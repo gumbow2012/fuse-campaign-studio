@@ -27,7 +27,7 @@ const TemplateCarousel = () => {
                 key={i}
                 className="flex-shrink-0 group cursor-pointer"
               >
-                <div className="w-[180px] aspect-[9/16] rounded-xl overflow-hidden border border-primary/30 relative transition-all duration-300 group-hover:border-primary/60 group-hover:glow-blue-sm group-hover:-translate-y-1">
+                <div className="w-[180px] aspect-[9/16] rounded-xl overflow-hidden border-2 border-primary/40 relative transition-all duration-300 group-hover:border-primary/70 group-hover:glow-blue-sm group-hover:-translate-y-1">
                   <img
                     src={template.image}
                     alt={template.name}
