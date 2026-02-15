@@ -20,10 +20,10 @@ const HeroSection = () => {
         }}
       />
 
-      <div className="container mx-auto px-6 py-20 relative z-10">
-        <div className="grid lg:grid-cols-[1.1fr_auto_auto] gap-8 items-start pt-12">
+      <div className="max-w-[1300px] mx-auto px-8 py-20 relative z-10">
+        <div className="flex flex-col lg:flex-row items-start gap-8 pt-12">
           {/* Left — copy */}
-          <div className="max-w-xl pt-8">
+          <div className="flex-1 max-w-xl pt-8">
             <h1 className="font-display text-5xl md:text-[3.5rem] lg:text-[4rem] font-bold leading-[1.08] tracking-tight mb-6">
               <span className="text-gradient-warm">Create Full</span>
               <br />
@@ -47,11 +47,11 @@ const HeroSection = () => {
             </div>
           </div>
 
-          {/* Center — upload card */}
-          <UploadCard />
-
-          {/* Right — example output */}
-          <ExampleOutput />
+          {/* Right — upload card + example output side by side */}
+          <div className="flex items-start gap-5 flex-shrink-0">
+            <UploadCard />
+            <ExampleOutput />
+          </div>
         </div>
       </div>
     </section>
