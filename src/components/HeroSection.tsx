@@ -4,12 +4,27 @@ import ExampleOutput from "./ExampleOutput";
 
 const HeroSection = () => {
   return (
-    <section className="min-h-screen flex items-center relative grain vignette pt-16">
-      <div className="container mx-auto px-6 py-16">
-        <div className="grid lg:grid-cols-[1fr_auto_auto] gap-10 items-center">
+    <section className="relative pt-16 overflow-hidden">
+      {/* Blue radial glow background */}
+      <div className="absolute inset-0 bg-background" />
+      <div
+        className="absolute inset-0"
+        style={{
+          background: "radial-gradient(ellipse 80% 60% at 60% 50%, hsl(199 89% 48% / 0.12) 0%, transparent 70%)",
+        }}
+      />
+      <div
+        className="absolute inset-0"
+        style={{
+          background: "radial-gradient(ellipse 50% 40% at 55% 45%, hsl(199 89% 48% / 0.08) 0%, transparent 60%)",
+        }}
+      />
+
+      <div className="container mx-auto px-6 py-20 relative z-10">
+        <div className="grid lg:grid-cols-[1.1fr_auto_auto] gap-8 items-start pt-12">
           {/* Left — copy */}
-          <div className="max-w-lg">
-            <h1 className="font-display text-5xl md:text-6xl font-bold leading-[1.08] tracking-tight mb-6">
+          <div className="max-w-xl pt-8">
+            <h1 className="font-display text-5xl md:text-[3.5rem] lg:text-[4rem] font-bold leading-[1.08] tracking-tight mb-6">
               <span className="text-gradient-warm">Create Full</span>
               <br />
               <span className="text-gradient-warm">Campaign Content.</span>
