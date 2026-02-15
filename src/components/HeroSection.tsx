@@ -5,18 +5,20 @@ import ExampleOutput from "./ExampleOutput";
 const HeroSection = () => {
   return (
     <section className="relative pt-16 overflow-hidden">
-      {/* Blue radial glow background — strong to match reference */}
+      {/* Deep background */}
       <div className="absolute inset-0 bg-background" />
+      
+      {/* Vibrant blue/cyan radial glow — intense to match reference */}
       <div
         className="absolute inset-0"
         style={{
-          background: "radial-gradient(ellipse 90% 70% at 55% 50%, hsl(199 89% 48% / 0.18) 0%, transparent 65%)",
+          background: "radial-gradient(ellipse 120% 90% at 50% 30%, hsl(190 100% 50% / 0.35) 0%, hsl(210 100% 50% / 0.20) 25%, hsl(220 80% 30% / 0.10) 50%, transparent 70%)",
         }}
       />
       <div
         className="absolute inset-0"
         style={{
-          background: "radial-gradient(ellipse 60% 50% at 50% 45%, hsl(199 89% 48% / 0.12) 0%, transparent 55%)",
+          background: "radial-gradient(ellipse 80% 60% at 50% 35%, hsl(185 100% 55% / 0.25) 0%, transparent 55%)",
         }}
       />
 
