@@ -1,4 +1,3 @@
-import fuseLogo from "@/assets/fuse-logo.png";
 import { Button } from "@/components/ui/button";
 import { Link } from "react-router-dom";
 
@@ -13,10 +12,9 @@ const Navbar = () => {
   return (
     <nav className="fixed top-0 left-0 right-0 z-50 glass">
       <div className="container mx-auto flex items-center justify-between h-16 px-6">
-        {/* Logo */}
-        <Link to="/" className="flex items-center gap-2">
-          <img src={fuseLogo} alt="FUSE" className="h-8 w-auto" />
-          <span className="font-display text-xl font-bold tracking-tight text-foreground">FUSE</span>
+        {/* Logo — text only */}
+        <Link to="/" className="flex items-center">
+          <span className="font-display text-2xl font-extrabold tracking-tight text-foreground">FUSE</span>
         </Link>
 
         {/* Center nav links */}
@@ -37,13 +35,13 @@ const Navbar = () => {
           <Button
             variant="outline"
             size="sm"
-            className="rounded-full border-border/60 text-muted-foreground hover:text-foreground hover:border-foreground/30 bg-transparent"
+            className="rounded-full border-border/60 text-foreground hover:text-foreground hover:border-foreground/30 bg-transparent px-6"
           >
             Login
           </Button>
           <Button
             size="sm"
-            className="rounded-full gradient-primary text-primary-foreground font-medium glow-blue-sm hover:opacity-90 transition-opacity border-0"
+            className="rounded-full gradient-primary text-primary-foreground font-medium glow-blue-sm hover:opacity-90 transition-opacity border-0 px-6"
           >
             Get Started
           </Button>
