@@ -4,23 +4,35 @@ import ExampleOutput from "./ExampleOutput";
 
 const HeroSection = () => {
   return (
-    <section className="relative pt-16 overflow-hidden">
+    <section className="relative pt-16">
       {/* Deep background */}
       <div className="absolute inset-0 bg-background" />
       
-      {/* Vibrant blue/cyan radial glow — intense to match reference */}
-      <div
-        className="absolute inset-0"
-        style={{
-          background: "radial-gradient(ellipse 120% 90% at 50% 30%, hsl(190 100% 50% / 0.35) 0%, hsl(210 100% 50% / 0.20) 25%, hsl(220 80% 30% / 0.10) 50%, transparent 70%)",
-        }}
-      />
-      <div
-        className="absolute inset-0"
-        style={{
-          background: "radial-gradient(ellipse 80% 60% at 50% 35%, hsl(185 100% 55% / 0.25) 0%, transparent 55%)",
-        }}
-      />
+      {/* Bright cyan/blue glow blobs */}
+      <div className="absolute inset-0 overflow-hidden">
+        <div
+          className="absolute w-[1200px] h-[800px] rounded-full"
+          style={{
+            top: "-400px",
+            left: "40%",
+            transform: "translateX(-50%)",
+            background: "radial-gradient(circle, hsl(190 100% 50%) 0%, hsl(195 100% 55%) 30%, transparent 70%)",
+            opacity: 0.5,
+            filter: "blur(90px)",
+          }}
+        />
+        <div
+          className="absolute w-[800px] h-[600px] rounded-full"
+          style={{
+            top: "-200px",
+            left: "50%",
+            transform: "translateX(-50%)",
+            background: "radial-gradient(circle, hsl(185 100% 60%) 0%, hsl(190 100% 50%) 50%, transparent 75%)",
+            opacity: 0.3,
+            filter: "blur(60px)",
+          }}
+        />
+      </div>
 
       <div className="max-w-[1300px] mx-auto px-8 py-20 relative z-10">
         <div className="flex flex-col lg:flex-row items-start gap-8 pt-12">
