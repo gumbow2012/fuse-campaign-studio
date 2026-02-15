@@ -5,45 +5,74 @@ import ExampleOutput from "./ExampleOutput";
 const HeroSection = () => {
   return (
     <section className="relative pt-20 pb-20 overflow-hidden min-h-screen flex flex-col justify-center">
-      {/* Deep background */}
-      <div className="absolute inset-0 bg-[#020617]" />
+      {/* 
+        Background Layer 
+        Base: Deep inky navy/black-blue #0C1626 / #111322
+      */}
+      <div className="absolute inset-0 bg-[#0C1626]" />
       
-      {/* Intense blue/cyan glow - positioned behind text and cards */}
-      <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div
-          className="absolute w-[1200px] h-[1200px] rounded-full blur-[120px]"
-          style={{
-            top: "-500px",
-            left: "10%",
-            background: "radial-gradient(circle, rgba(6,182,212,0.25) 0%, rgba(59,130,246,0.15) 40%, transparent 70%)",
-            opacity: 1,
-            zIndex: 0,
-          }}
-        />
-        <div
-          className="absolute w-[800px] h-[800px] rounded-full blur-[100px]"
-          style={{
-            top: "-200px",
-            left: "30%",
-            background: "radial-gradient(circle, rgba(14,165,233,0.3) 0%, transparent 60%)",
-            opacity: 0.8,
-            zIndex: 0,
-          }}
-        />
-      </div>
+      {/* 
+        Main Glow Cloud
+        Brighter energy from left/mid rolling right.
+        #0787DE -> #0A72B9 -> #0866AA
+        Positioned middle-left, bleeding into RHS.
+      */}
+      <div 
+        className="absolute top-[-10%] left-[-10%] w-[70%] h-[120%] rounded-full opacity-90 blur-[120px]"
+        style={{
+          background: "radial-gradient(circle at center, #0787DE 0%, #0A72B9 40%, #0866AA 70%, transparent 100%)",
+          transform: "rotate(-15deg)",
+        }}
+      />
+
+      {/* 
+        Secondary Glow / Bleed
+        Softens the transition to the right
+      */}
+      <div 
+        className="absolute top-[10%] left-[30%] w-[50%] h-[80%] rounded-full opacity-60 blur-[100px]"
+        style={{
+          background: "radial-gradient(circle at center, #0A72B9 0%, transparent 70%)",
+        }}
+      />
+
+      {/* 
+        Dark Falloff / Vignette
+        Fades quickly into inky navy toward far right edge and corners.
+        #094373 -> #092744 -> #0C1626
+        Strong edge darkening top-right and bottom-right.
+      */}
+      <div 
+        className="absolute inset-0 pointer-events-none"
+        style={{
+          background: `
+            radial-gradient(circle at 90% 90%, #0C1626 0%, #092744 30%, transparent 70%),
+            radial-gradient(circle at 90% 10%, #092744 0%, transparent 50%),
+            linear-gradient(to right, transparent 40%, #0C1626 100%)
+          `
+        }}
+      />
+
+      {/* 
+        Texture Overlay
+        Subtle smoky / fog blur texture with gentle noise.
+      */}
+      <div className="absolute inset-0 opacity-[0.03] pointer-events-none mix-blend-overlay bg-[url('https://grainy-gradients.vercel.app/noise.svg')] bg-repeat" />
+      <div className="absolute inset-0 opacity-20 pointer-events-none mix-blend-soft-light bg-gradient-to-br from-white/10 to-transparent backdrop-blur-3xl" />
+
 
       <div className="container mx-auto px-6 relative z-10">
         <div className="flex flex-col lg:flex-row items-center lg:items-start justify-between gap-12 lg:gap-20">
           {/* Left — copy */}
           <div className="flex-1 max-w-xl text-center lg:text-left pt-12">
-            <h1 className="font-display text-5xl md:text-7xl font-bold leading-[1.05] tracking-tight mb-8 text-white drop-shadow-2xl">
+            <h1 className="font-display text-5xl md:text-7xl font-bold leading-[1.05] tracking-tight mb-8 text-[#FDFCF0] drop-shadow-2xl">
               Create Full
               <br />
               Campaign Content.
               <br />
               One Click.
             </h1>
-            <p className="text-lg md:text-xl text-blue-100/70 leading-relaxed mb-10 max-w-lg font-light mx-auto lg:mx-0">
+            <p className="text-lg md:text-xl text-blue-200/80 leading-relaxed mb-10 max-w-lg font-light mx-auto lg:mx-0">
               Upload your product and logo. FUSE generates on-model shots, closeups, and drop-ready content automatically.
             </p>
             <div className="flex items-center justify-center lg:justify-start gap-4">
