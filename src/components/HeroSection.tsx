@@ -5,18 +5,18 @@ import ExampleOutput from "./ExampleOutput";
 const HeroSection = () => {
   return (
     <section className="relative pt-16 overflow-hidden">
-      {/* Blue radial glow background */}
+      {/* Blue radial glow background — strong to match reference */}
       <div className="absolute inset-0 bg-background" />
       <div
         className="absolute inset-0"
         style={{
-          background: "radial-gradient(ellipse 80% 60% at 60% 50%, hsl(199 89% 48% / 0.12) 0%, transparent 70%)",
+          background: "radial-gradient(ellipse 90% 70% at 55% 50%, hsl(199 89% 48% / 0.18) 0%, transparent 65%)",
         }}
       />
       <div
         className="absolute inset-0"
         style={{
-          background: "radial-gradient(ellipse 50% 40% at 55% 45%, hsl(199 89% 48% / 0.08) 0%, transparent 60%)",
+          background: "radial-gradient(ellipse 60% 50% at 50% 45%, hsl(199 89% 48% / 0.12) 0%, transparent 55%)",
         }}
       />
 
@@ -24,12 +24,12 @@ const HeroSection = () => {
         <div className="flex flex-col lg:flex-row items-start gap-8 pt-12">
           {/* Left — copy */}
           <div className="flex-1 max-w-xl pt-8">
-            <h1 className="font-display text-5xl md:text-[3.5rem] lg:text-[4rem] font-bold leading-[1.08] tracking-tight mb-6">
-              <span className="text-gradient-warm">Create Full</span>
+            <h1 className="font-display text-5xl md:text-[3.5rem] lg:text-[4rem] font-bold leading-[1.08] tracking-tight mb-6 text-foreground">
+              Create Full
               <br />
-              <span className="text-gradient-warm">Campaign Content.</span>
+              Campaign Content.
               <br />
-              <span className="text-gradient-warm">One Click.</span>
+              One Click.
             </h1>
             <p className="text-base text-muted-foreground leading-relaxed mb-10 max-w-md">
               Upload your product and logo. FUSE generates on-model shots, closeups, and drop-ready content automatically.
