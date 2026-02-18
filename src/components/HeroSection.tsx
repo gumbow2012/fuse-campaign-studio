@@ -9,51 +9,33 @@ const HeroSection = () => {
         Background Layer 
         Base: Deep inky navy/black-blue #0C1626 / #111322
       */}
-      <div className="absolute inset-0 bg-[#0a0e1a]" />
+      <div className="absolute inset-0 bg-[#0C1626]" />
       
-      {/* Aurora green glow — center-left */}
+      {/* Main Glow Cloud */}
       <div 
-        className="absolute top-[-15%] left-[-5%] w-[60%] h-[130%] rounded-full opacity-70 blur-[140px]"
+        className="absolute top-[-10%] left-[-10%] w-[70%] h-[120%] rounded-full opacity-90 blur-[120px]"
         style={{
-          background: "radial-gradient(circle at center, #22c55e 0%, #10b981 30%, #059669 55%, transparent 100%)",
-          transform: "rotate(-10deg)",
+          background: "radial-gradient(circle at center, #0787DE 0%, #0A72B9 40%, #0866AA 70%, transparent 100%)",
+          transform: "rotate(-15deg)",
         }}
       />
 
-      {/* Purple/violet wash — upper right */}
+      {/* Secondary Glow */}
       <div 
-        className="absolute top-[-20%] right-[5%] w-[55%] h-[100%] rounded-full opacity-60 blur-[130px]"
+        className="absolute top-[10%] left-[30%] w-[50%] h-[80%] rounded-full opacity-60 blur-[100px]"
         style={{
-          background: "radial-gradient(circle at center, #a855f7 0%, #7c3aed 35%, #6d28d9 60%, transparent 100%)",
-          transform: "rotate(15deg)",
+          background: "radial-gradient(circle at center, #0A72B9 0%, transparent 70%)",
         }}
       />
 
-      {/* Pink/magenta accent — lower center */}
-      <div 
-        className="absolute bottom-[-10%] left-[25%] w-[45%] h-[70%] rounded-full opacity-40 blur-[120px]"
-        style={{
-          background: "radial-gradient(circle at center, #ec4899 0%, #db2777 40%, transparent 100%)",
-        }}
-      />
-
-      {/* Teal secondary — right side mid */}
-      <div 
-        className="absolute top-[20%] left-[40%] w-[40%] h-[60%] rounded-full opacity-50 blur-[110px]"
-        style={{
-          background: "radial-gradient(circle at center, #2dd4bf 0%, #14b8a6 40%, transparent 80%)",
-        }}
-      />
-
-      {/* Dark vignette — edges */}
+      {/* Dark Falloff / Vignette */}
       <div 
         className="absolute inset-0 pointer-events-none"
         style={{
           background: `
-            radial-gradient(circle at 95% 95%, #0a0e1a 0%, transparent 50%),
-            radial-gradient(circle at 95% 5%, #0a0e1a 0%, transparent 40%),
-            radial-gradient(circle at 5% 95%, #0a0e1a 0%, transparent 40%),
-            linear-gradient(to bottom, transparent 60%, #0a0e1a 100%)
+            radial-gradient(circle at 90% 90%, #0C1626 0%, #092744 30%, transparent 70%),
+            radial-gradient(circle at 90% 10%, #092744 0%, transparent 50%),
+            linear-gradient(to right, transparent 40%, #0C1626 100%)
           `
         }}
       />
