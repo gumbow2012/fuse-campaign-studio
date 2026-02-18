@@ -4,7 +4,7 @@ import TemplateCategories from "@/components/TemplateCategories";
 
 const Index = () => {
   return (
-    <div className="min-h-screen bg-[#0C1626]">
+    <div className="min-h-screen bg-[#060a14]">
       <Navbar />
       <HeroSection />
       <TemplateCategories />
