@@ -21,30 +21,19 @@ const DropCountdownBar = () => {
   const pad = (n: number) => n.toString().padStart(2, "0");
 
   return (
-    <div className="mb-10 flex items-center justify-between px-4 py-3 rounded-xl border border-white/[0.06] bg-white/[0.02] backdrop-blur-sm">
-      <div className="flex items-center gap-3">
-        <span className="relative flex h-2 w-2">
-          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75" />
-          <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500" />
-        </span>
-        <span className="text-[10px] font-mono uppercase tracking-[0.2em] text-white/40">
-          Next Drop In
-        </span>
-      </div>
-      <div className="flex items-center gap-1.5 font-mono">
-        {[
-          { val: pad(time.days), label: "D" },
-          { val: pad(time.hours), label: "H" },
-          { val: pad(time.mins), label: "M" },
-          { val: pad(time.secs), label: "S" },
-        ].map((unit, i) => (
-          <div key={i} className="flex items-center gap-1">
-            {i > 0 && <span className="text-white/15 text-xs">:</span>}
-            <span className="text-sm font-bold text-white/90 tabular-nums">{unit.val}</span>
-            <span className="text-[9px] text-white/25 uppercase">{unit.label}</span>
-          </div>
-        ))}
-      </div>
+    <div className="flex items-center gap-1.5 font-mono">
+      {[
+        { val: pad(time.days), label: "D" },
+        { val: pad(time.hours), label: "H" },
+        { val: pad(time.mins), label: "M" },
+        { val: pad(time.secs), label: "S" },
+      ].map((unit, i) => (
+        <div key={i} className="flex items-center gap-0.5">
+          {i > 0 && <span className="text-white/15 text-[10px] mx-0.5">:</span>}
+          <span className="text-xs font-bold text-white/70 tabular-nums">{unit.val}</span>
+          <span className="text-[8px] text-white/25 uppercase">{unit.label}</span>
+        </div>
+      ))}
     </div>
   );
 };
