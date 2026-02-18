@@ -393,25 +393,34 @@ const TemplateCategories = () => {
             onClick={() => setActiveCategory("all")}
             className={`text-xs font-semibold uppercase tracking-wider px-4 py-2 rounded-lg border transition-all duration-200 ${
               activeCategory === "all"
-                ? "bg-white/10 border-white/20 text-white"
+                ? "bg-gradient-to-r from-emerald-500/80 via-teal-400/80 to-blue-500/80 border-emerald-400/30 text-white shadow-[0_0_15px_rgba(16,185,129,0.3)]"
                 : "bg-transparent border-white/8 text-white/40 hover:text-white/70 hover:border-white/15"
             }`}
           >
             All Templates
           </button>
-          {categories.map((cat) => (
-            <button
-              key={cat.slug}
-              onClick={() => setActiveCategory(cat.slug)}
-              className={`text-xs font-semibold uppercase tracking-wider px-4 py-2 rounded-lg border transition-all duration-200 ${
-                activeCategory === cat.slug
-                  ? "bg-white/10 border-white/20 text-white"
-                  : "bg-transparent border-white/8 text-white/40 hover:text-white/70 hover:border-white/15"
-              }`}
-            >
-              {cat.icon} {cat.title}
-            </button>
-          ))}
+          {categories.map((cat, i) => {
+            const gradients = [
+              "from-green-400/80 via-emerald-500/80 to-teal-500/80 border-green-400/30 shadow-[0_0_15px_rgba(74,222,128,0.3)]",
+              "from-teal-400/80 via-cyan-400/80 to-blue-500/80 border-teal-400/30 shadow-[0_0_15px_rgba(45,212,191,0.3)]",
+              "from-cyan-400/80 via-blue-500/80 to-violet-500/80 border-cyan-400/30 shadow-[0_0_15px_rgba(34,211,238,0.3)]",
+              "from-blue-500/80 via-violet-500/80 to-purple-500/80 border-blue-400/30 shadow-[0_0_15px_rgba(139,92,246,0.3)]",
+              "from-violet-500/80 via-purple-500/80 to-fuchsia-500/80 border-violet-400/30 shadow-[0_0_15px_rgba(168,85,247,0.3)]",
+            ];
+            return (
+              <button
+                key={cat.slug}
+                onClick={() => setActiveCategory(cat.slug)}
+                className={`text-xs font-semibold uppercase tracking-wider px-4 py-2 rounded-lg border transition-all duration-200 ${
+                  activeCategory === cat.slug
+                    ? `bg-gradient-to-r ${gradients[i % gradients.length]} text-white`
+                    : "bg-transparent border-white/8 text-white/40 hover:text-white/70 hover:border-white/15"
+                }`}
+              >
+                {cat.icon} {cat.title}
+              </button>
+            );
+          })}
         </div>
 
         {/* Category sections */}
