@@ -15,7 +15,8 @@ const FileNodeHeader = () => (
 const DropZone = ({ label }: { label: string }) => (
   <div>
     <FileNodeHeader />
-    <label className="text-[9px] font-black uppercase tracking-[0.25em] text-white/50 mb-2 block">
+    <div className="h-px bg-gradient-to-r from-white/[0.06] to-transparent mb-2" />
+    <label className="text-[9px] font-black uppercase tracking-[0.25em] text-white/70 mb-2 block">
       {label}
     </label>
     <div className="border border-dashed border-white/15 rounded-lg py-9 flex flex-col items-center justify-center gap-2 cursor-pointer hover:border-white/30 hover:bg-white/[0.02] transition-all group">
