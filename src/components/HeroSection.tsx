@@ -27,14 +27,14 @@ const HeroSection = () => {
       <div
         className="absolute top-[-10%] left-[-10%] w-[70%] h-[120%] rounded-full opacity-90 blur-[120px] will-change-transform"
         style={{
-          background: "radial-gradient(circle at center, #0787DE 0%, #0A72B9 40%, #0866AA 70%, transparent 100%)",
+          background: "radial-gradient(circle at center, #0EA5E9 0%, #06B6D4 30%, #0284C7 60%, transparent 100%)",
           transform: `rotate(-15deg) translateY(${parallax1}px)`,
         }}
       />
       <div
         className="absolute top-[10%] left-[30%] w-[50%] h-[80%] rounded-full opacity-60 blur-[100px] will-change-transform"
         style={{
-          background: "radial-gradient(circle at center, #0A72B9 0%, transparent 70%)",
+          background: "radial-gradient(circle at center, #0EA5E9 0%, #06B6D4 40%, transparent 70%)",
           transform: `translateY(${parallax2}px)`,
         }}
       />
