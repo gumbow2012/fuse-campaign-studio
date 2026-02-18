@@ -1,41 +1,16 @@
-import { useState, useEffect, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import UploadCard from "./UploadCard";
 import ExampleOutput from "./ExampleOutput";
 
 const HeroSection = () => {
-  const [scrollY, setScrollY] = useState(0);
-
-  const handleScroll = useCallback(() => {
-    setScrollY(window.scrollY);
-  }, []);
-
-  useEffect(() => {
-    window.addEventListener("scroll", handleScroll, { passive: true });
-    return () => window.removeEventListener("scroll", handleScroll);
-  }, [handleScroll]);
-
-  const parallax1 = scrollY * 0.15;
-  const parallax2 = scrollY * 0.08;
 
   return (
     <section className="relative pt-16 pb-20 overflow-hidden min-h-screen flex flex-col justify-center">
       {/* Background */}
-      <div className="absolute inset-0 bg-[#04060d]" />
-
-      {/* Parallax glow clouds */}
       <div
-        className="absolute top-[-10%] left-[-10%] w-[70%] h-[120%] rounded-full opacity-90 blur-[120px] will-change-transform"
+        className="absolute inset-0"
         style={{
-          background: "radial-gradient(circle at center, #0EA5E9 0%, #06B6D4 30%, #0284C7 60%, transparent 100%)",
-          transform: `rotate(-15deg) translateY(${parallax1}px)`,
-        }}
-      />
-      <div
-        className="absolute top-[10%] left-[30%] w-[50%] h-[80%] rounded-full opacity-60 blur-[100px] will-change-transform"
-        style={{
-          background: "radial-gradient(circle at center, #0EA5E9 0%, #06B6D4 40%, transparent 70%)",
-          transform: `translateY(${parallax2}px)`,
+          background: `radial-gradient(circle at 25% 40%, rgba(30,116,184,0.9) 0%, rgba(15,70,120,0.6) 40%, rgba(7,26,47,0.8) 75%), linear-gradient(135deg, #071A2F 0%, #0C355C 100%)`,
         }}
       />
 
