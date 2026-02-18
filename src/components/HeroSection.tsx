@@ -5,77 +5,90 @@ import ExampleOutput from "./ExampleOutput";
 const HeroSection = () => {
   return (
     <section className="relative pt-20 pb-20 overflow-hidden min-h-screen flex flex-col justify-center">
-      {/* 
-        Background Layer 
-        Base: Deep inky navy/black-blue #0C1626 / #111322
-      */}
-      <div className="absolute inset-0 bg-[#0C1626]" />
-      
-      {/* Main Glow Cloud */}
-      <div 
+      {/* Background */}
+      <div className="absolute inset-0 bg-[#04060d]" />
+      <div
         className="absolute top-[-10%] left-[-10%] w-[70%] h-[120%] rounded-full opacity-90 blur-[120px]"
-        style={{
-          background: "radial-gradient(circle at center, #0787DE 0%, #0A72B9 40%, #0866AA 70%, transparent 100%)",
-          transform: "rotate(-15deg)",
-        }}
+        style={{ background: "radial-gradient(circle at center, #0787DE 0%, #0A72B9 40%, #0866AA 70%, transparent 100%)", transform: "rotate(-15deg)" }}
       />
-
-      {/* Secondary Glow */}
-      <div 
+      <div
         className="absolute top-[10%] left-[30%] w-[50%] h-[80%] rounded-full opacity-60 blur-[100px]"
-        style={{
-          background: "radial-gradient(circle at center, #0A72B9 0%, transparent 70%)",
-        }}
+        style={{ background: "radial-gradient(circle at center, #0A72B9 0%, transparent 70%)" }}
       />
-
-      {/* Dark Falloff / Vignette */}
-      <div 
+      <div
         className="absolute inset-0 pointer-events-none"
-        style={{
-          background: `
-            radial-gradient(circle at 90% 90%, #0C1626 0%, #092744 30%, transparent 70%),
-            radial-gradient(circle at 90% 10%, #092744 0%, transparent 50%),
-            linear-gradient(to right, transparent 40%, #0C1626 100%)
-          `
-        }}
+        style={{ background: "radial-gradient(circle at 90% 90%, #04060d 0%, #092744 30%, transparent 70%), radial-gradient(circle at 90% 10%, #092744 0%, transparent 50%), linear-gradient(to right, transparent 40%, #04060d 100%)" }}
       />
+      {/* Grain */}
+      <div className="absolute inset-0 opacity-[0.04] pointer-events-none mix-blend-overlay bg-[url('data:image/svg+xml,%3Csvg viewBox=%270 0 256 256%27 xmlns=%27http://www.w3.org/2000/svg%27%3E%3Cfilter id=%27noise%27%3E%3CfeTurbulence type=%27fractalNoise%27 baseFrequency=%270.9%27 numOctaves=%274%27 stitchTiles=%27stitch%27/%3E%3C/filter%3E%3Crect width=%27100%25%27 height=%27100%25%27 filter=%27url(%23noise)%27 opacity=%270.06%27/%3E%3C/svg%3E')] bg-repeat" />
 
-      {/* 
-        Texture Overlay
-        Subtle smoky / fog blur texture with gentle noise.
-      */}
-      <div className="absolute inset-0 opacity-[0.03] pointer-events-none mix-blend-overlay bg-[url('https://grainy-gradients.vercel.app/noise.svg')] bg-repeat" />
-      <div className="absolute inset-0 opacity-20 pointer-events-none mix-blend-soft-light bg-gradient-to-br from-white/10 to-transparent backdrop-blur-3xl" />
-
+      {/* Live Drop strip */}
+      <div className="absolute top-0 inset-x-0 z-20">
+        <div className="bg-white/[0.03] border-b border-white/[0.05] backdrop-blur-sm">
+          <div className="container mx-auto px-6 py-2 flex items-center justify-between">
+            <div className="flex items-center gap-2.5">
+              <span className="relative flex h-1.5 w-1.5">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75" />
+                <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-red-500" />
+              </span>
+              <span className="text-[9px] font-black uppercase tracking-[0.2em] text-white/50">
+                Live Drop: Raw Street Vol 01
+              </span>
+            </div>
+            <span className="text-[8px] uppercase tracking-[0.15em] text-white/20 font-medium">
+              New Templates Added
+            </span>
+          </div>
+        </div>
+      </div>
 
       <div className="container mx-auto px-6 relative z-10">
         <div className="flex flex-col lg:flex-row items-center lg:items-start justify-between gap-12 lg:gap-20">
           {/* Left — copy */}
           <div className="flex-1 max-w-xl text-center lg:text-left pt-12">
-            <h1 className="font-display text-5xl md:text-7xl font-bold leading-[1.05] tracking-tight mb-8 text-[#FDFCF0] drop-shadow-2xl">
+            <p className="text-[9px] font-black uppercase tracking-[0.4em] text-white/25 mb-4">
+              For Streetwear Brands
+            </p>
+            <h1 className="font-display text-5xl md:text-7xl font-black leading-[1.05] tracking-tight mb-6 text-[#FDFCF0] drop-shadow-2xl">
               Build Your
               <br />
               Entire Drop.
               <br />
-              <span className="text-white/60">One Run.</span>
+              <span className="text-white/50">One Run.</span>
             </h1>
-            <p className="text-lg md:text-xl text-blue-200/80 leading-relaxed mb-10 max-w-lg font-light mx-auto lg:mx-0">
-              Turn your garment into a full campaign — on-model shots, closeups, and drop-ready content. Automatically.
+            <p className="text-base md:text-lg text-blue-200/60 leading-relaxed mb-4 max-w-md font-light mx-auto lg:mx-0">
+              Turn your garment into a campaign system. On-model. Closeups. Editorial. In one run.
             </p>
-            <div className="flex items-center justify-center lg:justify-start gap-4">
-              <Button className="h-12 px-8 rounded-xl bg-gradient-to-r from-cyan-400 to-blue-500 text-white font-semibold hover:opacity-90 transition-all text-base shadow-[0_0_20px_rgba(6,182,212,0.4)] hover:shadow-[0_0_30px_rgba(6,182,212,0.6)] border-0">
-                Start Creating
+
+            {/* Process steps */}
+            <div className="flex items-center gap-3 mb-10 justify-center lg:justify-start">
+              {["Upload the Garment", "Choose Creative Direction", "Run the Drop"].map((step, i) => (
+                <div key={i} className="flex items-center gap-3">
+                  {i > 0 && <span className="text-white/10 text-xs">→</span>}
+                  <span className="text-[9px] font-bold uppercase tracking-[0.15em] text-white/30">{step}</span>
+                </div>
+              ))}
+            </div>
+
+            <div className="flex items-center justify-center lg:justify-start gap-4 mb-6">
+              <Button className="h-11 px-8 rounded-lg bg-gradient-to-r from-cyan-400 to-blue-500 text-white font-black text-sm tracking-[0.1em] uppercase hover:opacity-90 transition-all shadow-[0_0_25px_rgba(6,182,212,0.35)] hover:shadow-[0_0_35px_rgba(6,182,212,0.55)] border-0">
+                Launch Drop
               </Button>
               <Button
                 variant="outline"
-                className="h-12 px-8 rounded-xl border-white/20 bg-transparent text-white hover:bg-white/10 hover:border-white/40 transition-all text-base font-normal backdrop-blur-sm"
+                className="h-11 px-8 rounded-lg border-white/15 bg-transparent text-white/70 hover:bg-white/5 hover:border-white/25 transition-all text-sm font-medium tracking-wide backdrop-blur-sm"
               >
-                View Templates
+                View Drops
               </Button>
             </div>
+
+            {/* Social proof */}
+            <p className="text-[10px] text-white/15 uppercase tracking-[0.2em] font-medium">
+              8,240 Campaign Runs Generated
+            </p>
           </div>
 
-          {/* Right — upload card + example output side by side */}
+          {/* Right — upload card + example output */}
           <div className="flex flex-row items-center gap-6 lg:gap-8 transform scale-95 lg:scale-100 origin-top">
             <UploadCard />
             <ExampleOutput />
