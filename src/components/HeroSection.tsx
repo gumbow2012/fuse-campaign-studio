@@ -76,7 +76,7 @@ const HeroSection = () => {
               Turn your garment into a full campaign — on-model shots, closeups, and drop-ready content. Automatically.
             </p>
             <div className="flex items-center justify-center lg:justify-start gap-4">
-              <Button className="h-12 px-8 rounded-xl bg-gradient-to-r from-orange-500 to-orange-400 text-white font-semibold hover:opacity-90 transition-all text-base shadow-[0_0_20px_rgba(249,115,22,0.4)] hover:shadow-[0_0_30px_rgba(249,115,22,0.6)] border-0">
+              <Button className="h-12 px-8 rounded-xl bg-gradient-to-r from-cyan-400 to-blue-500 text-white font-semibold hover:opacity-90 transition-all text-base shadow-[0_0_20px_rgba(6,182,212,0.4)] hover:shadow-[0_0_30px_rgba(6,182,212,0.6)] border-0">
                 Start Creating
               </Button>
               <Button
