@@ -45,10 +45,10 @@ const HeroSection = () => {
         style={{ background: "radial-gradient(circle at 90% 90%, #04060d 0%, #092744 30%, transparent 70%), radial-gradient(circle at 90% 10%, #092744 0%, transparent 50%), linear-gradient(to right, transparent 40%, #04060d 100%)" }}
       />
 
-      {/* Contrast anchor — radial shadow behind text area */}
+      {/* Contrast anchor — soft radial darkening behind headline */}
       <div
-        className="absolute top-[20%] left-[5%] w-[50%] h-[60%] rounded-full pointer-events-none blur-[80px]"
-        style={{ background: "radial-gradient(ellipse at center, rgba(0,0,0,0.45) 0%, rgba(0,0,0,0.15) 50%, transparent 80%)" }}
+        className="absolute top-[15%] left-[8%] w-[45%] h-[65%] rounded-full pointer-events-none blur-[100px]"
+        style={{ background: "radial-gradient(ellipse at center, rgba(0,0,0,0.55) 0%, rgba(0,0,0,0.2) 45%, transparent 75%)" }}
       />
 
       {/* Grain */}
@@ -58,41 +58,41 @@ const HeroSection = () => {
         <div className="flex flex-col lg:flex-row items-center lg:items-start justify-between gap-12 lg:gap-20">
           {/* Left — copy with readability plate */}
           <div className="flex-1 max-w-xl text-center lg:text-left pt-12 relative">
-            {/* Subtle readability plate */}
-            <div className="absolute -inset-8 rounded-2xl bg-gradient-to-r from-black/30 via-black/15 to-transparent backdrop-blur-[3px] -z-10" />
+            {/* Subtle readability plate — no box, just gradient */}
+            <div className="absolute -inset-8 rounded-2xl bg-gradient-to-r from-black/25 via-black/10 to-transparent -z-10" />
 
             <p
               className="text-[9px] font-black uppercase tracking-[0.4em] mb-4"
-              style={{ color: "rgba(255,255,255,0.55)", textShadow: "0 2px 10px rgba(0,0,0,0.45)" }}
+              style={{ color: "rgba(255,255,255,0.65)", textShadow: "0 2px 10px rgba(0,0,0,0.5)" }}
             >
               For Streetwear Brands
             </p>
             <h1
-              className="font-display text-5xl md:text-7xl font-black leading-[1.05] tracking-tight mb-6 text-[#FDFCF0]"
-              style={{ textShadow: "0 2px 18px rgba(0,0,0,0.35)" }}
+              className="font-display text-5xl md:text-7xl font-black leading-[1.05] tracking-tight mb-6 text-white"
+              style={{ textShadow: "0 2px 20px rgba(0,0,0,0.4)" }}
             >
               Build Your
               <br />
               Entire Drop.
               <br />
-              <span className="text-white/60">One Run.</span>
+              <span className="font-bold tracking-wide">One Run.</span>
             </h1>
             <p
               className="text-base md:text-lg leading-relaxed mb-4 max-w-md font-light mx-auto lg:mx-0"
-              style={{ color: "rgba(255,255,255,0.78)", textShadow: "0 2px 12px rgba(0,0,0,0.35)" }}
+              style={{ color: "rgba(255,255,255,0.85)", textShadow: "0 2px 14px rgba(0,0,0,0.4)" }}
             >
               Turn your garment into a campaign system. On-model. Closeups. Editorial. In one run.
             </p>
 
-            {/* Process steps — pill */}
+            {/* Process steps — pill with stronger border */}
             <div
-              className="inline-flex items-center gap-3 mb-10 px-4 py-2.5 rounded-lg border border-white/[0.08] bg-black/25 backdrop-blur-sm"
-              style={{ textShadow: "0 2px 10px rgba(0,0,0,0.45)" }}
+              className="inline-flex items-center gap-3 mb-10 px-4 py-2.5 rounded-lg border border-white/[0.1] bg-[#04060d]/50 backdrop-blur-sm"
+              style={{ textShadow: "0 2px 10px rgba(0,0,0,0.5)" }}
             >
               {["Upload the Garment", "Choose Creative Direction", "Run the Drop"].map((step, i) => (
                 <div key={i} className="flex items-center gap-3">
-                  {i > 0 && <span className="text-white/15 text-xs">→</span>}
-                  <span className="text-[10px] font-bold uppercase tracking-[0.15em] text-white/50">{step}</span>
+                  {i > 0 && <span className="text-white/25 text-xs">→</span>}
+                  <span className="text-[10px] font-bold uppercase tracking-[0.15em] text-white/60">{step}</span>
                 </div>
               ))}
             </div>
@@ -112,7 +112,7 @@ const HeroSection = () => {
             {/* Social proof */}
             <p
               className="text-[10px] uppercase tracking-[0.2em] font-medium"
-              style={{ color: "rgba(255,255,255,0.35)", textShadow: "0 2px 10px rgba(0,0,0,0.45)" }}
+              style={{ color: "rgba(255,255,255,0.6)", textShadow: "0 2px 10px rgba(0,0,0,0.5)" }}
             >
               8,240 Campaign Runs Generated
             </p>
