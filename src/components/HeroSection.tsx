@@ -1,46 +1,52 @@
+import { useRef, useState, useEffect, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import UploadCard from "./UploadCard";
 import ExampleOutput from "./ExampleOutput";
 
 const HeroSection = () => {
+  const [scrollY, setScrollY] = useState(0);
+
+  const handleScroll = useCallback(() => {
+    setScrollY(window.scrollY);
+  }, []);
+
+  useEffect(() => {
+    window.addEventListener("scroll", handleScroll, { passive: true });
+    return () => window.removeEventListener("scroll", handleScroll);
+  }, [handleScroll]);
+
+  const parallax1 = scrollY * 0.15;
+  const parallax2 = scrollY * 0.08;
+
   return (
-    <section className="relative pt-20 pb-20 overflow-hidden min-h-screen flex flex-col justify-center">
+    <section className="relative pt-16 pb-20 overflow-hidden min-h-screen flex flex-col justify-center">
       {/* Background */}
       <div className="absolute inset-0 bg-[#04060d]" />
+
+      {/* Parallax glow clouds */}
       <div
-        className="absolute top-[-10%] left-[-10%] w-[70%] h-[120%] rounded-full opacity-90 blur-[120px]"
-        style={{ background: "radial-gradient(circle at center, #0787DE 0%, #0A72B9 40%, #0866AA 70%, transparent 100%)", transform: "rotate(-15deg)" }}
+        className="absolute top-[-10%] left-[-10%] w-[70%] h-[120%] rounded-full opacity-90 blur-[120px] will-change-transform"
+        style={{
+          background: "radial-gradient(circle at center, #0787DE 0%, #0A72B9 40%, #0866AA 70%, transparent 100%)",
+          transform: `rotate(-15deg) translateY(${parallax1}px)`,
+        }}
       />
       <div
-        className="absolute top-[10%] left-[30%] w-[50%] h-[80%] rounded-full opacity-60 blur-[100px]"
-        style={{ background: "radial-gradient(circle at center, #0A72B9 0%, transparent 70%)" }}
+        className="absolute top-[10%] left-[30%] w-[50%] h-[80%] rounded-full opacity-60 blur-[100px] will-change-transform"
+        style={{
+          background: "radial-gradient(circle at center, #0A72B9 0%, transparent 70%)",
+          transform: `translateY(${parallax2}px)`,
+        }}
       />
+
+      {/* Vignette */}
       <div
         className="absolute inset-0 pointer-events-none"
         style={{ background: "radial-gradient(circle at 90% 90%, #04060d 0%, #092744 30%, transparent 70%), radial-gradient(circle at 90% 10%, #092744 0%, transparent 50%), linear-gradient(to right, transparent 40%, #04060d 100%)" }}
       />
+
       {/* Grain */}
       <div className="absolute inset-0 opacity-[0.04] pointer-events-none mix-blend-overlay bg-[url('data:image/svg+xml,%3Csvg viewBox=%270 0 256 256%27 xmlns=%27http://www.w3.org/2000/svg%27%3E%3Cfilter id=%27noise%27%3E%3CfeTurbulence type=%27fractalNoise%27 baseFrequency=%270.9%27 numOctaves=%274%27 stitchTiles=%27stitch%27/%3E%3C/filter%3E%3Crect width=%27100%25%27 height=%27100%25%27 filter=%27url(%23noise)%27 opacity=%270.06%27/%3E%3C/svg%3E')] bg-repeat" />
-
-      {/* Live Drop strip */}
-      <div className="absolute top-0 inset-x-0 z-20">
-        <div className="bg-white/[0.03] border-b border-white/[0.05] backdrop-blur-sm">
-          <div className="container mx-auto px-6 py-2 flex items-center justify-between">
-            <div className="flex items-center gap-2.5">
-              <span className="relative flex h-1.5 w-1.5">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75" />
-                <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-red-500" />
-              </span>
-              <span className="text-[9px] font-black uppercase tracking-[0.2em] text-white/50">
-                Live Drop: Raw Street Vol 01
-              </span>
-            </div>
-            <span className="text-[8px] uppercase tracking-[0.15em] text-white/20 font-medium">
-              New Templates Added
-            </span>
-          </div>
-        </div>
-      </div>
 
       <div className="container mx-auto px-6 relative z-10">
         <div className="flex flex-col lg:flex-row items-center lg:items-start justify-between gap-12 lg:gap-20">
