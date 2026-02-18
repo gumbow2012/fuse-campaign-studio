@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Link } from "react-router-dom";
 import { Star, FolderArchive, FileText, Bell, User, Search, Lock, ChevronDown } from "lucide-react";
@@ -139,9 +139,26 @@ const TemplatesMegaMenu = () => {
 /* ─── Main Navbar ─── */
 const Navbar = () => {
   const [activeMode, setActiveMode] = useState<typeof modes[number]>("Streetwear");
+  const [scrolled, setScrolled] = useState(false);
+
+  const handleScroll = useCallback(() => {
+    setScrolled(window.scrollY > 50);
+  }, []);
+
+  useEffect(() => {
+    window.addEventListener("scroll", handleScroll, { passive: true });
+    return () => window.removeEventListener("scroll", handleScroll);
+  }, [handleScroll]);
 
   return (
-    <nav className="fixed top-0 left-0 right-0 z-50 bg-transparent backdrop-blur-sm" style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+    <nav
+      className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${
+        scrolled
+          ? "bg-background/85 backdrop-blur-xl border-b border-border/30 shadow-lg shadow-black/20"
+          : "bg-transparent backdrop-blur-sm"
+      }`}
+      style={!scrolled ? { borderBottom: '1px solid rgba(255,255,255,0.04)' } : undefined}
+    >
       <div className="container mx-auto flex items-center justify-between h-16 px-6">
         {/* Logo */}
         <Link to="/" className="flex items-center">
