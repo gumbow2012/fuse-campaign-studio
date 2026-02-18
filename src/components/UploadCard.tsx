@@ -65,8 +65,9 @@ const UploadCard = () => {
         </div>
 
         {/* Run button - yellow/lime */}
-        <Button className="w-full bg-[#e8e87c] hover:bg-[#d4d46a] text-black font-semibold text-sm rounded-xl h-11 border-0 shadow-none transition-all">
-          Run
+        <Button className="w-full bg-gradient-to-r from-cyan-400 to-blue-500 text-white font-bold text-sm tracking-widest rounded-full h-11 shadow-[0_0_25px_rgba(6,182,212,0.4)] hover:shadow-[0_0_35px_rgba(6,182,212,0.6)] hover:scale-[1.02] active:scale-[0.98] transition-all duration-300 border-0 relative overflow-hidden group uppercase">
+          <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-300 rounded-full" />
+          <span className="relative z-10">RUN</span>
         </Button>
       </div>
     </div>
