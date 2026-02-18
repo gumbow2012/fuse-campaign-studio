@@ -215,6 +215,11 @@ const Navbar = () => {
           <Link to="#" className="text-sm text-muted-foreground hover:text-foreground transition-colors duration-200">
             Explore
           </Link>
+
+          {/* Pricing */}
+          <Link to="/pricing" className="text-sm text-muted-foreground hover:text-foreground transition-colors duration-200">
+            Pricing
+          </Link>
         </div>
 
         {/* Right side */}
