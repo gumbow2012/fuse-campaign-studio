@@ -10,7 +10,7 @@ const HeroSection = () => {
       <div
         className="absolute inset-0"
         style={{
-          background: `radial-gradient(circle at 25% 40%, rgba(30,116,184,0.9) 0%, rgba(15,70,120,0.6) 40%, rgba(7,26,47,0.8) 75%), linear-gradient(135deg, #071A2F 0%, #0C355C 100%)`,
+          background: `radial-gradient(circle at 25% 40%, rgba(34,141,214,0.9) 0%, rgba(20,95,155,0.7) 35%, rgba(10,45,80,0.3) 55%, rgba(0,0,0,0) 75%), linear-gradient(135deg, #071A2F 0%, #0C355C 100%)`,
         }}
       />
 
