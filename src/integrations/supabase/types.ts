@@ -14,16 +14,269 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      credit_ledger: {
+        Row: {
+          amount: number
+          created_at: string
+          description: string | null
+          id: string
+          project_id: string | null
+          step_id: string | null
+          template_id: string | null
+          type: Database["public"]["Enums"]["credit_event_type"]
+          user_id: string
+        }
+        Insert: {
+          amount: number
+          created_at?: string
+          description?: string | null
+          id?: string
+          project_id?: string | null
+          step_id?: string | null
+          template_id?: string | null
+          type: Database["public"]["Enums"]["credit_event_type"]
+          user_id: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          description?: string | null
+          id?: string
+          project_id?: string | null
+          step_id?: string | null
+          template_id?: string | null
+          type?: Database["public"]["Enums"]["credit_event_type"]
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "credit_ledger_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "credit_ledger_step_id_fkey"
+            columns: ["step_id"]
+            isOneToOne: false
+            referencedRelation: "project_steps"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "credit_ledger_template_id_fkey"
+            columns: ["template_id"]
+            isOneToOne: false
+            referencedRelation: "templates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      profiles: {
+        Row: {
+          created_at: string
+          credits_balance: number
+          email: string
+          id: string
+          name: string | null
+          plan: string | null
+          stripe_customer_id: string | null
+          subscription_status: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          credits_balance?: number
+          email: string
+          id?: string
+          name?: string | null
+          plan?: string | null
+          stripe_customer_id?: string | null
+          subscription_status?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          credits_balance?: number
+          email?: string
+          id?: string
+          name?: string | null
+          plan?: string | null
+          stripe_customer_id?: string | null
+          subscription_status?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      project_steps: {
+        Row: {
+          created_at: string
+          id: string
+          last_run_cost_credits: number | null
+          output_url: string | null
+          project_id: string
+          status: Database["public"]["Enums"]["step_status"]
+          step_key: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          last_run_cost_credits?: number | null
+          output_url?: string | null
+          project_id: string
+          status?: Database["public"]["Enums"]["step_status"]
+          step_key: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          last_run_cost_credits?: number | null
+          output_url?: string | null
+          project_id?: string
+          status?: Database["public"]["Enums"]["step_status"]
+          step_key?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "project_steps_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      projects: {
+        Row: {
+          created_at: string
+          id: string
+          inputs: Json | null
+          outputs: Json | null
+          status: Database["public"]["Enums"]["project_status"]
+          template_id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          inputs?: Json | null
+          outputs?: Json | null
+          status?: Database["public"]["Enums"]["project_status"]
+          template_id: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          inputs?: Json | null
+          outputs?: Json | null
+          status?: Database["public"]["Enums"]["project_status"]
+          template_id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "projects_template_id_fkey"
+            columns: ["template_id"]
+            isOneToOne: false
+            referencedRelation: "templates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      templates: {
+        Row: {
+          category: string | null
+          created_at: string
+          description: string | null
+          estimated_credits_per_run: number
+          id: string
+          is_active: boolean
+          name: string
+          preview_url: string | null
+          required_inputs: Json | null
+          tags: string[] | null
+          updated_at: string
+        }
+        Insert: {
+          category?: string | null
+          created_at?: string
+          description?: string | null
+          estimated_credits_per_run?: number
+          id?: string
+          is_active?: boolean
+          name: string
+          preview_url?: string | null
+          required_inputs?: Json | null
+          tags?: string[] | null
+          updated_at?: string
+        }
+        Update: {
+          category?: string | null
+          created_at?: string
+          description?: string | null
+          estimated_credits_per_run?: number
+          id?: string
+          is_active?: boolean
+          name?: string
+          preview_url?: string | null
+          required_inputs?: Json | null
+          tags?: string[] | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      user_roles: {
+        Row: {
+          id: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Insert: {
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Update: {
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      has_role: {
+        Args: {
+          _role: Database["public"]["Enums"]["app_role"]
+          _user_id: string
+        }
+        Returns: boolean
+      }
     }
     Enums: {
-      [_ in never]: never
+      app_role: "admin" | "user"
+      credit_event_type:
+        | "run_template"
+        | "rerun_step"
+        | "topup"
+        | "monthly_grant"
+        | "refund"
+        | "adjustment"
+      project_status: "queued" | "running" | "failed" | "complete"
+      step_status: "queued" | "running" | "failed" | "complete"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -150,6 +403,18 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      app_role: ["admin", "user"],
+      credit_event_type: [
+        "run_template",
+        "rerun_step",
+        "topup",
+        "monthly_grant",
+        "refund",
+        "adjustment",
+      ],
+      project_status: ["queued", "running", "failed", "complete"],
+      step_status: ["queued", "running", "failed", "complete"],
+    },
   },
 } as const
