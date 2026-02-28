@@ -61,7 +61,12 @@ const Dashboard = () => {
         </div>
 
         {/* Quick Actions */}
-        <div className="flex gap-3 mb-10">
+        <div className="flex flex-wrap gap-3 mb-10">
+          <Link to="/app/templates/urban-graffiti-style">
+            <Button className="gradient-primary text-primary-foreground font-bold border-0 glow-blue-sm">
+              <Plus size={14} className="mr-2" /> Run Template
+            </Button>
+          </Link>
           <Link to="/projects">
             <Button variant="outline" className="border-border/50 text-foreground bg-secondary hover:bg-secondary/80">
               <FolderOpen size={14} className="mr-2" /> My Projects
