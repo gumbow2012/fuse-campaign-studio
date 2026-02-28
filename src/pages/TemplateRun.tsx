@@ -6,9 +6,33 @@ import { getTemplateBySlug } from "@/lib/template-configs";
 import { useAuth } from "@/contexts/AuthContext";
 import CreditConfirmModal from "@/components/CreditConfirmModal";
 import { toast } from "@/hooks/use-toast";
-import { Minus, Plus, GripVertical, MoreVertical, Upload, X, Zap } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
+import { Minus, Plus, GripVertical, MoreVertical, Upload, X, Zap, Loader2 } from "lucide-react";
 
 const BACKEND_URL = "https://fuse-backend.workers.dev";
+
+/** Upload a file to storage and return a signed URL (1 hour expiry). */
+const uploadToStorage = async (
+  userId: string,
+  fieldKey: string,
+  file: File
+): Promise<string> => {
+  const ext = file.name.split(".").pop() || "png";
+  const path = `${userId}/${Date.now()}-${fieldKey}.${ext}`;
+
+  const { error: uploadErr } = await supabase.storage
+    .from("template-inputs")
+    .upload(path, file, { upsert: true });
+  if (uploadErr) throw new Error(`Upload failed for ${fieldKey}: ${uploadErr.message}`);
+
+  const { data: signedData, error: signErr } = await supabase.storage
+    .from("template-inputs")
+    .createSignedUrl(path, 3600); // 1 hour
+  if (signErr || !signedData?.signedUrl)
+    throw new Error(`Could not get URL for ${fieldKey}`);
+
+  return signedData.signedUrl;
+};
 
 /* ─── Drop zone with preview ─── */
 const FileNodeHeader = () => (
@@ -135,14 +159,14 @@ const TemplateRun = () => {
     setShowConfirm(false);
     setLoading(true);
     try {
-      // Upload files to get URLs (placeholder: use object URLs for now, real impl would upload to storage)
+      if (!user) throw new Error("Not authenticated");
+
+      // Upload all files to storage and collect signed URLs
       const inputs: Record<string, string> = {};
       for (const field of template.inputs) {
         const f = files[field.key];
         if (f) {
-          // In production, upload to storage and get a signed URL
-          // For now, we pass a placeholder since the backend handles this
-          inputs[field.key] = `uploaded:${field.key}:${f.name}`;
+          inputs[field.key] = await uploadToStorage(user.id, field.key, f);
         }
       }
 
