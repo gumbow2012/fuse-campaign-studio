@@ -1,7 +1,8 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { Button } from "@/components/ui/button";
-import { Link } from "react-router-dom";
-import { Star, FolderArchive, FileText, Bell, User, Search, Lock, ChevronDown } from "lucide-react";
+import { Link, useNavigate } from "react-router-dom";
+import { Star, FolderArchive, FileText, Bell, User, Search, Lock, ChevronDown, LogOut, LayoutDashboard, Zap } from "lucide-react";
+import { useAuth } from "@/contexts/AuthContext";
 
 /* ─── Mode options ─── */
 const modes = ["Streetwear", "Luxury", "Ecom", "UGC"] as const;
@@ -140,6 +141,8 @@ const TemplatesMegaMenu = () => {
 const Navbar = () => {
   const [activeMode, setActiveMode] = useState<typeof modes[number]>("Streetwear");
   const [scrolled, setScrolled] = useState(false);
+  const { user, profile, signOut } = useAuth();
+  const navigate = useNavigate();
 
   const handleScroll = useCallback(() => {
     setScrolled(window.scrollY > 50);
@@ -241,41 +244,91 @@ const Navbar = () => {
             ))}
           </div>
 
-          {/* Quick action icons */}
-          <div className="hidden md:flex items-center gap-1">
-            {[
-              { icon: Search, label: "Search" },
-              { icon: Bell, label: "Updates" },
-              { icon: Star, label: "Saved" },
-              { icon: FolderArchive, label: "Vault" },
-              { icon: FileText, label: "Runs" },
-            ].map(({ icon: Icon, label }) => (
-              <button
-                key={label}
-                title={label}
-                className="p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-secondary/40 transition-colors"
+          {user ? (
+            <>
+              {/* Credits badge */}
+              <div className="hidden md:flex items-center gap-1 px-3 py-1.5 rounded-full bg-secondary/50 border border-border/40">
+                <Zap size={12} className="text-primary" />
+                <span className="text-[10px] font-bold text-foreground">{profile?.credits_balance ?? 0}</span>
+              </div>
+
+              {/* Quick action icons */}
+              <div className="hidden md:flex items-center gap-1">
+                {[
+                  { icon: Search, label: "Search" },
+                  { icon: Bell, label: "Updates" },
+                  { icon: FolderArchive, label: "Vault" },
+                ].map(({ icon: Icon, label }) => (
+                  <button
+                    key={label}
+                    title={label}
+                    className="p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-secondary/40 transition-colors"
+                  >
+                    <Icon size={16} />
+                  </button>
+                ))}
+              </div>
+
+              <div className="w-px h-6 bg-border/40 mx-1 hidden md:block" />
+
+              <Link to="/dashboard">
+                <Button variant="outline" size="sm" className="rounded-full border-border/60 text-foreground hover:text-foreground hover:border-foreground/30 bg-transparent px-4 text-xs">
+                  <LayoutDashboard size={14} className="mr-1.5" />
+                  Dashboard
+                </Button>
+              </Link>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => { signOut(); navigate("/"); }}
+                className="rounded-full text-muted-foreground hover:text-foreground px-3 text-xs"
               >
-                <Icon size={16} />
-              </button>
-            ))}
-          </div>
+                <LogOut size={14} />
+              </Button>
+            </>
+          ) : (
+            <>
+              {/* Quick action icons */}
+              <div className="hidden md:flex items-center gap-1">
+                {[
+                  { icon: Search, label: "Search" },
+                  { icon: Bell, label: "Updates" },
+                  { icon: Star, label: "Saved" },
+                  { icon: FolderArchive, label: "Vault" },
+                  { icon: FileText, label: "Runs" },
+                ].map(({ icon: Icon, label }) => (
+                  <button
+                    key={label}
+                    title={label}
+                    className="p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-secondary/40 transition-colors"
+                  >
+                    <Icon size={16} />
+                  </button>
+                ))}
+              </div>
 
-          <div className="w-px h-6 bg-border/40 mx-1 hidden md:block" />
+              <div className="w-px h-6 bg-border/40 mx-1 hidden md:block" />
 
-          <Button
-            variant="outline"
-            size="sm"
-            className="rounded-full border-border/60 text-foreground hover:text-foreground hover:border-foreground/30 bg-transparent px-5 text-xs"
-          >
-            <User size={14} className="mr-1.5" />
-            Login
-          </Button>
-          <Button
-            size="sm"
-            className="rounded-full gradient-primary text-primary-foreground font-bold glow-blue-sm hover:opacity-90 transition-opacity border-0 px-5 text-xs tracking-wide"
-          >
-            Launch Drop
-          </Button>
+              <Link to="/auth">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="rounded-full border-border/60 text-foreground hover:text-foreground hover:border-foreground/30 bg-transparent px-5 text-xs"
+                >
+                  <User size={14} className="mr-1.5" />
+                  Login
+                </Button>
+              </Link>
+              <Link to="/auth">
+                <Button
+                  size="sm"
+                  className="rounded-full gradient-primary text-primary-foreground font-bold glow-blue-sm hover:opacity-90 transition-opacity border-0 px-5 text-xs tracking-wide"
+                >
+                  Launch Drop
+                </Button>
+              </Link>
+            </>
+          )}
         </div>
       </div>
     </nav>

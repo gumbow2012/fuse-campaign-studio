@@ -2,7 +2,11 @@ import Navbar from "@/components/Navbar";
 import { Button } from "@/components/ui/button";
 import { Check, Zap, Crown, Building2, Rocket, ArrowRight } from "lucide-react";
 import { useState } from "react";
-
+import { useAuth } from "@/contexts/AuthContext";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "@/hooks/use-toast";
+import { useNavigate } from "react-router-dom";
+import { STRIPE_TIERS } from "@/lib/stripe-config";
 /* ─── Tier data ─── */
 const tiers = [
   {
@@ -115,6 +119,35 @@ const creditPacks = [
 
 const Pricing = () => {
   const [billingCycle, setBillingCycle] = useState<"monthly" | "annual">("monthly");
+  const [loading, setLoading] = useState<string | null>(null);
+  const { user } = useAuth();
+  const navigate = useNavigate();
+
+  const handleTierCta = async (tierName: string) => {
+    if (tierName === "Enterprise") {
+      window.open("mailto:sales@fusecampaign.com", "_blank");
+      return;
+    }
+    if (!user) {
+      navigate("/auth");
+      return;
+    }
+    const tierKey = tierName.toLowerCase() as keyof typeof STRIPE_TIERS;
+    const tier = STRIPE_TIERS[tierKey];
+    if (!tier) return;
+    setLoading(tierName);
+    try {
+      const { data, error } = await supabase.functions.invoke("create-checkout", {
+        body: { priceId: tier.price_id },
+      });
+      if (error) throw error;
+      if (data?.url) window.open(data.url, "_blank");
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    } finally {
+      setLoading(null);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-background">
@@ -222,14 +255,16 @@ const Pricing = () => {
 
                   {/* CTA */}
                   <Button
+                    onClick={() => handleTierCta(tier.name)}
+                    disabled={loading === tier.name}
                     className={`w-full mb-6 rounded-lg font-bold text-sm tracking-wide ${
                       tier.popular
                         ? "gradient-primary text-primary-foreground glow-blue-sm border-0"
                         : "bg-secondary text-foreground hover:bg-secondary/80 border border-border/40"
                     }`}
                   >
-                    {tier.cta}
-                    <ArrowRight size={14} className="ml-2" />
+                    {loading === tier.name ? "Loading..." : tier.cta}
+                    {loading !== tier.name && <ArrowRight size={14} className="ml-2" />}
                   </Button>
 
                   {/* Features */}
