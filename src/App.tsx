@@ -21,6 +21,8 @@ import Analytics from "./pages/Analytics";
 import AdminAnalytics from "./pages/AdminAnalytics";
 import CreatorAnalytics from "./pages/CreatorAnalytics";
 import Referrals from "./pages/Referrals";
+import TemplateRun from "./pages/TemplateRun";
+import JobStatus from "./pages/JobStatus";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -50,6 +52,10 @@ const App = () => (
             <Route path="/analytics" element={<ProtectedRoute><Analytics /></ProtectedRoute>} />
             <Route path="/creator/analytics" element={<ProtectedRoute><CreatorAnalytics /></ProtectedRoute>} />
             <Route path="/referrals" element={<ProtectedRoute><Referrals /></ProtectedRoute>} />
+
+            {/* Template run & job status */}
+            <Route path="/app/templates/:slug" element={<ProtectedRoute><TemplateRun /></ProtectedRoute>} />
+            <Route path="/app/jobs/:jobId" element={<ProtectedRoute><JobStatus /></ProtectedRoute>} />
 
             {/* Admin routes */}
             <Route path="/admin" element={<AdminRoute><Admin /></AdminRoute>} />
