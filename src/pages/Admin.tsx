@@ -6,7 +6,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "@/hooks/use-toast";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Plus, Trash2 } from "lucide-react";
+import { Plus, Trash2, BarChart3, DollarSign } from "lucide-react";
+import { Link } from "react-router-dom";
 
 const Admin = () => {
   const queryClient = useQueryClient();
@@ -66,6 +67,25 @@ const Admin = () => {
     }
   };
 
+  // Revenue config
+  const { data: platformConfig } = useQuery({
+    queryKey: ["platform-config"],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("platform_config").select("*").limit(1).single();
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  const { data: referralConfig } = useQuery({
+    queryKey: ["referral-config"],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("referral_program_config").select("*").limit(1).single();
+      if (error) throw error;
+      return data;
+    },
+  });
+
   // Recent projects
   const { data: recentProjects } = useQuery({
     queryKey: ["admin-projects"],
@@ -92,6 +112,8 @@ const Admin = () => {
             <TabsTrigger value="templates" className="text-xs">Templates</TabsTrigger>
             <TabsTrigger value="credits" className="text-xs">Credits</TabsTrigger>
             <TabsTrigger value="projects" className="text-xs">Projects</TabsTrigger>
+            <TabsTrigger value="revenue" className="text-xs">Revenue</TabsTrigger>
+            <TabsTrigger value="referrals" className="text-xs">Referrals</TabsTrigger>
           </TabsList>
 
           <TabsContent value="templates">
@@ -154,6 +176,68 @@ const Admin = () => {
                   }`}>{p.status}</span>
                 </div>
               ))}
+            </div>
+          </TabsContent>
+
+          <TabsContent value="revenue">
+            <div className="space-y-6">
+              <div className="rounded-xl border border-border/40 bg-card p-5">
+                <h3 className="text-sm font-bold text-foreground mb-4">Revenue Split Config</h3>
+                {platformConfig ? (
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                    <div>
+                      <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-muted-foreground mb-1">Platform Share</p>
+                      <p className="font-display text-xl font-black text-foreground">{platformConfig.platform_share_percent}%</p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-muted-foreground mb-1">Creator Share</p>
+                      <p className="font-display text-xl font-black text-foreground">{platformConfig.creator_share_percent}%</p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-muted-foreground mb-1">Affiliate %</p>
+                      <p className="font-display text-xl font-black text-foreground">{platformConfig.affiliate_percent_of_platform}%</p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-muted-foreground mb-1">Hold Period</p>
+                      <p className="font-display text-xl font-black text-foreground">{platformConfig.hold_period_days}d</p>
+                    </div>
+                  </div>
+                ) : <p className="text-sm text-muted-foreground">Loading...</p>}
+              </div>
+
+              <Link to="/admin/analytics">
+                <Button variant="outline" className="border-border/50 text-foreground bg-secondary hover:bg-secondary/80">
+                  <BarChart3 size={14} className="mr-2" /> View Full Analytics Dashboard
+                </Button>
+              </Link>
+            </div>
+          </TabsContent>
+
+          <TabsContent value="referrals">
+            <div className="rounded-xl border border-border/40 bg-card p-5">
+              <h3 className="text-sm font-bold text-foreground mb-4">Referral Program Config</h3>
+              {referralConfig ? (
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                  <div>
+                    <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-muted-foreground mb-1">Status</p>
+                    <p className={`font-display text-lg font-black ${referralConfig.enabled ? "text-green-400" : "text-red-400"}`}>
+                      {referralConfig.enabled ? "Active" : "Disabled"}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-muted-foreground mb-1">Signup Bonus</p>
+                    <p className="font-display text-xl font-black text-foreground">{referralConfig.signup_bonus_credits} credits</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-muted-foreground mb-1">Referrer Bonus</p>
+                    <p className="font-display text-xl font-black text-foreground">{referralConfig.referrer_bonus_credits_on_paid} credits</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-muted-foreground mb-1">Trigger</p>
+                    <p className="text-xs font-bold text-foreground">{referralConfig.paid_trigger}</p>
+                  </div>
+                </div>
+              ) : <p className="text-sm text-muted-foreground">Loading...</p>}
             </div>
           </TabsContent>
         </Tabs>
