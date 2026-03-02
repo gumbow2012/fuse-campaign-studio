@@ -6,6 +6,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import CreditConfirmModal from "@/components/CreditConfirmModal";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
+import { submitJob } from "@/lib/cf-worker";
 import { useQuery } from "@tanstack/react-query";
 import { Minus, Plus, GripVertical, MoreVertical, Upload, X, Zap, Loader2 } from "lucide-react";
 
@@ -161,13 +162,28 @@ const TemplateRun = () => {
         }
       }
 
-      // Call run-template edge function
+      // 1. Call Supabase to deduct credits + create project record
       const { data, error } = await supabase.functions.invoke("run-template", {
         body: { templateId: template.id, inputs },
       });
 
       if (error) throw new Error(error.message);
       if (data?.error) throw new Error(data.error);
+
+      // 2. Submit the job to CF Worker for orchestration
+      const session = await supabase.auth.getSession();
+      const token = session.data.session?.access_token;
+      if (!token) throw new Error("Not authenticated");
+
+      try {
+        await submitJob(
+          { projectId: data.projectId, templateId: template.id, inputs },
+          token,
+        );
+      } catch (cfErr: any) {
+        // Job is already queued in DB — CF Worker submission is best-effort
+        console.warn("CF Worker submission failed (job still queued):", cfErr.message);
+      }
 
       navigate(`/app/jobs/${data.projectId}`);
     } catch (err: any) {
