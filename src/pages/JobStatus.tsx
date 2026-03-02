@@ -5,25 +5,11 @@ import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Download, RotateCcw, CheckCircle2, Loader2, AlertTriangle } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
-
-interface OutputItem {
-  type: string;
-  url: string;
-  label?: string;
-}
-
-interface JobData {
-  status: "queued" | "running" | "complete" | "failed";
-  progress?: number;
-  outputs?: { items?: OutputItem[] };
-  error?: string;
-  mode?: string;
-  weavyStatus?: string;
-}
+import { getJobStatus, type JobStatusResponse } from "@/lib/cf-worker";
 
 const JobStatus = () => {
   const { jobId } = useParams<{ jobId: string }>();
-  const [job, setJob] = useState<JobData | null>(null);
+  const [job, setJob] = useState<JobStatusResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -32,34 +18,12 @@ const JobStatus = () => {
 
     const poll = async () => {
       try {
-        const { data, error: fnErr } = await supabase.functions.invoke("weavy-job-status", {
-          body: null,
-          headers: {},
-        });
-
-        // We need to pass projectId as query param — invoke doesn't support that natively,
-        // so let's use fetch directly
         const session = await supabase.auth.getSession();
         const token = session.data.session?.access_token;
         if (!token) throw new Error("Not authenticated");
 
-        const projectId = import.meta.env.VITE_SUPABASE_PROJECT_ID;
-        const res = await fetch(
-          `https://${projectId}.supabase.co/functions/v1/weavy-job-status?projectId=${jobId}`,
-          {
-            headers: {
-              Authorization: `Bearer ${token}`,
-              apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
-            },
-          },
-        );
+        const jobData = await getJobStatus(jobId, token);
 
-        if (!res.ok) {
-          const errData = await res.json().catch(() => ({ error: "Request failed" }));
-          throw new Error(errData.error || `HTTP ${res.status}`);
-        }
-
-        const jobData: JobData = await res.json();
         if (active) {
           setJob(jobData);
           setError(null);
@@ -124,13 +88,6 @@ const JobStatus = () => {
 
             <Progress value={job.progress || 0} className="h-2 mb-3" />
             <p className="text-xs text-muted-foreground text-right">{job.progress || 0}%</p>
-
-            {job.weavyStatus && (
-              <p className="text-[10px] text-muted-foreground mt-2">Weavy status: {job.weavyStatus}</p>
-            )}
-            {job.mode === "mock" && (
-              <p className="text-[10px] text-yellow-500 mt-2">⚠ Running in mock mode (no Weavy config)</p>
-            )}
 
             <div className="mt-8 flex items-center justify-center gap-2">
               <Loader2 className="w-4 h-4 text-primary animate-spin" />
