@@ -154,47 +154,90 @@ const Admin = () => {
   });
 
   const [expandedTemplate, setExpandedTemplate] = useState<string | null>(null);
-  const [importFlowUrl, setImportFlowUrl] = useState("");
-  const [importRecipeId, setImportRecipeId] = useState("");
-  const [importLoading, setImportLoading] = useState(false);
-  const [importResults, setImportResults] = useState<any>(null);
 
-  const fetchWeavyRecipe = async () => {
-    if (!importFlowUrl && !importRecipeId) {
-      toast({ title: "Enter a flow URL or recipe ID", variant: "destructive" });
+  // Paste-to-import
+  const [curlPaste, setCurlPaste] = useState("");
+  const [parseLoading, setParseLoading] = useState(false);
+  const [parsedResult, setParsedResult] = useState<any>(null);
+
+  const parseCurlInput = async () => {
+    if (!curlPaste.trim()) {
+      toast({ title: "Paste a cURL or request body first", variant: "destructive" });
       return;
     }
-    setImportLoading(true);
-    setImportResults(null);
+    setParseLoading(true);
+    setParsedResult(null);
     try {
-      const { data, error } = await supabase.functions.invoke("fetch-weavy-recipe", {
-        body: { flowUrl: importFlowUrl, recipeId: importRecipeId },
+      const { data, error } = await supabase.functions.invoke("parse-weavy-curl", {
+        body: { rawInput: curlPaste },
       });
       if (error) throw error;
-      setImportResults(data);
-
-      // If recipe data was found, pre-fill the template form
-      if (data?.recipe) {
-        const recipe = data.recipe;
-        setNewTemplate((prev) => ({
-          ...prev,
-          weavy_recipe_id: recipe.recipeId || recipe.id || importRecipeId || "",
-          weavy_recipe_version: recipe.recipeVersion || recipe.version || 1,
-          weavy_flow_url: importFlowUrl || prev.weavy_flow_url,
-          name: recipe.name || prev.name,
-          description: recipe.description || prev.description,
-          input_schema: recipe.inputs
-            ? JSON.stringify(recipe.inputs, null, 2)
-            : prev.input_schema,
-        }));
-        toast({ title: "Recipe data imported!", description: "Template form has been pre-filled." });
-      } else {
-        toast({ title: "API probe complete", description: "Check the results below for available endpoints." });
+      if (data?.error) {
+        toast({ title: "Parse failed", description: data.error, variant: "destructive" });
+        setParsedResult(data);
+        return;
       }
+      setParsedResult(data);
+
+      // Auto-fill template form
+      const p = data.parsed;
+      setNewTemplate((prev) => ({
+        ...prev,
+        weavy_recipe_id: p.recipeId || prev.weavy_recipe_id,
+        weavy_recipe_version: p.recipeVersion || prev.weavy_recipe_version,
+        input_schema: p.inputs?.length ? JSON.stringify(p.inputs, null, 2) : prev.input_schema,
+      }));
+      toast({ title: "✅ Parsed!", description: `Recipe ${p.recipeId} with ${p.inputs?.length || 0} inputs extracted.` });
     } catch (err: any) {
       toast({ title: "Error", description: err.message, variant: "destructive" });
     } finally {
-      setImportLoading(false);
+      setParseLoading(false);
+    }
+  };
+
+  const oneClickImport = async () => {
+    if (!parsedResult?.parsed) return;
+    const p = parsedResult.parsed;
+    if (!p.recipeId) {
+      toast({ title: "Missing recipe ID", description: "Could not extract recipe ID from the pasted data.", variant: "destructive" });
+      return;
+    }
+
+    try {
+      let parsedSchema = p.inputs || [];
+
+      const { error } = await supabase.from("templates").insert([
+        {
+          name: newTemplate.name || `Weavy Recipe ${p.recipeId.slice(0, 8)}`,
+          description: newTemplate.description || "",
+          estimated_credits_per_run: newTemplate.estimated_credits_per_run,
+          category: newTemplate.category || "",
+          weavy_recipe_id: p.recipeId,
+          weavy_recipe_version: p.recipeVersion || 1,
+          input_schema: parsedSchema,
+          output_type: newTemplate.output_type,
+          expected_output_count: newTemplate.expected_output_count,
+        },
+      ]);
+      if (error) throw error;
+      queryClient.invalidateQueries({ queryKey: ["admin-templates"] });
+      setCurlPaste("");
+      setParsedResult(null);
+      setNewTemplate({
+        name: "",
+        description: "",
+        estimated_credits_per_run: 10,
+        category: "",
+        weavy_flow_url: "",
+        weavy_recipe_id: "",
+        weavy_recipe_version: 1,
+        input_schema: EXAMPLE_INPUT_SCHEMA,
+        output_type: "video",
+        expected_output_count: 1,
+      });
+      toast({ title: "🚀 Template created!", description: "Recipe imported and ready to use." });
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
     }
   };
 
@@ -215,96 +258,97 @@ const Admin = () => {
           </TabsList>
 
           <TabsContent value="templates">
-            {/* Auto-import from Weavy */}
+            {/* Paste-to-Import */}
             <div className="rounded-xl border border-primary/20 bg-primary/5 p-5 mb-6">
-              <h3 className="text-sm font-bold text-foreground mb-2">🔄 Auto-Import from Weavy</h3>
-              <p className="text-xs text-muted-foreground mb-3">
-                Paste a Weavy flow URL or recipe ID to automatically fetch recipe metadata and pre-fill the template form.
+              <h3 className="text-sm font-bold text-foreground mb-2">⚡ One-Paste Import</h3>
+              <p className="text-xs text-muted-foreground mb-1">
+                Run your flow once in Weavy, then:
               </p>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
-                <Input
-                  placeholder="Weavy Flow URL (e.g. https://www.weavy.run/canvas/...)"
-                  value={importFlowUrl}
-                  onChange={(e) => setImportFlowUrl(e.target.value)}
-                  className="bg-secondary border-border text-foreground"
-                />
-                <Input
-                  placeholder="Recipe ID (if known)"
-                  value={importRecipeId}
-                  onChange={(e) => setImportRecipeId(e.target.value)}
-                  className="bg-secondary border-border text-foreground"
-                />
-              </div>
-              <Button
-                onClick={fetchWeavyRecipe}
-                disabled={importLoading || (!importFlowUrl && !importRecipeId)}
-                className="gradient-primary text-primary-foreground font-bold border-0"
-              >
-                {importLoading ? (
-                  <><Loader2 size={14} className="mr-1 animate-spin" /> Probing API...</>
-                ) : (
-                  <><Download size={14} className="mr-1" /> Fetch Recipe Metadata</>
+              <ol className="text-xs text-muted-foreground space-y-0.5 list-decimal list-inside mb-3">
+                <li>Open DevTools → <strong>Network</strong> tab (F12)</li>
+                <li>Click <strong>Run</strong> in Weavy</li>
+                <li>Find the <code className="text-primary">POST .../run</code> request → right-click → <strong>Copy as cURL</strong></li>
+                <li>Paste below → everything is auto-extracted</li>
+              </ol>
+              <Textarea
+                placeholder={`Paste cURL here...\n\ncurl 'https://...weavy.io/api/v1/recipe-runs/recipes/ABC123/run' \\\n  -H 'Authorization: Bearer ...' \\\n  --data-raw '{"recipeVersion":1,"inputs":[...]}'`}
+                value={curlPaste}
+                onChange={(e) => setCurlPaste(e.target.value)}
+                rows={5}
+                className="bg-secondary border-border text-foreground font-mono text-xs mb-3"
+              />
+              <div className="flex gap-2">
+                <Button
+                  onClick={parseCurlInput}
+                  disabled={parseLoading || !curlPaste.trim()}
+                  className="gradient-primary text-primary-foreground font-bold border-0"
+                >
+                  {parseLoading ? (
+                    <><Loader2 size={14} className="mr-1 animate-spin" /> Parsing...</>
+                  ) : (
+                    <><Download size={14} className="mr-1" /> Parse & Extract</>
+                  )}
+                </Button>
+                {parsedResult?.parsed && (
+                  <Button
+                    onClick={oneClickImport}
+                    className="bg-accent text-accent-foreground font-bold border-0"
+                  >
+                    <Plus size={14} className="mr-1" /> One-Click Create Template
+                  </Button>
                 )}
-              </Button>
+              </div>
 
-              {importResults && (
+              {parsedResult?.parsed && (
                 <div className="mt-4 rounded-lg border border-border/30 bg-card p-3">
                   <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-muted-foreground mb-2">
-                    API Probe Results
+                    ✅ Extracted Data
                   </p>
-                  <div className="space-y-2">
-                    {importResults.recipe ? (
-                      <div className="text-xs text-green-400 font-bold">
-                        ✅ Recipe data found and imported into form below!
-                      </div>
-                    ) : (
-                      <div className="text-xs text-muted-foreground">
-                        No recipe data auto-detected. Review discovered endpoints:
-                      </div>
-                    )}
-                    {importResults.discoveredEndpoints?.map((ep: any, i: number) => (
-                      <div key={i} className="text-[10px] font-mono bg-secondary/50 rounded p-2">
-                        <span className={ep.status === 200 ? "text-green-400" : "text-muted-foreground"}>
-                          [{ep.status || "ERR"}]
-                        </span>{" "}
-                        <span className="text-foreground">{ep.endpoint}</span>
-                        {ep.data && (
-                          <pre className="mt-1 text-muted-foreground overflow-x-auto max-h-32 overflow-y-auto">
-                            {JSON.stringify(ep.data, null, 2).slice(0, 2000)}
-                          </pre>
-                        )}
-                        {ep.body && (
-                          <pre className="mt-1 text-muted-foreground">{ep.body.slice(0, 300)}</pre>
-                        )}
-                      </div>
-                    ))}
-                    {importResults.pageRecipeIds && (
-                      <div className="text-xs text-foreground">
-                        <span className="text-muted-foreground">Page recipe IDs:</span>{" "}
-                        {importResults.pageRecipeIds.join(", ")}
-                      </div>
-                    )}
-                    {importResults.pageNodeIds && (
-                      <div className="text-xs text-foreground">
-                        <span className="text-muted-foreground">Page node IDs:</span>{" "}
-                        {importResults.pageNodeIds.join(", ")}
-                      </div>
-                    )}
+                  <div className="grid grid-cols-2 gap-2 text-xs mb-2">
+                    <div><span className="text-muted-foreground">Recipe ID:</span> <span className="text-foreground font-mono font-bold">{parsedResult.parsed.recipeId || "—"}</span></div>
+                    <div><span className="text-muted-foreground">Version:</span> <span className="text-foreground font-bold">{parsedResult.parsed.recipeVersion}</span></div>
+                    <div><span className="text-muted-foreground">Inputs found:</span> <span className="text-foreground font-bold">{parsedResult.parsed.inputs?.length || 0}</span></div>
+                    <div><span className="text-muted-foreground">Base URL:</span> <span className="text-foreground font-mono text-[10px]">{parsedResult.parsed.baseUrl || "—"}</span></div>
+                  </div>
+                  {parsedResult.parsed.inputs?.length > 0 && (
+                    <div className="space-y-1">
+                      <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-muted-foreground">Inputs</p>
+                      {parsedResult.parsed.inputs.map((inp: any, i: number) => (
+                        <div key={i} className="text-[10px] font-mono bg-secondary/50 rounded p-1.5 flex items-center gap-2">
+                          <span className="text-primary font-bold">{inp.nodeId}</span>
+                          <span className="text-muted-foreground">→</span>
+                          <span className="text-foreground">{inp.label}</span>
+                          <span className="text-muted-foreground">({inp.type})</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Quick-edit name before one-click import */}
+                  <div className="mt-3 flex gap-2">
+                    <Input
+                      placeholder="Template name (optional, auto-generated if empty)"
+                      value={newTemplate.name}
+                      onChange={e => setNewTemplate({ ...newTemplate, name: e.target.value })}
+                      className="bg-secondary border-border text-foreground text-xs"
+                    />
+                    <Input
+                      placeholder="Credits"
+                      type="number"
+                      value={newTemplate.estimated_credits_per_run}
+                      onChange={e => setNewTemplate({ ...newTemplate, estimated_credits_per_run: parseInt(e.target.value) || 10 })}
+                      className="bg-secondary border-border text-foreground text-xs w-24"
+                    />
                   </div>
                 </div>
               )}
-            </div>
 
-            {/* How to capture */}
-            <div className="rounded-xl border border-primary/20 bg-primary/5 p-5 mb-6">
-              <h3 className="text-sm font-bold text-foreground mb-2">📡 How to capture Weavy recipe values</h3>
-              <ol className="text-xs text-muted-foreground space-y-1 list-decimal list-inside">
-                <li>Open your Weavy flow in the browser and open Chrome DevTools → Network tab</li>
-                <li>Click "Run" in Weavy and look for a POST to <code className="text-primary">/api/v1/recipe-runs/recipes/&lt;recipeId&gt;/run</code></li>
-                <li>From the request URL, copy the <strong>recipeId</strong></li>
-                <li>From the request payload, copy <strong>recipeVersion</strong> and each input's <strong>nodeId</strong></li>
-                <li>Status endpoint: <code className="text-primary">GET /api/v1/recipe-runs/recipes/&lt;recipeId&gt;/runs/status?runIds=&lt;runId&gt;</code></li>
-              </ol>
+              {parsedResult?.error && (
+                <div className="mt-4 rounded-lg border border-destructive/30 bg-destructive/5 p-3">
+                  <p className="text-xs text-destructive font-bold">{parsedResult.error}</p>
+                  {parsedResult.hint && <p className="text-xs text-muted-foreground mt-1">{parsedResult.hint}</p>}
+                </div>
+              )}
             </div>
 
             {/* Create template form with Weavy fields */}
