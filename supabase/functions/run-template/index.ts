@@ -7,8 +7,6 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-const AI_GATEWAY = "https://ai.gateway.lovable.dev/v1/chat/completions";
-
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
@@ -77,180 +75,83 @@ serve(async (req) => {
       description: `Run template: ${template.name}`,
     });
 
-    // Mark running
-    await supabase.from("projects").update({
-      status: "running",
-      started_at: new Date().toISOString(),
-    }).eq("id", project.id);
+    // ── Trigger Weavy recipe run ──
+    const WEAVY_API_KEY = Deno.env.get("WEAVY_API_KEY");
+    const WEAVY_BASE = Deno.env.get("WEAVY_API_BASE_URL") || "https://api.weavy.io";
+    const recipeId = template.weavy_recipe_id;
 
-    // ── AI Image Generation ──
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) {
-      console.error("LOVABLE_API_KEY not configured");
+    if (!WEAVY_API_KEY || !recipeId) {
+      // No Weavy config — leave as queued for manual admin fulfillment
+      console.log("No Weavy API key or recipe ID — project stays queued for manual fulfillment");
+      return new Response(
+        JSON.stringify({ projectId: project.id, status: "queued", mode: "manual" }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
+
+    // Build Weavy input payload from user-uploaded signed URLs
+    const weavyInputs: Record<string, any> = {};
+    const inputSchema: Array<{ key: string; nodeId?: string }> = template.input_schema || [];
+    for (const field of inputSchema) {
+      const value = inputs?.[field.key];
+      if (value) {
+        // Use nodeId as key if available (Weavy expects node-based keys), else use field key
+        const weavyKey = field.nodeId || field.key;
+        weavyInputs[weavyKey] = value;
+      }
+    }
+
+    // Build webhook callback URL so Weavy notifies us on completion
+    const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
+    const webhookUrl = `${SUPABASE_URL}/functions/v1/weavy-webhook`;
+
+    const runUrl = `${WEAVY_BASE}/api/v1/recipe-runs/recipes/${recipeId}/run`;
+    console.log("Triggering Weavy run:", runUrl);
+
+    const weavyRes = await fetch(runUrl, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${WEAVY_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        inputs: weavyInputs,
+        version: template.weavy_recipe_version || undefined,
+        webhookUrl,
+        metadata: {
+          projectId: project.id,
+          userId: user.id,
+        },
+      }),
+    });
+
+    if (!weavyRes.ok) {
+      const errText = await weavyRes.text();
+      console.error("Weavy run error:", weavyRes.status, errText);
       await supabase.from("projects").update({
         status: "failed",
         failed_at: new Date().toISOString(),
       }).eq("id", project.id);
-      throw new Error("AI service not configured");
+      throw new Error(`Weavy run failed: ${weavyRes.status} — ${errText}`);
     }
 
-    // Build the AI prompt from template
-    const aiPrompt = template.ai_prompt || template.description || 
-      `Generate a professional ${template.category || "product"} image. Output type: ${template.output_type || "image"}.`;
+    const weavyData = await weavyRes.json();
+    const weavyRunId = weavyData.runId || weavyData.id || weavyData.run_id || null;
+    console.log("Weavy run started:", JSON.stringify(weavyData));
 
-    // Collect image inputs as base64 for multimodal
-    const contentParts: any[] = [];
-    const inputSchema: Array<{ key: string; label: string }> = template.input_schema || [];
-    
-    for (const field of inputSchema) {
-      const url = inputs?.[field.key];
-      if (url) {
-        try {
-          console.log(`Fetching input image for ${field.key}...`);
-          const imgRes = await fetch(url);
-          if (imgRes.ok) {
-            const imgBuffer = await imgRes.arrayBuffer();
-            const base64 = btoa(String.fromCharCode(...new Uint8Array(imgBuffer)));
-            const contentType = imgRes.headers.get("content-type") || "image/png";
-            contentParts.push({
-              type: "image_url",
-              image_url: { url: `data:${contentType};base64,${base64}` },
-            });
-            console.log(`Added ${field.key} image (${(imgBuffer.byteLength / 1024).toFixed(0)}KB)`);
-          }
-        } catch (e) {
-          console.warn(`Failed to fetch image for ${field.key}:`, e);
-        }
-      }
-    }
-
-    // Add the text prompt
-    contentParts.push({
-      type: "text",
-      text: aiPrompt,
-    });
-
-    console.log(`Calling AI gateway with ${contentParts.length} content parts...`);
-
-    const aiRes = await fetch(AI_GATEWAY, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "google/gemini-3-pro-image-preview",
-        messages: [
-          {
-            role: "system",
-            content: "You are a professional product photographer and creative director. Generate high-quality, commercial-grade images based on the provided inputs and instructions. Always output an image.",
-          },
-          {
-            role: "user",
-            content: contentParts,
-          },
-        ],
-      }),
-    });
-
-    if (!aiRes.ok) {
-      const errText = await aiRes.text();
-      console.error("AI gateway error:", aiRes.status, errText);
-      
-      if (aiRes.status === 429) {
-        await supabase.from("projects").update({ status: "failed", failed_at: new Date().toISOString() }).eq("id", project.id);
-        throw new Error("AI rate limit exceeded. Please try again in a moment.");
-      }
-      if (aiRes.status === 402) {
-        await supabase.from("projects").update({ status: "failed", failed_at: new Date().toISOString() }).eq("id", project.id);
-        throw new Error("AI credits exhausted. Please add funds.");
-      }
-      
-      await supabase.from("projects").update({ status: "failed", failed_at: new Date().toISOString() }).eq("id", project.id);
-      throw new Error(`AI generation failed: ${aiRes.status}`);
-    }
-
-    const aiData = await aiRes.json();
-    console.log("AI response received");
-
-    // Extract generated images from the response
-    const outputItems: Array<{ type: string; url: string; label: string }> = [];
-    const choices = aiData.choices || [];
-
-    for (let i = 0; i < choices.length; i++) {
-      const message = choices[i]?.message;
-      if (!message?.content) continue;
-
-      // Handle array content (multimodal response with images)
-      if (Array.isArray(message.content)) {
-        for (let j = 0; j < message.content.length; j++) {
-          const part = message.content[j];
-          if (part.type === "image_url" && part.image_url?.url) {
-            const imageUrl = part.image_url.url;
-            // If it's base64, upload to storage
-            if (imageUrl.startsWith("data:")) {
-              const match = imageUrl.match(/^data:(image\/\w+);base64,(.+)$/);
-              if (match) {
-                const mimeType = match[1];
-                const ext = mimeType.split("/")[1] || "png";
-                const b64Data = match[2];
-                const bytes = Uint8Array.from(atob(b64Data), c => c.charCodeAt(0));
-                const storagePath = `${user.id}/${project.id}/output-${i}-${j}.${ext}`;
-                
-                const { error: upErr } = await supabase.storage
-                  .from("project-assets")
-                  .upload(storagePath, bytes, { contentType: mimeType, upsert: true });
-
-                if (upErr) {
-                  console.error("Storage upload failed:", upErr);
-                } else {
-                  const { data: signedData } = await supabase.storage
-                    .from("project-assets")
-                    .createSignedUrl(storagePath, 86400); // 24h
-
-                  if (signedData?.signedUrl) {
-                    outputItems.push({
-                      type: "image",
-                      url: signedData.signedUrl,
-                      label: `Generated ${ext.toUpperCase()} ${outputItems.length + 1}`,
-                    });
-                  }
-                }
-              }
-            } else {
-              // Direct URL
-              outputItems.push({
-                type: "image",
-                url: imageUrl,
-                label: `Generated Image ${outputItems.length + 1}`,
-              });
-            }
-          }
-        }
-      } else if (typeof message.content === "string") {
-        // Text-only response — no image generated, store as text output
-        console.log("AI returned text (no image):", message.content.substring(0, 200));
-      }
-    }
-
-    console.log(`Generated ${outputItems.length} output(s)`);
-
-    // Update project with outputs
-    const finalStatus = outputItems.length > 0 ? "complete" : "failed";
+    // Update project with Weavy run ID and mark as running
     await supabase.from("projects").update({
-      status: finalStatus,
-      outputs: { items: outputItems },
-      ...(finalStatus === "complete"
-        ? { completed_at: new Date().toISOString() }
-        : { failed_at: new Date().toISOString() }),
+      status: "running",
+      started_at: new Date().toISOString(),
+      weavy_run_id: weavyRunId,
     }).eq("id", project.id);
 
     return new Response(
-      JSON.stringify({ 
-        projectId: project.id, 
-        status: finalStatus,
-        outputCount: outputItems.length,
-        mode: "ai",
+      JSON.stringify({
+        projectId: project.id,
+        status: "running",
+        weavyRunId,
+        mode: "weavy",
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
