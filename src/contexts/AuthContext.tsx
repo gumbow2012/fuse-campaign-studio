@@ -104,28 +104,42 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       async (_event, newSession) => {
         setSession(newSession);
         setUser(newSession?.user ?? null);
+
         if (newSession?.user) {
+          setLoading(true);
           // Use setTimeout to avoid Supabase deadlock
-          setTimeout(() => {
-            fetchProfile(newSession.user.id);
-            checkAdmin(newSession.user.id);
+          setTimeout(async () => {
+            await Promise.all([
+              fetchProfile(newSession.user.id),
+              checkAdmin(newSession.user.id),
+            ]);
+            setLoading(false);
           }, 0);
-        } else {
-          setProfile(null);
-          setIsAdmin(false);
+          return;
         }
+
+        setProfile(null);
+        setIsAdmin(false);
         setLoading(false);
       }
     );
 
     // THEN check existing session
-    supabase.auth.getSession().then(({ data: { session: existingSession } }) => {
+    supabase.auth.getSession().then(async ({ data: { session: existingSession } }) => {
       setSession(existingSession);
       setUser(existingSession?.user ?? null);
+
       if (existingSession?.user) {
-        fetchProfile(existingSession.user.id);
-        checkAdmin(existingSession.user.id);
+        setLoading(true);
+        await Promise.all([
+          fetchProfile(existingSession.user.id),
+          checkAdmin(existingSession.user.id),
+        ]);
+      } else {
+        setProfile(null);
+        setIsAdmin(false);
       }
+
       setLoading(false);
     });
 
