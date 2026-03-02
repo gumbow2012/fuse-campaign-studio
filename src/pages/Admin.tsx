@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/hooks/use-toast";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Plus, Trash2, BarChart3, Eye, Copy, Loader2, Download, Upload, Check, X, Pencil, Save } from "lucide-react";
+import { Plus, Trash2, BarChart3, Eye, Copy, Loader2, Download, Upload, Check, X, Pencil, Save, Play } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Link } from "react-router-dom";
 
@@ -628,6 +628,11 @@ const Admin = () => {
                       </p>
                     </div>
                     <div className="flex items-center gap-1">
+                      <Link to="/app/templates/run">
+                        <Button variant="ghost" size="sm" className="text-primary hover:text-primary/80" title="Run this template">
+                          <Play size={14} />
+                        </Button>
+                      </Link>
                       <Button variant="ghost" size="sm" onClick={() => startEditing(t)} className="text-muted-foreground hover:text-foreground">
                         <Pencil size={14} />
                       </Button>
