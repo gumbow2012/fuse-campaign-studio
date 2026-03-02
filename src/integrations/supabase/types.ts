@@ -300,6 +300,7 @@ export type Database = {
           template_id: string
           updated_at: string
           user_id: string
+          weavy_run_id: string | null
         }
         Insert: {
           completed_at?: string | null
@@ -313,6 +314,7 @@ export type Database = {
           template_id: string
           updated_at?: string
           user_id: string
+          weavy_run_id?: string | null
         }
         Update: {
           completed_at?: string | null
@@ -326,6 +328,7 @@ export type Database = {
           template_id?: string
           updated_at?: string
           user_id?: string
+          weavy_run_id?: string | null
         }
         Relationships: [
           {
@@ -540,15 +543,21 @@ export type Database = {
           creator_id: string | null
           description: string | null
           estimated_credits_per_run: number
+          expected_output_count: number | null
           id: string
+          input_schema: Json | null
           is_active: boolean
           name: string
+          output_type: string | null
           owner_type: string
           preview_url: string | null
           required_inputs: Json | null
           revenue_split_override: Json | null
           tags: string[] | null
           updated_at: string
+          weavy_flow_url: string | null
+          weavy_recipe_id: string | null
+          weavy_recipe_version: number | null
         }
         Insert: {
           category?: string | null
@@ -556,15 +565,21 @@ export type Database = {
           creator_id?: string | null
           description?: string | null
           estimated_credits_per_run?: number
+          expected_output_count?: number | null
           id?: string
+          input_schema?: Json | null
           is_active?: boolean
           name: string
+          output_type?: string | null
           owner_type?: string
           preview_url?: string | null
           required_inputs?: Json | null
           revenue_split_override?: Json | null
           tags?: string[] | null
           updated_at?: string
+          weavy_flow_url?: string | null
+          weavy_recipe_id?: string | null
+          weavy_recipe_version?: number | null
         }
         Update: {
           category?: string | null
@@ -572,15 +587,21 @@ export type Database = {
           creator_id?: string | null
           description?: string | null
           estimated_credits_per_run?: number
+          expected_output_count?: number | null
           id?: string
+          input_schema?: Json | null
           is_active?: boolean
           name?: string
+          output_type?: string | null
           owner_type?: string
           preview_url?: string | null
           required_inputs?: Json | null
           revenue_split_override?: Json | null
           tags?: string[] | null
           updated_at?: string
+          weavy_flow_url?: string | null
+          weavy_recipe_id?: string | null
+          weavy_recipe_version?: number | null
         }
         Relationships: [
           {
