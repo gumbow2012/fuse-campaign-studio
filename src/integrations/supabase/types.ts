@@ -538,6 +538,7 @@ export type Database = {
       }
       templates: {
         Row: {
+          ai_prompt: string | null
           category: string | null
           created_at: string
           creator_id: string | null
@@ -560,6 +561,7 @@ export type Database = {
           weavy_recipe_version: number | null
         }
         Insert: {
+          ai_prompt?: string | null
           category?: string | null
           created_at?: string
           creator_id?: string | null
@@ -582,6 +584,7 @@ export type Database = {
           weavy_recipe_version?: number | null
         }
         Update: {
+          ai_prompt?: string | null
           category?: string | null
           created_at?: string
           creator_id?: string | null
