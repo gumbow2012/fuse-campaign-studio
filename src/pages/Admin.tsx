@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/hooks/use-toast";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Plus, Trash2, BarChart3, Eye, Copy } from "lucide-react";
+import { Plus, Trash2, BarChart3, Eye, Copy, Loader2, Download } from "lucide-react";
 import { Link } from "react-router-dom";
 
 const EXAMPLE_INPUT_SCHEMA = JSON.stringify(
@@ -154,6 +154,49 @@ const Admin = () => {
   });
 
   const [expandedTemplate, setExpandedTemplate] = useState<string | null>(null);
+  const [importFlowUrl, setImportFlowUrl] = useState("");
+  const [importRecipeId, setImportRecipeId] = useState("");
+  const [importLoading, setImportLoading] = useState(false);
+  const [importResults, setImportResults] = useState<any>(null);
+
+  const fetchWeavyRecipe = async () => {
+    if (!importFlowUrl && !importRecipeId) {
+      toast({ title: "Enter a flow URL or recipe ID", variant: "destructive" });
+      return;
+    }
+    setImportLoading(true);
+    setImportResults(null);
+    try {
+      const { data, error } = await supabase.functions.invoke("fetch-weavy-recipe", {
+        body: { flowUrl: importFlowUrl, recipeId: importRecipeId },
+      });
+      if (error) throw error;
+      setImportResults(data);
+
+      // If recipe data was found, pre-fill the template form
+      if (data?.recipe) {
+        const recipe = data.recipe;
+        setNewTemplate((prev) => ({
+          ...prev,
+          weavy_recipe_id: recipe.recipeId || recipe.id || importRecipeId || "",
+          weavy_recipe_version: recipe.recipeVersion || recipe.version || 1,
+          weavy_flow_url: importFlowUrl || prev.weavy_flow_url,
+          name: recipe.name || prev.name,
+          description: recipe.description || prev.description,
+          input_schema: recipe.inputs
+            ? JSON.stringify(recipe.inputs, null, 2)
+            : prev.input_schema,
+        }));
+        toast({ title: "Recipe data imported!", description: "Template form has been pre-filled." });
+      } else {
+        toast({ title: "API probe complete", description: "Check the results below for available endpoints." });
+      }
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    } finally {
+      setImportLoading(false);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-background">
@@ -172,6 +215,86 @@ const Admin = () => {
           </TabsList>
 
           <TabsContent value="templates">
+            {/* Auto-import from Weavy */}
+            <div className="rounded-xl border border-primary/20 bg-primary/5 p-5 mb-6">
+              <h3 className="text-sm font-bold text-foreground mb-2">🔄 Auto-Import from Weavy</h3>
+              <p className="text-xs text-muted-foreground mb-3">
+                Paste a Weavy flow URL or recipe ID to automatically fetch recipe metadata and pre-fill the template form.
+              </p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
+                <Input
+                  placeholder="Weavy Flow URL (e.g. https://www.weavy.run/canvas/...)"
+                  value={importFlowUrl}
+                  onChange={(e) => setImportFlowUrl(e.target.value)}
+                  className="bg-secondary border-border text-foreground"
+                />
+                <Input
+                  placeholder="Recipe ID (if known)"
+                  value={importRecipeId}
+                  onChange={(e) => setImportRecipeId(e.target.value)}
+                  className="bg-secondary border-border text-foreground"
+                />
+              </div>
+              <Button
+                onClick={fetchWeavyRecipe}
+                disabled={importLoading || (!importFlowUrl && !importRecipeId)}
+                className="gradient-primary text-primary-foreground font-bold border-0"
+              >
+                {importLoading ? (
+                  <><Loader2 size={14} className="mr-1 animate-spin" /> Probing API...</>
+                ) : (
+                  <><Download size={14} className="mr-1" /> Fetch Recipe Metadata</>
+                )}
+              </Button>
+
+              {importResults && (
+                <div className="mt-4 rounded-lg border border-border/30 bg-card p-3">
+                  <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-muted-foreground mb-2">
+                    API Probe Results
+                  </p>
+                  <div className="space-y-2">
+                    {importResults.recipe ? (
+                      <div className="text-xs text-green-400 font-bold">
+                        ✅ Recipe data found and imported into form below!
+                      </div>
+                    ) : (
+                      <div className="text-xs text-muted-foreground">
+                        No recipe data auto-detected. Review discovered endpoints:
+                      </div>
+                    )}
+                    {importResults.discoveredEndpoints?.map((ep: any, i: number) => (
+                      <div key={i} className="text-[10px] font-mono bg-secondary/50 rounded p-2">
+                        <span className={ep.status === 200 ? "text-green-400" : "text-muted-foreground"}>
+                          [{ep.status || "ERR"}]
+                        </span>{" "}
+                        <span className="text-foreground">{ep.endpoint}</span>
+                        {ep.data && (
+                          <pre className="mt-1 text-muted-foreground overflow-x-auto max-h-32 overflow-y-auto">
+                            {JSON.stringify(ep.data, null, 2).slice(0, 2000)}
+                          </pre>
+                        )}
+                        {ep.body && (
+                          <pre className="mt-1 text-muted-foreground">{ep.body.slice(0, 300)}</pre>
+                        )}
+                      </div>
+                    ))}
+                    {importResults.pageRecipeIds && (
+                      <div className="text-xs text-foreground">
+                        <span className="text-muted-foreground">Page recipe IDs:</span>{" "}
+                        {importResults.pageRecipeIds.join(", ")}
+                      </div>
+                    )}
+                    {importResults.pageNodeIds && (
+                      <div className="text-xs text-foreground">
+                        <span className="text-muted-foreground">Page node IDs:</span>{" "}
+                        {importResults.pageNodeIds.join(", ")}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+
             {/* How to capture */}
             <div className="rounded-xl border border-primary/20 bg-primary/5 p-5 mb-6">
               <h3 className="text-sm font-bold text-foreground mb-2">📡 How to capture Weavy recipe values</h3>
