@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/hooks/use-toast";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Plus, Trash2, BarChart3, Eye, Copy, Loader2, Download } from "lucide-react";
+import { Plus, Trash2, BarChart3, Eye, Copy, Loader2, Download, Upload, Check, X } from "lucide-react";
 import { Link } from "react-router-dom";
 
 const EXAMPLE_INPUT_SCHEMA = JSON.stringify(
@@ -241,6 +241,76 @@ const Admin = () => {
     }
   };
 
+  // HAR bulk import
+  const [harLoading, setHarLoading] = useState(false);
+  const [harRecipes, setHarRecipes] = useState<any[]>([]);
+  const [harSelected, setHarSelected] = useState<Set<string>>(new Set());
+  const [bulkImporting, setBulkImporting] = useState(false);
+
+  const handleHarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setHarLoading(true);
+    setHarRecipes([]);
+    setHarSelected(new Set());
+    try {
+      const text = await file.text();
+      const harContent = JSON.parse(text);
+      const { data, error } = await supabase.functions.invoke("parse-har-bulk", {
+        body: { harContent },
+      });
+      if (error) throw error;
+      if (data?.error) {
+        toast({ title: "No recipes found", description: data.error, variant: "destructive" });
+        return;
+      }
+      setHarRecipes(data.recipes || []);
+      setHarSelected(new Set((data.recipes || []).map((r: any) => r.recipeId)));
+      toast({ title: `Found ${data.count} recipes`, description: "Select which ones to import." });
+    } catch (err: any) {
+      toast({ title: "Error parsing HAR", description: err.message, variant: "destructive" });
+    } finally {
+      setHarLoading(false);
+      e.target.value = "";
+    }
+  };
+
+  const toggleHarRecipe = (recipeId: string) => {
+    setHarSelected(prev => {
+      const next = new Set(prev);
+      if (next.has(recipeId)) next.delete(recipeId);
+      else next.add(recipeId);
+      return next;
+    });
+  };
+
+  const bulkImportSelected = async () => {
+    const toImport = harRecipes.filter(r => harSelected.has(r.recipeId));
+    if (toImport.length === 0) return;
+    setBulkImporting(true);
+    try {
+      const rows = toImport.map(r => ({
+        name: `Weavy Recipe ${r.recipeId.slice(0, 8)}`,
+        weavy_recipe_id: r.recipeId,
+        weavy_recipe_version: r.recipeVersion || 1,
+        input_schema: r.inputs || [],
+        estimated_credits_per_run: 10,
+        output_type: "video",
+        expected_output_count: 1,
+      }));
+      const { error } = await supabase.from("templates").insert(rows);
+      if (error) throw error;
+      queryClient.invalidateQueries({ queryKey: ["admin-templates"] });
+      toast({ title: `🚀 ${rows.length} templates created!` });
+      setHarRecipes([]);
+      setHarSelected(new Set());
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    } finally {
+      setBulkImporting(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-background">
       <Navbar />
@@ -258,6 +328,107 @@ const Admin = () => {
           </TabsList>
 
           <TabsContent value="templates">
+            {/* HAR Bulk Import */}
+            <div className="rounded-xl border border-accent/30 bg-accent/5 p-5 mb-6">
+              <h3 className="text-sm font-bold text-foreground mb-2">📦 Bulk Import (HAR File)</h3>
+              <p className="text-xs text-muted-foreground mb-1">
+                Import hundreds of flows at once:
+              </p>
+              <ol className="text-xs text-muted-foreground space-y-0.5 list-decimal list-inside mb-3">
+                <li>Open Weavy and run all your flows (or just visit them)</li>
+                <li>Open DevTools → <strong>Network</strong> tab (F12)</li>
+                <li>Run each flow once</li>
+                <li>Right-click in the Network tab → <strong>Save all as HAR with content</strong></li>
+                <li>Upload the <code className="text-primary">.har</code> file below</li>
+              </ol>
+              <div className="flex items-center gap-3">
+                <label className="cursor-pointer">
+                  <input
+                    type="file"
+                    accept=".har"
+                    onChange={handleHarUpload}
+                    className="hidden"
+                    disabled={harLoading}
+                  />
+                  <span className="inline-flex items-center gap-1.5 px-4 py-2 rounded-md bg-accent text-accent-foreground font-bold text-xs hover:opacity-90 transition-opacity">
+                    {harLoading ? (
+                      <><Loader2 size={14} className="animate-spin" /> Parsing HAR...</>
+                    ) : (
+                      <><Upload size={14} /> Upload HAR File</>
+                    )}
+                  </span>
+                </label>
+                {harRecipes.length > 0 && (
+                  <span className="text-xs text-muted-foreground">
+                    {harRecipes.length} recipes found · {harSelected.size} selected
+                  </span>
+                )}
+              </div>
+
+              {harRecipes.length > 0 && (
+                <div className="mt-4 space-y-2">
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-muted-foreground">
+                      Select recipes to import
+                    </p>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => setHarSelected(new Set(harRecipes.map(r => r.recipeId)))}
+                        className="text-[10px] text-primary hover:underline"
+                      >
+                        Select all
+                      </button>
+                      <button
+                        onClick={() => setHarSelected(new Set())}
+                        className="text-[10px] text-muted-foreground hover:underline"
+                      >
+                        Deselect all
+                      </button>
+                    </div>
+                  </div>
+                  <div className="max-h-64 overflow-y-auto space-y-1 rounded-lg border border-border/30 bg-card p-2">
+                    {harRecipes.map((r: any) => (
+                      <label
+                        key={r.recipeId}
+                        className={`flex items-center gap-3 p-2 rounded cursor-pointer hover:bg-secondary/50 transition-colors ${
+                          harSelected.has(r.recipeId) ? "bg-primary/10" : ""
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={harSelected.has(r.recipeId)}
+                          onChange={() => toggleHarRecipe(r.recipeId)}
+                          className="rounded"
+                        />
+                        <div className="flex-1 min-w-0">
+                          <span className="text-xs font-mono font-bold text-foreground">{r.recipeId}</span>
+                          <span className="text-[10px] text-muted-foreground ml-2">
+                            v{r.recipeVersion} · {r.inputs?.length || 0} inputs
+                          </span>
+                        </div>
+                        {r.inputs?.length > 0 && (
+                          <span className="text-[10px] text-muted-foreground truncate max-w-[200px]">
+                            {r.inputs.map((i: any) => i.label).join(", ")}
+                          </span>
+                        )}
+                      </label>
+                    ))}
+                  </div>
+                  <Button
+                    onClick={bulkImportSelected}
+                    disabled={bulkImporting || harSelected.size === 0}
+                    className="gradient-primary text-primary-foreground font-bold border-0 w-full"
+                  >
+                    {bulkImporting ? (
+                      <><Loader2 size={14} className="mr-1 animate-spin" /> Importing {harSelected.size} templates...</>
+                    ) : (
+                      <><Plus size={14} className="mr-1" /> Import {harSelected.size} Templates</>
+                    )}
+                  </Button>
+                </div>
+              )}
+            </div>
+
             {/* Paste-to-Import */}
             <div className="rounded-xl border border-primary/20 bg-primary/5 p-5 mb-6">
               <h3 className="text-sm font-bold text-foreground mb-2">⚡ One-Paste Import</h3>
