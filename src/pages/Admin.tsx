@@ -808,22 +808,56 @@ const Admin = () => {
           </TabsContent>
 
           <TabsContent value="projects">
+            {/* Pending projects needing fulfillment */}
+            {recentProjects?.some((p: any) => p.status === "queued" || p.status === "running") && (
+              <div className="mb-6">
+                <h3 className="text-sm font-bold text-foreground mb-3 flex items-center gap-2">
+                  🔔 Pending Fulfillment
+                  <span className="text-[10px] bg-primary/20 text-primary px-2 py-0.5 rounded-full">
+                    {recentProjects?.filter((p: any) => p.status === "queued" || p.status === "running").length}
+                  </span>
+                </h3>
+                <div className="space-y-2">
+                  {recentProjects?.filter((p: any) => p.status === "queued" || p.status === "running").map((p: any) => (
+                    <Link key={p.id} to={`/projects/${p.id}`} className="block">
+                      <div className="rounded-lg border border-accent/30 bg-accent/5 p-4 flex items-center justify-between hover:bg-accent/10 transition-colors cursor-pointer">
+                        <div>
+                          <p className="text-sm font-bold text-foreground">{p.templates?.name ?? "Unknown"}</p>
+                          <p className="text-xs text-muted-foreground">{new Date(p.created_at).toLocaleString()}</p>
+                          <p className="text-[10px] font-mono text-muted-foreground mt-0.5">ID: {p.id.slice(0, 8)}...</p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className={`text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full ${
+                            p.status === "running" ? "bg-primary/20 text-primary" : "bg-muted text-muted-foreground"
+                          }`}>{p.status}</span>
+                          <Play size={14} className="text-primary" />
+                        </div>
+                      </div>
+                    </Link>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <h3 className="text-sm font-bold text-foreground mb-3">All Projects</h3>
             <div className="space-y-2">
               {recentProjects?.map((p: any) => (
-                <div key={p.id} className="rounded-lg border border-border/30 bg-card p-4 flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-bold text-foreground">{p.templates?.name ?? "Unknown"}</p>
-                    <p className="text-xs text-muted-foreground">{new Date(p.created_at).toLocaleDateString()}</p>
+                <Link key={p.id} to={`/projects/${p.id}`} className="block">
+                  <div className="rounded-lg border border-border/30 bg-card p-4 flex items-center justify-between hover:bg-card/80 transition-colors cursor-pointer">
+                    <div>
+                      <p className="text-sm font-bold text-foreground">{p.templates?.name ?? "Unknown"}</p>
+                      <p className="text-xs text-muted-foreground">{new Date(p.created_at).toLocaleDateString()}</p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className={`text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full ${
+                        p.status === "complete" ? "bg-green-500/20 text-green-400" :
+                        p.status === "running" ? "bg-primary/20 text-primary" :
+                        p.status === "failed" ? "bg-red-500/20 text-red-400" :
+                        "bg-muted text-muted-foreground"
+                      }`}>{p.status}</span>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-2">
-                    {p.weavy_run_id && <span className="text-[9px] font-mono text-muted-foreground">{p.weavy_run_id.slice(0, 8)}...</span>}
-                    <span className={`text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full ${
-                      p.status === "complete" ? "bg-green-500/20 text-green-400" :
-                      p.status === "failed" ? "bg-red-500/20 text-red-400" :
-                      "bg-muted text-muted-foreground"
-                    }`}>{p.status}</span>
-                  </div>
-                </div>
+                </Link>
               ))}
             </div>
           </TabsContent>
