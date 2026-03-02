@@ -7,7 +7,8 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/hooks/use-toast";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Plus, Trash2, BarChart3, Eye, Copy, Loader2, Download, Upload, Check, X } from "lucide-react";
+import { Plus, Trash2, BarChart3, Eye, Copy, Loader2, Download, Upload, Check, X, Pencil, Save } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Link } from "react-router-dom";
 
 const EXAMPLE_INPUT_SCHEMA = JSON.stringify(
@@ -154,6 +155,55 @@ const Admin = () => {
   });
 
   const [expandedTemplate, setExpandedTemplate] = useState<string | null>(null);
+  const [editingTemplate, setEditingTemplate] = useState<string | null>(null);
+  const [editForm, setEditForm] = useState<any>({});
+
+  const startEditing = (t: any) => {
+    setEditingTemplate(t.id);
+    setEditForm({
+      name: t.name,
+      description: t.description || "",
+      category: t.category || "",
+      estimated_credits_per_run: t.estimated_credits_per_run,
+      output_type: t.output_type || "video",
+      expected_output_count: t.expected_output_count || 1,
+      weavy_recipe_id: t.weavy_recipe_id || "",
+      weavy_recipe_version: t.weavy_recipe_version || 1,
+      input_schema: JSON.stringify(t.input_schema || [], null, 2),
+      is_active: t.is_active,
+    });
+    setExpandedTemplate(t.id);
+  };
+
+  const saveTemplate = async (id: string) => {
+    try {
+      let parsedSchema: any[];
+      try {
+        parsedSchema = JSON.parse(editForm.input_schema);
+      } catch {
+        toast({ title: "Invalid JSON", description: "input_schema must be valid JSON", variant: "destructive" });
+        return;
+      }
+      const { error } = await supabase.from("templates").update({
+        name: editForm.name,
+        description: editForm.description || null,
+        category: editForm.category || null,
+        estimated_credits_per_run: editForm.estimated_credits_per_run,
+        output_type: editForm.output_type,
+        expected_output_count: editForm.expected_output_count,
+        weavy_recipe_id: editForm.weavy_recipe_id || null,
+        weavy_recipe_version: editForm.weavy_recipe_version,
+        input_schema: parsedSchema,
+        is_active: editForm.is_active,
+      }).eq("id", id);
+      if (error) throw error;
+      queryClient.invalidateQueries({ queryKey: ["admin-templates"] });
+      setEditingTemplate(null);
+      toast({ title: "Template updated" });
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    }
+  };
 
   // Paste-to-import
   const [curlPaste, setCurlPaste] = useState("");
@@ -573,28 +623,97 @@ const Admin = () => {
                       <p className="text-sm font-bold text-foreground">{t.name}</p>
                       <p className="text-xs text-muted-foreground">
                         {t.category || "—"} · {t.estimated_credits_per_run} credits
-                        {t.weavy_recipe_id && <span className="ml-2 text-primary">· Weavy: {t.weavy_recipe_id}</span>}
+                        {t.weavy_recipe_id && <span className="ml-2 text-primary">· Weavy: {t.weavy_recipe_id.slice(0, 12)}...</span>}
+                        {!t.is_active && <span className="ml-2 text-destructive font-bold">· INACTIVE</span>}
                       </p>
                     </div>
                     <div className="flex items-center gap-1">
+                      <Button variant="ghost" size="sm" onClick={() => startEditing(t)} className="text-muted-foreground hover:text-foreground">
+                        <Pencil size={14} />
+                      </Button>
                       <Button variant="ghost" size="sm" onClick={() => setExpandedTemplate(expandedTemplate === t.id ? null : t.id)} className="text-muted-foreground hover:text-foreground">
                         <Eye size={14} />
                       </Button>
                       <Button variant="ghost" size="sm" onClick={() => { navigator.clipboard.writeText(t.id); toast({ title: "ID copied" }); }} className="text-muted-foreground hover:text-foreground">
                         <Copy size={14} />
                       </Button>
-                      <Button variant="ghost" size="sm" onClick={() => deleteTemplate(t.id)} className="text-red-400 hover:text-red-300">
+                      <Button variant="ghost" size="sm" onClick={() => deleteTemplate(t.id)} className="text-destructive hover:text-destructive">
                         <Trash2 size={14} />
                       </Button>
                     </div>
                   </div>
-                  {expandedTemplate === t.id && (
+                  {expandedTemplate === t.id && editingTemplate === t.id && (
+                    <div className="px-4 pb-4 border-t border-border/20 pt-3 space-y-3">
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Name</label>
+                          <Input value={editForm.name} onChange={e => setEditForm({ ...editForm, name: e.target.value })} className="bg-secondary border-border text-foreground text-xs mt-1" />
+                        </div>
+                        <div>
+                          <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Category</label>
+                          <Input value={editForm.category} onChange={e => setEditForm({ ...editForm, category: e.target.value })} className="bg-secondary border-border text-foreground text-xs mt-1" />
+                        </div>
+                        <div>
+                          <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Credits per Run</label>
+                          <Input type="number" value={editForm.estimated_credits_per_run} onChange={e => setEditForm({ ...editForm, estimated_credits_per_run: parseInt(e.target.value) || 0 })} className="bg-secondary border-border text-foreground text-xs mt-1" />
+                        </div>
+                        <div>
+                          <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Output Type</label>
+                          <Select value={editForm.output_type} onValueChange={v => setEditForm({ ...editForm, output_type: v })}>
+                            <SelectTrigger className="bg-secondary border-border text-foreground text-xs mt-1">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="video">Video</SelectItem>
+                              <SelectItem value="image">Image</SelectItem>
+                              <SelectItem value="multi">Multi-asset</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div>
+                          <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Expected Outputs</label>
+                          <Input type="number" value={editForm.expected_output_count} onChange={e => setEditForm({ ...editForm, expected_output_count: parseInt(e.target.value) || 1 })} className="bg-secondary border-border text-foreground text-xs mt-1" />
+                        </div>
+                        <div>
+                          <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Recipe Version</label>
+                          <Input type="number" value={editForm.weavy_recipe_version} onChange={e => setEditForm({ ...editForm, weavy_recipe_version: parseInt(e.target.value) || 1 })} className="bg-secondary border-border text-foreground text-xs mt-1" />
+                        </div>
+                      </div>
+                      <div>
+                        <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Description</label>
+                        <Textarea value={editForm.description} onChange={e => setEditForm({ ...editForm, description: e.target.value })} className="bg-secondary border-border text-foreground text-xs mt-1" rows={2} />
+                      </div>
+                      <div>
+                        <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Recipe ID</label>
+                        <Input value={editForm.weavy_recipe_id} onChange={e => setEditForm({ ...editForm, weavy_recipe_id: e.target.value })} className="bg-secondary border-border text-foreground text-xs font-mono mt-1" />
+                      </div>
+                      <div>
+                        <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Input Schema (JSON)</label>
+                        <Textarea value={editForm.input_schema} onChange={e => setEditForm({ ...editForm, input_schema: e.target.value })} className="bg-secondary border-border text-foreground text-xs font-mono mt-1" rows={6} />
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <label className="flex items-center gap-2 text-xs text-foreground cursor-pointer">
+                          <input type="checkbox" checked={editForm.is_active} onChange={e => setEditForm({ ...editForm, is_active: e.target.checked })} className="rounded" />
+                          Active (visible to users)
+                        </label>
+                        <div className="flex gap-2">
+                          <Button variant="outline" size="sm" onClick={() => setEditingTemplate(null)} className="text-xs">
+                            <X size={12} className="mr-1" /> Cancel
+                          </Button>
+                          <Button size="sm" onClick={() => saveTemplate(t.id)} className="gradient-primary text-primary-foreground text-xs font-bold border-0">
+                            <Save size={12} className="mr-1" /> Save
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                  {expandedTemplate === t.id && editingTemplate !== t.id && (
                     <div className="px-4 pb-4 border-t border-border/20 pt-3">
                       <div className="grid grid-cols-2 gap-2 text-xs">
                         <div><span className="text-muted-foreground">Recipe ID:</span> <span className="text-foreground font-mono">{t.weavy_recipe_id || "—"}</span></div>
                         <div><span className="text-muted-foreground">Version:</span> <span className="text-foreground">{t.weavy_recipe_version || "—"}</span></div>
                         <div><span className="text-muted-foreground">Output:</span> <span className="text-foreground">{t.output_type} × {t.expected_output_count}</span></div>
-                        <div><span className="text-muted-foreground">Flow URL:</span> <span className="text-foreground font-mono text-[10px] break-all">{t.weavy_flow_url || "—"}</span></div>
+                        <div><span className="text-muted-foreground">Description:</span> <span className="text-foreground">{t.description || "—"}</span></div>
                       </div>
                       <pre className="mt-2 text-[10px] bg-secondary/50 rounded p-2 overflow-x-auto text-muted-foreground">
                         {JSON.stringify(t.input_schema, null, 2)}
