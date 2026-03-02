@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/hooks/use-toast";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Plus, Trash2, BarChart3, Eye, Copy, Loader2, Download, Upload, Check, X, Pencil, Save, Play } from "lucide-react";
+import { Plus, Trash2, BarChart3, Eye, Copy, Loader2, Download, Upload, Check, X, Pencil, Save, Play, Search } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Link } from "react-router-dom";
 
@@ -202,6 +202,43 @@ const Admin = () => {
       toast({ title: "Template updated" });
     } catch (err: any) {
       toast({ title: "Error", description: err.message, variant: "destructive" });
+    }
+  };
+
+  // Auto-fetch recipe metadata from Weavy
+  const [fetchingRecipe, setFetchingRecipe] = useState(false);
+
+  const fetchRecipeMetadata = async (recipeId: string, target: "new" | "edit") => {
+    if (!recipeId) {
+      toast({ title: "Enter a Recipe ID first", variant: "destructive" });
+      return;
+    }
+    setFetchingRecipe(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("fetch-weavy-recipe", {
+        body: { recipeId },
+      });
+      if (error) throw error;
+      if (data?.error) {
+        toast({ title: "Recipe not found", description: data.error, variant: "destructive" });
+        console.log("Tried endpoints:", data.tried);
+        return;
+      }
+      const schema = data.inputSchema || [];
+      const schemaJson = JSON.stringify(schema, null, 2);
+      if (target === "new") {
+        setNewTemplate((prev) => ({ ...prev, input_schema: schemaJson }));
+      } else {
+        setEditForm((prev: any) => ({ ...prev, input_schema: schemaJson }));
+      }
+      toast({
+        title: "✅ Recipe found!",
+        description: `${schema.length} input(s) discovered via ${data.workingEndpoint}`,
+      });
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    } finally {
+      setFetchingRecipe(false);
     }
   };
 
@@ -585,7 +622,20 @@ const Admin = () => {
               <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-muted-foreground mb-2 mt-4">Weavy Configuration</p>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
                 <Input placeholder="Weavy Flow URL (optional)" value={newTemplate.weavy_flow_url} onChange={e => setNewTemplate({ ...newTemplate, weavy_flow_url: e.target.value })} className="bg-secondary border-border text-foreground" />
-                <Input placeholder="Weavy Recipe ID *" value={newTemplate.weavy_recipe_id} onChange={e => setNewTemplate({ ...newTemplate, weavy_recipe_id: e.target.value })} className="bg-secondary border-border text-foreground" />
+                <div className="flex gap-2">
+                  <Input placeholder="Weavy Recipe ID *" value={newTemplate.weavy_recipe_id} onChange={e => setNewTemplate({ ...newTemplate, weavy_recipe_id: e.target.value })} className="bg-secondary border-border text-foreground flex-1" />
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => fetchRecipeMetadata(newTemplate.weavy_recipe_id, "new")}
+                    disabled={fetchingRecipe || !newTemplate.weavy_recipe_id}
+                    className="h-10 px-3 text-xs shrink-0"
+                    title="Auto-fetch input schema from Weavy"
+                  >
+                    {fetchingRecipe ? <Loader2 size={14} className="animate-spin" /> : <Search size={14} />}
+                    <span className="ml-1">Auto-fetch</span>
+                  </Button>
+                </div>
                 <Input placeholder="Recipe Version" type="number" value={newTemplate.weavy_recipe_version} onChange={e => setNewTemplate({ ...newTemplate, weavy_recipe_version: parseInt(e.target.value) || 1 })} className="bg-secondary border-border text-foreground" />
                 <div className="flex gap-2">
                   <select
@@ -690,7 +740,20 @@ const Admin = () => {
                       </div>
                       <div>
                         <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Recipe ID</label>
-                        <Input value={editForm.weavy_recipe_id} onChange={e => setEditForm({ ...editForm, weavy_recipe_id: e.target.value })} className="bg-secondary border-border text-foreground text-xs font-mono mt-1" />
+                        <div className="flex gap-2 mt-1">
+                          <Input value={editForm.weavy_recipe_id} onChange={e => setEditForm({ ...editForm, weavy_recipe_id: e.target.value })} className="bg-secondary border-border text-foreground text-xs font-mono flex-1" />
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => fetchRecipeMetadata(editForm.weavy_recipe_id, "edit")}
+                            disabled={fetchingRecipe || !editForm.weavy_recipe_id}
+                            className="h-9 px-3 text-xs shrink-0"
+                            title="Auto-fetch input schema from Weavy"
+                          >
+                            {fetchingRecipe ? <Loader2 size={12} className="animate-spin" /> : <Search size={12} />}
+                            <span className="ml-1">Auto-fetch</span>
+                          </Button>
+                        </div>
                       </div>
                       <div>
                         <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Input Schema (JSON)</label>

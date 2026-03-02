@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "npm:@supabase/supabase-js@2.57.2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -6,201 +7,225 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+const json = (body: unknown, status = 200) =>
+  new Response(JSON.stringify(body), {
+    status,
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
+
 serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
-  }
+  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
+
+  const supabase = createClient(
+    Deno.env.get("SUPABASE_URL")!,
+    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+    { auth: { persistSession: false } },
+  );
 
   try {
-    const WEAVY_API_KEY = Deno.env.get("WEAVY_API_KEY");
-    const WEAVY_API_BASE_URL = Deno.env.get("WEAVY_API_BASE_URL");
-
-    if (!WEAVY_API_KEY || !WEAVY_API_BASE_URL) {
-      return new Response(
-        JSON.stringify({ error: "Weavy API credentials not configured" }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    // Validate admin role
-    const { createClient } = await import("https://esm.sh/@supabase/supabase-js@2");
-    const supabase = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
-    );
-
+    // Auth — admin only
     const authHeader = req.headers.get("Authorization");
-    if (!authHeader) {
-      return new Response(JSON.stringify({ error: "Missing auth" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
+    if (!authHeader) return json({ error: "Missing auth" }, 401);
     const token = authHeader.replace("Bearer ", "");
-    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
-    if (authError || !user) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    // Check admin
+    const { data: { user }, error: authErr } = await supabase.auth.getUser(token);
+    if (authErr || !user) return json({ error: "Unauthorized" }, 401);
     const { data: roleData } = await supabase
       .from("user_roles")
       .select("role")
       .eq("user_id", user.id)
       .eq("role", "admin")
       .maybeSingle();
+    if (!roleData) return json({ error: "Admin access required" }, 403);
 
-    if (!roleData) {
-      return new Response(JSON.stringify({ error: "Admin access required" }), {
-        status: 403,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+    const WEAVY_API_KEY = Deno.env.get("WEAVY_API_KEY");
+    const WEAVY_BASE = Deno.env.get("WEAVY_API_BASE_URL");
+    if (!WEAVY_API_KEY || !WEAVY_BASE) {
+      return json({ error: "WEAVY_API_KEY / WEAVY_API_BASE_URL not configured" }, 500);
     }
 
-    const { flowUrl, recipeId: providedRecipeId } = await req.json();
+    const { recipeId } = await req.json();
+    if (!recipeId) return json({ error: "recipeId is required" }, 400);
 
     const headers = {
       Authorization: `Bearer ${WEAVY_API_KEY}`,
-      "Content-Type": "application/json",
+      Accept: "application/json",
     };
 
-    const results: Record<string, unknown> = {
-      flowUrl,
-      discoveredEndpoints: [],
-      recipe: null,
-      error: null,
-    };
-
-    // Strategy 1: If recipeId is provided directly, try to fetch its details
-    let recipeId = providedRecipeId;
-
-    // Strategy 2: Try to extract recipe ID from flow URL
-    if (!recipeId && flowUrl) {
-      // Common URL patterns: /canvas/<id>, /flow/<id>, /recipe/<id>
-      const urlPatterns = [
-        /\/canvas\/([a-zA-Z0-9_-]+)/,
-        /\/flow\/([a-zA-Z0-9_-]+)/,
-        /\/recipe\/([a-zA-Z0-9_-]+)/,
-        /\/recipes\/([a-zA-Z0-9_-]+)/,
-      ];
-
-      for (const pattern of urlPatterns) {
-        const match = flowUrl.match(pattern);
-        if (match) {
-          recipeId = match[1];
-          break;
-        }
-      }
-    }
-
-    // Try multiple API endpoints to discover recipe metadata
-    const endpointsToTry = [
-      // Try recipe details
-      ...(recipeId
-        ? [
-            `/api/v1/recipes/${recipeId}`,
-            `/api/v1/recipe-runs/recipes/${recipeId}`,
-            `/api/v1/flows/${recipeId}`,
-            `/api/v1/workflows/${recipeId}`,
-          ]
-        : []),
-      // Try listing endpoints
-      `/api/v1/recipes`,
-      `/api/v1/recipe-runs/recipes`,
-      `/api/v1/flows`,
-      `/api/v1/workflows`,
+    // Try multiple known Weavy API path patterns to find the recipe
+    const pathPatterns = [
+      `/api/v1/recipes/${recipeId}`,
+      `/api/v1/recipe-runs/recipes/${recipeId}`,
+      `/api/v1/flows/${recipeId}`,
+      `/api/v1/workflows/${recipeId}`,
+      `/api/v2/recipes/${recipeId}`,
     ];
 
-    for (const endpoint of endpointsToTry) {
-      try {
-        const url = `${WEAVY_API_BASE_URL}${endpoint}`;
-        console.log(`Trying: ${url}`);
+    let recipeData: any = null;
+    let workingEndpoint: string | null = null;
+    const tried: { endpoint: string; status: number }[] = [];
 
+    for (const path of pathPatterns) {
+      const url = `${WEAVY_BASE}${path}`;
+      console.log(`Trying: ${url}`);
+      try {
         const res = await fetch(url, { method: "GET", headers });
-        const status = res.status;
-
-        if (status === 200) {
-          const data = await res.json();
-          (results.discoveredEndpoints as unknown[]).push({
-            endpoint,
-            status,
-            data,
-          });
-
-          // If this looks like recipe data, store it
-          if (data && (data.recipeId || data.id || data.inputs || data.nodes)) {
-            results.recipe = data;
-          }
+        tried.push({ endpoint: path, status: res.status });
+        if (res.ok) {
+          recipeData = await res.json();
+          workingEndpoint = path;
+          break;
         } else {
-          const text = await res.text().catch(() => "");
-          (results.discoveredEndpoints as unknown[]).push({
-            endpoint,
-            status,
-            body: text.slice(0, 500),
-          });
+          await res.text(); // consume body
         }
       } catch (e) {
-        (results.discoveredEndpoints as unknown[]).push({
-          endpoint,
-          error: e instanceof Error ? e.message : String(e),
-        });
+        tried.push({ endpoint: path, status: 0 });
       }
     }
 
-    // If we got a flow URL, also try to fetch the page itself to extract metadata
-    if (flowUrl) {
-      try {
-        const pageRes = await fetch(flowUrl, {
-          headers: {
-            Cookie: `token=${WEAVY_API_KEY}`,
-            Authorization: `Bearer ${WEAVY_API_KEY}`,
-          },
-        });
-        const html = await pageRes.text();
-
-        // Try to extract JSON config from the page
-        const jsonMatches = html.match(
-          /(?:window\.__NEXT_DATA__|__NUXT__|window\.__CONFIG__|"recipeId"|"recipe_id").*?({[^}]+})/gs
-        );
-        if (jsonMatches) {
-          results.pageExtracted = jsonMatches.map((m) => m.slice(0, 1000));
+    if (!recipeData) {
+      // Also try listing all recipes and finding by ID
+      const listPaths = [`/api/v1/recipes`, `/api/v1/recipe-runs/recipes`];
+      for (const path of listPaths) {
+        const url = `${WEAVY_BASE}${path}`;
+        console.log(`Trying list: ${url}`);
+        try {
+          const res = await fetch(url, { method: "GET", headers });
+          tried.push({ endpoint: path, status: res.status });
+          if (res.ok) {
+            const list = await res.json();
+            const items = Array.isArray(list) ? list : list?.data || list?.recipes || list?.items || [];
+            const match = items.find((r: any) =>
+              r.id === recipeId || r.recipeId === recipeId || r._id === recipeId
+            );
+            if (match) {
+              recipeData = match;
+              workingEndpoint = `${path} (from list)`;
+              break;
+            }
+          } else {
+            await res.text();
+          }
+        } catch (e) {
+          tried.push({ endpoint: path, status: 0 });
         }
-
-        // Extract any recipe IDs from the page
-        const recipeIdMatches = html.match(
-          /["'](?:recipeId|recipe_id|recipe-id)["']\s*[:=]\s*["']([^"']+)["']/g
-        );
-        if (recipeIdMatches) {
-          results.pageRecipeIds = recipeIdMatches;
-        }
-
-        // Try to find input/node definitions
-        const nodeMatches = html.match(
-          /["'](?:nodeId|node_id)["']\s*[:=]\s*["']([^"']+)["']/g
-        );
-        if (nodeMatches) {
-          results.pageNodeIds = nodeMatches;
-        }
-
-        results.pageStatus = pageRes.status;
-        results.pageLength = html.length;
-      } catch (e) {
-        results.pageFetchError = e instanceof Error ? e.message : String(e);
       }
     }
 
-    return new Response(JSON.stringify(results, null, 2), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    if (!recipeData) {
+      return json({
+        error: "Could not find recipe via any known Weavy API endpoint",
+        recipeId,
+        tried,
+        hint: "The recipe ID may be wrong, or the Weavy API base URL may be incorrect. Check your Weavy dashboard.",
+      }, 404);
+    }
+
+    // Extract input schema from the recipe metadata
+    const inputSchema = extractInputSchema(recipeData);
+
+    return json({
+      success: true,
+      recipeId,
+      workingEndpoint,
+      inputSchema,
+      rawRecipe: recipeData,
+      tried,
     });
   } catch (err) {
     console.error("Error:", err);
-    return new Response(
-      JSON.stringify({ error: err instanceof Error ? err.message : String(err) }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
+    return json({ error: err instanceof Error ? err.message : String(err) }, 500);
   }
 });
+
+/**
+ * Extract a normalized input_schema array from various Weavy recipe data shapes.
+ */
+function extractInputSchema(recipe: any): Array<{
+  key: string;
+  label: string;
+  nodeId: string;
+  type: string;
+  required: boolean;
+}> {
+  const inputs: any[] = [];
+
+  // Shape 1: recipe.inputs array
+  if (Array.isArray(recipe.inputs)) {
+    for (const inp of recipe.inputs) {
+      inputs.push(normalizeInput(inp));
+    }
+  }
+
+  // Shape 2: recipe.nodes with input-type nodes
+  if (Array.isArray(recipe.nodes)) {
+    for (const node of recipe.nodes) {
+      if (
+        node.type === "input" ||
+        node.type === "file_input" ||
+        node.type === "image_input" ||
+        node.category === "input"
+      ) {
+        inputs.push({
+          key: node.id || node.nodeId || `node_${inputs.length}`,
+          label: node.label || node.name || node.title || node.id || "Input",
+          nodeId: node.id || node.nodeId || "",
+          type: inferType(node),
+          required: node.required !== false,
+        });
+      }
+    }
+  }
+
+  // Shape 3: recipe.inputNodes
+  if (Array.isArray(recipe.inputNodes)) {
+    for (const node of recipe.inputNodes) {
+      inputs.push({
+        key: node.nodeId || node.id || `input_${inputs.length}`,
+        label: node.label || node.name || "Input",
+        nodeId: node.nodeId || node.id || "",
+        type: inferType(node),
+        required: node.required !== false,
+      });
+    }
+  }
+
+  // Shape 4: recipe.parameters
+  if (Array.isArray(recipe.parameters)) {
+    for (const p of recipe.parameters) {
+      inputs.push({
+        key: p.name || p.key || `param_${inputs.length}`,
+        label: p.label || p.name || "Parameter",
+        nodeId: p.nodeId || "",
+        type: p.type === "file" || p.type === "image" ? "image" : p.type || "text",
+        required: p.required !== false,
+      });
+    }
+  }
+
+  // Deduplicate by key
+  const seen = new Set<string>();
+  return inputs.filter((i) => {
+    if (seen.has(i.key)) return false;
+    seen.add(i.key);
+    return true;
+  });
+}
+
+function normalizeInput(inp: any) {
+  return {
+    key: inp.key || inp.name || inp.nodeId || inp.id || `input_${Math.random().toString(36).slice(2, 6)}`,
+    label: inp.label || inp.name || inp.key || "Input",
+    nodeId: inp.nodeId || inp.id || "",
+    type: inferType(inp),
+    required: inp.required !== false,
+  };
+}
+
+function inferType(node: any): string {
+  const t = (node.type || node.inputType || node.fieldType || "").toLowerCase();
+  if (t.includes("image") || t.includes("file") || t.includes("upload")) return "image";
+  if (t.includes("video")) return "video";
+  if (t.includes("text") || t.includes("string")) return "text";
+  if (t.includes("number") || t.includes("int") || t.includes("float")) return "number";
+  return "image"; // default to image for workflow tools
+}
