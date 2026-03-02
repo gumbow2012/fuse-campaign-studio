@@ -57,42 +57,62 @@ function parseHar(harContent: any): ParsedRecipe[] {
     const req = entry.request;
     if (!req) continue;
 
-    // Only look at POST requests to recipe-run endpoints
-    if (req.method !== "POST") continue;
     const url = req.url || "";
-    const recipeMatch = url.match(
-      /\/recipe-runs\/recipes\/([a-zA-Z0-9_-]+)\/run/
-    );
-    if (!recipeMatch) continue;
 
-    const recipeId = recipeMatch[1];
-
-    // Skip if we already found this recipe
-    if (recipes.has(recipeId)) continue;
-
-    // Extract base URL
-    const baseUrlMatch = url.match(/(https?:\/\/[^/]+)/);
-    const baseUrl = baseUrlMatch ? baseUrlMatch[1] : "";
-
-    // Extract request body
-    let body: any = {};
-    const postData = req.postData;
-    if (postData?.text) {
-      try {
-        body = JSON.parse(postData.text);
-      } catch {
-        // try mimeType-based extraction
+    // Strategy 1: POST requests to .../run
+    if (req.method === "POST") {
+      const recipeMatch = url.match(
+        /\/recipe-runs\/recipes\/([a-zA-Z0-9_-]+)\/run/
+      );
+      if (recipeMatch) {
+        const recipeId = recipeMatch[1];
+        if (!recipes.has(recipeId)) {
+          const baseUrlMatch = url.match(/(https?:\/\/[^/]+)/);
+          const baseUrl = baseUrlMatch ? baseUrlMatch[1] : "";
+          let body: any = {};
+          const postData = req.postData;
+          if (postData?.text) {
+            try { body = JSON.parse(postData.text); } catch { /* skip */ }
+          }
+          const recipeVersion = body.recipeVersion || 1;
+          const inputs = extractInputs(body);
+          recipes.set(recipeId, { recipeId, recipeVersion, inputs, baseUrl });
+        }
         continue;
       }
-    } else if (postData?.params) {
-      // URL-encoded or multipart — skip
+    }
+
+    // Strategy 2: GET status-polling requests like /recipe-runs/recipes/{id}/runs/status
+    const statusMatch = url.match(
+      /\/recipe-runs\/recipes\/([a-zA-Z0-9_-]+)\/runs\/status/
+    );
+    if (statusMatch) {
+      const recipeId = statusMatch[1];
+      if (!recipes.has(recipeId)) {
+        const baseUrlMatch = url.match(/(https?:\/\/[^/]+)/);
+        const baseUrl = baseUrlMatch ? baseUrlMatch[1] : "";
+        recipes.set(recipeId, { recipeId, recipeVersion: 1, inputs: [], baseUrl });
+      }
       continue;
     }
 
-    const recipeVersion = body.recipeVersion || 1;
-    const inputs = extractInputs(body);
-
-    recipes.set(recipeId, { recipeId, recipeVersion, inputs, baseUrl });
+    // Strategy 3: X-App-Recipeid header on any api.weavy.ai request
+    if (url.includes("weavy.ai") || url.includes("weavy")) {
+      const headers = req.headers || [];
+      const recipeHeader = headers.find(
+        (h: any) => h.name.toLowerCase() === "x-app-recipeid"
+      );
+      if (recipeHeader?.value && !recipes.has(recipeHeader.value)) {
+        const baseUrlMatch = url.match(/(https?:\/\/[^/]+)/);
+        const baseUrl = baseUrlMatch ? baseUrlMatch[1] : "";
+        recipes.set(recipeHeader.value, {
+          recipeId: recipeHeader.value,
+          recipeVersion: 1,
+          inputs: [],
+          baseUrl,
+        });
+      }
+    }
   }
 
   return Array.from(recipes.values());
