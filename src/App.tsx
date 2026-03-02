@@ -54,6 +54,7 @@ const App = () => (
             <Route path="/referrals" element={<ProtectedRoute><Referrals /></ProtectedRoute>} />
 
             {/* Template run & job status */}
+            <Route path="/app/templates/run" element={<ProtectedRoute><TemplateRun /></ProtectedRoute>} />
             <Route path="/app/templates/:slug" element={<ProtectedRoute><TemplateRun /></ProtectedRoute>} />
             <Route path="/app/jobs/:jobId" element={<ProtectedRoute><JobStatus /></ProtectedRoute>} />
 
