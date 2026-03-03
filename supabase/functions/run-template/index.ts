@@ -19,18 +19,19 @@ function errText(e: unknown): string {
 }
 
 async function failProject(
-  supabaseAdmin: ReturnType<typeof createClient>,
+  sb: ReturnType<typeof createClient>,
   projectId: string,
   error: string,
+  source: string,
+  trace: Record<string, unknown>,
 ) {
-  await supabaseAdmin
-    .from("projects")
-    .update({
-      status: "failed",
-      error: error.slice(0, 10000),
-      failed_at: new Date().toISOString(),
-    })
-    .eq("id", projectId);
+  await sb.from("projects").update({
+    status: "failed",
+    error: error.slice(0, 10000),
+    failed_at: new Date().toISOString(),
+    failed_source: source,
+    debug_trace: trace,
+  }).eq("id", projectId);
 }
 
 /** Exchange the long-lived Firebase refresh token for a fresh id_token. */
@@ -46,10 +47,7 @@ async function getWeavyIdToken(): Promise<string> {
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        grant_type: "refresh_token",
-        refresh_token: refreshToken,
-      }),
+      body: JSON.stringify({ grant_type: "refresh_token", refresh_token: refreshToken }),
     },
   );
 
@@ -69,7 +67,10 @@ Deno.serve(async (req) => {
     return new Response(null, { status: 204, headers: corsHeaders });
   }
 
-  const supabaseAdmin = createClient(
+  const traceId = crypto.randomUUID().slice(0, 8);
+  const trace: Record<string, unknown> = { traceId, ts: new Date().toISOString() };
+
+  const sb = createClient(
     Deno.env.get("SUPABASE_URL")!,
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
     { auth: { persistSession: false } },
@@ -82,27 +83,35 @@ Deno.serve(async (req) => {
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) throw new Error("No authorization header");
     const token = authHeader.replace("Bearer ", "");
-    const { data: userData, error: userError } = await supabaseAdmin.auth.getUser(token);
+    const { data: userData, error: userError } = await sb.auth.getUser(token);
     if (userError || !userData.user) throw new Error(userError?.message ?? "Not authenticated");
     const user = userData.user;
-    console.log(`[run-template] user=${user.id}`);
+    trace.userId = user.id;
+    trace.step = "auth_ok";
+    console.log(`[${traceId}] auth ok user=${user.id}`);
 
+    // ── Parse body ──
     const { templateId, inputs } = await req.json();
     if (!templateId) throw new Error("templateId is required");
-    console.log(`[run-template] templateId=${templateId}, inputKeys=${Object.keys(inputs || {}).join(",")}`);
+    trace.templateId = templateId;
+    trace.received_input_keys = Object.keys(inputs || {});
+    trace.step = "body_parsed";
+    console.log(`[${traceId}] templateId=${templateId} inputKeys=${trace.received_input_keys}`);
 
     // ── Get template ──
-    const { data: template, error: tplErr } = await supabaseAdmin
+    const { data: template, error: tplErr } = await sb
       .from("templates")
       .select("*")
       .eq("id", templateId)
       .single();
     if (tplErr || !template) throw new Error(`Template not found: ${tplErr?.message ?? templateId}`);
+    trace.weavy_recipe_id = template.weavy_recipe_id ?? null;
+    trace.step = "template_loaded";
 
     const creditCost = template.estimated_credits_per_run;
 
     // ── Check credits ──
-    const { data: profile, error: profErr } = await supabaseAdmin
+    const { data: profile, error: profErr } = await sb
       .from("profiles")
       .select("credits_balance")
       .eq("user_id", user.id)
@@ -111,9 +120,12 @@ Deno.serve(async (req) => {
     if (profile.credits_balance < creditCost) {
       throw new Error(`Insufficient credits: have ${profile.credits_balance}, need ${creditCost}`);
     }
+    trace.credits_before = profile.credits_balance;
+    trace.credit_cost = creditCost;
+    trace.step = "credits_ok";
 
     // ── Create project ──
-    const { data: project, error: projErr } = await supabaseAdmin
+    const { data: project, error: projErr } = await sb
       .from("projects")
       .insert({
         user_id: user.id,
@@ -125,89 +137,101 @@ Deno.serve(async (req) => {
       .single();
     if (projErr) throw new Error(`Project insert failed: ${projErr.message}`);
     projectId = project.id;
-    console.log(`[run-template] project created: ${projectId}`);
+    trace.projectId = projectId;
+    trace.step = "project_created";
+    console.log(`[${traceId}] project=${projectId}`);
 
     // ── Deduct credits ──
-    await supabaseAdmin
+    await sb
       .from("profiles")
       .update({ credits_balance: profile.credits_balance - creditCost })
       .eq("user_id", user.id);
 
-    await supabaseAdmin.from("credit_ledger").insert({
+    await sb.from("credit_ledger").insert({
       user_id: user.id,
       type: "run_template",
       amount: -creditCost,
       template_id: templateId,
-      project_id: project.id,
+      project_id: projectId,
       description: `Run template: ${template.name}`,
     });
+    trace.step = "credits_deducted";
 
-    // ── Trigger Weavy automation ──
+    // ── Trigger Weavy ──
     const recipeId = template.weavy_recipe_id;
-    if (recipeId) {
-      console.log(`[run-template] triggering Weavy recipe ${recipeId}`);
-      const idToken = await getWeavyIdToken();
-      const weavyBase = Deno.env.get("WEAVY_API_BASE_URL") || "https://api.weavy.ai";
-
-      const runRes = await fetch(
-        `${weavyBase}/api/v1/recipe-runs/recipes/${recipeId}/run`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${idToken}`,
-          },
-          body: JSON.stringify({ inputs: inputs || {} }),
-        },
-      );
-
-      if (!runRes.ok) {
-        const body = await runRes.text();
-        const msg = `Weavy trigger failed (${runRes.status}): ${body}`;
-        console.error(`[run-template] ${msg}`);
-        await failProject(supabaseAdmin, projectId, msg);
-        // Still return the projectId so user can see the error
-        return new Response(
-          JSON.stringify({ projectId, status: "failed", error: msg }),
-          { headers: { ...corsHeaders, "Content-Type": "application/json" } },
-        );
-      }
-
-      const runData = await runRes.json();
-      const runId = runData.id || runData.runId;
-      console.log(`[run-template] Weavy run started: ${runId}`);
-
-      await supabaseAdmin
-        .from("projects")
-        .update({
-          weavy_run_id: runId,
-          status: "running",
-          started_at: new Date().toISOString(),
-        })
-        .eq("id", projectId);
-
+    if (!recipeId) {
+      trace.step = "no_recipe_queued";
+      // Save trace even on success for debugging
+      await sb.from("projects").update({ debug_trace: trace }).eq("id", projectId);
       return new Response(
-        JSON.stringify({ projectId, status: "running", weavyRunId: runId }),
+        JSON.stringify({ projectId, status: "queued" }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
 
-    // No recipe — stays queued for admin fulfillment
+    console.log(`[${traceId}] triggering Weavy recipe=${recipeId}`);
+    trace.step = "weavy_token_start";
+
+    const idToken = await getWeavyIdToken();
+    trace.step = "weavy_token_ok";
+
+    const weavyBase = Deno.env.get("WEAVY_API_BASE_URL") || "https://api.weavy.ai";
+    const weavyUrl = `${weavyBase}/api/v1/recipe-runs/recipes/${recipeId}/run`;
+    trace.weavy_url = weavyUrl;
+
+    const runRes = await fetch(weavyUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${idToken}`,
+      },
+      body: JSON.stringify({ inputs: inputs || {} }),
+    });
+
+    trace.weavy_status = runRes.status;
+
+    if (!runRes.ok) {
+      const body = await runRes.text();
+      trace.weavy_error_body = body.slice(0, 2000);
+      trace.step = "weavy_trigger_failed";
+      const msg = `Weavy trigger failed (${runRes.status}): ${body.slice(0, 500)}`;
+      console.error(`[${traceId}] ${msg}`);
+      await failProject(sb, projectId, msg, "weavy_trigger", trace);
+      return new Response(
+        JSON.stringify({ projectId, status: "failed", error: msg }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
+
+    const runData = await runRes.json();
+    const runId = runData.id || runData.runId;
+    trace.weavy_run_id = runId;
+    trace.step = "weavy_running";
+    console.log(`[${traceId}] Weavy run=${runId}`);
+
+    await sb.from("projects").update({
+      weavy_run_id: runId,
+      status: "running",
+      started_at: new Date().toISOString(),
+      debug_trace: trace,
+    }).eq("id", projectId);
+
     return new Response(
-      JSON.stringify({ projectId, status: "queued" }),
+      JSON.stringify({ projectId, status: "running", weavyRunId: runId }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
   } catch (error) {
     const msg = errText(error);
-    console.error(`[run-template] FATAL: ${msg}`);
+    trace.fatal_error = msg;
+    trace.step = `fatal_at_${trace.step ?? "unknown"}`;
+    console.error(`[${traceId}] FATAL: ${msg}`);
 
-    // If we already created the project, mark it failed with the error
     if (projectId) {
-      await failProject(supabaseAdmin, projectId, msg);
+      await failProject(sb, projectId, msg, `exception_at_${trace.step}`, trace);
     }
 
     return new Response(
-      JSON.stringify({ error: msg, projectId }),
+      JSON.stringify({ error: msg, projectId, traceId }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 500 },
     );
   }
