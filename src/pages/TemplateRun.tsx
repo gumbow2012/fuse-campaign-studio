@@ -6,7 +6,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import CreditConfirmModal from "@/components/CreditConfirmModal";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { submitJob } from "@/lib/cf-worker";
+import { submitJob, isCfWorkerConfigured } from "@/lib/cf-worker";
 import { useQuery } from "@tanstack/react-query";
 import {
   Minus, Plus, GripVertical, MoreVertical, Upload, X, Zap,
@@ -267,6 +267,17 @@ const TemplateRun = () => {
   return (
     <div className="min-h-screen bg-background flex flex-col">
       <Navbar />
+      {!isCfWorkerConfigured && (
+        <div className="mx-4 mt-4 rounded-xl border border-destructive/30 bg-destructive/5 p-4 flex items-start gap-3">
+          <AlertTriangle className="w-5 h-5 text-destructive shrink-0 mt-0.5" />
+          <div>
+            <p className="text-sm font-bold text-destructive">Backend Not Connected</p>
+            <p className="text-xs text-muted-foreground mt-1">
+              The worker URL is not configured. Please add <code className="bg-muted px-1 py-0.5 rounded text-[10px]">VITE_CF_WORKER_URL</code> in your environment settings and redeploy.
+            </p>
+          </div>
+        </div>
+      )}
 
       <div className="flex-1 flex flex-col lg:flex-row pt-16">
         {/* ════════ LEFT PANEL — Upload + Controls ════════ */}
