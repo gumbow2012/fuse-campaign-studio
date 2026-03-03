@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
-import { getPapparaziJobStatus } from "@/lib/cf-worker";
+import { getPapparaziJobStatus, isCfWorkerConfigured } from "@/lib/cf-worker";
 
 type Phase = "idle" | "uploading" | "running" | "complete" | "error";
 
@@ -233,6 +233,18 @@ const PapparaziRun = () => {
           Upload a product image → AI generates styled editorial shots.
         </p>
 
+        {/* Worker not configured banner */}
+        {!isCfWorkerConfigured && (
+          <div className="mb-6 rounded-xl border border-destructive/30 bg-destructive/5 p-4 flex items-start gap-3">
+            <AlertCircle className="w-5 h-5 text-destructive shrink-0 mt-0.5" />
+            <div>
+              <p className="text-sm font-bold text-destructive">Backend Not Connected</p>
+              <p className="text-xs text-muted-foreground mt-1">
+                The worker URL is not configured. Please add <code className="bg-muted px-1 py-0.5 rounded text-[10px]">VITE_CF_WORKER_URL</code> in your environment settings and redeploy.
+              </p>
+            </div>
+          </div>
+        )}
 
         {/* Upload Zone */}
         <div

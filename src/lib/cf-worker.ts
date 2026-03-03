@@ -7,9 +7,8 @@
 
 const CF_WORKER_URL = import.meta.env.VITE_CF_WORKER_URL as string | undefined;
 
-if (!CF_WORKER_URL) {
-  console.warn("[cf-worker] VITE_CF_WORKER_URL is not set — CF Worker calls will fail. (v2)");
-}
+/** Whether the CF Worker URL is configured. Use this to show UI warnings. */
+export const isCfWorkerConfigured = !!CF_WORKER_URL;
 
 /** Thin wrapper around fetch that attaches the Supabase JWT. */
 async function cfFetch<T = unknown>(
