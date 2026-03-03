@@ -12,7 +12,7 @@ async function getWeavyIdToken(): Promise<string> {
   const firebaseApiKey = Deno.env.get("WEAVY_FIREBASE_API_KEY");
   const refreshToken = Deno.env.get("WEAVY_REFRESH_TOKEN");
   if (!firebaseApiKey || !refreshToken) {
-    throw new Error("Missing FIREBASE_API_KEY or WEAVY_REFRESH_TOKEN");
+    throw new Error("Missing WEAVY_FIREBASE_API_KEY or WEAVY_REFRESH_TOKEN");
   }
 
   const res = await fetch(
