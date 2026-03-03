@@ -97,3 +97,70 @@ export async function rerunStep(
     token,
   });
 }
+
+/* ──────────────── Papparazi Pipeline API ──────────────── */
+
+/** Upload an image to the CF Worker → R2. */
+export async function uploadImageToWorker(
+  file: File,
+  token: string,
+): Promise<{ imageUrl: string; key: string }> {
+  if (!CF_WORKER_URL) throw new Error("VITE_CF_WORKER_URL is not configured");
+
+  const url = `${CF_WORKER_URL.replace(/\/+$/, "")}/api/upload`;
+  const formData = new FormData();
+  formData.append("file", file);
+
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+    body: formData,
+  });
+
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error((data as any).error || `Upload failed ${res.status}`);
+  return data as { imageUrl: string; key: string };
+}
+
+export interface RunTemplatePayload {
+  templateId: string;
+  inputs: Record<string, string>;
+}
+
+export interface RunTemplateResponse {
+  jobId: string;
+  status: string;
+  weavyRunId?: string;
+  error?: string;
+}
+
+/** Trigger a template run via the CF Worker. */
+export async function runTemplate(
+  payload: RunTemplatePayload,
+  token: string,
+): Promise<RunTemplateResponse> {
+  return cfFetch<RunTemplateResponse>("/api/run-template", {
+    method: "POST",
+    body: payload,
+    token,
+  });
+}
+
+export interface PapparaziJobStatus {
+  status: "running" | "succeeded" | "failed" | "queued";
+  progress?: number;
+  outputImageUrl?: string | null;
+  outputVideoUrl?: string | null;
+  error?: string;
+}
+
+/** Poll the CF Worker for Papparazi job status. */
+export async function getPapparaziJobStatus(
+  jobId: string,
+  token: string,
+): Promise<PapparaziJobStatus> {
+  return cfFetch<PapparaziJobStatus>(`/api/job/${jobId}`, {
+    method: "GET",
+    token,
+  });
+}

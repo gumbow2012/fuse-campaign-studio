@@ -2,6 +2,7 @@ import { Env } from "./types";
 import { handleSubmit } from "./routes/submit";
 import { handleStatus } from "./routes/status";
 import { handleRerun } from "./routes/rerun";
+import { handleUpload, handleRunTemplate, handleJobStatus } from "./routes/papparazi";
 import { serveAsset } from "./r2";
 
 const CORS_HEADERS: Record<string, string> = {
@@ -43,6 +44,15 @@ export default {
         response = await handleStatus(request, env, projectId);
       } else if (path === "/jobs/rerun-step" && request.method === "POST") {
         response = await handleRerun(request, env);
+
+      // ── Papparazi custom pipeline ──
+      } else if (path === "/api/upload" && request.method === "POST") {
+        response = await handleUpload(request, env);
+      } else if (path === "/api/run-template" && request.method === "POST") {
+        response = await handleRunTemplate(request, env);
+      } else if (path.match(/^\/api\/job\/[^/]+$/) && request.method === "GET") {
+        const jobId = path.split("/")[3];
+        response = await handleJobStatus(request, env, jobId);
 
       // ── R2 asset proxy ──
       } else if (path.startsWith("/assets/") && request.method === "GET") {

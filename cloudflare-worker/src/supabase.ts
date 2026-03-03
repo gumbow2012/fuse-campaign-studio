@@ -1,7 +1,7 @@
 import { Env } from "./types";
 
 /** Helper to make authenticated Supabase REST API calls. */
-async function supabaseFetch(
+export async function supabaseFetch(
   env: Env,
   path: string,
   opts?: { method?: string; body?: unknown; headers?: Record<string, string> },
@@ -24,7 +24,7 @@ export async function updateProjectStatus(
   env: Env,
   projectId: string,
   status: "queued" | "running" | "complete" | "failed",
-  extra?: { outputs?: unknown; started_at?: string; completed_at?: string; failed_at?: string },
+  extra?: Record<string, unknown>,
 ) {
   const body: Record<string, unknown> = { status, ...extra };
   const res = await supabaseFetch(env, `/projects?id=eq.${projectId}`, {

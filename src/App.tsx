@@ -23,6 +23,7 @@ import CreatorAnalytics from "./pages/CreatorAnalytics";
 import Referrals from "./pages/Referrals";
 import Templates from "./pages/Templates";
 import TemplateRun from "./pages/TemplateRun";
+import PapparaziRun from "./pages/PapparaziRun";
 import JobStatus from "./pages/JobStatus";
 import NotFound from "./pages/NotFound";
 
@@ -57,6 +58,7 @@ const App = () => (
             {/* Template run & job status */}
             <Route path="/app/templates" element={<ProtectedRoute><Templates /></ProtectedRoute>} />
             <Route path="/app/templates/run" element={<ProtectedRoute><TemplateRun /></ProtectedRoute>} />
+            <Route path="/app/templates/papparazi/run" element={<ProtectedRoute><PapparaziRun /></ProtectedRoute>} />
             <Route path="/app/templates/:slug" element={<ProtectedRoute><TemplateRun /></ProtectedRoute>} />
             <Route path="/app/jobs/:jobId" element={<ProtectedRoute><JobStatus /></ProtectedRoute>} />
 
