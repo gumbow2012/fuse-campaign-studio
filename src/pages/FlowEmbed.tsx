@@ -1,5 +1,6 @@
+import { useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, ExternalLink, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 const ALLOWED_FLOW_IDS = new Set([
@@ -22,6 +23,15 @@ const FlowEmbed = () => {
   const { flowId } = useParams<{ flowId: string }>();
   const navigate = useNavigate();
 
+  const flowUrl = flowId ? `https://app.weavy.ai/flow/${flowId}` : null;
+
+  // Auto-open in new tab on mount
+  useEffect(() => {
+    if (flowUrl) {
+      window.open(flowUrl, "_blank", "noopener,noreferrer");
+    }
+  }, [flowUrl]);
+
   if (!flowId || !ALLOWED_FLOW_IDS.has(flowId)) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
@@ -36,27 +46,34 @@ const FlowEmbed = () => {
   }
 
   return (
-    <div className="h-screen w-screen flex flex-col bg-background">
-      {/* Minimal top bar */}
-      <div className="flex items-center gap-3 px-4 py-2 border-b border-border/40 bg-background/80 backdrop-blur-sm shrink-0">
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => navigate("/app/templates")}
-          className="gap-1.5 text-muted-foreground hover:text-foreground"
-        >
-          <ArrowLeft className="w-4 h-4" />
-          Back
-        </Button>
+    <div className="min-h-screen bg-background flex items-center justify-center">
+      <div className="text-center space-y-6 max-w-md px-6">
+        <div className="mx-auto w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center">
+          <ExternalLink className="w-6 h-6 text-primary" />
+        </div>
+        <div className="space-y-2">
+          <h2 className="text-lg font-semibold text-foreground">Flow opened in a new tab</h2>
+          <p className="text-sm text-muted-foreground">
+            The Weavy flow editor has been opened in a separate tab. If it didn't open automatically, click below.
+          </p>
+        </div>
+        <div className="flex flex-col gap-3">
+          <Button asChild>
+            <a href={flowUrl!} target="_blank" rel="noopener noreferrer" className="gap-2">
+              <ExternalLink className="w-4 h-4" />
+              Open Flow Editor
+            </a>
+          </Button>
+          <Button
+            variant="ghost"
+            onClick={() => navigate("/app/templates")}
+            className="gap-1.5 text-muted-foreground"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            Back to Templates
+          </Button>
+        </div>
       </div>
-
-      {/* Full-screen iframe */}
-      <iframe
-        src={`https://app.weavy.ai/flow/${flowId}`}
-        className="flex-1 w-full border-0"
-        allow="clipboard-read; clipboard-write; fullscreen"
-        title="Weavy Flow"
-      />
     </div>
   );
 };
