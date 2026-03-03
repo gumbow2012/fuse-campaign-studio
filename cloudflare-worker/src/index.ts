@@ -3,6 +3,7 @@ import { handleSubmit } from "./routes/submit";
 import { handleStatus } from "./routes/status";
 import { handleRerun } from "./routes/rerun";
 import { handleUpload, handleRunTemplate, handleJobStatus } from "./routes/papparazi";
+import { handleWeavyTrigger } from "./routes/weavy-trigger";
 import { serveAsset } from "./r2";
 
 const CORS_HEADERS: Record<string, string> = {
@@ -53,6 +54,10 @@ export default {
       } else if (path.match(/^\/api\/job\/[^/]+$/) && request.method === "GET") {
         const jobId = path.split("/")[3];
         response = await handleJobStatus(request, env, jobId);
+
+      // ── Weavy trigger (new dedicated route) ──
+      } else if (path === "/weavy/trigger" && request.method === "POST") {
+        response = await handleWeavyTrigger(request, env);
 
       // ── R2 asset proxy ──
       } else if (path.startsWith("/assets/") && request.method === "GET") {
