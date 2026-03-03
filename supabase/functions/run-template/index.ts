@@ -7,6 +7,35 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+/** Exchange the long-lived Firebase refresh token for a fresh id_token. */
+async function getWeavyIdToken(): Promise<string> {
+  const firebaseApiKey = Deno.env.get("FIREBASE_API_KEY");
+  const refreshToken = Deno.env.get("WEAVY_REFRESH_TOKEN");
+  if (!firebaseApiKey || !refreshToken) {
+    throw new Error("Missing FIREBASE_API_KEY or WEAVY_REFRESH_TOKEN");
+  }
+
+  const res = await fetch(
+    `https://securetoken.googleapis.com/v1/token?key=${firebaseApiKey}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        grant_type: "refresh_token",
+        refresh_token: refreshToken,
+      }),
+    },
+  );
+
+  if (!res.ok) {
+    const errText = await res.text();
+    throw new Error(`Firebase token refresh failed (${res.status}): ${errText}`);
+  }
+
+  const data = await res.json();
+  return data.id_token;
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
@@ -47,7 +76,7 @@ serve(async (req) => {
     if (profErr || !profile) throw new Error("Profile not found");
     if (profile.credits_balance < creditCost) throw new Error("Insufficient credits");
 
-    // Create project — always queued for admin fulfillment
+    // Create project
     const { data: project, error: projErr } = await supabase
       .from("projects")
       .insert({
@@ -75,8 +104,54 @@ serve(async (req) => {
       description: `Run template: ${template.name}`,
     });
 
+    // ── Trigger Weavy automation (if template has a recipe) ──
+    const recipeId = template.weavy_recipe_id;
+    if (recipeId) {
+      try {
+        const idToken = await getWeavyIdToken();
+        const weavyBase = Deno.env.get("WEAVY_API_BASE_URL") || "https://api.weavy.ai";
+
+        console.log(`Triggering Weavy recipe ${recipeId} for project ${project.id}`);
+
+        const runRes = await fetch(
+          `${weavyBase}/api/v1/recipe-runs/recipes/${recipeId}/run`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${idToken}`,
+            },
+            body: JSON.stringify({ inputs: inputs || {} }),
+          },
+        );
+
+        if (!runRes.ok) {
+          const errText = await runRes.text();
+          console.error(`Weavy run trigger failed (${runRes.status}):`, errText);
+          // Don't fail the whole request — project is created, admin can still fulfill
+        } else {
+          const runData = await runRes.json();
+          const runId = runData.id || runData.runId;
+          console.log(`Weavy run started: ${runId}`);
+
+          // Save weavy_run_id and mark as running
+          await supabase
+            .from("projects")
+            .update({
+              weavy_run_id: runId,
+              status: "running",
+              started_at: new Date().toISOString(),
+            })
+            .eq("id", project.id);
+        }
+      } catch (weavyErr) {
+        // Log but don't fail — falls back to admin fulfillment
+        console.error("Weavy automation error:", weavyErr);
+      }
+    }
+
     return new Response(
-      JSON.stringify({ projectId: project.id, status: "queued" }),
+      JSON.stringify({ projectId: project.id, status: recipeId ? "running" : "queued" }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
   } catch (error) {
