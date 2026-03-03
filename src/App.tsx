@@ -25,6 +25,7 @@ import Templates from "./pages/Templates";
 import TemplateRun from "./pages/TemplateRun";
 import PapparaziRun from "./pages/PapparaziRun";
 import JobStatus from "./pages/JobStatus";
+import WeavyEditor from "./pages/WeavyEditor";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -60,6 +61,7 @@ const App = () => (
             <Route path="/app/templates/run" element={<ProtectedRoute><TemplateRun /></ProtectedRoute>} />
             <Route path="/app/templates/dvgEXt4aeShCeokMq5MIpZ/run" element={<ProtectedRoute><PapparaziRun /></ProtectedRoute>} />
             <Route path="/app/templates/:slug" element={<ProtectedRoute><TemplateRun /></ProtectedRoute>} />
+            <Route path="/app/weavy-editor" element={<ProtectedRoute><WeavyEditor /></ProtectedRoute>} />
             <Route path="/app/jobs/:jobId" element={<ProtectedRoute><JobStatus /></ProtectedRoute>} />
 
             {/* Admin routes */}
