@@ -8,7 +8,7 @@
 const CF_WORKER_URL = import.meta.env.VITE_CF_WORKER_URL as string | undefined;
 
 if (!CF_WORKER_URL) {
-  console.warn("[cf-worker] VITE_CF_WORKER_URL is not set — CF Worker calls will fail.");
+  console.warn("[cf-worker] VITE_CF_WORKER_URL is not set — CF Worker calls will fail. (v2)");
 }
 
 /** Thin wrapper around fetch that attaches the Supabase JWT. */
