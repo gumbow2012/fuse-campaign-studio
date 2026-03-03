@@ -146,8 +146,32 @@ export async function runTemplate(
   });
 }
 
+export interface TriggerWeavyPayload {
+  projectId: string;
+  recipeId: string;
+  inputs: Record<string, string>;
+}
+
+export interface TriggerWeavyResponse {
+  weavyRunId: string;
+  status: string;
+  error?: string;
+}
+
+/** Tell the CF Worker to trigger a Weavy recipe for an existing project. */
+export async function triggerWeavy(
+  payload: TriggerWeavyPayload,
+  token: string,
+): Promise<TriggerWeavyResponse> {
+  return cfFetch<TriggerWeavyResponse>("/weavy/trigger", {
+    method: "POST",
+    body: payload,
+    token,
+  });
+}
+
 export interface PapparaziJobStatus {
-  status: "running" | "succeeded" | "failed" | "queued";
+  status: "running" | "succeeded" | "failed" | "queued" | "complete";
   progress?: number;
   outputImageUrl?: string | null;
   outputVideoUrl?: string | null;

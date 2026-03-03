@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
+import { triggerWeavy, getPapparaziJobStatus } from "@/lib/cf-worker";
 
 type Phase = "idle" | "uploading" | "running" | "complete" | "error";
 
@@ -31,7 +32,7 @@ const PapparaziRun = () => {
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Hardcoded Weavy recipe ID for PAPPARAZI
-  const templateId = "dvgEXt4aeShCeokMq5MIpZ";
+  const recipeId = "dvgEXt4aeShCeokMq5MIpZ";
 
   const uploadToStorage = async (userId: string, sourceFile: File): Promise<string> => {
     const ext = sourceFile.name.split(".").pop() || "png";
@@ -48,28 +49,6 @@ const PapparaziRun = () => {
     if (signErr || !signedData?.signedUrl) throw new Error("Could not generate upload URL");
 
     return signedData.signedUrl;
-  };
-
-  const getWeavyJobStatus = async (projectId: string, token: string) => {
-    const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/weavy-job-status?projectId=${encodeURIComponent(projectId)}`;
-    const res = await fetch(url, {
-      method: "GET",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
-      },
-    });
-
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) {
-      throw new Error((data as { error?: string }).error || `Status check failed (${res.status})`);
-    }
-
-    return data as {
-      status: "running" | "complete" | "failed";
-      outputs?: { items?: { type: string; url: string }[] };
-      error?: string;
-    };
   };
 
   // Cleanup poll on unmount
@@ -151,7 +130,7 @@ const PapparaziRun = () => {
   );
 
   const handleRun = async () => {
-    if (!file || !templateId || !user) return;
+    if (!file || !recipeId || !user) return;
 
     setPhase("uploading");
     setErrorMsg(null);
@@ -167,11 +146,11 @@ const PapparaziRun = () => {
       // 1) Upload image to storage and create signed URL
       const imageUrl = await uploadToStorage(user.id, file);
 
-      // 2) Resolve template UUID by recipe ID
+      // 2) Resolve template UUID from DB by recipe ID
       const { data: templateRow, error: templateErr } = await supabase
         .from("templates")
         .select("id")
-        .eq("weavy_recipe_id", templateId)
+        .eq("weavy_recipe_id", recipeId)
         .eq("is_active", true)
         .limit(1)
         .maybeSingle();
@@ -180,7 +159,7 @@ const PapparaziRun = () => {
         throw new Error("Template is not configured in the database");
       }
 
-      // 3) Trigger backend template run
+      // 3) Create project + deduct credits via edge function
       setPhase("running");
       const { data: runData, error: runErr } = await supabase.functions.invoke("run-template", {
         body: {
@@ -190,28 +169,38 @@ const PapparaziRun = () => {
       });
 
       if (runErr) throw new Error(runErr.message);
-      if (runData?.status === "failed") {
-        throw new Error(runData.error || "Template run failed");
-      }
+      if (runData?.error) throw new Error(runData.error);
 
       const projectId = runData?.projectId as string | undefined;
       if (!projectId) throw new Error("Run started but no project ID was returned");
 
-      
+      // 4) Trigger Weavy via Cloudflare Worker (server-to-server)
+      const weavyRecipeId = runData?.weavyRecipeId || recipeId;
+      const triggerResult = await triggerWeavy(
+        {
+          projectId,
+          recipeId: weavyRecipeId,
+          inputs: { product_image: imageUrl },
+        },
+        token,
+      );
 
-      // 4) Poll for status
+      if (triggerResult.error) {
+        throw new Error(triggerResult.error);
+      }
+
+      // 5) Poll CF Worker for job status
       pollRef.current = setInterval(async () => {
         try {
-          const status = await getWeavyJobStatus(projectId, token);
+          const status = await getPapparaziJobStatus(projectId, token);
 
-          if (status.status === "complete") {
+          if (status.status === "succeeded" || status.status === "complete") {
             clearInterval(pollRef.current!);
             pollRef.current = null;
 
-            const items = status.outputs?.items || [];
             setResult({
-              outputImageUrl: items.find((i) => i.type === "image")?.url ?? null,
-              outputVideoUrl: items.find((i) => i.type === "video")?.url ?? null,
+              outputImageUrl: status.outputImageUrl ?? null,
+              outputVideoUrl: status.outputVideoUrl ?? null,
             });
             setPhase("complete");
             refreshProfile();
@@ -245,7 +234,7 @@ const PapparaziRun = () => {
     setResult(null);
   };
 
-  const isReady = !!file && !!templateId && phase === "idle";
+  const isReady = !!file && !!recipeId && phase === "idle";
 
   return (
     <div className="min-h-screen bg-background text-foreground">

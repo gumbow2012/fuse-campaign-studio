@@ -34,33 +34,12 @@ async function failProject(
   }).eq("id", projectId);
 }
 
-/** Exchange the long-lived Firebase refresh token for a fresh id_token. */
-async function getWeavyIdToken(): Promise<string> {
-  const firebaseApiKey = Deno.env.get("WEAVY_FIREBASE_API_KEY");
-  const refreshToken = Deno.env.get("WEAVY_REFRESH_TOKEN");
-  if (!firebaseApiKey || !refreshToken) {
-    throw new Error("Missing WEAVY_FIREBASE_API_KEY or WEAVY_REFRESH_TOKEN");
-  }
-
-  const res = await fetch(
-    `https://securetoken.googleapis.com/v1/token?key=${firebaseApiKey}`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ grant_type: "refresh_token", refresh_token: refreshToken }),
-    },
-  );
-
-  if (!res.ok) {
-    const txt = await res.text();
-    throw new Error(`Firebase token refresh failed (${res.status}): ${txt}`);
-  }
-
-  const data = await res.json();
-  return data.id_token;
-}
-
 /* ── Main ── */
+/*
+ * This edge function handles auth, credit checks, project creation, and
+ * credit deduction ONLY. Weavy triggering is delegated to the Cloudflare
+ * Worker which holds the Firebase credentials server-side.
+ */
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -157,67 +136,17 @@ Deno.serve(async (req) => {
     });
     trace.step = "credits_deducted";
 
-    // ── Trigger Weavy ──
-    const recipeId = template.weavy_recipe_id;
-    if (!recipeId) {
-      trace.step = "no_recipe_queued";
-      // Save trace even on success for debugging
-      await sb.from("projects").update({ debug_trace: trace }).eq("id", projectId);
-      return new Response(
-        JSON.stringify({ projectId, status: "queued" }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } },
-      );
-    }
-
-    console.log(`[${traceId}] triggering Weavy recipe=${recipeId}`);
-    trace.step = "weavy_token_start";
-
-    const idToken = await getWeavyIdToken();
-    trace.step = "weavy_token_ok";
-
-    const weavyBase = Deno.env.get("WEAVY_API_BASE_URL") || "https://api.weavy.ai";
-    const weavyUrl = `${weavyBase}/api/v1/recipe-runs/recipes/${recipeId}/run`;
-    trace.weavy_url = weavyUrl;
-
-    const runRes = await fetch(weavyUrl, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${idToken}`,
-      },
-      body: JSON.stringify({ inputs: inputs || {} }),
-    });
-
-    trace.weavy_status = runRes.status;
-
-    if (!runRes.ok) {
-      const body = await runRes.text();
-      trace.weavy_error_body = body.slice(0, 2000);
-      trace.step = "weavy_trigger_failed";
-      const msg = `Weavy trigger failed (${runRes.status}): ${body.slice(0, 500)}`;
-      console.error(`[${traceId}] ${msg}`);
-      await failProject(sb, projectId, msg, "weavy_trigger", trace);
-      return new Response(
-        JSON.stringify({ projectId, status: "failed", error: msg }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } },
-      );
-    }
-
-    const runData = await runRes.json();
-    const runId = runData.id || runData.runId;
-    trace.weavy_run_id = runId;
-    trace.step = "weavy_running";
-    console.log(`[${traceId}] Weavy run=${runId}`);
-
-    await sb.from("projects").update({
-      weavy_run_id: runId,
-      status: "running",
-      started_at: new Date().toISOString(),
-      debug_trace: trace,
-    }).eq("id", projectId);
+    // ── Save trace and return ──
+    // Weavy triggering is handled by the Cloudflare Worker.
+    // The frontend will call the CF Worker with this projectId.
+    await sb.from("projects").update({ debug_trace: trace }).eq("id", projectId);
 
     return new Response(
-      JSON.stringify({ projectId, status: "running", weavyRunId: runId }),
+      JSON.stringify({
+        projectId,
+        status: "queued",
+        weavyRecipeId: template.weavy_recipe_id ?? null,
+      }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
   } catch (error) {
