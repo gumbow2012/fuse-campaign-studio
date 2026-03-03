@@ -2,6 +2,7 @@ export interface Env {
   ASSETS: R2Bucket;
   SUPABASE_URL: string;
   SUPABASE_SERVICE_ROLE_KEY: string;
+  SUPABASE_ANON_KEY: string;
   WEAVY_API_KEY: string;
   WEAVY_API_BASE_URL: string;
   WEAVY_FIREBASE_API_KEY: string;
