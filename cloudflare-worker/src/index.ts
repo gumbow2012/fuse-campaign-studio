@@ -64,6 +64,24 @@ export default {
         const key = decodeURIComponent(path.slice("/assets/".length));
         response = await serveAsset(env, key);
 
+      // ── Weavy flow proxy (strip X-Frame-Options so we can iframe) ──
+      } else if (path.startsWith("/weavy/flow/") && request.method === "GET") {
+        const flowPath = path.slice("/weavy".length); // → /flow/<id>
+        const target = `https://app.weavy.ai${flowPath}${url.search}`;
+        const upstream = await fetch(target, {
+          headers: { "User-Agent": request.headers.get("User-Agent") || "" },
+          redirect: "follow",
+        });
+        const headers = new Headers(upstream.headers);
+        headers.delete("x-frame-options");
+        headers.delete("content-security-policy");
+        headers.set("access-control-allow-origin", "*");
+        response = new Response(upstream.body, {
+          status: upstream.status,
+          statusText: upstream.statusText,
+          headers,
+        });
+
       // ── Health check ──
       } else if (path === "/health") {
         response = Response.json({ ok: true, timestamp: Date.now() });
