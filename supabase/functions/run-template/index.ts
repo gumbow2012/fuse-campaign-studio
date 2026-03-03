@@ -9,7 +9,7 @@ const corsHeaders = {
 
 /** Exchange the long-lived Firebase refresh token for a fresh id_token. */
 async function getWeavyIdToken(): Promise<string> {
-  const firebaseApiKey = Deno.env.get("FIREBASE_API_KEY");
+  const firebaseApiKey = Deno.env.get("WEAVY_FIREBASE_API_KEY");
   const refreshToken = Deno.env.get("WEAVY_REFRESH_TOKEN");
   if (!firebaseApiKey || !refreshToken) {
     throw new Error("Missing FIREBASE_API_KEY or WEAVY_REFRESH_TOKEN");
