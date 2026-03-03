@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
-import { triggerWeavy, getPapparaziJobStatus } from "@/lib/cf-worker";
+import { getPapparaziJobStatus } from "@/lib/cf-worker";
 
 type Phase = "idle" | "uploading" | "running" | "complete" | "error";
 
@@ -146,50 +146,30 @@ const PapparaziRun = () => {
       // 1) Upload image to storage and create signed URL
       const imageUrl = await uploadToStorage(user.id, file);
 
-      // 2) Resolve template UUID from DB by recipe ID
-      const { data: templateRow, error: templateErr } = await supabase
-        .from("templates")
-        .select("id")
-        .eq("weavy_recipe_id", recipeId)
-        .eq("is_active", true)
-        .limit(1)
-        .maybeSingle();
-
-      if (templateErr || !templateRow?.id) {
-        throw new Error("Template is not configured in the database");
-      }
-
-      // 3) Create project + deduct credits via edge function
+      // 2) Call CF Worker directly — it handles credits, project, and Weavy trigger
       setPhase("running");
-      const { data: runData, error: runErr } = await supabase.functions.invoke("run-template", {
-        body: {
-          templateId: templateRow.id,
-          inputs: { product_image: imageUrl },
+
+      const CF_WORKER_URL = import.meta.env.VITE_CF_WORKER_URL as string;
+      if (!CF_WORKER_URL) throw new Error("VITE_CF_WORKER_URL is not configured");
+
+      const triggerRes = await fetch(`${CF_WORKER_URL.replace(/\/+$/, "")}/weavy/trigger`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
         },
+        body: JSON.stringify({ recipeId, imageUrl }),
       });
 
-      if (runErr) throw new Error(runErr.message);
-      if (runData?.error) throw new Error(runData.error);
-
-      const projectId = runData?.projectId as string | undefined;
-      if (!projectId) throw new Error("Run started but no project ID was returned");
-
-      // 4) Trigger Weavy via Cloudflare Worker (server-to-server)
-      const weavyRecipeId = runData?.weavyRecipeId || recipeId;
-      const triggerResult = await triggerWeavy(
-        {
-          projectId,
-          recipeId: weavyRecipeId,
-          inputs: { product_image: imageUrl },
-        },
-        token,
-      );
-
-      if (triggerResult.error) {
-        throw new Error(triggerResult.error);
+      const triggerData = await triggerRes.json().catch(() => ({}));
+      if (!triggerRes.ok) {
+        throw new Error((triggerData as any).error || `Trigger failed (${triggerRes.status})`);
       }
 
-      // 5) Poll CF Worker for job status
+      const projectId = (triggerData as any).projectId || (triggerData as any).jobId;
+      if (!projectId) throw new Error("No project ID returned from worker");
+
+      // 3) Poll CF Worker for job status
       pollRef.current = setInterval(async () => {
         try {
           const status = await getPapparaziJobStatus(projectId, token);
