@@ -1,5 +1,5 @@
-import { useState, useCallback } from "react";
-import { useNavigate } from "react-router-dom";
+import { useState, useCallback, useEffect, useRef } from "react";
+import { useNavigate, useParams } from "react-router-dom";
 import Navbar from "@/components/Navbar";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
@@ -8,9 +8,12 @@ import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { submitJob } from "@/lib/cf-worker";
 import { useQuery } from "@tanstack/react-query";
-import { Minus, Plus, GripVertical, MoreVertical, Upload, X, Zap, Loader2 } from "lucide-react";
+import {
+  Minus, Plus, GripVertical, MoreVertical, Upload, X, Zap,
+  Loader2, Download, CheckCircle2, AlertTriangle, Copy, Maximize2,
+} from "lucide-react";
 
-/** Upload a file to storage and return a signed URL (1 hour expiry). */
+/* ─── Storage upload helper ─── */
 const uploadToStorage = async (userId: string, fieldKey: string, file: File): Promise<string> => {
   const ext = file.name.split(".").pop() || "png";
   const path = `${userId}/${Date.now()}-${fieldKey}.${ext}`;
@@ -21,7 +24,7 @@ const uploadToStorage = async (userId: string, fieldKey: string, file: File): Pr
   return signedData.signedUrl;
 };
 
-/* ─── Drop zone with preview ─── */
+/* ─── File node header (Weavy-style) ─── */
 const FileNodeHeader = () => (
   <div className="flex items-center justify-between mb-3">
     <div className="flex items-center gap-2">
@@ -33,6 +36,7 @@ const FileNodeHeader = () => (
   </div>
 );
 
+/* ─── Upload zone ─── */
 interface UploadZoneProps {
   label: string;
   required: boolean;
@@ -90,25 +94,27 @@ const UploadZone = ({ label, required, file, onFile }: UploadZoneProps) => {
           }`}
         >
           <Upload className="w-8 h-8 text-muted-foreground/30 group-hover:text-muted-foreground/50 transition-colors" />
-          <p className="text-xs text-muted-foreground/50 font-medium">Drag & drop or click</p>
+          <p className="text-xs text-muted-foreground/50 font-medium">Drag & drop or click to upload</p>
         </div>
       )}
     </div>
   );
 };
 
-/* ─── Input schema type ─── */
-interface InputField {
-  key: string;
-  label: string;
-  nodeId: string;
-  type: string;
-  required: boolean;
+/* ─── Types ─── */
+interface InputField { key: string; label: string; nodeId: string; type: string; required: boolean; }
+
+interface OutputItem { type: string; url: string; label?: string; }
+interface ProjectResult {
+  status: "queued" | "running" | "complete" | "failed";
+  outputs: OutputItem[];
+  error?: string;
 }
 
-/* ─── Page ─── */
+/* ─── Main page ─── */
 const TemplateRun = () => {
   const navigate = useNavigate();
+  const { slug } = useParams<{ slug: string }>();
   const { user, profile } = useAuth();
 
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>("");
@@ -116,6 +122,11 @@ const TemplateRun = () => {
   const [runs, setRuns] = useState(1);
   const [loading, setLoading] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
+
+  // Result state (inline, no navigation)
+  const [projectId, setProjectId] = useState<string | null>(null);
+  const [result, setResult] = useState<ProjectResult | null>(null);
+  const pollingRef = useRef(false);
 
   // Load templates from DB
   const { data: templates, isLoading: templatesLoading } = useQuery({
@@ -131,11 +142,65 @@ const TemplateRun = () => {
     },
   });
 
+  // Auto-select template from slug (template id or weavy_recipe_id)
+  useEffect(() => {
+    if (!templates || !slug || selectedTemplateId) return;
+    const match = templates.find((t: any) => t.id === slug || t.weavy_recipe_id === slug);
+    if (match) setSelectedTemplateId(match.id);
+  }, [templates, slug, selectedTemplateId]);
+
   const template = templates?.find((t: any) => t.id === selectedTemplateId);
   const inputSchema: InputField[] = (template?.input_schema as any) || [];
   const requiredFields = inputSchema.filter((i) => i.required);
   const allRequiredUploaded = requiredFields.every((f) => files[f.key]);
   const totalCost = (template?.estimated_credits_per_run || 0) * runs;
+
+  /* ─── Poll project status from Supabase ─── */
+  useEffect(() => {
+    if (!projectId) return;
+    pollingRef.current = true;
+
+    const poll = async () => {
+      if (!pollingRef.current) return;
+      try {
+        const { data, error } = await supabase
+          .from("projects")
+          .select("status, outputs, error")
+          .eq("id", projectId)
+          .single();
+
+        if (error) throw error;
+
+        const outputs: OutputItem[] = [];
+        if (data.outputs && typeof data.outputs === "object") {
+          const o = data.outputs as any;
+          if (Array.isArray(o.items)) {
+            outputs.push(...o.items);
+          } else if (o.outputVideoUrl) {
+            outputs.push({ type: "video", url: o.outputVideoUrl, label: "Video" });
+          }
+          if (o.outputImageUrl) {
+            outputs.push({ type: "image", url: o.outputImageUrl, label: "Image" });
+          }
+        }
+
+        setResult({
+          status: data.status as ProjectResult["status"],
+          outputs,
+          error: data.error ?? undefined,
+        });
+
+        if (data.status === "queued" || data.status === "running") {
+          setTimeout(poll, 3000);
+        }
+      } catch {
+        if (pollingRef.current) setTimeout(poll, 5000);
+      }
+    };
+
+    poll();
+    return () => { pollingRef.current = false; };
+  }, [projectId]);
 
   const handleRun = async () => {
     if (!user) { navigate("/auth"); return; }
@@ -150,42 +215,37 @@ const TemplateRun = () => {
   const executeRun = async () => {
     setShowConfirm(false);
     setLoading(true);
+    setResult(null);
+    setProjectId(null);
     try {
       if (!user || !template) throw new Error("Not authenticated");
 
-      // Upload all files to storage and collect signed URLs
       const inputs: Record<string, string> = {};
       for (const field of inputSchema) {
         const f = files[field.key];
-        if (f) {
-          inputs[field.key] = await uploadToStorage(user.id, field.key, f);
-        }
+        if (f) inputs[field.key] = await uploadToStorage(user.id, field.key, f);
       }
 
-      // 1. Call Supabase to deduct credits + create project record
       const { data, error } = await supabase.functions.invoke("run-template", {
         body: { templateId: template.id, inputs },
       });
-
       if (error) throw new Error(error.message);
       if (data?.error) throw new Error(data.error);
 
-      // 2. Submit the job to CF Worker for orchestration
+      // Set projectId to start polling inline
+      setProjectId(data.projectId);
+      setResult({ status: "queued", outputs: [] });
+
+      // Best-effort CF Worker submission
       const session = await supabase.auth.getSession();
       const token = session.data.session?.access_token;
-      if (!token) throw new Error("Not authenticated");
-
-      try {
-        await submitJob(
-          { projectId: data.projectId, templateId: template.id, inputs },
-          token,
-        );
-      } catch (cfErr: any) {
-        // Job is already queued in DB — CF Worker submission is best-effort
-        console.warn("CF Worker submission failed (job still queued):", cfErr.message);
+      if (token) {
+        try {
+          await submitJob({ projectId: data.projectId, templateId: template.id, inputs }, token);
+        } catch (cfErr: any) {
+          console.warn("CF Worker submission failed (job still queued):", cfErr.message);
+        }
       }
-
-      navigate(`/app/jobs/${data.projectId}`);
     } catch (err: any) {
       toast({ title: "Error", description: err.message, variant: "destructive" });
     } finally {
@@ -193,86 +253,58 @@ const TemplateRun = () => {
     }
   };
 
+  const handleRerun = () => {
+    setResult(null);
+    setProjectId(null);
+    setShowConfirm(true);
+  };
+
+  const isRunning = result?.status === "queued" || result?.status === "running";
+  const isComplete = result?.status === "complete";
+  const isFailed = result?.status === "failed";
+  const hasResult = !!result;
+
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-background flex flex-col">
       <Navbar />
 
-      <div className="container mx-auto px-6 pt-28 pb-16">
-        {/* Header */}
-        <div className="mb-8">
-          <p className="text-[10px] font-bold uppercase tracking-[0.4em] text-muted-foreground mb-2">Run Template</p>
-          <h1 className="font-display text-3xl md:text-4xl font-black text-foreground">Job Runner</h1>
-        </div>
-
-        <div className="flex flex-col lg:flex-row gap-8">
-          {/* Left: Template selector + info */}
-          <div className="flex-1 space-y-4">
-            {/* Template selector */}
-            <div className="rounded-xl border border-border/40 bg-card p-6">
-              <h3 className="font-display text-sm font-bold text-foreground mb-4 uppercase tracking-wider">Select Template</h3>
+      <div className="flex-1 flex flex-col lg:flex-row pt-16">
+        {/* ════════ LEFT PANEL — Upload + Controls ════════ */}
+        <div className="w-full lg:w-[360px] border-r border-border/30 flex flex-col bg-card/50">
+          {/* Template selector (compact) */}
+          {!template && (
+            <div className="p-4 border-b border-border/20 flex-1 overflow-y-auto">
+              <h3 className="text-[9px] font-black uppercase tracking-[0.25em] text-muted-foreground mb-3">Select Template</h3>
               {templatesLoading ? (
-                <div className="flex items-center gap-2 text-muted-foreground text-sm">
-                  <Loader2 size={14} className="animate-spin" /> Loading templates...
+                <div className="flex items-center gap-2 text-muted-foreground text-sm py-8 justify-center">
+                  <Loader2 size={14} className="animate-spin" /> Loading...
                 </div>
               ) : (
-                <div className="space-y-2">
+                <div className="space-y-1.5">
                   {templates?.map((t: any) => (
                     <button
                       key={t.id}
-                      onClick={() => { setSelectedTemplateId(t.id); setFiles({}); }}
-                      className={`w-full text-left rounded-lg border p-4 transition-all ${
-                        selectedTemplateId === t.id
-                          ? "border-primary bg-primary/5"
-                          : "border-border/30 bg-card hover:border-border/60"
-                      }`}
+                      onClick={() => { setSelectedTemplateId(t.id); setFiles({}); setResult(null); setProjectId(null); }}
+                      className="w-full text-left rounded-lg border border-border/20 p-3 hover:border-border/50 hover:bg-foreground/[0.02] transition-all"
                     >
-                      <p className="text-sm font-bold text-foreground">{t.name}</p>
-                      <p className="text-xs text-muted-foreground mt-1">
-                        {t.category || "General"} · {t.estimated_credits_per_run} credits · {t.output_type}
-                        {!t.weavy_recipe_id && <span className="ml-1 text-yellow-500">(no Weavy config)</span>}
+                      <p className="text-xs font-bold text-foreground">{t.name}</p>
+                      <p className="text-[10px] text-muted-foreground mt-0.5">
+                        {t.category || "General"} · {t.estimated_credits_per_run} credits
                       </p>
                     </button>
                   ))}
-                  {templates?.length === 0 && (
-                    <p className="text-sm text-muted-foreground">No active templates. Create one in Admin.</p>
-                  )}
                 </div>
               )}
             </div>
+          )}
 
-            {/* Template info */}
-            {template && (
-              <div className="rounded-xl border border-border/40 bg-card p-6">
-                <h3 className="font-display text-sm font-bold text-foreground mb-4 uppercase tracking-wider">About This Template</h3>
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between py-2 border-b border-border/20">
-                    <span className="text-sm text-muted-foreground">Credits per run</span>
-                    <span className="text-sm font-bold text-primary">{template.estimated_credits_per_run}</span>
-                  </div>
-                  <div className="flex items-center justify-between py-2 border-b border-border/20">
-                    <span className="text-sm text-muted-foreground">Required inputs</span>
-                    <span className="text-sm font-bold text-foreground">{requiredFields.length}</span>
-                  </div>
-                  <div className="flex items-center justify-between py-2 border-b border-border/20">
-                    <span className="text-sm text-muted-foreground">Output type</span>
-                    <span className="text-sm font-bold text-foreground">{template.output_type}</span>
-                  </div>
-                  <div className="flex items-center justify-between py-2">
-                    <span className="text-sm text-muted-foreground">Weavy recipe</span>
-                    <span className="text-sm font-mono text-foreground">{template.weavy_recipe_id || "—"}</span>
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Right: Upload card */}
+          {/* Upload zones + controls when template selected */}
           {template && (
-            <div className="w-full lg:w-[340px] flex flex-col gap-3">
+            <>
               {/* Upload zones */}
-              {inputSchema.length > 0 && (
-                <div className="rounded-xl p-5 flex flex-col gap-5 border border-border/[0.08] bg-card/90 backdrop-blur-xl shadow-[0_8px_40px_rgba(0,0,0,0.5)]">
-                  {inputSchema.map((field) => (
+              <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                {inputSchema.length > 0 ? (
+                  inputSchema.map((field) => (
                     <UploadZone
                       key={field.key}
                       label={field.label}
@@ -280,19 +312,23 @@ const TemplateRun = () => {
                       file={files[field.key] || null}
                       onFile={(f) => setFiles((prev) => ({ ...prev, [field.key]: f }))}
                     />
-                  ))}
-                </div>
-              )}
+                  ))
+                ) : (
+                  <div className="py-12 text-center">
+                    <p className="text-xs text-muted-foreground/50">No file inputs required</p>
+                  </div>
+                )}
+              </div>
 
-              {/* Runs & Run button */}
-              <div className="rounded-xl p-5 flex flex-col gap-3 border border-border/[0.08] bg-card/90 backdrop-blur-xl shadow-[0_8px_40px_rgba(0,0,0,0.5)]">
+              {/* Bottom controls — Runs + Cost + Run/Re-run button */}
+              <div className="border-t border-border/20 p-4 space-y-3 bg-card/80">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs text-muted-foreground font-bold uppercase tracking-wider">Runs</span>
-                  <div className="h-8 bg-secondary/40 border border-border rounded-lg flex items-center px-1">
+                  <span className="text-xs text-foreground font-medium">Runs</span>
+                  <div className="h-7 bg-secondary/40 border border-border rounded-md flex items-center px-0.5">
                     <button onClick={() => setRuns((r) => Math.max(1, r - 1))} className="w-6 h-full flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors">
                       <Minus className="w-3 h-3" />
                     </button>
-                    <span className="w-5 text-center text-xs font-bold text-foreground/80">{runs}</span>
+                    <span className="w-6 text-center text-xs font-bold text-foreground">{runs}</span>
                     <button onClick={() => setRuns((r) => r + 1)} className="w-6 h-full flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors">
                       <Plus className="w-3 h-3" />
                     </button>
@@ -300,33 +336,169 @@ const TemplateRun = () => {
                 </div>
 
                 <div className="flex items-center justify-between">
-                  <span className="text-[10px] text-muted-foreground/40 font-medium">Total cost</span>
-                  <span className="text-[10px] text-muted-foreground/60 font-bold">
+                  <span className="text-[10px] text-muted-foreground/60 font-medium">Total cost</span>
+                  <span className="text-[10px] text-muted-foreground/80 font-bold">
                     <Zap size={10} className="inline text-primary mr-0.5" />
                     {totalCost} credits
                   </span>
                 </div>
 
-                <Button
-                  onClick={handleRun}
-                  disabled={!allRequiredUploaded || loading || !template}
-                  className="w-full gradient-primary text-primary-foreground font-black text-xs tracking-[0.25em] rounded-lg h-10 glow-blue hover:opacity-90 active:scale-[0.98] transition-all duration-300 border-0 relative overflow-hidden group uppercase disabled:opacity-40 disabled:cursor-not-allowed"
-                >
-                  {loading ? (
-                    <span className="relative z-10 flex items-center gap-2"><Loader2 size={14} className="animate-spin" /> Processing...</span>
-                  ) : (
-                    <>
-                      <div className="absolute inset-0 bg-foreground/15 translate-y-full group-hover:translate-y-0 transition-transform duration-300" />
-                      <span className="relative z-10">RUN</span>
-                    </>
-                  )}
-                </Button>
+                {hasResult && !isRunning ? (
+                  <Button
+                    onClick={handleRerun}
+                    className="w-full bg-[hsl(60,80%,70%)] hover:bg-[hsl(60,80%,65%)] text-[hsl(222,47%,6%)] font-black text-xs tracking-[0.15em] rounded-md h-10 transition-all uppercase"
+                  >
+                    Re-run
+                  </Button>
+                ) : (
+                  <Button
+                    onClick={handleRun}
+                    disabled={!allRequiredUploaded || loading || isRunning}
+                    className="w-full gradient-primary text-primary-foreground font-black text-xs tracking-[0.25em] rounded-md h-10 glow-blue hover:opacity-90 active:scale-[0.98] transition-all border-0 uppercase disabled:opacity-40"
+                  >
+                    {loading ? (
+                      <span className="flex items-center gap-2"><Loader2 size={14} className="animate-spin" /> Uploading...</span>
+                    ) : isRunning ? (
+                      <span className="flex items-center gap-2"><Loader2 size={14} className="animate-spin" /> Running...</span>
+                    ) : (
+                      "RUN"
+                    )}
+                  </Button>
+                )}
+              </div>
+            </>
+          )}
+        </div>
 
-                <div className="pt-2 border-t border-border/[0.04] space-y-1">
-                  <p className="text-[8px] text-muted-foreground/30 uppercase tracking-[0.2em] font-bold">
-                    Cost: {template.estimated_credits_per_run} credits per run
+        {/* ════════ RIGHT PANEL — Output / Results ════════ */}
+        <div className="flex-1 flex flex-col bg-background min-h-0">
+          {!hasResult && (
+            <div className="flex-1 flex items-center justify-center text-center p-8">
+              <div>
+                <div className="w-16 h-16 rounded-2xl bg-secondary/30 flex items-center justify-center mx-auto mb-4">
+                  <Upload className="w-7 h-7 text-muted-foreground/30" />
+                </div>
+                <p className="text-sm font-medium text-muted-foreground/50">Upload your files and hit Run</p>
+                <p className="text-[10px] text-muted-foreground/30 mt-1">Output will appear here</p>
+              </div>
+            </div>
+          )}
+
+          {/* Running state */}
+          {isRunning && (
+            <div className="flex-1 flex items-center justify-center p-8">
+              <div className="text-center space-y-4">
+                <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mx-auto">
+                  <Loader2 className="w-8 h-8 text-primary animate-spin" />
+                </div>
+                <div>
+                  <p className="text-sm font-bold text-foreground">
+                    {result?.status === "queued" ? "Queued..." : "Generating your assets..."}
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-1">This may take a few minutes</p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Failed state */}
+          {isFailed && (
+            <div className="flex-1 flex items-center justify-center p-8">
+              <div className="text-center space-y-4 max-w-sm">
+                <AlertTriangle className="w-10 h-10 text-destructive-foreground mx-auto" />
+                <p className="text-sm font-bold text-foreground">Generation Failed</p>
+                <p className="text-xs text-muted-foreground">{result?.error || "Something went wrong."}</p>
+              </div>
+            </div>
+          )}
+
+          {/* Complete — show outputs */}
+          {isComplete && result && result.outputs.length > 0 && (
+            <div className="flex-1 flex flex-col min-h-0">
+              {/* Output header */}
+              <div className="px-5 py-3 border-b border-border/20 flex items-center justify-between shrink-0">
+                <div>
+                  <p className="text-xs font-bold text-foreground">Output</p>
+                  <p className="text-[10px] text-muted-foreground font-mono mt-0.5">
+                    {result.outputs.length} asset{result.outputs.length !== 1 ? "s" : ""} generated
                   </p>
                 </div>
+                <div className="flex items-center gap-1">
+                  <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-muted-foreground hover:text-foreground">
+                    <Copy size={14} />
+                  </Button>
+                  <a
+                    href={result.outputs[0]?.url}
+                    download
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-muted-foreground hover:text-foreground">
+                      <Download size={14} />
+                    </Button>
+                  </a>
+                  <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-muted-foreground hover:text-foreground">
+                    <MoreVertical size={14} />
+                  </Button>
+                </div>
+              </div>
+
+              {/* Output content */}
+              <div className="flex-1 overflow-y-auto p-5">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {result.outputs.map((output, i) => (
+                    <div key={i} className="rounded-xl border border-border/30 bg-card overflow-hidden group">
+                      {output.type === "video" ? (
+                        <video
+                          src={output.url}
+                          controls
+                          className="w-full aspect-video object-cover bg-secondary/50"
+                        />
+                      ) : (
+                        <div className="relative">
+                          <img
+                            src={output.url}
+                            alt={output.label || `Asset ${i + 1}`}
+                            className="w-full aspect-square object-cover bg-secondary/50"
+                          />
+                          <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity flex gap-1">
+                            <a href={output.url} download target="_blank" rel="noopener noreferrer">
+                              <button className="w-7 h-7 rounded-md bg-background/80 backdrop-blur-sm flex items-center justify-center text-foreground hover:bg-background transition-colors">
+                                <Download size={12} />
+                              </button>
+                            </a>
+                            <a href={output.url} target="_blank" rel="noopener noreferrer">
+                              <button className="w-7 h-7 rounded-md bg-background/80 backdrop-blur-sm flex items-center justify-center text-foreground hover:bg-background transition-colors">
+                                <Maximize2 size={12} />
+                              </button>
+                            </a>
+                          </div>
+                        </div>
+                      )}
+                      <div className="px-3 py-2 flex items-center justify-between">
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                          {output.label || `Asset ${i + 1}`}
+                        </span>
+                        <a href={output.url} download target="_blank" rel="noopener noreferrer">
+                          <Button size="sm" variant="ghost" className="h-6 text-[10px] text-muted-foreground hover:text-foreground px-2">
+                            <Download size={10} className="mr-1" /> Download
+                          </Button>
+                        </a>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Complete but no outputs */}
+          {isComplete && result && result.outputs.length === 0 && (
+            <div className="flex-1 flex items-center justify-center p-8">
+              <div className="text-center space-y-3">
+                <CheckCircle2 className="w-10 h-10 text-primary mx-auto" />
+                <p className="text-sm font-bold text-foreground">Complete</p>
+                <p className="text-xs text-muted-foreground">Job finished but no output assets were found.</p>
               </div>
             </div>
           )}
