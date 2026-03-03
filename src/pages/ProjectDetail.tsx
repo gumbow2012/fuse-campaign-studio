@@ -163,9 +163,15 @@ const ProjectDetail = () => {
         </div>
 
         {project.status === "failed" && (
-          <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-4 mb-6 flex items-center gap-3">
-            <AlertTriangle size={18} className="text-red-400" />
-            <p className="text-sm text-red-300">This project failed during processing. Please try running again or contact support.</p>
+          <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-4 mb-6 flex items-start gap-3">
+            <AlertTriangle size={18} className="text-red-400 mt-0.5 shrink-0" />
+            <div>
+              <p className="text-sm font-medium text-red-300">This project failed during processing.</p>
+              {project.error && (
+                <p className="text-xs text-red-300/70 mt-1">{project.error}</p>
+              )}
+              <p className="text-xs text-red-300/50 mt-1">Please try running again or contact support.</p>
+            </div>
           </div>
         )}
 
