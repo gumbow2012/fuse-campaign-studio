@@ -291,6 +291,7 @@ export type Database = {
         Row: {
           completed_at: string | null
           created_at: string
+          error: string | null
           failed_at: string | null
           id: string
           inputs: Json | null
@@ -305,6 +306,7 @@ export type Database = {
         Insert: {
           completed_at?: string | null
           created_at?: string
+          error?: string | null
           failed_at?: string | null
           id?: string
           inputs?: Json | null
@@ -319,6 +321,7 @@ export type Database = {
         Update: {
           completed_at?: string | null
           created_at?: string
+          error?: string | null
           failed_at?: string | null
           id?: string
           inputs?: Json | null

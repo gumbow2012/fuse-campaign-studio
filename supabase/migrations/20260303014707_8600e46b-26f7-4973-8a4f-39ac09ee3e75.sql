@@ -1,0 +1,1 @@
+ALTER TABLE public.projects ADD COLUMN error text NULL;
