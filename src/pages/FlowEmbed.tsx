@@ -1,7 +1,9 @@
 import { useState, useRef, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { ArrowLeft, ExternalLink, AlertTriangle } from "lucide-react";
+import { ArrowLeft, ExternalLink, AlertTriangle, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+
+const CF_WORKER_URL = import.meta.env.VITE_CF_WORKER_URL as string | undefined;
 
 const ALLOWED_FLOW_IDS = new Set([
   "dvgEXt4aeShCeokMq5MIpZ",
@@ -26,34 +28,48 @@ const FlowEmbed = () => {
   const [loading, setLoading] = useState(true);
   const iframeRef = useRef<HTMLIFrameElement>(null);
 
-  const flowUrl = flowId ? `https://app.weavy.ai/flow/${flowId}` : null;
+  // Primary: direct Weavy URL. Fallback: proxy through CF Worker to strip X-Frame-Options.
+  const directUrl = flowId ? `https://app.weavy.ai/flow/${flowId}` : null;
+  const proxyUrl = flowId && CF_WORKER_URL
+    ? `${CF_WORKER_URL.replace(/\/+$/, "")}/weavy/flow/${flowId}`
+    : null;
 
-  // Detect if iframe failed to load (X-Frame-Options / CSP block)
+  const [useProxy, setUseProxy] = useState(false);
+  const flowUrl = useProxy ? proxyUrl : directUrl;
+
+  // Detect if direct iframe failed to load (X-Frame-Options / CSP block)
   useEffect(() => {
+    if (useProxy) return; // don't re-trigger when already on proxy
     const timer = setTimeout(() => {
-      // If still loading after 5s, likely blocked
+      if (loading) {
+        // Direct embed blocked — switch to CF Worker proxy
+        if (proxyUrl) {
+          setUseProxy(true);
+          setLoading(true); // reset for proxy attempt
+        } else {
+          setIframeBlocked(true);
+          setLoading(false);
+        }
+      }
+    }, 5000);
+    return () => clearTimeout(timer);
+  }, [loading, useProxy, proxyUrl]);
+
+  // If proxy also fails after 8s, show fallback
+  useEffect(() => {
+    if (!useProxy || !loading) return;
+    const timer = setTimeout(() => {
       if (loading) {
         setIframeBlocked(true);
         setLoading(false);
       }
-    }, 5000);
+    }, 8000);
     return () => clearTimeout(timer);
-  }, [loading]);
+  }, [useProxy, loading]);
 
   const handleIframeLoad = () => {
-    // If the iframe loads, check if we can access it (same-origin only)
-    try {
-      const doc = iframeRef.current?.contentDocument;
-      // If we can access the document, it loaded fine
-      if (doc) {
-        setLoading(false);
-        setIframeBlocked(false);
-      }
-    } catch {
-      // Cross-origin — iframe loaded successfully (we just can't access the DOM)
-      setLoading(false);
-      setIframeBlocked(false);
-    }
+    setLoading(false);
+    setIframeBlocked(false);
   };
 
   if (!flowId || !ALLOWED_FLOW_IDS.has(flowId)) {
@@ -86,6 +102,17 @@ const FlowEmbed = () => {
 
       {/* Iframe with blocked fallback overlay */}
       <div className="flex-1 relative">
+        {loading && !iframeBlocked && (
+          <div className="absolute inset-0 z-10 flex items-center justify-center bg-background">
+            <div className="flex flex-col items-center gap-3">
+              <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
+              <p className="text-sm text-muted-foreground">
+                {useProxy ? "Loading via proxy…" : "Connecting to flow editor…"}
+              </p>
+            </div>
+          </div>
+        )}
+
         {iframeBlocked && (
           <div className="absolute inset-0 z-10 flex items-center justify-center bg-background">
             <div className="text-center space-y-5 max-w-sm px-6">
@@ -101,7 +128,7 @@ const FlowEmbed = () => {
                 </p>
               </div>
               <Button asChild>
-                <a href={flowUrl!} target="_blank" rel="noopener noreferrer" className="gap-2">
+                <a href={directUrl!} target="_blank" rel="noopener noreferrer" className="gap-2">
                   <ExternalLink className="w-4 h-4" />
                   Open in New Tab
                 </a>
