@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import { Upload, Loader2, CheckCircle, AlertCircle, Image, Film, ArrowLeft } from "lucide-react";
+import { Upload, Loader2, CheckCircle, AlertCircle, Image, Film, ArrowLeft, Shrink } from "lucide-react";
 import Navbar from "@/components/Navbar";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
@@ -23,6 +23,11 @@ const PapparaziRun = () => {
   const [phase, setPhase] = useState<Phase>("idle");
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [result, setResult] = useState<RunResult | null>(null);
+  const [imageMeta, setImageMeta] = useState<{
+    originalW: number; originalH: number; originalSize: number;
+    finalW: number; finalH: number; finalSize: number;
+    wasResized: boolean;
+  } | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Hardcoded Weavy recipe ID for PAPPARAZI
@@ -77,7 +82,7 @@ const PapparaziRun = () => {
   const MAX_DIMENSION = 2048;
   const MAX_FILE_SIZE_MB = 10;
 
-  const downscaleImage = useCallback((file: File): Promise<File> => {
+  const downscaleImage = useCallback((file: File): Promise<{ file: File; originalW: number; originalH: number; finalW: number; finalH: number; wasResized: boolean }> => {
     return new Promise((resolve, reject) => {
       const img = new window.Image();
       const url = URL.createObjectURL(file);
@@ -85,7 +90,7 @@ const PapparaziRun = () => {
         URL.revokeObjectURL(url);
         const { width, height } = img;
         if (width <= MAX_DIMENSION && height <= MAX_DIMENSION && file.size <= MAX_FILE_SIZE_MB * 1024 * 1024) {
-          resolve(file);
+          resolve({ file, originalW: width, originalH: height, finalW: width, finalH: height, wasResized: false });
           return;
         }
         const scale = Math.min(MAX_DIMENSION / width, MAX_DIMENSION / height, 1);
@@ -98,8 +103,7 @@ const PapparaziRun = () => {
           (blob) => {
             if (!blob) { reject(new Error("Downscale failed")); return; }
             const newFile = new File([blob], file.name.replace(/\.\w+$/, ".jpg"), { type: "image/jpeg" });
-            toast({ title: "Image resized", description: `Downscaled from ${width}×${height} to ${canvas.width}×${canvas.height} for compatibility.` });
-            resolve(newFile);
+            resolve({ file: newFile, originalW: width, originalH: height, finalW: canvas.width, finalH: canvas.height, wasResized: true });
           },
           "image/jpeg",
           0.85,
@@ -114,6 +118,7 @@ const PapparaziRun = () => {
     setPhase("idle");
     setErrorMsg(null);
     setResult(null);
+    setImageMeta(null);
     if (!f) { setFile(null); setPreview(null); return; }
 
     if (f.size > 100 * 1024 * 1024) {
@@ -122,9 +127,13 @@ const PapparaziRun = () => {
     }
 
     try {
-      const processed = await downscaleImage(f);
+      const { file: processed, originalW, originalH, finalW, finalH, wasResized } = await downscaleImage(f);
       setFile(processed);
       setPreview(URL.createObjectURL(processed));
+      setImageMeta({ originalW, originalH, originalSize: f.size, finalW, finalH, finalSize: processed.size, wasResized });
+      if (wasResized) {
+        toast({ title: "Image resized", description: `Downscaled from ${originalW}×${originalH} to ${finalW}×${finalH} for compatibility.` });
+      }
     } catch {
       toast({ title: "Error", description: "Could not process the image.", variant: "destructive" });
     }
@@ -232,7 +241,7 @@ const PapparaziRun = () => {
     setPreview(null);
     setPhase("idle");
     setErrorMsg(null);
-    
+    setImageMeta(null);
     setResult(null);
   };
 
@@ -285,6 +294,25 @@ const PapparaziRun = () => {
                 className="max-h-64 rounded-lg object-contain"
               />
               <span className="text-xs text-muted-foreground">{file?.name}</span>
+              {imageMeta && (
+                <div className="flex items-center gap-2 text-[10px] text-muted-foreground bg-muted/50 rounded-md px-3 py-1.5">
+                  {imageMeta.wasResized ? (
+                    <>
+                      <Shrink className="w-3 h-3 text-primary shrink-0" />
+                      <span>
+                        <span className="line-through opacity-60">{imageMeta.originalW}×{imageMeta.originalH}</span>
+                        {" → "}
+                        <span className="text-foreground font-medium">{imageMeta.finalW}×{imageMeta.finalH}</span>
+                        <span className="ml-1 opacity-60">
+                          ({(imageMeta.originalSize / 1024 / 1024).toFixed(1)} MB → {(imageMeta.finalSize / 1024 / 1024).toFixed(1)} MB)
+                        </span>
+                      </span>
+                    </>
+                  ) : (
+                    <span>{imageMeta.finalW}×{imageMeta.finalH} · {(imageMeta.finalSize / 1024 / 1024).toFixed(1)} MB</span>
+                  )}
+                </div>
+              )}
               {phase === "idle" && (
                 <button
                   onClick={(e) => {
