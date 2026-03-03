@@ -58,7 +58,7 @@ const App = () => (
             {/* Template run & job status */}
             <Route path="/app/templates" element={<ProtectedRoute><Templates /></ProtectedRoute>} />
             <Route path="/app/templates/run" element={<ProtectedRoute><TemplateRun /></ProtectedRoute>} />
-            <Route path="/app/templates/papparazi/run" element={<ProtectedRoute><PapparaziRun /></ProtectedRoute>} />
+            <Route path="/app/templates/dvgEXt4aeShCeokMq5MIpZ/run" element={<ProtectedRoute><PapparaziRun /></ProtectedRoute>} />
             <Route path="/app/templates/:slug" element={<ProtectedRoute><TemplateRun /></ProtectedRoute>} />
             <Route path="/app/jobs/:jobId" element={<ProtectedRoute><JobStatus /></ProtectedRoute>} />
 
