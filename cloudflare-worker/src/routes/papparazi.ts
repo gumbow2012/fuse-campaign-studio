@@ -47,18 +47,43 @@ export async function handleRunTemplate(request: Request, env: Env): Promise<Res
     return Response.json({ error: "templateId is required" }, { status: 400 });
   }
 
-  // ── Fetch template ──
-  const template = await getTemplate(env, body.templateId);
-  if (!template) {
-    return Response.json({ error: "Template not found" }, { status: 404 });
+  const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(body.templateId);
+
+  let recipeId: string;
+  let creditCost = 0;
+  let templateName = body.templateId;
+  let supabaseTemplateId: string | null = null;
+
+  if (isUUID) {
+    // Supabase template lookup
+    const template = await getTemplate(env, body.templateId);
+    if (!template) {
+      return Response.json({ error: "Template not found" }, { status: 404 });
+    }
+    recipeId = template.weavy_recipe_id as string;
+    if (!recipeId) {
+      return Response.json({ error: "Template has no weavy_recipe_id" }, { status: 400 });
+    }
+    creditCost = (template.estimated_credits_per_run as number) || 0;
+    templateName = (template.name as string) || body.templateId;
+    supabaseTemplateId = body.templateId;
+  } else {
+    // Direct Weavy recipe ID (e.g. "dvgEXt4aeShCeokMq5MIpZ")
+    recipeId = body.templateId;
+
+    // Try to find matching Supabase template by weavy_recipe_id for credit tracking
+    const tplRes = await supabaseFetch(env, `/templates?weavy_recipe_id=eq.${recipeId}&select=*&limit=1`);
+    if (tplRes.ok) {
+      const rows = await tplRes.json() as Record<string, unknown>[];
+      if (rows[0]) {
+        creditCost = (rows[0].estimated_credits_per_run as number) || 0;
+        templateName = (rows[0].name as string) || recipeId;
+        supabaseTemplateId = rows[0].id as string;
+      }
+    }
   }
 
-  const recipeId = template.weavy_recipe_id;
-  if (!recipeId) {
-    return Response.json({ error: "Template has no weavy_recipe_id" }, { status: 400 });
-  }
-
-  const creditCost = template.estimated_credits_per_run || 0;
+  console.log(`[run-template] recipeId=${recipeId} creditCost=${creditCost} inputKeys=${Object.keys(body.inputs || {})}`);
 
   // ── Check credits ──
   const profRes = await supabaseFetch(env, `/profiles?user_id=eq.${userId}&select=credits_balance`);
@@ -68,7 +93,7 @@ export async function handleRunTemplate(request: Request, env: Env): Promise<Res
   if (!profile) {
     return Response.json({ error: "Profile not found" }, { status: 404 });
   }
-  if (profile.credits_balance < creditCost) {
+  if (creditCost > 0 && profile.credits_balance < creditCost) {
     return Response.json(
       { error: `Insufficient credits: have ${profile.credits_balance}, need ${creditCost}` },
       { status: 402 },
@@ -76,11 +101,20 @@ export async function handleRunTemplate(request: Request, env: Env): Promise<Res
   }
 
   // ── Create project row ──
+  // Use supabaseTemplateId if available; otherwise we need a fallback template row
+  const projectTemplateId = supabaseTemplateId;
+  if (!projectTemplateId) {
+    return Response.json(
+      { error: `No matching template found in DB for recipe ${recipeId}. Create a template row with weavy_recipe_id = "${recipeId}".` },
+      { status: 400 },
+    );
+  }
+
   const projRes = await supabaseFetch(env, "/projects", {
     method: "POST",
     body: {
       user_id: userId,
-      template_id: body.templateId,
+      template_id: projectTemplateId,
       status: "queued",
       inputs: body.inputs,
     },
@@ -93,22 +127,24 @@ export async function handleRunTemplate(request: Request, env: Env): Promise<Res
   const [project] = await projRes.json() as { id: string }[];
 
   // ── Deduct credits ──
-  await supabaseFetch(env, `/profiles?user_id=eq.${userId}`, {
-    method: "PATCH",
-    body: { credits_balance: profile.credits_balance - creditCost },
-  });
+  if (creditCost > 0) {
+    await supabaseFetch(env, `/profiles?user_id=eq.${userId}`, {
+      method: "PATCH",
+      body: { credits_balance: profile.credits_balance - creditCost },
+    });
 
-  await supabaseFetch(env, "/credit_ledger", {
-    method: "POST",
-    body: {
-      user_id: userId,
-      type: "run_template",
-      amount: -creditCost,
-      template_id: body.templateId,
-      project_id: project.id,
-      description: `Run template: ${template.name}`,
-    },
-  });
+    await supabaseFetch(env, "/credit_ledger", {
+      method: "POST",
+      body: {
+        user_id: userId,
+        type: "run_template",
+        amount: -creditCost,
+        template_id: projectTemplateId,
+        project_id: project.id,
+        description: `Run template: ${templateName}`,
+      },
+    });
+  }
 
   // ── Trigger Weavy ──
   try {

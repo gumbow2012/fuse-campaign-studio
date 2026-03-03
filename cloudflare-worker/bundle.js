@@ -227,37 +227,60 @@ async function handleRunTemplate(request, env) {
     return Response.json({ error: "templateId is required" }, { status: 400 });
   }
 
-  const template = await getTemplate(env, body.templateId);
-  if (!template) {
-    return Response.json({ error: "Template not found" }, { status: 404 });
+  const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(body.templateId);
+
+  let recipeId;
+  let creditCost = 0;
+  let templateName = body.templateId;
+  let supabaseTemplateId = null;
+
+  if (isUUID) {
+    const template = await getTemplate(env, body.templateId);
+    if (!template) return Response.json({ error: "Template not found" }, { status: 404 });
+    recipeId = template.weavy_recipe_id;
+    if (!recipeId) return Response.json({ error: "Template has no weavy_recipe_id" }, { status: 400 });
+    creditCost = template.estimated_credits_per_run || 0;
+    templateName = template.name || body.templateId;
+    supabaseTemplateId = body.templateId;
+  } else {
+    recipeId = body.templateId;
+    const tplRes = await supabaseFetch(env, `/templates?weavy_recipe_id=eq.${recipeId}&select=*&limit=1`);
+    if (tplRes.ok) {
+      const rows = await tplRes.json();
+      if (rows[0]) {
+        creditCost = rows[0].estimated_credits_per_run || 0;
+        templateName = rows[0].name || recipeId;
+        supabaseTemplateId = rows[0].id;
+      }
+    }
   }
 
-  const recipeId = template.weavy_recipe_id;
-  if (!recipeId) {
-    return Response.json({ error: "Template has no weavy_recipe_id" }, { status: 400 });
-  }
+  console.log(`[run-template] recipeId=${recipeId} creditCost=${creditCost} inputKeys=${Object.keys(body.inputs || {})}`);
 
-  const creditCost = template.estimated_credits_per_run || 0;
-
-  // Check credits
   const profRes = await supabaseFetch(env, `/profiles?user_id=eq.${userId}&select=credits_balance`);
   if (!profRes.ok) throw new Error("Failed to fetch profile");
   const profiles = await profRes.json();
   const profile = profiles[0];
   if (!profile) return Response.json({ error: "Profile not found" }, { status: 404 });
-  if (profile.credits_balance < creditCost) {
+  if (creditCost > 0 && profile.credits_balance < creditCost) {
     return Response.json(
       { error: `Insufficient credits: have ${profile.credits_balance}, need ${creditCost}` },
       { status: 402 },
     );
   }
 
-  // Create project
+  if (!supabaseTemplateId) {
+    return Response.json(
+      { error: `No matching template in DB for recipe ${recipeId}. Create a template row with weavy_recipe_id = "${recipeId}".` },
+      { status: 400 },
+    );
+  }
+
   const projRes = await supabaseFetch(env, "/projects", {
     method: "POST",
     body: {
       user_id: userId,
-      template_id: body.templateId,
+      template_id: supabaseTemplateId,
       status: "queued",
       inputs: body.inputs,
     },
@@ -269,23 +292,24 @@ async function handleRunTemplate(request, env) {
   }
   const [project] = await projRes.json();
 
-  // Deduct credits
-  await supabaseFetch(env, `/profiles?user_id=eq.${userId}`, {
-    method: "PATCH",
-    body: { credits_balance: profile.credits_balance - creditCost },
-  });
+  if (creditCost > 0) {
+    await supabaseFetch(env, `/profiles?user_id=eq.${userId}`, {
+      method: "PATCH",
+      body: { credits_balance: profile.credits_balance - creditCost },
+    });
 
-  await supabaseFetch(env, "/credit_ledger", {
-    method: "POST",
-    body: {
-      user_id: userId,
-      type: "run_template",
-      amount: -creditCost,
-      template_id: body.templateId,
-      project_id: project.id,
-      description: `Run template: ${template.name}`,
-    },
-  });
+    await supabaseFetch(env, "/credit_ledger", {
+      method: "POST",
+      body: {
+        user_id: userId,
+        type: "run_template",
+        amount: -creditCost,
+        template_id: supabaseTemplateId,
+        project_id: project.id,
+        description: `Run template: ${templateName}`,
+      },
+    });
+  }
 
   // Trigger Weavy
   try {

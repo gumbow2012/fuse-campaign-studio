@@ -27,20 +27,8 @@ const PapparaziRun = () => {
   const [result, setResult] = useState<PapparaziJobStatus | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // Template ID for Papparazi — fetched from DB
-  const [templateId, setTemplateId] = useState<string | null>(null);
-
-  useEffect(() => {
-    supabase
-      .from("templates")
-      .select("id")
-      .ilike("name", "%papparaz%")
-      .eq("is_active", true)
-      .limit(1)
-      .then(({ data }) => {
-        if (data?.[0]) setTemplateId(data[0].id);
-      });
-  }, []);
+  // Hardcoded Weavy recipe ID for PAPPARAZI
+  const templateId = "dvgEXt4aeShCeokMq5MIpZ";
 
   // Cleanup poll on unmount
   useEffect(() => {
@@ -120,14 +108,16 @@ const PapparaziRun = () => {
           } else if (status.status === "failed") {
             clearInterval(pollRef.current!);
             pollRef.current = null;
-            setErrorMsg(status.error || "Job failed");
+            const failMsg = status.error || "Run failed. Check Worker logs.";
+            setErrorMsg(failMsg);
             setPhase("error");
+            toast({ title: "Run Failed", description: failMsg, variant: "destructive" });
           }
           // else still running — keep polling
         } catch {
           // Swallow transient poll errors
         }
-      }, 3000);
+      }, 2000);
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Something went wrong";
       setErrorMsg(msg);
@@ -165,11 +155,6 @@ const PapparaziRun = () => {
           Upload a product image → AI generates styled editorial shots.
         </p>
 
-        {!templateId && (
-          <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-4 mb-6 text-sm text-destructive">
-            Papparazi template not found in the database. Please create an active template with "Papparazi" in its name.
-          </div>
-        )}
 
         {/* Upload Zone */}
         <div
