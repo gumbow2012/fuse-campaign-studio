@@ -6,7 +6,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import CreditConfirmModal from "@/components/CreditConfirmModal";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { submitJob, isCfWorkerConfigured } from "@/lib/cf-worker";
+import { runTemplate as cfRunTemplate, getPapparaziJobStatus, isCfWorkerConfigured } from "@/lib/cf-worker";
 import { useQuery } from "@tanstack/react-query";
 import {
   Minus, Plus, GripVertical, MoreVertical, Upload, X, Zap,
@@ -155,7 +155,7 @@ const TemplateRun = () => {
   const allRequiredUploaded = requiredFields.every((f) => files[f.key]);
   const totalCost = (template?.estimated_credits_per_run || 0) * runs;
 
-  /* ─── Poll project status from Supabase ─── */
+  /* ─── Poll job status via CF Worker ─── */
   useEffect(() => {
     if (!projectId) return;
     pollingRef.current = true;
@@ -163,34 +163,26 @@ const TemplateRun = () => {
     const poll = async () => {
       if (!pollingRef.current) return;
       try {
-        const { data, error } = await supabase
-          .from("projects")
-          .select("status, outputs, error")
-          .eq("id", projectId)
-          .single();
+        const { data: { session } } = await supabase.auth.getSession();
+        const token = session?.access_token;
+        if (!token) return;
 
-        if (error) throw error;
+        const status = await getPapparaziJobStatus(projectId, token);
 
         const outputs: OutputItem[] = [];
-        if (data.outputs && typeof data.outputs === "object") {
-          const o = data.outputs as any;
-          if (Array.isArray(o.items)) {
-            outputs.push(...o.items);
-          } else if (o.outputVideoUrl) {
-            outputs.push({ type: "video", url: o.outputVideoUrl, label: "Video" });
-          }
-          if (o.outputImageUrl) {
-            outputs.push({ type: "image", url: o.outputImageUrl, label: "Image" });
-          }
-        }
+        if (status.outputImageUrl) outputs.push({ type: "image", url: status.outputImageUrl, label: "Image" });
+        if (status.outputVideoUrl) outputs.push({ type: "video", url: status.outputVideoUrl, label: "Video" });
+
+        const normalizedStatus =
+          status.status === "succeeded" ? "complete" : status.status as ProjectResult["status"];
 
         setResult({
-          status: data.status as ProjectResult["status"],
+          status: normalizedStatus,
           outputs,
-          error: data.error ?? undefined,
+          error: status.error ?? undefined,
         });
 
-        if (data.status === "queued" || data.status === "running") {
+        if (normalizedStatus === "queued" || normalizedStatus === "running") {
           setTimeout(poll, 3000);
         }
       } catch {
@@ -220,32 +212,28 @@ const TemplateRun = () => {
     try {
       if (!user || !template) throw new Error("Not authenticated");
 
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      if (!token) throw new Error("Not authenticated – no session token");
+
+      // Upload files to storage
       const inputs: Record<string, string> = {};
       for (const field of inputSchema) {
         const f = files[field.key];
         if (f) inputs[field.key] = await uploadToStorage(user.id, field.key, f);
       }
 
-      const { data, error } = await supabase.functions.invoke("run-template", {
-        body: { templateId: template.id, inputs },
-      });
-      if (error) throw new Error(error.message);
-      if (data?.error) throw new Error(data.error);
+      // Call CF Worker /api/run-template with Bearer token
+      const response = await cfRunTemplate({ templateId: template.id, inputs }, token);
 
-      // Set projectId to start polling inline
-      setProjectId(data.projectId);
+      if (response.error) throw new Error(response.error);
+
+      const jobId = response.jobId;
+      if (!jobId) throw new Error("No job ID returned from worker");
+
+      // Start polling via CF Worker
+      setProjectId(jobId);
       setResult({ status: "queued", outputs: [] });
-
-      // Best-effort CF Worker submission
-      const session = await supabase.auth.getSession();
-      const token = session.data.session?.access_token;
-      if (token) {
-        try {
-          await submitJob({ projectId: data.projectId, templateId: template.id, inputs }, token);
-        } catch (cfErr: any) {
-          console.warn("CF Worker submission failed (job still queued):", cfErr.message);
-        }
-      }
     } catch (err: any) {
       toast({ title: "Error", description: err.message, variant: "destructive" });
     } finally {
