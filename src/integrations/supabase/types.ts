@@ -291,8 +291,10 @@ export type Database = {
         Row: {
           completed_at: string | null
           created_at: string
+          debug_trace: Json | null
           error: string | null
           failed_at: string | null
+          failed_source: string | null
           id: string
           inputs: Json | null
           outputs: Json | null
@@ -306,8 +308,10 @@ export type Database = {
         Insert: {
           completed_at?: string | null
           created_at?: string
+          debug_trace?: Json | null
           error?: string | null
           failed_at?: string | null
+          failed_source?: string | null
           id?: string
           inputs?: Json | null
           outputs?: Json | null
@@ -321,8 +325,10 @@ export type Database = {
         Update: {
           completed_at?: string | null
           created_at?: string
+          debug_trace?: Json | null
           error?: string | null
           failed_at?: string | null
+          failed_source?: string | null
           id?: string
           inputs?: Json | null
           outputs?: Json | null
