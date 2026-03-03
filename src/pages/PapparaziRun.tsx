@@ -74,18 +74,61 @@ const PapparaziRun = () => {
     };
   }, []);
 
-  const handleFile = useCallback((f: File | null) => {
-    setFile(f);
-    if (f) {
-      const url = URL.createObjectURL(f);
-      setPreview(url);
-    } else {
-      setPreview(null);
-    }
+  const MAX_DIMENSION = 2048;
+  const MAX_FILE_SIZE_MB = 10;
+
+  const downscaleImage = useCallback((file: File): Promise<File> => {
+    return new Promise((resolve, reject) => {
+      const img = new window.Image();
+      const url = URL.createObjectURL(file);
+      img.onload = () => {
+        URL.revokeObjectURL(url);
+        const { width, height } = img;
+        if (width <= MAX_DIMENSION && height <= MAX_DIMENSION && file.size <= MAX_FILE_SIZE_MB * 1024 * 1024) {
+          resolve(file);
+          return;
+        }
+        const scale = Math.min(MAX_DIMENSION / width, MAX_DIMENSION / height, 1);
+        const canvas = document.createElement("canvas");
+        canvas.width = Math.round(width * scale);
+        canvas.height = Math.round(height * scale);
+        const ctx = canvas.getContext("2d")!;
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        canvas.toBlob(
+          (blob) => {
+            if (!blob) { reject(new Error("Downscale failed")); return; }
+            const newFile = new File([blob], file.name.replace(/\.\w+$/, ".jpg"), { type: "image/jpeg" });
+            toast({ title: "Image resized", description: `Downscaled from ${width}×${height} to ${canvas.width}×${canvas.height} for compatibility.` });
+            resolve(newFile);
+          },
+          "image/jpeg",
+          0.85,
+        );
+      };
+      img.onerror = () => { URL.revokeObjectURL(url); reject(new Error("Could not read image")); };
+      img.src = url;
+    });
+  }, []);
+
+  const handleFile = useCallback(async (f: File | null) => {
     setPhase("idle");
     setErrorMsg(null);
     setResult(null);
-  }, []);
+    if (!f) { setFile(null); setPreview(null); return; }
+
+    if (f.size > 100 * 1024 * 1024) {
+      toast({ title: "File too large", description: "Please use an image under 100 MB.", variant: "destructive" });
+      return;
+    }
+
+    try {
+      const processed = await downscaleImage(f);
+      setFile(processed);
+      setPreview(URL.createObjectURL(processed));
+    } catch {
+      toast({ title: "Error", description: "Could not process the image.", variant: "destructive" });
+    }
+  }, [downscaleImage]);
 
   const onDrop = useCallback(
     (e: React.DragEvent) => {
