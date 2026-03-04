@@ -5,7 +5,7 @@
  * CF Worker. Supabase still owns auth, credits, and project records.
  */
 
-const CF_WORKER_URL = import.meta.env.VITE_CF_WORKER_URL as string | undefined;
+const CF_WORKER_URL = import.meta.env.VITE_CF_WORKER_URL as string | undefined || "https://shiny-rice-e95bfuse-api.kade-fc1.workers.dev";
 
 /** Whether the CF Worker URL is configured. Use this to show UI warnings. */
 export const isCfWorkerConfigured = !!CF_WORKER_URL;

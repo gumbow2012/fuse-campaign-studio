@@ -149,7 +149,7 @@ const PapparaziRun = () => {
       // 2) Call CF Worker directly — it handles credits, project, and Weavy trigger
       setPhase("running");
 
-      const CF_WORKER_URL = import.meta.env.VITE_CF_WORKER_URL as string;
+      const CF_WORKER_URL = import.meta.env.VITE_CF_WORKER_URL as string || "https://shiny-rice-e95bfuse-api.kade-fc1.workers.dev";
       if (!CF_WORKER_URL) throw new Error("VITE_CF_WORKER_URL is not configured");
 
       const triggerRes = await fetch(`${CF_WORKER_URL.replace(/\/+$/, "")}/weavy/trigger`, {
