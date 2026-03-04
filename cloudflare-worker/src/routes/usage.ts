@@ -13,20 +13,18 @@ export async function handleUsage(
 ): Promise<Response> {
   const userId = await verifyToken(request, env);
 
-  // Fire all three queries in parallel
-  const [creditsRes, statsRes, recentRes] = await Promise.all([
-    // 1. Credit balance from the `users` table
+  // Fire all queries in parallel
+  const [creditsRes, runsRes, ledgerRes] = await Promise.all([
     supabaseFetch(env, `/users?id=eq.${userId}&select=credits`, {
       headers: { Accept: "application/vnd.pgrst.object+json" },
     }),
-
-    // 2. Aggregate stats: group projects by status
-    supabaseFetch(env, `/projects?user_id=eq.${userId}&select=status`),
-
-    // 3. Last 25 runs
     supabaseFetch(
       env,
-      `/projects?user_id=eq.${userId}&select=id,template_id,status,created_at&order=created_at.desc&limit=25`,
+      `/projects?user_id=eq.${userId}&select=id,template_id,status,created_at&order=created_at.desc`,
+    ),
+    supabaseFetch(
+      env,
+      `/credit_ledger?user_id=eq.${userId}&type=in.(run_template,rerun_step)&select=amount`,
     ),
   ]);
 
@@ -41,39 +39,21 @@ export async function handleUsage(
     }
   }
 
-  // ── Compute aggregate stats ──
-  let totalRuns = 0;
-  let completed = 0;
-  let failed = 0;
-  let running = 0;
+  // ── Guard runs response (Supabase may return an error object) ──
+  const runsData = runsRes.ok ? await runsRes.json() : [];
+  const runs = Array.isArray(runsData) ? runsData as { id: string; template_id: string; status: string; created_at: string }[] : [];
 
-  if (statsRes.ok) {
-    const rows = (await statsRes.json()) as { status: string }[];
-    totalRuns = rows.length;
-    for (const r of rows) {
-      if (r.status === "complete") completed++;
-      else if (r.status === "failed") failed++;
-      else if (r.status === "running" || r.status === "queued") running++;
-    }
-  }
+  const totalRuns = runs.length;
+  const completed = runs.filter(r => r.status === "complete").length;
+  const failed = runs.filter(r => r.status === "failed").length;
+  const running = runs.filter(r => r.status === "running" || r.status === "queued").length;
 
   // ── Credits used (sum from credit_ledger debits) ──
-  const ledgerRes = await supabaseFetch(
-    env,
-    `/credit_ledger?user_id=eq.${userId}&type=in.(run_template,rerun_step)&select=amount`,
-  );
+  const ledgerData = ledgerRes.ok ? await ledgerRes.json() : [];
+  const ledgerRows = Array.isArray(ledgerData) ? ledgerData as { amount: number }[] : [];
   let creditsUsed = 0;
-  if (ledgerRes.ok) {
-    const ledgerRows = (await ledgerRes.json()) as { amount: number }[];
-    for (const row of ledgerRows) {
-      creditsUsed += Math.abs(row.amount);
-    }
-  }
-
-  // ── Recent runs ──
-  let recentRuns: unknown[] = [];
-  if (recentRes.ok) {
-    recentRuns = (await recentRes.json()) as unknown[];
+  for (const row of ledgerRows) {
+    creditsUsed += Math.abs(row.amount);
   }
 
   return Response.json({
@@ -83,6 +63,6 @@ export async function handleUsage(
     failed,
     running,
     creditsUsed,
-    recentRuns,
+    recentRuns: runs.slice(0, 25),
   });
 }
