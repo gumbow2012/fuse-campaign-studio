@@ -34,12 +34,65 @@ async function failProject(
   }).eq("id", projectId);
 }
 
+/* ── Firebase token exchange for Weavy ── */
+async function getWeavyIdToken(): Promise<string> {
+  const apiKey = Deno.env.get("WEAVY_FIREBASE_API_KEY");
+  const refreshToken = Deno.env.get("WEAVY_REFRESH_TOKEN");
+  if (!apiKey || !refreshToken) throw new Error("Weavy Firebase credentials not configured");
+
+  const res = await fetch(
+    `https://securetoken.googleapis.com/v1/token?key=${apiKey}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        grant_type: "refresh_token",
+        refresh_token: refreshToken,
+      }),
+    },
+  );
+
+  if (!res.ok) {
+    const txt = await res.text();
+    throw new Error(`Firebase token refresh failed (${res.status}): ${txt}`);
+  }
+
+  const data: { id_token: string } = await res.json();
+  return data.id_token;
+}
+
+/* ── Trigger Weavy recipe ── */
+async function triggerWeavyRecipe(
+  recipeId: string,
+  inputs: Record<string, unknown>,
+): Promise<string> {
+  const baseUrl = Deno.env.get("WEAVY_API_BASE_URL") || "https://app.weavy.ai";
+  const idToken = await getWeavyIdToken();
+  const url = `${baseUrl}/api/v1/recipe-runs/recipes/${recipeId}/run`;
+
+  console.log(`[weavy] triggering recipe=${recipeId}`);
+
+  const res = await fetch(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${idToken}`,
+    },
+    body: JSON.stringify({ inputs }),
+  });
+
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`Weavy trigger failed (${res.status}): ${body.slice(0, 1000)}`);
+  }
+
+  const data = await res.json();
+  const runId = data.id || data.runId;
+  console.log(`[weavy] run started runId=${runId}`);
+  return runId;
+}
+
 /* ── Main ── */
-/*
- * This edge function handles auth, credit checks, project creation, and
- * credit deduction ONLY. Weavy triggering is delegated to the Cloudflare
- * Worker which holds the Firebase credentials server-side.
- */
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -136,16 +189,30 @@ Deno.serve(async (req) => {
     });
     trace.step = "credits_deducted";
 
-    // ── Save trace and return ──
-    // Weavy triggering is handled by the Cloudflare Worker.
-    // The frontend will call the CF Worker with this projectId.
-    await sb.from("projects").update({ debug_trace: trace }).eq("id", projectId);
+    // ── Trigger Weavy recipe ──
+    const recipeId = template.weavy_recipe_id;
+    if (!recipeId) {
+      throw new Error("Template has no weavy_recipe_id configured");
+    }
+
+    const runId = await triggerWeavyRecipe(recipeId, inputs || {});
+    trace.weavy_run_id = runId;
+    trace.step = "weavy_triggered";
+
+    // ── Update project with run ID ──
+    await sb.from("projects").update({
+      status: "running",
+      weavy_run_id: runId,
+      started_at: new Date().toISOString(),
+      debug_trace: trace,
+    }).eq("id", projectId);
 
     return new Response(
       JSON.stringify({
         projectId,
-        status: "queued",
-        weavyRecipeId: template.weavy_recipe_id ?? null,
+        status: "running",
+        weavyRunId: runId,
+        weavyRecipeId: recipeId,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );

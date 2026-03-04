@@ -6,7 +6,6 @@ import { useAuth } from "@/contexts/AuthContext";
 import CreditConfirmModal from "@/components/CreditConfirmModal";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { runTemplate as cfRunTemplate, getPapparaziJobStatus, isCfWorkerConfigured } from "@/lib/cf-worker";
 import { useQuery } from "@tanstack/react-query";
 import {
   Minus, Plus, GripVertical, MoreVertical, Upload, X, Zap,
@@ -163,7 +162,7 @@ const TemplateRun = () => {
   const allRequiredUploaded = requiredFields.every((f) => files[f.key]);
   const totalCost = (template?.estimated_credits_per_run || 0) * runs;
 
-  /* ─── Poll job status via CF Worker ─── */
+  /* ─── Poll job status via edge function ─── */
   useEffect(() => {
     if (!projectId) return;
     pollingRef.current = true;
@@ -175,11 +174,22 @@ const TemplateRun = () => {
         const token = session?.access_token;
         if (!token) return;
 
-        const status = await getPapparaziJobStatus(projectId, token);
+        const statusRes = await fetch(
+          `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/weavy-job-status?projectId=${projectId}`,
+          {
+            headers: {
+              Authorization: `Bearer ${token}`,
+              apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+            },
+          },
+        );
+        const status = await statusRes.json();
 
         const outputs: OutputItem[] = [];
-        if (status.outputImageUrl) outputs.push({ type: "image", url: status.outputImageUrl, label: "Image" });
-        if (status.outputVideoUrl) outputs.push({ type: "video", url: status.outputVideoUrl, label: "Video" });
+        const items = status.outputs?.items || [];
+        for (const item of items) {
+          outputs.push({ type: item.type || "image", url: item.url, label: item.label });
+        }
 
         const normalizedStatus =
           status.status === "succeeded" ? "complete" : status.status as ProjectResult["status"];
@@ -231,15 +241,18 @@ const TemplateRun = () => {
         if (f) inputs[field.key] = await uploadToStorage(user.id, field.key, f);
       }
 
-      // Call CF Worker /api/run-template with Bearer token
-      const response = await cfRunTemplate({ templateId: template.id, inputs }, token);
+      // Call run-template edge function (handles credits + Weavy trigger)
+      const { data: runData, error: runErr } = await supabase.functions.invoke("run-template", {
+        body: { templateId: template.id, inputs },
+      });
 
-      if (response.error) throw new Error(response.error);
+      if (runErr) throw new Error(runErr.message || "Run template failed");
+      if (runData?.error) throw new Error(runData.error);
 
-      const jobId = response.jobId;
-      if (!jobId) throw new Error("No job ID returned from worker");
+      const jobId = runData?.projectId;
+      if (!jobId) throw new Error("No job ID returned");
 
-      // Start polling via CF Worker
+      // Start polling via edge function
       setProjectId(jobId);
       setResult({ status: "queued", outputs: [] });
     } catch (err: any) {
@@ -263,18 +276,6 @@ const TemplateRun = () => {
   return (
     <div className="min-h-screen bg-background flex flex-col">
       <Navbar />
-      {!isCfWorkerConfigured && (
-        <div className="mx-4 mt-4 rounded-xl border border-destructive/30 bg-destructive/5 p-4 flex items-start gap-3">
-          <AlertTriangle className="w-5 h-5 text-destructive shrink-0 mt-0.5" />
-          <div>
-            <p className="text-sm font-bold text-destructive">Backend Not Connected</p>
-            <p className="text-xs text-muted-foreground mt-1">
-              The worker URL is not configured. Please add <code className="bg-muted px-1 py-0.5 rounded text-[10px]">VITE_CF_WORKER_URL</code> in your environment settings and redeploy.
-            </p>
-          </div>
-        </div>
-      )}
-
       <div className="flex-1 flex flex-col lg:flex-row pt-16">
         {/* ════════ LEFT PANEL — Upload + Controls ════════ */}
         <div className="w-full lg:w-[360px] border-r border-border/30 flex flex-col bg-card/50">

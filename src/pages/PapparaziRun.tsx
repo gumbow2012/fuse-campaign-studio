@@ -6,7 +6,6 @@ import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
-import { getPapparaziJobStatus, isCfWorkerConfigured } from "@/lib/cf-worker";
 
 type Phase = "idle" | "uploading" | "running" | "complete" | "error";
 
@@ -130,7 +129,7 @@ const PapparaziRun = () => {
   );
 
   const handleRun = async () => {
-    if (!file || !recipeId || !user) return;
+    if (!file || !user) return;
 
     setPhase("uploading");
     setErrorMsg(null);
@@ -143,53 +142,53 @@ const PapparaziRun = () => {
       const token = session?.access_token;
       if (!token) throw new Error("Not authenticated");
 
-      // Diagnostic: log token issuer so we can confirm it matches Worker's SUPABASE_URL
-      try {
-        const jwtPayload = JSON.parse(atob(token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/")));
-        console.log("[PAPPARAZI] Token issuer (iss):", jwtPayload.iss);
-        console.log("[PAPPARAZI] Expected Supabase URL: https://sdmwcjfksoqbplcqqmhg.supabase.co");
-      } catch (e) {
-        console.warn("[PAPPARAZI] Could not decode token for debug", e);
-      }
-
       // 1) Upload image to storage and create signed URL
       const imageUrl = await uploadToStorage(user.id, file);
 
-      // 2) Call CF Worker directly — it handles credits, project, and Weavy trigger
+      // 2) Find the template by weavy_recipe_id
+      const { data: tpl } = await supabase
+        .from("templates")
+        .select("id")
+        .eq("weavy_recipe_id", recipeId)
+        .eq("is_active", true)
+        .single();
+      if (!tpl) throw new Error("PAPPARAZI template not found in database");
+
+      // 3) Call run-template edge function (handles credits + Weavy trigger)
       setPhase("running");
 
-      const CF_WORKER_URL = import.meta.env.VITE_CF_WORKER_URL as string || "https://shiny-rice-e95bfuse-api.kade-fc1.workers.dev";
-      if (!CF_WORKER_URL) throw new Error("VITE_CF_WORKER_URL is not configured");
-
-      const triggerRes = await fetch(`${CF_WORKER_URL.replace(/\/+$/, "")}/weavy/trigger`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ recipeId, imageUrl }),
+      const { data: runData, error: runErr } = await supabase.functions.invoke("run-template", {
+        body: { templateId: tpl.id, inputs: { "CLOTHING ITEM": imageUrl } },
       });
 
-      const triggerData = await triggerRes.json().catch(() => ({}));
-      if (!triggerRes.ok) {
-        throw new Error((triggerData as any).error || `Trigger failed (${triggerRes.status})`);
-      }
+      if (runErr) throw new Error(runErr.message || "Run template failed");
+      if (runData?.error) throw new Error(runData.error);
 
-      const projectId = (triggerData as any).projectId || (triggerData as any).jobId;
-      if (!projectId) throw new Error("No project ID returned from worker");
+      const projectId = runData?.projectId;
+      if (!projectId) throw new Error("No project ID returned");
 
-      // 3) Poll CF Worker for job status
+      // 4) Poll weavy-job-status edge function
       pollRef.current = setInterval(async () => {
         try {
-          const status = await getPapparaziJobStatus(projectId, token);
+          const statusRes = await fetch(
+            `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/weavy-job-status?projectId=${projectId}`,
+            {
+              headers: {
+                Authorization: `Bearer ${token}`,
+                apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+              },
+            },
+          );
+          const status = await statusRes.json();
 
-          if (status.status === "succeeded" || status.status === "complete") {
+          if (status.status === "complete") {
             clearInterval(pollRef.current!);
             pollRef.current = null;
 
+            const items = status.outputs?.items || [];
             setResult({
-              outputImageUrl: status.outputImageUrl ?? null,
-              outputVideoUrl: status.outputVideoUrl ?? null,
+              outputImageUrl: items.find((i: any) => i.type === "image")?.url ?? null,
+              outputVideoUrl: items.find((i: any) => i.type === "video")?.url ?? null,
             });
             setPhase("complete");
             refreshProfile();
@@ -204,7 +203,7 @@ const PapparaziRun = () => {
         } catch {
           // Swallow transient poll errors
         }
-      }, 2000);
+      }, 3000);
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Something went wrong";
       setErrorMsg(msg);
@@ -242,18 +241,6 @@ const PapparaziRun = () => {
           Upload a product image → AI generates styled editorial shots.
         </p>
 
-        {/* Worker not configured banner */}
-        {!isCfWorkerConfigured && (
-          <div className="mb-6 rounded-xl border border-destructive/30 bg-destructive/5 p-4 flex items-start gap-3">
-            <AlertCircle className="w-5 h-5 text-destructive shrink-0 mt-0.5" />
-            <div>
-              <p className="text-sm font-bold text-destructive">Backend Not Connected</p>
-              <p className="text-xs text-muted-foreground mt-1">
-                The worker URL is not configured. Please add <code className="bg-muted px-1 py-0.5 rounded text-[10px]">VITE_CF_WORKER_URL</code> in your environment settings and redeploy.
-              </p>
-            </div>
-          </div>
-        )}
 
         {/* Upload Zone */}
         <div
