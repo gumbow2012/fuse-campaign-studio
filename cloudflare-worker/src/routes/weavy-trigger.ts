@@ -59,7 +59,7 @@ export async function handleWeavyTrigger(request: Request, env: Env): Promise<Re
       user_id: userId,
       template_id: templateId,
       status: "queued",
-      inputs: { product_image: body.imageUrl },
+      inputs: { "CLOTHING ITEM": body.imageUrl },
     },
     headers: { Prefer: "return=representation" },
   });
@@ -91,7 +91,7 @@ export async function handleWeavyTrigger(request: Request, env: Env): Promise<Re
 
   // ── Trigger Weavy ──
   try {
-    const { runId } = await triggerWeavyRecipe(env, body.recipeId, { product_image: body.imageUrl });
+    const { runId } = await triggerWeavyRecipe(env, body.recipeId, { "CLOTHING ITEM": body.imageUrl });
 
     await updateProjectStatus(env, project.id, "running", {
       weavy_run_id: runId,
