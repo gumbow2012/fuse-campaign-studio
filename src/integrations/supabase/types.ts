@@ -710,6 +710,21 @@ export type Database = {
         }
         Relationships: []
       }
+      users: {
+        Row: {
+          credits: number | null
+          id: string
+        }
+        Insert: {
+          credits?: number | null
+          id: string
+        }
+        Update: {
+          credits?: number | null
+          id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
