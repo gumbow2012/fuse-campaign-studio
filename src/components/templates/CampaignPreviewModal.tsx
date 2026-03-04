@@ -1,4 +1,5 @@
 import { X } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import type { Template } from "./DropTemplateCard";
 
 interface CampaignPreviewModalProps {
@@ -26,6 +27,17 @@ const shotTypes = [
 ];
 
 const CampaignPreviewModal = ({ template, volLabel, onClose }: CampaignPreviewModalProps) => {
+  const navigate = useNavigate();
+
+  const handleRun = () => {
+    onClose();
+    if (template.dbTemplateId) {
+      navigate(`/app/templates/run?templateId=${template.dbTemplateId}`);
+    } else {
+      navigate("/app/templates/run");
+    }
+  };
+
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center" onClick={onClose}>
       {/* Backdrop */}
@@ -149,7 +161,10 @@ const CampaignPreviewModal = ({ template, volLabel, onClose }: CampaignPreviewMo
 
         {/* CTA */}
         <div className="flex items-center gap-4 pt-6 border-t border-white/[0.04] pb-4">
-          <button className="px-8 py-3 text-[9px] font-black uppercase tracking-[0.25em] bg-white/8 border border-white/10 text-white/80 rounded-lg hover:bg-white/12 hover:text-white transition-all duration-300">
+          <button
+            onClick={handleRun}
+            className="px-8 py-3 text-[9px] font-black uppercase tracking-[0.25em] bg-white/90 text-black rounded-lg hover:bg-white transition-all duration-300"
+          >
             Run This Campaign →
           </button>
           <button onClick={onClose} className="px-6 py-3 text-[9px] font-bold uppercase tracking-[0.2em] text-white/25 hover:text-white/50 transition-all">

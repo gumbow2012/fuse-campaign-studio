@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import Navbar from "@/components/Navbar";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
@@ -115,6 +115,8 @@ interface ProjectResult {
 const TemplateRun = () => {
   const navigate = useNavigate();
   const { slug } = useParams<{ slug: string }>();
+  const [searchParams] = useSearchParams();
+  const queryTemplateId = searchParams.get("templateId");
   const { user, profile } = useAuth();
 
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>("");
@@ -142,12 +144,18 @@ const TemplateRun = () => {
     },
   });
 
-  // Auto-select template from slug (template id or weavy_recipe_id)
+  // Auto-select template from slug or query param
   useEffect(() => {
-    if (!templates || !slug || selectedTemplateId) return;
-    const match = templates.find((t: any) => t.id === slug || t.weavy_recipe_id === slug);
-    if (match) setSelectedTemplateId(match.id);
-  }, [templates, slug, selectedTemplateId]);
+    if (!templates || selectedTemplateId) return;
+    if (queryTemplateId) {
+      const match = templates.find((t: any) => t.id === queryTemplateId);
+      if (match) { setSelectedTemplateId(match.id); return; }
+    }
+    if (slug) {
+      const match = templates.find((t: any) => t.id === slug || t.weavy_recipe_id === slug);
+      if (match) setSelectedTemplateId(match.id);
+    }
+  }, [templates, slug, queryTemplateId, selectedTemplateId]);
 
   const template = templates?.find((t: any) => t.id === selectedTemplateId);
   const inputSchema: InputField[] = (template?.input_schema as any) || [];
