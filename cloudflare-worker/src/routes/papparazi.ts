@@ -1,7 +1,7 @@
 import { Env } from "../types";
 import { verifyToken } from "../auth";
 import { supabaseFetch, updateProjectStatus, getProject, getTemplate } from "../supabase";
-import { weavyRun, weavyStatus } from "../weavy";
+import { triggerWeavyRecipe, getWeavyRunStatus } from "../weavy";
 
 /**
  * POST /api/upload
@@ -148,19 +148,19 @@ export async function handleRunTemplate(request: Request, env: Env): Promise<Res
 
   // ── Trigger Weavy ──
   try {
-    const weavy = await weavyRun(env, recipeId, body.inputs);
+    const { runId } = await triggerWeavyRecipe(env, recipeId, body.inputs);
 
     await updateProjectStatus(env, project.id, "running", {
-      weavy_run_id: weavy.id,
+      weavy_run_id: runId,
       started_at: new Date().toISOString(),
       debug_trace: {
         weavy_recipe_id: recipeId,
-        weavy_run_id: weavy.id,
+        weavy_run_id: runId,
         inputs: body.inputs,
       },
     });
 
-    return Response.json({ jobId: project.id, status: "running", weavyRunId: weavy.id });
+    return Response.json({ jobId: project.id, status: "running", weavyRunId: runId });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error(`[papparazi] Weavy trigger error: ${msg}`);
@@ -201,54 +201,59 @@ export async function handleJobStatus(request: Request, env: Env, jobId: string)
   // If running with a weavy_run_id, poll Weavy
   if (project.status === "running" && project.weavy_run_id) {
     try {
-      const ws = await weavyStatus(env, project.weavy_run_id as string);
-      console.log(`[papparazi] Weavy status for ${jobId}:`, JSON.stringify(ws));
+      const template = await getTemplate(env, project.template_id);
+      const recipeId = template?.weavy_recipe_id;
 
-      // Normalize status (Weavy varies between status/state)
-      const wStatus = ((ws.status || ws.state || "running") as string).toLowerCase();
+      if (recipeId) {
+        const weavyStatus = await getWeavyRunStatus(env, recipeId, project.weavy_run_id);
+        console.log(`[papparazi] Weavy status for ${jobId}:`, JSON.stringify(weavyStatus));
 
-      if (wStatus === "completed" || wStatus === "complete" || wStatus === "succeeded" || wStatus === "success") {
-        // Extract outputs from result or outputs field
-        const rawOutputs = ws.outputs || ws.result || [];
-        const items: { type: string; url: string }[] = [];
+        // Parse Weavy response — structure varies
+        const statusData = Array.isArray(weavyStatus) ? weavyStatus[0] : weavyStatus;
+        const wStatus = (statusData?.status || "running").toLowerCase();
 
-        for (const out of (Array.isArray(rawOutputs) ? rawOutputs : [rawOutputs])) {
-          if (!out) continue;
-          const url = (out as any)?.url || (out as any)?.output_url || (out as any)?.value;
-          if (url) {
-            const isVideo = /\.(mp4|mov|webm)/i.test(url) || (out as any)?.type === "video";
-            items.push({ type: isVideo ? "video" : "image", url });
+        if (wStatus === "completed" || wStatus === "complete" || wStatus === "succeeded") {
+          // Extract outputs
+          const rawOutputs = statusData?.results || statusData?.outputs || [];
+          const items: { type: string; url: string }[] = [];
+
+          for (const out of (Array.isArray(rawOutputs) ? rawOutputs : [rawOutputs])) {
+            const url = out?.url || out?.output_url || out?.value;
+            if (url) {
+              const isVideo = /\.(mp4|mov|webm)/i.test(url) || out?.type === "video";
+              items.push({ type: isVideo ? "video" : "image", url });
+            }
           }
+
+          await updateProjectStatus(env, jobId, "complete", {
+            completed_at: new Date().toISOString(),
+            outputs: { items },
+          });
+
+          return Response.json({
+            status: "succeeded",
+            outputImageUrl: items.find(i => i.type === "image")?.url ?? null,
+            outputVideoUrl: items.find(i => i.type === "video")?.url ?? null,
+          });
         }
 
-        await updateProjectStatus(env, jobId, "complete", {
-          completed_at: new Date().toISOString(),
-          outputs: { items },
-        });
+        if (wStatus === "failed" || wStatus === "error") {
+          const errMsg = statusData?.error || "Weavy job failed";
+          await updateProjectStatus(env, jobId, "failed", {
+            error: errMsg,
+            failed_at: new Date().toISOString(),
+            failed_source: "weavy_run",
+          });
 
+          return Response.json({ status: "failed", error: errMsg });
+        }
+
+        // Still running
         return Response.json({
-          status: "succeeded",
-          outputImageUrl: items.find(i => i.type === "image")?.url ?? null,
-          outputVideoUrl: items.find(i => i.type === "video")?.url ?? null,
+          status: "running",
+          progress: statusData?.progress ?? undefined,
         });
       }
-
-      if (wStatus === "failed" || wStatus === "error") {
-        const errMsg = ws.error || ws.message || "Weavy job failed";
-        await updateProjectStatus(env, jobId, "failed", {
-          error: errMsg,
-          failed_at: new Date().toISOString(),
-          failed_source: "weavy_run",
-        });
-
-        return Response.json({ status: "failed", error: errMsg });
-      }
-
-      // Still running
-      return Response.json({
-        status: "running",
-        progress: ws.progress ?? undefined,
-      });
     } catch (err) {
       console.error(`[papparazi] status poll error: ${err}`);
       // Don't fail — just return current DB status

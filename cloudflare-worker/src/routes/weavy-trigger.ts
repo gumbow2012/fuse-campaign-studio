@@ -1,7 +1,7 @@
 import { Env } from "../types";
 import { verifyToken } from "../auth";
 import { supabaseFetch, updateProjectStatus, getTemplate } from "../supabase";
-import { weavyRun } from "../weavy";
+import { triggerWeavyRecipe } from "../weavy";
 
 /**
  * POST /weavy/trigger
@@ -91,20 +91,20 @@ export async function handleWeavyTrigger(request: Request, env: Env): Promise<Re
 
   // ── Trigger Weavy ──
   try {
-    const weavy = await weavyRun(env, body.recipeId, { product_image: body.imageUrl });
+    const { runId } = await triggerWeavyRecipe(env, body.recipeId, { product_image: body.imageUrl });
 
     await updateProjectStatus(env, project.id, "running", {
-      weavy_run_id: weavy.id,
+      weavy_run_id: runId,
       started_at: new Date().toISOString(),
       debug_trace: {
         weavy_recipe_id: body.recipeId,
-        weavy_run_id: weavy.id,
+        weavy_run_id: runId,
         inputs: { product_image: body.imageUrl },
         triggered_via: "cf_worker",
       },
     });
 
-    return Response.json({ projectId: project.id, weavyRunId: weavy.id, status: "running" });
+    return Response.json({ projectId: project.id, weavyRunId: runId, status: "running" });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error(`[weavy/trigger] error: ${msg}`);
