@@ -14,3 +14,4 @@ bucket_name = "fuse-assets"
 # WEAVY_API_BASE_URL
 # WEAVY_FIREBASE_API_KEY
 # WEAVY_REFRESH_TOKEN
+npx wrangler secret put SUPABASE_URL
