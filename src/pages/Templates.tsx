@@ -4,6 +4,18 @@ import { supabase } from "@/integrations/supabase/client";
 import Navbar from "@/components/Navbar";
 import { Zap } from "lucide-react";
 
+import garageEdit from "@/assets/templates/garage-edit.png";
+import ravenOriginal from "@/assets/templates/raven-original.png";
+import ugcWhiteGirl from "@/assets/templates/ugc-white-girl.png";
+import ugcStudio from "@/assets/templates/ugc-studio.png";
+
+const templateImages: Record<string, string> = {
+  GARAGE: garageEdit,
+  RAVEN: ravenOriginal,
+  "UGC MIRROR": ugcWhiteGirl,
+  UNBOXING: ugcStudio,
+};
+
 const Templates = () => {
   const { data: templates, isLoading } = useQuery({
     queryKey: ["all-templates"],
@@ -29,29 +41,49 @@ const Templates = () => {
           <p className="text-muted-foreground text-sm">No templates found.</p>
         ) : (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {templates.map((t) => (
-              <Link
-                key={t.id}
-                to={t.weavy_recipe_id === 'dvgEXt4aeShCeokMq5MIpZ' ? `/app/templates/dvgEXt4aeShCeokMq5MIpZ/run` : t.weavy_recipe_id ? `/app/flow/${t.weavy_recipe_id}` : `/app/templates/run?templateId=${t.id}`}
-                className="group rounded-xl border border-white/[0.06] bg-white/[0.02] p-5 hover:border-white/15 hover:bg-white/[0.04] transition-all"
-              >
-                <h3 className="text-sm font-bold text-foreground group-hover:text-primary transition-colors truncate">
-                  {t.name}
-                </h3>
-                {t.description && (
-                  <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{t.description}</p>
-                )}
-                <div className="flex items-center gap-3 mt-3 text-[10px] text-muted-foreground uppercase tracking-widest">
-                  <span className="flex items-center gap-1">
-                    <Zap className="w-3 h-3" /> {t.estimated_credits_per_run} credits
-                  </span>
-                  {t.category && <span>· {t.category}</span>}
-                  {!t.is_active && (
-                    <span className="text-destructive font-bold">Inactive</span>
-                  )}
-                </div>
-              </Link>
-            ))}
+            {templates.map((t) => {
+              const img = templateImages[t.name] || t.preview_url;
+              return (
+                <Link
+                  key={t.id}
+                  to={t.weavy_recipe_id === 'dvgEXt4aeShCeokMq5MIpZ' ? `/app/templates/dvgEXt4aeShCeokMq5MIpZ/run` : t.weavy_recipe_id ? `/app/flow/${t.weavy_recipe_id}` : `/app/templates/run?templateId=${t.id}`}
+                  className="group rounded-xl border border-white/[0.06] bg-white/[0.02] overflow-hidden hover:border-white/15 hover:bg-white/[0.04] transition-all"
+                >
+                  <div className="aspect-[4/3] w-full overflow-hidden bg-muted/20 relative">
+                    {img ? (
+                      <img
+                        src={img}
+                        alt={t.name}
+                        className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+                      />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-primary/10 to-muted/30">
+                        <span className="text-2xl font-black tracking-tighter text-muted-foreground/40 select-none">
+                          {t.name}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                  <div className="p-4">
+                    <h3 className="text-sm font-bold text-foreground group-hover:text-primary transition-colors truncate">
+                      {t.name}
+                    </h3>
+                    {t.description && (
+                      <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{t.description}</p>
+                    )}
+                    <div className="flex items-center gap-3 mt-2 text-[10px] text-muted-foreground uppercase tracking-widest">
+                      <span className="flex items-center gap-1">
+                        <Zap className="w-3 h-3" /> {t.estimated_credits_per_run} credits
+                      </span>
+                      {t.category && <span>· {t.category}</span>}
+                      {!t.is_active && (
+                        <span className="text-destructive font-bold">Inactive</span>
+                      )}
+                    </div>
+                  </div>
+                </Link>
+              );
+            })}
           </div>
         )}
       </div>
