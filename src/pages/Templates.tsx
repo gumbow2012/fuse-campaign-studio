@@ -32,7 +32,7 @@ const Templates = () => {
             {templates.map((t) => (
               <Link
                 key={t.id}
-                to={t.weavy_recipe_id ? `/app/flow/${t.weavy_recipe_id}` : `/app/templates/run?templateId=${t.id}`}
+                to={t.weavy_recipe_id === 'dvgEXt4aeShCeokMq5MIpZ' ? `/app/templates/dvgEXt4aeShCeokMq5MIpZ/run` : t.weavy_recipe_id ? `/app/flow/${t.weavy_recipe_id}` : `/app/templates/run?templateId=${t.id}`}
                 className="group rounded-xl border border-white/[0.06] bg-white/[0.02] p-5 hover:border-white/15 hover:bg-white/[0.04] transition-all"
               >
                 <h3 className="text-sm font-bold text-foreground group-hover:text-primary transition-colors truncate">
