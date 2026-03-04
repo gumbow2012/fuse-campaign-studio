@@ -63,7 +63,7 @@ const App = () => (
             <Route path="/app/templates/dvgEXt4aeShCeokMq5MIpZ/run" element={<ProtectedRoute><PapparaziRun /></ProtectedRoute>} />
             <Route path="/app/templates/:slug" element={<ProtectedRoute><TemplateRun /></ProtectedRoute>} />
             <Route path="/app/flow/:flowId" element={<ProtectedRoute><FlowEmbed /></ProtectedRoute>} />
-            <Route path="/app/flow-test" element={<ProtectedRoute><FlowTest /></ProtectedRoute>} />
+            <Route path="/app/flow-test" element={<FlowTest />} />
             <Route path="/app/jobs/:jobId" element={<ProtectedRoute><JobStatus /></ProtectedRoute>} />
 
             {/* Admin routes */}
