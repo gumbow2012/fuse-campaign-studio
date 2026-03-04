@@ -97,6 +97,28 @@ export async function rerunStep(
   });
 }
 
+/* ──────────────────── Usage / Dashboard ──────────────────── */
+
+export interface UsageResponse {
+  credits: number;
+  totalRuns: number;
+  completed: number;
+  failed: number;
+  running: number;
+  creditsUsed: number;
+  recentRuns: {
+    id: string;
+    template_id: string;
+    status: string;
+    created_at: string;
+  }[];
+}
+
+/** Fetch the authenticated user's credit balance and usage stats. */
+export async function getUsage(token: string): Promise<UsageResponse> {
+  return cfFetch<UsageResponse>("/api/usage", { method: "GET", token });
+}
+
 /* ──────────────── Papparazi Pipeline API ──────────────── */
 
 /** Upload an image to the CF Worker → R2. */
