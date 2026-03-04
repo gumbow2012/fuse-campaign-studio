@@ -46,7 +46,7 @@ const Templates = () => {
               return (
                 <Link
                   key={t.id}
-                  to={t.weavy_recipe_id === 'dvgEXt4aeShCeokMq5MIpZ' ? `/app/templates/dvgEXt4aeShCeokMq5MIpZ/run` : t.weavy_recipe_id ? `/app/flow/${t.weavy_recipe_id}` : `/app/templates/run?templateId=${t.id}`}
+                  to={t.weavy_recipe_id === 'dvgEXt4aeShCeokMq5MIpZ' ? `/app/templates/dvgEXt4aeShCeokMq5MIpZ/run` : `/app/templates/run?templateId=${t.id}`}
                   className="group rounded-xl border border-white/[0.06] bg-white/[0.02] overflow-hidden hover:border-white/15 hover:bg-white/[0.04] transition-all"
                 >
                   <div className="aspect-[4/3] w-full overflow-hidden bg-muted/20 relative">
