@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import CampaignPreviewModal from "./CampaignPreviewModal";
 
 interface Template {
@@ -10,6 +11,7 @@ interface Template {
   description: string;
   badge?: string;
   energy?: string;
+  dbTemplateId?: string;
   filters: {
     environment: string;
     cameraAngle: string;
@@ -33,7 +35,15 @@ const energyColors: Record<string, string> = {
 
 const DropTemplateCard = ({ template, volLabel }: { template: Template; volLabel: string }) => {
   const [showPreview, setShowPreview] = useState(false);
+  const navigate = useNavigate();
 
+  const handleRunClick = () => {
+    if (template.dbTemplateId) {
+      navigate(`/app/templates/run?templateId=${template.dbTemplateId}`);
+    } else {
+      navigate("/app/templates/run");
+    }
+  };
   return (
     <>
       <div className="group cursor-pointer relative">
@@ -98,10 +108,10 @@ const DropTemplateCard = ({ template, volLabel }: { template: Template; volLabel
             )}
 
             <button
-              onClick={(e) => { e.stopPropagation(); setShowPreview(true); }}
-              className="w-full py-2 text-[8px] font-black uppercase tracking-[0.2em] text-white/60 border border-white/[0.08] rounded-lg hover:bg-white/5 hover:text-white/90 hover:border-white/15 transition-all duration-200 backdrop-blur-sm"
+              onClick={(e) => { e.stopPropagation(); handleRunClick(); }}
+              className="w-full py-2 text-[8px] font-black uppercase tracking-[0.2em] text-black bg-white/90 rounded-lg hover:bg-white transition-all duration-200 backdrop-blur-sm"
             >
-              View Full Campaign
+              Run This Template →
             </button>
           </div>
         </div>

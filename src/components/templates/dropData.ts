@@ -28,6 +28,7 @@ export const drops: DropCollection[] = [
     templates: [
       {
         id: "T-001", name: "PARKING GARAGE GRIT", image: garageEdit,
+        dbTemplateId: "7a924959-e168-4a0e-bb25-8db08d8ca4be",
         tags: ["Low Angle", "28mm", "Harsh Flash", "Gritty"],
         includes: ["3 On-Model", "2 Closeup", "1 Editorial"],
         description: "Raw concrete energy. Harsh flash, wide angle.",
@@ -37,6 +38,7 @@ export const drops: DropCollection[] = [
       },
       {
         id: "T-002", name: "RAVEN", image: ravenOriginal,
+        dbTemplateId: "90868f44-ddcc-4f7f-9bbf-3eeb1b553893",
         tags: ["Night", "Neon Glow", "35mm", "Street"],
         includes: ["2 On-Model", "1 Lifestyle", "1 Detail"],
         description: "Late night pump station. Neon spill, film grain.",
@@ -46,6 +48,7 @@ export const drops: DropCollection[] = [
       },
       {
         id: "T-003", name: "UGC MIRROR", image: ugcWhiteGirl,
+        dbTemplateId: "b90a3316-0980-4b2f-a859-6188a33509c4",
         tags: ["Golden Hour", "Wide", "Warm Tones"],
         includes: ["2 On-Model", "1 Editorial", "1 Landscape"],
         description: "City skyline backdrop. Warm golden hour light.",
@@ -54,6 +57,7 @@ export const drops: DropCollection[] = [
       },
       {
         id: "T-004", name: "ALLEYWAY FLASH", image: ugcStudio,
+        dbTemplateId: "a2b56c4c-9eb1-4e2f-99a0-67b6bba6cb5e",
         tags: ["Flash", "Tight Crop", "Urban", "Night"],
         includes: ["2 On-Model", "1 Closeup"],
         description: "Direct flash in narrow alleys. Bold and raw.",
@@ -74,6 +78,7 @@ export const drops: DropCollection[] = [
     templates: [
       {
         id: "T-005", name: "CHROME STUDIO", image: ugcStudio,
+        dbTemplateId: "12f4adb6-4873-4e76-9319-4578614097a9",
         tags: ["Studio", "Reflective", "Clean", "High-End"],
         includes: ["2 On-Model", "1 Product", "1 Detail"],
         description: "Chrome reflections. Controlled studio light.",
@@ -82,6 +87,7 @@ export const drops: DropCollection[] = [
       },
       {
         id: "T-006", name: "GLOSS BLACK FLOOR", image: ravenOriginal,
+        dbTemplateId: "fe8e2921-9745-4ac5-a373-c91e91231265",
         tags: ["Reflection", "Minimal", "Dark", "Softbox"],
         includes: ["2 On-Model", "1 Editorial"],
         description: "Black mirror floor. Dramatic soft lighting.",
@@ -91,6 +97,7 @@ export const drops: DropCollection[] = [
       },
       {
         id: "T-007", name: "SOFTBOX EDITORIAL", image: ugcWhiteGirl,
+        dbTemplateId: "b9107ab1-f028-490e-bd10-044d0b01789f",
         tags: ["Editorial", "Soft Light", "Premium"],
         includes: ["2 On-Model", "1 Closeup", "1 Lifestyle"],
         description: "Magazine-grade softbox. Clean and elevated.",
@@ -99,6 +106,7 @@ export const drops: DropCollection[] = [
       },
       {
         id: "T-008", name: "MINIMALIST WHITE SET", image: garageEdit,
+        dbTemplateId: "adc23b6c-c00e-454d-812d-003d3fe3b0f5",
         tags: ["White", "Clean", "Ecom-Ready", "Bright"],
         includes: ["2 On-Model", "1 Product", "1 Detail"],
         description: "Pure white backdrop. Let the garment speak.",
@@ -118,6 +126,7 @@ export const drops: DropCollection[] = [
     templates: [
       {
         id: "T-009", name: "FISHEYE PUNCH", image: garageEdit,
+        dbTemplateId: "0bd0545b-2a1f-46a7-b61d-09ba8343e4a6",
         tags: ["Fisheye", "14mm", "Distortion", "Bold"],
         includes: ["2 On-Model", "1 TikTok Ready"],
         description: "Wide fisheye distortion. Social-first energy.",
@@ -127,6 +136,7 @@ export const drops: DropCollection[] = [
       },
       {
         id: "T-010", name: "MIRROR SELFIE iPHONE", image: ugcWhiteGirl,
+        dbTemplateId: "58aa5877-73bd-4360-9270-a0dccf8d41bd",
         tags: ["UGC", "Phone", "Mirror", "Authentic"],
         includes: ["2 On-Model", "1 Social Post"],
         description: "Mirror selfie aesthetic. iPhone-native feel.",
@@ -135,6 +145,7 @@ export const drops: DropCollection[] = [
       },
       {
         id: "T-011", name: "PAPARAZZI FLASH", image: ravenOriginal,
+        dbTemplateId: "1e2ff926-fb8d-45b3-8566-adec76a42cd3",
         tags: ["Flash", "Night", "Candid", "Celebrity"],
         includes: ["2 On-Model", "1 Editorial"],
         description: "Caught-off-guard pap shot. Direct flash chaos.",
@@ -144,6 +155,7 @@ export const drops: DropCollection[] = [
       },
       {
         id: "T-012", name: "LOW ANGLE POWER", image: ugcStudio,
+        dbTemplateId: "15127485-78c7-4e1a-b668-f9f361928042",
         tags: ["Low Angle", "Power", "Wide", "Dramatic"],
         includes: ["2 On-Model", "1 Hero Shot"],
         description: "Ground-up perspective. Dominance and presence.",
@@ -163,6 +175,7 @@ export const drops: DropCollection[] = [
     templates: [
       {
         id: "T-013", name: "HOODED SHADOW FIGURE", image: ravenOriginal,
+        dbTemplateId: "a7266515-32a5-4ca6-96be-38a07ca56b99",
         tags: ["Shadow", "Mystery", "Dark", "Silhouette"],
         includes: ["2 On-Model", "1 Mood Shot"],
         description: "Face obscured. Hoodie-forward. Pure mood.",
@@ -172,6 +185,7 @@ export const drops: DropCollection[] = [
       },
       {
         id: "T-014", name: "INDUSTRIAL RUST WALL", image: garageEdit,
+        dbTemplateId: "7a924959-e168-4a0e-bb25-8db08d8ca4be",
         tags: ["Rust", "Texture", "Industrial", "Warm"],
         includes: ["2 On-Model", "1 Editorial", "1 Detail"],
         description: "Corroded metal backdrop. Warm decay.",
@@ -180,6 +194,7 @@ export const drops: DropCollection[] = [
       },
       {
         id: "T-015", name: "TUNNEL BACKLIGHT", image: ugcStudio,
+        dbTemplateId: "fe8e2921-9745-4ac5-a373-c91e91231265",
         tags: ["Backlit", "Tunnel", "Halo", "Dramatic"],
         includes: ["2 On-Model", "1 Silhouette"],
         description: "Light from behind. Halo silhouette effect.",
@@ -188,6 +203,7 @@ export const drops: DropCollection[] = [
       },
       {
         id: "T-016", name: "VHS GRAIN NIGHT", image: ugcWhiteGirl,
+        dbTemplateId: "90868f44-ddcc-4f7f-9bbf-3eeb1b553893",
         tags: ["VHS", "Grain", "Night", "Lo-Fi"],
         includes: ["2 On-Model", "1 Lifestyle"],
         description: "VHS tape aesthetic. Heavy grain, lo-fi color.",
@@ -208,6 +224,7 @@ export const drops: DropCollection[] = [
     templates: [
       {
         id: "T-017", name: "STUDIO FRONT", image: ugcStudio,
+        dbTemplateId: "b9107ab1-f028-490e-bd10-044d0b01789f",
         tags: ["Front View", "Clean", "Studio", "Ecom"],
         includes: ["1 Product", "1 Front Shot"],
         description: "Straight-on studio shot. Ready for your store.",
@@ -216,6 +233,7 @@ export const drops: DropCollection[] = [
       },
       {
         id: "T-018", name: "BACK + DETAIL CLOSEUP", image: garageEdit,
+        dbTemplateId: "adc23b6c-c00e-454d-812d-003d3fe3b0f5",
         tags: ["Back View", "Detail", "Macro", "Clean"],
         includes: ["1 Product", "1 Back Shot", "1 Detail"],
         description: "Back view with stitching details. Shopify-ready.",
@@ -224,6 +242,7 @@ export const drops: DropCollection[] = [
       },
       {
         id: "T-019", name: "SLEEVE FOCUS", image: ugcWhiteGirl,
+        dbTemplateId: "12f4adb6-4873-4e76-9319-4578614097a9",
         tags: ["Sleeve", "Detail", "Macro", "Branding"],
         includes: ["1 Detail", "1 Closeup"],
         description: "Arm detail. Brand tag and embroidery focus.",
@@ -232,6 +251,7 @@ export const drops: DropCollection[] = [
       },
       {
         id: "T-020", name: "TEXTURE MACRO", image: ravenOriginal,
+        dbTemplateId: "a2b56c4c-9eb1-4e2f-99a0-67b6bba6cb5e",
         tags: ["Macro", "Texture", "Fabric", "Premium"],
         includes: ["1 Detail", "1 Texture Shot"],
         description: "Extreme close fabric. Show the quality.",
