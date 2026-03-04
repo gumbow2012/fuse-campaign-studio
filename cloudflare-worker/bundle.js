@@ -1,47 +1,9 @@
-// ═══════════════════════════════════════════════════════════════
-// FUSE Cloudflare Worker — Single-file bundle for Dashboard editor
-// Paste this entire file into: Workers & Pages → fuse-worker → Quick Edit
-//
-// Required secrets (Settings → Variables & Secrets):
-//   SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY,
-//   WEAVY_API_KEY, WEAVY_API_BASE_URL,
-//   WEAVY_FIREBASE_API_KEY, WEAVY_REFRESH_TOKEN
-//
-// Required R2 binding (Settings → R2 Bucket Bindings):
-//   Variable name: ASSETS  →  Bucket: fuse-assets
-//
-// Routes:
-//   POST /weavy/trigger          ← single-call from frontend
-//   POST /jobs/submit
-//   GET  /jobs/:projectId/status
-//   POST /jobs/rerun-step
-//   POST /api/upload
-//   POST /api/run-template
-//   GET  /api/job/:jobId
-//   GET  /assets/:key            ← R2 proxy
-//   GET  /weavy/flow/:flowId     ← reverse-proxy (strips X-Frame-Options)
-//   GET  /health
-// ═══════════════════════════════════════════════════════════════
+// ─── AUTO-GENERATED BUNDLE ───
+// Manual concatenation of cloudflare-worker/src/*.ts → plain JS.
+// Last synced: 2026-03-04
 
-// ── auth ──
-async function verifyToken(request, env) {
-  const authHeader = request.headers.get("Authorization");
-  if (!authHeader?.startsWith("Bearer ")) {
-    throw new Error("Missing or invalid Authorization header");
-  }
-  const token = authHeader.slice(7);
-  const res = await fetch(`${env.SUPABASE_URL}/auth/v1/user`, {
-    headers: {
-      Authorization: `Bearer ${token}`,
-      apikey: env.SUPABASE_ANON_KEY,
-    },
-  });
-  if (!res.ok) throw new Error("Invalid or expired token");
-  const user = await res.json();
-  return user.id;
-}
+// ============= supabase.ts =============
 
-// ── supabase helpers ──
 async function supabaseFetch(env, path, opts) {
   return fetch(`${env.SUPABASE_URL}/rest/v1${path}`, {
     method: opts?.method ?? "GET",
@@ -85,7 +47,44 @@ async function upsertStep(env, projectId, stepKey, data) {
   if (!res.ok) console.error("Failed to upsert step:", await res.text());
 }
 
-// ── R2 ──
+// ============= auth.ts =============
+
+async function verifyToken(request, env) {
+  const authHeader = request.headers.get("Authorization");
+  if (!authHeader?.startsWith("Bearer ")) throw new Error("Missing or invalid Authorization header");
+  const token = authHeader.slice(7);
+  try {
+    const payloadB64 = token.split(".")[1];
+    if (payloadB64) {
+      const payload = JSON.parse(atob(payloadB64.replace(/-/g, "+").replace(/_/g, "/")));
+      const tokenIssuer = payload.iss || "(none)";
+      const expectedPrefix = env.SUPABASE_URL.replace(/\/+$/, "");
+      console.log(`[auth] Token issuer: ${tokenIssuer}`);
+      console.log(`[auth] Expected SUPABASE_URL: ${expectedPrefix}`);
+      if (!tokenIssuer.startsWith(expectedPrefix)) {
+        throw new Error(`Token issuer mismatch: token iss="${tokenIssuer}" but Worker SUPABASE_URL="${expectedPrefix}". Update the Worker's SUPABASE_URL env var to match the Supabase project that issued this token.`);
+      }
+    }
+  } catch (e) {
+    if (e.message?.includes("Token issuer mismatch")) throw e;
+    console.warn("[auth] Could not decode JWT for pre-check:", e.message);
+  }
+  const supabaseUrl = env.SUPABASE_URL.replace(/\/+$/, "");
+  const res = await fetch(`${supabaseUrl}/auth/v1/user`, {
+    headers: { Authorization: `Bearer ${token}`, apikey: env.SUPABASE_ANON_KEY },
+  });
+  if (!res.ok) {
+    const txt = await res.text();
+    console.error(`[auth] Supabase auth failed (${res.status}): ${txt}`);
+    throw new Error(`Auth failed (${res.status}): ${txt}`);
+  }
+  const user = await res.json();
+  console.log(`[auth] Verified user: ${user.id}`);
+  return user.id;
+}
+
+// ============= r2.ts =============
+
 async function serveAsset(env, key) {
   const object = await env.ASSETS.get(key);
   if (!object) return new Response("Not found", { status: 404 });
@@ -95,23 +94,15 @@ async function serveAsset(env, key) {
   return new Response(object.body, { headers });
 }
 
-// ── Weavy ──
+// ============= weavy.ts =============
+
 async function getWeavyIdToken(env) {
-  const res = await fetch(
-    `https://securetoken.googleapis.com/v1/token?key=${env.WEAVY_FIREBASE_API_KEY}`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        grant_type: "refresh_token",
-        refresh_token: env.WEAVY_REFRESH_TOKEN,
-      }),
-    },
-  );
-  if (!res.ok) {
-    const txt = await res.text();
-    throw new Error(`Firebase token refresh failed (${res.status}): ${txt}`);
-  }
+  const res = await fetch(`https://securetoken.googleapis.com/v1/token?key=${env.WEAVY_FIREBASE_API_KEY}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ grant_type: "refresh_token", refresh_token: env.WEAVY_REFRESH_TOKEN }),
+  });
+  if (!res.ok) { const txt = await res.text(); throw new Error(`Firebase token refresh failed (${res.status}): ${txt}`); }
   const data = await res.json();
   return data.id_token;
 }
@@ -125,10 +116,7 @@ async function triggerWeavyRecipe(env, recipeId, inputs) {
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` },
     body: JSON.stringify({ inputs }),
   });
-  if (!res.ok) {
-    const body = await res.text();
-    throw new Error(`Weavy trigger failed (${res.status}): ${body.slice(0, 1000)}`);
-  }
+  if (!res.ok) { const body = await res.text(); throw new Error(`Weavy trigger failed (${res.status}): ${body.slice(0, 1000)}`); }
   const data = await res.json();
   const runId = data.id || data.runId;
   console.log(`[weavy] run started runId=${runId}`);
@@ -139,14 +127,12 @@ async function getWeavyRunStatus(env, recipeId, runId) {
   const idToken = await getWeavyIdToken(env);
   const url = `${env.WEAVY_API_BASE_URL}/api/v1/recipe-runs/recipes/${recipeId}/runs/status?runIds=${runId}`;
   const res = await fetch(url, { headers: { Authorization: `Bearer ${idToken}` } });
-  if (!res.ok) {
-    const body = await res.text();
-    throw new Error(`Weavy status poll failed (${res.status}): ${body.slice(0, 500)}`);
-  }
+  if (!res.ok) { const body = await res.text(); throw new Error(`Weavy status poll failed (${res.status}): ${body.slice(0, 500)}`); }
   return res.json();
 }
 
-// ── Route: POST /jobs/submit ──
+// ============= routes/submit.ts =============
+
 async function handleSubmit(request, env) {
   const userId = await verifyToken(request, env);
   const payload = await request.json();
@@ -158,7 +144,8 @@ async function handleSubmit(request, env) {
   return Response.json({ jobId: payload.projectId, status: "running" });
 }
 
-// ── Route: GET /jobs/:projectId/status ──
+// ============= routes/status.ts =============
+
 async function handleStatus(request, env, projectId) {
   const userId = await verifyToken(request, env);
   const project = await getProject(env, projectId);
@@ -166,7 +153,8 @@ async function handleStatus(request, env, projectId) {
   return Response.json({ status: project.status, outputs: project.outputs ?? undefined });
 }
 
-// ── Route: POST /jobs/rerun-step ──
+// ============= routes/rerun.ts =============
+
 async function handleRerun(request, env) {
   const userId = await verifyToken(request, env);
   const { projectId, stepId } = await request.json();
@@ -176,7 +164,8 @@ async function handleRerun(request, env) {
   return Response.json({ success: true });
 }
 
-// ── Route: POST /api/upload ──
+// ============= routes/papparazi.ts =============
+
 async function handleUpload(request, env) {
   const userId = await verifyToken(request, env);
   const formData = await request.formData();
@@ -191,7 +180,6 @@ async function handleUpload(request, env) {
   return Response.json({ imageUrl, key });
 }
 
-// ── Route: POST /api/run-template ──
 async function handleRunTemplate(request, env) {
   const userId = await verifyToken(request, env);
   const body = await request.json();
@@ -213,75 +201,43 @@ async function handleRunTemplate(request, env) {
     const tplRes = await supabaseFetch(env, `/templates?weavy_recipe_id=eq.${recipeId}&select=*&limit=1`);
     if (tplRes.ok) {
       const rows = await tplRes.json();
-      if (rows[0]) {
-        creditCost = rows[0].estimated_credits_per_run || 0;
-        templateName = rows[0].name || recipeId;
-        supabaseTemplateId = rows[0].id;
-      }
+      if (rows[0]) { creditCost = rows[0].estimated_credits_per_run || 0; templateName = rows[0].name || recipeId; supabaseTemplateId = rows[0].id; }
     }
   }
 
   console.log(`[run-template] recipeId=${recipeId} creditCost=${creditCost} inputKeys=${Object.keys(body.inputs || {})}`);
 
-  // Check credits
   const profRes = await supabaseFetch(env, `/profiles?user_id=eq.${userId}&select=credits_balance`);
   if (!profRes.ok) throw new Error("Failed to fetch profile");
   const profiles = await profRes.json();
   const profile = profiles[0];
   if (!profile) return Response.json({ error: "Profile not found" }, { status: 404 });
-  if (creditCost > 0 && profile.credits_balance < creditCost) {
-    return Response.json({ error: `Insufficient credits: have ${profile.credits_balance}, need ${creditCost}` }, { status: 402 });
-  }
+  if (creditCost > 0 && profile.credits_balance < creditCost) return Response.json({ error: `Insufficient credits: have ${profile.credits_balance}, need ${creditCost}` }, { status: 402 });
 
   const projectTemplateId = supabaseTemplateId;
-  if (!projectTemplateId) {
-    return Response.json({ error: `No matching template found in DB for recipe ${recipeId}. Create a template row with weavy_recipe_id = "${recipeId}".` }, { status: 400 });
-  }
+  if (!projectTemplateId) return Response.json({ error: `No matching template found in DB for recipe ${recipeId}. Create a template row with weavy_recipe_id = "${recipeId}".` }, { status: 400 });
 
-  // Create project
-  const projRes = await supabaseFetch(env, "/projects", {
-    method: "POST",
-    body: { user_id: userId, template_id: projectTemplateId, status: "queued", inputs: body.inputs },
-    headers: { Prefer: "return=representation" },
-  });
-  if (!projRes.ok) {
-    const txt = await projRes.text();
-    return Response.json({ error: `Project creation failed: ${txt}` }, { status: 500 });
-  }
+  const projRes = await supabaseFetch(env, "/projects", { method: "POST", body: { user_id: userId, template_id: projectTemplateId, status: "queued", inputs: body.inputs }, headers: { Prefer: "return=representation" } });
+  if (!projRes.ok) { const txt = await projRes.text(); return Response.json({ error: `Project creation failed: ${txt}` }, { status: 500 }); }
   const [project] = await projRes.json();
 
-  // Deduct credits
   if (creditCost > 0) {
-    await supabaseFetch(env, `/profiles?user_id=eq.${userId}`, {
-      method: "PATCH",
-      body: { credits_balance: profile.credits_balance - creditCost },
-    });
-    await supabaseFetch(env, "/credit_ledger", {
-      method: "POST",
-      body: { user_id: userId, type: "run_template", amount: -creditCost, template_id: projectTemplateId, project_id: project.id, description: `Run template: ${templateName}` },
-    });
+    await supabaseFetch(env, `/profiles?user_id=eq.${userId}`, { method: "PATCH", body: { credits_balance: profile.credits_balance - creditCost } });
+    await supabaseFetch(env, "/credit_ledger", { method: "POST", body: { user_id: userId, type: "run_template", amount: -creditCost, template_id: projectTemplateId, project_id: project.id, description: `Run template: ${templateName}` } });
   }
 
-  // Trigger Weavy
   try {
     const { runId } = await triggerWeavyRecipe(env, recipeId, body.inputs);
-    await updateProjectStatus(env, project.id, "running", {
-      weavy_run_id: runId,
-      started_at: new Date().toISOString(),
-      debug_trace: { weavy_recipe_id: recipeId, weavy_run_id: runId, inputs: body.inputs },
-    });
+    await updateProjectStatus(env, project.id, "running", { weavy_run_id: runId, started_at: new Date().toISOString(), debug_trace: { weavy_recipe_id: recipeId, weavy_run_id: runId, inputs: body.inputs } });
     return Response.json({ jobId: project.id, status: "running", weavyRunId: runId });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error(`[papparazi] Weavy trigger error: ${msg}`);
-    await updateProjectStatus(env, project.id, "failed", {
-      error: msg.slice(0, 5000), failed_at: new Date().toISOString(), failed_source: "weavy_trigger",
-    });
+    await updateProjectStatus(env, project.id, "failed", { error: msg.slice(0, 5000), failed_at: new Date().toISOString(), failed_source: "weavy_trigger" });
     return Response.json({ jobId: project.id, status: "failed", error: msg }, { status: 500 });
   }
 }
 
-// ── Route: GET /api/job/:jobId ──
 async function handleJobStatus(request, env, jobId) {
   const userId = await verifyToken(request, env);
   const project = await getProject(env, jobId);
@@ -312,17 +268,10 @@ async function handleJobStatus(request, env, jobId) {
           const items = [];
           for (const out of (Array.isArray(rawOutputs) ? rawOutputs : [rawOutputs])) {
             const url = out?.url || out?.output_url || out?.value;
-            if (url) {
-              const isVideo = /\.(mp4|mov|webm)/i.test(url) || out?.type === "video";
-              items.push({ type: isVideo ? "video" : "image", url });
-            }
+            if (url) { const isVideo = /\.(mp4|mov|webm)/i.test(url) || out?.type === "video"; items.push({ type: isVideo ? "video" : "image", url }); }
           }
           await updateProjectStatus(env, jobId, "complete", { completed_at: new Date().toISOString(), outputs: { items } });
-          return Response.json({
-            status: "succeeded",
-            outputImageUrl: items.find((i) => i.type === "image")?.url ?? null,
-            outputVideoUrl: items.find((i) => i.type === "video")?.url ?? null,
-          });
+          return Response.json({ status: "succeeded", outputImageUrl: items.find((i) => i.type === "image")?.url ?? null, outputVideoUrl: items.find((i) => i.type === "video")?.url ?? null });
         }
 
         if (wStatus === "failed" || wStatus === "error") {
@@ -333,20 +282,18 @@ async function handleJobStatus(request, env, jobId) {
 
         return Response.json({ status: "running", progress: statusData?.progress ?? undefined });
       }
-    } catch (err) {
-      console.error(`[papparazi] status poll error: ${err}`);
-    }
+    } catch (err) { console.error(`[papparazi] status poll error: ${err}`); }
   }
 
   return Response.json({ status: project.status });
 }
 
-// ── Route: POST /weavy/trigger ──
+// ============= routes/weavy-trigger.ts =============
+
 async function handleWeavyTrigger(request, env) {
   const userId = await verifyToken(request, env);
   const body = await request.json();
   if (!body.recipeId || !body.imageUrl) return Response.json({ error: "recipeId and imageUrl are required" }, { status: 400 });
-
   console.log(`[weavy/trigger] user=${userId} recipe=${body.recipeId}`);
 
   const tplRes = await supabaseFetch(env, `/templates?weavy_recipe_id=eq.${body.recipeId}&is_active=eq.true&select=*&limit=1`);
@@ -359,62 +306,64 @@ async function handleWeavyTrigger(request, env) {
   const templateName = template.name || body.recipeId;
   const templateId = template.id;
 
-  // Check credits
   const profRes = await supabaseFetch(env, `/profiles?user_id=eq.${userId}&select=credits_balance`);
   if (!profRes.ok) throw new Error("Failed to fetch profile");
   const profiles = await profRes.json();
   const profile = profiles[0];
   if (!profile) return Response.json({ error: "Profile not found" }, { status: 404 });
-  if (creditCost > 0 && profile.credits_balance < creditCost) {
-    return Response.json({ error: `Insufficient credits: have ${profile.credits_balance}, need ${creditCost}` }, { status: 402 });
-  }
+  if (creditCost > 0 && profile.credits_balance < creditCost) return Response.json({ error: `Insufficient credits: have ${profile.credits_balance}, need ${creditCost}` }, { status: 402 });
 
-  // Create project
-  const projRes = await supabaseFetch(env, "/projects", {
-    method: "POST",
-    body: { user_id: userId, template_id: templateId, status: "queued", inputs: { product_image: body.imageUrl } },
-    headers: { Prefer: "return=representation" },
-  });
-  if (!projRes.ok) {
-    const txt = await projRes.text();
-    return Response.json({ error: `Project creation failed: ${txt}` }, { status: 500 });
-  }
+  const projRes = await supabaseFetch(env, "/projects", { method: "POST", body: { user_id: userId, template_id: templateId, status: "queued", inputs: { product_image: body.imageUrl } }, headers: { Prefer: "return=representation" } });
+  if (!projRes.ok) { const txt = await projRes.text(); return Response.json({ error: `Project creation failed: ${txt}` }, { status: 500 }); }
   const [project] = await projRes.json();
 
-  // Deduct credits
   if (creditCost > 0) {
-    await supabaseFetch(env, `/profiles?user_id=eq.${userId}`, {
-      method: "PATCH",
-      body: { credits_balance: profile.credits_balance - creditCost },
-    });
-    await supabaseFetch(env, "/credit_ledger", {
-      method: "POST",
-      body: { user_id: userId, type: "run_template", amount: -creditCost, template_id: templateId, project_id: project.id, description: `Run template: ${templateName}` },
-    });
+    await supabaseFetch(env, `/profiles?user_id=eq.${userId}`, { method: "PATCH", body: { credits_balance: profile.credits_balance - creditCost } });
+    await supabaseFetch(env, "/credit_ledger", { method: "POST", body: { user_id: userId, type: "run_template", amount: -creditCost, template_id: templateId, project_id: project.id, description: `Run template: ${templateName}` } });
   }
 
-  // Trigger Weavy
   try {
     const { runId } = await triggerWeavyRecipe(env, body.recipeId, { product_image: body.imageUrl });
-    await updateProjectStatus(env, project.id, "running", {
-      weavy_run_id: runId,
-      started_at: new Date().toISOString(),
-      debug_trace: { weavy_recipe_id: body.recipeId, weavy_run_id: runId, inputs: { product_image: body.imageUrl }, triggered_via: "cf_worker" },
-    });
+    await updateProjectStatus(env, project.id, "running", { weavy_run_id: runId, started_at: new Date().toISOString(), debug_trace: { weavy_recipe_id: body.recipeId, weavy_run_id: runId, inputs: { product_image: body.imageUrl }, triggered_via: "cf_worker" } });
     return Response.json({ projectId: project.id, weavyRunId: runId, status: "running" });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error(`[weavy/trigger] error: ${msg}`);
-    await updateProjectStatus(env, project.id, "failed", {
-      error: msg.slice(0, 5000), failed_at: new Date().toISOString(), failed_source: "weavy_trigger",
-    });
+    await updateProjectStatus(env, project.id, "failed", { error: msg.slice(0, 5000), failed_at: new Date().toISOString(), failed_source: "weavy_trigger" });
     return Response.json({ projectId: project.id, error: msg, status: "failed" }, { status: 500 });
   }
 }
 
-// ═══════════════════════════════════════════════════════════
-// Entrypoint
-// ═══════════════════════════════════════════════════════════
+// ============= routes/usage.ts =============
+
+async function handleUsage(request, env) {
+  const userId = await verifyToken(request, env);
+
+  const [creditsRes, runsRes, ledgerRes] = await Promise.all([
+    supabaseFetch(env, `/users?id=eq.${userId}&select=credits`, { headers: { Accept: "application/vnd.pgrst.object+json" } }),
+    supabaseFetch(env, `/projects?user_id=eq.${userId}&select=id,template_id,status,created_at&order=created_at.desc`),
+    supabaseFetch(env, `/credit_ledger?user_id=eq.${userId}&type=in.(run_template,rerun_step)&select=amount`),
+  ]);
+
+  let credits = 0;
+  if (creditsRes.ok) { try { const row = await creditsRes.json(); credits = row.credits ?? 0; } catch { /* user row might not exist */ } }
+
+  const runsData = runsRes.ok ? await runsRes.json() : [];
+  const runs = Array.isArray(runsData) ? runsData : [];
+  const totalRuns = runs.length;
+  const completed = runs.filter((r) => r.status === "complete").length;
+  const failed = runs.filter((r) => r.status === "failed").length;
+  const running = runs.filter((r) => r.status === "running" || r.status === "queued").length;
+
+  const ledgerData = ledgerRes.ok ? await ledgerRes.json() : [];
+  const ledgerRows = Array.isArray(ledgerData) ? ledgerData : [];
+  let creditsUsed = 0;
+  for (const row of ledgerRows) creditsUsed += Math.abs(row.amount);
+
+  return Response.json({ credits, totalRuns, completed, failed, running, creditsUsed, recentRuns: runs.slice(0, 25) });
+}
+
+// ============= index.ts (entrypoint) =============
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
@@ -430,9 +379,7 @@ function corsResponse(response) {
 
 export default {
   async fetch(request, env) {
-    if (request.method === "OPTIONS") {
-      return new Response(null, { status: 204, headers: CORS_HEADERS });
-    }
+    if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: CORS_HEADERS });
 
     const url = new URL(request.url);
     const path = url.pathname;
@@ -452,25 +399,19 @@ export default {
         response = await handleRunTemplate(request, env);
       } else if (path.match(/^\/api\/job\/[^/]+$/) && request.method === "GET") {
         response = await handleJobStatus(request, env, path.split("/")[3]);
+      } else if (path === "/api/usage" && request.method === "GET") {
+        response = await handleUsage(request, env);
       } else if (path === "/weavy/trigger" && request.method === "POST") {
         response = await handleWeavyTrigger(request, env);
       } else if (path.startsWith("/assets/") && request.method === "GET") {
         response = await serveAsset(env, decodeURIComponent(path.slice("/assets/".length)));
-
-      // ── Weavy flow proxy (strip X-Frame-Options so we can iframe) ──
       } else if (path.startsWith("/weavy/flow/") && request.method === "GET") {
         const flowPath = path.slice("/weavy".length);
         const target = `https://app.weavy.ai${flowPath}${url.search}`;
-        const upstream = await fetch(target, {
-          headers: { "User-Agent": request.headers.get("User-Agent") || "" },
-          redirect: "follow",
-        });
-        const hdrs = new Headers(upstream.headers);
-        hdrs.delete("x-frame-options");
-        hdrs.delete("content-security-policy");
-        hdrs.set("access-control-allow-origin", "*");
-        response = new Response(upstream.body, { status: upstream.status, statusText: upstream.statusText, headers: hdrs });
-
+        const upstream = await fetch(target, { headers: { "User-Agent": request.headers.get("User-Agent") || "" }, redirect: "follow" });
+        const headers = new Headers(upstream.headers);
+        headers.delete("x-frame-options"); headers.delete("content-security-policy"); headers.set("access-control-allow-origin", "*");
+        response = new Response(upstream.body, { status: upstream.status, statusText: upstream.statusText, headers });
       } else if (path === "/health") {
         response = Response.json({ ok: true, timestamp: Date.now() });
       } else {
