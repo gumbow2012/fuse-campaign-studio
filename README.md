@@ -1,73 +1,89 @@
-# Welcome to your Lovable project
+# FUSE Campaign Studio
 
-## Project info
+AI-powered creative campaign platform. Upload assets, run templates powered by Weavy AI, and get production-ready outputs.
 
-**URL**: https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID
+## Tech Stack
 
-## How can I edit this code?
+- **Frontend**: React + TypeScript + Vite + Tailwind CSS + shadcn/ui
+- **Backend**: Lovable Cloud (Supabase) — auth, database, edge functions, storage
+- **Orchestration**: Cloudflare Worker — job pipeline, R2 asset storage, Weavy AI integration
+- **CI/CD**: GitHub Actions — auto-deploy worker on push
 
-There are several ways of editing your application.
+## Architecture
 
-**Use Lovable**
+```
+Frontend (React)
+    ↓ Bearer JWT
+Cloudflare Worker (shiny-rice-e95bfuse-api)
+    ├── Supabase (auth, credits, projects, steps)
+    ├── R2 (fuse-assets bucket)
+    └── Weavy AI (recipe execution)
+```
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and start prompting.
-
-Changes made via Lovable will be committed automatically to this repo.
-
-**Use your preferred IDE**
-
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
-
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
-
-Follow these steps:
+## Local Development
 
 ```sh
-# Step 1: Clone the repository using the project's Git URL.
 git clone <YOUR_GIT_URL>
-
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
-
-# Step 3: Install the necessary dependencies.
-npm i
-
-# Step 4: Start the development server with auto-reloading and an instant preview.
+cd fuse-campaign-studio
+npm install
 npm run dev
 ```
 
-**Edit a file directly in GitHub**
+## Environment Variables
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+| Variable | Where | Description |
+|---|---|---|
+| `VITE_SUPABASE_URL` | `.env` (auto-managed) | Supabase project URL |
+| `VITE_SUPABASE_PUBLISHABLE_KEY` | `.env` (auto-managed) | Supabase anon key |
+| `VITE_CF_WORKER_URL` | `.env` (optional) | Cloudflare Worker URL (fallback hardcoded) |
 
-**Use GitHub Codespaces**
+## Cloudflare Worker
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+See [`cloudflare-worker/README.md`](cloudflare-worker/README.md) for setup, secrets, and deployment details.
 
-## What technologies are used for this project?
+### Required Worker Secrets
 
-This project is built with:
+Set via `wrangler secret put` or Cloudflare Dashboard:
 
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
+- `SUPABASE_URL`
+- `SUPABASE_ANON_KEY`
+- `SUPABASE_SERVICE_ROLE_KEY`
+- `WEAVY_API_BASE_URL`
+- `WEAVY_FIREBASE_API_KEY`
+- `WEAVY_REFRESH_TOKEN`
 
-## How can I deploy this project?
+## GitHub Actions
 
-Simply open [Lovable](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and click on Share -> Publish.
+The worker auto-deploys on push to `main` when files in `cloudflare-worker/` change. Manual dispatch also available to sync secrets.
 
-## Can I connect a custom domain to my Lovable project?
+### Required GitHub Secrets
 
-Yes, you can!
+- `CLOUDFLARE_API_TOKEN`
+- `SUPABASE_URL`
+- `SUPABASE_ANON_KEY`
+- `SUPABASE_SERVICE_ROLE_KEY`
+- `WEAVY_API_BASE_URL`
+- `WEAVY_FIREBASE_API_KEY`
+- `WEAVY_REFRESH_TOKEN`
 
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
+## Deployment
 
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
+- **Frontend**: Publish via Lovable (Share → Publish)
+- **Backend**: Edge functions deploy automatically
+- **Worker**: Auto-deploys via GitHub Actions or `cd cloudflare-worker && npm run deploy`
+
+## Key Routes
+
+| Page | Path | Description |
+|---|---|---|
+| Landing | `/` | Marketing page |
+| Templates | `/templates` | Browse campaign templates |
+| Dashboard | `/dashboard` | User dashboard with projects |
+| Template Run | `/templates/:id/run` | Execute a template |
+| Job Status | `/job/:id` | Poll job progress |
+| Admin | `/admin` | Admin panel (role-gated) |
+| Billing | `/billing` | Subscription & credits |
+
+## License
+
+Private — All rights reserved.
