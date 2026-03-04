@@ -36,7 +36,7 @@ export const drops: DropCollection[] = [
         filters: { environment: "Urban", cameraAngle: "Low Angle", lighting: "Flash", mood: "Gritty", gender: "Unisex", timeOfDay: "Night", style: "Editorial" },
       },
       {
-        id: "T-002", name: "GAS STATION RAW", image: ravenOriginal,
+        id: "T-002", name: "RAVEN", image: ravenOriginal,
         tags: ["Night", "Neon Glow", "35mm", "Street"],
         includes: ["2 On-Model", "1 Lifestyle", "1 Detail"],
         description: "Late night pump station. Neon spill, film grain.",
@@ -45,7 +45,7 @@ export const drops: DropCollection[] = [
         filters: { environment: "Urban", cameraAngle: "Eye Level", lighting: "Neon", mood: "Gritty", gender: "Male", timeOfDay: "Night", style: "Editorial" },
       },
       {
-        id: "T-003", name: "ROOFTOP SUNSET DROP", image: ugcWhiteGirl,
+        id: "T-003", name: "UGC MIRROR", image: ugcWhiteGirl,
         tags: ["Golden Hour", "Wide", "Warm Tones"],
         includes: ["2 On-Model", "1 Editorial", "1 Landscape"],
         description: "City skyline backdrop. Warm golden hour light.",
