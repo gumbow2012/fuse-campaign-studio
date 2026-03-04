@@ -11,9 +11,9 @@
 - **Stripe Connect**: Creator onboarding is placeholder — creates creator profile but doesn't yet redirect to Stripe Connect. Admin must manually set `connect_status = 'ACTIVE'` for now.
 - **Payouts**: Payout execution not yet automated. Admin triggers manually. `payouts` table tracks status.
 
-### Revenue Allocation Flow
-1. `run-template` or `rerun-step` edge function executes
-2. Creates a `usage_charges` record with credit + USD cost info
+### Revenue Allocation Flow (via Cloudflare Worker)
+1. User clicks RUN → frontend calls Cloudflare Worker `/api/run-template`
+2. Worker verifies JWT, checks credit balance, deducts credits
 3. Calls `revenue-split` function with `action: "allocate"` + the charge ID
 4. Function reads template ownership, platform config, and referral status
 5. Creates `revenue_allocations` rows for PLATFORM, CREATOR, and/or AFFILIATE
@@ -40,7 +40,7 @@
 - **Paid trigger**: FIRST_SUBSCRIPTION_PAYMENT (options: FIRST_TOPUP, EITHER)
 - **Code format**: FUSE-XXXXXX (6 alphanumeric chars)
 - **Anti-fraud**: Self-referral blocked via DB constraint. One attribution per user (UNIQUE on referred_user_id).
-- **Referral link**: `https://your-domain.com/auth?ref=FUSE-XXXXXX`
+- **Referral link**: `https://fuse-campaign-studio.lovable.app/auth?ref=FUSE-XXXXXX`
 - **Note**: The Auth page doesn't yet auto-read `?ref=` param and apply. You should add that logic to the signup flow.
 
 ### What's NOT Yet Implemented (Future Work)
