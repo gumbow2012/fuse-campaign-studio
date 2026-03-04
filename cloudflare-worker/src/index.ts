@@ -4,6 +4,7 @@ import { handleStatus } from "./routes/status";
 import { handleRerun } from "./routes/rerun";
 import { handleUpload, handleRunTemplate, handleJobStatus } from "./routes/papparazi";
 import { handleWeavyTrigger } from "./routes/weavy-trigger";
+import { handleUsage } from "./routes/usage";
 import { serveAsset } from "./r2";
 
 const CORS_HEADERS: Record<string, string> = {
@@ -54,6 +55,10 @@ export default {
       } else if (path.match(/^\/api\/job\/[^/]+$/) && request.method === "GET") {
         const jobId = path.split("/")[3];
         response = await handleJobStatus(request, env, jobId);
+
+      // ── Usage / dashboard stats ──
+      } else if (path === "/api/usage" && request.method === "GET") {
+        response = await handleUsage(request, env);
 
       // ── Weavy trigger (new dedicated route) ──
       } else if (path === "/weavy/trigger" && request.method === "POST") {
