@@ -143,6 +143,15 @@ const PapparaziRun = () => {
       const token = session?.access_token;
       if (!token) throw new Error("Not authenticated");
 
+      // Diagnostic: log token issuer so we can confirm it matches Worker's SUPABASE_URL
+      try {
+        const jwtPayload = JSON.parse(atob(token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/")));
+        console.log("[PAPPARAZI] Token issuer (iss):", jwtPayload.iss);
+        console.log("[PAPPARAZI] Expected Supabase URL: https://sdmwcjfksoqbplcqqmhg.supabase.co");
+      } catch (e) {
+        console.warn("[PAPPARAZI] Could not decode token for debug", e);
+      }
+
       // 1) Upload image to storage and create signed URL
       const imageUrl = await uploadToStorage(user.id, file);
 
