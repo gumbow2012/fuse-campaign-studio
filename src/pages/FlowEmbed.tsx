@@ -3,7 +3,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import { ArrowLeft, ExternalLink, AlertTriangle, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
-const CF_WORKER_URL = import.meta.env.VITE_CF_WORKER_URL as string | undefined;
+const CF_WORKER_URL = import.meta.env.VITE_CF_WORKER_URL as string | undefined || "https://shiny-rice-e95bfuse-api.kade-fc1.workers.dev";
 
 const ALLOWED_FLOW_IDS = new Set([
   "dvgEXt4aeShCeokMq5MIpZ",
