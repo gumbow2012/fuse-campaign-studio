@@ -46,7 +46,7 @@ Deno.serve(async (req) => {
 
   const { data, error } = await supabase
     .from("projects")
-    .select("id,status,outputs,error")
+    .select("id,status,outputs,error,progress")
     .eq("id", projectId)
     .maybeSingle();
 
@@ -68,6 +68,7 @@ Deno.serve(async (req) => {
     JSON.stringify({
       projectId: data.id,
       status: data.status,
+      progress: (data as any).progress ?? 0,
       outputs: data.outputs ?? null,
       error: data.error ?? null,
     }),
