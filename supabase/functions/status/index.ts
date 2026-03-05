@@ -29,9 +29,7 @@ Deno.serve(async (req) => {
     });
   }
 
-  const uuidRe =
-    /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$/;
-
+  const uuidRe = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$/;
   if (!uuidRe.test(projectId)) {
     return new Response(JSON.stringify({ error: "Invalid projectId (must be UUID)", projectId }), {
       status: 400,
@@ -41,7 +39,6 @@ Deno.serve(async (req) => {
 
   const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-
   const supabase = createClient(supabaseUrl, serviceKey);
 
   const { data, error } = await supabase
@@ -64,6 +61,10 @@ Deno.serve(async (req) => {
     });
   }
 
+  // Build result_url from outputs
+  const outputs = (data as any).outputs as { items?: { type: string; url: string }[] } | null;
+  const resultUrl = outputs?.items?.[0]?.url ?? null;
+
   return new Response(
     JSON.stringify({
       projectId: data.id,
@@ -72,6 +73,7 @@ Deno.serve(async (req) => {
       logs: (data as any).logs ?? [],
       attempts: (data as any).attempts ?? 0,
       maxAttempts: (data as any).max_attempts ?? 3,
+      result_url: resultUrl,
       outputs: data.outputs ?? null,
       error: data.error ?? null,
     }),
