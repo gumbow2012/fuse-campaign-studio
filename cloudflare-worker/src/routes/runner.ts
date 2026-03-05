@@ -143,8 +143,10 @@ async function callFalNanoBanana(
   const apiKey = env.FAL_API_KEY;
   if (!apiKey) throw new Error("FAL_API_KEY not configured in Worker secrets");
 
-  // Submit to fal queue
-  const submitRes = await fetch("https://queue.fal.run/fal-ai/nano-banana-2/edit", {
+  await onProgress?.("Calling fal nano-banana edit...");
+
+  // Try synchronous endpoint first (faster for short jobs)
+  const directRes = await fetch("https://fal.run/fal-ai/nano-banana/edit", {
     method: "POST",
     headers: {
       Authorization: `Key ${apiKey}`,
@@ -152,7 +154,31 @@ async function callFalNanoBanana(
     },
     body: JSON.stringify({
       prompt,
-      image_urls: [imageUrl],
+      image_url: imageUrl,
+    }),
+  });
+
+  if (directRes.ok) {
+    const data = await directRes.json() as {
+      images?: { url: string }[];
+      image?: { url: string };
+    };
+    const url = data.images?.[0]?.url || data.image?.url;
+    if (url) return url;
+  }
+
+  // Fallback: use queue API for longer jobs
+  await onProgress?.("Direct call returned non-OK, falling back to queue API...");
+
+  const submitRes = await fetch("https://queue.fal.run/fal-ai/nano-banana/edit", {
+    method: "POST",
+    headers: {
+      Authorization: `Key ${apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      prompt,
+      image_url: imageUrl,
     }),
   });
 
@@ -161,12 +187,12 @@ async function callFalNanoBanana(
     throw new Error(`fal submit failed (${submitRes.status}): ${txt.slice(0, 500)}`);
   }
 
-  const submitData = await submitRes.json() as { request_id: string; status_url?: string; response_url?: string };
+  const submitData = await submitRes.json() as { request_id: string };
   const requestId = submitData.request_id;
   if (!requestId) throw new Error("fal: no request_id returned");
 
-  const statusUrl = `https://queue.fal.run/fal-ai/nano-banana-2/edit/requests/${requestId}/status`;
-  const responseUrl = `https://queue.fal.run/fal-ai/nano-banana-2/edit/requests/${requestId}`;
+  const statusUrl = `https://queue.fal.run/fal-ai/nano-banana/edit/requests/${requestId}/status`;
+  const responseUrl = `https://queue.fal.run/fal-ai/nano-banana/edit/requests/${requestId}`;
 
   await onProgress?.(`fal queued (request: ${requestId.slice(0, 8)}...)`);
 
@@ -187,9 +213,8 @@ async function callFalNanoBanana(
         const result = await resultRes.json() as {
           images?: { url: string }[];
           image?: { url: string };
-          output?: { url: string };
         };
-        const url = result.images?.[0]?.url || result.image?.url || result.output?.url;
+        const url = result.images?.[0]?.url || result.image?.url;
         if (!url) throw new Error("fal completed but no image URL in response");
         return url;
       }
@@ -198,7 +223,6 @@ async function callFalNanoBanana(
       }
     } catch (e) {
       if (e instanceof Error && (e.message.includes("fal job failed") || e.message.includes("no image URL"))) throw e;
-      // Network error — retry
     }
   }
   throw new Error("fal job timed out after 10 minutes");
