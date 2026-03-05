@@ -8,6 +8,7 @@ import { handleUsage } from "./routes/usage";
 import { handleEnqueue, handleProjectStatus } from "./routes/runner";
 import { handlePresign, handleUploadPut } from "./routes/uploads";
 import { serveAsset } from "./r2";
+import { handleTestKling } from "./routes/test-kling";
 
 const CORS_HEADERS: Record<string, string> = {
   "Access-Control-Allow-Origin": "*",
@@ -106,6 +107,10 @@ export default {
           statusText: upstream.statusText,
           headers,
         });
+
+      // ── Test Kling auth ──
+      } else if (path === "/api/test-kling" && request.method === "GET") {
+        response = await handleTestKling(request, env);
 
       // ── Health check ──
       } else if (path === "/health") {
