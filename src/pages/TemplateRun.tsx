@@ -263,7 +263,7 @@ const TemplateRun = () => {
         }
       }
 
-      // Call run-template edge function (handles credits + Weavy trigger)
+      // Call run-template edge function (handles credits + enqueue to CF Worker)
       const { data: runData, error: runErr } = await supabase.functions.invoke("run-template", {
         body: { templateId: template.id, inputs },
       });

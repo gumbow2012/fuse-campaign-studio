@@ -11,7 +11,9 @@ bucket_name = "fuse-assets"
 # SUPABASE_URL
 # SUPABASE_ANON_KEY
 # SUPABASE_SERVICE_ROLE_KEY
-# WEAVY_API_BASE_URL
-# WEAVY_FIREBASE_API_KEY
-# WEAVY_REFRESH_TOKEN
+# WEAVY_API_BASE_URL (legacy — HAR import only)
+# WEAVY_FIREBASE_API_KEY (legacy)
+# WEAVY_REFRESH_TOKEN (legacy)
+# FAL_API_KEY — fal.ai key for nano-banana-pro image gen
+# KLING_API_KEY — Kling key for video generation
 
