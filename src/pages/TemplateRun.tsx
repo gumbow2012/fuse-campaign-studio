@@ -11,6 +11,7 @@ import {
   Minus, Plus, GripVertical, MoreVertical, Upload, X, Zap,
   Loader2, Download, CheckCircle2, AlertTriangle, Copy, Maximize2,
 } from "lucide-react";
+import { Progress } from "@/components/ui/progress";
 
 /* ─── Storage upload helper ─── */
 const uploadToStorage = async (userId: string, fieldKey: string, file: File): Promise<string> => {
@@ -106,6 +107,7 @@ interface InputField { key: string; label: string; nodeId: string; type: string;
 interface OutputItem { type: string; url: string; label?: string; }
 interface ProjectResult {
   status: "queued" | "running" | "complete" | "failed";
+  progress: number;
   outputs: OutputItem[];
   error?: string;
 }
@@ -196,6 +198,7 @@ const TemplateRun = () => {
 
         setResult({
           status: normalizedStatus,
+          progress: status.progress ?? 0,
           outputs,
           error: status.error ?? undefined,
         });
@@ -254,7 +257,7 @@ const TemplateRun = () => {
 
       // Start polling via edge function
       setProjectId(jobId);
-      setResult({ status: "queued", outputs: [] });
+      setResult({ status: "queued", progress: 0, outputs: [] });
     } catch (err: any) {
       toast({ title: "Error", description: err.message, variant: "destructive" });
     } finally {
@@ -395,7 +398,7 @@ const TemplateRun = () => {
           {/* Running state */}
           {isRunning && (
             <div className="flex-1 flex items-center justify-center p-8">
-              <div className="text-center space-y-4">
+              <div className="text-center space-y-5 w-full max-w-xs">
                 <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mx-auto">
                   <Loader2 className="w-8 h-8 text-primary animate-spin" />
                 </div>
@@ -404,6 +407,10 @@ const TemplateRun = () => {
                     {result?.status === "queued" ? "Queued..." : "Generating your assets..."}
                   </p>
                   <p className="text-xs text-muted-foreground mt-1">This may take a few minutes</p>
+                </div>
+                <div className="space-y-1.5">
+                  <Progress value={result?.progress ?? 0} className="h-2" />
+                  <p className="text-[10px] text-muted-foreground font-mono">{result?.progress ?? 0}%</p>
                 </div>
               </div>
             </div>

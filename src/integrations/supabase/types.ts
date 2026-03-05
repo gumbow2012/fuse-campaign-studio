@@ -298,6 +298,7 @@ export type Database = {
           id: string
           inputs: Json | null
           outputs: Json | null
+          progress: number
           started_at: string | null
           status: Database["public"]["Enums"]["project_status"]
           template_id: string
@@ -315,6 +316,7 @@ export type Database = {
           id?: string
           inputs?: Json | null
           outputs?: Json | null
+          progress?: number
           started_at?: string | null
           status?: Database["public"]["Enums"]["project_status"]
           template_id: string
@@ -332,6 +334,7 @@ export type Database = {
           id?: string
           inputs?: Json | null
           outputs?: Json | null
+          progress?: number
           started_at?: string | null
           status?: Database["public"]["Enums"]["project_status"]
           template_id?: string
