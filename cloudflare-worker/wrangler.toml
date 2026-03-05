@@ -4,7 +4,7 @@ compatibility_date = "2024-12-01"
 
 # R2 bucket binding
 [[r2_buckets]]
-binding = "ASSETS"
+binding = "FUSE_ASSETS"
 bucket_name = "fuse-assets"
 
 # Secrets (set via `wrangler secret put`)

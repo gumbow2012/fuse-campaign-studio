@@ -12,7 +12,7 @@ export async function uploadToR2(
   contentType?: string,
 ): Promise<string> {
   const key = `projects/${projectId}/${filename}`;
-  await env.ASSETS.put(key, body, {
+  await env.FUSE_ASSETS.put(key, body, {
     httpMetadata: contentType ? { contentType } : undefined,
   });
   return key;
@@ -31,7 +31,7 @@ export function getAssetUrl(workerUrl: string, key: string): string {
  * Serve an R2 object by key (used by the /assets/:key route).
  */
 export async function serveAsset(env: Env, key: string): Promise<Response> {
-  const object = await env.ASSETS.get(key);
+  const object = await env.FUSE_ASSETS.get(key);
 
   if (!object) {
     return new Response("Not found", { status: 404 });

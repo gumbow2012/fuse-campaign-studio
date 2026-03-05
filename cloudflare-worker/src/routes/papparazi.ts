@@ -19,7 +19,7 @@ export async function handleUpload(request: Request, env: Env): Promise<Response
   const ext = file.name.split(".").pop() || "png";
   const key = `uploads/${userId}/${Date.now()}.${ext}`;
 
-  await env.ASSETS.put(key, file.stream(), {
+  await env.FUSE_ASSETS.put(key, file.stream(), {
     httpMetadata: { contentType: file.type || "image/png" },
   });
 

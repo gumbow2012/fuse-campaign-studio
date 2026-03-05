@@ -90,7 +90,7 @@ export async function handleEnqueue(request: Request, env: Env): Promise<Respons
  *  Input helpers
  * ══════════════════════════════════════════════════════════════ */
 
-const WORKER_URL = "https://shiny-rice-e95bfuse-api.kade-fc1.workers.dev";
+const R2_PUBLIC_DOMAIN = "https://pub-18eb2ae6df714575853d0d459e18b74b.r2.dev";
 
 /**
  * Resolve an image input value to a usable URL.
@@ -100,7 +100,7 @@ const WORKER_URL = "https://shiny-rice-e95bfuse-api.kade-fc1.workers.dev";
  */
 function resolveImageUrl(value: string): string {
   if (value.startsWith("uploads/") || value.startsWith("outputs/") || value.startsWith("projects/")) {
-    return `${WORKER_URL}/assets/${encodeURIComponent(value)}`;
+    return `${R2_PUBLIC_DOMAIN}/${value}`;
   }
   return value;
 }
@@ -356,8 +356,8 @@ async function uploadOutputsToR2(
         const ext = item.type === "video" ? "mp4" : "png";
         const ct = item.type === "video" ? "video/mp4" : "image/png";
         const key = `outputs/${projectId}/${Date.now()}.${ext}`;
-        await env.ASSETS.put(key, res.body, { httpMetadata: { contentType: ct } });
-        finalItems.push({ type: item.type, url: `${WORKER_URL}/assets/${encodeURIComponent(key)}` });
+        await env.FUSE_ASSETS.put(key, res.body, { httpMetadata: { contentType: ct } });
+        finalItems.push({ type: item.type, url: `${R2_PUBLIC_DOMAIN}/${key}` });
       } else {
         finalItems.push(item);
       }
