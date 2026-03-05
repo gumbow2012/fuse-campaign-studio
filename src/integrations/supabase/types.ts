@@ -552,15 +552,18 @@ export type Database = {
           created_at: string
           creator_id: string | null
           description: string | null
+          edges_count: number | null
           estimated_credits_per_run: number
           expected_output_count: number | null
           id: string
           input_schema: Json | null
           is_active: boolean
           name: string
+          nodes_count: number | null
           output_type: string | null
           owner_type: string
           preview_url: string | null
+          raw_json: Json | null
           required_inputs: Json | null
           revenue_split_override: Json | null
           tags: string[] | null
@@ -575,15 +578,18 @@ export type Database = {
           created_at?: string
           creator_id?: string | null
           description?: string | null
+          edges_count?: number | null
           estimated_credits_per_run?: number
           expected_output_count?: number | null
           id?: string
           input_schema?: Json | null
           is_active?: boolean
           name: string
+          nodes_count?: number | null
           output_type?: string | null
           owner_type?: string
           preview_url?: string | null
+          raw_json?: Json | null
           required_inputs?: Json | null
           revenue_split_override?: Json | null
           tags?: string[] | null
@@ -598,15 +604,18 @@ export type Database = {
           created_at?: string
           creator_id?: string | null
           description?: string | null
+          edges_count?: number | null
           estimated_credits_per_run?: number
           expected_output_count?: number | null
           id?: string
           input_schema?: Json | null
           is_active?: boolean
           name?: string
+          nodes_count?: number | null
           output_type?: string | null
           owner_type?: string
           preview_url?: string | null
+          raw_json?: Json | null
           required_inputs?: Json | null
           revenue_split_override?: Json | null
           tags?: string[] | null
