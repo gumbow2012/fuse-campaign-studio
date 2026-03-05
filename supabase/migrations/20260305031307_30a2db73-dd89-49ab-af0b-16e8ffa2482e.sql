@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX IF NOT EXISTS templates_weavy_recipe_id_unique ON public.templates (weavy_recipe_id) WHERE weavy_recipe_id IS NOT NULL;

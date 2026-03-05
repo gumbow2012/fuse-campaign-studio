@@ -17,6 +17,8 @@ import ProjectDetail from "./pages/ProjectDetail";
 import Billing from "./pages/Billing";
 import Account from "./pages/Account";
 import Admin from "./pages/Admin";
+import AdminTemplates from "./pages/AdminTemplates";
+import AdminTemplateImport from "./pages/AdminTemplateImport";
 import Analytics from "./pages/Analytics";
 import AdminAnalytics from "./pages/AdminAnalytics";
 import CreatorAnalytics from "./pages/CreatorAnalytics";
@@ -69,6 +71,8 @@ const App = () => (
             {/* Admin routes */}
             <Route path="/admin" element={<AdminRoute><Admin /></AdminRoute>} />
             <Route path="/admin/analytics" element={<AdminRoute><AdminAnalytics /></AdminRoute>} />
+            <Route path="/admin/templates" element={<AdminRoute><AdminTemplates /></AdminRoute>} />
+            <Route path="/admin/templates/import" element={<AdminRoute><AdminTemplateImport /></AdminRoute>} />
 
             <Route path="*" element={<NotFound />} />
           </Routes>
