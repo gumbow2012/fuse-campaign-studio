@@ -10,7 +10,8 @@ export interface Env {
   WEAVY_REFRESH_TOKEN?: string;
   // Model API keys for direct execution
   FAL_API_KEY?: string;
-  KLING_API_KEY?: string;
+  KLING_ACCESS_KEY?: string;
+  KLING_SECRET_KEY?: string;
 }
 
 export interface JobPayload {

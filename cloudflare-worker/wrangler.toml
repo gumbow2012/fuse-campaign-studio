@@ -14,6 +14,7 @@ bucket_name = "fuse-assets"
 # WEAVY_API_BASE_URL (legacy — HAR import only)
 # WEAVY_FIREBASE_API_KEY (legacy)
 # WEAVY_REFRESH_TOKEN (legacy)
-# FAL_API_KEY — fal.ai key for nano-banana-pro image gen
-# KLING_API_KEY — Kling key for video generation
+# FAL_API_KEY — fal.ai key for nano-banana-2 image editing
+# KLING_ACCESS_KEY — Kling access key (from developer portal)
+# KLING_SECRET_KEY — Kling secret key (for JWT signing)
 
