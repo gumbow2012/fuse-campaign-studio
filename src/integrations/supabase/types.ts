@@ -289,6 +289,7 @@ export type Database = {
       }
       projects: {
         Row: {
+          attempts: number
           completed_at: string | null
           created_at: string
           debug_trace: Json | null
@@ -297,6 +298,8 @@ export type Database = {
           failed_source: string | null
           id: string
           inputs: Json | null
+          logs: Json
+          max_attempts: number
           outputs: Json | null
           progress: number
           started_at: string | null
@@ -307,6 +310,7 @@ export type Database = {
           weavy_run_id: string | null
         }
         Insert: {
+          attempts?: number
           completed_at?: string | null
           created_at?: string
           debug_trace?: Json | null
@@ -315,6 +319,8 @@ export type Database = {
           failed_source?: string | null
           id?: string
           inputs?: Json | null
+          logs?: Json
+          max_attempts?: number
           outputs?: Json | null
           progress?: number
           started_at?: string | null
@@ -325,6 +331,7 @@ export type Database = {
           weavy_run_id?: string | null
         }
         Update: {
+          attempts?: number
           completed_at?: string | null
           created_at?: string
           debug_trace?: Json | null
@@ -333,6 +340,8 @@ export type Database = {
           failed_source?: string | null
           id?: string
           inputs?: Json | null
+          logs?: Json
+          max_attempts?: number
           outputs?: Json | null
           progress?: number
           started_at?: string | null
