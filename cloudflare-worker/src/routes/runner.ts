@@ -143,10 +143,10 @@ async function callFalNanoBanana(
   const apiKey = env.FAL_API_KEY;
   if (!apiKey) throw new Error("FAL_API_KEY not configured in Worker secrets");
 
-  await onProgress?.("Calling fal nano-banana edit...");
+  await onProgress?.("Calling fal nano-banana-pro edit...");
 
   // Try synchronous endpoint first (faster for short jobs)
-  const directRes = await fetch("https://fal.run/fal-ai/nano-banana/edit", {
+  const directRes = await fetch("https://fal.run/fal-ai/nano-banana-pro/edit", {
     method: "POST",
     headers: {
       Authorization: `Key ${apiKey}`,
@@ -170,7 +170,7 @@ async function callFalNanoBanana(
   // Fallback: use queue API for longer jobs
   await onProgress?.("Direct call returned non-OK, falling back to queue API...");
 
-  const submitRes = await fetch("https://queue.fal.run/fal-ai/nano-banana/edit", {
+  const submitRes = await fetch("https://queue.fal.run/fal-ai/nano-banana-pro/edit", {
     method: "POST",
     headers: {
       Authorization: `Key ${apiKey}`,
@@ -191,8 +191,8 @@ async function callFalNanoBanana(
   const requestId = submitData.request_id;
   if (!requestId) throw new Error("fal: no request_id returned");
 
-  const statusUrl = `https://queue.fal.run/fal-ai/nano-banana/edit/requests/${requestId}/status`;
-  const responseUrl = `https://queue.fal.run/fal-ai/nano-banana/edit/requests/${requestId}`;
+  const statusUrl = `https://queue.fal.run/fal-ai/nano-banana-pro/edit/requests/${requestId}/status`;
+  const responseUrl = `https://queue.fal.run/fal-ai/nano-banana-pro/edit/requests/${requestId}`;
 
   await onProgress?.(`fal queued (request: ${requestId.slice(0, 8)}...)`);
 
@@ -404,14 +404,14 @@ async function runJob(env: Env, projectId: string) {
 
       const outputType = (template as any).output_type || "video";
 
-      // ── Step 1: Image generation via fal nano-banana-2 ──
-      await setProgress(env, projectId, 15, "Submitting to nano-banana-2 (image edit)");
+      // ── Step 1: Image generation via fal nano-banana-pro ──
+      await setProgress(env, projectId, 15, "Submitting to nano-banana-pro (image edit)");
 
       const editedImageUrl = await callFalNanoBanana(env, imageUrl, prompt, async (msg) => {
         await setProgress(env, projectId, 20, msg);
       });
 
-      await setProgress(env, projectId, 45, "nano-banana-2 complete — edited image ready");
+      await setProgress(env, projectId, 45, "nano-banana-pro complete — edited image ready");
 
       if (outputType !== "video") {
         // Image-only template — done
