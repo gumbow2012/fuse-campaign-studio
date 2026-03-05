@@ -13,15 +13,35 @@ import {
 } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
 
-/* ─── Storage upload helper ─── */
-const uploadToStorage = async (userId: string, fieldKey: string, file: File): Promise<string> => {
-  const ext = file.name.split(".").pop() || "png";
-  const path = `${userId}/${Date.now()}-${fieldKey}.${ext}`;
-  const { error: uploadErr } = await supabase.storage.from("template-inputs").upload(path, file, { upsert: true });
-  if (uploadErr) throw new Error(`Upload failed for ${fieldKey}: ${uploadErr.message}`);
-  const { data: signedData, error: signErr } = await supabase.storage.from("template-inputs").createSignedUrl(path, 3600);
-  if (signErr || !signedData?.signedUrl) throw new Error(`Could not get URL for ${fieldKey}`);
-  return signedData.signedUrl;
+/* ─── R2 upload via CF Worker presign ─── */
+const CF_WORKER_URL = import.meta.env.VITE_CF_WORKER_URL as string || "https://shiny-rice-e95bfuse-api.kade-fc1.workers.dev";
+
+const uploadToR2 = async (token: string, fieldKey: string, file: File): Promise<string> => {
+  // Step 1: Get presigned key + upload URL
+  const presignRes = await fetch(`${CF_WORKER_URL}/api/uploads/presign`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ filename: `${fieldKey}-${file.name}`, content_type: file.type }),
+  });
+  if (!presignRes.ok) throw new Error(`Presign failed: ${await presignRes.text()}`);
+  const { key, upload_url } = await presignRes.json();
+
+  // Step 2: PUT the file directly to the Worker → R2
+  const putRes = await fetch(upload_url, {
+    method: "PUT",
+    headers: {
+      "Content-Type": file.type,
+      Authorization: `Bearer ${token}`,
+    },
+    body: file,
+  });
+  if (!putRes.ok) throw new Error(`Upload failed: ${await putRes.text()}`);
+
+  // Return the R2 key (not a URL) — the runner will resolve it
+  return key;
 };
 
 /* ─── File node header (Weavy-style) ─── */
@@ -251,12 +271,12 @@ const TemplateRun = () => {
       const token = session?.access_token;
       if (!token) throw new Error("Not authenticated – no session token");
 
-      // Build inputs: upload files + include text inputs
+      // Build inputs: upload files to R2 + include text inputs
       const inputs: Record<string, string> = {};
       for (const field of inputSchema) {
         if (field.type === "image") {
           const f = files[field.key];
-          if (f) inputs[field.key] = await uploadToStorage(user.id, field.key, f);
+          if (f) inputs[field.key] = await uploadToR2(token, field.key, f);
         } else {
           const val = textInputs[field.key]?.trim();
           if (val) inputs[field.key] = val;
