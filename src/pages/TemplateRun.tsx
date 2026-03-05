@@ -174,10 +174,12 @@ const TemplateRun = () => {
   });
   const totalCost = (template?.estimated_credits_per_run || 0) * runs;
 
-  /* ─── Poll job status via edge function ─── */
+  /* ─── Poll job status via CF Worker /api/projects/:id ─── */
   useEffect(() => {
     if (!projectId) return;
     pollingRef.current = true;
+
+    const cfWorkerUrl = import.meta.env.VITE_CF_WORKER_URL as string || "https://shiny-rice-e95bfuse-api.kade-fc1.workers.dev";
 
     const poll = async () => {
       if (!pollingRef.current) return;
@@ -187,11 +189,10 @@ const TemplateRun = () => {
         if (!token) return;
 
         const statusRes = await fetch(
-          `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/weavy-job-status?projectId=${projectId}`,
+          `${cfWorkerUrl}/api/projects/${projectId}`,
           {
             headers: {
               Authorization: `Bearer ${token}`,
-              apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
             },
           },
         );
@@ -217,10 +218,10 @@ const TemplateRun = () => {
         });
 
         if (normalizedStatus === "queued" || normalizedStatus === "running") {
-          setTimeout(poll, 3000);
+          setTimeout(poll, 2000);
         }
       } catch {
-        if (pollingRef.current) setTimeout(poll, 5000);
+        if (pollingRef.current) setTimeout(poll, 4000);
       }
     };
 

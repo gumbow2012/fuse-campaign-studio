@@ -5,12 +5,13 @@ import { handleRerun } from "./routes/rerun";
 import { handleUpload, handleRunTemplate, handleJobStatus } from "./routes/papparazi";
 import { handleWeavyTrigger } from "./routes/weavy-trigger";
 import { handleUsage } from "./routes/usage";
+import { handleEnqueue, handleProjectStatus } from "./routes/runner";
 import { serveAsset } from "./r2";
 
 const CORS_HEADERS: Record<string, string> = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, Authorization",
+  "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Service-Call",
 };
 
 function corsResponse(response: Response): Response {
@@ -38,8 +39,17 @@ export default {
     try {
       let response: Response;
 
-      // ── Job routes ──
-      if (path === "/jobs/submit" && request.method === "POST") {
+      // ── New: Project status (replaces weavy-job-status) ──
+      if (path.match(/^\/api\/projects\/[^/]+$/) && request.method === "GET") {
+        const projectId = path.split("/")[3];
+        response = await handleProjectStatus(request, env, projectId);
+
+      // ── New: Enqueue job for runner ──
+      } else if (path === "/api/enqueue" && request.method === "POST") {
+        response = await handleEnqueue(request, env);
+
+      // ── Legacy job routes ──
+      } else if (path === "/jobs/submit" && request.method === "POST") {
         response = await handleSubmit(request, env);
       } else if (path.match(/^\/jobs\/[^/]+\/status$/) && request.method === "GET") {
         const projectId = path.split("/")[2];
@@ -47,7 +57,7 @@ export default {
       } else if (path === "/jobs/rerun-step" && request.method === "POST") {
         response = await handleRerun(request, env);
 
-      // ── Papparazi custom pipeline ──
+      // ── Papparazi / legacy pipeline ──
       } else if (path === "/api/upload" && request.method === "POST") {
         response = await handleUpload(request, env);
       } else if (path === "/api/run-template" && request.method === "POST") {
@@ -60,7 +70,7 @@ export default {
       } else if (path === "/api/usage" && request.method === "GET") {
         response = await handleUsage(request, env);
 
-      // ── Weavy trigger (new dedicated route) ──
+      // ── Weavy trigger (legacy) ──
       } else if (path === "/weavy/trigger" && request.method === "POST") {
         response = await handleWeavyTrigger(request, env);
 
@@ -69,9 +79,9 @@ export default {
         const key = decodeURIComponent(path.slice("/assets/".length));
         response = await serveAsset(env, key);
 
-      // ── Weavy flow proxy (strip X-Frame-Options so we can iframe) ──
+      // ── Weavy flow proxy ──
       } else if (path.startsWith("/weavy/flow/") && request.method === "GET") {
-        const flowPath = path.slice("/weavy".length); // → /flow/<id>
+        const flowPath = path.slice("/weavy".length);
         const target = `https://app.weavy.ai${flowPath}${url.search}`;
         const upstream = await fetch(target, {
           headers: { "User-Agent": request.headers.get("User-Agent") || "" },
