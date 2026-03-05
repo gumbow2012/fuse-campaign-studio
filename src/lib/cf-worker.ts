@@ -191,6 +191,31 @@ export async function triggerWeavy(
   });
 }
 
+/* ──────────────── Weavy Run Recipe API ──────────────── */
+
+export interface RunWeavyRecipePayload {
+  recipeId: string;
+  graph: Record<string, unknown>;
+}
+
+export interface RunWeavyRecipeResponse {
+  runId?: string;
+  status: string;
+  error?: string;
+}
+
+/** Trigger a Weavy recipe run via the CF Worker (JWT-authenticated). */
+export async function runWeavyRecipe(
+  payload: RunWeavyRecipePayload,
+  token: string,
+): Promise<RunWeavyRecipeResponse> {
+  return cfFetch<RunWeavyRecipeResponse>("/api/weavy/run-recipe", {
+    method: "POST",
+    body: payload,
+    token,
+  });
+}
+
 export interface PapparaziJobStatus {
   status: "running" | "succeeded" | "failed" | "queued" | "complete";
   progress?: number;
