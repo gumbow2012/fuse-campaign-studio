@@ -86,31 +86,39 @@ serve(async (req) => {
 
     // Extract image from response — could be in various formats
     const choice = data.choices?.[0];
-    const content = choice?.message?.content;
+    const message = choice?.message;
+    const content = message?.content;
 
-    // If content is a string, it might contain a markdown image or base64
-    // If it's an array, look for image parts
     let outputImage: string | null = null;
 
-    if (typeof content === "string") {
-      // Check for base64 data URI
+    // Check message.images[] array (Gemini image generation format)
+    if (message?.images && Array.isArray(message.images)) {
+      for (const img of message.images) {
+        if (img?.image_url?.url) {
+          outputImage = img.image_url.url;
+          break;
+        }
+        if (img?.url) {
+          outputImage = img.url;
+          break;
+        }
+      }
+    }
+
+    // Fallback: check content string
+    if (!outputImage && typeof content === "string") {
       const dataUriMatch = content.match(/data:image\/[^;]+;base64,[A-Za-z0-9+/=]+/);
       if (dataUriMatch) {
         outputImage = dataUriMatch[0];
       }
-      // Check for markdown image
       const mdMatch = content.match(/!\[.*?\]\((https?:\/\/[^\s)]+)\)/);
       if (!outputImage && mdMatch) {
         outputImage = mdMatch[1];
       }
-      // If no image found, return the text
-      if (!outputImage) {
-        return new Response(
-          JSON.stringify({ error: "Model returned text only", text: content.slice(0, 500) }),
-          { status: 422, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-    } else if (Array.isArray(content)) {
+    }
+
+    // Fallback: check content array
+    if (!outputImage && Array.isArray(content)) {
       for (const part of content) {
         if (part.type === "image_url") {
           outputImage = part.image_url?.url;
