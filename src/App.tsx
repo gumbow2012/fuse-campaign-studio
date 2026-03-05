@@ -29,6 +29,7 @@ import PapparaziRun from "./pages/PapparaziRun";
 import JobStatus from "./pages/JobStatus";
 import FlowEmbed from "./pages/FlowEmbed";
 import FlowTest from "./pages/FlowTest";
+import NanoRun from "./pages/NanoRun";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -67,6 +68,7 @@ const App = () => (
             <Route path="/app/flow/:flowId" element={<ProtectedRoute><FlowEmbed /></ProtectedRoute>} />
             <Route path="/app/flow-test" element={<FlowTest />} />
             <Route path="/app/jobs/:jobId" element={<ProtectedRoute><JobStatus /></ProtectedRoute>} />
+            <Route path="/app/nano" element={<ProtectedRoute><NanoRun /></ProtectedRoute>} />
 
             {/* Admin routes */}
             <Route path="/admin" element={<AdminRoute><Admin /></AdminRoute>} />

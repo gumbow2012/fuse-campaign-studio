@@ -12,6 +12,7 @@ export interface Env {
   FAL_API_KEY?: string;
   KLING_ACCESS_KEY?: string;
   KLING_SECRET_KEY?: string;
+  GEMINI_API_KEY?: string;
 }
 
 export interface JobPayload {

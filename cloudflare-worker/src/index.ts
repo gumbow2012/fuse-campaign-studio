@@ -9,6 +9,7 @@ import { handleEnqueue, handleProjectStatus } from "./routes/runner";
 import { handlePresign, handleUploadPut } from "./routes/uploads";
 import { serveAsset } from "./r2";
 import { handleTestKling } from "./routes/test-kling";
+import { handleNanoRun } from "./routes/nano";
 
 const CORS_HEADERS: Record<string, string> = {
   "Access-Control-Allow-Origin": "*",
@@ -111,6 +112,10 @@ export default {
       // ── Test Kling auth ──
       } else if (path === "/api/test-kling" && request.method === "GET") {
         response = await handleTestKling(request, env);
+
+      // ── Nano Banana (Gemini image gen) ──
+      } else if (path === "/api/nano/run" && request.method === "POST") {
+        response = await handleNanoRun(request, env);
 
       // ── Health check ──
       } else if (path === "/health") {

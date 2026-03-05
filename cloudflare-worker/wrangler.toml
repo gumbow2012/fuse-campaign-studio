@@ -17,4 +17,5 @@ bucket_name = "fuse-assets"
 # FAL_API_KEY — fal.ai key for nano-banana-2 image editing
 # KLING_ACCESS_KEY — Kling access key (from developer portal)
 # KLING_SECRET_KEY — Kling secret key (for JWT signing)
+# GEMINI_API_KEY — Google Gemini API key for Nano Banana image generation
 
