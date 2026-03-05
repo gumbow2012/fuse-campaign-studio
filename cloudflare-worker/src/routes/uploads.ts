@@ -51,7 +51,7 @@ export async function handleUploadPut(request: Request, env: Env, key: string): 
     return Response.json({ error: "No body" }, { status: 400 });
   }
 
-  await env.ASSETS.put(key, request.body, {
+  await env.FUSE_ASSETS.put(key, request.body, {
     httpMetadata: { contentType },
   });
 
