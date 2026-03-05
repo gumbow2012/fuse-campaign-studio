@@ -1,0 +1,1 @@
+UPDATE public.profiles SET credits_balance = 500 WHERE user_id = '6c96111a-02f4-44f1-9e73-d2a0fbaa30d5';
