@@ -90,14 +90,33 @@ export async function handleEnqueue(request: Request, env: Env): Promise<Respons
  *  Input helpers
  * ══════════════════════════════════════════════════════════════ */
 
-/** Find the first URL-like value from inputs (for image). */
-function findImageUrl(inputs: Record<string, string>): string | undefined {
-  // Try common keys first
-  for (const key of ["image", "image_url", "clothing_item", "photo", "input_image"]) {
-    if (inputs[key] && inputs[key].startsWith("http")) return inputs[key];
+const WORKER_URL = "https://shiny-rice-e95bfuse-api.kade-fc1.workers.dev";
+
+/**
+ * Resolve an image input value to a usable URL.
+ * Supports:
+ *   - R2 key (starts with "uploads/") → convert to Worker asset URL
+ *   - Full URL (http/https) → use as-is
+ */
+function resolveImageUrl(value: string): string {
+  if (value.startsWith("uploads/") || value.startsWith("outputs/") || value.startsWith("projects/")) {
+    return `${WORKER_URL}/assets/${encodeURIComponent(value)}`;
   }
-  // Fallback: first URL value
-  return Object.values(inputs).find((v) => typeof v === "string" && v.startsWith("http"));
+  return value;
+}
+
+/** Find the first image value from inputs. */
+function findImageUrl(inputs: Record<string, string>): string | undefined {
+  for (const key of ["image", "image_url", "clothing_item", "photo", "input_image", "image_key"]) {
+    if (inputs[key]?.trim()) return resolveImageUrl(inputs[key]);
+  }
+  // Fallback: first value that looks like a URL or R2 key
+  for (const v of Object.values(inputs)) {
+    if (typeof v === "string" && (v.startsWith("http") || v.startsWith("uploads/"))) {
+      return resolveImageUrl(v);
+    }
+  }
+  return undefined;
 }
 
 function findPrompt(inputs: Record<string, string>): string {
@@ -303,7 +322,6 @@ async function uploadOutputsToR2(
   projectId: string,
   items: { type: string; url: string }[],
 ): Promise<{ type: string; url: string }[]> {
-  const workerUrl = "https://shiny-rice-e95bfuse-api.kade-fc1.workers.dev";
   const finalItems: { type: string; url: string }[] = [];
 
   for (const item of items) {
@@ -315,7 +333,7 @@ async function uploadOutputsToR2(
         const ct = item.type === "video" ? "video/mp4" : "image/png";
         const key = `outputs/${projectId}/${Date.now()}.${ext}`;
         await env.ASSETS.put(key, res.body, { httpMetadata: { contentType: ct } });
-        finalItems.push({ type: item.type, url: `${workerUrl}/assets/${encodeURIComponent(key)}` });
+        finalItems.push({ type: item.type, url: `${WORKER_URL}/assets/${encodeURIComponent(key)}` });
       } else {
         finalItems.push(item);
       }

@@ -6,6 +6,7 @@ import { handleUpload, handleRunTemplate, handleJobStatus } from "./routes/pappa
 import { handleWeavyTrigger } from "./routes/weavy-trigger";
 import { handleUsage } from "./routes/usage";
 import { handleEnqueue, handleProjectStatus } from "./routes/runner";
+import { handlePresign, handleUploadPut } from "./routes/uploads";
 import { serveAsset } from "./r2";
 
 const CORS_HEADERS: Record<string, string> = {
@@ -43,6 +44,15 @@ export default {
       if (path.match(/^\/api\/projects\/[^/]+$/) && request.method === "GET") {
         const projectId = path.split("/")[3];
         response = await handleProjectStatus(request, env, projectId);
+
+      // ── Presigned upload (step 1: get key + url) ──
+      } else if (path === "/api/uploads/presign" && request.method === "POST") {
+        response = await handlePresign(request, env);
+
+      // ── Direct upload to R2 (step 2: PUT file) ──
+      } else if (path.startsWith("/api/uploads/") && request.method === "PUT") {
+        const key = decodeURIComponent(path.slice("/api/uploads/".length));
+        response = await handleUploadPut(request, env, key);
 
       // ── New: Enqueue job for runner ──
       } else if (path === "/api/enqueue" && request.method === "POST") {
