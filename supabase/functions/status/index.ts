@@ -46,7 +46,7 @@ Deno.serve(async (req) => {
 
   const { data, error } = await supabase
     .from("projects")
-    .select("id,status,outputs,error,progress")
+    .select("id,status,outputs,error,progress,logs,attempts,max_attempts")
     .eq("id", projectId)
     .maybeSingle();
 
@@ -69,6 +69,9 @@ Deno.serve(async (req) => {
       projectId: data.id,
       status: data.status,
       progress: (data as any).progress ?? 0,
+      logs: (data as any).logs ?? [],
+      attempts: (data as any).attempts ?? 0,
+      maxAttempts: (data as any).max_attempts ?? 3,
       outputs: data.outputs ?? null,
       error: data.error ?? null,
     }),

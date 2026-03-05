@@ -1,0 +1,4 @@
+ALTER TABLE public.projects
+  ADD COLUMN IF NOT EXISTS logs jsonb NOT NULL DEFAULT '[]'::jsonb,
+  ADD COLUMN IF NOT EXISTS attempts integer NOT NULL DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS max_attempts integer NOT NULL DEFAULT 3;

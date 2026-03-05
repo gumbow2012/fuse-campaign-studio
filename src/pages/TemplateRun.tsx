@@ -108,6 +108,9 @@ interface OutputItem { type: string; url: string; label?: string; }
 interface ProjectResult {
   status: "queued" | "running" | "complete" | "failed";
   progress: number;
+  logs: string[];
+  attempts: number;
+  maxAttempts: number;
   outputs: OutputItem[];
   error?: string;
 }
@@ -122,9 +125,11 @@ const TemplateRun = () => {
 
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>("");
   const [files, setFiles] = useState<Record<string, File | null>>({});
+  const [textInputs, setTextInputs] = useState<Record<string, string>>({});
   const [runs, setRuns] = useState(1);
   const [loading, setLoading] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
+  const [showLogs, setShowLogs] = useState(false);
 
   // Result state (inline, no navigation)
   const [projectId, setProjectId] = useState<string | null>(null);
@@ -160,8 +165,13 @@ const TemplateRun = () => {
 
   const template = templates?.find((t: any) => t.id === selectedTemplateId);
   const inputSchema: InputField[] = (template?.input_schema as any) || [];
+  const imageFields = inputSchema.filter((i) => i.type === "image");
+  const textFields = inputSchema.filter((i) => i.type === "text" || i.type === "prompt");
   const requiredFields = inputSchema.filter((i) => i.required);
-  const allRequiredUploaded = requiredFields.every((f) => files[f.key]);
+  const allRequiredFilled = requiredFields.every((f) => {
+    if (f.type === "image") return !!files[f.key];
+    return !!(textInputs[f.key]?.trim());
+  });
   const totalCost = (template?.estimated_credits_per_run || 0) * runs;
 
   /* ─── Poll job status via edge function ─── */
@@ -199,6 +209,9 @@ const TemplateRun = () => {
         setResult({
           status: normalizedStatus,
           progress: status.progress ?? 0,
+          logs: status.logs ?? [],
+          attempts: status.attempts ?? 0,
+          maxAttempts: status.maxAttempts ?? 3,
           outputs,
           error: status.error ?? undefined,
         });
@@ -218,8 +231,8 @@ const TemplateRun = () => {
   const handleRun = async () => {
     if (!user) { navigate("/auth"); return; }
     if (!template) return;
-    if (!allRequiredUploaded) {
-      toast({ title: "Missing uploads", description: "Please upload all required files.", variant: "destructive" });
+    if (!allRequiredFilled) {
+      toast({ title: "Missing inputs", description: "Please fill all required fields.", variant: "destructive" });
       return;
     }
     setShowConfirm(true);
@@ -237,11 +250,16 @@ const TemplateRun = () => {
       const token = session?.access_token;
       if (!token) throw new Error("Not authenticated – no session token");
 
-      // Upload files to storage
+      // Build inputs: upload files + include text inputs
       const inputs: Record<string, string> = {};
       for (const field of inputSchema) {
-        const f = files[field.key];
-        if (f) inputs[field.key] = await uploadToStorage(user.id, field.key, f);
+        if (field.type === "image") {
+          const f = files[field.key];
+          if (f) inputs[field.key] = await uploadToStorage(user.id, field.key, f);
+        } else {
+          const val = textInputs[field.key]?.trim();
+          if (val) inputs[field.key] = val;
+        }
       }
 
       // Call run-template edge function (handles credits + Weavy trigger)
@@ -257,7 +275,7 @@ const TemplateRun = () => {
 
       // Start polling via edge function
       setProjectId(jobId);
-      setResult({ status: "queued", progress: 0, outputs: [] });
+      setResult({ status: "queued", progress: 0, logs: [], attempts: 0, maxAttempts: 3, outputs: [] });
     } catch (err: any) {
       toast({ title: "Error", description: err.message, variant: "destructive" });
     } finally {
@@ -315,15 +333,41 @@ const TemplateRun = () => {
               {/* Upload zones */}
               <div className="flex-1 overflow-y-auto p-4 space-y-4">
                 {inputSchema.length > 0 ? (
-                  inputSchema.map((field) => (
-                    <UploadZone
-                      key={field.key}
-                      label={field.label}
-                      required={field.required}
-                      file={files[field.key] || null}
-                      onFile={(f) => setFiles((prev) => ({ ...prev, [field.key]: f }))}
-                    />
-                  ))
+                  <>
+                    {inputSchema.filter(f => f.type === "image").map((field) => (
+                      <UploadZone
+                        key={field.key}
+                        label={field.label}
+                        required={field.required}
+                        file={files[field.key] || null}
+                        onFile={(f) => setFiles((prev) => ({ ...prev, [field.key]: f }))}
+                      />
+                    ))}
+                    {inputSchema.filter(f => f.type === "text" || f.type === "prompt").map((field) => (
+                      <div key={field.key}>
+                        <label className="text-[9px] font-black uppercase tracking-[0.25em] text-foreground/70 mb-2 block">
+                          {field.label} {field.required && <span className="text-destructive-foreground">*</span>}
+                        </label>
+                        {field.type === "prompt" ? (
+                          <textarea
+                            value={textInputs[field.key] || ""}
+                            onChange={(e) => setTextInputs((prev) => ({ ...prev, [field.key]: e.target.value }))}
+                            placeholder={`Enter ${field.label.toLowerCase()}...`}
+                            rows={3}
+                            className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring resize-none"
+                          />
+                        ) : (
+                          <input
+                            type="text"
+                            value={textInputs[field.key] || ""}
+                            onChange={(e) => setTextInputs((prev) => ({ ...prev, [field.key]: e.target.value }))}
+                            placeholder={`Enter ${field.label.toLowerCase()}...`}
+                            className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                          />
+                        )}
+                      </div>
+                    ))}
+                  </>
                 ) : (
                   <div className="py-12 text-center">
                     <p className="text-xs text-muted-foreground/50">No file inputs required</p>
@@ -364,7 +408,7 @@ const TemplateRun = () => {
                 ) : (
                   <Button
                     onClick={handleRun}
-                    disabled={!allRequiredUploaded || loading || isRunning}
+                    disabled={!allRequiredFilled || loading || isRunning}
                     className="w-full gradient-primary text-primary-foreground font-black text-xs tracking-[0.25em] rounded-md h-10 glow-blue hover:opacity-90 active:scale-[0.98] transition-all border-0 uppercase disabled:opacity-40"
                   >
                     {loading ? (
@@ -397,8 +441,8 @@ const TemplateRun = () => {
 
           {/* Running state */}
           {isRunning && (
-            <div className="flex-1 flex items-center justify-center p-8">
-              <div className="text-center space-y-5 w-full max-w-xs">
+            <div className="flex-1 flex flex-col items-center justify-center p-8">
+              <div className="text-center space-y-5 w-full max-w-sm">
                 <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mx-auto">
                   <Loader2 className="w-8 h-8 text-primary animate-spin" />
                 </div>
@@ -406,12 +450,33 @@ const TemplateRun = () => {
                   <p className="text-sm font-bold text-foreground">
                     {result?.status === "queued" ? "Queued..." : "Generating your assets..."}
                   </p>
-                  <p className="text-xs text-muted-foreground mt-1">This may take a few minutes</p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Attempt {result?.attempts ?? 0}/{result?.maxAttempts ?? 3} · This may take a few minutes
+                  </p>
                 </div>
                 <div className="space-y-1.5">
                   <Progress value={result?.progress ?? 0} className="h-2" />
                   <p className="text-[10px] text-muted-foreground font-mono">{result?.progress ?? 0}%</p>
                 </div>
+
+                {/* Live logs */}
+                {(result?.logs?.length ?? 0) > 0 && (
+                  <div className="w-full text-left">
+                    <button
+                      onClick={() => setShowLogs((v) => !v)}
+                      className="text-[10px] text-muted-foreground hover:text-foreground font-mono mb-1"
+                    >
+                      {showLogs ? "▼" : "►"} Logs ({result!.logs.length})
+                    </button>
+                    {showLogs && (
+                      <div className="bg-secondary/40 rounded-md p-2 max-h-40 overflow-y-auto">
+                        {result!.logs.map((log, i) => (
+                          <p key={i} className="text-[9px] font-mono text-muted-foreground leading-relaxed">{log}</p>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -419,10 +484,32 @@ const TemplateRun = () => {
           {/* Failed state */}
           {isFailed && (
             <div className="flex-1 flex items-center justify-center p-8">
-              <div className="text-center space-y-4 max-w-sm">
+              <div className="text-center space-y-4 max-w-sm w-full">
                 <AlertTriangle className="w-10 h-10 text-destructive-foreground mx-auto" />
                 <p className="text-sm font-bold text-foreground">Generation Failed</p>
                 <p className="text-xs text-muted-foreground">{result?.error || "Something went wrong."}</p>
+                {result?.attempts && result.attempts > 1 && (
+                  <p className="text-[10px] text-muted-foreground">
+                    Failed after {result.attempts} attempt{result.attempts !== 1 ? "s" : ""}
+                  </p>
+                )}
+                {(result?.logs?.length ?? 0) > 0 && (
+                  <div className="text-left">
+                    <button
+                      onClick={() => setShowLogs((v) => !v)}
+                      className="text-[10px] text-muted-foreground hover:text-foreground font-mono mb-1"
+                    >
+                      {showLogs ? "▼" : "►"} Logs ({result!.logs.length})
+                    </button>
+                    {showLogs && (
+                      <div className="bg-secondary/40 rounded-md p-2 max-h-40 overflow-y-auto">
+                        {result!.logs.map((log, i) => (
+                          <p key={i} className="text-[9px] font-mono text-muted-foreground leading-relaxed">{log}</p>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
           )}

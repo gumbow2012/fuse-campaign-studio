@@ -18,6 +18,25 @@ function errText(e: unknown): string {
   }
 }
 
+function ts(): string {
+  return new Date().toISOString();
+}
+
+async function appendLog(
+  sb: ReturnType<typeof createClient>,
+  projectId: string,
+  message: string,
+) {
+  const { data } = await sb
+    .from("projects")
+    .select("logs")
+    .eq("id", projectId)
+    .single();
+  const logs: string[] = (data as any)?.logs ?? [];
+  logs.push(`[${ts()}] ${message}`);
+  await sb.from("projects").update({ logs } as any).eq("id", projectId);
+}
+
 async function failProject(
   sb: ReturnType<typeof createClient>,
   projectId: string,
@@ -25,13 +44,14 @@ async function failProject(
   source: string,
   trace: Record<string, unknown>,
 ) {
+  await appendLog(sb, projectId, `FAILED: ${error}`);
   await sb.from("projects").update({
     status: "failed",
     error: error.slice(0, 10000),
-    failed_at: new Date().toISOString(),
+    failed_at: ts(),
     failed_source: source,
     debug_trace: trace,
-  }).eq("id", projectId);
+  } as any).eq("id", projectId);
 }
 
 /* ── Firebase token exchange for Weavy ── */
@@ -45,10 +65,7 @@ async function getWeavyIdToken(): Promise<string> {
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        grant_type: "refresh_token",
-        refresh_token: refreshToken,
-      }),
+      body: JSON.stringify({ grant_type: "refresh_token", refresh_token: refreshToken }),
     },
   );
 
@@ -61,35 +78,70 @@ async function getWeavyIdToken(): Promise<string> {
   return data.id_token;
 }
 
-/* ── Trigger Weavy recipe ── */
-async function triggerWeavyRecipe(
+/* ── Trigger Weavy recipe with retries ── */
+async function triggerWeavyRecipeWithRetries(
+  sb: ReturnType<typeof createClient>,
+  projectId: string,
   recipeId: string,
   inputs: Record<string, unknown>,
+  maxAttempts: number,
 ): Promise<string> {
   const baseUrl = Deno.env.get("WEAVY_API_BASE_URL") || "https://app.weavy.ai";
-  const idToken = await getWeavyIdToken();
   const url = `${baseUrl}/api/v1/recipe-runs/recipes/${recipeId}/run`;
 
-  console.log(`[weavy] triggering recipe=${recipeId}`);
+  let lastError = "";
 
-  const res = await fetch(url, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${idToken}`,
-    },
-    body: JSON.stringify({ inputs }),
-  });
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    await sb.from("projects").update({ attempts: attempt } as any).eq("id", projectId);
+    await appendLog(sb, projectId, `Attempt ${attempt}/${maxAttempts}: triggering Weavy recipe ${recipeId}`);
 
-  if (!res.ok) {
-    const body = await res.text();
-    throw new Error(`Weavy trigger failed (${res.status}): ${body.slice(0, 1000)}`);
+    try {
+      const idToken = await getWeavyIdToken();
+
+      const res = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${idToken}`,
+        },
+        body: JSON.stringify({ inputs }),
+      });
+
+      if (!res.ok) {
+        const body = await res.text();
+        lastError = `Weavy trigger failed (${res.status}): ${body.slice(0, 500)}`;
+        await appendLog(sb, projectId, `Attempt ${attempt} failed: ${lastError}`);
+
+        // Don't retry on 4xx (client errors) except 429 (rate limit)
+        if (res.status >= 400 && res.status < 500 && res.status !== 429) {
+          throw new Error(lastError);
+        }
+
+        // Wait before retry (exponential backoff)
+        if (attempt < maxAttempts) {
+          const delay = Math.min(2000 * Math.pow(2, attempt - 1), 15000);
+          await appendLog(sb, projectId, `Waiting ${delay}ms before retry...`);
+          await new Promise((r) => setTimeout(r, delay));
+        }
+        continue;
+      }
+
+      const data = await res.json();
+      const runId = data.id || data.runId;
+      await appendLog(sb, projectId, `Weavy run started: ${runId}`);
+      return runId;
+    } catch (e) {
+      lastError = errText(e);
+      await appendLog(sb, projectId, `Attempt ${attempt} exception: ${lastError}`);
+
+      if (attempt < maxAttempts) {
+        const delay = Math.min(2000 * Math.pow(2, attempt - 1), 15000);
+        await new Promise((r) => setTimeout(r, delay));
+      }
+    }
   }
 
-  const data = await res.json();
-  const runId = data.id || data.runId;
-  console.log(`[weavy] run started runId=${runId}`);
-  return runId;
+  throw new Error(`All ${maxAttempts} attempts failed. Last error: ${lastError}`);
 }
 
 /* ── Main ── */
@@ -100,7 +152,7 @@ Deno.serve(async (req) => {
   }
 
   const traceId = crypto.randomUUID().slice(0, 8);
-  const trace: Record<string, unknown> = { traceId, ts: new Date().toISOString() };
+  const trace: Record<string, unknown> = { traceId, ts: ts() };
 
   const sb = createClient(
     Deno.env.get("SUPABASE_URL")!,
@@ -120,7 +172,6 @@ Deno.serve(async (req) => {
     const user = userData.user;
     trace.userId = user.id;
     trace.step = "auth_ok";
-    console.log(`[${traceId}] auth ok user=${user.id}`);
 
     // ── Parse body ──
     const { templateId, inputs } = await req.json();
@@ -128,7 +179,6 @@ Deno.serve(async (req) => {
     trace.templateId = templateId;
     trace.received_input_keys = Object.keys(inputs || {});
     trace.step = "body_parsed";
-    console.log(`[${traceId}] templateId=${templateId} inputKeys=${trace.received_input_keys}`);
 
     // ── Get template ──
     const { data: template, error: tplErr } = await sb
@@ -152,8 +202,6 @@ Deno.serve(async (req) => {
     if (profile.credits_balance < creditCost) {
       throw new Error(`Insufficient credits: have ${profile.credits_balance}, need ${creditCost}`);
     }
-    trace.credits_before = profile.credits_balance;
-    trace.credit_cost = creditCost;
     trace.step = "credits_ok";
 
     // ── Create project ──
@@ -164,14 +212,16 @@ Deno.serve(async (req) => {
         template_id: templateId,
         status: "queued",
         inputs: inputs || {},
-      })
+        attempts: 0,
+        max_attempts: 3,
+        logs: [`[${ts()}] Job created`],
+      } as any)
       .select()
       .single();
     if (projErr) throw new Error(`Project insert failed: ${projErr.message}`);
     projectId = project.id;
     trace.projectId = projectId;
     trace.step = "project_created";
-    console.log(`[${traceId}] project=${projectId}`);
 
     // ── Deduct credits ──
     await sb
@@ -187,15 +237,19 @@ Deno.serve(async (req) => {
       project_id: projectId,
       description: `Run template: ${template.name}`,
     });
+    await appendLog(sb, projectId, `Credits deducted: ${creditCost}`);
     trace.step = "credits_deducted";
 
-    // ── Trigger Weavy recipe ──
+    // ── Trigger Weavy recipe with retries ──
     const recipeId = template.weavy_recipe_id;
     if (!recipeId) {
       throw new Error("Template has no weavy_recipe_id configured");
     }
 
-    const runId = await triggerWeavyRecipe(recipeId, inputs || {});
+    const maxAttempts = 3;
+    const runId = await triggerWeavyRecipeWithRetries(
+      sb, projectId, recipeId, inputs || {}, maxAttempts,
+    );
     trace.weavy_run_id = runId;
     trace.step = "weavy_triggered";
 
@@ -203,17 +257,13 @@ Deno.serve(async (req) => {
     await sb.from("projects").update({
       status: "running",
       weavy_run_id: runId,
-      started_at: new Date().toISOString(),
+      started_at: ts(),
+      progress: 10,
       debug_trace: trace,
-    }).eq("id", projectId);
+    } as any).eq("id", projectId);
 
     return new Response(
-      JSON.stringify({
-        projectId,
-        status: "running",
-        weavyRunId: runId,
-        weavyRecipeId: recipeId,
-      }),
+      JSON.stringify({ projectId, status: "running", weavyRunId: runId, weavyRecipeId: recipeId }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
   } catch (error) {
