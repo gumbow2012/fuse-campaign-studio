@@ -30,9 +30,8 @@ export default function UploadPage() {
       const uploadJson = await uploadRes.json()
       setUploadResult(JSON.stringify(uploadJson, null, 2))
 
-      if (!uploadJson.marker || uploadJson.marker !== "UPLOAD_ROUTE_WORKING") {
-        setRunResult("⚠️ Upload response missing marker UPLOAD_ROUTE_WORKING — skipping run.")
-        return
+      if (!uploadJson?.ok || !uploadJson?.assetKey) {
+        throw new Error("Upload failed: missing ok or assetKey")
       }
 
       // Trigger template run
