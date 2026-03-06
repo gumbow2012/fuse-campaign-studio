@@ -84,5 +84,12 @@ export async function handleUploadMultipart(request: Request, env: Env): Promise
 
   const url = `${WORKER_URL}/assets/${encodeURIComponent(key)}`;
 
-  return Response.json({ key, url });
+  return Response.json({
+    ok: true,
+    marker: "UPLOAD_ROUTE_WORKING",
+    key,
+    url,
+    assetKey: key,
+    assetUrl: url,
+  });
 }
