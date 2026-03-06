@@ -7,14 +7,14 @@ const USER_ID = "7a20bd20-b93b-4742-a502-07648cb834e6"
 export default function UploadPage() {
   const [file, setFile] = useState<File | null>(null)
   const [uploading, setUploading] = useState(false)
-  const [uploadResult, setUploadResult] = useState("")
+  const [uploadDebug, setUploadDebug] = useState<any>(null)
   const [runResult, setRunResult] = useState("")
 
   async function handleUpload() {
     if (!file) { alert("choose file first"); return }
 
     setUploading(true)
-    setUploadResult("")
+    setUploadDebug(null)
     setRunResult("")
 
     try {
@@ -27,11 +27,14 @@ export default function UploadPage() {
         body: fd,
       })
 
-      const uploadJson = await uploadRes.json()
-      setUploadResult(JSON.stringify(uploadJson, null, 2))
+      const rawText = await uploadRes.text()
+      let uploadJson: any = null
+      try { uploadJson = JSON.parse(rawText) } catch {}
+
+      setUploadDebug({ status: uploadRes.status, rawText, parsed: uploadJson })
 
       if (!uploadJson?.ok || !uploadJson?.assetKey) {
-        throw new Error("Upload failed: missing ok or assetKey")
+        throw new Error(`Upload failed. Status: ${uploadRes.status}. Raw response: ${rawText}`)
       }
 
       // Trigger template run
@@ -48,7 +51,7 @@ export default function UploadPage() {
       const runJson = await runRes.json()
       setRunResult(JSON.stringify(runJson, null, 2))
     } catch (err: any) {
-      setUploadResult(`Error: ${err.message}`)
+      setRunResult(`Error: ${err.message}`)
     } finally {
       setUploading(false)
     }
@@ -63,10 +66,12 @@ export default function UploadPage() {
         {uploading ? "Uploading…" : "Upload & Run"}
       </button>
 
-      {uploadResult && (
+      {uploadDebug && (
         <>
-          <h3 style={{ marginTop: 24 }}>Upload Response</h3>
-          <pre style={{ background: "#111", color: "#0f0", padding: 16, borderRadius: 8, overflow: "auto" }}>{uploadResult}</pre>
+          <h3 style={{ marginTop: 24 }}>Upload Debug</h3>
+          <pre style={{ background: "#111", color: "#0f0", padding: 16, borderRadius: 8, overflow: "auto" }}>
+            {JSON.stringify(uploadDebug, null, 2)}
+          </pre>
         </>
       )}
 
