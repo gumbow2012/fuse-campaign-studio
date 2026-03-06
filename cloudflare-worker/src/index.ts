@@ -121,6 +121,16 @@ export default {
       } else if (path === "/api/nano/run" && request.method === "POST") {
         response = await handleNanoRun(request, env);
 
+      // ── Debug: prove correct bundle is live ──
+      } else if (path === "/debug-upload-check") {
+        response = Response.json({
+          ok: true,
+          marker: "DEBUG_UPLOAD_CHECK_LIVE",
+          path,
+          time: new Date().toISOString(),
+          routes: ["/api/uploads", "/api/uploads/presign", "/api/enqueue", "/api/projects/:id"],
+        });
+
       // ── Health check ──
       } else if (path === "/health") {
         response = Response.json({ ok: true, timestamp: Date.now() });
