@@ -1,28 +1,59 @@
 import { useState, useCallback, useEffect, useRef } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import Navbar from "@/components/Navbar";
+import { Button } from "@/components/ui/button";
+import { useAuth } from "@/contexts/AuthContext";
+import CreditConfirmModal from "@/components/CreditConfirmModal";
+import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { templateConfigs, type TemplateConfig, type TemplateInput } from "@/lib/template-configs";
+import { useQuery } from "@tanstack/react-query";
 import {
-  Minus, Plus, Upload, X, Zap, ChevronDown,
-  Loader2, Download, CheckCircle2, AlertTriangle,
-  Image as ImageIcon, Film,
+  Minus, Plus, Upload, X, Zap, ChevronLeft,
+  Loader2, Download, CheckCircle2, AlertTriangle, Copy, Maximize2,
+  MoreVertical, DollarSign, Sparkles, Image as ImageIcon, Film,
 } from "lucide-react";
+import { Progress } from "@/components/ui/progress";
 
 /* ─── Constants ─── */
-const WORKER = "https://shiny-rice-e95bfuse-api.kade-fc1.workers.dev";
-const API_KEY = "fuse_sk_live_k4d3m4dd3n2025xQ9zPv7";
-const USER_ID = "7a20bd20-b93b-4742-a502-07648cb834e6";
+const CF_WORKER_URL = import.meta.env.VITE_CF_WORKER_URL as string || "https://shiny-rice-e95bfuse-api.kade-fc1.workers.dev";
+const CREDIT_DOLLAR_VALUE = 0.098; // ~$0.098 per credit (Starter: $49/500)
 
-/* ─── Upload card ─── */
-interface UploadCardProps {
-  input: TemplateInput;
+/* ─── R2 upload ─── */
+const uploadToR2 = async (token: string, fieldKey: string, file: File): Promise<string> => {
+  const presignRes = await fetch(`${CF_WORKER_URL}/api/uploads/presign`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ filename: `${fieldKey}-${file.name}`, content_type: file.type }),
+  });
+  if (!presignRes.ok) throw new Error(`Presign failed: ${await presignRes.text()}`);
+  const { key, upload_url } = await presignRes.json();
+  const putRes = await fetch(upload_url, {
+    method: "PUT",
+    headers: { "Content-Type": file.type, Authorization: `Bearer ${token}` },
+    body: file,
+  });
+  if (!putRes.ok) throw new Error(`Upload failed: ${await putRes.text()}`);
+  return key;
+};
+
+/* ─── Category icons/colors ─── */
+const categoryConfig: Record<string, { color: string; icon: string }> = {
+  Street: { color: "text-orange-400", icon: "🔥" },
+  Editorial: { color: "text-purple-400", icon: "📸" },
+  UGC: { color: "text-green-400", icon: "🤳" },
+  Studio: { color: "text-blue-400", icon: "💡" },
+  General: { color: "text-muted-foreground", icon: "✦" },
+};
+
+/* ─── Upload zone ─── */
+interface UploadZoneProps {
+  label: string;
+  required: boolean;
   file: File | null;
-  uploaded: { assetKey: string; assetUrl: string } | null;
-  onFile: (f: File | null) => void;
+  onFile: (file: File | null) => void;
 }
 
-const UploadCard = ({ input, file, uploaded, onFile }: UploadCardProps) => {
+const UploadZone = ({ label, required, file, onFile }: UploadZoneProps) => {
   const [dragOver, setDragOver] = useState(false);
 
   const handleDrop = useCallback((e: React.DragEvent) => {
@@ -33,60 +64,36 @@ const UploadCard = ({ input, file, uploaded, onFile }: UploadCardProps) => {
   }, [onFile]);
 
   const handleClick = () => {
-    const inp = document.createElement("input");
-    inp.type = "file";
-    inp.accept = "image/*";
-    inp.onchange = (e) => {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = "image/*";
+    input.onchange = (e) => {
       const f = (e.target as HTMLInputElement).files?.[0];
       if (f) onFile(f);
     };
-    inp.click();
+    input.click();
   };
 
   return (
-    <div className="rounded-xl border border-border/30 bg-card/60 backdrop-blur-sm p-4 space-y-3">
-      {/* Header */}
-      <div className="flex items-center gap-2">
-        <span className="text-[9px] font-black tracking-[0.15em] uppercase bg-primary/20 text-primary px-2.5 py-0.5 rounded">
-          FILE
-        </span>
-        <div className="flex-1 h-px bg-border/20" />
-        {input.required && (
-          <span className="text-[8px] font-bold uppercase tracking-wider text-primary/60 bg-primary/10 px-1.5 py-0.5 rounded">
-            Required
-          </span>
+    <div className="space-y-2">
+      <div className="flex items-center justify-between">
+        <label className="text-[10px] font-bold uppercase tracking-[0.2em] text-foreground/60">
+          {label}
+        </label>
+        {required && (
+          <span className="text-[8px] font-bold uppercase tracking-wider text-primary/70 bg-primary/10 px-1.5 py-0.5 rounded">Required</span>
         )}
       </div>
-
-      {/* Label */}
-      <p className="text-[10px] font-black uppercase tracking-[0.25em] text-foreground/60">
-        {input.label}
-      </p>
-
-      {/* Upload zone or preview */}
       {file ? (
-        <div className={`relative rounded-lg border p-3 flex items-center gap-3 transition-all ${
-          uploaded ? "border-green-500/40 bg-green-500/[0.04]" : "border-primary/30 bg-primary/[0.03]"
-        }`}>
-          <img
-            src={URL.createObjectURL(file)}
-            alt={input.label}
-            className="w-14 h-14 object-cover rounded-lg ring-1 ring-border/30"
-          />
+        <div className="relative rounded-xl border border-primary/30 bg-primary/[0.03] p-3 flex items-center gap-3 group">
+          <img src={URL.createObjectURL(file)} alt={label} className="w-16 h-16 object-cover rounded-lg ring-1 ring-border" />
           <div className="flex-1 min-w-0">
             <p className="text-xs font-semibold text-foreground truncate">{file.name}</p>
-            <p className="text-[10px] text-muted-foreground mt-0.5">
-              {(file.size / 1024).toFixed(0)} KB · {file.type.split("/")[1]?.toUpperCase()}
-            </p>
-            {uploaded && (
-              <p className="text-[9px] text-green-400 font-bold mt-0.5 flex items-center gap-1">
-                <CheckCircle2 size={10} /> Uploaded
-              </p>
-            )}
+            <p className="text-[10px] text-muted-foreground mt-0.5">{(file.size / 1024).toFixed(0)} KB · {file.type.split("/")[1]?.toUpperCase()}</p>
           </div>
           <button
             onClick={() => onFile(null)}
-            className="p-1.5 rounded-lg bg-secondary/60 hover:bg-destructive/20 text-muted-foreground hover:text-foreground transition-all"
+            className="p-1.5 rounded-lg bg-secondary/60 hover:bg-destructive/20 text-muted-foreground hover:text-destructive-foreground transition-all"
           >
             <X size={12} />
           </button>
@@ -97,518 +104,563 @@ const UploadCard = ({ input, file, uploaded, onFile }: UploadCardProps) => {
           onDragLeave={() => setDragOver(false)}
           onDrop={handleDrop}
           onClick={handleClick}
-          className={`rounded-lg border-2 border-dashed py-10 flex flex-col items-center justify-center gap-2.5 cursor-pointer transition-all duration-200 group ${
+          className={`relative rounded-xl border-2 border-dashed py-8 flex flex-col items-center justify-center gap-2.5 cursor-pointer transition-all duration-200 group ${
             dragOver
               ? "border-primary bg-primary/[0.06] scale-[1.01]"
-              : "border-border/30 hover:border-primary/40 hover:bg-foreground/[0.015]"
+              : "border-border/40 hover:border-primary/40 hover:bg-foreground/[0.015]"
           }`}
         >
-          <div className="w-10 h-10 rounded-xl bg-secondary/40 flex items-center justify-center group-hover:bg-primary/10 transition-colors">
-            <ImageIcon className="w-5 h-5 text-muted-foreground/30 group-hover:text-primary/60 transition-colors" />
+          <div className="w-10 h-10 rounded-xl bg-secondary/50 flex items-center justify-center group-hover:bg-primary/10 transition-colors">
+            <ImageIcon className="w-5 h-5 text-muted-foreground/40 group-hover:text-primary/60 transition-colors" />
           </div>
-          <p className="text-xs text-muted-foreground/40 group-hover:text-muted-foreground/60 transition-colors">
-            Drop image or <span className="text-primary/70 underline underline-offset-2">browse</span>
-          </p>
-          <p className="text-[9px] text-muted-foreground/25">PNG, JPG up to 10MB</p>
+          <div className="text-center">
+            <p className="text-xs font-medium text-foreground/40 group-hover:text-foreground/60 transition-colors">
+              Drop image or <span className="text-primary/70 underline underline-offset-2">browse</span>
+            </p>
+            <p className="text-[9px] text-muted-foreground/30 mt-0.5">PNG, JPG up to 10MB</p>
+          </div>
         </div>
       )}
     </div>
   );
 };
 
-/* ─── Debug accordion ─── */
-const DebugSection = ({ title, data, color = "text-primary" }: { title: string; data: any; color?: string }) => {
-  const [open, setOpen] = useState(false);
-  if (!data) return null;
-  return (
-    <div className="border border-border/20 rounded-lg overflow-hidden">
-      <button
-        onClick={() => setOpen(!open)}
-        className="w-full flex items-center justify-between px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-muted-foreground hover:text-foreground transition-colors"
-      >
-        <span>{title}</span>
-        <ChevronDown size={12} className={`transition-transform ${open ? "rotate-180" : ""}`} />
-      </button>
-      {open && (
-        <pre className={`px-3 pb-3 text-[10px] font-mono ${color} overflow-auto max-h-60 leading-relaxed`}>
-          {JSON.stringify(data, null, 2)}
-        </pre>
-      )}
-    </div>
-  );
-};
-
-/* ─── Media helpers ─── */
-function isMedia(url: string) {
-  const l = url.toLowerCase();
-  if (/\.(jpg|jpeg|png|gif|webp|svg)/.test(l)) return "image";
-  if (/\.(mp4|webm|mov)/.test(l)) return "video";
-  return null;
-}
-
-function extractOutputUrls(outputs: any): string[] {
-  if (!outputs) return [];
-  const urls: string[] = [];
-
-  // Handle { items: [{ type, url }] } from the runner
-  if (outputs.items && Array.isArray(outputs.items)) {
-    for (const item of outputs.items) {
-      if (item?.url && typeof item.url === "string") urls.push(item.url);
-    }
-    if (urls.length > 0) return urls;
-  }
-
-  // Fallback: scan all values recursively
-  const scan = (obj: unknown) => {
-    if (typeof obj === "string" && obj.startsWith("http")) urls.push(obj);
-    else if (Array.isArray(obj)) obj.forEach(scan);
-    else if (obj && typeof obj === "object") Object.values(obj).forEach(scan);
-  };
-  scan(outputs);
-  return urls;
+/* ─── Types ─── */
+interface InputField { key: string; label: string; nodeId: string; type: string; required: boolean; }
+interface OutputItem { type: string; url: string; label?: string; }
+interface ProjectResult {
+  status: "queued" | "running" | "complete" | "failed";
+  progress: number;
+  logs: string[];
+  attempts: number;
+  maxAttempts: number;
+  outputs: OutputItem[];
+  error?: string;
 }
 
 /* ═══════════════════════════════════════════════════════════ */
 /* ═══ MAIN PAGE ════════════════════════════════════════════ */
 /* ═══════════════════════════════════════════════════════════ */
 const TemplateRun = () => {
+  const navigate = useNavigate();
+  const { slug } = useParams<{ slug: string }>();
   const [searchParams] = useSearchParams();
   const queryTemplateId = searchParams.get("templateId");
+  const { user, profile } = useAuth();
 
-  // Find initial template from URL param
-  const initialTemplate = queryTemplateId
-    ? templateConfigs.find((t) => t.templateId === queryTemplateId) || templateConfigs[0]
-    : templateConfigs[0];
-
-  const [selectedTemplate, setSelectedTemplate] = useState<TemplateConfig>(initialTemplate);
-  const [uploadedFiles, setUploadedFiles] = useState<Record<string, File | null>>({});
-  const [uploadedAssets, setUploadedAssets] = useState<Record<string, { assetKey: string; assetUrl: string } | null>>({});
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string>("");
+  const [files, setFiles] = useState<Record<string, File | null>>({});
+  const [textInputs, setTextInputs] = useState<Record<string, string>>({});
   const [runs, setRuns] = useState(1);
+  const [loading, setLoading] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
+  const [showLogs, setShowLogs] = useState(false);
+  const [categoryFilter, setCategoryFilter] = useState<string>("All");
 
-  // Execution state
-  const [isRunning, setIsRunning] = useState(false);
   const [projectId, setProjectId] = useState<string | null>(null);
-  const [status, setStatus] = useState<string | null>(null);
-  const [outputs, setOutputs] = useState<any>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [progress, setProgress] = useState(0);
-  const [stepLogs, setStepLogs] = useState<string[]>([]);
-
-  // Debug state
-  const [uploadDebug, setUploadDebug] = useState<any[]>([]);
-  const [runTemplateDebug, setRunTemplateDebug] = useState<any>(null);
-  const [enqueueDebug, setEnqueueDebug] = useState<any>(null);
-  const [pollDebug, setPollDebug] = useState<any>(null);
-
+  const [result, setResult] = useState<ProjectResult | null>(null);
   const pollingRef = useRef(false);
 
-  // Reset everything when template changes
-  const switchTemplate = (t: TemplateConfig) => {
-    pollingRef.current = false;
-    setSelectedTemplate(t);
-    setUploadedFiles({});
-    setUploadedAssets({});
-    setIsRunning(false);
-    setProjectId(null);
-    setStatus(null);
-    setOutputs(null);
-    setError(null);
-    setStepLogs([]);
-    setUploadDebug([]);
-    setRunTemplateDebug(null);
-    setEnqueueDebug(null);
-    setPollDebug(null);
-  };
+  // Load templates
+  const { data: templates, isLoading: templatesLoading } = useQuery({
+    queryKey: ["active-templates"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("templates")
+        .select("*")
+        .eq("is_active", true)
+        .order("name");
+      if (error) throw error;
+      return data;
+    },
+  });
 
-  // Check all required files selected
-  const allRequiredFilled = selectedTemplate.inputs
-    .filter((i) => i.required)
-    .every((i) => !!uploadedFiles[i.key]);
+  // Auto-select
+  useEffect(() => {
+    if (!templates || selectedTemplateId) return;
+    if (queryTemplateId) {
+      const match = templates.find((t: any) => t.id === queryTemplateId);
+      if (match) { setSelectedTemplateId(match.id); return; }
+    }
+    if (slug) {
+      const match = templates.find((t: any) => t.id === slug || t.weavy_recipe_id === slug);
+      if (match) setSelectedTemplateId(match.id);
+    }
+  }, [templates, slug, queryTemplateId, selectedTemplateId]);
 
-  const totalCost = selectedTemplate.credits * runs;
+  const template = templates?.find((t: any) => t.id === selectedTemplateId);
+  const inputSchema: InputField[] = (template?.input_schema as any) || [];
+  const imageFields = inputSchema.filter((i) => i.type === "image");
+  const textFields = inputSchema.filter((i) => i.type === "text" || i.type === "prompt");
+  const requiredFields = inputSchema.filter((i) => i.required);
+  const allRequiredFilled = requiredFields.every((f) => {
+    if (f.type === "image") return !!files[f.key];
+    return !!(textInputs[f.key]?.trim());
+  });
 
-  // ─── Polling ───
+  const creditCost = template?.estimated_credits_per_run || 0;
+  const totalCost = creditCost * runs;
+  const dollarCost = (totalCost * CREDIT_DOLLAR_VALUE).toFixed(2);
+  const balance = profile?.credits_balance ?? 0;
+  const canAfford = balance >= totalCost;
+
+  // Categories
+  const categories = ["All", ...Array.from(new Set(templates?.map((t: any) => t.category || "General") || []))];
+  const filteredTemplates = categoryFilter === "All"
+    ? templates
+    : templates?.filter((t: any) => (t.category || "General") === categoryFilter);
+
+  /* ─── Poll job status ─── */
   useEffect(() => {
     if (!projectId) return;
     pollingRef.current = true;
-
     const poll = async () => {
       if (!pollingRef.current) return;
       try {
-        const res = await fetch(`${WORKER}/api/projects/${projectId}`, {
-          headers: { "X-Api-Key": API_KEY, "X-User-Id": USER_ID },
+        const { data: { session } } = await supabase.auth.getSession();
+        const token = session?.access_token;
+        if (!token) return;
+        const statusRes = await fetch(`${CF_WORKER_URL}/api/projects/${projectId}`, {
+          headers: { Authorization: `Bearer ${token}` },
         });
-        const raw = await res.text();
-        let parsed: any = null;
-        try { parsed = JSON.parse(raw); } catch {}
-
-        setPollDebug({ url: `${WORKER}/api/projects/${projectId}`, status: res.status, parsed });
-
-        const st = parsed?.status;
-        setStatus(st);
-        setProgress(parsed?.progress ?? 0);
-        if (Array.isArray(parsed?.logs)) setStepLogs(parsed.logs);
-
-        if (st === "complete") {
-          pollingRef.current = false;
-          setOutputs(parsed?.outputs);
-          setIsRunning(false);
-        } else if (st === "failed") {
-          pollingRef.current = false;
-          setError(parsed?.error || "Job failed");
-          setIsRunning(false);
-        } else {
-          setTimeout(poll, 3000);
-        }
+        const status = await statusRes.json();
+        const outputs: OutputItem[] = (status.outputs?.items || []).map((item: any) => ({
+          type: item.type || "image", url: item.url, label: item.label,
+        }));
+        const normalizedStatus = status.status === "succeeded" ? "complete" : status.status as ProjectResult["status"];
+        setResult({
+          status: normalizedStatus,
+          progress: status.progress ?? 0,
+          logs: status.logs ?? [],
+          attempts: status.attempts ?? 0,
+          maxAttempts: status.maxAttempts ?? 3,
+          outputs,
+          error: status.error ?? undefined,
+        });
+        if (normalizedStatus === "queued" || normalizedStatus === "running") setTimeout(poll, 2000);
       } catch {
         if (pollingRef.current) setTimeout(poll, 4000);
       }
     };
-
     poll();
     return () => { pollingRef.current = false; };
   }, [projectId]);
 
-  // ─── Execute the 4-step flow ───
   const handleRun = async () => {
-    if (!allRequiredFilled) return;
+    if (!user) { navigate("/auth"); return; }
+    if (!template) return;
+    if (!allRequiredFilled) {
+      toast({ title: "Missing inputs", description: "Please fill all required fields.", variant: "destructive" });
+      return;
+    }
+    setShowConfirm(true);
+  };
 
-    setIsRunning(true);
-    setStatus(null);
-    setOutputs(null);
-    setError(null);
-    setProgress(0);
-    setStepLogs([]);
-    setUploadDebug([]);
-    setRunTemplateDebug(null);
-    setEnqueueDebug(null);
-    setPollDebug(null);
+  const executeRun = async () => {
+    setShowConfirm(false);
+    setLoading(true);
+    setResult(null);
     setProjectId(null);
-
     try {
-      // Step 1: Upload each file
-      const assetResults: Record<string, { assetKey: string; assetUrl: string }> = {};
-      const debugEntries: any[] = [];
+      if (!user || !template) throw new Error("Not authenticated");
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      if (!token) throw new Error("Not authenticated – no session token");
 
-      for (const input of selectedTemplate.inputs) {
-        const file = uploadedFiles[input.key];
-        if (!file) continue;
-
-        const fd = new FormData();
-        fd.append("file", file);
-        const url = `${WORKER}/api/uploads`;
-
-        const res = await fetch(url, {
-          method: "POST",
-          headers: { "X-Api-Key": API_KEY, "X-User-Id": USER_ID },
-          body: fd,
-        });
-
-        const rawText = await res.text();
-        let parsed: any = null;
-        try { parsed = JSON.parse(rawText); } catch {}
-
-        const entry = { inputKey: input.key, url, method: "POST", status: res.status, rawText, parsed };
-        debugEntries.push(entry);
-        setUploadDebug([...debugEntries]);
-
-        if (!parsed?.ok || !parsed?.assetKey) {
-          throw new Error(`Upload failed for ${input.label}. Status: ${res.status}`);
-        }
-
-        assetResults[input.key] = { assetKey: parsed.assetKey, assetUrl: parsed.assetUrl };
-        setUploadedAssets((prev) => ({ ...prev, [input.key]: { assetKey: parsed.assetKey, assetUrl: parsed.assetUrl } }));
-      }
-
-      // Step 2: Call run-template edge function
       const inputs: Record<string, string> = {};
-      for (const [key, asset] of Object.entries(assetResults)) {
-        inputs[key] = asset.assetUrl;
-        inputs[`${key}_key`] = asset.assetKey;
+      for (const field of inputSchema) {
+        if (field.type === "image") {
+          const f = files[field.key];
+          if (f) inputs[field.key] = await uploadToR2(token, field.key, f);
+        } else {
+          const val = textInputs[field.key]?.trim();
+          if (val) inputs[field.key] = val;
+        }
       }
 
-      const runBody = { templateId: selectedTemplate.templateId, inputs };
-
-      const { data: rtData, error: rtError } = await supabase.functions.invoke("run-template", {
-        body: runBody,
+      const { data: runData, error: runErr } = await supabase.functions.invoke("run-template", {
+        body: { templateId: template.id, inputs },
       });
+      if (runErr) throw new Error(runErr.message || "Run template failed");
+      if (runData?.error) throw new Error(runData.error);
+      const jobId = runData?.projectId;
+      if (!jobId) throw new Error("No job ID returned");
 
-      setRunTemplateDebug({
-        functionName: "run-template",
-        requestBody: runBody,
-        response: rtData,
-        error: rtError ? { message: rtError.message, name: rtError.name } : null,
-      });
-
-      if (rtError || !rtData?.projectId) {
-        throw new Error(`run-template failed: ${rtError?.message || JSON.stringify(rtData)}`);
-      }
-
-      const pId = rtData.projectId;
-
-      // Step 3: Enqueue
-      const enqueueUrl = `${WORKER}/api/enqueue`;
-      const enqueueBody = { projectId: pId };
-
-      const enqRes = await fetch(enqueueUrl, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-Api-Key": API_KEY,
-          "X-User-Id": USER_ID,
-        },
-        body: JSON.stringify(enqueueBody),
-      });
-
-      const enqRaw = await enqRes.text();
-      let enqParsed: any = null;
-      try { enqParsed = JSON.parse(enqRaw); } catch {}
-
-      setEnqueueDebug({
-        url: enqueueUrl,
-        method: "POST",
-        requestBody: enqueueBody,
-        status: enqRes.status,
-        rawText: enqRaw,
-        parsed: enqParsed,
-      });
-
-      // Step 4: Start polling
-      setProjectId(pId);
-      setStatus("queued");
-
+      setProjectId(jobId);
+      setResult({ status: "queued", progress: 0, logs: [], attempts: 0, maxAttempts: 3, outputs: [] });
     } catch (err: any) {
-      setError(err.message);
-      setIsRunning(false);
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    } finally {
+      setLoading(false);
     }
   };
 
-  const outputUrls = extractOutputUrls(outputs);
+  const handleRerun = () => {
+    setResult(null);
+    setProjectId(null);
+    setShowConfirm(true);
+  };
+
+  const isRunning = result?.status === "queued" || result?.status === "running";
+  const isComplete = result?.status === "complete";
+  const isFailed = result?.status === "failed";
+  const hasResult = !!result;
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
       <Navbar />
-
       <div className="flex-1 flex flex-col lg:flex-row pt-16">
+
         {/* ════════ LEFT PANEL ════════ */}
-        <div className="w-full lg:w-[420px] xl:w-[440px] border-r border-border/20 flex flex-col bg-card/20 backdrop-blur-sm overflow-y-auto">
+        <div className="w-full lg:w-[400px] xl:w-[420px] border-r border-border/20 flex flex-col bg-card/30">
 
-          {/* Template selector */}
-          <div className="px-5 pt-5 pb-3">
-            <label className="text-[9px] font-black uppercase tracking-[0.2em] text-muted-foreground mb-2 block">
-              Template
-            </label>
-            <select
-              value={selectedTemplate.id}
-              onChange={(e) => {
-                const t = templateConfigs.find((tc) => tc.id === e.target.value);
-                if (t) switchTemplate(t);
-              }}
-              className="w-full rounded-lg border border-border/30 bg-secondary/30 px-3 py-2.5 text-sm font-bold text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 appearance-none cursor-pointer"
-            >
-              {templateConfigs.map((t) => (
-                <option key={t.id} value={t.id}>{t.name}</option>
-              ))}
-            </select>
-          </div>
+          {/* ── Template selector ── */}
+          {!template && (
+            <div className="flex-1 overflow-y-auto">
+              {/* Header */}
+              <div className="sticky top-0 z-10 bg-card/80 backdrop-blur-xl border-b border-border/10 px-5 py-4">
+                <h2 className="font-display text-lg font-bold text-foreground">Choose Template</h2>
+                <p className="text-xs text-muted-foreground mt-0.5">Select a campaign style to get started</p>
 
-          {/* Template header */}
-          <div className="px-5 pb-4">
-            <h2 className="text-lg font-black text-foreground tracking-tight">{selectedTemplate.name}</h2>
-            <p className="text-[10px] text-muted-foreground mt-0.5">
-              {selectedTemplate.inputs.length} input{selectedTemplate.inputs.length !== 1 ? "s" : ""} required
-            </p>
-          </div>
-
-          {/* Dynamic upload cards */}
-          <div className="px-5 space-y-3 pb-4">
-            {selectedTemplate.inputs.map((input) => (
-              <UploadCard
-                key={input.key}
-                input={input}
-                file={uploadedFiles[input.key] || null}
-                uploaded={uploadedAssets[input.key] || null}
-                onFile={(f) => {
-                  setUploadedFiles((prev) => ({ ...prev, [input.key]: f }));
-                  setUploadedAssets((prev) => ({ ...prev, [input.key]: null }));
-                }}
-              />
-            ))}
-          </div>
-
-          {/* Runs + Cost + Run button */}
-          <div className="px-5 pb-5 space-y-3 mt-auto">
-            {/* Runs counter */}
-            <div className="rounded-xl border border-border/20 bg-card/40 p-4 space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Runs</span>
-                <div className="h-8 bg-secondary/40 border border-border/30 rounded-lg flex items-center">
-                  <button
-                    onClick={() => setRuns((r) => Math.max(1, r - 1))}
-                    className="w-8 h-full flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors rounded-l-lg hover:bg-secondary/60"
-                  >
-                    <Minus className="w-3 h-3" />
-                  </button>
-                  <span className="w-8 text-center text-sm font-bold text-foreground tabular-nums">{runs}</span>
-                  <button
-                    onClick={() => setRuns((r) => r + 1)}
-                    className="w-8 h-full flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors rounded-r-lg hover:bg-secondary/60"
-                  >
-                    <Plus className="w-3 h-3" />
-                  </button>
+                {/* Category pills */}
+                <div className="flex gap-1.5 mt-3 flex-wrap">
+                  {categories.map((cat) => {
+                    const cfg = categoryConfig[cat] || categoryConfig.General;
+                    return (
+                      <button
+                        key={cat}
+                        onClick={() => setCategoryFilter(cat)}
+                        className={`text-[10px] font-bold uppercase tracking-wider px-3 py-1.5 rounded-full transition-all ${
+                          categoryFilter === cat
+                            ? "bg-primary/20 text-primary border border-primary/30"
+                            : "bg-secondary/40 text-muted-foreground border border-transparent hover:bg-secondary/60 hover:text-foreground"
+                        }`}
+                      >
+                        {cat !== "All" && <span className="mr-1">{cfg.icon}</span>}
+                        {cat}
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
 
-              <div className="flex items-center justify-between">
-                <span className="text-[10px] text-muted-foreground/50">Total cost</span>
-                <span className="text-xs font-bold text-foreground flex items-center gap-1.5">
-                  <Zap size={11} className="text-primary" />
-                  {totalCost} credits
-                </span>
-              </div>
-
-              {/* Run button */}
-              <button
-                onClick={handleRun}
-                disabled={!allRequiredFilled || isRunning}
-                className="w-full gradient-primary text-primary-foreground font-black text-xs tracking-[0.25em] uppercase rounded-xl h-11 glow-blue hover:opacity-90 active:scale-[0.98] transition-all disabled:opacity-30 disabled:shadow-none flex items-center justify-center gap-2"
-              >
-                {isRunning ? (
-                  <><Loader2 size={14} className="animate-spin" /> RUNNING…</>
+              {/* Template grid */}
+              <div className="p-4">
+                {templatesLoading ? (
+                  <div className="flex items-center gap-2 text-muted-foreground text-sm py-12 justify-center">
+                    <Loader2 size={16} className="animate-spin" /> Loading templates...
+                  </div>
                 ) : (
-                  <><Zap size={14} /> RUN</>
+                  <div className="grid grid-cols-2 gap-3">
+                    {filteredTemplates?.map((t: any) => {
+                      const cat = t.category || "General";
+                      const cfg = categoryConfig[cat] || categoryConfig.General;
+                      const cost = t.estimated_credits_per_run || 0;
+                      const dollarEst = (cost * CREDIT_DOLLAR_VALUE).toFixed(2);
+
+                      return (
+                        <button
+                          key={t.id}
+                          onClick={() => {
+                            setSelectedTemplateId(t.id);
+                            setFiles({});
+                            setTextInputs({});
+                            setResult(null);
+                            setProjectId(null);
+                          }}
+                          className="group text-left rounded-xl border border-border/20 bg-secondary/20 hover:bg-secondary/40 hover:border-primary/30 transition-all duration-200 overflow-hidden hover:-translate-y-0.5"
+                        >
+                          {/* Preview area */}
+                          <div className="aspect-[4/3] bg-gradient-to-br from-secondary/60 to-secondary/20 flex items-center justify-center relative overflow-hidden">
+                            <div className="text-3xl opacity-30 group-hover:opacity-50 group-hover:scale-110 transition-all duration-300">
+                              {cfg.icon}
+                            </div>
+                            {/* Category badge */}
+                            <span className={`absolute top-2 left-2 text-[8px] font-black uppercase tracking-wider ${cfg.color} bg-background/70 backdrop-blur-sm px-2 py-0.5 rounded-md`}>
+                              {cat}
+                            </span>
+                            {/* Output type */}
+                            <span className="absolute top-2 right-2">
+                              {t.output_type === "video" ? (
+                                <Film size={12} className="text-muted-foreground/40" />
+                              ) : (
+                                <ImageIcon size={12} className="text-muted-foreground/40" />
+                              )}
+                            </span>
+                          </div>
+
+                          {/* Info */}
+                          <div className="p-3 space-y-1.5">
+                            <p className="text-xs font-bold text-foreground leading-tight group-hover:text-primary transition-colors">
+                              {t.name}
+                            </p>
+                            {t.description && (
+                              <p className="text-[10px] text-muted-foreground/60 leading-snug line-clamp-2">
+                                {t.description}
+                              </p>
+                            )}
+                            <div className="flex items-center justify-between pt-1">
+                              <span className="flex items-center gap-1 text-[10px] font-bold text-primary/80">
+                                <Zap size={10} /> {cost}
+                              </span>
+                              <span className="text-[9px] text-muted-foreground/40 font-medium">
+                                ~${dollarEst}
+                              </span>
+                            </div>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
                 )}
-              </button>
-
-              {/* Output estimate */}
-              <div className="pt-2 border-t border-border/10 space-y-1">
-                <p className="text-[8px] text-muted-foreground/30 uppercase tracking-[0.2em] font-bold">
-                  Est. Output: {selectedTemplate.estimatedOutputs}
-                </p>
-                <p className="text-[8px] text-muted-foreground/20 uppercase tracking-[0.15em]">
-                  Includes: {selectedTemplate.includes.join(" / ")}
-                </p>
-              </div>
-            </div>
-
-            {/* Debug accordion */}
-            {(uploadDebug.length > 0 || runTemplateDebug || enqueueDebug || pollDebug) && (
-              <div className="space-y-1.5">
-                <p className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground/40 px-1">Debug</p>
-                <DebugSection title="Upload Debug" data={uploadDebug.length > 0 ? uploadDebug : null} color="text-green-400" />
-                <DebugSection title="Run-Template Debug" data={runTemplateDebug} color="text-orange-400" />
-                <DebugSection title="Enqueue Debug" data={enqueueDebug} color="text-yellow-400" />
-                <DebugSection title="Poll Debug" data={pollDebug} color="text-cyan-400" />
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* ════════ RIGHT PANEL ════════ */}
-        <div className="flex-1 flex flex-col bg-background min-h-0">
-
-          {/* No result yet — show preview */}
-          {!status && !error && (
-            <div className="flex-1 flex items-center justify-center p-8">
-              <div className="relative max-w-lg w-full">
-                <div className="aspect-[4/3] rounded-2xl border border-border/20 bg-secondary/20 overflow-hidden flex items-center justify-center">
-                  {selectedTemplate.previewImage !== "/placeholder.svg" ? (
-                    <img
-                      src={selectedTemplate.previewImage}
-                      alt={selectedTemplate.name}
-                      className="w-full h-full object-cover"
-                    />
-                  ) : (
-                    <div className="text-center space-y-3">
-                      <div className="w-16 h-16 rounded-2xl bg-secondary/30 flex items-center justify-center mx-auto">
-                        <ImageIcon className="w-8 h-8 text-muted-foreground/15" />
-                      </div>
-                      <p className="text-sm font-semibold text-muted-foreground/30">Preview</p>
-                    </div>
-                  )}
-                </div>
-                {/* Badge */}
-                <div className="absolute bottom-4 right-4 bg-background/80 backdrop-blur-sm border border-border/30 rounded-lg px-3 py-1.5">
-                  <p className="text-[9px] font-black uppercase tracking-[0.2em] text-muted-foreground/60">
-                    Example Output
-                  </p>
-                </div>
               </div>
             </div>
           )}
 
-          {/* Running */}
-          {(status === "queued" || status === "running") && (
-            <div className="flex-1 flex items-center justify-center p-8">
-              <div className="text-center space-y-6 max-w-xs w-full">
+          {/* ── Upload + controls ── */}
+          {template && (
+            <>
+              {/* Template header */}
+              <div className="px-5 py-4 border-b border-border/10 bg-card/50">
+                <button
+                  onClick={() => { setSelectedTemplateId(""); setFiles({}); setTextInputs({}); setResult(null); setProjectId(null); }}
+                  className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground hover:text-foreground transition-colors mb-3"
+                >
+                  <ChevronLeft size={12} /> All Templates
+                </button>
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center text-lg">
+                    {categoryConfig[template.category || "General"]?.icon || "✦"}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <h3 className="text-sm font-bold text-foreground">{template.name}</h3>
+                    <p className="text-[10px] text-muted-foreground mt-0.5">
+                      {template.category || "General"} · {template.expected_output_count || 1} asset{(template.expected_output_count || 1) > 1 ? "s" : ""}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Upload zones */}
+              <div className="flex-1 overflow-y-auto px-5 py-4 space-y-5">
+                {inputSchema.length > 0 ? (
+                  <>
+                    {imageFields.map((field) => (
+                      <UploadZone
+                        key={field.key}
+                        label={field.label}
+                        required={field.required}
+                        file={files[field.key] || null}
+                        onFile={(f) => setFiles((prev) => ({ ...prev, [field.key]: f }))}
+                      />
+                    ))}
+                    {textFields.map((field) => (
+                      <div key={field.key} className="space-y-2">
+                        <div className="flex items-center justify-between">
+                          <label className="text-[10px] font-bold uppercase tracking-[0.2em] text-foreground/60">
+                            {field.label}
+                          </label>
+                          {field.required && (
+                            <span className="text-[8px] font-bold uppercase tracking-wider text-primary/70 bg-primary/10 px-1.5 py-0.5 rounded">Required</span>
+                          )}
+                        </div>
+                        {field.type === "prompt" ? (
+                          <textarea
+                            value={textInputs[field.key] || ""}
+                            onChange={(e) => setTextInputs((prev) => ({ ...prev, [field.key]: e.target.value }))}
+                            placeholder={`Enter ${field.label.toLowerCase()}...`}
+                            rows={3}
+                            className="w-full rounded-xl border border-border/40 bg-secondary/20 px-3.5 py-2.5 text-sm placeholder:text-muted-foreground/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:border-primary/40 resize-none transition-all"
+                          />
+                        ) : (
+                          <input
+                            type="text"
+                            value={textInputs[field.key] || ""}
+                            onChange={(e) => setTextInputs((prev) => ({ ...prev, [field.key]: e.target.value }))}
+                            placeholder={`Enter ${field.label.toLowerCase()}...`}
+                            className="w-full rounded-xl border border-border/40 bg-secondary/20 px-3.5 py-2.5 text-sm placeholder:text-muted-foreground/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:border-primary/40 transition-all"
+                          />
+                        )}
+                      </div>
+                    ))}
+                  </>
+                ) : (
+                  <div className="py-12 text-center">
+                    <Sparkles className="w-8 h-8 text-muted-foreground/20 mx-auto mb-2" />
+                    <p className="text-xs text-muted-foreground/40">No file inputs — hit Run to generate</p>
+                  </div>
+                )}
+              </div>
+
+              {/* ── Bottom: Cost + Run ── */}
+              <div className="border-t border-border/10 bg-card/60 backdrop-blur-sm">
+                {/* Runs counter */}
+                <div className="px-5 py-3 flex items-center justify-between">
+                  <span className="text-xs font-semibold text-foreground/70">Runs</span>
+                  <div className="h-8 bg-secondary/40 border border-border/30 rounded-lg flex items-center">
+                    <button
+                      onClick={() => setRuns((r) => Math.max(1, r - 1))}
+                      className="w-8 h-full flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors rounded-l-lg hover:bg-secondary/60"
+                    >
+                      <Minus className="w-3 h-3" />
+                    </button>
+                    <span className="w-8 text-center text-sm font-bold text-foreground tabular-nums">{runs}</span>
+                    <button
+                      onClick={() => setRuns((r) => r + 1)}
+                      className="w-8 h-full flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors rounded-r-lg hover:bg-secondary/60"
+                    >
+                      <Plus className="w-3 h-3" />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Cost breakdown */}
+                <div className="px-5 pb-2 space-y-1">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] text-muted-foreground/50">Per run</span>
+                    <span className="text-[10px] text-muted-foreground/70 font-medium tabular-nums">
+                      {creditCost} credits · ~${(creditCost * CREDIT_DOLLAR_VALUE).toFixed(2)}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-bold text-foreground/70">Total</span>
+                    <span className="text-xs font-bold text-foreground flex items-center gap-1.5">
+                      <Zap size={11} className="text-primary" />
+                      {totalCost} credits
+                      <span className="text-[10px] font-normal text-muted-foreground ml-1">~${dollarCost}</span>
+                    </span>
+                  </div>
+                  {/* Balance indicator */}
+                  <div className="flex items-center justify-between pt-0.5">
+                    <span className="text-[10px] text-muted-foreground/40">Your balance</span>
+                    <span className={`text-[10px] font-bold tabular-nums ${canAfford ? "text-green-400/80" : "text-red-400/80"}`}>
+                      {balance} credits
+                    </span>
+                  </div>
+                </div>
+
+                {/* Run button */}
+                <div className="px-5 pb-5 pt-2">
+                  {hasResult && !isRunning ? (
+                    <Button
+                      onClick={handleRerun}
+                      className="w-full bg-amber-500/90 hover:bg-amber-500 text-background font-black text-xs tracking-[0.2em] rounded-xl h-11 transition-all uppercase shadow-[0_0_20px_rgba(245,158,11,0.2)]"
+                    >
+                      <Sparkles size={14} className="mr-2" /> Re-run
+                    </Button>
+                  ) : (
+                    <Button
+                      onClick={handleRun}
+                      disabled={!allRequiredFilled || loading || isRunning || !canAfford}
+                      className="w-full gradient-primary text-primary-foreground font-black text-xs tracking-[0.25em] rounded-xl h-11 glow-blue hover:opacity-90 active:scale-[0.98] transition-all border-0 uppercase disabled:opacity-30 disabled:shadow-none"
+                    >
+                      {loading ? (
+                        <span className="flex items-center gap-2"><Loader2 size={14} className="animate-spin" /> Uploading...</span>
+                      ) : isRunning ? (
+                        <span className="flex items-center gap-2"><Loader2 size={14} className="animate-spin" /> Running...</span>
+                      ) : !canAfford ? (
+                        "Insufficient Credits"
+                      ) : (
+                        <span className="flex items-center gap-2">
+                          <Zap size={14} /> RUN · {totalCost} CR
+                        </span>
+                      )}
+                    </Button>
+                  )}
+                  {!canAfford && !hasResult && (
+                    <button
+                      onClick={() => navigate("/billing")}
+                      className="w-full text-center text-[10px] text-primary/70 hover:text-primary font-medium mt-2 transition-colors"
+                    >
+                      Get more credits →
+                    </button>
+                  )}
+                </div>
+              </div>
+            </>
+          )}
+        </div>
+
+        {/* ════════ RIGHT PANEL — Output ════════ */}
+        <div className="flex-1 flex flex-col bg-background min-h-0">
+          {!hasResult && (
+            <div className="flex-1 flex items-center justify-center text-center p-8">
+              <div>
+                <div className="w-20 h-20 rounded-2xl bg-secondary/20 flex items-center justify-center mx-auto mb-5">
+                  <Sparkles className="w-8 h-8 text-muted-foreground/15" />
+                </div>
+                <p className="text-sm font-semibold text-muted-foreground/40">Upload your assets and hit Run</p>
+                <p className="text-[10px] text-muted-foreground/25 mt-1.5">Generated output will appear here</p>
+              </div>
+            </div>
+          )}
+
+          {isRunning && (
+            <div className="flex-1 flex flex-col items-center justify-center p-8">
+              <div className="text-center space-y-5 w-full max-w-sm">
                 <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mx-auto">
                   <Loader2 className="w-8 h-8 text-primary animate-spin" />
                 </div>
                 <div>
                   <p className="text-sm font-bold text-foreground">
-                    {status === "queued" ? "Queued…" : "Generating your assets…"}
+                    {result?.status === "queued" ? "Queued..." : "Generating your assets..."}
                   </p>
-                  <p className="text-xs text-muted-foreground mt-1">This may take a few minutes</p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Attempt {result?.attempts ?? 0}/{result?.maxAttempts ?? 3} · This may take a few minutes
+                  </p>
                 </div>
-
-                {/* Progress bar */}
-                <div className="space-y-2">
-                  <div className="relative h-2 w-full rounded-full bg-secondary overflow-hidden">
-                    <div
-                      className="absolute inset-y-0 left-0 bg-primary rounded-full transition-all duration-500 ease-out"
-                      style={{ width: `${progress}%` }}
-                    />
-                  </div>
-                  <p className="text-lg font-black text-foreground tabular-nums">{progress}%</p>
+                <div className="space-y-1.5">
+                  <Progress value={result?.progress ?? 0} className="h-2" />
+                  <p className="text-[10px] text-muted-foreground font-mono tabular-nums">{result?.progress ?? 0}%</p>
                 </div>
-
-                {/* Step log feed */}
-                {stepLogs.length > 0 && (
-                  <div className="w-full max-h-40 overflow-y-auto rounded-lg border border-border/20 bg-secondary/20 p-3 space-y-1.5 text-left">
-                    {stepLogs.map((log, i) => (
-                      <div
-                        key={i}
-                        className="flex items-start gap-2 animate-fade-in"
-                        style={{ animationDelay: `${i * 50}ms`, animationFillMode: "backwards" }}
-                      >
-                        <CheckCircle2 className="w-3 h-3 mt-0.5 shrink-0 text-primary" />
-                        <span className="text-[11px] text-muted-foreground leading-tight">{log}</span>
+                {(result?.logs?.length ?? 0) > 0 && (
+                  <div className="w-full text-left">
+                    <button onClick={() => setShowLogs((v) => !v)} className="text-[10px] text-muted-foreground hover:text-foreground font-mono mb-1">
+                      {showLogs ? "▼" : "►"} Logs ({result!.logs.length})
+                    </button>
+                    {showLogs && (
+                      <div className="bg-secondary/40 rounded-lg p-3 max-h-40 overflow-y-auto">
+                        {result!.logs.map((log, i) => (
+                          <p key={i} className="text-[9px] font-mono text-muted-foreground leading-relaxed">{log}</p>
+                        ))}
                       </div>
-                    ))}
+                    )}
                   </div>
                 )}
               </div>
             </div>
           )}
 
-          {/* Failed */}
-          {status === "failed" && (
+          {isFailed && (
             <div className="flex-1 flex items-center justify-center p-8">
               <div className="text-center space-y-4 max-w-sm w-full">
-                <div className="w-14 h-14 rounded-full bg-destructive/10 flex items-center justify-center mx-auto">
-                  <AlertTriangle className="w-7 h-7 text-destructive" />
+                <div className="w-14 h-14 rounded-full bg-red-500/10 flex items-center justify-center mx-auto">
+                  <AlertTriangle className="w-7 h-7 text-red-400" />
                 </div>
                 <p className="text-sm font-bold text-foreground">Generation Failed</p>
-                <p className="text-xs text-muted-foreground">{error || "Something went wrong."}</p>
+                <p className="text-xs text-muted-foreground">{result?.error || "Something went wrong."}</p>
+                {result?.attempts && result.attempts > 1 && (
+                  <p className="text-[10px] text-muted-foreground">Failed after {result.attempts} attempts</p>
+                )}
+                {(result?.logs?.length ?? 0) > 0 && (
+                  <div className="text-left">
+                    <button onClick={() => setShowLogs((v) => !v)} className="text-[10px] text-muted-foreground hover:text-foreground font-mono mb-1">
+                      {showLogs ? "▼" : "►"} Logs ({result!.logs.length})
+                    </button>
+                    {showLogs && (
+                      <div className="bg-secondary/40 rounded-lg p-3 max-h-40 overflow-y-auto">
+                        {result!.logs.map((log, i) => (
+                          <p key={i} className="text-[9px] font-mono text-muted-foreground leading-relaxed">{log}</p>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
           )}
 
-          {/* Error without status (upload/enqueue error) */}
-          {error && !status && (
-            <div className="flex-1 flex items-center justify-center p-8">
-              <div className="text-center space-y-4 max-w-sm w-full">
-                <div className="w-14 h-14 rounded-full bg-destructive/10 flex items-center justify-center mx-auto">
-                  <AlertTriangle className="w-7 h-7 text-destructive" />
-                </div>
-                <p className="text-sm font-bold text-foreground">Error</p>
-                <p className="text-xs text-muted-foreground break-all">{error}</p>
-              </div>
-            </div>
-          )}
-
-          {/* Complete — show outputs */}
-          {status === "complete" && (
+          {isComplete && result && result.outputs.length > 0 && (
             <div className="flex-1 flex flex-col min-h-0">
               <div className="px-5 py-3 border-b border-border/20 flex items-center justify-between shrink-0">
                 <div>
@@ -616,58 +668,77 @@ const TemplateRun = () => {
                     <CheckCircle2 size={14} className="text-green-400" /> Output Ready
                   </p>
                   <p className="text-[10px] text-muted-foreground font-mono mt-0.5">
-                    {outputUrls.length} asset{outputUrls.length !== 1 ? "s" : ""} · {totalCost} credits
+                    {result.outputs.length} asset{result.outputs.length !== 1 ? "s" : ""} · {totalCost} credits used
                   </p>
                 </div>
+                <div className="flex items-center gap-1">
+                  <a href={result.outputs[0]?.url} download target="_blank" rel="noopener noreferrer">
+                    <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-muted-foreground hover:text-foreground">
+                      <Download size={14} />
+                    </Button>
+                  </a>
+                </div>
               </div>
-
               <div className="flex-1 overflow-y-auto p-5">
-                {outputUrls.length > 0 ? (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {outputUrls.map((url, i) => {
-                      const type = isMedia(url);
-                      return (
-                        <div key={i} className="rounded-xl border border-border/30 bg-card overflow-hidden group">
-                          {type === "video" ? (
-                            <video src={url} controls className="w-full aspect-video object-cover bg-secondary/50" />
-                          ) : (
-                            <div className="relative">
-                              <img src={url} alt={`Asset ${i + 1}`} className="w-full aspect-square object-cover bg-secondary/50" />
-                              <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                                <a href={url} target="_blank" rel="noreferrer">
-                                  <button className="w-7 h-7 rounded-md bg-background/80 backdrop-blur-sm flex items-center justify-center text-foreground hover:bg-background transition-colors">
-                                    <Download size={12} />
-                                  </button>
-                                </a>
-                              </div>
-                            </div>
-                          )}
-                          <div className="px-3 py-2">
-                            <a href={url} target="_blank" rel="noreferrer" className="text-[10px] text-primary/70 hover:text-primary font-mono break-all">
-                              {url}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {result.outputs.map((output, i) => (
+                    <div key={i} className="rounded-xl border border-border/30 bg-card overflow-hidden group">
+                      {output.type === "video" ? (
+                        <video src={output.url} controls className="w-full aspect-video object-cover bg-secondary/50" />
+                      ) : (
+                        <div className="relative">
+                          <img src={output.url} alt={output.label || `Asset ${i + 1}`} className="w-full aspect-square object-cover bg-secondary/50" />
+                          <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity flex gap-1">
+                            <a href={output.url} download target="_blank" rel="noopener noreferrer">
+                              <button className="w-7 h-7 rounded-md bg-background/80 backdrop-blur-sm flex items-center justify-center text-foreground hover:bg-background transition-colors">
+                                <Download size={12} />
+                              </button>
+                            </a>
+                            <a href={output.url} target="_blank" rel="noopener noreferrer">
+                              <button className="w-7 h-7 rounded-md bg-background/80 backdrop-blur-sm flex items-center justify-center text-foreground hover:bg-background transition-colors">
+                                <Maximize2 size={12} />
+                              </button>
                             </a>
                           </div>
                         </div>
-                      );
-                    })}
-                  </div>
-                ) : (
-                  <div className="text-center py-12">
-                    <CheckCircle2 className="w-10 h-10 text-primary mx-auto mb-3" />
-                    <p className="text-sm font-bold text-foreground">Complete</p>
-                    <p className="text-xs text-muted-foreground mt-1">No output assets found in the response.</p>
-                    {outputs && (
-                      <pre className="mt-4 text-left text-[10px] font-mono text-muted-foreground bg-secondary/30 rounded-lg p-4 max-h-60 overflow-auto">
-                        {JSON.stringify(outputs, null, 2)}
-                      </pre>
-                    )}
-                  </div>
-                )}
+                      )}
+                      <div className="px-3 py-2 flex items-center justify-between">
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                          {output.label || `Asset ${i + 1}`}
+                        </span>
+                        <a href={output.url} download target="_blank" rel="noopener noreferrer">
+                          <Button size="sm" variant="ghost" className="h-6 text-[10px] text-muted-foreground hover:text-foreground px-2">
+                            <Download size={10} className="mr-1" /> Save
+                          </Button>
+                        </a>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {isComplete && result && result.outputs.length === 0 && (
+            <div className="flex-1 flex items-center justify-center p-8">
+              <div className="text-center space-y-3">
+                <CheckCircle2 className="w-10 h-10 text-primary mx-auto" />
+                <p className="text-sm font-bold text-foreground">Complete</p>
+                <p className="text-xs text-muted-foreground">Job finished but no output assets were found.</p>
               </div>
             </div>
           )}
         </div>
       </div>
+
+      <CreditConfirmModal
+        open={showConfirm}
+        onOpenChange={setShowConfirm}
+        creditCost={totalCost}
+        currentBalance={balance}
+        actionLabel="Run Template"
+        onConfirm={executeRun}
+      />
     </div>
   );
 };
