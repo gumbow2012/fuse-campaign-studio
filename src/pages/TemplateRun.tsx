@@ -274,6 +274,7 @@ const TemplateRun = () => {
     setStatus(null);
     setOutputs(null);
     setError(null);
+    setProgress(0);
     setUploadDebug([]);
     setRunTemplateDebug(null);
     setEnqueueDebug(null);
