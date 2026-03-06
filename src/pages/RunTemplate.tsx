@@ -459,9 +459,9 @@ const RunTemplate = () => {
                 ) : (
                   <div className="text-center py-12">
                     <CheckCircle2 className="w-10 h-10 text-primary mx-auto mb-3" />
-                    <p className="text-sm font-bold text-foreground">Complete</p>
+                    <p className="text-sm font-bold text-foreground font-display">Complete</p>
                     <p className="text-xs text-muted-foreground mt-1">
-                      No output assets returned.
+                      No results were generated.
                     </p>
                   </div>
                 )}
