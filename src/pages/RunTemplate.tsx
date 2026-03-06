@@ -13,8 +13,8 @@ import {
   type ProjectStatus,
 } from "@/lib/api";
 import {
-  Upload, X, Zap, Loader2, Download, CheckCircle2,
-  AlertTriangle, Image as ImageIcon, Film, ArrowLeft,
+  X, Zap, Loader2, Download, CheckCircle2,
+  AlertTriangle, Image as ImageIcon, ArrowLeft, Sparkles,
 } from "lucide-react";
 
 /* ─── Upload card ─── */
