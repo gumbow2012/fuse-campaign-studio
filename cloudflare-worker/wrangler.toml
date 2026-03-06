@@ -9,6 +9,10 @@ compatibility_flags = ["nodejs_compat"]
 binding = "FUSE_ASSETS"
 bucket_name = "fuse-assets"
 
+[[r2_buckets]]
+binding = "FUSE_TEMPLATES"
+bucket_name = "fuse-templates"
+
 # Secrets (set via `wrangler secret put`)
 # SUPABASE_URL
 # SUPABASE_ANON_KEY
