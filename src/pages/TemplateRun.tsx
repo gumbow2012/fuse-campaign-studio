@@ -278,17 +278,23 @@ const TemplateRun = () => {
       const token = session?.access_token;
       if (!token) throw new Error("Not authenticated – no session token");
 
+      // Step 1: Upload each file to R2
       const inputs: Record<string, string> = {};
       for (const field of inputSchema) {
         if (field.type === "image") {
           const f = files[field.key];
-          if (f) inputs[field.key] = await uploadToR2(token, field.key, f);
+          if (f) {
+            const { assetKey, assetUrl } = await uploadToR2(token, field.key, f);
+            inputs[field.key] = assetUrl;
+            inputs[`${field.key}_asset_key`] = assetKey;
+          }
         } else {
           const val = textInputs[field.key]?.trim();
           if (val) inputs[field.key] = val;
         }
       }
 
+      // Step 2: Create project via run-template edge function
       const { data: runData, error: runErr } = await supabase.functions.invoke("run-template", {
         body: { templateId: template.id, inputs },
       });
@@ -296,6 +302,9 @@ const TemplateRun = () => {
       if (runData?.error) throw new Error(runData.error);
       const jobId = runData?.projectId;
       if (!jobId) throw new Error("No job ID returned");
+
+      // Step 3: Enqueue on CF Worker
+      await enqueueProject(token, jobId);
 
       setProjectId(jobId);
       setResult({ status: "queued", progress: 0, logs: [], attempts: 0, maxAttempts: 3, outputs: [] });
