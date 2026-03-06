@@ -1,6 +1,7 @@
 name = "shiny-rice-e95bfuse-api"
 main = "src/index.ts"
 compatibility_date = "2024-12-01"
+compatibility_flags = ["nodejs_compat"]
 
 # R2 bucket binding
 [[r2_buckets]]
