@@ -244,6 +244,7 @@ const TemplateRun = () => {
 
         const st = parsed?.status;
         setStatus(st);
+        setProgress(parsed?.progress ?? 0);
 
         if (st === "complete") {
           pollingRef.current = false;
