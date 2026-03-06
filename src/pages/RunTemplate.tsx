@@ -13,8 +13,8 @@ import {
   type ProjectStatus,
 } from "@/lib/api";
 import {
-  Upload, X, Zap, Loader2, Download, CheckCircle2,
-  AlertTriangle, Image as ImageIcon, Film, ArrowLeft,
+  X, Zap, Loader2, Download, CheckCircle2,
+  AlertTriangle, Image as ImageIcon, ArrowLeft, Sparkles,
 } from "lucide-react";
 
 /* ─── Upload card ─── */
@@ -334,11 +334,11 @@ const RunTemplate = () => {
             >
               {running ? (
                 <>
-                  <Loader2 size={14} className="animate-spin" /> RUNNING…
+                  <Loader2 size={14} className="animate-spin" /> GENERATING…
                 </>
               ) : (
                 <>
-                  <Zap size={14} /> RUN
+                  <Sparkles size={14} /> GENERATE
                 </>
               )}
             </button>
@@ -355,7 +355,7 @@ const RunTemplate = () => {
                   <ImageIcon className="w-8 h-8 text-muted-foreground/15" />
                 </div>
                 <p className="text-sm font-medium text-muted-foreground/30">
-                  Upload assets and hit Run
+                  Upload your assets and generate
                 </p>
               </div>
             </div>
@@ -369,8 +369,8 @@ const RunTemplate = () => {
                   <Loader2 className="w-8 h-8 text-primary animate-spin" />
                 </div>
                 <div>
-                  <p className="text-sm font-bold text-foreground">
-                    {status.status === "queued" ? "Queued…" : "Generating assets…"}
+                  <p className="text-sm font-bold text-foreground font-display">
+                    {progress < 10 ? "Preparing…" : progress < 80 ? "Generating…" : "Finalizing…"}
                   </p>
                   <p className="text-xs text-muted-foreground mt-1">This may take a few minutes</p>
                 </div>
@@ -385,20 +385,6 @@ const RunTemplate = () => {
                   </div>
                   <p className="text-lg font-black text-foreground tabular-nums">{progress}%</p>
                 </div>
-
-                {/* Logs */}
-                {logs.length > 0 && (
-                  <div className="w-full max-h-48 overflow-y-auto rounded-lg border border-border/20 bg-secondary/20 p-3 space-y-1.5 text-left">
-                    {logs.map((log, i) => (
-                      <div key={i} className="flex items-start gap-2">
-                        <CheckCircle2 className="w-3 h-3 mt-0.5 shrink-0 text-primary" />
-                        <span className="text-[11px] font-mono text-muted-foreground leading-tight">
-                          {log}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                )}
               </div>
             </div>
           )}
@@ -410,19 +396,12 @@ const RunTemplate = () => {
                 <div className="w-14 h-14 rounded-full bg-destructive/10 flex items-center justify-center mx-auto">
                   <AlertTriangle className="w-7 h-7 text-destructive" />
                 </div>
-                <p className="text-sm font-bold text-foreground">
-                  {status?.status === "failed" ? "Generation Failed" : "Error"}
+                <p className="text-sm font-bold text-foreground font-display">
+                  Generation Failed
                 </p>
-                <p className="text-xs text-muted-foreground break-all">
-                  {error || status?.error || "Something went wrong."}
+                <p className="text-xs text-muted-foreground">
+                  Something went wrong. Please try again or contact support.
                 </p>
-                {logs.length > 0 && (
-                  <div className="w-full max-h-32 overflow-y-auto rounded-lg border border-border/20 bg-secondary/20 p-3 space-y-1 text-left">
-                    {logs.map((log, i) => (
-                      <p key={i} className="text-[10px] font-mono text-muted-foreground">{log}</p>
-                    ))}
-                  </div>
-                )}
               </div>
             </div>
           )}
@@ -432,10 +411,10 @@ const RunTemplate = () => {
             <div className="flex-1 flex flex-col min-h-0">
               <div className="px-5 py-3 border-b border-border/20 flex items-center justify-between shrink-0">
                 <div>
-                  <p className="text-xs font-bold text-foreground flex items-center gap-2">
-                    <CheckCircle2 size={14} className="text-green-400" /> Output Ready
+                  <p className="text-xs font-bold text-foreground flex items-center gap-2 font-display">
+                    <CheckCircle2 size={14} className="text-green-400" /> Results Ready
                   </p>
-                  <p className="text-[10px] text-muted-foreground font-mono mt-0.5">
+                  <p className="text-[10px] text-muted-foreground mt-0.5">
                     {outputUrls.length} asset{outputUrls.length !== 1 ? "s" : ""}
                   </p>
                 </div>
@@ -480,9 +459,9 @@ const RunTemplate = () => {
                 ) : (
                   <div className="text-center py-12">
                     <CheckCircle2 className="w-10 h-10 text-primary mx-auto mb-3" />
-                    <p className="text-sm font-bold text-foreground">Complete</p>
+                    <p className="text-sm font-bold text-foreground font-display">Complete</p>
                     <p className="text-xs text-muted-foreground mt-1">
-                      No output assets returned.
+                      No results were generated.
                     </p>
                   </div>
                 )}
