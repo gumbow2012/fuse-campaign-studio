@@ -243,7 +243,7 @@ const RunTemplate = () => {
 
       // 4. Start polling
       setProjectId(pId);
-      setStatus({ status: "queued", progress: 0, logs: [], outputs: null, error: null, attempts: 0, maxAttempts: 3 });
+      setStatus({ status: "queued", progress: 0, logs: [], outputs: null, error: null });
     } catch (err: any) {
       setError(err.message);
       setRunning(false);

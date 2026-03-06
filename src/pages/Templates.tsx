@@ -17,7 +17,7 @@ const Templates = () => {
         <div className="mb-10">
           <h1 className="font-display text-3xl font-bold tracking-tight">Templates</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Choose a template, upload your assets, and let Fuse generate the outputs.
+            Choose a template, upload your assets, and generate results.
           </p>
         </div>
 
