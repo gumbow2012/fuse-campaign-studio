@@ -191,6 +191,7 @@ const TemplateRun = () => {
   const [status, setStatus] = useState<string | null>(null);
   const [outputs, setOutputs] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
+  const [progress, setProgress] = useState(0);
 
   // Debug state
   const [uploadDebug, setUploadDebug] = useState<any[]>([]);
@@ -243,6 +244,7 @@ const TemplateRun = () => {
 
         const st = parsed?.status;
         setStatus(st);
+        setProgress(parsed?.progress ?? 0);
 
         if (st === "complete") {
           pollingRef.current = false;
@@ -272,6 +274,7 @@ const TemplateRun = () => {
     setStatus(null);
     setOutputs(null);
     setError(null);
+    setProgress(0);
     setUploadDebug([]);
     setRunTemplateDebug(null);
     setEnqueueDebug(null);
@@ -533,7 +536,7 @@ const TemplateRun = () => {
           {/* Running */}
           {(status === "queued" || status === "running") && (
             <div className="flex-1 flex items-center justify-center p-8">
-              <div className="text-center space-y-5">
+              <div className="text-center space-y-6 max-w-xs w-full">
                 <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mx-auto">
                   <Loader2 className="w-8 h-8 text-primary animate-spin" />
                 </div>
@@ -542,6 +545,17 @@ const TemplateRun = () => {
                     {status === "queued" ? "Queued…" : "Generating your assets…"}
                   </p>
                   <p className="text-xs text-muted-foreground mt-1">This may take a few minutes</p>
+                </div>
+
+                {/* Progress bar */}
+                <div className="space-y-2">
+                  <div className="relative h-2 w-full rounded-full bg-secondary overflow-hidden">
+                    <div
+                      className="absolute inset-y-0 left-0 bg-primary rounded-full transition-all duration-500 ease-out"
+                      style={{ width: `${progress}%` }}
+                    />
+                  </div>
+                  <p className="text-lg font-black text-foreground tabular-nums">{progress}%</p>
                 </div>
               </div>
             </div>
