@@ -355,7 +355,7 @@ const RunTemplate = () => {
                   <ImageIcon className="w-8 h-8 text-muted-foreground/15" />
                 </div>
                 <p className="text-sm font-medium text-muted-foreground/30">
-                  Upload assets and hit Run
+                  Upload your assets and generate
                 </p>
               </div>
             </div>
