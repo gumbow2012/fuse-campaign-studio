@@ -25,6 +25,7 @@ import CreatorAnalytics from "./pages/CreatorAnalytics";
 import Referrals from "./pages/Referrals";
 import Templates from "./pages/Templates";
 import RunTemplate from "./pages/RunTemplate";
+import TemplateRun from "./pages/TemplateRun";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -56,6 +57,7 @@ const App = () => (
 
             {/* Flow B: Templates → Run */}
             <Route path="/app/templates" element={<ProtectedRoute><Templates /></ProtectedRoute>} />
+            <Route path="/app/templates/run" element={<ProtectedRoute><TemplateRun /></ProtectedRoute>} />
             <Route path="/app/run/:templateId" element={<ProtectedRoute><RunTemplate /></ProtectedRoute>} />
 
             {/* Admin */}
