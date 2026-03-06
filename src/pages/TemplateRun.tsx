@@ -149,11 +149,22 @@ function isMedia(url: string) {
 function extractOutputUrls(outputs: any): string[] {
   if (!outputs) return [];
   const urls: string[] = [];
-  if (Array.isArray(outputs)) {
-    outputs.forEach((v) => { if (typeof v === "string" && v.startsWith("http")) urls.push(v); });
-  } else if (typeof outputs === "object") {
-    Object.values(outputs).forEach((v) => { if (typeof v === "string" && v.startsWith("http")) urls.push(v as string); });
+
+  // Handle { items: [{ type, url }] } from the runner
+  if (outputs.items && Array.isArray(outputs.items)) {
+    for (const item of outputs.items) {
+      if (item?.url && typeof item.url === "string") urls.push(item.url);
+    }
+    if (urls.length > 0) return urls;
   }
+
+  // Fallback: scan all values recursively
+  const scan = (obj: unknown) => {
+    if (typeof obj === "string" && obj.startsWith("http")) urls.push(obj);
+    else if (Array.isArray(obj)) obj.forEach(scan);
+    else if (obj && typeof obj === "object") Object.values(obj).forEach(scan);
+  };
+  scan(outputs);
   return urls;
 }
 
