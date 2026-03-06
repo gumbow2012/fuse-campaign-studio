@@ -1,6 +1,7 @@
 import type { Env } from "./auth";
 import { handleEnqueue, handleProjectStatus } from "./routes/runner";
 import { handlePresign, handleUploadMultipart, handleUploadPut } from "./routes/uploads";
+import { handleListTemplates, handleCreateProject } from "./routes/projects";
 import { serveAsset } from "./r2";
 
 const CORS_HEADERS = {
@@ -35,7 +36,11 @@ export default {
     try {
       let response: Response;
 
-      if (path.match(/^\/api\/projects\/[^/]+$/) && request.method === "GET") {
+      if (path === "/api/templates" && request.method === "GET") {
+        response = await handleListTemplates(request, env);
+      } else if (path === "/api/projects" && request.method === "POST") {
+        response = await handleCreateProject(request, env);
+      } else if (path.match(/^\/api\/projects\/[^/]+$/) && request.method === "GET") {
         const projectId = path.split("/")[3];
         response = await handleProjectStatus(request, env, projectId);
       } else if (path === "/api/uploads" && request.method === "POST") {
@@ -57,6 +62,8 @@ export default {
           path,
           time: new Date().toISOString(),
           routes: [
+            "GET  /api/templates",
+            "POST /api/projects",
             "POST /api/uploads",
             "POST /api/uploads/presign",
             "PUT  /api/uploads/:key",
