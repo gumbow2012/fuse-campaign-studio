@@ -80,7 +80,11 @@ export async function handleProjectStatus(request: Request, env: Env, projectId:
   });
 }
 
-export async function handleEnqueue(request: Request, env: Env) {
+export async function handleEnqueue(
+  request: Request,
+  env: Env,
+  ctx: ExecutionContext
+) {
   const isServiceCall = request.headers.get("X-Service-Call") === "true";
   if (!isServiceCall) {
     await verifyToken(request, env);
@@ -90,10 +94,6 @@ export async function handleEnqueue(request: Request, env: Env) {
   if (!body.projectId) {
     return Response.json({ error: "projectId required" }, { status: 400 });
   }
-
-  const ctx = {
-    waitUntil: (p: Promise<any>) => p.catch(console.error),
-  };
 
   ctx.waitUntil(runJob(env, body.projectId));
 
