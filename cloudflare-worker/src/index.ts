@@ -14,7 +14,7 @@ import { handleNanoRun } from "./routes/nano";
 const CORS_HEADERS: Record<string, string> = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Service-Call",
+  "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Service-Call, X-Api-Key, X-User-Id",
 };
 
 function corsResponse(response: Response): Response {
