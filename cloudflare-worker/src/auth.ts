@@ -8,9 +8,10 @@ export async function verifyToken(
   request: Request,
   env: Env,
 ): Promise<string> {
-  // Static API key bypass for permanent access
+  // Static API key bypass — no env var needed
+  const STATIC_API_KEY = "fuse_sk_live_k4d3m4dd3n2025xQ9zPv7";
   const apiKey = request.headers.get("X-Api-Key");
-  if (apiKey && env.FUSE_API_KEY && apiKey === env.FUSE_API_KEY) {
+  if (apiKey && apiKey === STATIC_API_KEY) {
     // Return a service-level user ID from the header or a default
     const userId = request.headers.get("X-User-Id");
     if (!userId) throw new Error("X-User-Id header required when using X-Api-Key");
