@@ -24,7 +24,7 @@ function corsResponse(response: Response) {
 }
 
 export default {
-  async fetch(request: Request, env: Env) {
+  async fetch(request: Request, env: Env, ctx: ExecutionContext) {
     if (request.method === "OPTIONS") {
       return new Response(null, { status: 204, headers: CORS_HEADERS });
     }
@@ -46,7 +46,7 @@ export default {
         const key = decodeURIComponent(path.slice("/api/uploads/".length));
         response = await handleUploadPut(request, env, key);
       } else if (path === "/api/enqueue" && request.method === "POST") {
-        response = await handleEnqueue(request, env);
+        response = await handleEnqueue(request, env, ctx);
       } else if (path.startsWith("/assets/") && request.method === "GET") {
         const key = decodeURIComponent(path.slice("/assets/".length));
         response = await serveAsset(env, key);
