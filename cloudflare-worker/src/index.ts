@@ -62,6 +62,8 @@ export default {
           path,
           time: new Date().toISOString(),
           routes: [
+            "GET  /api/templates",
+            "POST /api/projects",
             "POST /api/uploads",
             "POST /api/uploads/presign",
             "PUT  /api/uploads/:key",
