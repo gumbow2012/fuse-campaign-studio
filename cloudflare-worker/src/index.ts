@@ -1,6 +1,7 @@
 import type { Env } from "./auth";
 import { handleEnqueue, handleProjectStatus } from "./routes/runner";
 import { handlePresign, handleUploadMultipart, handleUploadPut } from "./routes/uploads";
+import { handleListTemplates, handleCreateProject } from "./routes/projects";
 import { serveAsset } from "./r2";
 
 const CORS_HEADERS = {
