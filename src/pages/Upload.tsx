@@ -15,6 +15,7 @@ export default function UploadPage() {
   const [runTemplateDebug, setRunTemplateDebug] = useState<any>(null)
   const [enqueueDebug, setEnqueueDebug] = useState<any>(null)
   const [pollDebug, setPollDebug] = useState<any>(null)
+  const [finalResult, setFinalResult] = useState<any>(null)
 
   async function handleUpload() {
     if (!file) { alert("choose file first"); return }
