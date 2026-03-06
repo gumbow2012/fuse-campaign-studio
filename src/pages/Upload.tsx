@@ -175,6 +175,21 @@ export default function UploadPage() {
       {runTemplateDebug && <Section title="2. run-template (creates project)" color="#f90" data={runTemplateDebug} />}
       {enqueueDebug && <Section title="3. Enqueue (kick runner)" color="#ff0" data={enqueueDebug} />}
       {pollDebug && <Section title="4. Poll Status" color="#0ff" data={pollDebug} />}
+
+      {finalResult && finalResult.status === "complete" && (
+        <div style={{ marginTop: 32 }}>
+          <h2 style={{ color: "#0f0" }}>✅ Complete</h2>
+          {renderOutputs(finalResult.outputs)}
+          <Section title="Full Result Payload" color="#0f0" data={finalResult} />
+        </div>
+      )}
+
+      {finalResult && finalResult.status === "failed" && (
+        <div style={{ marginTop: 32 }}>
+          <h2 style={{ color: "#f44" }}>❌ Failed</h2>
+          <Section title="Error Payload" color="#f44" data={{ error: finalResult.error, debug_trace: finalResult.debug_trace, logs: finalResult.logs }} />
+        </div>
+      )}
     </div>
   )
 }
