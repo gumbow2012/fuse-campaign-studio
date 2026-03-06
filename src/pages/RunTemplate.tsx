@@ -338,7 +338,7 @@ const RunTemplate = () => {
                 </>
               ) : (
                 <>
-                  <Zap size={14} /> RUN
+                  <Sparkles size={14} /> GENERATE
                 </>
               )}
             </button>
