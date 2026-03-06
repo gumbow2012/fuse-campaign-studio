@@ -1,4 +1,4 @@
-export interface TemplateInputField {
+export interface TemplateInput {
   key: string;
   label: string;
   type: "image";
@@ -6,27 +6,73 @@ export interface TemplateInputField {
 }
 
 export interface TemplateConfig {
-  slug: string;
+  id: string;
+  templateId: string;
   name: string;
-  weavyFlowId: string;
-  estimatedCredits: number;
-  inputs: TemplateInputField[];
+  previewImage: string;
+  credits: number;
+  estimatedOutputs: string;
+  includes: string[];
+  inputs: TemplateInput[];
 }
 
-export const templateConfigs: Record<string, TemplateConfig> = {
-  "urban-graffiti-style": {
-    slug: "urban-graffiti-style",
-    name: "Urban Graffiti Style",
-    weavyFlowId: "VFCSb8jQZrVYqhqkwQSc5g",
-    estimatedCredits: 250,
+export const templateConfigs: TemplateConfig[] = [
+  {
+    id: "garage",
+    templateId: "7a924959-e168-4a0e-bb25-8db08d8ca4be",
+    name: "GARAGE",
+    previewImage: "/placeholder.svg",
+    credits: 15,
+    estimatedOutputs: "6–12 Assets",
+    includes: ["On-model", "Closeup", "Editorial"],
     inputs: [
-      { key: "shirt_image", label: "Shirt Image", type: "image", required: true },
-      { key: "shorts_image", label: "Shorts Image", type: "image", required: true },
-      { key: "logo_overlay", label: "Logo Overlay", type: "image", required: false },
-      { key: "background_reference", label: "Background Reference", type: "image", required: false },
+      { key: "garment_file", label: "GARMENT FILE", type: "image", required: true },
+      { key: "brand_asset", label: "BRAND ASSET", type: "image", required: true },
     ],
   },
-};
+  {
+    id: "front-back",
+    templateId: "front-back-placeholder",
+    name: "FRONT + BACK",
+    previewImage: "/placeholder.svg",
+    credits: 18,
+    estimatedOutputs: "8–16 Assets",
+    includes: ["Front view", "Back view", "Flat lay"],
+    inputs: [
+      { key: "front_shirt", label: "FRONT OF SHIRT", type: "image", required: true },
+      { key: "back_shirt", label: "BACK OF SHIRT", type: "image", required: true },
+    ],
+  },
+  {
+    id: "front-only",
+    templateId: "front-only-placeholder",
+    name: "FRONT ONLY",
+    previewImage: "/placeholder.svg",
+    credits: 12,
+    estimatedOutputs: "4–8 Assets",
+    includes: ["On-model", "Closeup"],
+    inputs: [
+      { key: "front_shirt", label: "FRONT OF SHIRT", type: "image", required: true },
+    ],
+  },
+  {
+    id: "front-back-logo",
+    templateId: "front-back-logo-placeholder",
+    name: "FRONT + BACK + LOGO",
+    previewImage: "/placeholder.svg",
+    credits: 20,
+    estimatedOutputs: "10–18 Assets",
+    includes: ["On-model", "Closeup", "Editorial", "Logo placement"],
+    inputs: [
+      { key: "front_shirt", label: "FRONT OF SHIRT", type: "image", required: true },
+      { key: "back_shirt", label: "BACK OF SHIRT", type: "image", required: true },
+      { key: "logo", label: "LOGO", type: "image", required: true },
+    ],
+  },
+];
 
-export const getTemplateBySlug = (slug: string): TemplateConfig | undefined =>
-  templateConfigs[slug];
+export const getTemplateById = (id: string): TemplateConfig | undefined =>
+  templateConfigs.find((t) => t.id === id);
+
+export const getTemplateByTemplateId = (templateId: string): TemplateConfig | undefined =>
+  templateConfigs.find((t) => t.templateId === templateId);
