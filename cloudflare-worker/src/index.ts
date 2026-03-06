@@ -122,13 +122,25 @@ export default {
         response = await handleNanoRun(request, env);
 
       // ── Debug: prove correct bundle is live ──
-      } else if (path === "/debug-upload-check") {
+      } else if (path === "/debug-upload-check" || path === "/debug-routes") {
         response = Response.json({
           ok: true,
           marker: "DEBUG_UPLOAD_CHECK_LIVE",
           path,
           time: new Date().toISOString(),
-          routes: ["/api/uploads", "/api/uploads/presign", "/api/enqueue", "/api/projects/:id"],
+          routes: [
+            "POST /api/uploads",
+            "POST /api/uploads/presign",
+            "PUT  /api/uploads/:key",
+            "POST /api/enqueue",
+            "GET  /api/projects/:id",
+            "POST /api/upload (legacy)",
+            "POST /api/run-template (legacy)",
+            "GET  /api/job/:id (legacy)",
+            "GET  /api/usage",
+            "GET  /assets/:key",
+            "GET  /health",
+          ],
         });
 
       // ── Health check ──
