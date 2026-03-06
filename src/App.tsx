@@ -25,6 +25,7 @@ import CreatorAnalytics from "./pages/CreatorAnalytics";
 import Referrals from "./pages/Referrals";
 import Templates from "./pages/Templates";
 import RunTemplate from "./pages/RunTemplate";
+import TemplateRun from "./pages/TemplateRun";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
