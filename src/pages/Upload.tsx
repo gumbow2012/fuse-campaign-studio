@@ -1,5 +1,7 @@
 import { useState } from "react"
-import { supabase } from "@/integrations/supabase/client"
+
+const WORKER_URL = "https://shiny-rice-e95bfuse-api.kade-fc1.workers.dev"
+const API_KEY = "fuse_sk_live_k4d3m4dd3n2025xQ9zPv7"
 
 export default function UploadPage() {
   const [file, setFile] = useState<File | null>(null)
@@ -11,30 +13,26 @@ export default function UploadPage() {
       return
     }
 
-    const { data: { session } } = await supabase.auth.getSession()
-    if (!session) {
-      alert("You must be logged in to upload")
-      return
-    }
-
     const form = new FormData()
     form.append("file", file)
 
     setResult("Uploading...")
 
-    const res = await fetch(
-      "https://shiny-rice-e95bfuse-api.kade-fc1.workers.dev/api/uploads",
-      {
+    try {
+      const res = await fetch(`${WORKER_URL}/api/uploads`, {
         method: "POST",
         headers: {
-          Authorization: `Bearer ${session.access_token}`,
+          "X-Api-Key": API_KEY,
+          "X-User-Id": "test-user-upload-page",
         },
         body: form,
-      }
-    )
+      })
 
-    const text = await res.text()
-    setResult(text)
+      const json = await res.json()
+      setResult(JSON.stringify(json, null, 2))
+    } catch (err: any) {
+      setResult(`Error: ${err.message}`)
+    }
   }
 
   return (
