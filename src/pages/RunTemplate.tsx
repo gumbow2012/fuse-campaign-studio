@@ -396,19 +396,12 @@ const RunTemplate = () => {
                 <div className="w-14 h-14 rounded-full bg-destructive/10 flex items-center justify-center mx-auto">
                   <AlertTriangle className="w-7 h-7 text-destructive" />
                 </div>
-                <p className="text-sm font-bold text-foreground">
-                  {status?.status === "failed" ? "Generation Failed" : "Error"}
+                <p className="text-sm font-bold text-foreground font-display">
+                  Generation Failed
                 </p>
-                <p className="text-xs text-muted-foreground break-all">
-                  {error || status?.error || "Something went wrong."}
+                <p className="text-xs text-muted-foreground">
+                  Something went wrong. Please try again or contact support.
                 </p>
-                {logs.length > 0 && (
-                  <div className="w-full max-h-32 overflow-y-auto rounded-lg border border-border/20 bg-secondary/20 p-3 space-y-1 text-left">
-                    {logs.map((log, i) => (
-                      <p key={i} className="text-[10px] font-mono text-muted-foreground">{log}</p>
-                    ))}
-                  </div>
-                )}
               </div>
             </div>
           )}
