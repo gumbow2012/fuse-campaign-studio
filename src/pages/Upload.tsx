@@ -25,6 +25,7 @@ export default function UploadPage() {
     setRunTemplateDebug(null)
     setEnqueueDebug(null)
     setPollDebug(null)
+    setFinalResult(null)
 
     try {
       // ── Step 1: Upload to CF Worker R2 ──
