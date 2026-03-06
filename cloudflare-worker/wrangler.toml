@@ -1,5 +1,5 @@
 # Fuse Worker — Cloudflare deployment config
-name = "fuse-worker"
+name = "shiny-rice-e95bfuse-api"
 main = "worker.js"
 compatibility_date = "2024-09-01"
 
