@@ -192,6 +192,7 @@ const TemplateRun = () => {
   const [outputs, setOutputs] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
   const [progress, setProgress] = useState(0);
+  const [stepLogs, setStepLogs] = useState<string[]>([]);
 
   // Debug state
   const [uploadDebug, setUploadDebug] = useState<any[]>([]);
@@ -212,6 +213,7 @@ const TemplateRun = () => {
     setStatus(null);
     setOutputs(null);
     setError(null);
+    setStepLogs([]);
     setUploadDebug([]);
     setRunTemplateDebug(null);
     setEnqueueDebug(null);
@@ -245,6 +247,7 @@ const TemplateRun = () => {
         const st = parsed?.status;
         setStatus(st);
         setProgress(parsed?.progress ?? 0);
+        if (Array.isArray(parsed?.logs)) setStepLogs(parsed.logs);
 
         if (st === "complete") {
           pollingRef.current = false;
@@ -275,6 +278,7 @@ const TemplateRun = () => {
     setOutputs(null);
     setError(null);
     setProgress(0);
+    setStepLogs([]);
     setUploadDebug([]);
     setRunTemplateDebug(null);
     setEnqueueDebug(null);
@@ -557,6 +561,22 @@ const TemplateRun = () => {
                   </div>
                   <p className="text-lg font-black text-foreground tabular-nums">{progress}%</p>
                 </div>
+
+                {/* Step log feed */}
+                {stepLogs.length > 0 && (
+                  <div className="w-full max-h-40 overflow-y-auto rounded-lg border border-border/20 bg-secondary/20 p-3 space-y-1.5 text-left">
+                    {stepLogs.map((log, i) => (
+                      <div
+                        key={i}
+                        className="flex items-start gap-2 animate-fade-in"
+                        style={{ animationDelay: `${i * 50}ms`, animationFillMode: "backwards" }}
+                      >
+                        <CheckCircle2 className="w-3 h-3 mt-0.5 shrink-0 text-primary" />
+                        <span className="text-[11px] text-muted-foreground leading-tight">{log}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
           )}
