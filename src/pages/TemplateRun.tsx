@@ -18,22 +18,33 @@ import { Progress } from "@/components/ui/progress";
 const CF_WORKER_URL = import.meta.env.VITE_CF_WORKER_URL as string || "https://shiny-rice-e95bfuse-api.kade-fc1.workers.dev";
 const CREDIT_DOLLAR_VALUE = 0.098; // ~$0.098 per credit (Starter: $49/500)
 
-/* ─── R2 upload ─── */
-const uploadToR2 = async (token: string, fieldKey: string, file: File): Promise<string> => {
-  const presignRes = await fetch(`${CF_WORKER_URL}/api/uploads/presign`, {
+/* ─── R2 upload via POST /api/uploads (confirmed working flow) ─── */
+const uploadToR2 = async (token: string, _fieldKey: string, file: File): Promise<{ assetKey: string; assetUrl: string }> => {
+  const fd = new FormData();
+  fd.append("file", file);
+  const res = await fetch(`${CF_WORKER_URL}/api/uploads`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+    body: fd,
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || !data.ok || !data.assetKey) {
+    throw new Error(data.error || `Upload failed (${res.status})`);
+  }
+  return { assetKey: data.assetKey, assetUrl: data.assetUrl };
+};
+
+/* ─── Enqueue project on CF Worker ─── */
+const enqueueProject = async (token: string, projectId: string): Promise<void> => {
+  const res = await fetch(`${CF_WORKER_URL}/api/enqueue`, {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-    body: JSON.stringify({ filename: `${fieldKey}-${file.name}`, content_type: file.type }),
+    body: JSON.stringify({ projectId }),
   });
-  if (!presignRes.ok) throw new Error(`Presign failed: ${await presignRes.text()}`);
-  const { key, upload_url } = await presignRes.json();
-  const putRes = await fetch(upload_url, {
-    method: "PUT",
-    headers: { "Content-Type": file.type, Authorization: `Bearer ${token}` },
-    body: file,
-  });
-  if (!putRes.ok) throw new Error(`Upload failed: ${await putRes.text()}`);
-  return key;
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error || `Enqueue failed (${res.status})`);
+  }
 };
 
 /* ─── Category icons/colors ─── */
@@ -267,17 +278,23 @@ const TemplateRun = () => {
       const token = session?.access_token;
       if (!token) throw new Error("Not authenticated – no session token");
 
+      // Step 1: Upload each file to R2
       const inputs: Record<string, string> = {};
       for (const field of inputSchema) {
         if (field.type === "image") {
           const f = files[field.key];
-          if (f) inputs[field.key] = await uploadToR2(token, field.key, f);
+          if (f) {
+            const { assetKey, assetUrl } = await uploadToR2(token, field.key, f);
+            inputs[field.key] = assetUrl;
+            inputs[`${field.key}_asset_key`] = assetKey;
+          }
         } else {
           const val = textInputs[field.key]?.trim();
           if (val) inputs[field.key] = val;
         }
       }
 
+      // Step 2: Create project via run-template edge function
       const { data: runData, error: runErr } = await supabase.functions.invoke("run-template", {
         body: { templateId: template.id, inputs },
       });
@@ -285,6 +302,9 @@ const TemplateRun = () => {
       if (runData?.error) throw new Error(runData.error);
       const jobId = runData?.projectId;
       if (!jobId) throw new Error("No job ID returned");
+
+      // Step 3: Enqueue on CF Worker
+      await enqueueProject(token, jobId);
 
       setProjectId(jobId);
       setResult({ status: "queued", progress: 0, logs: [], attempts: 0, maxAttempts: 3, outputs: [] });
