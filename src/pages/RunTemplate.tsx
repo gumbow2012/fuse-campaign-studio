@@ -334,7 +334,7 @@ const RunTemplate = () => {
             >
               {running ? (
                 <>
-                  <Loader2 size={14} className="animate-spin" /> RUNNING…
+                  <Loader2 size={14} className="animate-spin" /> GENERATING…
                 </>
               ) : (
                 <>
