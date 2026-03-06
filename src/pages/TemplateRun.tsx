@@ -213,6 +213,7 @@ const TemplateRun = () => {
     setStatus(null);
     setOutputs(null);
     setError(null);
+    setStepLogs([]);
     setUploadDebug([]);
     setRunTemplateDebug(null);
     setEnqueueDebug(null);
