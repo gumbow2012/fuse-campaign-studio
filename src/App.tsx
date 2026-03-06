@@ -57,6 +57,7 @@ const App = () => (
 
             {/* Flow B: Templates → Run */}
             <Route path="/app/templates" element={<ProtectedRoute><Templates /></ProtectedRoute>} />
+            <Route path="/app/templates/run" element={<ProtectedRoute><TemplateRun /></ProtectedRoute>} />
             <Route path="/app/run/:templateId" element={<ProtectedRoute><RunTemplate /></ProtectedRoute>} />
 
             {/* Admin */}
