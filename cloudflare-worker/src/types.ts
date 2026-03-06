@@ -1,7 +1,8 @@
 export interface Env {
   FUSE_ASSETS: R2Bucket;
   SUPABASE_URL: string;
-  SUPABASE_SERVICE_ROLE_KEY: string;
+SUPABASE_SERVICE_ROLE_KEY: string;
+  FUSE_API_KEY?: string;
   SUPABASE_ANON_KEY: string;
   // Legacy Weavy (kept for HAR import only)
   WEAVY_API_KEY?: string;

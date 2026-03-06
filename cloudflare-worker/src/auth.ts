@@ -1,10 +1,23 @@
 import { Env } from "./types";
 
-/** Verify the Supabase JWT and return the user ID. */
+/**
+ * Verify the Supabase JWT and return the user ID.
+ * Also supports a static X-Api-Key header for permanent server/testing access.
+ */
 export async function verifyToken(
   request: Request,
   env: Env,
 ): Promise<string> {
+  // Static API key bypass for permanent access
+  const apiKey = request.headers.get("X-Api-Key");
+  if (apiKey && env.FUSE_API_KEY && apiKey === env.FUSE_API_KEY) {
+    // Return a service-level user ID from the header or a default
+    const userId = request.headers.get("X-User-Id");
+    if (!userId) throw new Error("X-User-Id header required when using X-Api-Key");
+    console.log(`[auth] Authenticated via API key for user: ${userId}`);
+    return userId;
+  }
+
   const authHeader = request.headers.get("Authorization");
   if (!authHeader?.startsWith("Bearer ")) {
     throw new Error("Missing or invalid Authorization header");
