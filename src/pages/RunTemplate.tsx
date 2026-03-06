@@ -411,10 +411,10 @@ const RunTemplate = () => {
             <div className="flex-1 flex flex-col min-h-0">
               <div className="px-5 py-3 border-b border-border/20 flex items-center justify-between shrink-0">
                 <div>
-                  <p className="text-xs font-bold text-foreground flex items-center gap-2">
-                    <CheckCircle2 size={14} className="text-green-400" /> Output Ready
+                  <p className="text-xs font-bold text-foreground flex items-center gap-2 font-display">
+                    <CheckCircle2 size={14} className="text-green-400" /> Results Ready
                   </p>
-                  <p className="text-[10px] text-muted-foreground font-mono mt-0.5">
+                  <p className="text-[10px] text-muted-foreground mt-0.5">
                     {outputUrls.length} asset{outputUrls.length !== 1 ? "s" : ""}
                   </p>
                 </div>
