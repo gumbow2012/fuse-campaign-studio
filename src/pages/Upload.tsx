@@ -150,6 +150,7 @@ export default function UploadPage() {
         const st = pollJson?.status
         if (st === "complete" || st === "failed") {
           done = true
+          setFinalResult(pollJson)
         }
       }
     } catch (err: any) {
