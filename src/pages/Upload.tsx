@@ -15,6 +15,7 @@ export default function UploadPage() {
   const [runTemplateDebug, setRunTemplateDebug] = useState<any>(null)
   const [enqueueDebug, setEnqueueDebug] = useState<any>(null)
   const [pollDebug, setPollDebug] = useState<any>(null)
+  const [finalResult, setFinalResult] = useState<any>(null)
 
   async function handleUpload() {
     if (!file) { alert("choose file first"); return }
@@ -24,6 +25,7 @@ export default function UploadPage() {
     setRunTemplateDebug(null)
     setEnqueueDebug(null)
     setPollDebug(null)
+    setFinalResult(null)
 
     try {
       // ── Step 1: Upload to CF Worker R2 ──
@@ -148,6 +150,7 @@ export default function UploadPage() {
         const st = pollJson?.status
         if (st === "complete" || st === "failed") {
           done = true
+          setFinalResult(pollJson)
         }
       }
     } catch (err: any) {
@@ -172,6 +175,59 @@ export default function UploadPage() {
       {runTemplateDebug && <Section title="2. run-template (creates project)" color="#f90" data={runTemplateDebug} />}
       {enqueueDebug && <Section title="3. Enqueue (kick runner)" color="#ff0" data={enqueueDebug} />}
       {pollDebug && <Section title="4. Poll Status" color="#0ff" data={pollDebug} />}
+
+      {finalResult && finalResult.status === "complete" && (
+        <div style={{ marginTop: 32 }}>
+          <h2 style={{ color: "#0f0" }}>✅ Complete</h2>
+          {renderOutputs(finalResult.outputs)}
+          <Section title="Full Result Payload" color="#0f0" data={finalResult} />
+        </div>
+      )}
+
+      {finalResult && finalResult.status === "failed" && (
+        <div style={{ marginTop: 32 }}>
+          <h2 style={{ color: "#f44" }}>❌ Failed</h2>
+          <Section title="Error Payload" color="#f44" data={{ error: finalResult.error, debug_trace: finalResult.debug_trace, logs: finalResult.logs }} />
+        </div>
+      )}
+    </div>
+  )
+}
+
+function isMedia(url: string) {
+  const lower = url.toLowerCase()
+  if (/\.(jpg|jpeg|png|gif|webp|bmp|svg)/.test(lower)) return "image"
+  if (/\.(mp4|webm|mov|avi)/.test(lower)) return "video"
+  return null
+}
+
+function renderOutputs(outputs: any) {
+  if (!outputs) return <p style={{ color: "#aaa" }}>No outputs returned.</p>
+
+  const urls: string[] = []
+  // outputs could be an object with URL values, or an array
+  if (Array.isArray(outputs)) {
+    outputs.forEach((v: any) => { if (typeof v === "string") urls.push(v) })
+  } else if (typeof outputs === "object") {
+    Object.values(outputs).forEach((v: any) => { if (typeof v === "string" && v.startsWith("http")) urls.push(v) })
+  }
+
+  if (urls.length === 0) return <p style={{ color: "#aaa" }}>Outputs present but no URLs found. See payload below.</p>
+
+  return (
+    <div style={{ display: "flex", flexWrap: "wrap", gap: 16, marginTop: 12 }}>
+      {urls.map((url, i) => {
+        const type = isMedia(url)
+        return (
+          <div key={i} style={{ background: "#111", padding: 12, borderRadius: 8 }}>
+            {type === "image" && <img src={url} alt={`output-${i}`} style={{ maxWidth: 400, borderRadius: 4 }} />}
+            {type === "video" && <video src={url} controls style={{ maxWidth: 400, borderRadius: 4 }} />}
+            <div style={{ marginTop: 8 }}>
+              <a href={url} target="_blank" rel="noreferrer" style={{ color: "#4af", wordBreak: "break-all", fontSize: 12 }}>{url}</a>
+            </div>
+          </div>
+        )
+      })}
     </div>
   )
 }
