@@ -191,6 +191,7 @@ const TemplateRun = () => {
   const [status, setStatus] = useState<string | null>(null);
   const [outputs, setOutputs] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
+  const [progress, setProgress] = useState(0);
 
   // Debug state
   const [uploadDebug, setUploadDebug] = useState<any[]>([]);
