@@ -59,3 +59,30 @@ export async function handleUploadPut(request: Request, env: Env, key: string): 
 
   return Response.json({ key, url });
 }
+
+/**
+ * POST /api/uploads  (multipart/form-data)
+ * Accepts a single file in a "file" field, streams it to R2.
+ * Returns: { key, url }
+ */
+export async function handleUploadMultipart(request: Request, env: Env): Promise<Response> {
+  const userId = await verifyToken(request, env);
+
+  const formData = await request.formData();
+  const file = formData.get("file") as File | null;
+
+  if (!file) {
+    return Response.json({ error: "No 'file' field in form data" }, { status: 400 });
+  }
+
+  const ext = file.name.split(".").pop() || "bin";
+  const key = `uploads/${userId}/${Date.now()}-${crypto.randomUUID().slice(0, 8)}.${ext}`;
+
+  await env.FUSE_ASSETS.put(key, file.stream(), {
+    httpMetadata: { contentType: file.type || "application/octet-stream" },
+  });
+
+  const url = `${WORKER_URL}/assets/${encodeURIComponent(key)}`;
+
+  return Response.json({ key, url });
+}

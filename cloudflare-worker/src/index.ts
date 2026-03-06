@@ -6,7 +6,7 @@ import { handleUpload, handleRunTemplate, handleJobStatus } from "./routes/pappa
 import { handleWeavyTrigger } from "./routes/weavy-trigger";
 import { handleUsage } from "./routes/usage";
 import { handleEnqueue, handleProjectStatus } from "./routes/runner";
-import { handlePresign, handleUploadPut } from "./routes/uploads";
+import { handlePresign, handleUploadPut, handleUploadMultipart } from "./routes/uploads";
 import { serveAsset } from "./r2";
 import { handleTestKling } from "./routes/test-kling";
 import { handleNanoRun } from "./routes/nano";
@@ -46,6 +46,10 @@ export default {
       if (path.match(/^\/api\/projects\/[^/]+$/) && request.method === "GET") {
         const projectId = path.split("/")[3];
         response = await handleProjectStatus(request, env, projectId);
+
+      // ── Direct multipart upload to R2 ──
+      } else if (path === "/api/uploads" && request.method === "POST") {
+        response = await handleUploadMultipart(request, env);
 
       // ── Presigned upload (step 1: get key + url) ──
       } else if (path === "/api/uploads/presign" && request.method === "POST") {
