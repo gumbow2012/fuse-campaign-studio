@@ -19,6 +19,11 @@ export async function verifyToken(
     return userId;
   }
 
+  // ── JWT fallback: require SUPABASE_URL to be configured ──
+  if (!env.SUPABASE_URL) {
+    throw new Error("SUPABASE_URL is not configured. Use X-Api-Key + X-User-Id for authentication, or set the SUPABASE_URL secret.");
+  }
+
   const authHeader = request.headers.get("Authorization");
   if (!authHeader?.startsWith("Bearer ")) {
     throw new Error("Missing or invalid Authorization header");
@@ -43,9 +48,7 @@ export async function verifyToken(
       }
     }
   } catch (e: any) {
-    // If it's our mismatch error, re-throw it
     if (e.message?.includes("Token issuer mismatch")) throw e;
-    // Otherwise just log and let Supabase do the final validation
     console.warn("[auth] Could not decode JWT for pre-check:", e.message);
   }
 
