@@ -31,6 +31,7 @@ import FlowEmbed from "./pages/FlowEmbed";
 import FlowTest from "./pages/FlowTest";
 import NanoRun from "./pages/NanoRun";
 import NotFound from "./pages/NotFound";
+import Upload from "./pages/Upload";
 
 const queryClient = new QueryClient();
 
@@ -76,6 +77,7 @@ const App = () => (
             <Route path="/admin/templates" element={<AdminRoute><AdminTemplates /></AdminRoute>} />
             <Route path="/admin/templates/import" element={<AdminRoute><AdminTemplateImport /></AdminRoute>} />
 
+            <Route path="/upload" element={<Upload />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </BrowserRouter>
