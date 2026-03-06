@@ -194,6 +194,44 @@ export default function UploadPage() {
   )
 }
 
+function isMedia(url: string) {
+  const lower = url.toLowerCase()
+  if (/\.(jpg|jpeg|png|gif|webp|bmp|svg)/.test(lower)) return "image"
+  if (/\.(mp4|webm|mov|avi)/.test(lower)) return "video"
+  return null
+}
+
+function renderOutputs(outputs: any) {
+  if (!outputs) return <p style={{ color: "#aaa" }}>No outputs returned.</p>
+
+  const urls: string[] = []
+  // outputs could be an object with URL values, or an array
+  if (Array.isArray(outputs)) {
+    outputs.forEach((v: any) => { if (typeof v === "string") urls.push(v) })
+  } else if (typeof outputs === "object") {
+    Object.values(outputs).forEach((v: any) => { if (typeof v === "string" && v.startsWith("http")) urls.push(v) })
+  }
+
+  if (urls.length === 0) return <p style={{ color: "#aaa" }}>Outputs present but no URLs found. See payload below.</p>
+
+  return (
+    <div style={{ display: "flex", flexWrap: "wrap", gap: 16, marginTop: 12 }}>
+      {urls.map((url, i) => {
+        const type = isMedia(url)
+        return (
+          <div key={i} style={{ background: "#111", padding: 12, borderRadius: 8 }}>
+            {type === "image" && <img src={url} alt={`output-${i}`} style={{ maxWidth: 400, borderRadius: 4 }} />}
+            {type === "video" && <video src={url} controls style={{ maxWidth: 400, borderRadius: 4 }} />}
+            <div style={{ marginTop: 8 }}>
+              <a href={url} target="_blank" rel="noreferrer" style={{ color: "#4af", wordBreak: "break-all", fontSize: 12 }}>{url}</a>
+            </div>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
 function Section({ title, color, data }: { title: string; color: string; data: any }) {
   return (
     <>
