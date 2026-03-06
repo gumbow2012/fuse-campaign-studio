@@ -369,8 +369,8 @@ const RunTemplate = () => {
                   <Loader2 className="w-8 h-8 text-primary animate-spin" />
                 </div>
                 <div>
-                  <p className="text-sm font-bold text-foreground">
-                    {status.status === "queued" ? "Queued…" : "Generating assets…"}
+                  <p className="text-sm font-bold text-foreground font-display">
+                    {progress < 10 ? "Preparing…" : progress < 80 ? "Generating…" : "Finalizing…"}
                   </p>
                   <p className="text-xs text-muted-foreground mt-1">This may take a few minutes</p>
                 </div>
@@ -385,20 +385,6 @@ const RunTemplate = () => {
                   </div>
                   <p className="text-lg font-black text-foreground tabular-nums">{progress}%</p>
                 </div>
-
-                {/* Logs */}
-                {logs.length > 0 && (
-                  <div className="w-full max-h-48 overflow-y-auto rounded-lg border border-border/20 bg-secondary/20 p-3 space-y-1.5 text-left">
-                    {logs.map((log, i) => (
-                      <div key={i} className="flex items-start gap-2">
-                        <CheckCircle2 className="w-3 h-3 mt-0.5 shrink-0 text-primary" />
-                        <span className="text-[11px] font-mono text-muted-foreground leading-tight">
-                          {log}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                )}
               </div>
             </div>
           )}
