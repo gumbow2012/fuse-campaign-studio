@@ -1,5 +1,6 @@
 name = "shiny-rice-e95bfuse-api"
 main = "src/index.ts"
+account_id = "fc1475b3027b02c9aef41534caae907d"
 compatibility_date = "2024-12-01"
 compatibility_flags = ["nodejs_compat"]
 
