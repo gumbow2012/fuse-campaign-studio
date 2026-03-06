@@ -247,6 +247,7 @@ const TemplateRun = () => {
         const st = parsed?.status;
         setStatus(st);
         setProgress(parsed?.progress ?? 0);
+        if (Array.isArray(parsed?.logs)) setStepLogs(parsed.logs);
 
         if (st === "complete") {
           pollingRef.current = false;
