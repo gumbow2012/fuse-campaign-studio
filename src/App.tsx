@@ -24,14 +24,8 @@ import AdminAnalytics from "./pages/AdminAnalytics";
 import CreatorAnalytics from "./pages/CreatorAnalytics";
 import Referrals from "./pages/Referrals";
 import Templates from "./pages/Templates";
-import TemplateRun from "./pages/TemplateRun";
-import PapparaziRun from "./pages/PapparaziRun";
-import JobStatus from "./pages/JobStatus";
-import FlowEmbed from "./pages/FlowEmbed";
-import FlowTest from "./pages/FlowTest";
-import NanoRun from "./pages/NanoRun";
+import RunTemplate from "./pages/RunTemplate";
 import NotFound from "./pages/NotFound";
-import Upload from "./pages/Upload";
 
 const queryClient = new QueryClient();
 
@@ -43,41 +37,33 @@ const App = () => (
         <Sonner />
         <BrowserRouter>
           <Routes>
-            {/* Public routes */}
+            {/* Public */}
             <Route path="/" element={<Index />} />
             <Route path="/pricing" element={<Pricing />} />
             <Route path="/auth" element={<Auth />} />
             <Route path="/forgot-password" element={<ForgotPassword />} />
             <Route path="/reset-password" element={<ResetPassword />} />
 
-            {/* Protected routes */}
+            {/* Protected */}
             <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
             <Route path="/projects" element={<ProtectedRoute><Projects /></ProtectedRoute>} />
             <Route path="/projects/:projectId" element={<ProtectedRoute><ProjectDetail /></ProtectedRoute>} />
             <Route path="/billing" element={<ProtectedRoute><Billing /></ProtectedRoute>} />
             <Route path="/account" element={<ProtectedRoute><Account /></ProtectedRoute>} />
-
             <Route path="/analytics" element={<ProtectedRoute><Analytics /></ProtectedRoute>} />
             <Route path="/creator/analytics" element={<ProtectedRoute><CreatorAnalytics /></ProtectedRoute>} />
             <Route path="/referrals" element={<ProtectedRoute><Referrals /></ProtectedRoute>} />
 
-            {/* Template run & job status */}
+            {/* Flow B: Templates → Run */}
             <Route path="/app/templates" element={<ProtectedRoute><Templates /></ProtectedRoute>} />
-            <Route path="/app/templates/run" element={<ProtectedRoute><TemplateRun /></ProtectedRoute>} />
-            <Route path="/app/templates/dvgEXt4aeShCeokMq5MIpZ/run" element={<ProtectedRoute><PapparaziRun /></ProtectedRoute>} />
-            <Route path="/app/templates/:slug" element={<ProtectedRoute><TemplateRun /></ProtectedRoute>} />
-            <Route path="/app/flow/:flowId" element={<ProtectedRoute><FlowEmbed /></ProtectedRoute>} />
-            <Route path="/app/flow-test" element={<FlowTest />} />
-            <Route path="/app/jobs/:jobId" element={<ProtectedRoute><JobStatus /></ProtectedRoute>} />
-            <Route path="/app/nano" element={<ProtectedRoute><NanoRun /></ProtectedRoute>} />
+            <Route path="/app/run/:templateId" element={<ProtectedRoute><RunTemplate /></ProtectedRoute>} />
 
-            {/* Admin routes */}
+            {/* Admin */}
             <Route path="/admin" element={<AdminRoute><Admin /></AdminRoute>} />
             <Route path="/admin/analytics" element={<AdminRoute><AdminAnalytics /></AdminRoute>} />
             <Route path="/admin/templates" element={<AdminRoute><AdminTemplates /></AdminRoute>} />
             <Route path="/admin/templates/import" element={<AdminRoute><AdminTemplateImport /></AdminRoute>} />
 
-            <Route path="/upload" element={<Upload />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </BrowserRouter>
