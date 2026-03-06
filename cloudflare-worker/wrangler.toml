@@ -21,3 +21,8 @@ bucket_name = "fuse-assets"
 # KLING_SECRET_KEY — Kling secret key (for JWT signing)
 # GEMINI_API_KEY — Google Gemini API key for Nano Banana image generation
 
+# KV namespace binding
+[[kv_namespaces]]
+binding = "FUSE_TEMPLATES"
+id = "REPLACE_WITH_YOUR_KV_NAMESPACE_ID"
+
