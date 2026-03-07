@@ -39,6 +39,84 @@ async function cfFetch<T = unknown>(
 
 /* ──────────────────────── Public API ──────────────────────── */
 
+/* ─── Templates ─── */
+
+export interface WorkerTemplate {
+  id: string;
+  name: string;
+  description?: string;
+  category?: string;
+  output_type?: string;
+  required_inputs?: string[];
+  estimated_credits_per_run?: number;
+}
+
+/** Fetch available templates from the worker. */
+export async function listTemplates(token: string): Promise<WorkerTemplate[]> {
+  return cfFetch<WorkerTemplate[]>("/api/templates", { method: "GET", token });
+}
+
+/* ─── Projects ─── */
+
+export interface CreateProjectPayload {
+  template_id: string;
+  inputs: Record<string, string>;
+}
+
+export interface CreateProjectResponse {
+  ok: boolean;
+  projectId: string;
+}
+
+/** Create a project record via the worker. */
+export async function createProject(
+  payload: CreateProjectPayload,
+  token: string,
+): Promise<CreateProjectResponse> {
+  return cfFetch<CreateProjectResponse>("/api/projects", {
+    method: "POST",
+    body: payload,
+    token,
+  });
+}
+
+/** Enqueue (start) a created project. */
+export async function enqueueJob(
+  projectId: string,
+  token: string,
+): Promise<{ ok: boolean; projectId: string; message: string }> {
+  return cfFetch<{ ok: boolean; projectId: string; message: string }>("/api/enqueue", {
+    method: "POST",
+    body: { projectId },
+    token,
+  });
+}
+
+export interface ProjectStatusResponse {
+  ok: boolean;
+  id: string;
+  status: "queued" | "running" | "video_pending" | "complete" | "failed";
+  progress?: number;
+  outputs?: { items?: { type: string; url: string; label?: string }[] };
+  error?: string;
+  logs?: string[];
+  attempts?: number;
+  maxAttempts?: number;
+}
+
+/** Poll the worker for project status. */
+export async function getProjectStatus(
+  projectId: string,
+  token: string,
+): Promise<ProjectStatusResponse> {
+  return cfFetch<ProjectStatusResponse>(`/api/projects/${projectId}`, {
+    method: "GET",
+    token,
+  });
+}
+
+/* ─── Legacy endpoints (kept for backward compat) ─── */
+
 export interface SubmitJobPayload {
   projectId: string;
   templateId: string;
@@ -50,7 +128,7 @@ export interface SubmitJobResponse {
   status: string;
 }
 
-/** Submit a job to the CF Worker for orchestration. */
+/** @deprecated Use createProject + enqueueJob instead. */
 export async function submitJob(
   payload: SubmitJobPayload,
   token: string,
@@ -69,7 +147,7 @@ export interface JobStatusResponse {
   error?: string;
 }
 
-/** Poll the CF Worker for job status. */
+/** @deprecated Use getProjectStatus instead. */
 export async function getJobStatus(
   projectId: string,
   token: string,
