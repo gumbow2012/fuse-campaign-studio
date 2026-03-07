@@ -1,0 +1,1 @@
+ALTER TABLE public.projects ADD COLUMN IF NOT EXISTS user_inputs jsonb DEFAULT '{}'::jsonb;

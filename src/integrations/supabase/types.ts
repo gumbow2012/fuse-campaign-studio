@@ -308,6 +308,7 @@ export type Database = {
           template_name: string | null
           updated_at: string
           user_id: string
+          user_inputs: Json | null
           weavy_run_id: string | null
         }
         Insert: {
@@ -330,6 +331,7 @@ export type Database = {
           template_name?: string | null
           updated_at?: string
           user_id: string
+          user_inputs?: Json | null
           weavy_run_id?: string | null
         }
         Update: {
@@ -352,6 +354,7 @@ export type Database = {
           template_name?: string | null
           updated_at?: string
           user_id?: string
+          user_inputs?: Json | null
           weavy_run_id?: string | null
         }
         Relationships: [
