@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
+import { listTemplates } from "@/lib/cf-worker";
 import Navbar from "@/components/Navbar";
 import { Zap } from "lucide-react";
 
@@ -20,6 +21,16 @@ const Templates = () => {
   const { data: templates, isLoading } = useQuery({
     queryKey: ["all-templates"],
     queryFn: async () => {
+      // Try worker API first, fall back to Supabase
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session?.access_token) {
+          const workerTemplates = await listTemplates(session.access_token);
+          if (workerTemplates?.length) return workerTemplates;
+        }
+      } catch (e) {
+        console.warn("Worker templates fetch failed, falling back to DB:", e);
+      }
       const { data, error } = await supabase
         .from("templates")
         .select("*")
