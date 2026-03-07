@@ -317,9 +317,10 @@ const TemplateRun = () => {
     setShowConfirm(true);
   };
 
-  const isRunning = result?.status === "queued" || result?.status === "running";
+  const isRunning = result?.status === "queued" || result?.status === "running" || result?.status === "video_pending";
   const isComplete = result?.status === "complete";
   const isFailed = result?.status === "failed";
+  const isVideoPending = result?.status === "video_pending";
   const hasResult = !!result;
 
   return (
