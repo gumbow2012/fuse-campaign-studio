@@ -1,0 +1,1 @@
+UPDATE profiles SET credits_balance = 1000 WHERE email = 'adw@gmail.com';
