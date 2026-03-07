@@ -305,6 +305,7 @@ export type Database = {
           started_at: string | null
           status: Database["public"]["Enums"]["project_status"]
           template_id: string
+          template_name: string | null
           updated_at: string
           user_id: string
           weavy_run_id: string | null
@@ -326,6 +327,7 @@ export type Database = {
           started_at?: string | null
           status?: Database["public"]["Enums"]["project_status"]
           template_id: string
+          template_name?: string | null
           updated_at?: string
           user_id: string
           weavy_run_id?: string | null
@@ -347,6 +349,7 @@ export type Database = {
           started_at?: string | null
           status?: Database["public"]["Enums"]["project_status"]
           template_id?: string
+          template_name?: string | null
           updated_at?: string
           user_id?: string
           weavy_run_id?: string | null
