@@ -620,10 +620,12 @@ const TemplateRun = () => {
                 </div>
                 <div>
                   <p className="text-sm font-bold text-foreground">
-                    {result?.status === "queued" ? "Queued..." : "Generating your assets..."}
+                    {result?.status === "queued" ? "Queued..." : isVideoPending ? "Video processing..." : "Generating your assets..."}
                   </p>
                   <p className="text-xs text-muted-foreground mt-1">
-                    Attempt {result?.attempts ?? 0}/{result?.maxAttempts ?? 3} · This may take a few minutes
+                    {isVideoPending
+                      ? "Image is ready. Video generation takes 1–3 minutes."
+                      : `Attempt ${result?.attempts ?? 0}/${result?.maxAttempts ?? 3} · This may take a few minutes`}
                   </p>
                 </div>
                 <div className="space-y-1.5">
