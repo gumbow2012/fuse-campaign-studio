@@ -647,6 +647,19 @@ const TemplateRun = () => {
                   </div>
                 )}
               </div>
+              {/* Show completed images during video_pending */}
+              {isVideoPending && result && result.outputs.length > 0 && (
+                <div className="px-5 pb-5">
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-3">Image Ready</p>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {result.outputs.filter(o => o.type === "image").map((output, i) => (
+                      <div key={i} className="rounded-xl border border-border/30 bg-card overflow-hidden">
+                        <img src={output.url} alt={output.label || `Image ${i + 1}`} className="w-full aspect-square object-cover bg-secondary/50" />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
