@@ -18,22 +18,18 @@ import { Progress } from "@/components/ui/progress";
 const CF_WORKER_URL = import.meta.env.VITE_CF_WORKER_URL as string || "https://shiny-rice-e95bfuse-api.kade-fc1.workers.dev";
 const CREDIT_DOLLAR_VALUE = 0.098; // ~$0.098 per credit (Starter: $49/500)
 
-/* ─── R2 upload ─── */
-const uploadToR2 = async (token: string, fieldKey: string, file: File): Promise<string> => {
-  const presignRes = await fetch(`${CF_WORKER_URL}/api/uploads/presign`, {
+/* ─── Upload image to worker (multipart) ─── */
+const uploadImage = async (token: string, file: File): Promise<{ imageUrl: string; key: string }> => {
+  const formData = new FormData();
+  formData.append("file", file);
+  const res = await fetch(`${CF_WORKER_URL}/api/upload`, {
     method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-    body: JSON.stringify({ filename: `${fieldKey}-${file.name}`, content_type: file.type }),
+    headers: { Authorization: `Bearer ${token}` },
+    body: formData,
   });
-  if (!presignRes.ok) throw new Error(`Presign failed: ${await presignRes.text()}`);
-  const { key, upload_url } = await presignRes.json();
-  const putRes = await fetch(upload_url, {
-    method: "PUT",
-    headers: { "Content-Type": file.type, Authorization: `Bearer ${token}` },
-    body: file,
-  });
-  if (!putRes.ok) throw new Error(`Upload failed: ${await putRes.text()}`);
-  return key;
+  const data = await res.json();
+  if (!res.ok) throw new Error(data?.error || `Upload failed: ${res.status}`);
+  return { imageUrl: data.imageUrl || data.url, key: data.key || data.assetKey };
 };
 
 /* ─── Category icons/colors ─── */
