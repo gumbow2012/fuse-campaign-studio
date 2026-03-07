@@ -223,7 +223,8 @@ const TemplateRun = () => {
         const outputs: OutputItem[] = (status.outputs?.items || []).map((item: any) => ({
           type: item.type || "image", url: item.url, label: item.label,
         }));
-        const normalizedStatus = status.status === "succeeded" ? "complete" : status.status as ProjectResult["status"];
+        const rawStatus = status.status === "succeeded" ? "complete" : status.status;
+        const normalizedStatus = rawStatus as ProjectResult["status"];
         setResult({
           status: normalizedStatus,
           progress: status.progress ?? 0,
@@ -233,9 +234,11 @@ const TemplateRun = () => {
           outputs,
           error: status.error ?? undefined,
         });
-        if (normalizedStatus === "queued" || normalizedStatus === "running") setTimeout(poll, 2000);
+        if (normalizedStatus === "queued" || normalizedStatus === "running" || normalizedStatus === "video_pending") {
+          setTimeout(poll, 10000);
+        }
       } catch {
-        if (pollingRef.current) setTimeout(poll, 4000);
+        if (pollingRef.current) setTimeout(poll, 10000);
       }
     };
     poll();
