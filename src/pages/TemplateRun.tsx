@@ -157,17 +157,19 @@ const TemplateRun = () => {
   const [result, setResult] = useState<ProjectResult | null>(null);
   const pollingRef = useRef(false);
 
-  // Load templates
+  // Load templates from CF Worker API
   const { data: templates, isLoading: templatesLoading } = useQuery({
     queryKey: ["active-templates"],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("templates")
-        .select("*")
-        .eq("is_active", true)
-        .order("name");
-      if (error) throw error;
-      return data;
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      const headers: Record<string, string> = {};
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+      const res = await fetch(`${CF_WORKER_URL}/api/templates`, { headers });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || "Failed to load templates");
+      // Worker may return array directly or { templates: [...] }
+      return Array.isArray(data) ? data : (data.templates || []);
     },
   });
 
