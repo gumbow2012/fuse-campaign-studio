@@ -125,7 +125,7 @@ const UploadZone = ({ label, required, file, onFile }: UploadZoneProps) => {
 interface InputField { key: string; label: string; nodeId: string; type: string; required: boolean; }
 interface OutputItem { type: string; url: string; label?: string; }
 interface ProjectResult {
-  status: "queued" | "running" | "complete" | "failed";
+  status: "queued" | "running" | "video_pending" | "complete" | "failed";
   progress: number;
   logs: string[];
   attempts: number;
