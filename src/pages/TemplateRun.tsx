@@ -263,24 +263,41 @@ const TemplateRun = () => {
       const token = session?.access_token;
       if (!token) throw new Error("Not authenticated – no session token");
 
+      // 1. Upload files & build inputs
       const inputs: Record<string, string> = {};
       for (const field of inputSchema) {
         if (field.type === "image") {
           const f = files[field.key];
-          if (f) inputs[field.key] = await uploadToR2(token, field.key, f);
+          if (f) {
+            const { imageUrl, key } = await uploadImage(token, f);
+            inputs[field.key] = imageUrl;
+            inputs[`${field.key}_key`] = key;
+          }
         } else {
           const val = textInputs[field.key]?.trim();
           if (val) inputs[field.key] = val;
         }
       }
 
-      const { data: runData, error: runErr } = await supabase.functions.invoke("run-template", {
-        body: { templateId: template.id, inputs },
+      // 2. Create project via worker
+      const createRes = await fetch(`${CF_WORKER_URL}/api/projects`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ template_id: template.id, inputs }),
       });
-      if (runErr) throw new Error(runErr.message || "Run template failed");
-      if (runData?.error) throw new Error(runData.error);
-      const jobId = runData?.projectId;
-      if (!jobId) throw new Error("No job ID returned");
+      const createData = await createRes.json();
+      if (!createRes.ok) throw new Error(createData?.error || "Create project failed");
+      const jobId = createData?.projectId;
+      if (!jobId) throw new Error("No project ID returned");
+
+      // 3. Enqueue the job
+      const enqueueRes = await fetch(`${CF_WORKER_URL}/api/enqueue`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ projectId: jobId }),
+      });
+      const enqueueData = await enqueueRes.json();
+      if (!enqueueRes.ok) throw new Error(enqueueData?.error || "Enqueue failed");
 
       setProjectId(jobId);
       setResult({ status: "queued", progress: 0, logs: [], attempts: 0, maxAttempts: 3, outputs: [] });
