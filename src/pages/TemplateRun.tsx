@@ -18,22 +18,18 @@ import { Progress } from "@/components/ui/progress";
 const CF_WORKER_URL = import.meta.env.VITE_CF_WORKER_URL as string || "https://shiny-rice-e95bfuse-api.kade-fc1.workers.dev";
 const CREDIT_DOLLAR_VALUE = 0.098; // ~$0.098 per credit (Starter: $49/500)
 
-/* ─── R2 upload ─── */
-const uploadToR2 = async (token: string, fieldKey: string, file: File): Promise<string> => {
-  const presignRes = await fetch(`${CF_WORKER_URL}/api/uploads/presign`, {
+/* ─── Upload image to worker (multipart) ─── */
+const uploadImage = async (token: string, file: File): Promise<{ imageUrl: string; key: string }> => {
+  const formData = new FormData();
+  formData.append("file", file);
+  const res = await fetch(`${CF_WORKER_URL}/api/upload`, {
     method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-    body: JSON.stringify({ filename: `${fieldKey}-${file.name}`, content_type: file.type }),
+    headers: { Authorization: `Bearer ${token}` },
+    body: formData,
   });
-  if (!presignRes.ok) throw new Error(`Presign failed: ${await presignRes.text()}`);
-  const { key, upload_url } = await presignRes.json();
-  const putRes = await fetch(upload_url, {
-    method: "PUT",
-    headers: { "Content-Type": file.type, Authorization: `Bearer ${token}` },
-    body: file,
-  });
-  if (!putRes.ok) throw new Error(`Upload failed: ${await putRes.text()}`);
-  return key;
+  const data = await res.json();
+  if (!res.ok) throw new Error(data?.error || `Upload failed: ${res.status}`);
+  return { imageUrl: data.imageUrl || data.url, key: data.key || data.assetKey };
 };
 
 /* ─── Category icons/colors ─── */
@@ -129,7 +125,7 @@ const UploadZone = ({ label, required, file, onFile }: UploadZoneProps) => {
 interface InputField { key: string; label: string; nodeId: string; type: string; required: boolean; }
 interface OutputItem { type: string; url: string; label?: string; }
 interface ProjectResult {
-  status: "queued" | "running" | "complete" | "failed";
+  status: "queued" | "running" | "video_pending" | "complete" | "failed";
   progress: number;
   logs: string[];
   attempts: number;
@@ -227,7 +223,8 @@ const TemplateRun = () => {
         const outputs: OutputItem[] = (status.outputs?.items || []).map((item: any) => ({
           type: item.type || "image", url: item.url, label: item.label,
         }));
-        const normalizedStatus = status.status === "succeeded" ? "complete" : status.status as ProjectResult["status"];
+        const rawStatus = status.status === "succeeded" ? "complete" : status.status;
+        const normalizedStatus = rawStatus as ProjectResult["status"];
         setResult({
           status: normalizedStatus,
           progress: status.progress ?? 0,
@@ -237,9 +234,11 @@ const TemplateRun = () => {
           outputs,
           error: status.error ?? undefined,
         });
-        if (normalizedStatus === "queued" || normalizedStatus === "running") setTimeout(poll, 2000);
+        if (normalizedStatus === "queued" || normalizedStatus === "running" || normalizedStatus === "video_pending") {
+          setTimeout(poll, 10000);
+        }
       } catch {
-        if (pollingRef.current) setTimeout(poll, 4000);
+        if (pollingRef.current) setTimeout(poll, 10000);
       }
     };
     poll();
@@ -267,24 +266,41 @@ const TemplateRun = () => {
       const token = session?.access_token;
       if (!token) throw new Error("Not authenticated – no session token");
 
+      // 1. Upload files & build inputs
       const inputs: Record<string, string> = {};
       for (const field of inputSchema) {
         if (field.type === "image") {
           const f = files[field.key];
-          if (f) inputs[field.key] = await uploadToR2(token, field.key, f);
+          if (f) {
+            const { imageUrl, key } = await uploadImage(token, f);
+            inputs[field.key] = imageUrl;
+            inputs[`${field.key}_key`] = key;
+          }
         } else {
           const val = textInputs[field.key]?.trim();
           if (val) inputs[field.key] = val;
         }
       }
 
-      const { data: runData, error: runErr } = await supabase.functions.invoke("run-template", {
-        body: { templateId: template.id, inputs },
+      // 2. Create project via worker
+      const createRes = await fetch(`${CF_WORKER_URL}/api/projects`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ template_id: template.id, inputs }),
       });
-      if (runErr) throw new Error(runErr.message || "Run template failed");
-      if (runData?.error) throw new Error(runData.error);
-      const jobId = runData?.projectId;
-      if (!jobId) throw new Error("No job ID returned");
+      const createData = await createRes.json();
+      if (!createRes.ok) throw new Error(createData?.error || "Create project failed");
+      const jobId = createData?.projectId;
+      if (!jobId) throw new Error("No project ID returned");
+
+      // 3. Enqueue the job
+      const enqueueRes = await fetch(`${CF_WORKER_URL}/api/enqueue`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ projectId: jobId }),
+      });
+      const enqueueData = await enqueueRes.json();
+      if (!enqueueRes.ok) throw new Error(enqueueData?.error || "Enqueue failed");
 
       setProjectId(jobId);
       setResult({ status: "queued", progress: 0, logs: [], attempts: 0, maxAttempts: 3, outputs: [] });
@@ -301,9 +317,10 @@ const TemplateRun = () => {
     setShowConfirm(true);
   };
 
-  const isRunning = result?.status === "queued" || result?.status === "running";
+  const isRunning = result?.status === "queued" || result?.status === "running" || result?.status === "video_pending";
   const isComplete = result?.status === "complete";
   const isFailed = result?.status === "failed";
+  const isVideoPending = result?.status === "video_pending";
   const hasResult = !!result;
 
   return (
@@ -603,10 +620,12 @@ const TemplateRun = () => {
                 </div>
                 <div>
                   <p className="text-sm font-bold text-foreground">
-                    {result?.status === "queued" ? "Queued..." : "Generating your assets..."}
+                    {result?.status === "queued" ? "Queued..." : isVideoPending ? "Video processing..." : "Generating your assets..."}
                   </p>
                   <p className="text-xs text-muted-foreground mt-1">
-                    Attempt {result?.attempts ?? 0}/{result?.maxAttempts ?? 3} · This may take a few minutes
+                    {isVideoPending
+                      ? "Image is ready. Video generation takes 1–3 minutes."
+                      : `Attempt ${result?.attempts ?? 0}/${result?.maxAttempts ?? 3} · This may take a few minutes`}
                   </p>
                 </div>
                 <div className="space-y-1.5">
@@ -628,6 +647,19 @@ const TemplateRun = () => {
                   </div>
                 )}
               </div>
+              {/* Show completed images during video_pending */}
+              {isVideoPending && result && result.outputs.length > 0 && (
+                <div className="px-5 pb-5">
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-3">Image Ready</p>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {result.outputs.filter(o => o.type === "image").map((output, i) => (
+                      <div key={i} className="rounded-xl border border-border/30 bg-card overflow-hidden">
+                        <img src={output.url} alt={output.label || `Image ${i + 1}`} className="w-full aspect-square object-cover bg-secondary/50" />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
