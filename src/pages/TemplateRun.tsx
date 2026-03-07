@@ -13,24 +13,20 @@ import {
   MoreVertical, DollarSign, Sparkles, Image as ImageIcon, Film,
 } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
+import {
+  fetchTemplates,
+  fetchTemplateDetail,
+  uploadFile,
+  createProject,
+  enqueueProject,
+  getProjectStatus,
+  type ApiTemplate,
+  type OutputItem,
+  type TemplateDetail,
+} from "@/services/fuseApi";
 
 /* ─── Constants ─── */
-const CF_WORKER_URL = import.meta.env.VITE_CF_WORKER_URL as string || "https://shiny-rice-e95bfuse-api.kade-fc1.workers.dev";
-const CREDIT_DOLLAR_VALUE = 0.098; // ~$0.098 per credit (Starter: $49/500)
-
-/* ─── Upload image to worker (multipart) ─── */
-const uploadImage = async (token: string, file: File): Promise<{ imageUrl: string; key: string }> => {
-  const formData = new FormData();
-  formData.append("file", file);
-  const res = await fetch(`${CF_WORKER_URL}/api/upload`, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${token}` },
-    body: formData,
-  });
-  const data = await res.json();
-  if (!res.ok) throw new Error(data?.error || `Upload failed: ${res.status}`);
-  return { imageUrl: data.imageUrl || data.url, key: data.key || data.assetKey };
-};
+const CREDIT_DOLLAR_VALUE = 0.098;
 
 /* ─── Category icons/colors ─── */
 const categoryConfig: Record<string, { color: string; icon: string }> = {
@@ -76,8 +72,10 @@ const UploadZone = ({ label, required, file, onFile }: UploadZoneProps) => {
         <label className="text-[10px] font-bold uppercase tracking-[0.2em] text-foreground/60">
           {label}
         </label>
-        {required && (
+        {required ? (
           <span className="text-[8px] font-bold uppercase tracking-wider text-primary/70 bg-primary/10 px-1.5 py-0.5 rounded">Required</span>
+        ) : (
+          <span className="text-[8px] font-bold uppercase tracking-wider text-muted-foreground/40 bg-secondary/40 px-1.5 py-0.5 rounded">Optional</span>
         )}
       </div>
       {file ? (
@@ -122,8 +120,7 @@ const UploadZone = ({ label, required, file, onFile }: UploadZoneProps) => {
 };
 
 /* ─── Types ─── */
-interface InputField { key: string; label: string; nodeId: string; type: string; required: boolean; }
-interface OutputItem { type: string; url: string; label?: string; }
+interface InputField { key: string; label: string; type: string; required: boolean }
 interface ProjectResult {
   status: "queued" | "running" | "video_pending" | "complete" | "failed";
   progress: number;
@@ -157,39 +154,79 @@ const TemplateRun = () => {
   const [result, setResult] = useState<ProjectResult | null>(null);
   const pollingRef = useRef(false);
 
+  // Helper to get fresh token
+  const getToken = async (): Promise<string> => {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.access_token) throw new Error("Not authenticated");
+    return session.access_token;
+  };
+
   // Load templates from CF Worker API
-  const { data: templates, isLoading: templatesLoading } = useQuery<any[]>({
+  const { data: templates, isLoading: templatesLoading } = useQuery<ApiTemplate[]>({
     queryKey: ["active-templates"],
     queryFn: async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      const token = session?.access_token;
-      const headers: Record<string, string> = {};
-      if (token) headers["Authorization"] = `Bearer ${token}`;
-      const res = await fetch(`${CF_WORKER_URL}/api/templates`, { headers });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data?.error || "Failed to load templates");
-      return Array.isArray(data) ? data : (data.templates || []);
+      const token = await getToken();
+      return fetchTemplates(token);
     },
+  });
+
+  // Fetch template detail (user_inputs from R2) when a template is selected
+  const { data: templateDetail } = useQuery<TemplateDetail | null>({
+    queryKey: ["template-detail", selectedTemplateId],
+    queryFn: async () => {
+      if (!selectedTemplateId) return null;
+      const t = templates?.find((t) => t.id === selectedTemplateId);
+      if (!t) return null;
+      try {
+        const token = await getToken();
+        return await fetchTemplateDetail(token, t.name);
+      } catch {
+        return null; // Fall back to input_schema from DB
+      }
+    },
+    enabled: !!selectedTemplateId && !!templates,
   });
 
   // Auto-select
   useEffect(() => {
     if (!templates || selectedTemplateId) return;
     if (queryTemplateId) {
-      const match = templates.find((t: any) => t.id === queryTemplateId);
+      const match = templates.find((t) => t.id === queryTemplateId);
       if (match) { setSelectedTemplateId(match.id); return; }
     }
     if (slug) {
-      const match = templates.find((t: any) => t.id === slug || t.weavy_recipe_id === slug);
+      const match = templates.find((t) => t.id === slug);
       if (match) setSelectedTemplateId(match.id);
     }
   }, [templates, slug, queryTemplateId, selectedTemplateId]);
 
-  const template = templates?.find((t: any) => t.id === selectedTemplateId);
-  const inputSchema: InputField[] = (template?.input_schema as any) || [];
-  const imageFields = inputSchema.filter((i) => i.type === "image");
-  const textFields = inputSchema.filter((i) => i.type === "text" || i.type === "prompt");
-  const requiredFields = inputSchema.filter((i) => i.required);
+  const template = templates?.find((t) => t.id === selectedTemplateId);
+
+  // Build input fields: prefer R2 user_inputs, fall back to DB input_schema
+  const inputFields: InputField[] = (() => {
+    if (templateDetail?.user_inputs?.length) {
+      return templateDetail.user_inputs.map((ui) => ({
+        key: ui.key,
+        label: ui.label,
+        type: ui.type || "image",
+        required: ui.required ?? true,
+      }));
+    }
+    if (template?.input_schema && Array.isArray(template.input_schema) && template.input_schema.length > 0) {
+      return (template.input_schema as any[]).map((f: any) => ({
+        key: f.key,
+        label: f.label,
+        type: f.type || "image",
+        required: f.required ?? true,
+      }));
+    }
+    // Default fallback: single product_image
+    return [{ key: "product_image", label: "PRODUCT IMAGE", type: "image", required: true }];
+  })();
+
+  const imageFields = inputFields.filter((i) => i.type === "image");
+  const textFields = inputFields.filter((i) => i.type === "text" || i.type === "prompt");
+  const requiredFields = inputFields.filter((i) => i.required);
   const allRequiredFilled = requiredFields.every((f) => {
     if (f.type === "image") return !!files[f.key];
     return !!(textInputs[f.key]?.trim());
@@ -202,10 +239,10 @@ const TemplateRun = () => {
   const canAfford = balance >= totalCost;
 
   // Categories
-  const categories = ["All", ...Array.from(new Set(templates?.map((t: any) => t.category || "General") || []))];
+  const categories = ["All", ...Array.from(new Set(templates?.map((t) => t.category || "General") || []))];
   const filteredTemplates = categoryFilter === "All"
     ? templates
-    : templates?.filter((t: any) => (t.category || "General") === categoryFilter);
+    : templates?.filter((t) => (t.category || "General") === categoryFilter);
 
   /* ─── Poll job status ─── */
   useEffect(() => {
@@ -214,17 +251,12 @@ const TemplateRun = () => {
     const poll = async () => {
       if (!pollingRef.current) return;
       try {
-        const { data: { session } } = await supabase.auth.getSession();
-        const token = session?.access_token;
-        if (!token) return;
-        const statusRes = await fetch(`${CF_WORKER_URL}/api/projects/${projectId}`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        const status = await statusRes.json();
-        const outputs: OutputItem[] = (status.outputs?.items || []).map((item: any) => ({
+        const token = await getToken();
+        const status = await getProjectStatus(token, projectId);
+        const outputs: OutputItem[] = (status.outputs?.items || []).map((item) => ({
           type: item.type || "image", url: item.url, label: item.label,
         }));
-        const rawStatus = status.status === "succeeded" ? "complete" : status.status;
+        const rawStatus = (status.status as string) === "succeeded" ? "complete" : status.status;
         const normalizedStatus = rawStatus as ProjectResult["status"];
         setResult({
           status: normalizedStatus,
@@ -263,17 +295,15 @@ const TemplateRun = () => {
     setProjectId(null);
     try {
       if (!user || !template) throw new Error("Not authenticated");
-      const { data: { session } } = await supabase.auth.getSession();
-      const token = session?.access_token;
-      if (!token) throw new Error("Not authenticated – no session token");
+      const token = await getToken();
 
       // 1. Upload files & build inputs
       const inputs: Record<string, string> = {};
-      for (const field of inputSchema) {
+      for (const field of inputFields) {
         if (field.type === "image") {
           const f = files[field.key];
           if (f) {
-            const { imageUrl, key } = await uploadImage(token, f);
+            const { imageUrl, key } = await uploadFile(token, f);
             inputs[field.key] = imageUrl;
             inputs[`${field.key}_key`] = key;
           }
@@ -284,24 +314,12 @@ const TemplateRun = () => {
       }
 
       // 2. Create project via worker
-      const createRes = await fetch(`${CF_WORKER_URL}/api/projects`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ template_id: template.id, inputs }),
-      });
-      const createData = await createRes.json();
-      if (!createRes.ok) throw new Error(createData?.error || "Create project failed");
+      const createData = await createProject(token, template.id, inputs);
       const jobId = createData?.projectId;
       if (!jobId) throw new Error("No project ID returned");
 
       // 3. Enqueue the job
-      const enqueueRes = await fetch(`${CF_WORKER_URL}/api/enqueue`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ projectId: jobId }),
-      });
-      const enqueueData = await enqueueRes.json();
-      if (!enqueueRes.ok) throw new Error(enqueueData?.error || "Enqueue failed");
+      await enqueueProject(token, jobId);
 
       setProjectId(jobId);
       setResult({ status: "queued", progress: 0, logs: [], attempts: 0, maxAttempts: 3, outputs: [] });
@@ -370,7 +388,7 @@ const TemplateRun = () => {
                   </div>
                 ) : (
                   <div className="grid grid-cols-2 gap-3">
-                    {filteredTemplates?.map((t: any) => {
+                    {filteredTemplates?.map((t) => {
                       const cat = t.category || "General";
                       const cfg = categoryConfig[cat] || categoryConfig.General;
                       const cost = t.estimated_credits_per_run || 0;
@@ -393,11 +411,9 @@ const TemplateRun = () => {
                             <div className="text-3xl opacity-30 group-hover:opacity-50 group-hover:scale-110 transition-all duration-300">
                               {cfg.icon}
                             </div>
-                            {/* Category badge */}
                             <span className={`absolute top-2 left-2 text-[8px] font-black uppercase tracking-wider ${cfg.color} bg-background/70 backdrop-blur-sm px-2 py-0.5 rounded-md`}>
                               {cat}
                             </span>
-                            {/* Output type */}
                             <span className="absolute top-2 right-2">
                               {t.output_type === "video" ? (
                                 <Film size={12} className="text-muted-foreground/40" />
@@ -453,7 +469,7 @@ const TemplateRun = () => {
                   <div className="flex-1 min-w-0">
                     <h3 className="text-sm font-bold text-foreground">{template.name}</h3>
                     <p className="text-[10px] text-muted-foreground mt-0.5">
-                      {template.category || "General"} · {template.expected_output_count || 1} asset{(template.expected_output_count || 1) > 1 ? "s" : ""}
+                      {template.category || "General"} · {template.output_type || "video"}
                     </p>
                   </div>
                 </div>
@@ -461,7 +477,7 @@ const TemplateRun = () => {
 
               {/* Upload zones */}
               <div className="flex-1 overflow-y-auto px-5 py-4 space-y-5">
-                {inputSchema.length > 0 ? (
+                {inputFields.length > 0 ? (
                   <>
                     {imageFields.map((field) => (
                       <UploadZone
@@ -478,8 +494,10 @@ const TemplateRun = () => {
                           <label className="text-[10px] font-bold uppercase tracking-[0.2em] text-foreground/60">
                             {field.label}
                           </label>
-                          {field.required && (
+                          {field.required ? (
                             <span className="text-[8px] font-bold uppercase tracking-wider text-primary/70 bg-primary/10 px-1.5 py-0.5 rounded">Required</span>
+                          ) : (
+                            <span className="text-[8px] font-bold uppercase tracking-wider text-muted-foreground/40 bg-secondary/40 px-1.5 py-0.5 rounded">Optional</span>
                           )}
                         </div>
                         {field.type === "prompt" ? (
@@ -621,12 +639,14 @@ const TemplateRun = () => {
                 </div>
                 <div>
                   <p className="text-sm font-bold text-foreground">
-                    {result?.status === "queued" ? "Queued..." : isVideoPending ? "Video processing..." : "Generating your assets..."}
+                    {result?.status === "queued" ? "Queued..." : isVideoPending ? "🎬 Video processing..." : "🎨 Generating your campaign..."}
                   </p>
                   <p className="text-xs text-muted-foreground mt-1">
                     {isVideoPending
-                      ? "Image is ready. Video generation takes 1–3 minutes."
-                      : `Attempt ${result?.attempts ?? 0}/${result?.maxAttempts ?? 3} · This may take a few minutes`}
+                      ? "Image is ready. Video rendering takes 1–3 minutes."
+                      : result?.status === "queued"
+                      ? "Your job is in the queue..."
+                      : "Generating campaign image..."}
                   </p>
                 </div>
                 <div className="space-y-1.5">
@@ -650,8 +670,8 @@ const TemplateRun = () => {
               </div>
               {/* Show completed images during video_pending */}
               {isVideoPending && result && result.outputs.length > 0 && (
-                <div className="px-5 pb-5">
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-3">Image Ready</p>
+                <div className="w-full max-w-lg mt-6 px-5">
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-3">✅ Image Ready</p>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                     {result.outputs.filter(o => o.type === "image").map((output, i) => (
                       <div key={i} className="rounded-xl border border-border/30 bg-card overflow-hidden">
@@ -670,11 +690,14 @@ const TemplateRun = () => {
                 <div className="w-14 h-14 rounded-full bg-red-500/10 flex items-center justify-center mx-auto">
                   <AlertTriangle className="w-7 h-7 text-red-400" />
                 </div>
-                <p className="text-sm font-bold text-foreground">Generation Failed</p>
+                <p className="text-sm font-bold text-foreground">❌ Generation Failed</p>
                 <p className="text-xs text-muted-foreground">{result?.error || "Something went wrong."}</p>
                 {result?.attempts && result.attempts > 1 && (
                   <p className="text-[10px] text-muted-foreground">Failed after {result.attempts} attempts</p>
                 )}
+                <Button onClick={handleRerun} variant="outline" className="mt-2">
+                  Try Again
+                </Button>
                 {(result?.logs?.length ?? 0) > 0 && (
                   <div className="text-left">
                     <button onClick={() => setShowLogs((v) => !v)} className="text-[10px] text-muted-foreground hover:text-foreground font-mono mb-1">
@@ -698,26 +721,27 @@ const TemplateRun = () => {
               <div className="px-5 py-3 border-b border-border/20 flex items-center justify-between shrink-0">
                 <div>
                   <p className="text-xs font-bold text-foreground flex items-center gap-2">
-                    <CheckCircle2 size={14} className="text-green-400" /> Output Ready
+                    <CheckCircle2 size={14} className="text-green-400" /> ✅ Campaign Ready!
                   </p>
                   <p className="text-[10px] text-muted-foreground font-mono mt-0.5">
                     {result.outputs.length} asset{result.outputs.length !== 1 ? "s" : ""} · {totalCost} credits used
                   </p>
                 </div>
-                <div className="flex items-center gap-1">
-                  <a href={result.outputs[0]?.url} download target="_blank" rel="noopener noreferrer">
-                    <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-muted-foreground hover:text-foreground">
-                      <Download size={14} />
-                    </Button>
-                  </a>
-                </div>
+                <Button
+                  onClick={() => { setSelectedTemplateId(""); setFiles({}); setTextInputs({}); setResult(null); setProjectId(null); }}
+                  variant="outline"
+                  size="sm"
+                  className="text-[10px]"
+                >
+                  Run Another
+                </Button>
               </div>
               <div className="flex-1 overflow-y-auto p-5">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {result.outputs.map((output, i) => (
                     <div key={i} className="rounded-xl border border-border/30 bg-card overflow-hidden group">
                       {output.type === "video" ? (
-                        <video src={output.url} controls className="w-full aspect-video object-cover bg-secondary/50" />
+                        <video src={output.url} controls autoPlay loop muted className="w-full aspect-video object-cover bg-secondary/50" />
                       ) : (
                         <div className="relative">
                           <img src={output.url} alt={output.label || `Asset ${i + 1}`} className="w-full aspect-square object-cover bg-secondary/50" />
@@ -737,7 +761,7 @@ const TemplateRun = () => {
                       )}
                       <div className="px-3 py-2 flex items-center justify-between">
                         <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-                          {output.label || `Asset ${i + 1}`}
+                          {output.type === "video" ? "🎬 Video" : "🖼 Image"} · {output.label || `Asset ${i + 1}`}
                         </span>
                         <a href={output.url} download target="_blank" rel="noopener noreferrer">
                           <Button size="sm" variant="ghost" className="h-6 text-[10px] text-muted-foreground hover:text-foreground px-2">
