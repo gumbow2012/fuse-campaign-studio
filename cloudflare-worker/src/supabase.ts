@@ -6,11 +6,13 @@ export async function supabaseFetch(
   path: string,
   opts?: { method?: string; body?: unknown; headers?: Record<string, string> },
 ): Promise<Response> {
+  // Prefer anon key (verified working); service role key may be stale
+  const sbKey = env.SUPABASE_ANON_KEY || env.SUPABASE_SERVICE_ROLE_KEY;
   return fetch(`${env.SUPABASE_URL}/rest/v1${path}`, {
     method: opts?.method ?? "GET",
     headers: {
-      apikey: env.SUPABASE_SERVICE_ROLE_KEY,
-      Authorization: `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}`,
+      apikey: sbKey,
+      Authorization: `Bearer ${sbKey}`,
       "Content-Type": "application/json",
       Prefer: "return=representation",
       ...opts?.headers,

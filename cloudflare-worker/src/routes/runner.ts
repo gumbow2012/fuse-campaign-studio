@@ -334,8 +334,8 @@ async function callKling(
   prompt: string,
   onProgress?: (msg: string) => Promise<void>,
 ): Promise<string> {
-  const accessKey = env.KLING_ACCESS_KEY;
-  const secretKey = env.KLING_SECRET_KEY;
+  const accessKey = env.KLING_ACCESS_KEY || env.KLING_AK;
+  const secretKey = env.KLING_SECRET_KEY || env.KLING_SK;
   if (!accessKey || !secretKey) throw new Error("KLING_ACCESS_KEY / KLING_SECRET_KEY not configured");
 
   const jwt = await generateKlingJwt(accessKey, secretKey);
@@ -456,7 +456,7 @@ async function runJob(env: Env, projectId: string) {
       } else if (templateName) {
         // Load template JSON directly from R2 by name
         const key = templateName.toLowerCase().replace(/\s+/g, "_") + "_template.json";
-        const obj = await (env as any).FUSE_TEMPLATES?.get(key);
+        const obj = await env.FUSE_TEMPLATES?.get(key);
         if (obj) {
           try { template = JSON.parse(await obj.text()); } catch { /* ignore */ }
         }
