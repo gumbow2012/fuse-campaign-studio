@@ -2,7 +2,7 @@
   "name": "PACK THEIF (Pants)",
   "slug": "pack-theif-pants",
   "version": "1.0",
-  "description": "Thief-style unboxing — sneaky character stealing pants from a box. Street fashion energy.",
+  "description": "Thief-style unboxing \u2014 sneaky character stealing pants from a box. Street fashion energy.",
   "category": "Street",
   "tags": [
     "street",
@@ -74,6 +74,7 @@
       }
     }
   ],
+  "loras": [],
   "outputs": {
     "primary_type": "video",
     "items": [

@@ -2,7 +2,7 @@
   "name": "Copy of UNBOXING",
   "slug": "copy-of-unboxing",
   "version": "1.0",
-  "description": "Unboxing variant — alternative side-angle for product reveal content.",
+  "description": "Unboxing variant \u2014 alternative side-angle for product reveal content.",
   "category": "UGC",
   "tags": [
     "ugc",
@@ -74,6 +74,7 @@
       }
     }
   ],
+  "loras": [],
   "outputs": {
     "primary_type": "video",
     "items": [

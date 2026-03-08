@@ -2,7 +2,7 @@
   "name": "DOCTOR",
   "slug": "doctor",
   "version": "1.0",
-  "description": "Medical professional aesthetic — clean clinical setting meets high fashion. Unexpected and sharp.",
+  "description": "Medical professional aesthetic \u2014 clean clinical setting meets high fashion. Unexpected and sharp.",
   "category": "Editorial",
   "tags": [
     "editorial",
@@ -60,6 +60,7 @@
       }
     }
   ],
+  "loras": [],
   "outputs": {
     "primary_type": "video",
     "items": [

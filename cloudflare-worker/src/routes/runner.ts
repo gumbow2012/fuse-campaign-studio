@@ -228,6 +228,12 @@ function findPrompt(inputs: Record<string, string>): string {
  *  Model API Calls
  * ══════════════════════════════════════════════════════════════ */
 
+interface LoraConfig {
+  path: string;
+  scale?: number;
+  trigger_word?: string;
+}
+
 /**
  * Call fal.ai nano-banana-2/edit via REST queue API.
  * Docs: https://fal.ai/models/fal-ai/nano-banana-2/edit/api
@@ -236,12 +242,29 @@ async function callFalNanoBanana(
   env: Env,
   imageUrl: string,
   prompt: string,
+  loras?: LoraConfig[],
   onProgress?: (msg: string) => Promise<void>,
 ): Promise<string> {
   const apiKey = env.FAL_API_KEY;
   if (!apiKey) throw new Error("FAL_API_KEY not configured in Worker secrets");
 
   await onProgress?.("Calling fal nano-banana-pro edit...");
+
+  const lorasMsg = loras?.length ? ` (${loras.length} LoRA${loras.length > 1 ? "s" : ""})` : "";
+  await onProgress?.(`Calling fal nano-banana-pro edit${lorasMsg}...`);
+
+  const requestBody: Record<string, unknown> = {
+    prompt,
+    image_url: imageUrl,
+  };
+
+  // Attach LoRA weights when present
+  if (loras && loras.length > 0) {
+    requestBody.loras = loras.map((l) => ({
+      path: l.path,
+      scale: l.scale ?? 1.0,
+    }));
+  }
 
   // Try synchronous endpoint first (faster for short jobs)
   const directRes = await fetch("https://fal.run/fal-ai/nano-banana-pro/edit", {
@@ -250,10 +273,7 @@ async function callFalNanoBanana(
       Authorization: `Key ${apiKey}`,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({
-      prompt,
-      image_url: imageUrl,
-    }),
+    body: JSON.stringify(requestBody),
   });
 
   if (directRes.ok) {
@@ -274,10 +294,7 @@ async function callFalNanoBanana(
       Authorization: `Key ${apiKey}`,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({
-      prompt,
-      image_url: imageUrl,
-    }),
+    body: JSON.stringify(requestBody),
   });
 
   if (!submitRes.ok) {
@@ -519,10 +536,15 @@ async function runJob(env: Env, projectId: string) {
 
       const outputType = (template as any).output_type || "video";
 
+      // Extract LoRA configs stored on the template (populated by sync-weavy-loras)
+      const templateLoras: LoraConfig[] = Array.isArray((template as any).loras)
+        ? ((template as any).loras as LoraConfig[])
+        : [];
+
       // ── Step 1: Image generation via fal nano-banana-pro ──
       await setProgress(env, projectId, 15, "Submitting to nano-banana-pro (image edit)");
 
-      const editedImageUrl = await callFalNanoBanana(env, imageUrl, prompt, async (msg) => {
+      const editedImageUrl = await callFalNanoBanana(env, imageUrl, prompt, templateLoras, async (msg) => {
         await setProgress(env, projectId, 20, msg);
       });
 

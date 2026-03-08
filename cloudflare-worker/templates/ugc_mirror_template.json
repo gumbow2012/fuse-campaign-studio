@@ -2,7 +2,7 @@
   "name": "UGC MIRROR",
   "slug": "ugc-mirror",
   "version": "1.0",
-  "description": "User-generated content style — selfie mirror shot. Raw, authentic, relatable.",
+  "description": "User-generated content style \u2014 selfie mirror shot. Raw, authentic, relatable.",
   "category": "UGC",
   "tags": [
     "ugc",
@@ -40,7 +40,7 @@
         "image/webp"
       ],
       "max_size_mb": 10,
-      "hint": "Optional back view — generates a more complete outfit mirror shot."
+      "hint": "Optional back view \u2014 generates a more complete outfit mirror shot."
     }
   ],
   "steps": [
@@ -75,6 +75,7 @@
       }
     }
   ],
+  "loras": [],
   "outputs": {
     "primary_type": "video",
     "items": [

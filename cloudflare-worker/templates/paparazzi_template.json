@@ -37,8 +37,12 @@
       "type": "nano_banana_pro",
       "prompt": "Static overhead shot of a taped-down graphic t-shirt centered against a matte black backdrop. Multiple hands enter frame from all sides holding smartphones with ring lights, each screen lit bright, capturing the shirt from every angle. The shirt lies flat and perfectly centered. Shot with a medium-format film camera from directly above. Rembrandt lighting from above, dramatic shadows framing the shirt. Hyper-realistic photographic quality, fashion documentary style.",
       "user_prompt_key": null,
-      "user_input_keys": ["clothing_item"],
-      "locked_inputs": ["references/paparazzi-documentation.png"],
+      "user_input_keys": [
+        "clothing_item"
+      ],
+      "locked_inputs": [
+        "references/paparazzi-documentation.png"
+      ],
       "settings": {
         "resolution": "2K",
         "num_images": 1,
@@ -51,7 +55,9 @@
       "prompt": "replace all t-shirts with uploaded black product remove hanger and tag on the right sleeve",
       "user_prompt_key": null,
       "image_source": "scene_gen",
-      "user_input_keys": ["clothing_item"],
+      "user_input_keys": [
+        "clothing_item"
+      ],
       "locked_inputs": [],
       "settings": {
         "resolution": "2K",
@@ -74,6 +80,7 @@
       }
     }
   ],
+  "loras": [],
   "outputs": {
     "primary_type": "video",
     "items": [

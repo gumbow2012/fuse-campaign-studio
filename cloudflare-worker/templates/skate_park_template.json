@@ -2,7 +2,7 @@
   "name": "SKATE PARK",
   "slug": "skate-park",
   "version": "1.0",
-  "description": "Skate park environment — street fashion meets skating culture. Raw, energetic, youth culture.",
+  "description": "Skate park environment \u2014 street fashion meets skating culture. Raw, energetic, youth culture.",
   "category": "Street",
   "tags": [
     "street",
@@ -88,6 +88,7 @@
       }
     }
   ],
+  "loras": [],
   "outputs": {
     "primary_type": "video",
     "items": [

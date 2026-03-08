@@ -2,7 +2,7 @@
   "name": "BLUE LAB (original)",
   "slug": "blue-lab-original",
   "version": "1.0",
-  "description": "Blue laboratory aesthetic — scientific editorial, cool tones, futuristic and clean.",
+  "description": "Blue laboratory aesthetic \u2014 scientific editorial, cool tones, futuristic and clean.",
   "category": "Editorial",
   "tags": [
     "editorial",
@@ -27,14 +27,14 @@
         "image/webp"
       ],
       "max_size_mb": 10,
-      "hint": "White or light background preferred. Single product shot — the lab scene is generated around it."
+      "hint": "White or light background preferred. Single product shot \u2014 the lab scene is generated around it."
     }
   ],
   "steps": [
     {
       "id": "image_edit",
       "type": "nano_banana_pro",
-      "prompt": "Blue laboratory fashion editorial photo. A model wearing the clothing product in a futuristic lab setting — blue LED lighting, clean white surfaces, scientific equipment in background. Cool blue color palette, crisp and modern. The clothing product glows in the blue light. Think Apple lab meets fashion editorial. Hyper-clean, modern, aspirational.",
+      "prompt": "Blue laboratory fashion editorial photo. A model wearing the clothing product in a futuristic lab setting \u2014 blue LED lighting, clean white surfaces, scientific equipment in background. Cool blue color palette, crisp and modern. The clothing product glows in the blue light. Think Apple lab meets fashion editorial. Hyper-clean, modern, aspirational.",
       "user_prompt_key": null,
       "user_input_keys": [
         "product_image"
@@ -61,6 +61,7 @@
       }
     }
   ],
+  "loras": [],
   "outputs": {
     "primary_type": "video",
     "items": [

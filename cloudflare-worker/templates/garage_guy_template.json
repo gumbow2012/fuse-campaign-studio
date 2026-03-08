@@ -2,7 +2,7 @@
   "name": "GARAGE guy",
   "slug": "garage-guy",
   "version": "1.0",
-  "description": "Garage mechanic aesthetic — gritty industrial setting, grease and grit meets fashion.",
+  "description": "Garage mechanic aesthetic \u2014 gritty industrial setting, grease and grit meets fashion.",
   "category": "Street",
   "tags": [
     "street",
@@ -27,7 +27,7 @@
         "image/webp"
       ],
       "max_size_mb": 10,
-      "hint": "Front view of the full outfit — top and bottoms together on a clean background."
+      "hint": "Front view of the full outfit \u2014 top and bottoms together on a clean background."
     },
     {
       "key": "logo",
@@ -60,7 +60,7 @@
     {
       "id": "image_edit",
       "type": "nano_banana_pro",
-      "prompt": "Streetwear garage editorial. A model wearing the full outfit (front and back shown) stands in a gritty urban garage or workshop. The brand logo visible in the environment. Raw cinematic lighting, concrete floors, car parts, industrial energy. The outfit is the hero — clothing shown in full detail. Think Supreme x mechanic shop aesthetic.",
+      "prompt": "Streetwear garage editorial. A model wearing the full outfit (front and back shown) stands in a gritty urban garage or workshop. The brand logo visible in the environment. Raw cinematic lighting, concrete floors, car parts, industrial energy. The outfit is the hero \u2014 clothing shown in full detail. Think Supreme x mechanic shop aesthetic.",
       "user_prompt_key": null,
       "user_input_keys": [
         "front_top_bottoms",
@@ -89,6 +89,7 @@
       }
     }
   ],
+  "loras": [],
   "outputs": {
     "primary_type": "video",
     "items": [
