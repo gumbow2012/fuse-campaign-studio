@@ -203,7 +203,7 @@ function resolveImageUrl(value: string): string {
   return value;
 }
 
-/** Find the first image value from inputs. */
+/** Find the first image value from inputs (legacy fallback for templates without steps). */
 function findImageUrl(inputs: Record<string, string>): string | undefined {
   for (const key of ["product_image", "image", "image_url", "clothing_item", "photo", "input_image", "image_key"]) {
     if (inputs[key]?.trim()) return resolveImageUrl(inputs[key]);
@@ -225,106 +225,99 @@ function findPrompt(inputs: Record<string, string>): string {
 }
 
 /* ══════════════════════════════════════════════════════════════
- *  Model API Calls
+ *  Gemini image helpers (used by nano_banana_pro steps)
  * ══════════════════════════════════════════════════════════════ */
 
+async function imageToBase64(url: string): Promise<{ base64: string; mimeType: string }> {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`Failed to fetch image: ${url} (${res.status})`);
+  const contentType = res.headers.get("content-type") || "image/png";
+  const buf = await res.arrayBuffer();
+  const bytes = new Uint8Array(buf);
+  let binary = "";
+  for (const b of bytes) binary += String.fromCharCode(b);
+  return { base64: btoa(binary), mimeType: contentType };
+}
+
+async function uploadBase64ToR2(env: Env, dataUri: string, key: string): Promise<string> {
+  const match = dataUri.match(/^data:([^;]+);base64,(.+)$/);
+  if (!match) throw new Error("Invalid data URI from Gemini");
+  const mimeType = match[1];
+  const binary = atob(match[2]);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  await env.FUSE_ASSETS.put(key, bytes, { httpMetadata: { contentType: mimeType } });
+  return `${R2_PUBLIC_DOMAIN}/${key}`;
+}
+
 /**
- * Call fal.ai nano-banana-2/edit via REST queue API.
- * Docs: https://fal.ai/models/fal-ai/nano-banana-2/edit/api
+ * Call Gemini image generation (nano_banana_pro) with multiple input images.
+ * Returns the output image URL (uploaded to R2).
  */
-async function callFalNanoBanana(
+async function callNanoBananaPro(
   env: Env,
-  imageUrl: string,
+  projectId: string,
+  imageUrls: string[],
   prompt: string,
   onProgress?: (msg: string) => Promise<void>,
 ): Promise<string> {
-  const apiKey = env.FAL_API_KEY;
-  if (!apiKey) throw new Error("FAL_API_KEY not configured in Worker secrets");
+  const apiKey = env.GEMINI_API_KEY;
+  if (!apiKey) throw new Error("GEMINI_API_KEY not configured in Worker secrets");
 
-  await onProgress?.("Calling fal nano-banana-pro edit...");
+  await onProgress?.(`Calling Gemini (nano_banana_pro) with ${imageUrls.length} image(s)...`);
 
-  // Try synchronous endpoint first (faster for short jobs)
-  const directRes = await fetch("https://fal.run/fal-ai/nano-banana-pro/edit", {
+  // Convert all images to base64
+  const images: { base64: string; mimeType: string }[] = [];
+  for (const url of imageUrls) {
+    const img = await imageToBase64(resolveImageUrl(url));
+    images.push(img);
+  }
+
+  // Build parts: images first, then text
+  const parts: unknown[] = [
+    ...images.map((img) => ({ inline_data: { mime_type: img.mimeType, data: img.base64 } })),
+    { text: prompt },
+  ];
+
+  const model = "gemini-2.0-flash-exp-image-generation";
+  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+
+  const res = await fetch(endpoint, {
     method: "POST",
-    headers: {
-      Authorization: `Key ${apiKey}`,
-      "Content-Type": "application/json",
-    },
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      prompt,
-      image_url: imageUrl,
+      contents: [{ parts }],
+      generationConfig: { responseModalities: ["TEXT", "IMAGE"] },
     }),
   });
 
-  if (directRes.ok) {
-    const data = await directRes.json() as {
-      images?: { url: string }[];
-      image?: { url: string };
-    };
-    const url = data.images?.[0]?.url || data.image?.url;
-    if (url) return url;
+  if (!res.ok) {
+    const txt = await res.text();
+    throw new Error(`Gemini API error (${res.status}): ${txt.slice(0, 1000)}`);
   }
 
-  // Fallback: use queue API for longer jobs
-  await onProgress?.("Direct call returned non-OK, falling back to queue API...");
+  const data = await res.json() as { candidates?: { content?: { parts?: { inline_data?: { mime_type: string; data: string }; text?: string }[] } }[] };
+  const candidates = data.candidates;
+  if (!candidates?.length) throw new Error("Gemini returned no candidates");
 
-  const submitRes = await fetch("https://queue.fal.run/fal-ai/nano-banana-pro/edit", {
-    method: "POST",
-    headers: {
-      Authorization: `Key ${apiKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      prompt,
-      image_url: imageUrl,
-    }),
-  });
-
-  if (!submitRes.ok) {
-    const txt = await submitRes.text();
-    throw new Error(`fal submit failed (${submitRes.status}): ${txt.slice(0, 500)}`);
-  }
-
-  const submitData = await submitRes.json() as { request_id: string };
-  const requestId = submitData.request_id;
-  if (!requestId) throw new Error("fal: no request_id returned");
-
-  const statusUrl = `https://queue.fal.run/fal-ai/nano-banana-pro/edit/requests/${requestId}/status`;
-  const responseUrl = `https://queue.fal.run/fal-ai/nano-banana-pro/edit/requests/${requestId}`;
-
-  await onProgress?.(`fal queued (request: ${requestId.slice(0, 8)}...)`);
-
-  // Poll for completion (max ~10 min)
-  for (let i = 0; i < 120; i++) {
-    await sleep(5000);
-    try {
-      const statusRes = await fetch(statusUrl, {
-        headers: { Authorization: `Key ${apiKey}` },
-      });
-      if (!statusRes.ok) continue;
-      const status = await statusRes.json() as { status: string };
-
-      if (status.status === "COMPLETED") {
-        const resultRes = await fetch(responseUrl, {
-          headers: { Authorization: `Key ${apiKey}` },
-        });
-        const result = await resultRes.json() as {
-          images?: { url: string }[];
-          image?: { url: string };
-        };
-        const url = result.images?.[0]?.url || result.image?.url;
-        if (!url) throw new Error("fal completed but no image URL in response");
-        return url;
-      }
-      if (status.status === "FAILED") {
-        throw new Error("fal job failed");
-      }
-    } catch (e) {
-      if (e instanceof Error && (e.message.includes("fal job failed") || e.message.includes("no image URL"))) throw e;
+  for (const part of candidates[0].content?.parts || []) {
+    if (part.inline_data) {
+      const dataUri = `data:${part.inline_data.mime_type};base64,${part.inline_data.data}`;
+      const key = `outputs/${projectId}/${Date.now()}.png`;
+      const url = await uploadBase64ToR2(env, dataUri, key);
+      await onProgress?.("Gemini image generated and uploaded to R2");
+      return url;
     }
   }
-  throw new Error("fal job timed out after 10 minutes");
+
+  const textParts = candidates[0].content?.parts?.filter((p) => p.text) || [];
+  if (textParts.length) throw new Error(`Gemini returned text only: ${textParts[0].text?.slice(0, 200)}`);
+  throw new Error("Gemini returned no image in response");
 }
+
+/* ══════════════════════════════════════════════════════════════
+ *  Model API Calls
+ * ══════════════════════════════════════════════════════════════ */
 
 /**
  * Generate a JWT for Kling API authentication.
@@ -365,6 +358,14 @@ async function generateKlingJwt(accessKey: string, secretKey: string): Promise<s
   return `${signingInput}.${sigB64}`;
 }
 
+interface KlingSettings {
+  model?: string;
+  duration?: string;
+  aspect_ratio?: string;
+  cfg_scale?: number;
+  mode?: string;
+}
+
 /**
  * Call Kling image-to-video API.
  * Docs: https://app.klingai.com/global/dev/document-api
@@ -373,6 +374,7 @@ async function callKling(
   env: Env,
   imageUrl: string,
   prompt: string,
+  settings?: KlingSettings,
   onProgress?: (msg: string) => Promise<void>,
 ): Promise<string> {
   const accessKey = env.KLING_ACCESS_KEY || env.KLING_AK;
@@ -380,6 +382,12 @@ async function callKling(
   if (!accessKey || !secretKey) throw new Error("KLING_ACCESS_KEY / KLING_SECRET_KEY not configured");
 
   const jwt = await generateKlingJwt(accessKey, secretKey);
+
+  const modelName = settings?.model || "kling-v1-6";
+  const duration = settings?.duration || "10";
+  const aspectRatio = settings?.aspect_ratio || "9:16";
+  const cfgScale = settings?.cfg_scale ?? 0.5;
+  const mode = settings?.mode || "std";
 
   // Submit image-to-video task
   const submitRes = await fetch("https://api.klingai.com/v1/videos/image2video", {
@@ -389,11 +397,13 @@ async function callKling(
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      model_name: "kling-v1",
+      model_name: modelName,
       image: imageUrl,
       prompt,
-      duration: "5",
-      mode: "std",
+      duration,
+      aspect_ratio: aspectRatio,
+      cfg_scale: cfgScale,
+      mode,
     }),
   });
 
@@ -435,10 +445,6 @@ async function callKling(
   throw new Error("Kling job timed out after 30 minutes");
 }
 
-/* ══════════════════════════════════════════════════════════════
- *  Upload outputs to R2
- * ══════════════════════════════════════════════════════════════ */
-
 async function uploadOutputsToR2(
   env: Env,
   projectId: string,
@@ -468,6 +474,24 @@ async function uploadOutputsToR2(
 }
 
 /* ══════════════════════════════════════════════════════════════
+ *  Template step types
+ * ══════════════════════════════════════════════════════════════ */
+
+interface TemplateStep {
+  id: string;
+  type: "nano_banana_pro" | "kling" | string;
+  prompt?: string;
+  user_input_keys?: string[];
+  image_source?: "previous_step" | string;
+  settings?: Record<string, unknown>;
+}
+
+interface TemplateDefinition {
+  output_type?: string;
+  steps?: TemplateStep[];
+}
+
+/* ══════════════════════════════════════════════════════════════
  *  Job Runner — the main execution loop
  * ══════════════════════════════════════════════════════════════ */
 
@@ -487,83 +511,143 @@ async function runJob(env: Env, projectId: string) {
       const project = await getProject(env, projectId);
       if (!project) throw new Error("Project not found");
 
-      // V6: look up template by template_name (from R2) when template_id is null
-      let template: Record<string, unknown> | undefined;
       const templateName = project.template_name as string | undefined;
       const templateId = project.template_id as string | undefined;
 
+      let template: TemplateDefinition | undefined;
+
       if (templateId) {
-        template = await getTemplate(env, templateId);
+        template = (await getTemplate(env, templateId)) as TemplateDefinition | undefined;
       } else if (templateName) {
-        // Load template JSON directly from R2 by name
+        // Load template JSON from R2 by name
         const key = templateName.toLowerCase().replace(/\s+/g, "_") + "_template.json";
         const obj = await env.FUSE_TEMPLATES?.get(key);
         if (obj) {
-          try { template = JSON.parse(await obj.text()); } catch { /* ignore */ }
+          try { template = JSON.parse(await obj.text()) as TemplateDefinition; } catch { /* ignore */ }
         }
         if (!template) throw new Error(`Template not found in R2: ${key}`);
       }
 
       if (!template) throw new Error("Template not found");
 
-      // Check both inputs (frontend) and user_inputs (autorun script)
       const inputs = ((project.user_inputs || project.inputs) as Record<string, string>) || {};
-      const imageUrl = findImageUrl(inputs);
-      const prompt = findPrompt(inputs);
+      const steps: TemplateStep[] = template.steps || [];
 
-      await setProgress(env, projectId, 10, `Inputs validated — image: ${imageUrl ? "yes" : "no"}, prompt: "${prompt.slice(0, 40)}..."`);
+      await setProgress(env, projectId, 10, `Template loaded — ${steps.length} step(s) to execute`);
 
-      if (!imageUrl) {
-        throw new Error("No image URL found in inputs. Ensure an image was uploaded.");
-      }
+      // ── Execute template steps ──────────────────────────────
+      const collectedOutputs: { type: string; url: string; label?: string }[] = [];
+      let previousStepImageUrl: string | undefined;
 
-      const outputType = (template as any).output_type || "video";
+      // Progress budget per step (leave room for 10% start + 10% upload)
+      const stepCount = steps.length || 1;
+      const progressPerStep = Math.floor(75 / stepCount);
+      let progressBase = 15;
 
-      // ── Step 1: Image generation via fal nano-banana-pro ──
-      await setProgress(env, projectId, 15, "Submitting to nano-banana-pro (image edit)");
+      if (steps.length === 0) {
+        // ── Legacy fallback: no steps defined — use generic single-image pipeline ──
+        const imageUrl = findImageUrl(inputs);
+        if (!imageUrl) throw new Error("No image URL found in inputs. Ensure an image was uploaded.");
+        const prompt = findPrompt(inputs);
+        const outputType = template.output_type || "video";
 
-      const editedImageUrl = await callFalNanoBanana(env, imageUrl, prompt, async (msg) => {
-        await setProgress(env, projectId, 20, msg);
-      });
-
-      await setProgress(env, projectId, 45, "nano-banana-pro complete — edited image ready");
-
-      if (outputType !== "video") {
-        // Image-only template — done
-        await setProgress(env, projectId, 90, "Uploading to storage");
-        const finalItems = await uploadOutputsToR2(env, projectId, [
-          { type: "image", url: editedImageUrl },
-        ]);
-        await updateProjectStatus(env, projectId, "complete", {
-          completed_at: new Date().toISOString(),
-          outputs: { items: finalItems },
-          progress: 100,
+        await setProgress(env, projectId, 15, "No steps defined — using legacy pipeline");
+        const editedImageUrl = await callNanoBananaPro(env, projectId, [imageUrl], prompt, async (msg) => {
+          await setProgress(env, projectId, 25, msg);
         });
-        await appendLog(env, projectId, "✅ Job complete — image saved");
-        return;
+        collectedOutputs.push({ type: "image", url: editedImageUrl, label: "Generated Image" });
+        previousStepImageUrl = editedImageUrl;
+
+        if (outputType === "video") {
+          const videoUrl = await callKling(env, editedImageUrl, prompt, {}, async (msg) => {
+            await setProgress(env, projectId, 60, msg);
+          });
+          collectedOutputs.push({ type: "video", url: videoUrl, label: "Generated Video" });
+        }
+
+      } else {
+        for (let si = 0; si < steps.length; si++) {
+          const step = steps[si];
+          const stepLabel = `Step ${si + 1}/${steps.length} (${step.type})`;
+          await setProgress(env, projectId, progressBase, `${stepLabel} — starting`);
+
+          if (step.type === "nano_banana_pro") {
+            // Gather input images from user_input_keys
+            const inputKeys = step.user_input_keys || [];
+            const imageUrls: string[] = [];
+            for (const key of inputKeys) {
+              const val = inputs[key]?.trim() || inputs[`${key}_key`]?.trim();
+              if (val) imageUrls.push(val);
+            }
+            // Fallback: try to find any image in inputs
+            if (imageUrls.length === 0) {
+              const fallback = findImageUrl(inputs);
+              if (fallback) imageUrls.push(fallback);
+            }
+            if (imageUrls.length === 0) {
+              throw new Error(`Step "${step.id}": no images found for keys: ${inputKeys.join(", ")}`);
+            }
+
+            const prompt = step.prompt || findPrompt(inputs);
+            const outputImageUrl = await callNanoBananaPro(env, projectId, imageUrls, prompt, async (msg) => {
+              await setProgress(env, projectId, progressBase + Math.floor(progressPerStep * 0.7), msg);
+            });
+
+            collectedOutputs.push({ type: "image", url: outputImageUrl, label: step.id === "image_edit" ? "Generated Image" : step.id });
+            previousStepImageUrl = outputImageUrl;
+
+            // If this is the last step and output_type is "video", mark as video_pending
+            const isLastStep = si === steps.length - 1;
+            if (!isLastStep) {
+              // Intermediate step — update outputs so far (visible during video_pending)
+              await supabaseFetch(env, `/projects?id=eq.${projectId}`, {
+                method: "PATCH",
+                body: { outputs: { items: collectedOutputs }, status: "video_pending" },
+              });
+            }
+
+          } else if (step.type === "kling") {
+            // Determine source image
+            let sourceImageUrl: string | undefined;
+            if (step.image_source === "previous_step") {
+              sourceImageUrl = previousStepImageUrl;
+            } else if (step.user_input_keys?.length) {
+              const key = step.user_input_keys[0];
+              const val = inputs[key]?.trim();
+              if (val) sourceImageUrl = resolveImageUrl(val);
+            }
+            if (!sourceImageUrl) sourceImageUrl = previousStepImageUrl || findImageUrl(inputs);
+            if (!sourceImageUrl) throw new Error(`Step "${step.id}": no source image for Kling`);
+
+            const prompt = step.prompt || findPrompt(inputs);
+            const klingSettings = step.settings as KlingSettings | undefined;
+
+            const videoUrl = await callKling(env, sourceImageUrl, prompt, klingSettings, async (msg) => {
+              await setProgress(env, projectId, progressBase + Math.floor(progressPerStep * 0.7), msg);
+            });
+
+            collectedOutputs.push({ type: "video", url: videoUrl, label: "Generated Video" });
+            previousStepImageUrl = undefined; // video can't be used as next image input
+
+          } else {
+            await appendLog(env, projectId, `⚠️ Unknown step type "${step.type}" — skipping`);
+          }
+
+          progressBase = Math.min(progressBase + progressPerStep, 85);
+          await setProgress(env, projectId, progressBase, `${stepLabel} — complete`);
+        }
       }
 
-      // ── Step 2: Video generation via Kling ──
-      await setProgress(env, projectId, 50, "Submitting to Kling (image → video)");
-
-      const videoUrl = await callKling(env, editedImageUrl, prompt, async (msg) => {
-        await setProgress(env, projectId, 55, msg);
-      });
-
-      await setProgress(env, projectId, 90, "Kling complete — video ready, uploading to storage");
-
-      // ── Step 3: Upload all outputs to R2 ──
-      const finalItems = await uploadOutputsToR2(env, projectId, [
-        { type: "image", url: editedImageUrl },
-        { type: "video", url: videoUrl },
-      ]);
+      // ── Upload all outputs to R2 ──
+      await setProgress(env, projectId, 90, "Uploading outputs to storage");
+      const finalItems = await uploadOutputsToR2(env, projectId, collectedOutputs);
 
       await updateProjectStatus(env, projectId, "complete", {
         completed_at: new Date().toISOString(),
         outputs: { items: finalItems },
         progress: 100,
       });
-      await appendLog(env, projectId, "✅ Job complete — image + video saved to storage");
+      await appendLog(env, projectId, `✅ Job complete — ${finalItems.length} asset(s) saved`);
       return;
 
     } catch (err) {
