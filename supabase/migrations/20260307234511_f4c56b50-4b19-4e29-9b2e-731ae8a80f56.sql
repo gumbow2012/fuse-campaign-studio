@@ -1,1 +1,0 @@
-ALTER TABLE public.projects ADD COLUMN IF NOT EXISTS template_name text;

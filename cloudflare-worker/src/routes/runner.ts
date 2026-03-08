@@ -9,7 +9,7 @@
 
 import { Env } from "../types";
 import { verifyToken } from "../auth";
-import { supabaseFetch, updateProjectStatus, getProject, getTemplate } from "../supabase";
+import { supabaseFetch, updateProjectStatus, getProject, getTemplate, getCreditBalance, deductCredits } from "../supabase";
 
 /* ── Helpers ── */
 
@@ -96,6 +96,26 @@ export async function handleCreateProject(request: Request, env: Env): Promise<R
   // user_id must be a real Supabase auth UUID — use null for service/API-key calls
   const userIdForDb = UUID_RE.test(userId) ? userId : null;
 
+  // ── Credit check & deduction for authenticated users ──────────────────────
+  let creditCost = 10; // default
+  if (userIdForDb) {
+    // Determine credit cost from template
+    if (templateId) {
+      try {
+        const tmpl = await getTemplate(env, templateId);
+        creditCost = (tmpl?.estimated_credits_per_run as number) ?? 10;
+      } catch { /* use default */ }
+    }
+
+    const balance = await getCreditBalance(env, userIdForDb);
+    if (balance < creditCost) {
+      return Response.json(
+        { error: `Insufficient credits. Need ${creditCost}, have ${balance}.` },
+        { status: 402 },
+      );
+    }
+  }
+
   const now = new Date().toISOString();
   const projRes = await supabaseFetch(env, "/projects", {
     method: "POST",
@@ -122,10 +142,23 @@ export async function handleCreateProject(request: Request, env: Env): Promise<R
   const [project] = await projRes.json() as { id: string }[];
   const id = project.id;
 
+  // Deduct credits after successful project creation
+  if (userIdForDb) {
+    await deductCredits(
+      env,
+      userIdForDb,
+      creditCost,
+      id,
+      templateId,
+      `Run template (${templateName || templateId})`,
+    ).catch((e) => console.error("Credit deduction failed:", e));
+  }
+
   return Response.json({
     ok: true,
     project_id: id,   // snake_case for autorun script
     projectId: id,    // camelCase for frontend
+    credits_used: creditCost,
   }, { status: 201 });
 }
 
