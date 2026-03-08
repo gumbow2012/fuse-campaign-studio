@@ -307,7 +307,7 @@ export type Database = {
           template_id: string | null
           template_name: string | null
           updated_at: string
-          user_id: string
+          user_id: string | null
           user_inputs: Json | null
           weavy_run_id: string | null
         }
@@ -330,7 +330,7 @@ export type Database = {
           template_id?: string | null
           template_name?: string | null
           updated_at?: string
-          user_id: string
+          user_id?: string | null
           user_inputs?: Json | null
           weavy_run_id?: string | null
         }
@@ -353,7 +353,7 @@ export type Database = {
           template_id?: string | null
           template_name?: string | null
           updated_at?: string
-          user_id?: string
+          user_id?: string | null
           user_inputs?: Json | null
           weavy_run_id?: string | null
         }
