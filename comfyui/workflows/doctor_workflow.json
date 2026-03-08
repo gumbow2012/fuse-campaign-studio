@@ -1,9 +1,32 @@
 {
   "last_node_id": 18,
-  "last_link_id": 22,
+  "last_link_id": 27,
   "nodes": [
     {
       "id": 1,
+      "type": "Note",
+      "pos": [
+        50,
+        -150
+      ],
+      "size": {
+        "0": 800,
+        "1": 120
+      },
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [],
+      "properties": {
+        "text": "FUSE \u2014 DOCTOR\nInputs: Product Image \u2605\nStep 1: img2img (nano_banana_pro) \u2014 KSampler denoise=0.7\nStep 2: video_gen (kling) \u2014 AnimateDiff 24 frames 9:16 MP4\nCustom nodes: ComfyUI-AnimateDiff-Evolved \u00b7 ComfyUI-IPAdapter-plus \u00b7 ComfyUI-VideoHelperSuite"
+      },
+      "widgets_values": [
+        "FUSE \u2014 DOCTOR\nInputs: Product Image \u2605\nStep 1: img2img (nano_banana_pro) \u2014 KSampler denoise=0.7\nStep 2: video_gen (kling) \u2014 AnimateDiff 24 frames 9:16 MP4\nCustom nodes: ComfyUI-AnimateDiff-Evolved \u00b7 ComfyUI-IPAdapter-plus \u00b7 ComfyUI-VideoHelperSuite"
+      ]
+    },
+    {
+      "id": 2,
       "type": "CheckpointLoaderSimple",
       "pos": [
         50,
@@ -14,7 +37,7 @@
         "1": 98
       },
       "flags": {},
-      "order": 0,
+      "order": 1,
       "mode": 0,
       "outputs": [
         {
@@ -29,7 +52,7 @@
           "name": "CLIP",
           "type": "CLIP",
           "links": [
-            3
+            2
           ],
           "slot_index": 1
         },
@@ -37,8 +60,9 @@
           "name": "VAE",
           "type": "VAE",
           "links": [
-            9,
-            17
+            3,
+            4,
+            5
           ],
           "slot_index": 2
         }
@@ -51,7 +75,7 @@
       ]
     },
     {
-      "id": 2,
+      "id": 3,
       "type": "LoraLoader",
       "pos": [
         420,
@@ -62,7 +86,7 @@
         "1": 126
       },
       "flags": {},
-      "order": 1,
+      "order": 2,
       "mode": 0,
       "inputs": [
         {
@@ -73,7 +97,7 @@
         {
           "name": "clip",
           "type": "CLIP",
-          "link": 3
+          "link": 2
         }
       ],
       "outputs": [
@@ -81,8 +105,8 @@
           "name": "MODEL",
           "type": "MODEL",
           "links": [
-            2,
-            15
+            6,
+            7
           ],
           "slot_index": 0
         },
@@ -90,10 +114,10 @@
           "name": "CLIP",
           "type": "CLIP",
           "links": [
-            4,
-            5,
-            18,
-            19
+            8,
+            9,
+            10,
+            11
           ],
           "slot_index": 1
         }
@@ -108,49 +132,11 @@
       ]
     },
     {
-      "id": 3,
-      "type": "CLIPTextEncode",
-      "pos": [
-        50,
-        220
-      ],
-      "size": {
-        "0": 422,
-        "1": 164
-      },
-      "flags": {},
-      "order": 2,
-      "mode": 0,
-      "inputs": [
-        {
-          "name": "clip",
-          "type": "CLIP",
-          "link": 4
-        }
-      ],
-      "outputs": [
-        {
-          "name": "CONDITIONING",
-          "type": "CONDITIONING",
-          "links": [
-            6
-          ],
-          "slot_index": 0
-        }
-      ],
-      "properties": {
-        "Node name for S&R": "CLIPTextEncode"
-      },
-      "widgets_values": [
-        "Fashion editorial in a medical/clinical setting. A model wearing the clothing product poses in a clean clinic or hospital environment. Sterile white walls, clinical lighting, professional medical aesthetic. Sharp clothing detail, high fashion editorial quality."
-      ]
-    },
-    {
       "id": 4,
       "type": "CLIPTextEncode",
       "pos": [
         50,
-        420
+        220
       ],
       "size": {
         "0": 422,
@@ -163,7 +149,7 @@
         {
           "name": "clip",
           "type": "CLIP",
-          "link": 5
+          "link": 8
         }
       ],
       "outputs": [
@@ -171,7 +157,45 @@
           "name": "CONDITIONING",
           "type": "CONDITIONING",
           "links": [
-            7
+            12
+          ],
+          "slot_index": 0
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "CLIPTextEncode"
+      },
+      "widgets_values": [
+        "Fashion editorial in a medical/clinical setting. A model wearing the clothing product poses in a clean clinic or hospital environment. Sterile white walls, clinical lighting, professional medical aesthetic. Sharp clothing detail, high fashion editorial quality."
+      ]
+    },
+    {
+      "id": 5,
+      "type": "CLIPTextEncode",
+      "pos": [
+        50,
+        420
+      ],
+      "size": {
+        "0": 422,
+        "1": 164
+      },
+      "flags": {},
+      "order": 4,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "clip",
+          "type": "CLIP",
+          "link": 9
+        }
+      ],
+      "outputs": [
+        {
+          "name": "CONDITIONING",
+          "type": "CONDITIONING",
+          "links": [
+            13
           ],
           "slot_index": 0
         }
@@ -184,25 +208,25 @@
       ]
     },
     {
-      "id": 5,
+      "id": 6,
       "type": "LoadImage",
       "pos": [
         50,
-        620
+        640
       ],
       "size": {
         "0": 315,
         "1": 314
       },
       "flags": {},
-      "order": 4,
+      "order": 5,
       "mode": 0,
       "outputs": [
         {
           "name": "IMAGE",
           "type": "IMAGE",
           "links": [
-            8
+            14
           ],
           "slot_index": 0
         },
@@ -219,32 +243,34 @@
       "widgets_values": [
         "product_image.png",
         "image"
-      ]
+      ],
+      "_label": "\u2605 REQUIRED \u2014 Product Image",
+      "_hint": "Front-facing product on any clean background. White or light colors stand out best in the clinical setting."
     },
     {
-      "id": 6,
+      "id": 7,
       "type": "VAEEncode",
       "pos": [
-        420,
-        620
+        800,
+        800
       ],
       "size": {
         "0": 210,
         "1": 46
       },
       "flags": {},
-      "order": 5,
+      "order": 6,
       "mode": 0,
       "inputs": [
         {
           "name": "pixels",
           "type": "IMAGE",
-          "link": 8
+          "link": 14
         },
         {
           "name": "vae",
           "type": "VAE",
-          "link": 9
+          "link": 3
         }
       ],
       "outputs": [
@@ -252,7 +278,7 @@
           "name": "LATENT",
           "type": "LATENT",
           "links": [
-            10
+            15
           ],
           "slot_index": 0
         }
@@ -262,10 +288,10 @@
       }
     },
     {
-      "id": 7,
+      "id": 8,
       "type": "KSampler",
       "pos": [
-        800,
+        1100,
         220
       ],
       "size": {
@@ -273,28 +299,28 @@
         "1": 262
       },
       "flags": {},
-      "order": 6,
+      "order": 7,
       "mode": 0,
       "inputs": [
         {
           "name": "model",
           "type": "MODEL",
-          "link": 2
+          "link": 6
         },
         {
           "name": "positive",
           "type": "CONDITIONING",
-          "link": 6
+          "link": 12
         },
         {
           "name": "negative",
           "type": "CONDITIONING",
-          "link": 7
+          "link": 13
         },
         {
           "name": "latent_image",
           "type": "LATENT",
-          "link": 10
+          "link": 15
         }
       ],
       "outputs": [
@@ -302,7 +328,7 @@
           "name": "LATENT",
           "type": "LATENT",
           "links": [
-            11
+            16
           ],
           "slot_index": 0
         }
@@ -321,10 +347,10 @@
       ]
     },
     {
-      "id": 8,
+      "id": 9,
       "type": "VAEDecode",
       "pos": [
-        1170,
+        1470,
         220
       ],
       "size": {
@@ -332,18 +358,18 @@
         "1": 46
       },
       "flags": {},
-      "order": 7,
+      "order": 8,
       "mode": 0,
       "inputs": [
         {
           "name": "samples",
           "type": "LATENT",
-          "link": 11
+          "link": 16
         },
         {
           "name": "vae",
           "type": "VAE",
-          "link": 17
+          "link": 4
         }
       ],
       "outputs": [
@@ -351,8 +377,8 @@
           "name": "IMAGE",
           "type": "IMAGE",
           "links": [
-            12,
-            20
+            18,
+            19
           ],
           "slot_index": 0
         }
@@ -362,10 +388,10 @@
       }
     },
     {
-      "id": 9,
+      "id": 10,
       "type": "SaveImage",
       "pos": [
-        1430,
+        1730,
         220
       ],
       "size": {
@@ -373,13 +399,13 @@
         "1": 270
       },
       "flags": {},
-      "order": 8,
+      "order": 9,
       "mode": 0,
       "inputs": [
         {
           "name": "images",
           "type": "IMAGE",
-          "link": 12
+          "link": 18
         }
       ],
       "outputs": [],
@@ -391,24 +417,24 @@
       ]
     },
     {
-      "id": 10,
+      "id": 11,
       "type": "ADE_AnimateDiffLoaderWithContext",
       "pos": [
         50,
-        1000
+        1200
       ],
       "size": {
         "0": 315,
         "1": 150
       },
       "flags": {},
-      "order": 9,
+      "order": 10,
       "mode": 0,
       "inputs": [
         {
           "name": "model",
           "type": "MODEL",
-          "link": 15
+          "link": 7
         }
       ],
       "outputs": [
@@ -416,7 +442,7 @@
           "name": "MODEL",
           "type": "MODEL",
           "links": [
-            16
+            20
           ],
           "slot_index": 0
         }
@@ -431,44 +457,6 @@
         null,
         null,
         null
-      ]
-    },
-    {
-      "id": 11,
-      "type": "CLIPTextEncode",
-      "pos": [
-        420,
-        1000
-      ],
-      "size": {
-        "0": 422,
-        "1": 164
-      },
-      "flags": {},
-      "order": 10,
-      "mode": 0,
-      "inputs": [
-        {
-          "name": "clip",
-          "type": "CLIP",
-          "link": 18
-        }
-      ],
-      "outputs": [
-        {
-          "name": "CONDITIONING",
-          "type": "CONDITIONING",
-          "links": [
-            21
-          ],
-          "slot_index": 0
-        }
-      ],
-      "properties": {
-        "Node name for S&R": "CLIPTextEncode"
-      },
-      "widgets_values": [
-        "Clinical fashion video. Model in the clothing product walks through a clean white hospital corridor, clinical fluorescent lighting, slow confident walk, medical aesthetic, sharp clothing detail in motion."
       ]
     },
     {
@@ -489,7 +477,45 @@
         {
           "name": "clip",
           "type": "CLIP",
-          "link": 19
+          "link": 10
+        }
+      ],
+      "outputs": [
+        {
+          "name": "CONDITIONING",
+          "type": "CONDITIONING",
+          "links": [
+            21
+          ],
+          "slot_index": 0
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "CLIPTextEncode"
+      },
+      "widgets_values": [
+        "Clinical fashion video. Model in the clothing product walks through a clean white hospital corridor, clinical fluorescent lighting, slow confident walk, medical aesthetic, sharp clothing detail in motion."
+      ]
+    },
+    {
+      "id": 13,
+      "type": "CLIPTextEncode",
+      "pos": [
+        420,
+        1400
+      ],
+      "size": {
+        "0": 422,
+        "1": 164
+      },
+      "flags": {},
+      "order": 12,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "clip",
+          "type": "CLIP",
+          "link": 11
         }
       ],
       "outputs": [
@@ -510,18 +536,18 @@
       ]
     },
     {
-      "id": 13,
+      "id": 14,
       "type": "IPAdapterApply",
       "pos": [
         900,
-        1000
+        1200
       ],
       "size": {
         "0": 315,
         "1": 200
       },
       "flags": {},
-      "order": 12,
+      "order": 13,
       "mode": 0,
       "inputs": [
         {
@@ -537,12 +563,12 @@
         {
           "name": "image",
           "type": "IMAGE",
-          "link": 20
+          "link": 19
         },
         {
           "name": "model",
           "type": "MODEL",
-          "link": 16
+          "link": 20
         }
       ],
       "outputs": [
@@ -566,21 +592,55 @@
         1,
         "concat"
       ],
-      "_note": "Load IPAdapter SDXL model via IPAdapterModelLoader node (not shown). Drives video style from the edited image."
+      "_note": "Connect IPAdapterModelLoader and CLIPVisionLoader from manager."
     },
     {
-      "id": 14,
+      "id": 15,
+      "type": "EmptyLatentImage",
+      "pos": [
+        50,
+        1450
+      ],
+      "size": {
+        "0": 210,
+        "1": 90
+      },
+      "flags": {},
+      "order": 14,
+      "mode": 0,
+      "outputs": [
+        {
+          "name": "LATENT",
+          "type": "LATENT",
+          "links": [
+            24
+          ],
+          "slot_index": 0
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "EmptyLatentImage"
+      },
+      "widgets_values": [
+        512,
+        912,
+        24
+      ],
+      "_note": "512\u00d7912 = 9:16 aspect ratio. 24 frames."
+    },
+    {
+      "id": 16,
       "type": "KSampler",
       "pos": [
         900,
-        1250
+        1500
       ],
       "size": {
         "0": 315,
         "1": 262
       },
       "flags": {},
-      "order": 13,
+      "order": 15,
       "mode": 0,
       "inputs": [
         {
@@ -621,59 +681,25 @@
         42,
         "fixed",
         20,
-        7.5,
+        7.0,
         "dpmpp_2m",
         "karras",
         1.0
       ]
     },
     {
-      "id": 15,
-      "type": "EmptyLatentImage",
-      "pos": [
-        50,
-        1250
-      ],
-      "size": {
-        "0": 210,
-        "1": 90
-      },
-      "flags": {},
-      "order": 14,
-      "mode": 0,
-      "outputs": [
-        {
-          "name": "LATENT",
-          "type": "LATENT",
-          "links": [
-            24
-          ],
-          "slot_index": 0
-        }
-      ],
-      "properties": {
-        "Node name for S&R": "EmptyLatentImage"
-      },
-      "widgets_values": [
-        512,
-        912,
-        24
-      ],
-      "_note": "24 frames @ 512x912 = 9:16 aspect ratio"
-    },
-    {
-      "id": 16,
+      "id": 17,
       "type": "VAEDecodeTiled",
       "pos": [
         1270,
-        1250
+        1500
       ],
       "size": {
         "0": 210,
         "1": 66
       },
       "flags": {},
-      "order": 15,
+      "order": 16,
       "mode": 0,
       "inputs": [
         {
@@ -684,7 +710,7 @@
         {
           "name": "vae",
           "type": "VAE",
-          "link": 17
+          "link": 5
         }
       ],
       "outputs": [
@@ -705,24 +731,24 @@
       ]
     },
     {
-      "id": 17,
+      "id": 18,
       "type": "VHS_VideoCombine",
       "pos": [
-        1540,
-        1250
+        1530,
+        1500
       ],
       "size": {
         "0": 315,
         "1": 200
       },
       "flags": {},
-      "order": 16,
+      "order": 17,
       "mode": 0,
       "inputs": [
         {
           "name": "images",
           "type": "IMAGE",
-          "link": 26
+          "link": 27
         }
       ],
       "outputs": [],
@@ -739,243 +765,220 @@
         null,
         "video/h264-mp4"
       ]
-    },
-    {
-      "id": 18,
-      "type": "Note",
-      "pos": [
-        50,
-        -80
-      ],
-      "size": {
-        "0": 700,
-        "1": 100
-      },
-      "flags": {},
-      "order": 0,
-      "mode": 0,
-      "inputs": [],
-      "outputs": [],
-      "properties": {
-        "text": "FUSE Campaign Studio \u2014 DOCTOR\nStep 1: img2img edit via KSampler (denoise=0.7)\nStep 2: AnimateDiff img2video (24 frames, 9:16)\nReplace LoRA: doctor_style.safetensors\nRequires: ComfyUI-AnimateDiff-Evolved + ComfyUI-IPAdapter-plus + ComfyUI-VideoHelperSuite"
-      },
-      "widgets_values": [
-        "FUSE Campaign Studio \u2014 DOCTOR\nStep 1: img2img edit via KSampler (denoise=0.7)\nStep 2: AnimateDiff img2video (24 frames, 9:16)\nReplace LoRA: doctor_style.safetensors\nRequires: ComfyUI-AnimateDiff-Evolved + ComfyUI-IPAdapter-plus + ComfyUI-VideoHelperSuite"
-      ]
     }
   ],
   "links": [
     [
       1,
-      1,
-      0,
       2,
+      0,
+      3,
       0,
       "MODEL"
     ],
     [
       2,
       2,
-      0,
-      7,
-      0,
-      "MODEL"
-    ],
-    [
-      3,
-      1,
-      1,
-      2,
-      1,
-      "CLIP"
-    ],
-    [
-      4,
-      2,
       1,
       3,
-      0,
-      "CLIP"
-    ],
-    [
-      5,
-      2,
       1,
-      4,
-      0,
       "CLIP"
-    ],
-    [
-      6,
-      3,
-      0,
-      7,
-      1,
-      "CONDITIONING"
-    ],
-    [
-      7,
-      4,
-      0,
-      7,
-      2,
-      "CONDITIONING"
     ],
     [
       8,
+      3,
+      1,
+      4,
+      0,
+      "CLIP"
+    ],
+    [
+      9,
+      3,
+      1,
       5,
       0,
+      "CLIP"
+    ],
+    [
+      12,
+      4,
+      0,
+      8,
+      1,
+      "CONDITIONING"
+    ],
+    [
+      13,
+      5,
+      0,
+      8,
+      2,
+      "CONDITIONING"
+    ],
+    [
+      14,
       6,
+      0,
+      7,
       0,
       "IMAGE"
     ],
     [
-      9,
-      1,
+      3,
       2,
-      6,
+      2,
+      7,
       1,
       "VAE"
     ],
     [
-      10,
       6,
-      0,
-      7,
       3,
-      "LATENT"
-    ],
-    [
-      11,
-      7,
       0,
       8,
       0,
-      "LATENT"
+      "MODEL"
     ],
     [
-      12,
-      8,
-      0,
+      4,
+      2,
+      2,
       9,
-      0,
-      "IMAGE"
-    ],
-    [
-      15,
-      2,
-      0,
-      10,
-      0,
-      "MODEL"
-    ],
-    [
-      16,
-      10,
-      0,
-      13,
-      3,
-      "MODEL"
-    ],
-    [
-      17,
-      1,
-      2,
-      8,
       1,
       "VAE"
     ],
     [
       18,
-      2,
-      1,
+      9,
+      0,
+      10,
+      0,
+      "IMAGE"
+    ],
+    [
+      17,
+      9,
+      0,
+      null,
+      null,
+      "IMAGE"
+    ],
+    [
+      7,
+      3,
+      0,
       11,
+      0,
+      "MODEL"
+    ],
+    [
+      10,
+      3,
+      1,
+      12,
+      0,
+      "CLIP"
+    ],
+    [
+      11,
+      3,
+      1,
+      13,
       0,
       "CLIP"
     ],
     [
       19,
-      2,
-      1,
-      12,
+      9,
       0,
-      "CLIP"
-    ],
-    [
-      20,
-      8,
-      0,
-      13,
+      14,
       2,
       "IMAGE"
     ],
     [
-      21,
+      20,
       11,
       0,
       14,
+      3,
+      "MODEL"
+    ],
+    [
+      23,
+      14,
+      0,
+      16,
+      0,
+      "MODEL"
+    ],
+    [
+      21,
+      12,
+      0,
+      16,
       1,
       "CONDITIONING"
     ],
     [
       22,
-      12,
-      0,
-      14,
-      2,
-      "CONDITIONING"
-    ],
-    [
-      23,
       13,
       0,
-      14,
-      0,
-      "MODEL"
+      16,
+      2,
+      "CONDITIONING"
     ],
     [
       24,
       15,
       0,
-      14,
+      16,
       3,
       "LATENT"
     ],
     [
       25,
-      14,
-      0,
       16,
+      0,
+      17,
       0,
       "LATENT"
     ],
     [
-      26,
-      16,
-      0,
+      5,
+      2,
+      2,
       17,
+      1,
+      "VAE"
+    ],
+    [
+      27,
+      17,
+      0,
+      18,
       0,
       "IMAGE"
     ]
   ],
   "groups": [
     {
-      "title": "Step 1: Image Edit (nano_banana_pro)",
+      "title": "Step 1: image_edit (nano_banana_pro) \u2014 DOCTOR",
       "bounding": [
         40,
         160,
-        1750,
-        550
+        1950,
+        900
       ],
       "color": "#3d5e8a"
     },
     {
-      "title": "Step 2: Video Generation (kling / AnimateDiff)",
+      "title": "Step 2: video_gen (kling / AnimateDiff 9:16)",
       "bounding": [
         40,
-        960,
-        1850,
-        600
+        1150,
+        1900,
+        700
       ],
       "color": "#5e3d8a"
     }
@@ -985,20 +988,18 @@
     "fuse_template": "DOCTOR",
     "fuse_file": "doctor",
     "pipeline_steps": [
-      "image_edit (nano_banana_pro)",
-      "video_gen (kling)"
+      "image_edit",
+      "video_gen"
     ],
     "comfyui_equivalents": {
-      "nano_banana_pro": "KSampler img2img with LoRA",
-      "kling": "AnimateDiff-Evolved + IPAdapter + VHS_VideoCombine"
+      "nano_banana_pro": "KSampler img2img",
+      "kling": "AnimateDiff+IPAdapter+VHS"
     },
     "required_custom_nodes": [
       "ComfyUI-AnimateDiff-Evolved",
       "ComfyUI-IPAdapter-plus",
       "ComfyUI-VideoHelperSuite (VHS)"
-    ],
-    "lora_placeholder": "doctor_style.safetensors",
-    "instructions": "1. Load in ComfyUI. 2. Replace LoRA name with real .safetensors from sync-weavy-loras. 3. Load your product image in LoadImage node. 4. Queue."
+    ]
   },
   "version": 0.4
 }

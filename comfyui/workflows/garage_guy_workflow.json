@@ -1,9 +1,32 @@
 {
-  "last_node_id": 18,
-  "last_link_id": 22,
+  "last_node_id": 24,
+  "last_link_id": 33,
   "nodes": [
     {
       "id": 1,
+      "type": "Note",
+      "pos": [
+        50,
+        -150
+      ],
+      "size": {
+        "0": 800,
+        "1": 120
+      },
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [],
+      "properties": {
+        "text": "FUSE \u2014 GARAGE guy\nInputs: Front Top + Bottoms \u2605, Logo \u25cb, Back Outfit \u25cb\nStyle reference: references/garage-edit.png\nStep 1: img2img (nano_banana_pro) \u2014 KSampler denoise=0.74\nStep 2: video_gen (kling) \u2014 AnimateDiff 24 frames 9:16 MP4\nCustom nodes: ComfyUI-AnimateDiff-Evolved \u00b7 ComfyUI-IPAdapter-plus \u00b7 ComfyUI-VideoHelperSuite"
+      },
+      "widgets_values": [
+        "FUSE \u2014 GARAGE guy\nInputs: Front Top + Bottoms \u2605, Logo \u25cb, Back Outfit \u25cb\nStyle reference: references/garage-edit.png\nStep 1: img2img (nano_banana_pro) \u2014 KSampler denoise=0.74\nStep 2: video_gen (kling) \u2014 AnimateDiff 24 frames 9:16 MP4\nCustom nodes: ComfyUI-AnimateDiff-Evolved \u00b7 ComfyUI-IPAdapter-plus \u00b7 ComfyUI-VideoHelperSuite"
+      ]
+    },
+    {
+      "id": 2,
       "type": "CheckpointLoaderSimple",
       "pos": [
         50,
@@ -14,7 +37,7 @@
         "1": 98
       },
       "flags": {},
-      "order": 0,
+      "order": 1,
       "mode": 0,
       "outputs": [
         {
@@ -29,7 +52,7 @@
           "name": "CLIP",
           "type": "CLIP",
           "links": [
-            3
+            2
           ],
           "slot_index": 1
         },
@@ -37,8 +60,9 @@
           "name": "VAE",
           "type": "VAE",
           "links": [
-            9,
-            17
+            3,
+            4,
+            5
           ],
           "slot_index": 2
         }
@@ -51,7 +75,7 @@
       ]
     },
     {
-      "id": 2,
+      "id": 3,
       "type": "LoraLoader",
       "pos": [
         420,
@@ -62,7 +86,7 @@
         "1": 126
       },
       "flags": {},
-      "order": 1,
+      "order": 2,
       "mode": 0,
       "inputs": [
         {
@@ -73,7 +97,7 @@
         {
           "name": "clip",
           "type": "CLIP",
-          "link": 3
+          "link": 2
         }
       ],
       "outputs": [
@@ -81,8 +105,8 @@
           "name": "MODEL",
           "type": "MODEL",
           "links": [
-            2,
-            15
+            6,
+            7
           ],
           "slot_index": 0
         },
@@ -90,10 +114,10 @@
           "name": "CLIP",
           "type": "CLIP",
           "links": [
-            4,
-            5,
-            18,
-            19
+            8,
+            9,
+            10,
+            11
           ],
           "slot_index": 1
         }
@@ -108,49 +132,11 @@
       ]
     },
     {
-      "id": 3,
-      "type": "CLIPTextEncode",
-      "pos": [
-        50,
-        220
-      ],
-      "size": {
-        "0": 422,
-        "1": 164
-      },
-      "flags": {},
-      "order": 2,
-      "mode": 0,
-      "inputs": [
-        {
-          "name": "clip",
-          "type": "CLIP",
-          "link": 4
-        }
-      ],
-      "outputs": [
-        {
-          "name": "CONDITIONING",
-          "type": "CONDITIONING",
-          "links": [
-            6
-          ],
-          "slot_index": 0
-        }
-      ],
-      "properties": {
-        "Node name for S&R": "CLIPTextEncode"
-      },
-      "widgets_values": [
-        "Streetwear garage editorial. A model wearing the full outfit (front and back shown) stands in a gritty urban garage or workshop. Concrete floor, tool chests, cars or motorcycles in background. Dramatic industrial lighting, tack-sharp clothing detail."
-      ]
-    },
-    {
       "id": 4,
       "type": "CLIPTextEncode",
       "pos": [
         50,
-        420
+        220
       ],
       "size": {
         "0": 422,
@@ -163,7 +149,7 @@
         {
           "name": "clip",
           "type": "CLIP",
-          "link": 5
+          "link": 8
         }
       ],
       "outputs": [
@@ -171,7 +157,45 @@
           "name": "CONDITIONING",
           "type": "CONDITIONING",
           "links": [
-            7
+            12
+          ],
+          "slot_index": 0
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "CLIPTextEncode"
+      },
+      "widgets_values": [
+        "Streetwear garage editorial. A model wearing the full outfit (front and back shown) stands in a gritty urban garage or workshop. Concrete floor, tool chests, cars or motorcycles in background. Dramatic industrial lighting, tack-sharp clothing detail."
+      ]
+    },
+    {
+      "id": 5,
+      "type": "CLIPTextEncode",
+      "pos": [
+        50,
+        420
+      ],
+      "size": {
+        "0": 422,
+        "1": 164
+      },
+      "flags": {},
+      "order": 4,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "clip",
+          "type": "CLIP",
+          "link": 9
+        }
+      ],
+      "outputs": [
+        {
+          "name": "CONDITIONING",
+          "type": "CONDITIONING",
+          "links": [
+            13
           ],
           "slot_index": 0
         }
@@ -184,25 +208,25 @@
       ]
     },
     {
-      "id": 5,
+      "id": 6,
       "type": "LoadImage",
       "pos": [
         50,
-        620
+        640
       ],
       "size": {
         "0": 315,
         "1": 314
       },
       "flags": {},
-      "order": 4,
+      "order": 5,
       "mode": 0,
       "outputs": [
         {
           "name": "IMAGE",
           "type": "IMAGE",
           "links": [
-            8
+            14
           ],
           "slot_index": 0
         },
@@ -217,115 +241,58 @@
         "Node name for S&R": "LoadImage"
       },
       "widgets_values": [
-        "product_image.png",
+        "front_top_bottoms.png",
         "image"
-      ]
-    },
-    {
-      "id": 6,
-      "type": "VAEEncode",
-      "pos": [
-        420,
-        620
       ],
-      "size": {
-        "0": 210,
-        "1": 46
-      },
-      "flags": {},
-      "order": 5,
-      "mode": 0,
-      "inputs": [
-        {
-          "name": "pixels",
-          "type": "IMAGE",
-          "link": 8
-        },
-        {
-          "name": "vae",
-          "type": "VAE",
-          "link": 9
-        }
-      ],
-      "outputs": [
-        {
-          "name": "LATENT",
-          "type": "LATENT",
-          "links": [
-            10
-          ],
-          "slot_index": 0
-        }
-      ],
-      "properties": {
-        "Node name for S&R": "VAEEncode"
-      }
+      "_label": "\u2605 REQUIRED \u2014 Front Top + Bottoms",
+      "_hint": "Front view of the full outfit \u2014 top and bottoms together on a clean background."
     },
     {
       "id": 7,
-      "type": "KSampler",
+      "type": "LoadImage",
       "pos": [
-        800,
-        220
+        50,
+        1010
       ],
       "size": {
         "0": 315,
-        "1": 262
+        "1": 314
       },
       "flags": {},
       "order": 6,
       "mode": 0,
-      "inputs": [
-        {
-          "name": "model",
-          "type": "MODEL",
-          "link": 2
-        },
-        {
-          "name": "positive",
-          "type": "CONDITIONING",
-          "link": 6
-        },
-        {
-          "name": "negative",
-          "type": "CONDITIONING",
-          "link": 7
-        },
-        {
-          "name": "latent_image",
-          "type": "LATENT",
-          "link": 10
-        }
-      ],
       "outputs": [
         {
-          "name": "LATENT",
-          "type": "LATENT",
+          "name": "IMAGE",
+          "type": "IMAGE",
           "links": [
-            11
+            15
           ],
           "slot_index": 0
+        },
+        {
+          "name": "MASK",
+          "type": "MASK",
+          "links": [],
+          "slot_index": 1
         }
       ],
       "properties": {
-        "Node name for S&R": "KSampler"
+        "Node name for S&R": "LoadImage"
       },
       "widgets_values": [
-        42,
-        "fixed",
-        20,
-        7.0,
-        "dpmpp_2m",
-        "karras",
-        0.74
-      ]
+        "back_outfit.png",
+        "image"
+      ],
+      "_label": "\u25cb optional \u2014 Back Outfit",
+      "_hint": "Back view of the outfit for back-of-jacket or full-look detail."
     },
     {
       "id": 8,
-      "type": "VAEDecode",
+      "type": "ImageBatch",
       "pos": [
-        1170,
-        220
+        400,
+        800
       ],
       "size": {
         "0": 210,
@@ -336,14 +303,14 @@
       "mode": 0,
       "inputs": [
         {
-          "name": "samples",
-          "type": "LATENT",
-          "link": 11
+          "name": "image1",
+          "type": "IMAGE",
+          "link": 14
         },
         {
-          "name": "vae",
-          "type": "VAE",
-          "link": 17
+          "name": "image2",
+          "type": "IMAGE",
+          "link": 15
         }
       ],
       "outputs": [
@@ -351,64 +318,129 @@
           "name": "IMAGE",
           "type": "IMAGE",
           "links": [
-            12,
-            20
+            16
           ],
           "slot_index": 0
         }
       ],
       "properties": {
-        "Node name for S&R": "VAEDecode"
+        "Node name for S&R": "ImageBatch"
       }
     },
     {
       "id": 9,
-      "type": "SaveImage",
+      "type": "VAEEncode",
       "pos": [
-        1430,
-        220
+        800,
+        800
       ],
       "size": {
-        "0": 315,
-        "1": 270
+        "0": 210,
+        "1": 46
       },
       "flags": {},
       "order": 8,
       "mode": 0,
       "inputs": [
         {
-          "name": "images",
+          "name": "pixels",
           "type": "IMAGE",
-          "link": 12
+          "link": 16
+        },
+        {
+          "name": "vae",
+          "type": "VAE",
+          "link": 3
         }
       ],
-      "outputs": [],
+      "outputs": [
+        {
+          "name": "LATENT",
+          "type": "LATENT",
+          "links": [
+            17
+          ],
+          "slot_index": 0
+        }
+      ],
       "properties": {
-        "Node name for S&R": "SaveImage"
-      },
-      "widgets_values": [
-        "fuse_garage_guy_image"
-      ]
+        "Node name for S&R": "VAEEncode"
+      }
     },
     {
       "id": 10,
-      "type": "ADE_AnimateDiffLoaderWithContext",
+      "type": "LoadImage",
       "pos": [
         50,
-        1000
+        1380
       ],
       "size": {
         "0": 315,
-        "1": 150
+        "1": 314
       },
       "flags": {},
       "order": 9,
       "mode": 0,
+      "outputs": [
+        {
+          "name": "IMAGE",
+          "type": "IMAGE",
+          "links": [
+            18
+          ],
+          "slot_index": 0
+        },
+        {
+          "name": "MASK",
+          "type": "MASK",
+          "links": [],
+          "slot_index": 1
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "LoadImage"
+      },
+      "widgets_values": [
+        "logo.png",
+        "image"
+      ],
+      "_label": "\u25cb optional \u2014 Logo",
+      "_hint": "Your brand logo. Will be subtly incorporated into the scene."
+    },
+    {
+      "id": 11,
+      "type": "IPAdapterApply",
+      "pos": [
+        400,
+        1380
+      ],
+      "size": {
+        "0": 315,
+        "1": 200
+      },
+      "flags": {},
+      "order": 10,
+      "mode": 0,
       "inputs": [
+        {
+          "name": "ipadapter",
+          "type": "IPADAPTER",
+          "link": null
+        },
+        {
+          "name": "clip_vision",
+          "type": "CLIP_VISION",
+          "link": null
+        },
+        {
+          "name": "image",
+          "type": "IMAGE",
+          "link": 18
+        },
         {
           "name": "model",
           "type": "MODEL",
-          "link": 15
+          "link": 6
         }
       ],
       "outputs": [
@@ -416,105 +448,70 @@
           "name": "MODEL",
           "type": "MODEL",
           "links": [
-            16
+            19
           ],
           "slot_index": 0
         }
       ],
       "properties": {
-        "Node name for S&R": "ADE_AnimateDiffLoaderWithContext"
+        "Node name for S&R": "IPAdapterApply"
       },
       "widgets_values": [
-        "mm_sd_v15_v2.ckpt",
-        "autosize",
-        24,
-        null,
-        null,
-        null
-      ]
-    },
-    {
-      "id": 11,
-      "type": "CLIPTextEncode",
-      "pos": [
-        420,
-        1000
+        0.4,
+        "original",
+        "V only",
+        0,
+        1,
+        "concat"
       ],
-      "size": {
-        "0": 422,
-        "1": 164
-      },
-      "flags": {},
-      "order": 10,
-      "mode": 0,
-      "inputs": [
-        {
-          "name": "clip",
-          "type": "CLIP",
-          "link": 18
-        }
-      ],
-      "outputs": [
-        {
-          "name": "CONDITIONING",
-          "type": "CONDITIONING",
-          "links": [
-            21
-          ],
-          "slot_index": 0
-        }
-      ],
-      "properties": {
-        "Node name for S&R": "CLIPTextEncode"
-      },
-      "widgets_values": [
-        "Garage fashion video. Person in the clothing product moves through a gritty auto garage, leans against a car or picks up a tool, gritty urban energy, dramatic lighting, clothing fabric movement."
-      ]
+      "_note": "Connect IPAdapterModelLoader and CLIPVisionLoader from manager."
     },
     {
       "id": 12,
-      "type": "CLIPTextEncode",
+      "type": "LoadImage",
       "pos": [
-        420,
-        1200
+        400,
+        1750
       ],
       "size": {
-        "0": 422,
-        "1": 164
+        "0": 315,
+        "1": 314
       },
       "flags": {},
       "order": 11,
       "mode": 0,
-      "inputs": [
-        {
-          "name": "clip",
-          "type": "CLIP",
-          "link": 19
-        }
-      ],
       "outputs": [
         {
-          "name": "CONDITIONING",
-          "type": "CONDITIONING",
+          "name": "IMAGE",
+          "type": "IMAGE",
           "links": [
-            22
+            20
           ],
           "slot_index": 0
+        },
+        {
+          "name": "MASK",
+          "type": "MASK",
+          "links": [],
+          "slot_index": 1
         }
       ],
       "properties": {
-        "Node name for S&R": "CLIPTextEncode"
+        "Node name for S&R": "LoadImage"
       },
       "widgets_values": [
-        "blurry, low quality, distorted, duplicate frames, jitter, watermark, text"
-      ]
+        "references/garage-edit.png",
+        "image"
+      ],
+      "_label": "\u25cb optional \u2014 Style Reference (LOCKED)",
+      "_hint": "Pre-set reference image \u2014 do not change."
     },
     {
       "id": 13,
       "type": "IPAdapterApply",
       "pos": [
-        900,
-        1000
+        700,
+        1750
       ],
       "size": {
         "0": 315,
@@ -542,7 +539,7 @@
         {
           "name": "model",
           "type": "MODEL",
-          "link": 16
+          "link": 19
         }
       ],
       "outputs": [
@@ -550,7 +547,314 @@
           "name": "MODEL",
           "type": "MODEL",
           "links": [
-            23
+            21
+          ],
+          "slot_index": 0
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "IPAdapterApply"
+      },
+      "widgets_values": [
+        0.5,
+        "original",
+        "V only",
+        0,
+        1,
+        "concat"
+      ],
+      "_note": "Connect IPAdapterModelLoader and CLIPVisionLoader from manager."
+    },
+    {
+      "id": 14,
+      "type": "KSampler",
+      "pos": [
+        1100,
+        220
+      ],
+      "size": {
+        "0": 315,
+        "1": 262
+      },
+      "flags": {},
+      "order": 13,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "model",
+          "type": "MODEL",
+          "link": 21
+        },
+        {
+          "name": "positive",
+          "type": "CONDITIONING",
+          "link": 12
+        },
+        {
+          "name": "negative",
+          "type": "CONDITIONING",
+          "link": 13
+        },
+        {
+          "name": "latent_image",
+          "type": "LATENT",
+          "link": 17
+        }
+      ],
+      "outputs": [
+        {
+          "name": "LATENT",
+          "type": "LATENT",
+          "links": [
+            22
+          ],
+          "slot_index": 0
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "KSampler"
+      },
+      "widgets_values": [
+        42,
+        "fixed",
+        20,
+        7.0,
+        "dpmpp_2m",
+        "karras",
+        0.74
+      ]
+    },
+    {
+      "id": 15,
+      "type": "VAEDecode",
+      "pos": [
+        1470,
+        220
+      ],
+      "size": {
+        "0": 210,
+        "1": 46
+      },
+      "flags": {},
+      "order": 14,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "samples",
+          "type": "LATENT",
+          "link": 22
+        },
+        {
+          "name": "vae",
+          "type": "VAE",
+          "link": 4
+        }
+      ],
+      "outputs": [
+        {
+          "name": "IMAGE",
+          "type": "IMAGE",
+          "links": [
+            24,
+            25
+          ],
+          "slot_index": 0
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "VAEDecode"
+      }
+    },
+    {
+      "id": 16,
+      "type": "SaveImage",
+      "pos": [
+        1730,
+        220
+      ],
+      "size": {
+        "0": 315,
+        "1": 270
+      },
+      "flags": {},
+      "order": 15,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "link": 24
+        }
+      ],
+      "outputs": [],
+      "properties": {
+        "Node name for S&R": "SaveImage"
+      },
+      "widgets_values": [
+        "fuse_garage_guy_image"
+      ]
+    },
+    {
+      "id": 17,
+      "type": "ADE_AnimateDiffLoaderWithContext",
+      "pos": [
+        50,
+        1200
+      ],
+      "size": {
+        "0": 315,
+        "1": 150
+      },
+      "flags": {},
+      "order": 16,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "model",
+          "type": "MODEL",
+          "link": 7
+        }
+      ],
+      "outputs": [
+        {
+          "name": "MODEL",
+          "type": "MODEL",
+          "links": [
+            26
+          ],
+          "slot_index": 0
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "ADE_AnimateDiffLoaderWithContext"
+      },
+      "widgets_values": [
+        "mm_sd_v15_v2.ckpt",
+        "autosize",
+        24,
+        null,
+        null,
+        null
+      ]
+    },
+    {
+      "id": 18,
+      "type": "CLIPTextEncode",
+      "pos": [
+        420,
+        1200
+      ],
+      "size": {
+        "0": 422,
+        "1": 164
+      },
+      "flags": {},
+      "order": 17,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "clip",
+          "type": "CLIP",
+          "link": 10
+        }
+      ],
+      "outputs": [
+        {
+          "name": "CONDITIONING",
+          "type": "CONDITIONING",
+          "links": [
+            27
+          ],
+          "slot_index": 0
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "CLIPTextEncode"
+      },
+      "widgets_values": [
+        "Garage fashion video. Person in the clothing product moves through a gritty auto garage, leans against a car or picks up a tool, gritty urban energy, dramatic lighting, clothing fabric movement."
+      ]
+    },
+    {
+      "id": 19,
+      "type": "CLIPTextEncode",
+      "pos": [
+        420,
+        1400
+      ],
+      "size": {
+        "0": 422,
+        "1": 164
+      },
+      "flags": {},
+      "order": 18,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "clip",
+          "type": "CLIP",
+          "link": 11
+        }
+      ],
+      "outputs": [
+        {
+          "name": "CONDITIONING",
+          "type": "CONDITIONING",
+          "links": [
+            28
+          ],
+          "slot_index": 0
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "CLIPTextEncode"
+      },
+      "widgets_values": [
+        "blurry, low quality, distorted, duplicate frames, jitter, watermark, text"
+      ]
+    },
+    {
+      "id": 20,
+      "type": "IPAdapterApply",
+      "pos": [
+        900,
+        1200
+      ],
+      "size": {
+        "0": 315,
+        "1": 200
+      },
+      "flags": {},
+      "order": 19,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "ipadapter",
+          "type": "IPADAPTER",
+          "link": null
+        },
+        {
+          "name": "clip_vision",
+          "type": "CLIP_VISION",
+          "link": null
+        },
+        {
+          "name": "image",
+          "type": "IMAGE",
+          "link": 25
+        },
+        {
+          "name": "model",
+          "type": "MODEL",
+          "link": 26
+        }
+      ],
+      "outputs": [
+        {
+          "name": "MODEL",
+          "type": "MODEL",
+          "links": [
+            29
           ],
           "slot_index": 0
         }
@@ -566,87 +870,28 @@
         1,
         "concat"
       ],
-      "_note": "Load IPAdapter SDXL model via IPAdapterModelLoader node (not shown). Drives video style from the edited image."
+      "_note": "Connect IPAdapterModelLoader and CLIPVisionLoader from manager."
     },
     {
-      "id": 14,
-      "type": "KSampler",
-      "pos": [
-        900,
-        1250
-      ],
-      "size": {
-        "0": 315,
-        "1": 262
-      },
-      "flags": {},
-      "order": 13,
-      "mode": 0,
-      "inputs": [
-        {
-          "name": "model",
-          "type": "MODEL",
-          "link": 23
-        },
-        {
-          "name": "positive",
-          "type": "CONDITIONING",
-          "link": 21
-        },
-        {
-          "name": "negative",
-          "type": "CONDITIONING",
-          "link": 22
-        },
-        {
-          "name": "latent_image",
-          "type": "LATENT",
-          "link": 24
-        }
-      ],
-      "outputs": [
-        {
-          "name": "LATENT",
-          "type": "LATENT",
-          "links": [
-            25
-          ],
-          "slot_index": 0
-        }
-      ],
-      "properties": {
-        "Node name for S&R": "KSampler"
-      },
-      "widgets_values": [
-        42,
-        "fixed",
-        20,
-        7.5,
-        "dpmpp_2m",
-        "karras",
-        1.0
-      ]
-    },
-    {
-      "id": 15,
+      "id": 21,
       "type": "EmptyLatentImage",
       "pos": [
         50,
-        1250
+        1450
       ],
       "size": {
         "0": 210,
         "1": 90
       },
       "flags": {},
-      "order": 14,
+      "order": 20,
       "mode": 0,
       "outputs": [
         {
           "name": "LATENT",
           "type": "LATENT",
           "links": [
-            24
+            30
           ],
           "slot_index": 0
         }
@@ -659,32 +904,91 @@
         912,
         24
       ],
-      "_note": "24 frames @ 512x912 = 9:16 aspect ratio"
+      "_note": "512\u00d7912 = 9:16 aspect ratio. 24 frames."
     },
     {
-      "id": 16,
+      "id": 22,
+      "type": "KSampler",
+      "pos": [
+        900,
+        1500
+      ],
+      "size": {
+        "0": 315,
+        "1": 262
+      },
+      "flags": {},
+      "order": 21,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "model",
+          "type": "MODEL",
+          "link": 29
+        },
+        {
+          "name": "positive",
+          "type": "CONDITIONING",
+          "link": 27
+        },
+        {
+          "name": "negative",
+          "type": "CONDITIONING",
+          "link": 28
+        },
+        {
+          "name": "latent_image",
+          "type": "LATENT",
+          "link": 30
+        }
+      ],
+      "outputs": [
+        {
+          "name": "LATENT",
+          "type": "LATENT",
+          "links": [
+            31
+          ],
+          "slot_index": 0
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "KSampler"
+      },
+      "widgets_values": [
+        42,
+        "fixed",
+        20,
+        7.0,
+        "dpmpp_2m",
+        "karras",
+        1.0
+      ]
+    },
+    {
+      "id": 23,
       "type": "VAEDecodeTiled",
       "pos": [
         1270,
-        1250
+        1500
       ],
       "size": {
         "0": 210,
         "1": 66
       },
       "flags": {},
-      "order": 15,
+      "order": 22,
       "mode": 0,
       "inputs": [
         {
           "name": "samples",
           "type": "LATENT",
-          "link": 25
+          "link": 31
         },
         {
           "name": "vae",
           "type": "VAE",
-          "link": 17
+          "link": 5
         }
       ],
       "outputs": [
@@ -692,7 +996,7 @@
           "name": "IMAGE",
           "type": "IMAGE",
           "links": [
-            26
+            32
           ],
           "slot_index": 0
         }
@@ -705,24 +1009,24 @@
       ]
     },
     {
-      "id": 17,
+      "id": 24,
       "type": "VHS_VideoCombine",
       "pos": [
-        1540,
-        1250
+        1530,
+        1500
       ],
       "size": {
         "0": 315,
         "1": 200
       },
       "flags": {},
-      "order": 16,
+      "order": 23,
       "mode": 0,
       "inputs": [
         {
           "name": "images",
           "type": "IMAGE",
-          "link": 26
+          "link": 33
         }
       ],
       "outputs": [],
@@ -739,243 +1043,276 @@
         null,
         "video/h264-mp4"
       ]
-    },
-    {
-      "id": 18,
-      "type": "Note",
-      "pos": [
-        50,
-        -80
-      ],
-      "size": {
-        "0": 700,
-        "1": 100
-      },
-      "flags": {},
-      "order": 0,
-      "mode": 0,
-      "inputs": [],
-      "outputs": [],
-      "properties": {
-        "text": "FUSE Campaign Studio \u2014 GARAGE guy\nStep 1: img2img edit via KSampler (denoise=0.74)\nStep 2: AnimateDiff img2video (24 frames, 9:16)\nReplace LoRA: garage_guy_style.safetensors\nRequires: ComfyUI-AnimateDiff-Evolved + ComfyUI-IPAdapter-plus + ComfyUI-VideoHelperSuite"
-      },
-      "widgets_values": [
-        "FUSE Campaign Studio \u2014 GARAGE guy\nStep 1: img2img edit via KSampler (denoise=0.74)\nStep 2: AnimateDiff img2video (24 frames, 9:16)\nReplace LoRA: garage_guy_style.safetensors\nRequires: ComfyUI-AnimateDiff-Evolved + ComfyUI-IPAdapter-plus + ComfyUI-VideoHelperSuite"
-      ]
     }
   ],
   "links": [
     [
       1,
-      1,
-      0,
       2,
+      0,
+      3,
       0,
       "MODEL"
     ],
     [
       2,
       2,
-      0,
-      7,
-      0,
-      "MODEL"
-    ],
-    [
-      3,
-      1,
-      1,
-      2,
-      1,
-      "CLIP"
-    ],
-    [
-      4,
-      2,
       1,
       3,
-      0,
-      "CLIP"
-    ],
-    [
-      5,
-      2,
       1,
-      4,
-      0,
       "CLIP"
-    ],
-    [
-      6,
-      3,
-      0,
-      7,
-      1,
-      "CONDITIONING"
-    ],
-    [
-      7,
-      4,
-      0,
-      7,
-      2,
-      "CONDITIONING"
     ],
     [
       8,
-      5,
+      3,
+      1,
+      4,
       0,
-      6,
-      0,
-      "IMAGE"
+      "CLIP"
     ],
     [
       9,
-      1,
-      2,
-      6,
-      1,
-      "VAE"
-    ],
-    [
-      10,
-      6,
-      0,
-      7,
       3,
-      "LATENT"
-    ],
-    [
-      11,
-      7,
+      1,
+      5,
       0,
-      8,
-      0,
-      "LATENT"
+      "CLIP"
     ],
     [
       12,
-      8,
+      4,
       0,
-      9,
+      14,
+      1,
+      "CONDITIONING"
+    ],
+    [
+      13,
+      5,
+      0,
+      14,
+      2,
+      "CONDITIONING"
+    ],
+    [
+      14,
+      6,
+      0,
+      8,
       0,
       "IMAGE"
     ],
     [
       15,
-      2,
+      7,
       0,
-      10,
-      0,
-      "MODEL"
+      8,
+      1,
+      "IMAGE"
     ],
     [
       16,
-      10,
+      8,
       0,
-      13,
-      3,
-      "MODEL"
+      9,
+      0,
+      "IMAGE"
     ],
     [
-      17,
-      1,
+      3,
       2,
-      8,
+      2,
+      9,
       1,
       "VAE"
     ],
     [
       18,
-      2,
-      1,
+      10,
+      0,
       11,
-      0,
-      "CLIP"
-    ],
-    [
-      19,
-      2,
-      1,
-      12,
-      0,
-      "CLIP"
-    ],
-    [
-      20,
-      8,
-      0,
-      13,
       2,
       "IMAGE"
     ],
     [
-      21,
+      6,
+      3,
+      0,
       11,
-      0,
-      14,
-      1,
-      "CONDITIONING"
+      3,
+      "MODEL"
     ],
     [
-      22,
-      12,
-      0,
-      14,
-      2,
-      "CONDITIONING"
-    ],
-    [
-      23,
-      13,
+      19,
+      11,
       0,
       14,
       0,
       "MODEL"
     ],
     [
+      20,
+      12,
+      0,
+      13,
+      2,
+      "IMAGE"
+    ],
+    [
+      19,
+      null,
+      0,
+      13,
+      3,
+      "MODEL"
+    ],
+    [
+      21,
+      13,
+      0,
+      null,
+      0,
+      "MODEL"
+    ],
+    [
+      4,
+      2,
+      2,
+      15,
+      1,
+      "VAE"
+    ],
+    [
       24,
       15,
       0,
-      14,
+      16,
+      0,
+      "IMAGE"
+    ],
+    [
+      23,
+      15,
+      0,
+      null,
+      null,
+      "IMAGE"
+    ],
+    [
+      7,
+      3,
+      0,
+      17,
+      0,
+      "MODEL"
+    ],
+    [
+      10,
+      3,
+      1,
+      18,
+      0,
+      "CLIP"
+    ],
+    [
+      11,
+      3,
+      1,
+      19,
+      0,
+      "CLIP"
+    ],
+    [
+      25,
+      15,
+      0,
+      20,
+      2,
+      "IMAGE"
+    ],
+    [
+      26,
+      17,
+      0,
+      20,
+      3,
+      "MODEL"
+    ],
+    [
+      29,
+      20,
+      0,
+      22,
+      0,
+      "MODEL"
+    ],
+    [
+      27,
+      18,
+      0,
+      22,
+      1,
+      "CONDITIONING"
+    ],
+    [
+      28,
+      19,
+      0,
+      22,
+      2,
+      "CONDITIONING"
+    ],
+    [
+      30,
+      21,
+      0,
+      22,
       3,
       "LATENT"
     ],
     [
-      25,
-      14,
+      31,
+      22,
       0,
-      16,
+      23,
       0,
       "LATENT"
     ],
     [
-      26,
-      16,
+      5,
+      2,
+      2,
+      23,
+      1,
+      "VAE"
+    ],
+    [
+      33,
+      23,
       0,
-      17,
+      24,
       0,
       "IMAGE"
     ]
   ],
   "groups": [
     {
-      "title": "Step 1: Image Edit (nano_banana_pro)",
+      "title": "Step 1: image_edit (nano_banana_pro) \u2014 GARAGE guy",
       "bounding": [
         40,
         160,
-        1750,
-        550
+        1950,
+        900
       ],
       "color": "#3d5e8a"
     },
     {
-      "title": "Step 2: Video Generation (kling / AnimateDiff)",
+      "title": "Step 2: video_gen (kling / AnimateDiff 9:16)",
       "bounding": [
         40,
-        960,
-        1850,
-        600
+        1150,
+        1900,
+        700
       ],
       "color": "#5e3d8a"
     }
@@ -985,20 +1322,18 @@
     "fuse_template": "GARAGE guy",
     "fuse_file": "garage_guy",
     "pipeline_steps": [
-      "image_edit (nano_banana_pro)",
-      "video_gen (kling)"
+      "image_edit",
+      "video_gen"
     ],
     "comfyui_equivalents": {
-      "nano_banana_pro": "KSampler img2img with LoRA",
-      "kling": "AnimateDiff-Evolved + IPAdapter + VHS_VideoCombine"
+      "nano_banana_pro": "KSampler img2img",
+      "kling": "AnimateDiff+IPAdapter+VHS"
     },
     "required_custom_nodes": [
       "ComfyUI-AnimateDiff-Evolved",
       "ComfyUI-IPAdapter-plus",
       "ComfyUI-VideoHelperSuite (VHS)"
-    ],
-    "lora_placeholder": "garage_guy_style.safetensors",
-    "instructions": "1. Load in ComfyUI. 2. Replace LoRA name with real .safetensors from sync-weavy-loras. 3. Load your product image in LoadImage node. 4. Queue."
+    ]
   },
   "version": 0.4
 }

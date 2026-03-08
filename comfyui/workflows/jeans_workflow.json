@@ -1,9 +1,32 @@
 {
-  "last_node_id": 18,
-  "last_link_id": 22,
+  "last_node_id": 20,
+  "last_link_id": 29,
   "nodes": [
     {
       "id": 1,
+      "type": "Note",
+      "pos": [
+        50,
+        -150
+      ],
+      "size": {
+        "0": 800,
+        "1": 120
+      },
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [],
+      "properties": {
+        "text": "FUSE \u2014 JEANS\nInputs: Jeans (Front) \u2605, Jeans (Back) \u25cb\nStep 1: img2img (nano_banana_pro) \u2014 KSampler denoise=0.72\nStep 2: video_gen (kling) \u2014 AnimateDiff 24 frames 9:16 MP4\nCustom nodes: ComfyUI-AnimateDiff-Evolved \u00b7 ComfyUI-IPAdapter-plus \u00b7 ComfyUI-VideoHelperSuite"
+      },
+      "widgets_values": [
+        "FUSE \u2014 JEANS\nInputs: Jeans (Front) \u2605, Jeans (Back) \u25cb\nStep 1: img2img (nano_banana_pro) \u2014 KSampler denoise=0.72\nStep 2: video_gen (kling) \u2014 AnimateDiff 24 frames 9:16 MP4\nCustom nodes: ComfyUI-AnimateDiff-Evolved \u00b7 ComfyUI-IPAdapter-plus \u00b7 ComfyUI-VideoHelperSuite"
+      ]
+    },
+    {
+      "id": 2,
       "type": "CheckpointLoaderSimple",
       "pos": [
         50,
@@ -14,7 +37,7 @@
         "1": 98
       },
       "flags": {},
-      "order": 0,
+      "order": 1,
       "mode": 0,
       "outputs": [
         {
@@ -29,7 +52,7 @@
           "name": "CLIP",
           "type": "CLIP",
           "links": [
-            3
+            2
           ],
           "slot_index": 1
         },
@@ -37,8 +60,9 @@
           "name": "VAE",
           "type": "VAE",
           "links": [
-            9,
-            17
+            3,
+            4,
+            5
           ],
           "slot_index": 2
         }
@@ -51,7 +75,7 @@
       ]
     },
     {
-      "id": 2,
+      "id": 3,
       "type": "LoraLoader",
       "pos": [
         420,
@@ -62,7 +86,7 @@
         "1": 126
       },
       "flags": {},
-      "order": 1,
+      "order": 2,
       "mode": 0,
       "inputs": [
         {
@@ -73,7 +97,7 @@
         {
           "name": "clip",
           "type": "CLIP",
-          "link": 3
+          "link": 2
         }
       ],
       "outputs": [
@@ -81,8 +105,8 @@
           "name": "MODEL",
           "type": "MODEL",
           "links": [
-            2,
-            15
+            6,
+            7
           ],
           "slot_index": 0
         },
@@ -90,10 +114,10 @@
           "name": "CLIP",
           "type": "CLIP",
           "links": [
-            4,
-            5,
-            18,
-            19
+            8,
+            9,
+            10,
+            11
           ],
           "slot_index": 1
         }
@@ -108,49 +132,11 @@
       ]
     },
     {
-      "id": 3,
-      "type": "CLIPTextEncode",
-      "pos": [
-        50,
-        220
-      ],
-      "size": {
-        "0": 422,
-        "1": 164
-      },
-      "flags": {},
-      "order": 2,
-      "mode": 0,
-      "inputs": [
-        {
-          "name": "clip",
-          "type": "CLIP",
-          "link": 4
-        }
-      ],
-      "outputs": [
-        {
-          "name": "CONDITIONING",
-          "type": "CONDITIONING",
-          "links": [
-            6
-          ],
-          "slot_index": 0
-        }
-      ],
-      "properties": {
-        "Node name for S&R": "CLIPTextEncode"
-      },
-      "widgets_values": [
-        "Iconic denim jeans editorial campaign photo. A model wearing the jeans in a classic campaign setting \u2014 urban rooftop or sun-lit street. Golden hour lighting, confident pose, tack-sharp denim texture and stitching detail, high-fashion campaign quality."
-      ]
-    },
-    {
       "id": 4,
       "type": "CLIPTextEncode",
       "pos": [
         50,
-        420
+        220
       ],
       "size": {
         "0": 422,
@@ -163,7 +149,7 @@
         {
           "name": "clip",
           "type": "CLIP",
-          "link": 5
+          "link": 8
         }
       ],
       "outputs": [
@@ -171,7 +157,45 @@
           "name": "CONDITIONING",
           "type": "CONDITIONING",
           "links": [
-            7
+            12
+          ],
+          "slot_index": 0
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "CLIPTextEncode"
+      },
+      "widgets_values": [
+        "Iconic denim jeans editorial campaign photo. A model wearing the jeans in a classic campaign setting \u2014 urban rooftop or sun-lit street. Golden hour lighting, confident pose, tack-sharp denim texture and stitching detail, high-fashion campaign quality."
+      ]
+    },
+    {
+      "id": 5,
+      "type": "CLIPTextEncode",
+      "pos": [
+        50,
+        420
+      ],
+      "size": {
+        "0": 422,
+        "1": 164
+      },
+      "flags": {},
+      "order": 4,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "clip",
+          "type": "CLIP",
+          "link": 9
+        }
+      ],
+      "outputs": [
+        {
+          "name": "CONDITIONING",
+          "type": "CONDITIONING",
+          "links": [
+            13
           ],
           "slot_index": 0
         }
@@ -184,25 +208,25 @@
       ]
     },
     {
-      "id": 5,
+      "id": 6,
       "type": "LoadImage",
       "pos": [
         50,
-        620
+        640
       ],
       "size": {
         "0": 315,
         "1": 314
       },
       "flags": {},
-      "order": 4,
+      "order": 5,
       "mode": 0,
       "outputs": [
         {
           "name": "IMAGE",
           "type": "IMAGE",
           "links": [
-            8
+            14
           ],
           "slot_index": 0
         },
@@ -219,32 +243,114 @@
       "widgets_values": [
         "product_image.png",
         "image"
-      ]
+      ],
+      "_label": "\u2605 REQUIRED \u2014 Jeans (Front)",
+      "_hint": "Front view of the jeans/denim. Flat lay, worn, or folded."
     },
     {
-      "id": 6,
-      "type": "VAEEncode",
+      "id": 7,
+      "type": "LoadImage",
       "pos": [
-        420,
-        620
+        50,
+        1010
+      ],
+      "size": {
+        "0": 315,
+        "1": 314
+      },
+      "flags": {},
+      "order": 6,
+      "mode": 0,
+      "outputs": [
+        {
+          "name": "IMAGE",
+          "type": "IMAGE",
+          "links": [
+            15
+          ],
+          "slot_index": 0
+        },
+        {
+          "name": "MASK",
+          "type": "MASK",
+          "links": [],
+          "slot_index": 1
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "LoadImage"
+      },
+      "widgets_values": [
+        "product_back.png",
+        "image"
+      ],
+      "_label": "\u25cb optional \u2014 Jeans (Back)",
+      "_hint": "Optional back view for pocket and back detail."
+    },
+    {
+      "id": 8,
+      "type": "ImageBatch",
+      "pos": [
+        400,
+        800
       ],
       "size": {
         "0": 210,
         "1": 46
       },
       "flags": {},
-      "order": 5,
+      "order": 7,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "image1",
+          "type": "IMAGE",
+          "link": 14
+        },
+        {
+          "name": "image2",
+          "type": "IMAGE",
+          "link": 15
+        }
+      ],
+      "outputs": [
+        {
+          "name": "IMAGE",
+          "type": "IMAGE",
+          "links": [
+            16
+          ],
+          "slot_index": 0
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "ImageBatch"
+      }
+    },
+    {
+      "id": 9,
+      "type": "VAEEncode",
+      "pos": [
+        800,
+        800
+      ],
+      "size": {
+        "0": 210,
+        "1": 46
+      },
+      "flags": {},
+      "order": 8,
       "mode": 0,
       "inputs": [
         {
           "name": "pixels",
           "type": "IMAGE",
-          "link": 8
+          "link": 16
         },
         {
           "name": "vae",
           "type": "VAE",
-          "link": 9
+          "link": 3
         }
       ],
       "outputs": [
@@ -252,7 +358,7 @@
           "name": "LATENT",
           "type": "LATENT",
           "links": [
-            10
+            17
           ],
           "slot_index": 0
         }
@@ -262,10 +368,10 @@
       }
     },
     {
-      "id": 7,
+      "id": 10,
       "type": "KSampler",
       "pos": [
-        800,
+        1100,
         220
       ],
       "size": {
@@ -273,28 +379,28 @@
         "1": 262
       },
       "flags": {},
-      "order": 6,
+      "order": 9,
       "mode": 0,
       "inputs": [
         {
           "name": "model",
           "type": "MODEL",
-          "link": 2
+          "link": 6
         },
         {
           "name": "positive",
           "type": "CONDITIONING",
-          "link": 6
+          "link": 12
         },
         {
           "name": "negative",
           "type": "CONDITIONING",
-          "link": 7
+          "link": 13
         },
         {
           "name": "latent_image",
           "type": "LATENT",
-          "link": 10
+          "link": 17
         }
       ],
       "outputs": [
@@ -302,7 +408,7 @@
           "name": "LATENT",
           "type": "LATENT",
           "links": [
-            11
+            18
           ],
           "slot_index": 0
         }
@@ -321,10 +427,10 @@
       ]
     },
     {
-      "id": 8,
+      "id": 11,
       "type": "VAEDecode",
       "pos": [
-        1170,
+        1470,
         220
       ],
       "size": {
@@ -332,18 +438,18 @@
         "1": 46
       },
       "flags": {},
-      "order": 7,
+      "order": 10,
       "mode": 0,
       "inputs": [
         {
           "name": "samples",
           "type": "LATENT",
-          "link": 11
+          "link": 18
         },
         {
           "name": "vae",
           "type": "VAE",
-          "link": 17
+          "link": 4
         }
       ],
       "outputs": [
@@ -351,8 +457,8 @@
           "name": "IMAGE",
           "type": "IMAGE",
           "links": [
-            12,
-            20
+            20,
+            21
           ],
           "slot_index": 0
         }
@@ -362,10 +468,10 @@
       }
     },
     {
-      "id": 9,
+      "id": 12,
       "type": "SaveImage",
       "pos": [
-        1430,
+        1730,
         220
       ],
       "size": {
@@ -373,13 +479,13 @@
         "1": 270
       },
       "flags": {},
-      "order": 8,
+      "order": 11,
       "mode": 0,
       "inputs": [
         {
           "name": "images",
           "type": "IMAGE",
-          "link": 12
+          "link": 20
         }
       ],
       "outputs": [],
@@ -391,24 +497,24 @@
       ]
     },
     {
-      "id": 10,
+      "id": 13,
       "type": "ADE_AnimateDiffLoaderWithContext",
       "pos": [
         50,
-        1000
+        1200
       ],
       "size": {
         "0": 315,
         "1": 150
       },
       "flags": {},
-      "order": 9,
+      "order": 12,
       "mode": 0,
       "inputs": [
         {
           "name": "model",
           "type": "MODEL",
-          "link": 15
+          "link": 7
         }
       ],
       "outputs": [
@@ -416,7 +522,7 @@
           "name": "MODEL",
           "type": "MODEL",
           "links": [
-            16
+            22
           ],
           "slot_index": 0
         }
@@ -434,24 +540,24 @@
       ]
     },
     {
-      "id": 11,
+      "id": 14,
       "type": "CLIPTextEncode",
       "pos": [
         420,
-        1000
+        1200
       ],
       "size": {
         "0": 422,
         "1": 164
       },
       "flags": {},
-      "order": 10,
+      "order": 13,
       "mode": 0,
       "inputs": [
         {
           "name": "clip",
           "type": "CLIP",
-          "link": 18
+          "link": 10
         }
       ],
       "outputs": [
@@ -459,7 +565,7 @@
           "name": "CONDITIONING",
           "type": "CONDITIONING",
           "links": [
-            21
+            23
           ],
           "slot_index": 0
         }
@@ -472,24 +578,24 @@
       ]
     },
     {
-      "id": 12,
+      "id": 15,
       "type": "CLIPTextEncode",
       "pos": [
         420,
-        1200
+        1400
       ],
       "size": {
         "0": 422,
         "1": 164
       },
       "flags": {},
-      "order": 11,
+      "order": 14,
       "mode": 0,
       "inputs": [
         {
           "name": "clip",
           "type": "CLIP",
-          "link": 19
+          "link": 11
         }
       ],
       "outputs": [
@@ -497,7 +603,7 @@
           "name": "CONDITIONING",
           "type": "CONDITIONING",
           "links": [
-            22
+            24
           ],
           "slot_index": 0
         }
@@ -510,18 +616,18 @@
       ]
     },
     {
-      "id": 13,
+      "id": 16,
       "type": "IPAdapterApply",
       "pos": [
         900,
-        1000
+        1200
       ],
       "size": {
         "0": 315,
         "1": 200
       },
       "flags": {},
-      "order": 12,
+      "order": 15,
       "mode": 0,
       "inputs": [
         {
@@ -537,12 +643,12 @@
         {
           "name": "image",
           "type": "IMAGE",
-          "link": 20
+          "link": 21
         },
         {
           "name": "model",
           "type": "MODEL",
-          "link": 16
+          "link": 22
         }
       ],
       "outputs": [
@@ -550,7 +656,7 @@
           "name": "MODEL",
           "type": "MODEL",
           "links": [
-            23
+            25
           ],
           "slot_index": 0
         }
@@ -566,87 +672,28 @@
         1,
         "concat"
       ],
-      "_note": "Load IPAdapter SDXL model via IPAdapterModelLoader node (not shown). Drives video style from the edited image."
+      "_note": "Connect IPAdapterModelLoader and CLIPVisionLoader from manager."
     },
     {
-      "id": 14,
-      "type": "KSampler",
-      "pos": [
-        900,
-        1250
-      ],
-      "size": {
-        "0": 315,
-        "1": 262
-      },
-      "flags": {},
-      "order": 13,
-      "mode": 0,
-      "inputs": [
-        {
-          "name": "model",
-          "type": "MODEL",
-          "link": 23
-        },
-        {
-          "name": "positive",
-          "type": "CONDITIONING",
-          "link": 21
-        },
-        {
-          "name": "negative",
-          "type": "CONDITIONING",
-          "link": 22
-        },
-        {
-          "name": "latent_image",
-          "type": "LATENT",
-          "link": 24
-        }
-      ],
-      "outputs": [
-        {
-          "name": "LATENT",
-          "type": "LATENT",
-          "links": [
-            25
-          ],
-          "slot_index": 0
-        }
-      ],
-      "properties": {
-        "Node name for S&R": "KSampler"
-      },
-      "widgets_values": [
-        42,
-        "fixed",
-        20,
-        7.5,
-        "dpmpp_2m",
-        "karras",
-        1.0
-      ]
-    },
-    {
-      "id": 15,
+      "id": 17,
       "type": "EmptyLatentImage",
       "pos": [
         50,
-        1250
+        1450
       ],
       "size": {
         "0": 210,
         "1": 90
       },
       "flags": {},
-      "order": 14,
+      "order": 16,
       "mode": 0,
       "outputs": [
         {
           "name": "LATENT",
           "type": "LATENT",
           "links": [
-            24
+            26
           ],
           "slot_index": 0
         }
@@ -659,32 +706,91 @@
         912,
         24
       ],
-      "_note": "24 frames @ 512x912 = 9:16 aspect ratio"
+      "_note": "512\u00d7912 = 9:16 aspect ratio. 24 frames."
     },
     {
-      "id": 16,
+      "id": 18,
+      "type": "KSampler",
+      "pos": [
+        900,
+        1500
+      ],
+      "size": {
+        "0": 315,
+        "1": 262
+      },
+      "flags": {},
+      "order": 17,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "model",
+          "type": "MODEL",
+          "link": 25
+        },
+        {
+          "name": "positive",
+          "type": "CONDITIONING",
+          "link": 23
+        },
+        {
+          "name": "negative",
+          "type": "CONDITIONING",
+          "link": 24
+        },
+        {
+          "name": "latent_image",
+          "type": "LATENT",
+          "link": 26
+        }
+      ],
+      "outputs": [
+        {
+          "name": "LATENT",
+          "type": "LATENT",
+          "links": [
+            27
+          ],
+          "slot_index": 0
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "KSampler"
+      },
+      "widgets_values": [
+        42,
+        "fixed",
+        20,
+        7.0,
+        "dpmpp_2m",
+        "karras",
+        1.0
+      ]
+    },
+    {
+      "id": 19,
       "type": "VAEDecodeTiled",
       "pos": [
         1270,
-        1250
+        1500
       ],
       "size": {
         "0": 210,
         "1": 66
       },
       "flags": {},
-      "order": 15,
+      "order": 18,
       "mode": 0,
       "inputs": [
         {
           "name": "samples",
           "type": "LATENT",
-          "link": 25
+          "link": 27
         },
         {
           "name": "vae",
           "type": "VAE",
-          "link": 17
+          "link": 5
         }
       ],
       "outputs": [
@@ -692,7 +798,7 @@
           "name": "IMAGE",
           "type": "IMAGE",
           "links": [
-            26
+            28
           ],
           "slot_index": 0
         }
@@ -705,24 +811,24 @@
       ]
     },
     {
-      "id": 17,
+      "id": 20,
       "type": "VHS_VideoCombine",
       "pos": [
-        1540,
-        1250
+        1530,
+        1500
       ],
       "size": {
         "0": 315,
         "1": 200
       },
       "flags": {},
-      "order": 16,
+      "order": 19,
       "mode": 0,
       "inputs": [
         {
           "name": "images",
           "type": "IMAGE",
-          "link": 26
+          "link": 29
         }
       ],
       "outputs": [],
@@ -739,243 +845,236 @@
         null,
         "video/h264-mp4"
       ]
-    },
-    {
-      "id": 18,
-      "type": "Note",
-      "pos": [
-        50,
-        -80
-      ],
-      "size": {
-        "0": 700,
-        "1": 100
-      },
-      "flags": {},
-      "order": 0,
-      "mode": 0,
-      "inputs": [],
-      "outputs": [],
-      "properties": {
-        "text": "FUSE Campaign Studio \u2014 JEANS\nStep 1: img2img edit via KSampler (denoise=0.72)\nStep 2: AnimateDiff img2video (24 frames, 9:16)\nReplace LoRA: jeans_style.safetensors\nRequires: ComfyUI-AnimateDiff-Evolved + ComfyUI-IPAdapter-plus + ComfyUI-VideoHelperSuite"
-      },
-      "widgets_values": [
-        "FUSE Campaign Studio \u2014 JEANS\nStep 1: img2img edit via KSampler (denoise=0.72)\nStep 2: AnimateDiff img2video (24 frames, 9:16)\nReplace LoRA: jeans_style.safetensors\nRequires: ComfyUI-AnimateDiff-Evolved + ComfyUI-IPAdapter-plus + ComfyUI-VideoHelperSuite"
-      ]
     }
   ],
   "links": [
     [
       1,
-      1,
-      0,
       2,
+      0,
+      3,
       0,
       "MODEL"
     ],
     [
       2,
       2,
-      0,
-      7,
-      0,
-      "MODEL"
-    ],
-    [
-      3,
-      1,
-      1,
-      2,
-      1,
-      "CLIP"
-    ],
-    [
-      4,
-      2,
       1,
       3,
-      0,
-      "CLIP"
-    ],
-    [
-      5,
-      2,
       1,
-      4,
-      0,
       "CLIP"
-    ],
-    [
-      6,
-      3,
-      0,
-      7,
-      1,
-      "CONDITIONING"
-    ],
-    [
-      7,
-      4,
-      0,
-      7,
-      2,
-      "CONDITIONING"
     ],
     [
       8,
-      5,
+      3,
+      1,
+      4,
       0,
-      6,
-      0,
-      "IMAGE"
+      "CLIP"
     ],
     [
       9,
-      1,
-      2,
-      6,
-      1,
-      "VAE"
-    ],
-    [
-      10,
-      6,
-      0,
-      7,
       3,
-      "LATENT"
-    ],
-    [
-      11,
-      7,
+      1,
+      5,
       0,
-      8,
-      0,
-      "LATENT"
+      "CLIP"
     ],
     [
       12,
-      8,
+      4,
       0,
-      9,
+      10,
+      1,
+      "CONDITIONING"
+    ],
+    [
+      13,
+      5,
+      0,
+      10,
+      2,
+      "CONDITIONING"
+    ],
+    [
+      14,
+      6,
+      0,
+      8,
       0,
       "IMAGE"
     ],
     [
       15,
-      2,
+      7,
       0,
-      10,
-      0,
-      "MODEL"
+      8,
+      1,
+      "IMAGE"
     ],
     [
       16,
-      10,
+      8,
       0,
-      13,
-      3,
-      "MODEL"
+      9,
+      0,
+      "IMAGE"
     ],
     [
-      17,
-      1,
+      3,
       2,
-      8,
+      2,
+      9,
       1,
       "VAE"
     ],
     [
-      18,
-      2,
-      1,
-      11,
+      6,
+      3,
       0,
-      "CLIP"
+      10,
+      0,
+      "MODEL"
     ],
     [
-      19,
+      4,
       2,
+      2,
+      11,
       1,
-      12,
-      0,
-      "CLIP"
+      "VAE"
     ],
     [
       20,
-      8,
+      11,
+      0,
+      12,
+      0,
+      "IMAGE"
+    ],
+    [
+      19,
+      11,
+      0,
+      null,
+      null,
+      "IMAGE"
+    ],
+    [
+      7,
+      3,
       0,
       13,
-      2,
-      "IMAGE"
+      0,
+      "MODEL"
+    ],
+    [
+      10,
+      3,
+      1,
+      14,
+      0,
+      "CLIP"
+    ],
+    [
+      11,
+      3,
+      1,
+      15,
+      0,
+      "CLIP"
     ],
     [
       21,
       11,
       0,
-      14,
-      1,
-      "CONDITIONING"
+      16,
+      2,
+      "IMAGE"
     ],
     [
       22,
-      12,
+      13,
       0,
-      14,
-      2,
-      "CONDITIONING"
+      16,
+      3,
+      "MODEL"
+    ],
+    [
+      25,
+      16,
+      0,
+      18,
+      0,
+      "MODEL"
     ],
     [
       23,
-      13,
-      0,
       14,
       0,
-      "MODEL"
+      18,
+      1,
+      "CONDITIONING"
     ],
     [
       24,
       15,
       0,
-      14,
+      18,
+      2,
+      "CONDITIONING"
+    ],
+    [
+      26,
+      17,
+      0,
+      18,
       3,
       "LATENT"
     ],
     [
-      25,
-      14,
+      27,
+      18,
       0,
-      16,
+      19,
       0,
       "LATENT"
     ],
     [
-      26,
-      16,
+      5,
+      2,
+      2,
+      19,
+      1,
+      "VAE"
+    ],
+    [
+      29,
+      19,
       0,
-      17,
+      20,
       0,
       "IMAGE"
     ]
   ],
   "groups": [
     {
-      "title": "Step 1: Image Edit (nano_banana_pro)",
+      "title": "Step 1: image_edit (nano_banana_pro) \u2014 JEANS",
       "bounding": [
         40,
         160,
-        1750,
-        550
+        1950,
+        900
       ],
       "color": "#3d5e8a"
     },
     {
-      "title": "Step 2: Video Generation (kling / AnimateDiff)",
+      "title": "Step 2: video_gen (kling / AnimateDiff 9:16)",
       "bounding": [
         40,
-        960,
-        1850,
-        600
+        1150,
+        1900,
+        700
       ],
       "color": "#5e3d8a"
     }
@@ -985,20 +1084,18 @@
     "fuse_template": "JEANS",
     "fuse_file": "jeans",
     "pipeline_steps": [
-      "image_edit (nano_banana_pro)",
-      "video_gen (kling)"
+      "image_edit",
+      "video_gen"
     ],
     "comfyui_equivalents": {
-      "nano_banana_pro": "KSampler img2img with LoRA",
-      "kling": "AnimateDiff-Evolved + IPAdapter + VHS_VideoCombine"
+      "nano_banana_pro": "KSampler img2img",
+      "kling": "AnimateDiff+IPAdapter+VHS"
     },
     "required_custom_nodes": [
       "ComfyUI-AnimateDiff-Evolved",
       "ComfyUI-IPAdapter-plus",
       "ComfyUI-VideoHelperSuite (VHS)"
-    ],
-    "lora_placeholder": "jeans_style.safetensors",
-    "instructions": "1. Load in ComfyUI. 2. Replace LoRA name with real .safetensors from sync-weavy-loras. 3. Load your product image in LoadImage node. 4. Queue."
+    ]
   },
   "version": 0.4
 }
