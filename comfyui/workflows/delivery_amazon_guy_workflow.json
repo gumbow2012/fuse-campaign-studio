@@ -1,6 +1,6 @@
 {
   "last_node_id": 20,
-  "last_link_id": 29,
+  "last_link_id": 28,
   "nodes": [
     {
       "id": 1,
@@ -457,8 +457,8 @@
           "name": "IMAGE",
           "type": "IMAGE",
           "links": [
-            20,
-            21
+            19,
+            20
           ],
           "slot_index": 0
         }
@@ -485,7 +485,7 @@
         {
           "name": "images",
           "type": "IMAGE",
-          "link": 20
+          "link": 19
         }
       ],
       "outputs": [],
@@ -522,7 +522,7 @@
           "name": "MODEL",
           "type": "MODEL",
           "links": [
-            22
+            21
           ],
           "slot_index": 0
         }
@@ -565,7 +565,7 @@
           "name": "CONDITIONING",
           "type": "CONDITIONING",
           "links": [
-            23
+            22
           ],
           "slot_index": 0
         }
@@ -603,7 +603,7 @@
           "name": "CONDITIONING",
           "type": "CONDITIONING",
           "links": [
-            24
+            23
           ],
           "slot_index": 0
         }
@@ -643,12 +643,12 @@
         {
           "name": "image",
           "type": "IMAGE",
-          "link": 21
+          "link": 20
         },
         {
           "name": "model",
           "type": "MODEL",
-          "link": 22
+          "link": 21
         }
       ],
       "outputs": [
@@ -656,7 +656,7 @@
           "name": "MODEL",
           "type": "MODEL",
           "links": [
-            25
+            24
           ],
           "slot_index": 0
         }
@@ -693,7 +693,7 @@
           "name": "LATENT",
           "type": "LATENT",
           "links": [
-            26
+            25
           ],
           "slot_index": 0
         }
@@ -726,22 +726,22 @@
         {
           "name": "model",
           "type": "MODEL",
-          "link": 25
+          "link": 24
         },
         {
           "name": "positive",
           "type": "CONDITIONING",
-          "link": 23
+          "link": 22
         },
         {
           "name": "negative",
           "type": "CONDITIONING",
-          "link": 24
+          "link": 23
         },
         {
           "name": "latent_image",
           "type": "LATENT",
-          "link": 26
+          "link": 25
         }
       ],
       "outputs": [
@@ -749,7 +749,7 @@
           "name": "LATENT",
           "type": "LATENT",
           "links": [
-            27
+            26
           ],
           "slot_index": 0
         }
@@ -785,7 +785,7 @@
         {
           "name": "samples",
           "type": "LATENT",
-          "link": 27
+          "link": 26
         },
         {
           "name": "vae",
@@ -798,7 +798,7 @@
           "name": "IMAGE",
           "type": "IMAGE",
           "links": [
-            28
+            27
           ],
           "slot_index": 0
         }
@@ -828,7 +828,7 @@
         {
           "name": "images",
           "type": "IMAGE",
-          "link": 29
+          "link": 28
         }
       ],
       "outputs": [],
@@ -945,19 +945,11 @@
       "VAE"
     ],
     [
-      20,
+      19,
       11,
       0,
       12,
       0,
-      "IMAGE"
-    ],
-    [
-      19,
-      11,
-      0,
-      null,
-      null,
       "IMAGE"
     ],
     [
@@ -985,7 +977,7 @@
       "CLIP"
     ],
     [
-      21,
+      20,
       11,
       0,
       16,
@@ -993,7 +985,7 @@
       "IMAGE"
     ],
     [
-      22,
+      21,
       13,
       0,
       16,
@@ -1001,7 +993,7 @@
       "MODEL"
     ],
     [
-      25,
+      24,
       16,
       0,
       18,
@@ -1009,7 +1001,7 @@
       "MODEL"
     ],
     [
-      23,
+      22,
       14,
       0,
       18,
@@ -1017,7 +1009,7 @@
       "CONDITIONING"
     ],
     [
-      24,
+      23,
       15,
       0,
       18,
@@ -1025,7 +1017,7 @@
       "CONDITIONING"
     ],
     [
-      26,
+      25,
       17,
       0,
       18,
@@ -1033,7 +1025,7 @@
       "LATENT"
     ],
     [
-      27,
+      26,
       18,
       0,
       19,
@@ -1049,7 +1041,7 @@
       "VAE"
     ],
     [
-      29,
+      28,
       19,
       0,
       20,

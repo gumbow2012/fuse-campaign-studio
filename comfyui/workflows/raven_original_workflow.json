@@ -360,7 +360,7 @@
         {
           "name": "model",
           "type": "MODEL",
-          "link": 6
+          "link": 18
         }
       ],
       "outputs": [
@@ -427,7 +427,7 @@
           "name": "LATENT",
           "type": "LATENT",
           "links": [
-            18
+            19
           ],
           "slot_index": 0
         }
@@ -463,7 +463,7 @@
         {
           "name": "samples",
           "type": "LATENT",
-          "link": 18
+          "link": 19
         },
         {
           "name": "vae",
@@ -940,8 +940,8 @@
       "IMAGE"
     ],
     [
-      6,
-      null,
+      18,
+      3,
       0,
       9,
       3,
@@ -969,14 +969,6 @@
       0,
       12,
       0,
-      "IMAGE"
-    ],
-    [
-      19,
-      11,
-      0,
-      null,
-      null,
       "IMAGE"
     ],
     [
