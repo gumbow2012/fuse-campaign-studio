@@ -542,7 +542,7 @@ export default {
 
       if (path === "/health")                                           response = await handleHealth(env);
       else if (path.startsWith("/assets/"))                            response = await handleServeAsset(env, path.slice("/assets/".length));
-      else if (path === "/api/templates" && request.method === "GET")  { checkAuth(request, env); response = await handleListTemplates(env); }
+      else if (path === "/api/templates" && request.method === "GET")  { response = await handleListTemplates(env); }
       else if (path.startsWith("/api/templates/") && request.method === "GET") { checkAuth(request, env); response = await handleGetTemplate(env, path.slice("/api/templates/".length)); }
       else if (path === "/api/upload" && request.method === "POST")    response = await handleUploadFile(request, env);
       else if (path === "/api/uploads" && request.method === "POST")   response = await handleUploadFile(request, env);
