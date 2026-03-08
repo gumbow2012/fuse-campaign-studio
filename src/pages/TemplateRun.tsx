@@ -43,9 +43,10 @@ interface UploadZoneProps {
   required: boolean;
   file: File | null;
   onFile: (file: File | null) => void;
+  hint?: string;
 }
 
-const UploadZone = ({ label, required, file, onFile }: UploadZoneProps) => {
+const UploadZone = ({ label, required, file, onFile, hint }: UploadZoneProps) => {
   const [dragOver, setDragOver] = useState(false);
 
   const handleDrop = useCallback((e: React.DragEvent) => {
@@ -115,12 +116,15 @@ const UploadZone = ({ label, required, file, onFile }: UploadZoneProps) => {
           </div>
         </div>
       )}
+      {hint && (
+        <p className="text-[9px] text-muted-foreground/50 leading-relaxed px-0.5">{hint}</p>
+      )}
     </div>
   );
 };
 
 /* ─── Types ─── */
-interface InputField { key: string; label: string; type: string; required: boolean }
+interface InputField { key: string; label: string; type: string; required: boolean; hint?: string }
 interface ProjectResult {
   status: "queued" | "running" | "video_pending" | "complete" | "failed";
   progress: number;
@@ -210,19 +214,25 @@ const TemplateRun = () => {
         label: ui.label,
         type: ui.type || "image",
         required: ui.required ?? true,
+        hint: ui.hint,
       }));
     }
     if (template?.input_schema && Array.isArray(template.input_schema) && template.input_schema.length > 0) {
-      return (template.input_schema as any[]).map((f: any) => ({
+      return template.input_schema.map((f) => ({
         key: f.key,
         label: f.label,
         type: f.type || "image",
         required: f.required ?? true,
+        hint: f.hint,
       }));
     }
     // Default fallback: single product_image
     return [{ key: "product_image", label: "PRODUCT IMAGE", type: "image", required: true }];
   })();
+
+  // asset_requirements: prefer templateDetail, fall back to ApiTemplate field
+  const assetRequirements: string | null =
+    templateDetail?.asset_requirements || (template as any)?.asset_requirements || null;
 
   const imageFields = inputFields.filter((i) => i.type === "image");
   const textFields = inputFields.filter((i) => i.type === "text" || i.type === "prompt");
@@ -477,6 +487,12 @@ const TemplateRun = () => {
 
               {/* Upload zones */}
               <div className="flex-1 overflow-y-auto px-5 py-4 space-y-5">
+                {assetRequirements && (
+                  <div className="flex items-start gap-2 rounded-lg bg-amber-500/[0.07] border border-amber-500/20 px-3 py-2.5">
+                    <span className="text-amber-400 text-sm mt-0.5">💡</span>
+                    <p className="text-[10px] text-amber-300/80 leading-relaxed">{assetRequirements}</p>
+                  </div>
+                )}
                 {inputFields.length > 0 ? (
                   <>
                     {imageFields.map((field) => (
@@ -486,6 +502,7 @@ const TemplateRun = () => {
                         required={field.required}
                         file={files[field.key] || null}
                         onFile={(f) => setFiles((prev) => ({ ...prev, [field.key]: f }))}
+                        hint={field.hint}
                       />
                     ))}
                     {textFields.map((field) => (

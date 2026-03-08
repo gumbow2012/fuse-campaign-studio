@@ -1,0 +1,70 @@
+{
+  "name": "UGC STUDIO",
+  "slug": "ugc-studio",
+  "version": "1.0",
+  "description": "Clean studio UGC \u2014 influencer holding product. Professional but authentic.",
+  "category": "UGC",
+  "tags": [
+    "ugc",
+    "studio",
+    "clean",
+    "video"
+  ],
+  "output_type": "video",
+  "estimated_credits_per_run": 50,
+  "is_active": true,
+  "asset_requirements": "Product on white or light background for cleanest result.",
+  "input_manifest": [
+    {
+      "key": "product_image",
+      "label": "Product Image",
+      "type": "image",
+      "required": true,
+      "accepts": [
+        "image/jpeg",
+        "image/png",
+        "image/webp"
+      ],
+      "max_size_mb": 10,
+      "hint": "Product on white or light background for cleanest result."
+    }
+  ],
+  "steps": [
+    {
+      "id": "image_edit",
+      "type": "nano_banana_pro",
+      "prompt": "Clean studio UGC content creator photo. A person is wearing and showing off the clothing product against a clean white or light gray background. Ring light setup, direct camera facing shot, casual but styled, TikTok creator energy. The clothing product is the clear hero, crisp and detailed. Authentic Instagram/TikTok creator vibe.",
+      "user_prompt_key": null,
+      "user_input_keys": [
+        "product_image"
+      ],
+      "locked_inputs": [],
+      "settings": {
+        "resolution": "2K",
+        "num_images": 1,
+        "output_format": "png"
+      }
+    },
+    {
+      "id": "video_gen",
+      "type": "kling",
+      "prompt": "UGC studio review video. Content creator wearing the clothing product does a quick outfit check, turns around to show front and back, points to details, clean studio background, natural lighting, TikTok/Reels format content creator energy.",
+      "user_prompt_key": null,
+      "image_source": "previous_step",
+      "settings": {
+        "model": "kling-v1-6",
+        "duration": "10",
+        "aspect_ratio": "9:16",
+        "cfg_scale": 0.5,
+        "mode": "std"
+      }
+    }
+  ],
+  "outputs": {
+    "primary_type": "video",
+    "items": [
+      "image",
+      "video"
+    ]
+  }
+}

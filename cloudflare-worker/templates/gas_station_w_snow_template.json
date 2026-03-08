@@ -1,0 +1,71 @@
+{
+  "name": "GAS STATION W SNOW",
+  "slug": "gas-station-snow",
+  "version": "1.0",
+  "description": "Gas station at night in the snow \u2014 moody cinematic, neon reflections, cold weather fashion.",
+  "category": "Street",
+  "tags": [
+    "street",
+    "winter",
+    "cinematic",
+    "night",
+    "video"
+  ],
+  "output_type": "video",
+  "estimated_credits_per_run": 50,
+  "is_active": true,
+  "asset_requirements": "Any product. Dark or colorful products work especially well against neon and snow.",
+  "input_manifest": [
+    {
+      "key": "product_image",
+      "label": "Product Image",
+      "type": "image",
+      "required": true,
+      "accepts": [
+        "image/jpeg",
+        "image/png",
+        "image/webp"
+      ],
+      "max_size_mb": 10,
+      "hint": "Any product. Dark or colorful products work especially well against neon and snow."
+    }
+  ],
+  "steps": [
+    {
+      "id": "image_edit",
+      "type": "nano_banana_pro",
+      "prompt": "Cinematic gas station night photo in heavy snowfall. A model wearing the clothing product stands at a glowing gas station at night. Snow falling heavily, neon sign reflections on wet concrete, warm orange and cool blue color contrast from the canopy lights. The clothing clearly visible, contrasting beautifully against the snow and neon. 35mm film look, moody and atmospheric.",
+      "user_prompt_key": null,
+      "user_input_keys": [
+        "product_image"
+      ],
+      "locked_inputs": [],
+      "settings": {
+        "resolution": "2K",
+        "num_images": 1,
+        "output_format": "png"
+      }
+    },
+    {
+      "id": "video_gen",
+      "type": "kling",
+      "prompt": "Gas station snow cinematic video. Model wearing the clothing walks slowly through heavy snowfall under a gas station canopy, snow blowing around them, neon reflections on the ground, breath visible, the clothing moves naturally in the wind, moody cinematic camera movement.",
+      "user_prompt_key": null,
+      "image_source": "previous_step",
+      "settings": {
+        "model": "kling-v1-6",
+        "duration": "10",
+        "aspect_ratio": "9:16",
+        "cfg_scale": 0.5,
+        "mode": "std"
+      }
+    }
+  ],
+  "outputs": {
+    "primary_type": "video",
+    "items": [
+      "image",
+      "video"
+    ]
+  }
+}

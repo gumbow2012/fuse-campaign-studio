@@ -1,0 +1,70 @@
+{
+  "name": "PACK THEIF (Pants)",
+  "slug": "pack-theif-pants",
+  "version": "1.0",
+  "description": "Thief-style unboxing \u2014 sneaky character stealing pants from a box. Street fashion energy.",
+  "category": "Street",
+  "tags": [
+    "street",
+    "unboxing",
+    "pants",
+    "video"
+  ],
+  "output_type": "video",
+  "estimated_credits_per_run": 50,
+  "is_active": true,
+  "asset_requirements": "Clear shot of the pants/bottoms. Flat lay or folded works well.",
+  "input_manifest": [
+    {
+      "key": "product_image",
+      "label": "Product Image",
+      "type": "image",
+      "required": true,
+      "accepts": [
+        "image/jpeg",
+        "image/png",
+        "image/webp"
+      ],
+      "max_size_mb": 10,
+      "hint": "Clear shot of the pants/bottoms. Flat lay or folded works well."
+    }
+  ],
+  "steps": [
+    {
+      "id": "image_edit",
+      "type": "nano_banana_pro",
+      "prompt": "Streetwear thief aesthetic. Someone is pulling a pair of pants out of a shipping box dramatically. Urban street background, hooded figure, cinematic low-angle shot, the pants are the hero item shown prominently. Graffiti background, cinematic color grade, high fashion streetwear energy.",
+      "user_prompt_key": null,
+      "user_input_keys": [
+        "product_image"
+      ],
+      "locked_inputs": [],
+      "settings": {
+        "resolution": "2K",
+        "num_images": 1,
+        "output_format": "png"
+      }
+    },
+    {
+      "id": "video_gen",
+      "type": "kling",
+      "prompt": "Streetwear thief video. A hooded character dramatically pulls the pants out of a box, holds them up to admire, turns them to show both sides. Urban street setting, cinematic camera move, streetwear fashion energy, the pants shown clearly throughout.",
+      "user_prompt_key": null,
+      "image_source": "previous_step",
+      "settings": {
+        "model": "kling-v1-6",
+        "duration": "10",
+        "aspect_ratio": "9:16",
+        "cfg_scale": 0.5,
+        "mode": "std"
+      }
+    }
+  ],
+  "outputs": {
+    "primary_type": "video",
+    "items": [
+      "image",
+      "video"
+    ]
+  }
+}

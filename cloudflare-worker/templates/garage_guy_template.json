@@ -1,0 +1,70 @@
+{
+  "name": "GARAGE guy",
+  "slug": "garage-guy",
+  "version": "1.0",
+  "description": "Garage mechanic aesthetic \u2014 gritty industrial setting, grease and grit meets fashion.",
+  "category": "Street",
+  "tags": [
+    "street",
+    "garage",
+    "industrial",
+    "video"
+  ],
+  "output_type": "video",
+  "estimated_credits_per_run": 50,
+  "is_active": true,
+  "asset_requirements": "Any product. Bold colors contrast well with the industrial setting.",
+  "input_manifest": [
+    {
+      "key": "product_image",
+      "label": "Product Image",
+      "type": "image",
+      "required": true,
+      "accepts": [
+        "image/jpeg",
+        "image/png",
+        "image/webp"
+      ],
+      "max_size_mb": 10,
+      "hint": "Any product. Bold colors contrast well with the industrial setting."
+    }
+  ],
+  "steps": [
+    {
+      "id": "image_edit",
+      "type": "nano_banana_pro",
+      "prompt": "Garage mechanic fashion photography. A person wearing the clothing product inside a gritty auto garage or workshop. Cars or motorcycles in background, tools on walls, industrial fluorescent lighting. The clothing product is clean and stands out against the gritty garage environment. Editorial meets street \u2014 fashion in unexpected places.",
+      "user_prompt_key": null,
+      "user_input_keys": [
+        "product_image"
+      ],
+      "locked_inputs": [],
+      "settings": {
+        "resolution": "2K",
+        "num_images": 1,
+        "output_format": "png"
+      }
+    },
+    {
+      "id": "video_gen",
+      "type": "kling",
+      "prompt": "Garage fashion video. Person in the clothing product moves through a gritty auto garage, leans against a car or picks up a tool, the clothing contrasts with the industrial environment, camera moves slowly around the subject, the clothing fabric and details shown clearly.",
+      "user_prompt_key": null,
+      "image_source": "previous_step",
+      "settings": {
+        "model": "kling-v1-6",
+        "duration": "10",
+        "aspect_ratio": "9:16",
+        "cfg_scale": 0.5,
+        "mode": "std"
+      }
+    }
+  ],
+  "outputs": {
+    "primary_type": "video",
+    "items": [
+      "image",
+      "video"
+    ]
+  }
+}

@@ -1,0 +1,70 @@
+{
+  "name": "UNBOXING",
+  "slug": "unboxing",
+  "version": "1.0",
+  "description": "Clean unboxing reveal \u2014 hands opening the package, product reveal moment. Classic viral format.",
+  "category": "UGC",
+  "tags": [
+    "ugc",
+    "unboxing",
+    "reveal",
+    "video"
+  ],
+  "output_type": "video",
+  "estimated_credits_per_run": 50,
+  "is_active": true,
+  "asset_requirements": "Flat lay or folded product works great for the reveal.",
+  "input_manifest": [
+    {
+      "key": "product_image",
+      "label": "Product Image",
+      "type": "image",
+      "required": true,
+      "accepts": [
+        "image/jpeg",
+        "image/png",
+        "image/webp"
+      ],
+      "max_size_mb": 10,
+      "hint": "Flat lay or folded product works great for the reveal."
+    }
+  ],
+  "steps": [
+    {
+      "id": "image_edit",
+      "type": "nano_banana_pro",
+      "prompt": "Product unboxing photography. Close-up of hands opening a premium branded box to reveal the clothing product. Clean packaging, the clothing product neatly folded inside, crisp and clear. Top-down view, minimal aesthetic, the product is the star of the reveal moment.",
+      "user_prompt_key": null,
+      "user_input_keys": [
+        "product_image"
+      ],
+      "locked_inputs": [],
+      "settings": {
+        "resolution": "2K",
+        "num_images": 1,
+        "output_format": "png"
+      }
+    },
+    {
+      "id": "video_gen",
+      "type": "kling",
+      "prompt": "Unboxing reveal video. Hands carefully open a package and slowly reveal the clothing product, tissue paper moved aside, the product lifted out dramatically and held up to the camera, the fabric unfolds naturally. Satisfying unboxing ASMR energy, the clothing shown clearly.",
+      "user_prompt_key": null,
+      "image_source": "previous_step",
+      "settings": {
+        "model": "kling-v1-6",
+        "duration": "10",
+        "aspect_ratio": "9:16",
+        "cfg_scale": 0.5,
+        "mode": "std"
+      }
+    }
+  ],
+  "outputs": {
+    "primary_type": "video",
+    "items": [
+      "image",
+      "video"
+    ]
+  }
+}

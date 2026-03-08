@@ -1,0 +1,71 @@
+{
+  "name": "BLUE LAB (original)",
+  "slug": "blue-lab-original",
+  "version": "1.0",
+  "description": "Blue laboratory aesthetic \u2014 scientific editorial, cool tones, futuristic and clean.",
+  "category": "Editorial",
+  "tags": [
+    "editorial",
+    "lab",
+    "futuristic",
+    "blue",
+    "video"
+  ],
+  "output_type": "video",
+  "estimated_credits_per_run": 50,
+  "is_active": true,
+  "asset_requirements": "White/light background preferred. Light-colored products create the most striking blue contrast.",
+  "input_manifest": [
+    {
+      "key": "product_image",
+      "label": "Product Image",
+      "type": "image",
+      "required": true,
+      "accepts": [
+        "image/jpeg",
+        "image/png",
+        "image/webp"
+      ],
+      "max_size_mb": 10,
+      "hint": "White/light background preferred. Light-colored products create the most striking blue contrast."
+    }
+  ],
+  "steps": [
+    {
+      "id": "image_edit",
+      "type": "nano_banana_pro",
+      "prompt": "Blue laboratory fashion editorial photo. A model wearing the clothing product in a futuristic lab setting \u2014 blue LED lighting, clean white surfaces, scientific equipment in background. Cool blue color palette, crisp and modern. The clothing product glows in the blue light. Think Apple lab meets fashion editorial. Hyper-clean, modern, aspirational.",
+      "user_prompt_key": null,
+      "user_input_keys": [
+        "product_image"
+      ],
+      "locked_inputs": [],
+      "settings": {
+        "resolution": "2K",
+        "num_images": 1,
+        "output_format": "png"
+      }
+    },
+    {
+      "id": "video_gen",
+      "type": "kling",
+      "prompt": "Blue lab editorial video. Model in the clothing product walks through a sleek blue-lit laboratory environment, blue light plays across the fabric, slow tracking camera shot, clean white and blue aesthetic, the clothing shown in detail as the model moves through the space.",
+      "user_prompt_key": null,
+      "image_source": "previous_step",
+      "settings": {
+        "model": "kling-v1-6",
+        "duration": "10",
+        "aspect_ratio": "9:16",
+        "cfg_scale": 0.5,
+        "mode": "std"
+      }
+    }
+  ],
+  "outputs": {
+    "primary_type": "video",
+    "items": [
+      "image",
+      "video"
+    ]
+  }
+}

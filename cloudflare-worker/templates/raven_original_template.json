@@ -1,0 +1,70 @@
+{
+  "name": "RAVEN (Original)",
+  "slug": "raven-original",
+  "version": "1.0",
+  "description": "Original Raven template \u2014 dark editorial, moody cinematic. The OG version of the iconic style.",
+  "category": "Editorial",
+  "tags": [
+    "editorial",
+    "dark",
+    "original",
+    "video"
+  ],
+  "output_type": "video",
+  "estimated_credits_per_run": 50,
+  "is_active": true,
+  "asset_requirements": "Front-facing product. Dark backgrounds enhance the effect.",
+  "input_manifest": [
+    {
+      "key": "product_image",
+      "label": "Product Image",
+      "type": "image",
+      "required": true,
+      "accepts": [
+        "image/jpeg",
+        "image/png",
+        "image/webp"
+      ],
+      "max_size_mb": 10,
+      "hint": "Front-facing product. Dark backgrounds enhance the effect."
+    }
+  ],
+  "steps": [
+    {
+      "id": "image_edit",
+      "type": "nano_banana_pro",
+      "prompt": "Original Raven dark editorial fashion photo. A model wearing the clothing product in a dramatically lit dark setting. Gothic or industrial background, deep shadows, single dramatic key light illuminating the model and clothing. Raven feathers or dark organic elements in the scene. The clothing shown in sharp detail against the dark background. High contrast, desaturated, cinematic and moody.",
+      "user_prompt_key": null,
+      "user_input_keys": [
+        "product_image"
+      ],
+      "locked_inputs": [],
+      "settings": {
+        "resolution": "2K",
+        "num_images": 1,
+        "output_format": "png"
+      }
+    },
+    {
+      "id": "video_gen",
+      "type": "kling",
+      "prompt": "Dark Raven editorial fashion film. Model in the clothing stands in dramatic low-key lighting, black feathers floating in the air, slow cinematic camera orbit, deep shadows and strong highlights on the clothing, gothic atmosphere, the fabric catches the light dramatically.",
+      "user_prompt_key": null,
+      "image_source": "previous_step",
+      "settings": {
+        "model": "kling-v1-6",
+        "duration": "10",
+        "aspect_ratio": "9:16",
+        "cfg_scale": 0.5,
+        "mode": "std"
+      }
+    }
+  ],
+  "outputs": {
+    "primary_type": "video",
+    "items": [
+      "image",
+      "video"
+    ]
+  }
+}
