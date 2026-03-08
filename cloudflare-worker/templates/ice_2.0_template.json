@@ -1,30 +1,71 @@
 {
   "name": "ICE 2.0",
-  "description": "Icy cold aesthetic evolved — frozen environment, crystal-clear editorial. The next generation of cold.",
+  "slug": "ice-2",
+  "version": "1.0",
+  "description": "Icy cold aesthetic evolved \u2014 crystal-clear editorial. The next generation of cold.",
   "category": "Editorial",
+  "tags": [
+    "editorial",
+    "ice",
+    "winter",
+    "futuristic",
+    "video"
+  ],
   "output_type": "video",
   "estimated_credits_per_run": 50,
-  "version": "1.0",
-  "tags": ["editorial", "ice", "winter", "video"],
-  "user_inputs": [
-    { "key": "product_image", "label": "Product Image", "type": "image", "required": true }
+  "is_active": true,
+  "asset_requirements": "Clean/white background product. Sharp and detailed product shot recommended.",
+  "input_manifest": [
+    {
+      "key": "product_image",
+      "label": "Product Image",
+      "type": "image",
+      "required": true,
+      "accepts": [
+        "image/jpeg",
+        "image/png",
+        "image/webp"
+      ],
+      "max_size_mb": 10,
+      "hint": "Clean/white background product. Sharp and detailed product shot recommended."
+    }
   ],
   "steps": [
     {
       "id": "image_edit",
       "type": "nano_banana_pro",
-      "prompt": "Hyper-clean ice editorial fashion photo. Model wearing the clothing product in an ultra-modern frozen environment — crystal clear ice formations, blue-white color palette, cold vapor mist in the air. Futuristic winter aesthetic, the clothing contrasts beautifully against the icy background. Studio strobe lighting with blue gels, tack-sharp details on the clothing, editorial magazine quality. Ice and chrome reflections.",
+      "prompt": "Hyper-clean ice editorial fashion photo. Model wearing the clothing product in an ultra-modern frozen environment \u2014 crystal clear ice formations, blue-white color palette, cold vapor mist. Futuristic winter aesthetic, the clothing contrasts beautifully against the icy background. Studio strobe lighting with blue gels, tack-sharp clothing details, editorial magazine quality.",
+      "user_prompt_key": null,
+      "user_input_keys": [
+        "product_image"
+      ],
       "locked_inputs": [],
-      "user_input_keys": ["product_image"]
+      "settings": {
+        "resolution": "2K",
+        "num_images": 1,
+        "output_format": "png"
+      }
     },
     {
       "id": "video_gen",
       "type": "kling",
-      "prompt": "Ice editorial video. Model with the clothing product in a frozen crystal environment, ice formations cracking or forming around them, cold breath mist, slow orbit camera movement revealing the clothing in icy blue light, frost particles floating in the air. Ultra-modern winter aesthetic, the clothing is the focal point.",
+      "prompt": "Ice editorial video. Model with the clothing product in a frozen crystal environment, ice formations cracking around them, cold breath mist, slow orbit camera revealing the clothing in icy blue light, frost particles floating. Ultra-modern winter aesthetic.",
+      "user_prompt_key": null,
       "image_source": "previous_step",
-      "model": "kling-v1-6",
-      "duration": "10",
-      "aspect_ratio": "9:16"
+      "settings": {
+        "model": "kling-v1-6",
+        "duration": "10",
+        "aspect_ratio": "9:16",
+        "cfg_scale": 0.5,
+        "mode": "std"
+      }
     }
-  ]
+  ],
+  "outputs": {
+    "primary_type": "video",
+    "items": [
+      "image",
+      "video"
+    ]
+  }
 }

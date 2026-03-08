@@ -1,30 +1,70 @@
 {
   "name": "UGC MIRROR",
-  "description": "User-generated content style — selfie mirror shot with your product. Raw, authentic, relatable.",
+  "slug": "ugc-mirror",
+  "version": "1.0",
+  "description": "User-generated content style \u2014 selfie mirror shot. Raw, authentic, relatable.",
   "category": "UGC",
+  "tags": [
+    "ugc",
+    "mirror",
+    "selfie",
+    "video"
+  ],
   "output_type": "video",
   "estimated_credits_per_run": 50,
-  "version": "1.0",
-  "tags": ["ugc", "mirror", "selfie", "video"],
-  "user_inputs": [
-    { "key": "product_image", "label": "Product Image", "type": "image", "required": true }
+  "is_active": true,
+  "asset_requirements": "Any clean product photo. The template transforms it into a mirror selfie style.",
+  "input_manifest": [
+    {
+      "key": "product_image",
+      "label": "Product Image",
+      "type": "image",
+      "required": true,
+      "accepts": [
+        "image/jpeg",
+        "image/png",
+        "image/webp"
+      ],
+      "max_size_mb": 10,
+      "hint": "Any clean product photo. The template transforms it into a mirror selfie style."
+    }
   ],
   "steps": [
     {
       "id": "image_edit",
       "type": "nano_banana_pro",
-      "prompt": "UGC-style selfie mirror photo. A person wearing the clothing product is taking a selfie in a bathroom or bedroom mirror. Casual authentic vibe, phone camera perspective, slightly messy but cool background, natural lighting or ring light, vertical format. The clothing is clearly shown in the mirror reflection. Real person energy, not overly polished, Instagram UGC content creator aesthetic.",
+      "prompt": "UGC-style selfie mirror photo. A person wearing the clothing product is taking a selfie in a bathroom or bedroom mirror. Casual authentic vibe, phone camera perspective, natural lighting or ring light, vertical format. The clothing is clearly shown in the mirror reflection. Real person energy, not overly polished, Instagram UGC content creator aesthetic.",
+      "user_prompt_key": null,
+      "user_input_keys": [
+        "product_image"
+      ],
       "locked_inputs": [],
-      "user_input_keys": ["product_image"]
+      "settings": {
+        "resolution": "2K",
+        "num_images": 1,
+        "output_format": "png"
+      }
     },
     {
       "id": "video_gen",
       "type": "kling",
-      "prompt": "UGC mirror selfie video. Person wearing the clothing product films themselves in a mirror, adjusting their outfit, turning slightly to show different angles, casual phone recording movement, slight shaky cam for authenticity, natural lighting, relatable content creator vibe. Maybe a slight smile or outfit check moment.",
+      "prompt": "UGC mirror selfie video. Person wearing the clothing product films themselves in a mirror, adjusting their outfit, turning slightly to show different angles, casual phone recording movement, slight shaky cam for authenticity, natural lighting, relatable content creator vibe.",
+      "user_prompt_key": null,
       "image_source": "previous_step",
-      "model": "kling-v1-6",
-      "duration": "10",
-      "aspect_ratio": "9:16"
+      "settings": {
+        "model": "kling-v1-6",
+        "duration": "10",
+        "aspect_ratio": "9:16",
+        "cfg_scale": 0.5,
+        "mode": "std"
+      }
     }
-  ]
+  ],
+  "outputs": {
+    "primary_type": "video",
+    "items": [
+      "image",
+      "video"
+    ]
+  }
 }

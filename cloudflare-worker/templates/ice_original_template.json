@@ -1,30 +1,71 @@
 {
   "name": "ICE (Original)",
-  "description": "Original ice and snow aesthetic — frozen editorial, cold weather fashion, timeless winter look.",
+  "slug": "ice-original",
+  "version": "1.0",
+  "description": "Original ice and snow aesthetic \u2014 frozen editorial, timeless winter look.",
   "category": "Editorial",
+  "tags": [
+    "editorial",
+    "ice",
+    "winter",
+    "original",
+    "video"
+  ],
   "output_type": "video",
   "estimated_credits_per_run": 50,
-  "version": "1.0",
-  "tags": ["editorial", "ice", "winter", "video"],
-  "user_inputs": [
-    { "key": "product_image", "label": "Product Image", "type": "image", "required": true }
+  "is_active": true,
+  "asset_requirements": "Any product. Strong color contrast against white/blue works best.",
+  "input_manifest": [
+    {
+      "key": "product_image",
+      "label": "Product Image",
+      "type": "image",
+      "required": true,
+      "accepts": [
+        "image/jpeg",
+        "image/png",
+        "image/webp"
+      ],
+      "max_size_mb": 10,
+      "hint": "Any product. Strong color contrast against white/blue works best."
+    }
   ],
   "steps": [
     {
       "id": "image_edit",
       "type": "nano_banana_pro",
-      "prompt": "Frozen winter editorial fashion photo. A model wearing the clothing product in a snow-covered outdoor setting — frozen lake, snowy field, or icy landscape. Cold blue-white atmosphere, breath visible in the cold air, snowflakes or frost on surfaces. The clothing product is clearly shown and contrasts with the white winter environment. Timeless winter fashion editorial quality, clean and crisp.",
+      "prompt": "Frozen winter editorial fashion photo. A model wearing the clothing product in a snow-covered outdoor setting \u2014 frozen lake, snowy field, or icy landscape. Cold blue-white atmosphere, breath visible in the cold air, snowflakes or frost on surfaces. The clothing contrasts with the white winter environment. Timeless winter fashion editorial quality.",
+      "user_prompt_key": null,
+      "user_input_keys": [
+        "product_image"
+      ],
       "locked_inputs": [],
-      "user_input_keys": ["product_image"]
+      "settings": {
+        "resolution": "2K",
+        "num_images": 1,
+        "output_format": "png"
+      }
     },
     {
       "id": "video_gen",
       "type": "kling",
-      "prompt": "Winter ice fashion video. Model in the clothing product stands in a frozen landscape, snowflakes falling slowly around them, breath mist visible, the clothing moves slightly in a cold wind, slow orbit camera revealing the winter scene and clothing. Peaceful and striking winter editorial aesthetic.",
+      "prompt": "Winter ice fashion video. Model in the clothing product in a frozen landscape, snowflakes falling slowly, breath mist visible, the clothing moves in a cold wind, slow orbit camera revealing the winter scene. Peaceful and striking winter editorial.",
+      "user_prompt_key": null,
       "image_source": "previous_step",
-      "model": "kling-v1-6",
-      "duration": "10",
-      "aspect_ratio": "9:16"
+      "settings": {
+        "model": "kling-v1-6",
+        "duration": "10",
+        "aspect_ratio": "9:16",
+        "cfg_scale": 0.5,
+        "mode": "std"
+      }
     }
-  ]
+  ],
+  "outputs": {
+    "primary_type": "video",
+    "items": [
+      "image",
+      "video"
+    ]
+  }
 }

@@ -1,30 +1,70 @@
 {
   "name": "RAVEN",
-  "description": "Dark editorial — moody cinematic, raven aesthetic, high fashion. Deep shadows, dramatic contrast.",
+  "slug": "raven",
+  "version": "1.0",
+  "description": "Dark editorial \u2014 moody cinematic, raven aesthetic, high fashion. Deep shadows, dramatic contrast.",
   "category": "Editorial",
+  "tags": [
+    "editorial",
+    "dark",
+    "cinematic",
+    "video"
+  ],
   "output_type": "video",
   "estimated_credits_per_run": 50,
-  "version": "1.0",
-  "tags": ["editorial", "dark", "cinematic", "video"],
-  "user_inputs": [
-    { "key": "product_image", "label": "Product Image", "type": "image", "required": true }
+  "is_active": true,
+  "asset_requirements": "Dark or black background preferred. Any background works but dark produces the most dramatic results.",
+  "input_manifest": [
+    {
+      "key": "product_image",
+      "label": "Product Image",
+      "type": "image",
+      "required": true,
+      "accepts": [
+        "image/jpeg",
+        "image/png",
+        "image/webp"
+      ],
+      "max_size_mb": 10,
+      "hint": "Dark or black background preferred. Any background works but dark produces the most dramatic results."
+    }
   ],
   "steps": [
     {
       "id": "image_edit",
       "type": "nano_banana_pro",
-      "prompt": "Dark editorial fashion photography. A model wearing the clothing product in a dramatically lit scene. Raven-black aesthetic — deep shadows, dramatic contrast, moody atmosphere. Gothic architecture or dark industrial setting in the background. Shot on medium format, tack sharp clothing detail, cinematic color grading with crushed blacks and desaturated palette. High fashion Vogue editorial quality.",
+      "prompt": "Dark editorial fashion photography. A model wearing the clothing product in a dramatically lit scene. Raven-black aesthetic \u2014 deep shadows, dramatic contrast, moody atmosphere. Gothic architecture or dark industrial setting. Medium format, tack sharp clothing detail, cinematic color grading with crushed blacks and desaturated palette. High fashion Vogue editorial quality.",
+      "user_prompt_key": null,
+      "user_input_keys": [
+        "product_image"
+      ],
       "locked_inputs": [],
-      "user_input_keys": ["product_image"]
+      "settings": {
+        "resolution": "2K",
+        "num_images": 1,
+        "output_format": "png"
+      }
     },
     {
       "id": "video_gen",
       "type": "kling",
-      "prompt": "Dark moody fashion film. Model with the clothing product stands in dramatic low-key lighting, slow cinematic camera push-in, ravens or dark feathers floating in background, shadows playing across the clothing fabric, Gothic high fashion energy, slow motion fabric movement. Black and dark editorial cinema aesthetic.",
+      "prompt": "Dark moody fashion film. Model with the clothing product stands in dramatic low-key lighting, slow cinematic camera push-in, dark feathers floating in background, shadows playing across the clothing fabric, Gothic high fashion energy, slow motion fabric movement.",
+      "user_prompt_key": null,
       "image_source": "previous_step",
-      "model": "kling-v1-6",
-      "duration": "10",
-      "aspect_ratio": "9:16"
+      "settings": {
+        "model": "kling-v1-6",
+        "duration": "10",
+        "aspect_ratio": "9:16",
+        "cfg_scale": 0.5,
+        "mode": "std"
+      }
     }
-  ]
+  ],
+  "outputs": {
+    "primary_type": "video",
+    "items": [
+      "image",
+      "video"
+    ]
+  }
 }

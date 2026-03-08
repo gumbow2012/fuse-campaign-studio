@@ -1,30 +1,70 @@
 {
   "name": "PAPARAZZI (Original)",
-  "description": "Original Paparazzi template — the first version. Celebrity street energy, camera flashes, fashion week.",
+  "slug": "paparazzi-original",
+  "version": "1.0",
+  "description": "Original Paparazzi template. The classic version \u2014 celebrity street energy, camera flashes.",
   "category": "Street",
+  "tags": [
+    "street",
+    "paparazzi",
+    "original",
+    "video"
+  ],
   "output_type": "video",
   "estimated_credits_per_run": 50,
-  "version": "1.0",
-  "tags": ["street", "paparazzi", "original", "video"],
-  "user_inputs": [
-    { "key": "product_image", "label": "Product Image", "type": "image", "required": true }
+  "is_active": true,
+  "asset_requirements": "Front-facing product photo on a clean background.",
+  "input_manifest": [
+    {
+      "key": "product_image",
+      "label": "Product Image",
+      "type": "image",
+      "required": true,
+      "accepts": [
+        "image/jpeg",
+        "image/png",
+        "image/webp"
+      ],
+      "max_size_mb": 10,
+      "hint": "Front-facing product photo on a clean background."
+    }
   ],
   "steps": [
     {
       "id": "image_edit",
       "type": "nano_banana_pro",
-      "prompt": "Original Paparazzi style celebrity photo. A model wearing the clothing product is caught by paparazzi leaving a fashion event. Side-of-the-street setting, photographers with cameras visible in frame periphery, camera flash lighting effect on the subject, the model looks effortlessly stylish and caught mid-stride. This is the classic iconic celebrity paparazzi shot. Slightly candid feel but the clothing is clearly detailed and beautiful. 35mm film photography quality.",
+      "prompt": "Original Paparazzi style celebrity photo. A model wearing the clothing product is caught by paparazzi leaving a fashion event. Photographers with cameras visible, camera flash lighting effect, the model looks effortlessly stylish and caught mid-stride. Slightly candid feel but the clothing is clearly detailed and beautiful. 35mm film photography quality.",
+      "user_prompt_key": null,
+      "user_input_keys": [
+        "product_image"
+      ],
       "locked_inputs": [],
-      "user_input_keys": ["product_image"]
+      "settings": {
+        "resolution": "2K",
+        "num_images": 1,
+        "output_format": "png"
+      }
     },
     {
       "id": "video_gen",
       "type": "kling",
-      "prompt": "Original paparazzi video clip. Celebrity model leaving a venue, photographers surrounding them with cameras flashing, the model walks through confidently, the clothing is shown beautifully in the flash-lit chaos, handheld camera following the subject, classic celebrity street photography motion.",
+      "prompt": "Original paparazzi video. Celebrity model leaving a venue, photographers surrounding them with cameras flashing, the model walks through confidently, the clothing shown beautifully in the flash-lit chaos, classic celebrity street photography motion.",
+      "user_prompt_key": null,
       "image_source": "previous_step",
-      "model": "kling-v1-6",
-      "duration": "10",
-      "aspect_ratio": "9:16"
+      "settings": {
+        "model": "kling-v1-6",
+        "duration": "10",
+        "aspect_ratio": "9:16",
+        "cfg_scale": 0.5,
+        "mode": "std"
+      }
     }
-  ]
+  ],
+  "outputs": {
+    "primary_type": "video",
+    "items": [
+      "image",
+      "video"
+    ]
+  }
 }
