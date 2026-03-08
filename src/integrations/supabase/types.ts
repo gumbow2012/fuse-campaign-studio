@@ -304,7 +304,7 @@ export type Database = {
           progress: number
           started_at: string | null
           status: Database["public"]["Enums"]["project_status"]
-          template_id: string
+          template_id: string | null
           template_name: string | null
           updated_at: string
           user_id: string
@@ -327,7 +327,7 @@ export type Database = {
           progress?: number
           started_at?: string | null
           status?: Database["public"]["Enums"]["project_status"]
-          template_id: string
+          template_id?: string | null
           template_name?: string | null
           updated_at?: string
           user_id: string
@@ -350,7 +350,7 @@ export type Database = {
           progress?: number
           started_at?: string | null
           status?: Database["public"]["Enums"]["project_status"]
-          template_id?: string
+          template_id?: string | null
           template_name?: string | null
           updated_at?: string
           user_id?: string
@@ -774,7 +774,7 @@ export type Database = {
         | "monthly_grant"
         | "refund"
         | "adjustment"
-      project_status: "queued" | "running" | "failed" | "complete"
+      project_status: "queued" | "running" | "failed" | "complete" | "pending"
       step_status: "queued" | "running" | "failed" | "complete"
     }
     CompositeTypes: {
@@ -912,7 +912,7 @@ export const Constants = {
         "refund",
         "adjustment",
       ],
-      project_status: ["queued", "running", "failed", "complete"],
+      project_status: ["queued", "running", "failed", "complete", "pending"],
       step_status: ["queued", "running", "failed", "complete"],
     },
   },
