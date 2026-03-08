@@ -90,7 +90,7 @@ Replace placeholder PNGs with real images when the Weavy CDN is accessible.
 | `jeans_workflow.json` | JEANS | front ★, back ○ | — | 2 | 0.72 |
 | `pack_theif_pants_workflow.json` | PACK THEIF (Pants) | front ★, back ○ | — | 2 | 0.73 |
 | `paparazzi_original_workflow.json` | PAPARAZZI (Original) | product ★ | — | 2 | 0.72 |
-| `paparazzi_workflow.json` | PAPARAZZI | clothing ★ + LOCKED overhead scene | paparazzi-documentation.png | **3** | 0.80/0.55/— |
+| `paparazzi_workflow.json` | PAPARAZZI | front ★, back ○ | — | 2 | 0.72 |
 | `raven_original_workflow.json` | RAVEN (Original) | product ★ | raven-original.png | 2 | 0.75 |
 | `raven_workflow.json` | RAVEN | front ★, back ○ | raven-original.png | 2 | 0.75 |
 | `skate_park_workflow.json` | SKATE PARK | t-shirt ★, shorts ★, sunglasses ○ | — | 2 | 0.73 |

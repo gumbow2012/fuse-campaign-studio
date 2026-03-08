@@ -2,7 +2,7 @@
   "name": "RAVEN",
   "slug": "raven",
   "version": "1.0",
-  "description": "Dark editorial \u2014 moody cinematic, raven aesthetic, high fashion. Deep shadows, dramatic contrast.",
+  "description": "Dark editorial — moody cinematic, raven aesthetic, high fashion. Deep shadows, dramatic contrast.",
   "category": "Editorial",
   "tags": [
     "editorial",
@@ -47,7 +47,7 @@
     {
       "id": "image_edit",
       "type": "nano_banana_pro",
-      "prompt": "Dark editorial fashion photography. A model wearing the clothing product in a dramatically lit scene. Raven-black aesthetic \u2014 deep shadows, dramatic contrast, moody atmosphere. Gothic architecture or dark industrial setting. Medium format, tack sharp clothing detail, cinematic color grading with crushed blacks and desaturated palette. High fashion Vogue editorial quality.",
+      "prompt": "Dark editorial fashion photography. A model wearing the clothing product in a dramatically lit scene. Raven-black aesthetic — deep shadows, dramatic contrast, moody atmosphere. Gothic architecture or dark industrial setting. Medium format, tack sharp clothing detail, cinematic color grading with crushed blacks and desaturated palette. High fashion Vogue editorial quality.",
       "user_prompt_key": null,
       "user_input_keys": [
         "front_outfit",
@@ -75,7 +75,6 @@
       }
     }
   ],
-  "loras": [],
   "outputs": {
     "primary_type": "video",
     "items": [

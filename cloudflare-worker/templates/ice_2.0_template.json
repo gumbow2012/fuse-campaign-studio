@@ -2,7 +2,7 @@
   "name": "ICE 2.0",
   "slug": "ice-2",
   "version": "1.0",
-  "description": "Icy cold aesthetic evolved \u2014 crystal-clear editorial. The next generation of cold.",
+  "description": "Icy cold aesthetic evolved — crystal-clear editorial. The next generation of cold.",
   "category": "Editorial",
   "tags": [
     "editorial",
@@ -47,7 +47,7 @@
     {
       "id": "image_edit",
       "type": "nano_banana_pro",
-      "prompt": "Hyper-clean ice editorial fashion photo. A model wearing a hoodie and matching bottoms in an ultra-modern frozen environment \u2014 crystal clear ice formations, blue-white color palette, cold vapor mist. Futuristic winter aesthetic, the full outfit contrasts beautifully against the icy background. Studio strobe lighting with blue gels, tack-sharp clothing details, editorial magazine quality.",
+      "prompt": "Hyper-clean ice editorial fashion photo. A model wearing a hoodie and matching bottoms in an ultra-modern frozen environment — crystal clear ice formations, blue-white color palette, cold vapor mist. Futuristic winter aesthetic, the full outfit contrasts beautifully against the icy background. Studio strobe lighting with blue gels, tack-sharp clothing details, editorial magazine quality.",
       "user_prompt_key": null,
       "user_input_keys": [
         "hoodie",
@@ -75,7 +75,6 @@
       }
     }
   ],
-  "loras": [],
   "outputs": {
     "primary_type": "video",
     "items": [

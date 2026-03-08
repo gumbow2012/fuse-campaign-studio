@@ -26,7 +26,7 @@
         "image/webp"
       ],
       "max_size_mb": 10,
-      "hint": "Front of the product \u2014 will be shown delivered in the Amazon van scene."
+      "hint": "Front of the product — will be shown delivered in the Amazon van scene."
     },
     {
       "key": "back_outfit",
@@ -74,7 +74,6 @@
       }
     }
   ],
-  "loras": [],
   "outputs": {
     "primary_type": "video",
     "items": [

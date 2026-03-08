@@ -2,7 +2,7 @@
   "name": "UGC STUDIO",
   "slug": "ugc-studio",
   "version": "1.0",
-  "description": "Clean studio UGC \u2014 influencer holding product. Professional but authentic.",
+  "description": "Clean studio UGC — influencer holding product. Professional but authentic.",
   "category": "UGC",
   "tags": [
     "ugc",
@@ -75,7 +75,6 @@
       }
     }
   ],
-  "loras": [],
   "outputs": {
     "primary_type": "video",
     "items": [

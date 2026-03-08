@@ -2,7 +2,7 @@
   "name": "UNBOXING",
   "slug": "unboxing",
   "version": "1.0",
-  "description": "Clean unboxing reveal \u2014 hands opening the package, product reveal moment. Classic viral format.",
+  "description": "Clean unboxing reveal — hands opening the package, product reveal moment. Classic viral format.",
   "category": "UGC",
   "tags": [
     "ugc",
@@ -26,7 +26,7 @@
         "image/webp"
       ],
       "max_size_mb": 10,
-      "hint": "Main product \u2014 the hero item being unboxed. Flat lay or folded."
+      "hint": "Main product — the hero item being unboxed. Flat lay or folded."
     },
     {
       "key": "second_item",
@@ -74,7 +74,6 @@
       }
     }
   ],
-  "loras": [],
   "outputs": {
     "primary_type": "video",
     "items": [

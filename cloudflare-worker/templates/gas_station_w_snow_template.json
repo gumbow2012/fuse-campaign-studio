@@ -2,7 +2,7 @@
   "name": "GAS STATION W SNOW",
   "slug": "gas-station-snow",
   "version": "1.0",
-  "description": "Gas station at night in the snow \u2014 moody cinematic, neon reflections, cold weather fashion.",
+  "description": "Gas station at night in the snow — moody cinematic, neon reflections, cold weather fashion.",
   "category": "Street",
   "tags": [
     "street",
@@ -53,14 +53,14 @@
         "image/webp"
       ],
       "max_size_mb": 10,
-      "hint": "Brand logo \u2014 will appear in the gas station environment."
+      "hint": "Brand logo — will appear in the gas station environment."
     }
   ],
   "steps": [
     {
       "id": "image_edit",
       "type": "nano_banana_pro",
-      "prompt": "Cinematic fashion photography at a snowy gas station at night. A model wearing the full outfit \u2014 front and back details shown \u2014 stands under harsh fluorescent gas station lights with snow falling around them. The brand logo glows somewhere in the scene. Cinematic color grade, cold blue atmosphere, streetwear energy.",
+      "prompt": "Cinematic fashion photography at a snowy gas station at night. A model wearing the full outfit — front and back details shown — stands under harsh fluorescent gas station lights with snow falling around them. The brand logo glows somewhere in the scene. Cinematic color grade, cold blue atmosphere, streetwear energy.",
       "user_prompt_key": null,
       "user_input_keys": [
         "front_top_bottoms",
@@ -89,7 +89,6 @@
       }
     }
   ],
-  "loras": [],
   "outputs": {
     "primary_type": "video",
     "items": [

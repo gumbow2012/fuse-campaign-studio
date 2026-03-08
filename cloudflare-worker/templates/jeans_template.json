@@ -2,7 +2,7 @@
   "name": "JEANS",
   "slug": "jeans",
   "version": "1.0",
-  "description": "Denim editorial \u2014 classic jeans campaign. Timeless fashion imagery, iconic denim energy.",
+  "description": "Denim editorial — classic jeans campaign. Timeless fashion imagery, iconic denim energy.",
   "category": "Editorial",
   "tags": [
     "editorial",
@@ -46,7 +46,7 @@
     {
       "id": "image_edit",
       "type": "nano_banana_pro",
-      "prompt": "Iconic denim jeans editorial campaign photo. A model wearing the jeans in a classic campaign setting \u2014 may be an urban rooftop, industrial loft, or sun-drenched outdoor location. Clean, simple, confident. The jeans are the hero item \u2014 texture, fit, wash, and back pocket detail all crisp and clear. Classic denim brand energy. Natural warm light, medium format photography quality.",
+      "prompt": "Iconic denim jeans editorial campaign photo. A model wearing the jeans in a classic campaign setting — may be an urban rooftop, industrial loft, or sun-drenched outdoor location. Clean, simple, confident. The jeans are the hero item — texture, fit, wash, and back pocket detail all crisp and clear. Classic denim brand energy. Natural warm light, medium format photography quality.",
       "user_prompt_key": null,
       "user_input_keys": [
         "product_image",
@@ -74,7 +74,6 @@
       }
     }
   ],
-  "loras": [],
   "outputs": {
     "primary_type": "video",
     "items": [
