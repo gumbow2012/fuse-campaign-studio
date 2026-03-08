@@ -2,7 +2,7 @@
   "name": "ICE 2.0",
   "slug": "ice-2",
   "version": "1.0",
-  "description": "Icy cold aesthetic evolved \u2014 crystal-clear editorial. The next generation of cold.",
+  "description": "Icy cold aesthetic evolved — crystal-clear editorial. The next generation of cold.",
   "category": "Editorial",
   "tags": [
     "editorial",
@@ -14,11 +14,11 @@
   "output_type": "video",
   "estimated_credits_per_run": 50,
   "is_active": true,
-  "asset_requirements": "Clean/white background product. Sharp and detailed product shot recommended.",
+  "asset_requirements": "Upload TWO images: (1) your top/hoodie/jacket, (2) your pants/bottoms. Both on clean/white backgrounds.",
   "input_manifest": [
     {
-      "key": "product_image",
-      "label": "Product Image",
+      "key": "product_top",
+      "label": "Top / Hoodie / Jacket",
       "type": "image",
       "required": true,
       "accepts": [
@@ -27,17 +27,31 @@
         "image/webp"
       ],
       "max_size_mb": 10,
-      "hint": "Clean/white background product. Sharp and detailed product shot recommended."
+      "hint": "The top half of the outfit — hoodie, jacket, shirt. Clean/white background preferred."
+    },
+    {
+      "key": "product_bottom",
+      "label": "Pants / Bottoms",
+      "type": "image",
+      "required": true,
+      "accepts": [
+        "image/jpeg",
+        "image/png",
+        "image/webp"
+      ],
+      "max_size_mb": 10,
+      "hint": "The bottom half of the outfit — pants, shorts. Clean/white background preferred."
     }
   ],
   "steps": [
     {
       "id": "image_edit",
       "type": "nano_banana_pro",
-      "prompt": "Hyper-clean ice editorial fashion photo. Model wearing the clothing product in an ultra-modern frozen environment \u2014 crystal clear ice formations, blue-white color palette, cold vapor mist. Futuristic winter aesthetic, the clothing contrasts beautifully against the icy background. Studio strobe lighting with blue gels, tack-sharp clothing details, editorial magazine quality.",
+      "prompt": "Hyper-clean ice editorial fashion photo. A model wearing a full outfit — top piece and bottom piece shown together — in an ultra-modern frozen environment. Crystal clear ice formations, blue-white color palette, cold vapor mist. Futuristic winter aesthetic, the full outfit contrasts beautifully against the icy background. Studio strobe lighting with blue gels, tack-sharp clothing details, editorial magazine quality.",
       "user_prompt_key": null,
       "user_input_keys": [
-        "product_image"
+        "product_top",
+        "product_bottom"
       ],
       "locked_inputs": [],
       "settings": {

@@ -2,7 +2,7 @@
   "name": "UNBOXING",
   "slug": "unboxing",
   "version": "1.0",
-  "description": "Clean unboxing reveal \u2014 hands opening the package, product reveal moment. Classic viral format.",
+  "description": "Clean unboxing reveal — hands opening the package, product reveal moment. Classic viral format.",
   "category": "UGC",
   "tags": [
     "ugc",
@@ -13,11 +13,11 @@
   "output_type": "video",
   "estimated_credits_per_run": 50,
   "is_active": true,
-  "asset_requirements": "Flat lay or folded product works great for the reveal.",
+  "asset_requirements": "Product on clean background. Add a second product or back view for a full set reveal.",
   "input_manifest": [
     {
       "key": "product_image",
-      "label": "Product Image",
+      "label": "Product (Main)",
       "type": "image",
       "required": true,
       "accepts": [
@@ -26,17 +26,31 @@
         "image/webp"
       ],
       "max_size_mb": 10,
-      "hint": "Flat lay or folded product works great for the reveal."
+      "hint": "Main product — the hero item being unboxed. Flat lay or folded works great."
+    },
+    {
+      "key": "product_second",
+      "label": "Second Item (Optional)",
+      "type": "image",
+      "required": false,
+      "accepts": [
+        "image/jpeg",
+        "image/png",
+        "image/webp"
+      ],
+      "max_size_mb": 10,
+      "hint": "Optional — add a second item (pants, hoodie, accessories) to include in the reveal."
     }
   ],
   "steps": [
     {
       "id": "image_edit",
       "type": "nano_banana_pro",
-      "prompt": "Product unboxing photography. Close-up of hands opening a premium branded box to reveal the clothing product. Clean packaging, the clothing product neatly folded inside, crisp and clear. Top-down view, minimal aesthetic, the product is the star of the reveal moment.",
+      "prompt": "Product unboxing photography. Close-up of hands opening a premium branded box to reveal the clothing product. Clean packaging, the clothing product neatly folded inside, crisp and clear. If multiple items provided, both are shown in the box. Top-down view, minimal aesthetic, the product is the star of the reveal moment.",
       "user_prompt_key": null,
       "user_input_keys": [
-        "product_image"
+        "product_image",
+        "product_second"
       ],
       "locked_inputs": [],
       "settings": {

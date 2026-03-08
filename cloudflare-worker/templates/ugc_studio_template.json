@@ -2,7 +2,7 @@
   "name": "UGC STUDIO",
   "slug": "ugc-studio",
   "version": "1.0",
-  "description": "Clean studio UGC \u2014 influencer holding product. Professional but authentic.",
+  "description": "Clean studio UGC — influencer holding product. Professional but authentic.",
   "category": "UGC",
   "tags": [
     "ugc",
@@ -17,7 +17,7 @@
   "input_manifest": [
     {
       "key": "product_image",
-      "label": "Product Image",
+      "label": "Product (Front)",
       "type": "image",
       "required": true,
       "accepts": [
@@ -26,7 +26,20 @@
         "image/webp"
       ],
       "max_size_mb": 10,
-      "hint": "Product on white or light background for cleanest result."
+      "hint": "Front of the product on clean/white background."
+    },
+    {
+      "key": "product_back",
+      "label": "Product (Back) — Optional",
+      "type": "image",
+      "required": false,
+      "accepts": [
+        "image/jpeg",
+        "image/png",
+        "image/webp"
+      ],
+      "max_size_mb": 10,
+      "hint": "Optional back view for a full front-to-back review shot."
     }
   ],
   "steps": [
@@ -36,7 +49,8 @@
       "prompt": "Clean studio UGC content creator photo. A person is wearing and showing off the clothing product against a clean white or light gray background. Ring light setup, direct camera facing shot, casual but styled, TikTok creator energy. The clothing product is the clear hero, crisp and detailed. Authentic Instagram/TikTok creator vibe.",
       "user_prompt_key": null,
       "user_input_keys": [
-        "product_image"
+        "product_image",
+        "product_back"
       ],
       "locked_inputs": [],
       "settings": {
