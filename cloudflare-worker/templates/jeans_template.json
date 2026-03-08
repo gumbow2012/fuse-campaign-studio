@@ -2,7 +2,7 @@
   "name": "JEANS",
   "slug": "jeans",
   "version": "1.0",
-  "description": "Denim editorial \u2014 classic jeans campaign. Timeless fashion imagery, iconic denim energy.",
+  "description": "Denim editorial — classic jeans campaign. Timeless fashion imagery, iconic denim energy.",
   "category": "Editorial",
   "tags": [
     "editorial",
@@ -13,11 +13,11 @@
   "output_type": "video",
   "estimated_credits_per_run": 50,
   "is_active": true,
-  "asset_requirements": "Clear shot of the jeans/denim. Flat lay, worn, or folded all work.",
+  "asset_requirements": "Clear shot of the denim/pants. Front required, back view optional.",
   "input_manifest": [
     {
       "key": "product_image",
-      "label": "Product Image",
+      "label": "Jeans (Front)",
       "type": "image",
       "required": true,
       "accepts": [
@@ -26,17 +26,31 @@
         "image/webp"
       ],
       "max_size_mb": 10,
-      "hint": "Clear shot of the jeans/denim. Flat lay, worn, or folded all work."
+      "hint": "Front view of the jeans/denim. Flat lay, worn, or folded."
+    },
+    {
+      "key": "product_back",
+      "label": "Jeans (Back)",
+      "type": "image",
+      "required": false,
+      "accepts": [
+        "image/jpeg",
+        "image/png",
+        "image/webp"
+      ],
+      "max_size_mb": 10,
+      "hint": "Optional back view for pocket and back detail."
     }
   ],
   "steps": [
     {
       "id": "image_edit",
       "type": "nano_banana_pro",
-      "prompt": "Iconic denim jeans editorial campaign photo. A model wearing the jeans in a classic campaign setting \u2014 may be an urban rooftop, industrial loft, or sun-drenched outdoor location. Clean, simple, confident. The jeans are the hero item \u2014 texture, fit, and wash all crisp and detailed. Classic denim brand energy. Natural warm light, medium format photography quality.",
+      "prompt": "Iconic denim jeans editorial campaign photo. A model wearing the jeans in a classic campaign setting — may be an urban rooftop, industrial loft, or sun-drenched outdoor location. Clean, simple, confident. The jeans are the hero item — texture, fit, wash, and back pocket detail all crisp and clear. Classic denim brand energy. Natural warm light, medium format photography quality.",
       "user_prompt_key": null,
       "user_input_keys": [
-        "product_image"
+        "product_image",
+        "product_back"
       ],
       "locked_inputs": [],
       "settings": {

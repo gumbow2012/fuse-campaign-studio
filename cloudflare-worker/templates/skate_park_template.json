@@ -2,7 +2,7 @@
   "name": "SKATE PARK",
   "slug": "skate-park",
   "version": "1.0",
-  "description": "Skate park environment \u2014 street fashion meets skating culture. Raw, energetic, youth culture.",
+  "description": "Skate park environment — street fashion meets skating culture. Raw, energetic, youth culture.",
   "category": "Street",
   "tags": [
     "street",
@@ -13,11 +13,11 @@
   "output_type": "video",
   "estimated_credits_per_run": 50,
   "is_active": true,
-  "asset_requirements": "Front-facing product. Clean background composites best into the skate park environment.",
+  "asset_requirements": "Upload t-shirt, shorts, and sunglasses separately on clean backgrounds.",
   "input_manifest": [
     {
-      "key": "product_image",
-      "label": "Product Image",
+      "key": "t_shirt",
+      "label": "T-Shirt",
       "type": "image",
       "required": true,
       "accepts": [
@@ -26,17 +26,45 @@
         "image/webp"
       ],
       "max_size_mb": 10,
-      "hint": "Front-facing product. Clean background composites best into the skate park environment."
+      "hint": "Front of the t-shirt on a clean background."
+    },
+    {
+      "key": "shorts",
+      "label": "Shorts",
+      "type": "image",
+      "required": true,
+      "accepts": [
+        "image/jpeg",
+        "image/png",
+        "image/webp"
+      ],
+      "max_size_mb": 10,
+      "hint": "The shorts/bottoms on a clean background."
+    },
+    {
+      "key": "sun_glasses",
+      "label": "Sun Glasses",
+      "type": "image",
+      "required": false,
+      "accepts": [
+        "image/jpeg",
+        "image/png",
+        "image/webp"
+      ],
+      "max_size_mb": 10,
+      "hint": "The sunglasses or accessories."
     }
   ],
   "steps": [
     {
       "id": "image_edit",
       "type": "nano_banana_pro",
-      "prompt": "Skate park street fashion photography. A skater wearing the clothing product at a concrete skate park. Ramps, rails, and graffiti-covered concrete in background. The skater is posed with a skateboard, looking effortlessly cool. Golden hour lighting, wide angle lens, the clothing clearly shown. Raw youth culture energy, authentic skate scene aesthetic.",
+      "prompt": "Skate park street fashion editorial. A model wearing a t-shirt, shorts, and sunglasses in an urban skate park setting. Concrete bowls and rails in background, natural sunlight, relaxed confident energy. The clothing shown clearly in motion or posed at the skate park. Street photography quality, authentic skate culture aesthetic.",
       "user_prompt_key": null,
       "user_input_keys": [
-        "product_image"
+        "t_shirt",
+        "shorts",
+        "sun_glasses"
       ],
       "locked_inputs": [],
       "settings": {
@@ -48,7 +76,7 @@
     {
       "id": "video_gen",
       "type": "kling",
-      "prompt": "Skate park fashion video. Skater in the clothing product rides or does a trick at the skate park, camera follows the movement, concrete ramps and graffiti background, dynamic action camera work, the clothing visible and moving naturally. Youth culture energy, authentic skate aesthetic.",
+      "prompt": "Skate park fashion video. Model in the t-shirt and shorts skates or walks through a sun-drenched skate park, sunglasses on, confident energy, the clothing shown in natural motion. Camera follows at low angle, urban concrete backdrop.",
       "user_prompt_key": null,
       "image_source": "previous_step",
       "settings": {
