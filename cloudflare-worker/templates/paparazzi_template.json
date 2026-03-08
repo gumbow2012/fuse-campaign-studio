@@ -12,11 +12,11 @@
   "output_type": "video",
   "estimated_credits_per_run": 50,
   "is_active": true,
-  "asset_requirements": "Front-facing product on clean white/light background for best cutout.",
+  "asset_requirements": "Front-facing product on clean background. Adding a back view gives the model more angles to work with.",
   "input_manifest": [
     {
       "key": "product_image",
-      "label": "Product Image",
+      "label": "Product (Front View)",
       "type": "image",
       "required": true,
       "accepts": [
@@ -25,7 +25,20 @@
         "image/webp"
       ],
       "max_size_mb": 10,
-      "hint": "Front-facing product on clean white/light background for best cutout."
+      "hint": "Front of the product on a clean/white background. Best for the hero paparazzi shot."
+    },
+    {
+      "key": "product_back",
+      "label": "Product (Back View) — Optional",
+      "type": "image",
+      "required": false,
+      "accepts": [
+        "image/jpeg",
+        "image/png",
+        "image/webp"
+      ],
+      "max_size_mb": 10,
+      "hint": "Optional back view — the generated model may turn to show the back of the outfit."
     }
   ],
   "steps": [
@@ -35,7 +48,8 @@
       "prompt": "Paparazzi celebrity street photography. A model wearing the clothing product walks through a crowd of aggressive photographers. Camera flashes popping everywhere, chaotic fashion week sidewalk, the model looks iconic and confident. Shot on 35mm film, high contrast, cinematic grain, editorial quality. The clothing product is clearly visible and photorealistic.",
       "user_prompt_key": null,
       "user_input_keys": [
-        "product_image"
+        "product_image",
+        "product_back"
       ],
       "locked_inputs": [],
       "settings": {

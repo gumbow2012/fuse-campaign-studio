@@ -2,7 +2,7 @@
   "name": "ARMORED TRUCK",
   "slug": "armored-truck",
   "version": "1.0",
-  "description": "Armored truck heist aesthetic \u2014 guards, dramatic cinematic, product drop energy.",
+  "description": "Armored truck heist aesthetic — guards, dramatic cinematic, product drop energy.",
   "category": "Street",
   "tags": [
     "street",
@@ -14,11 +14,11 @@
   "output_type": "video",
   "estimated_credits_per_run": 50,
   "is_active": true,
-  "asset_requirements": "Any product. Bold statement pieces work best in this cinematic heist style.",
+  "asset_requirements": "Any bold statement piece. The cinematic heist scene is generated around your product.",
   "input_manifest": [
     {
       "key": "product_image",
-      "label": "Product Image",
+      "label": "Product (Front View)",
       "type": "image",
       "required": true,
       "accepts": [
@@ -27,17 +27,31 @@
         "image/webp"
       ],
       "max_size_mb": 10,
-      "hint": "Any product. Bold statement pieces work best in this cinematic heist style."
+      "hint": "Front of the product — will be worn in the armored truck heist scene."
+    },
+    {
+      "key": "product_back",
+      "label": "Product (Back View) — Optional",
+      "type": "image",
+      "required": false,
+      "accepts": [
+        "image/jpeg",
+        "image/png",
+        "image/webp"
+      ],
+      "max_size_mb": 10,
+      "hint": "Optional back view for more detail as the character moves in the scene."
     }
   ],
   "steps": [
     {
       "id": "image_edit",
       "type": "nano_banana_pro",
-      "prompt": "Cinematic armored truck fashion photo. A figure wearing the clothing product stands next to or emerges from an armored truck. Urban city setting, dramatic cinematography, security guards in background. The clothing worn with extreme confidence \u2014 this is a high-value drop. Think Supreme or Kanye drop energy. Cinematic color grade, dramatic low-angle perspective.",
+      "prompt": "Cinematic armored truck fashion photo. A figure wearing the clothing product stands next to or emerges from an armored truck. Urban city setting, dramatic cinematography, security guards in background. The clothing worn with extreme confidence — this is a high-value drop. Think Supreme or Kanye drop energy. Cinematic color grade, dramatic low-angle perspective.",
       "user_prompt_key": null,
       "user_input_keys": [
-        "product_image"
+        "product_image",
+        "product_back"
       ],
       "locked_inputs": [],
       "settings": {

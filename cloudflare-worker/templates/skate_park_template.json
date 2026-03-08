@@ -2,7 +2,7 @@
   "name": "SKATE PARK",
   "slug": "skate-park",
   "version": "1.0",
-  "description": "Skate park environment \u2014 street fashion meets skating culture. Raw, energetic, youth culture.",
+  "description": "Skate park environment — street fashion meets skating culture. Raw, energetic, youth culture.",
   "category": "Street",
   "tags": [
     "street",
@@ -13,11 +13,11 @@
   "output_type": "video",
   "estimated_credits_per_run": 50,
   "is_active": true,
-  "asset_requirements": "Front-facing product. Clean background composites best into the skate park environment.",
+  "asset_requirements": "Any streetwear product. Bold pieces work especially well in the skate park setting.",
   "input_manifest": [
     {
       "key": "product_image",
-      "label": "Product Image",
+      "label": "Product (Front View)",
       "type": "image",
       "required": true,
       "accepts": [
@@ -26,7 +26,20 @@
         "image/webp"
       ],
       "max_size_mb": 10,
-      "hint": "Front-facing product. Clean background composites best into the skate park environment."
+      "hint": "Front of the clothing or product — will be worn in the skate park scene."
+    },
+    {
+      "key": "product_back",
+      "label": "Product (Back View) — Optional",
+      "type": "image",
+      "required": false,
+      "accepts": [
+        "image/jpeg",
+        "image/png",
+        "image/webp"
+      ],
+      "max_size_mb": 10,
+      "hint": "Optional back view — great for hoodies or jackets with back graphics."
     }
   ],
   "steps": [
@@ -36,7 +49,8 @@
       "prompt": "Skate park street fashion photography. A skater wearing the clothing product at a concrete skate park. Ramps, rails, and graffiti-covered concrete in background. The skater is posed with a skateboard, looking effortlessly cool. Golden hour lighting, wide angle lens, the clothing clearly shown. Raw youth culture energy, authentic skate scene aesthetic.",
       "user_prompt_key": null,
       "user_input_keys": [
-        "product_image"
+        "product_image",
+        "product_back"
       ],
       "locked_inputs": [],
       "settings": {

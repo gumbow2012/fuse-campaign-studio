@@ -2,7 +2,7 @@
   "name": "DOCTOR",
   "slug": "doctor",
   "version": "1.0",
-  "description": "Medical professional aesthetic \u2014 clean clinical setting meets high fashion. Unexpected and sharp.",
+  "description": "Medical professional aesthetic — clean clinical setting meets high fashion. Unexpected and sharp.",
   "category": "Editorial",
   "tags": [
     "editorial",
@@ -13,7 +13,7 @@
   "output_type": "video",
   "estimated_credits_per_run": 50,
   "is_active": true,
-  "asset_requirements": "Any clean background. White/light clothing creates strongest contrast against the clinical environment.",
+  "asset_requirements": "Any clean product photo. White/light clothing creates strongest contrast against the clinical environment.",
   "input_manifest": [
     {
       "key": "product_image",
@@ -26,7 +26,7 @@
         "image/webp"
       ],
       "max_size_mb": 10,
-      "hint": "Any clean background. White/light clothing creates strongest contrast against the clinical environment."
+      "hint": "Front-facing product on any clean background. White or light colors stand out best in the clinical setting."
     }
   ],
   "steps": [
