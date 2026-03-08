@@ -102,7 +102,7 @@
         "Node name for S&R": "LoraLoader"
       },
       "widgets_values": [
-        "raven_style.safetensors",
+        "ice_2.0_style.safetensors",
         1.0,
         1.0
       ]
@@ -142,7 +142,7 @@
         "Node name for S&R": "CLIPTextEncode"
       },
       "widgets_values": [
-        "Dark editorial fashion photography. A model wearing the clothing product in a dramatically lit scene. Raven-black aesthetic \u2014 deep shadows, dramatic contrast, moody atmosphere. Gothic architecture or dark industrial setting. Medium format, tack sharp clothing detail, cinematic color grading with crushed blacks and desaturated palette. High fashion Vogue editorial quality."
+        "Hyper-clean ice editorial fashion photo. A model wearing a hoodie and matching bottoms in an ultra-modern frozen environment. Crystal clear ice formations, glacial blue tones, frozen water droplets mid-air, ultra-sharp clothing detail, high-fashion editorial quality."
       ]
     },
     {
@@ -180,7 +180,7 @@
         "Node name for S&R": "CLIPTextEncode"
       },
       "widgets_values": [
-        "bright, cheerful, colorful, warm tones, blurry, low quality"
+        "warm, tropical, dirty, blurry, low quality, distorted"
       ]
     },
     {
@@ -317,7 +317,7 @@
         7.0,
         "dpmpp_2m",
         "karras",
-        0.75
+        0.74
       ]
     },
     {
@@ -387,7 +387,7 @@
         "Node name for S&R": "SaveImage"
       },
       "widgets_values": [
-        "fuse_raven_image"
+        "fuse_ice_2.0_image"
       ]
     },
     {
@@ -468,7 +468,7 @@
         "Node name for S&R": "CLIPTextEncode"
       },
       "widgets_values": [
-        "Dark moody fashion film. Model with the clothing product stands in dramatic low-key lighting, slow cinematic camera push-in, dark feathers floating in background, shadows playing across the clothing fabric, Gothic high fashion energy, slow motion fabric movement."
+        "Ice editorial video. Model with the clothing product in a frozen crystal environment, ice formations cracking around them, cold air mist, glacial blue tones, slow dramatic camera movement."
       ]
     },
     {
@@ -733,7 +733,7 @@
         24,
         1,
         "mp4",
-        "fuse_raven_video",
+        "fuse_ice_2.0_video",
         true,
         true,
         null,
@@ -757,10 +757,10 @@
       "inputs": [],
       "outputs": [],
       "properties": {
-        "text": "FUSE Campaign Studio \u2014 RAVEN\nStep 1: img2img edit via KSampler (denoise=0.75)\nStep 2: AnimateDiff img2video (24 frames, 9:16)\nReplace LoRA: raven_style.safetensors\nRequires: ComfyUI-AnimateDiff-Evolved + ComfyUI-IPAdapter-plus + ComfyUI-VideoHelperSuite"
+        "text": "FUSE Campaign Studio \u2014 ICE 2.0\nStep 1: img2img edit via KSampler (denoise=0.74)\nStep 2: AnimateDiff img2video (24 frames, 9:16)\nReplace LoRA: ice_2.0_style.safetensors\nRequires: ComfyUI-AnimateDiff-Evolved + ComfyUI-IPAdapter-plus + ComfyUI-VideoHelperSuite"
       },
       "widgets_values": [
-        "FUSE Campaign Studio \u2014 RAVEN\nStep 1: img2img edit via KSampler (denoise=0.75)\nStep 2: AnimateDiff img2video (24 frames, 9:16)\nReplace LoRA: raven_style.safetensors\nRequires: ComfyUI-AnimateDiff-Evolved + ComfyUI-IPAdapter-plus + ComfyUI-VideoHelperSuite"
+        "FUSE Campaign Studio \u2014 ICE 2.0\nStep 1: img2img edit via KSampler (denoise=0.74)\nStep 2: AnimateDiff img2video (24 frames, 9:16)\nReplace LoRA: ice_2.0_style.safetensors\nRequires: ComfyUI-AnimateDiff-Evolved + ComfyUI-IPAdapter-plus + ComfyUI-VideoHelperSuite"
       ]
     }
   ],
@@ -982,8 +982,8 @@
   ],
   "config": {},
   "extra": {
-    "fuse_template": "RAVEN",
-    "fuse_file": "raven",
+    "fuse_template": "ICE 2.0",
+    "fuse_file": "ice_2.0",
     "pipeline_steps": [
       "image_edit (nano_banana_pro)",
       "video_gen (kling)"
@@ -997,7 +997,7 @@
       "ComfyUI-IPAdapter-plus",
       "ComfyUI-VideoHelperSuite (VHS)"
     ],
-    "lora_placeholder": "raven_style.safetensors",
+    "lora_placeholder": "ice_2.0_style.safetensors",
     "instructions": "1. Load in ComfyUI. 2. Replace LoRA name with real .safetensors from sync-weavy-loras. 3. Load your product image in LoadImage node. 4. Queue."
   },
   "version": 0.4

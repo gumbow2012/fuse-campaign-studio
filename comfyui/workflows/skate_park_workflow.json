@@ -102,7 +102,7 @@
         "Node name for S&R": "LoraLoader"
       },
       "widgets_values": [
-        "raven_style.safetensors",
+        "skate_park_style.safetensors",
         1.0,
         1.0
       ]
@@ -142,7 +142,7 @@
         "Node name for S&R": "CLIPTextEncode"
       },
       "widgets_values": [
-        "Dark editorial fashion photography. A model wearing the clothing product in a dramatically lit scene. Raven-black aesthetic \u2014 deep shadows, dramatic contrast, moody atmosphere. Gothic architecture or dark industrial setting. Medium format, tack sharp clothing detail, cinematic color grading with crushed blacks and desaturated palette. High fashion Vogue editorial quality."
+        "Skate park street fashion editorial. A model wearing a t-shirt, shorts, and sunglasses in an urban skate park setting. Concrete ramps and rails in background, sun-drenched, authentic skate culture energy. Sharp clothing detail, street fashion quality."
       ]
     },
     {
@@ -180,7 +180,7 @@
         "Node name for S&R": "CLIPTextEncode"
       },
       "widgets_values": [
-        "bright, cheerful, colorful, warm tones, blurry, low quality"
+        "formal, office, dark, blurry, low quality"
       ]
     },
     {
@@ -317,7 +317,7 @@
         7.0,
         "dpmpp_2m",
         "karras",
-        0.75
+        0.73
       ]
     },
     {
@@ -387,7 +387,7 @@
         "Node name for S&R": "SaveImage"
       },
       "widgets_values": [
-        "fuse_raven_image"
+        "fuse_skate_park_image"
       ]
     },
     {
@@ -468,7 +468,7 @@
         "Node name for S&R": "CLIPTextEncode"
       },
       "widgets_values": [
-        "Dark moody fashion film. Model with the clothing product stands in dramatic low-key lighting, slow cinematic camera push-in, dark feathers floating in background, shadows playing across the clothing fabric, Gothic high fashion energy, slow motion fabric movement."
+        "Skate park fashion video. Model in the t-shirt and shorts skates or walks through a sun-drenched skate park, sunglasses on, authentic street energy, clothing moving naturally."
       ]
     },
     {
@@ -733,7 +733,7 @@
         24,
         1,
         "mp4",
-        "fuse_raven_video",
+        "fuse_skate_park_video",
         true,
         true,
         null,
@@ -757,10 +757,10 @@
       "inputs": [],
       "outputs": [],
       "properties": {
-        "text": "FUSE Campaign Studio \u2014 RAVEN\nStep 1: img2img edit via KSampler (denoise=0.75)\nStep 2: AnimateDiff img2video (24 frames, 9:16)\nReplace LoRA: raven_style.safetensors\nRequires: ComfyUI-AnimateDiff-Evolved + ComfyUI-IPAdapter-plus + ComfyUI-VideoHelperSuite"
+        "text": "FUSE Campaign Studio \u2014 SKATE PARK\nStep 1: img2img edit via KSampler (denoise=0.73)\nStep 2: AnimateDiff img2video (24 frames, 9:16)\nReplace LoRA: skate_park_style.safetensors\nRequires: ComfyUI-AnimateDiff-Evolved + ComfyUI-IPAdapter-plus + ComfyUI-VideoHelperSuite"
       },
       "widgets_values": [
-        "FUSE Campaign Studio \u2014 RAVEN\nStep 1: img2img edit via KSampler (denoise=0.75)\nStep 2: AnimateDiff img2video (24 frames, 9:16)\nReplace LoRA: raven_style.safetensors\nRequires: ComfyUI-AnimateDiff-Evolved + ComfyUI-IPAdapter-plus + ComfyUI-VideoHelperSuite"
+        "FUSE Campaign Studio \u2014 SKATE PARK\nStep 1: img2img edit via KSampler (denoise=0.73)\nStep 2: AnimateDiff img2video (24 frames, 9:16)\nReplace LoRA: skate_park_style.safetensors\nRequires: ComfyUI-AnimateDiff-Evolved + ComfyUI-IPAdapter-plus + ComfyUI-VideoHelperSuite"
       ]
     }
   ],
@@ -982,8 +982,8 @@
   ],
   "config": {},
   "extra": {
-    "fuse_template": "RAVEN",
-    "fuse_file": "raven",
+    "fuse_template": "SKATE PARK",
+    "fuse_file": "skate_park",
     "pipeline_steps": [
       "image_edit (nano_banana_pro)",
       "video_gen (kling)"
@@ -997,7 +997,7 @@
       "ComfyUI-IPAdapter-plus",
       "ComfyUI-VideoHelperSuite (VHS)"
     ],
-    "lora_placeholder": "raven_style.safetensors",
+    "lora_placeholder": "skate_park_style.safetensors",
     "instructions": "1. Load in ComfyUI. 2. Replace LoRA name with real .safetensors from sync-weavy-loras. 3. Load your product image in LoadImage node. 4. Queue."
   },
   "version": 0.4

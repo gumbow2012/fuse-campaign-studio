@@ -102,7 +102,7 @@
         "Node name for S&R": "LoraLoader"
       },
       "widgets_values": [
-        "raven_style.safetensors",
+        "gas_station_w_snow_style.safetensors",
         1.0,
         1.0
       ]
@@ -142,7 +142,7 @@
         "Node name for S&R": "CLIPTextEncode"
       },
       "widgets_values": [
-        "Dark editorial fashion photography. A model wearing the clothing product in a dramatically lit scene. Raven-black aesthetic \u2014 deep shadows, dramatic contrast, moody atmosphere. Gothic architecture or dark industrial setting. Medium format, tack sharp clothing detail, cinematic color grading with crushed blacks and desaturated palette. High fashion Vogue editorial quality."
+        "Cinematic fashion photography at a snowy gas station at night. A model wearing the full outfit \u2014 front and back details visible \u2014 stands under the gas station canopy as snow falls. Neon pump lights reflecting off wet pavement, cold blue tones, moody cinematic atmosphere. Sharp clothing texture."
       ]
     },
     {
@@ -180,7 +180,7 @@
         "Node name for S&R": "CLIPTextEncode"
       },
       "widgets_values": [
-        "bright, cheerful, colorful, warm tones, blurry, low quality"
+        "daytime, warm, tropical, sunny, blurry, low quality"
       ]
     },
     {
@@ -317,7 +317,7 @@
         7.0,
         "dpmpp_2m",
         "karras",
-        0.75
+        0.76
       ]
     },
     {
@@ -387,7 +387,7 @@
         "Node name for S&R": "SaveImage"
       },
       "widgets_values": [
-        "fuse_raven_image"
+        "fuse_gas_station_w_snow_image"
       ]
     },
     {
@@ -468,7 +468,7 @@
         "Node name for S&R": "CLIPTextEncode"
       },
       "widgets_values": [
-        "Dark moody fashion film. Model with the clothing product stands in dramatic low-key lighting, slow cinematic camera push-in, dark feathers floating in background, shadows playing across the clothing fabric, Gothic high fashion energy, slow motion fabric movement."
+        "Gas station snow cinematic video. Model wearing the clothing walks slowly through heavy snowfall under a gas station canopy, neon signs glowing, breath visible in cold air, slow cinematic movement."
       ]
     },
     {
@@ -733,7 +733,7 @@
         24,
         1,
         "mp4",
-        "fuse_raven_video",
+        "fuse_gas_station_w_snow_video",
         true,
         true,
         null,
@@ -757,10 +757,10 @@
       "inputs": [],
       "outputs": [],
       "properties": {
-        "text": "FUSE Campaign Studio \u2014 RAVEN\nStep 1: img2img edit via KSampler (denoise=0.75)\nStep 2: AnimateDiff img2video (24 frames, 9:16)\nReplace LoRA: raven_style.safetensors\nRequires: ComfyUI-AnimateDiff-Evolved + ComfyUI-IPAdapter-plus + ComfyUI-VideoHelperSuite"
+        "text": "FUSE Campaign Studio \u2014 GAS STATION W SNOW\nStep 1: img2img edit via KSampler (denoise=0.76)\nStep 2: AnimateDiff img2video (24 frames, 9:16)\nReplace LoRA: gas_station_w_snow_style.safetensors\nRequires: ComfyUI-AnimateDiff-Evolved + ComfyUI-IPAdapter-plus + ComfyUI-VideoHelperSuite"
       },
       "widgets_values": [
-        "FUSE Campaign Studio \u2014 RAVEN\nStep 1: img2img edit via KSampler (denoise=0.75)\nStep 2: AnimateDiff img2video (24 frames, 9:16)\nReplace LoRA: raven_style.safetensors\nRequires: ComfyUI-AnimateDiff-Evolved + ComfyUI-IPAdapter-plus + ComfyUI-VideoHelperSuite"
+        "FUSE Campaign Studio \u2014 GAS STATION W SNOW\nStep 1: img2img edit via KSampler (denoise=0.76)\nStep 2: AnimateDiff img2video (24 frames, 9:16)\nReplace LoRA: gas_station_w_snow_style.safetensors\nRequires: ComfyUI-AnimateDiff-Evolved + ComfyUI-IPAdapter-plus + ComfyUI-VideoHelperSuite"
       ]
     }
   ],
@@ -982,8 +982,8 @@
   ],
   "config": {},
   "extra": {
-    "fuse_template": "RAVEN",
-    "fuse_file": "raven",
+    "fuse_template": "GAS STATION W SNOW",
+    "fuse_file": "gas_station_w_snow",
     "pipeline_steps": [
       "image_edit (nano_banana_pro)",
       "video_gen (kling)"
@@ -997,7 +997,7 @@
       "ComfyUI-IPAdapter-plus",
       "ComfyUI-VideoHelperSuite (VHS)"
     ],
-    "lora_placeholder": "raven_style.safetensors",
+    "lora_placeholder": "gas_station_w_snow_style.safetensors",
     "instructions": "1. Load in ComfyUI. 2. Replace LoRA name with real .safetensors from sync-weavy-loras. 3. Load your product image in LoadImage node. 4. Queue."
   },
   "version": 0.4

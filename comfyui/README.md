@@ -1,80 +1,85 @@
 # FUSE Campaign Studio — ComfyUI Workflows
 
-One workflow file per production template. Each is a ready-to-load ComfyUI
-img2img pipeline with a LoRA slot pre-wired.
+19 drag-and-drop ComfyUI workflow files recreating every Weavy pipeline locally.
 
-## Workflow Structure
+## Pipeline Map
+
+| Weavy step | ComfyUI equivalent |
+|---|---|
+| `nano_banana_pro` (image edit) | KSampler img2img + LoraLoader (denoise 0.55–0.80) |
+| `kling` (video gen) | AnimateDiff-Evolved + IPAdapter + VHS_VideoCombine |
+
+## Required Custom Nodes
+
+Install these from ComfyUI Manager before loading workflows:
+
+| Node pack | Purpose |
+|---|---|
+| [ComfyUI-AnimateDiff-Evolved](https://github.com/Kosinkadink/ComfyUI-AnimateDiff-Evolved) | AnimateDiff video generation |
+| [ComfyUI-IPAdapter-plus](https://github.com/cubiq/ComfyUI_IPAdapter_plus) | Reference image for video |
+| [ComfyUI-VideoHelperSuite (VHS)](https://github.com/Kosinkadink/ComfyUI-VideoHelperSuite) | MP4 output |
+
+Base model: **SDXL Base 1.0** (`sd_xl_base_1.0.safetensors`)
+AnimateDiff model: `mm_sd_v15_v2.ckpt`
+
+## Standard 2-Step Layout (18 workflows)
 
 ```
-LoadImage (product photo)
-    │
-CheckpointLoaderSimple (SDXL base)
-    │
-LoraLoader ◄── replace lora_name with actual .safetensors
-    │
-CLIPTextEncode (positive prompt — campaign style)
-CLIPTextEncode (negative prompt)
-    │
-VAEEncode → KSampler → VAEDecode → SaveImage
+┌─ Step 1: image_edit (nano_banana_pro) ─────────────────────────────────────┐
+│                                                                              │
+│  LoadImage ──► VAEEncode ──►┐                                               │
+│  CheckpointLoader ──► LoraLoader ──► CLIPTextEncode(+) ──►┐                 │
+│                              └──► CLIPTextEncode(-) ──────►├─► KSampler ──► VAEDecode ──► SaveImage
+│                                                             │   denoise=0.70–0.76         (edited image)
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─ Step 2: video_gen (kling) ────────────────────────────────────────────────┐
+│                                                                              │
+│  LoraLoader ──► ADE_AnimateDiffLoader ──►┐                                  │
+│  edited_image ──────────────────────────►├─► IPAdapterApply ──►┐            │
+│  LoraLoader ──► CLIPTextEncode(+) ───────────────────────────►─┤            │
+│              └── CLIPTextEncode(-) ──────────────────────────►─├─► KSampler ──► VAEDecodeTiled ──► VHS_VideoCombine (MP4)
+│  EmptyLatentImage (512×912, 24 frames) ─────────────────────►──┘
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+## PAPARAZZI 3-Step Layout
+
+```
+Step 1: scene_gen ──► overhead scene image
+Step 2: product_swap ──► replace shirt with user product  (denoise=0.55 — surgical swap)
+Step 3: video_gen ──► MP4 from product-swapped image
 ```
 
 ## Quick Start
 
-1. Open ComfyUI (`python main.py`)
-2. Drag any `*_workflow.json` from this folder into the ComfyUI canvas
-3. In **LoadImage** → point to your product photo
-4. In **LoraLoader** → replace `<slug>_style.safetensors` with the real LoRA
-   path (downloaded via `sync-weavy-loras`)
-5. In **CheckpointLoaderSimple** → confirm your SDXL checkpoint name
-6. Queue → Generate
+1. Open ComfyUI
+2. Drag a `*_workflow.json` from `comfyui/workflows/` onto the canvas
+3. **LoadImage** → select your product photo
+4. **LoraLoader** → replace `<slug>_style.safetensors` with your actual LoRA
+   (run `sync-weavy-loras` to get the real paths)
+5. Queue Prompt
 
-## Getting the Real LoRA Files
+## All 19 Workflows
 
-The LoRA file names are placeholders until the Weavy workflows are synced.
-Run `sync-weavy-loras` to populate the actual paths from each Weavy workflow:
-
-```bash
-curl -X POST \
-  "https://sdmwcjfksoqbplcqqmhg.supabase.co/functions/v1/sync-weavy-loras" \
-  -H "Authorization: Bearer <your-admin-jwt>" \
-  -H "Content-Type: application/json" \
-  -d '{}'
-```
-
-Then query the templates table to get the real `loras[].path` values and
-update the `LoraLoader` widgets_values in each workflow file.
-
-## Workflow Files
-
-| File | Template | Weavy Recipe ID | KSampler Denoise |
-|------|----------|-----------------|-----------------|
-| papparazi_workflow.json | PAPPARAZI | dvgEXt4aeShCeokMq5MIpZ | 0.72 |
-| raven_workflow.json | RAVEN | 8pyXqysncP9g3L2ic8Nob8 | 0.75 |
-| doctor_workflow.json | DOCTOR | P9KHisYdvYAfWpunm3Qlme | 0.70 |
-| blue_lab_workflow.json | BLUE LAB | yRblK7UvAxiaRjEw9blCJz | 0.73 |
-| garage_workflow.json | GARAGE | 86BheMWSbZTZbjUrTRHY7o | 0.74 |
-| unboxing_workflow.json | UNBOXING | EtWKBYSzByNh548YHW4JQe | 0.68 |
-| gas_station_workflow.json | GAS STATION | itkxIO30C0huXXMrsYEwaN | 0.76 |
-| jeans_workflow.json | JEANS | RkWlfogU1nhPSxKqDHXOjE | 0.72 |
-| ice_pick_workflow.json | ICE PICK | xeKqScADHcfDu54ofVVujY | 0.74 |
-| skatepark_workflow.json | SKATEPARK | VFCSb8jQZrVYqhqkwQSc5g | 0.73 |
-| amazon_guy_workflow.json | AMAZON GUY | slqi1gyGckjLnKfun8FIiS | 0.71 |
-| armored_truck_workflow.json | ARMORED TRUCK | 3XW2sv5u2GVW2V1HVtGjL0 | 0.76 |
-| ugc_mirror_workflow.json | UGC MIRROR | pqLsbL5ZJ8tlBCf3rH8eL1 | 0.69 |
-
-## Recommended Base Model
-
-**SDXL Base 1.0** (`sd_xl_base_1.0.safetensors`) — matches the style these
-LoRAs were trained against. Swap for a community SDXL merge for stylistic
-variations.
-
-## Node Connections at a Glance
-
-```
-[1] CheckpointLoader  MODEL → [2] LoraLoader → MODEL → [7] KSampler
-                      CLIP  → [2] LoraLoader → CLIP  → [3] CLIPTextEncode+ → COND → [7]
-                                              → CLIP  → [4] CLIPTextEncode- → COND → [7]
-                      VAE   ──────────────────────────────────────────────────────→ [6] VAEEncode
-[5] LoadImage         IMAGE → [6] VAEEncode   LATENT → [7] KSampler
-                                                        [7] → LATENT → [8] VAEDecode → IMAGE → [9] SaveImage
-```
+| File | Template | Steps | Denoise |
+|------|----------|-------|---------|
+| `armored_truck_workflow.json` | ARMORED TRUCK | 2 | 0.75 |
+| `blue_lab_original_workflow.json` | BLUE LAB (original) | 2 | 0.73 |
+| `copy_of_unboxing_workflow.json` | Copy of UNBOXING | 2 | 0.68 |
+| `delivery_amazon_guy_workflow.json` | DELIVERY (Amazon Guy) | 2 | 0.71 |
+| `doctor_workflow.json` | DOCTOR | 2 | 0.70 |
+| `garage_guy_workflow.json` | GARAGE guy | 2 | 0.74 |
+| `gas_station_w_snow_workflow.json` | GAS STATION W SNOW | 2 | 0.76 |
+| `ice_2.0_workflow.json` | ICE 2.0 | 2 | 0.74 |
+| `ice_original_workflow.json` | ICE (Original) | 2 | 0.74 |
+| `jeans_workflow.json` | JEANS | 2 | 0.72 |
+| `pack_theif_pants_workflow.json` | PACK THEIF (Pants) | 2 | 0.73 |
+| `paparazzi_original_workflow.json` | PAPARAZZI (Original) | 2 | 0.72 |
+| `paparazzi_workflow.json` | PAPARAZZI | **3** | 0.80 / 0.55 / — |
+| `raven_original_workflow.json` | RAVEN (Original) | 2 | 0.75 |
+| `raven_workflow.json` | RAVEN | 2 | 0.75 |
+| `skate_park_workflow.json` | SKATE PARK | 2 | 0.73 |
+| `ugc_mirror_workflow.json` | UGC MIRROR | 2 | 0.69 |
+| `ugc_studio_workflow.json` | UGC STUDIO | 2 | 0.69 |
+| `unboxing_workflow.json` | UNBOXING | 2 | 0.68 |
