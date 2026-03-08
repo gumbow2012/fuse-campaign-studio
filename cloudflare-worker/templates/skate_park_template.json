@@ -1,0 +1,30 @@
+{
+  "name": "SKATE PARK",
+  "description": "Skate park environment — street fashion meets skating culture. Raw, energetic, youth culture.",
+  "category": "Street",
+  "output_type": "video",
+  "estimated_credits_per_run": 50,
+  "version": "1.0",
+  "tags": ["street", "skate", "youth", "video"],
+  "user_inputs": [
+    { "key": "product_image", "label": "Product Image", "type": "image", "required": true }
+  ],
+  "steps": [
+    {
+      "id": "image_edit",
+      "type": "nano_banana_pro",
+      "prompt": "Skate park street fashion photography. A skater wearing the clothing product at a concrete skate park. Ramps, rails, and graffiti-covered concrete in the background. The skater is posed with a skateboard, looking effortlessly cool. Golden hour lighting or overcast skate park light, fisheye or wide angle lens, the clothing product is clearly shown. Raw youth culture energy, authentic skate scene aesthetic.",
+      "locked_inputs": [],
+      "user_input_keys": ["product_image"]
+    },
+    {
+      "id": "video_gen",
+      "type": "kling",
+      "prompt": "Skate park fashion video. Skater in the clothing product rides or does a trick at the skate park, camera follows the movement, concrete ramps and graffiti background, dynamic action camera work, the clothing is visible and moving naturally. Youth culture energy, authentic skate aesthetic, fluid motion.",
+      "image_source": "previous_step",
+      "model": "kling-v1-6",
+      "duration": "10",
+      "aspect_ratio": "9:16"
+    }
+  ]
+}

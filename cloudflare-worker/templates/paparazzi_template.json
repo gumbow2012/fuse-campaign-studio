@@ -1,0 +1,30 @@
+{
+  "name": "PAPARAZZI",
+  "description": "Paparazzi-style candid shots that make your product look iconic. Camera flashes, fashion week chaos, celebrity energy.",
+  "category": "Street",
+  "output_type": "video",
+  "estimated_credits_per_run": 50,
+  "version": "1.0",
+  "tags": ["street", "paparazzi", "editorial", "video"],
+  "user_inputs": [
+    { "key": "product_image", "label": "Product Image", "type": "image", "required": true }
+  ],
+  "steps": [
+    {
+      "id": "image_edit",
+      "type": "nano_banana_pro",
+      "prompt": "Paparazzi celebrity street photography. A model wearing the clothing product is walking through a crowd of aggressive photographers. Camera flashes popping everywhere, chaotic fashion week sidewalk, the model looks iconic and confident. Shot on 35mm film, high contrast, cinematic grain, editorial quality. The clothing product is clearly visible and photorealistic.",
+      "locked_inputs": [],
+      "user_input_keys": ["product_image"]
+    },
+    {
+      "id": "video_gen",
+      "type": "kling",
+      "prompt": "Paparazzi scene in motion. The model walks confidently through a crowd of photographers, cameras flashing rapidly, dynamic handheld camera movement following the subject, bokeh background of other press photographers, the clothing is shown prominently as the model moves. Cinematic, fashion week energy, 35mm aesthetic.",
+      "image_source": "previous_step",
+      "model": "kling-v1-6",
+      "duration": "10",
+      "aspect_ratio": "9:16"
+    }
+  ]
+}

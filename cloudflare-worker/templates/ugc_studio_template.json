@@ -1,0 +1,30 @@
+{
+  "name": "UGC STUDIO",
+  "description": "Clean studio UGC — influencer holding product against a simple background. Professional but authentic.",
+  "category": "UGC",
+  "output_type": "video",
+  "estimated_credits_per_run": 50,
+  "version": "1.0",
+  "tags": ["ugc", "studio", "clean", "video"],
+  "user_inputs": [
+    { "key": "product_image", "label": "Product Image", "type": "image", "required": true }
+  ],
+  "steps": [
+    {
+      "id": "image_edit",
+      "type": "nano_banana_pro",
+      "prompt": "Clean studio UGC content creator photo. A person is wearing and showing off the clothing product against a clean white or light gray background. Ring light setup, direct camera facing shot, casual but styled, TikTok creator energy. The clothing product is the clear hero, crisp and detailed. Natural looking person, genuine smile, authentic Instagram/TikTok creator vibe.",
+      "locked_inputs": [],
+      "user_input_keys": ["product_image"]
+    },
+    {
+      "id": "video_gen",
+      "type": "kling",
+      "prompt": "UGC studio review video. Content creator wearing the clothing product does a quick outfit check, turns around to show front and back, points to details of the clothing, clean studio background, natural lighting, TikTok/Reels format content creator energy. Casual and engaging.",
+      "image_source": "previous_step",
+      "model": "kling-v1-6",
+      "duration": "10",
+      "aspect_ratio": "9:16"
+    }
+  ]
+}

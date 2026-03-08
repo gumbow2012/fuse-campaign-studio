@@ -1,0 +1,30 @@
+{
+  "name": "RAVEN (Original)",
+  "description": "Original Raven template — dark editorial, moody cinematic, the OG version of the iconic style.",
+  "category": "Editorial",
+  "output_type": "video",
+  "estimated_credits_per_run": 50,
+  "version": "1.0",
+  "tags": ["editorial", "dark", "original", "video"],
+  "user_inputs": [
+    { "key": "product_image", "label": "Product Image", "type": "image", "required": true }
+  ],
+  "steps": [
+    {
+      "id": "image_edit",
+      "type": "nano_banana_pro",
+      "prompt": "Original Raven dark editorial fashion photo. A model wearing the clothing product in a dramatically lit dark setting. Gothic or industrial background, deep shadows, single dramatic key light illuminating the model and clothing. Raven feathers or dark organic elements in the scene. The clothing product is shown in sharp detail against the dark background. High contrast, desaturated color palette, cinematic and moody. Think Rick Owens, Gareth Pugh dark fashion editorial.",
+      "locked_inputs": [],
+      "user_input_keys": ["product_image"]
+    },
+    {
+      "id": "video_gen",
+      "type": "kling",
+      "prompt": "Dark Raven editorial fashion film. Model in the clothing stands in dramatic low-key lighting, black feathers floating in the air around them, slow cinematic camera orbit, deep shadows and strong highlights on the clothing, gothic atmosphere, the clothing fabric catches the light dramatically. Dark, powerful, fashion editorial cinema.",
+      "image_source": "previous_step",
+      "model": "kling-v1-6",
+      "duration": "10",
+      "aspect_ratio": "9:16"
+    }
+  ]
+}

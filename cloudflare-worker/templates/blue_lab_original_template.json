@@ -1,0 +1,30 @@
+{
+  "name": "BLUE LAB (original)",
+  "description": "Blue laboratory aesthetic — scientific editorial, cool tones, futuristic and clean.",
+  "category": "Editorial",
+  "output_type": "video",
+  "estimated_credits_per_run": 50,
+  "version": "1.0",
+  "tags": ["editorial", "lab", "futuristic", "video"],
+  "user_inputs": [
+    { "key": "product_image", "label": "Product Image", "type": "image", "required": true }
+  ],
+  "steps": [
+    {
+      "id": "image_edit",
+      "type": "nano_banana_pro",
+      "prompt": "Blue laboratory fashion editorial photo. A model wearing the clothing product in a futuristic lab setting — blue LED lighting, clean white surfaces, scientific equipment in the background. Cool blue color palette, crisp and modern. The clothing product glows in the blue light, showcasing its details. Think Apple lab meets fashion editorial. Hyper-clean, modern, aspirational. High fashion in a science lab.",
+      "locked_inputs": [],
+      "user_input_keys": ["product_image"]
+    },
+    {
+      "id": "video_gen",
+      "type": "kling",
+      "prompt": "Blue lab editorial video. Model in the clothing product walks through a sleek blue-lit laboratory environment, blue light plays across the fabric, slow tracking camera shot, clean white and blue aesthetic, the clothing is shown in detail as the model moves through the space. Futuristic and sleek.",
+      "image_source": "previous_step",
+      "model": "kling-v1-6",
+      "duration": "10",
+      "aspect_ratio": "9:16"
+    }
+  ]
+}

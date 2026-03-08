@@ -1,0 +1,30 @@
+{
+  "name": "DELIVERY (Amazon Guy)",
+  "description": "Amazon delivery driver reveals your product at the doorstep. Viral unboxing energy.",
+  "category": "UGC",
+  "output_type": "video",
+  "estimated_credits_per_run": 50,
+  "version": "1.0",
+  "tags": ["ugc", "delivery", "unboxing", "video"],
+  "user_inputs": [
+    { "key": "product_image", "label": "Product Image", "type": "image", "required": true }
+  ],
+  "steps": [
+    {
+      "id": "image_edit",
+      "type": "nano_banana_pro",
+      "prompt": "Amazon delivery unboxing photo. A delivery driver in a uniform is handing over or opening a brown Amazon box to reveal the clothing product. Doorstep setting, suburban house door background, the clothing product is being pulled out of the box dramatically. Natural daylight, photorealistic, the clothing is clearly visible and detailed.",
+      "locked_inputs": [],
+      "user_input_keys": ["product_image"]
+    },
+    {
+      "id": "video_gen",
+      "type": "kling",
+      "prompt": "Delivery unboxing video at the doorstep. Person opens an Amazon box and dramatically reveals the clothing product, pulls it out and holds it up, surprised and excited expression, suburban doorstep, natural light, the clothing is shown clearly throughout the reveal. Viral unboxing energy.",
+      "image_source": "previous_step",
+      "model": "kling-v1-6",
+      "duration": "10",
+      "aspect_ratio": "9:16"
+    }
+  ]
+}

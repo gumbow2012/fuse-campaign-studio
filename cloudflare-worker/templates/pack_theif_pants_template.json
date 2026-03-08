@@ -1,0 +1,30 @@
+{
+  "name": "PACK THEIF (Pants)",
+  "description": "Thief-style unboxing — sneaky character stealing pants from a box, street fashion energy.",
+  "category": "Street",
+  "output_type": "video",
+  "estimated_credits_per_run": 50,
+  "version": "1.0",
+  "tags": ["street", "unboxing", "pants", "video"],
+  "user_inputs": [
+    { "key": "product_image", "label": "Product Image (Pants)", "type": "image", "required": true }
+  ],
+  "steps": [
+    {
+      "id": "image_edit",
+      "type": "nano_banana_pro",
+      "prompt": "Streetwear thief aesthetic. Someone is pulling a pair of pants out of a shipping box or package dramatically. Urban street background, hooded figure, cinematic low-angle shot, the pants are the hero item shown prominently. Graffiti background, cinematic color grade, high fashion streetwear energy. The pants product is clearly visible and detailed.",
+      "locked_inputs": [],
+      "user_input_keys": ["product_image"]
+    },
+    {
+      "id": "video_gen",
+      "type": "kling",
+      "prompt": "Streetwear thief video. A hooded character dramatically pulls the pants out of a box, holds them up to admire, turns them to show both sides. Urban street setting, cinematic camera move around the product, streetwear fashion energy, the pants are shown clearly throughout.",
+      "image_source": "previous_step",
+      "model": "kling-v1-6",
+      "duration": "10",
+      "aspect_ratio": "9:16"
+    }
+  ]
+}

@@ -1,0 +1,30 @@
+{
+  "name": "DOCTOR",
+  "description": "Medical professional aesthetic — clean clinical setting meets high fashion. Unexpected and sharp.",
+  "category": "Editorial",
+  "output_type": "video",
+  "estimated_credits_per_run": 50,
+  "version": "1.0",
+  "tags": ["editorial", "clinical", "fashion", "video"],
+  "user_inputs": [
+    { "key": "product_image", "label": "Product Image", "type": "image", "required": true }
+  ],
+  "steps": [
+    {
+      "id": "image_edit",
+      "type": "nano_banana_pro",
+      "prompt": "Fashion editorial in a medical/clinical setting. A model wearing the clothing product poses in a clean clinic or hospital hallway. Sterile white walls, clinical lighting, stainless steel elements in the background. The fashion clothing contrasts sharply with the medical environment creating an editorial tension. Think Balenciaga runway meets ER. The clothing product is crisp, detailed, and clearly shown. High fashion unexpected location editorial.",
+      "locked_inputs": [],
+      "user_input_keys": ["product_image"]
+    },
+    {
+      "id": "video_gen",
+      "type": "kling",
+      "prompt": "Clinical fashion video. Model in the clothing product walks through a clean white hospital corridor, clinical fluorescent lighting, sterile environment creates high contrast with the fashion clothing, slow confident walk, camera tracks alongside the model, the clothing details are sharp and clear against the white background.",
+      "image_source": "previous_step",
+      "model": "kling-v1-6",
+      "duration": "10",
+      "aspect_ratio": "9:16"
+    }
+  ]
+}

@@ -1,0 +1,30 @@
+{
+  "name": "JEANS",
+  "description": "Denim editorial — classic jeans campaign. Timeless fashion imagery, iconic denim energy.",
+  "category": "Editorial",
+  "output_type": "video",
+  "estimated_credits_per_run": 50,
+  "version": "1.0",
+  "tags": ["editorial", "denim", "jeans", "video"],
+  "user_inputs": [
+    { "key": "product_image", "label": "Product Image (Jeans/Denim)", "type": "image", "required": true }
+  ],
+  "steps": [
+    {
+      "id": "image_edit",
+      "type": "nano_banana_pro",
+      "prompt": "Iconic denim jeans editorial campaign photo. A model wearing the jeans in a classic campaign setting — may be an urban rooftop, industrial loft, or sun-drenched outdoor location. Clean, simple, confident. The jeans are the hero item — texture, fit, and wash are all crisp and detailed. Levi's / Calvin Klein / classic denim brand energy. Natural warm light, medium format photography quality.",
+      "locked_inputs": [],
+      "user_input_keys": ["product_image"]
+    },
+    {
+      "id": "video_gen",
+      "type": "kling",
+      "prompt": "Denim campaign video. Model in the jeans walks confidently through a sun-lit setting, the denim fabric moves naturally, camera follows at a medium distance, slow-motion walk cycle, jeans texture and fit are clearly shown. Classic denim brand aesthetic, warm golden light, timeless fashion film.",
+      "image_source": "previous_step",
+      "model": "kling-v1-6",
+      "duration": "10",
+      "aspect_ratio": "9:16"
+    }
+  ]
+}

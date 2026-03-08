@@ -1,0 +1,30 @@
+{
+  "name": "ARMORED TRUCK",
+  "description": "Armored truck heist aesthetic — guards, dramatic cinematic, product drop energy. Luxury streetwear meets crime film.",
+  "category": "Street",
+  "output_type": "video",
+  "estimated_credits_per_run": 50,
+  "version": "1.0",
+  "tags": ["street", "cinematic", "heist", "video"],
+  "user_inputs": [
+    { "key": "product_image", "label": "Product Image", "type": "image", "required": true }
+  ],
+  "steps": [
+    {
+      "id": "image_edit",
+      "type": "nano_banana_pro",
+      "prompt": "Cinematic armored truck fashion photo. A figure wearing the clothing product stands next to or emerges from an armored truck. Urban city setting, dramatic cinematography, security guards or crew in the background. The clothing product is worn with extreme confidence — this is a high-value drop. Think Kanye, Rick Owens, or Supreme drop energy. Cinematic color grade, dramatic low-angle perspective, the clothing is sharp and detailed.",
+      "locked_inputs": [],
+      "user_input_keys": ["product_image"]
+    },
+    {
+      "id": "video_gen",
+      "type": "kling",
+      "prompt": "Armored truck heist fashion video. Figure in the clothing product steps out of an armored truck dramatically, security escorts, cinematic slow-motion walk, urban backdrop, dramatic color grade, the clothing is shown prominently as the figure moves with confidence. High-value drop energy, cinematic action film aesthetic.",
+      "image_source": "previous_step",
+      "model": "kling-v1-6",
+      "duration": "10",
+      "aspect_ratio": "9:16"
+    }
+  ]
+}

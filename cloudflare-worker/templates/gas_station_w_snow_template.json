@@ -1,0 +1,30 @@
+{
+  "name": "GAS STATION W SNOW",
+  "description": "Gas station at night in the snow — moody cinematic, neon reflections, cold weather fashion.",
+  "category": "Street",
+  "output_type": "video",
+  "estimated_credits_per_run": 50,
+  "version": "1.0",
+  "tags": ["street", "winter", "cinematic", "video"],
+  "user_inputs": [
+    { "key": "product_image", "label": "Product Image", "type": "image", "required": true }
+  ],
+  "steps": [
+    {
+      "id": "image_edit",
+      "type": "nano_banana_pro",
+      "prompt": "Cinematic gas station night photo in heavy snowfall. A model wearing the clothing product stands at a glowing gas station at night. Snow falling heavily, neon sign reflections on the wet concrete, warm orange and cool blue color contrast from the gas station canopy lights. The clothing product is clearly visible, contrasting beautifully against the snow and neon. Cinematic still, 35mm film look, moody and atmospheric.",
+      "locked_inputs": [],
+      "user_input_keys": ["product_image"]
+    },
+    {
+      "id": "video_gen",
+      "type": "kling",
+      "prompt": "Gas station snow cinematic video. Model wearing the clothing walks slowly through heavy snowfall under a gas station canopy, snow blowing around them, neon reflections on the ground, breath visible in the cold air, the clothing moves naturally in the wind, moody cinematic camera movement, atmospheric night lighting. Beautiful and melancholic.",
+      "image_source": "previous_step",
+      "model": "kling-v1-6",
+      "duration": "10",
+      "aspect_ratio": "9:16"
+    }
+  ]
+}

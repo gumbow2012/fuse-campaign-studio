@@ -1,0 +1,30 @@
+{
+  "name": "RAVEN",
+  "description": "Dark editorial — moody cinematic, raven aesthetic, high fashion. Deep shadows, dramatic contrast.",
+  "category": "Editorial",
+  "output_type": "video",
+  "estimated_credits_per_run": 50,
+  "version": "1.0",
+  "tags": ["editorial", "dark", "cinematic", "video"],
+  "user_inputs": [
+    { "key": "product_image", "label": "Product Image", "type": "image", "required": true }
+  ],
+  "steps": [
+    {
+      "id": "image_edit",
+      "type": "nano_banana_pro",
+      "prompt": "Dark editorial fashion photography. A model wearing the clothing product in a dramatically lit scene. Raven-black aesthetic — deep shadows, dramatic contrast, moody atmosphere. Gothic architecture or dark industrial setting in the background. Shot on medium format, tack sharp clothing detail, cinematic color grading with crushed blacks and desaturated palette. High fashion Vogue editorial quality.",
+      "locked_inputs": [],
+      "user_input_keys": ["product_image"]
+    },
+    {
+      "id": "video_gen",
+      "type": "kling",
+      "prompt": "Dark moody fashion film. Model with the clothing product stands in dramatic low-key lighting, slow cinematic camera push-in, ravens or dark feathers floating in background, shadows playing across the clothing fabric, Gothic high fashion energy, slow motion fabric movement. Black and dark editorial cinema aesthetic.",
+      "image_source": "previous_step",
+      "model": "kling-v1-6",
+      "duration": "10",
+      "aspect_ratio": "9:16"
+    }
+  ]
+}

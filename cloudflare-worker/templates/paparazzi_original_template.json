@@ -1,0 +1,30 @@
+{
+  "name": "PAPARAZZI (Original)",
+  "description": "Original Paparazzi template — the first version. Celebrity street energy, camera flashes, fashion week.",
+  "category": "Street",
+  "output_type": "video",
+  "estimated_credits_per_run": 50,
+  "version": "1.0",
+  "tags": ["street", "paparazzi", "original", "video"],
+  "user_inputs": [
+    { "key": "product_image", "label": "Product Image", "type": "image", "required": true }
+  ],
+  "steps": [
+    {
+      "id": "image_edit",
+      "type": "nano_banana_pro",
+      "prompt": "Original Paparazzi style celebrity photo. A model wearing the clothing product is caught by paparazzi leaving a fashion event. Side-of-the-street setting, photographers with cameras visible in frame periphery, camera flash lighting effect on the subject, the model looks effortlessly stylish and caught mid-stride. This is the classic iconic celebrity paparazzi shot. Slightly candid feel but the clothing is clearly detailed and beautiful. 35mm film photography quality.",
+      "locked_inputs": [],
+      "user_input_keys": ["product_image"]
+    },
+    {
+      "id": "video_gen",
+      "type": "kling",
+      "prompt": "Original paparazzi video clip. Celebrity model leaving a venue, photographers surrounding them with cameras flashing, the model walks through confidently, the clothing is shown beautifully in the flash-lit chaos, handheld camera following the subject, classic celebrity street photography motion.",
+      "image_source": "previous_step",
+      "model": "kling-v1-6",
+      "duration": "10",
+      "aspect_ratio": "9:16"
+    }
+  ]
+}

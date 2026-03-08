@@ -1,0 +1,30 @@
+{
+  "name": "GARAGE guy",
+  "description": "Garage mechanic aesthetic — gritty industrial setting, grease and grit meets fashion.",
+  "category": "Street",
+  "output_type": "video",
+  "estimated_credits_per_run": 50,
+  "version": "1.0",
+  "tags": ["street", "garage", "industrial", "video"],
+  "user_inputs": [
+    { "key": "product_image", "label": "Product Image", "type": "image", "required": true }
+  ],
+  "steps": [
+    {
+      "id": "image_edit",
+      "type": "nano_banana_pro",
+      "prompt": "Garage mechanic fashion photography. A person wearing the clothing product inside a gritty auto garage or workshop. Cars or motorcycles in the background, tools hanging on walls, industrial fluorescent lighting with some natural light from the garage door. The clothing product is clean and stands out against the gritty garage environment. Editorial meets street — fashion in unexpected places. Cinematic color grade with warm and cool contrast.",
+      "locked_inputs": [],
+      "user_input_keys": ["product_image"]
+    },
+    {
+      "id": "video_gen",
+      "type": "kling",
+      "prompt": "Garage fashion video. Person in the clothing product moves through a gritty auto garage, leans against a car or picks up a tool, the clothing contrasts with the industrial environment, camera moves slowly around the subject, warm garage lighting, the clothing fabric and details are shown clearly. Authentic blue-collar fashion energy.",
+      "image_source": "previous_step",
+      "model": "kling-v1-6",
+      "duration": "10",
+      "aspect_ratio": "9:16"
+    }
+  ]
+}

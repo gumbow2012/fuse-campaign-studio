@@ -1,0 +1,30 @@
+{
+  "name": "ICE 2.0",
+  "description": "Icy cold aesthetic evolved — frozen environment, crystal-clear editorial. The next generation of cold.",
+  "category": "Editorial",
+  "output_type": "video",
+  "estimated_credits_per_run": 50,
+  "version": "1.0",
+  "tags": ["editorial", "ice", "winter", "video"],
+  "user_inputs": [
+    { "key": "product_image", "label": "Product Image", "type": "image", "required": true }
+  ],
+  "steps": [
+    {
+      "id": "image_edit",
+      "type": "nano_banana_pro",
+      "prompt": "Hyper-clean ice editorial fashion photo. Model wearing the clothing product in an ultra-modern frozen environment — crystal clear ice formations, blue-white color palette, cold vapor mist in the air. Futuristic winter aesthetic, the clothing contrasts beautifully against the icy background. Studio strobe lighting with blue gels, tack-sharp details on the clothing, editorial magazine quality. Ice and chrome reflections.",
+      "locked_inputs": [],
+      "user_input_keys": ["product_image"]
+    },
+    {
+      "id": "video_gen",
+      "type": "kling",
+      "prompt": "Ice editorial video. Model with the clothing product in a frozen crystal environment, ice formations cracking or forming around them, cold breath mist, slow orbit camera movement revealing the clothing in icy blue light, frost particles floating in the air. Ultra-modern winter aesthetic, the clothing is the focal point.",
+      "image_source": "previous_step",
+      "model": "kling-v1-6",
+      "duration": "10",
+      "aspect_ratio": "9:16"
+    }
+  ]
+}

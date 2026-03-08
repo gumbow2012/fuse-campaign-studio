@@ -1,0 +1,30 @@
+{
+  "name": "Copy of UNBOXING",
+  "description": "Unboxing variant — alternative angle and energy for product reveal content.",
+  "category": "UGC",
+  "output_type": "video",
+  "estimated_credits_per_run": 50,
+  "version": "1.0",
+  "tags": ["ugc", "unboxing", "reveal", "video"],
+  "user_inputs": [
+    { "key": "product_image", "label": "Product Image", "type": "image", "required": true }
+  ],
+  "steps": [
+    {
+      "id": "image_edit",
+      "type": "nano_banana_pro",
+      "prompt": "Product unboxing photography, alternative angle. Side-angle view of a person opening a premium package and revealing the clothing product. The unboxing is happening on a wooden table or marble surface, natural window light, the person's hands and slight torso visible, casual but styled. The clothing product is the clear hero item being revealed. Authentic unboxing moment, lifestyle photography.",
+      "locked_inputs": [],
+      "user_input_keys": ["product_image"]
+    },
+    {
+      "id": "video_gen",
+      "type": "kling",
+      "prompt": "Unboxing reveal from a side angle. Person at a table opens a package, the clothing product is slowly revealed and lifted out, held up and admired, slight turn to show the product details. Natural light from the side, casual home or studio setting, authentic content creator energy.",
+      "image_source": "previous_step",
+      "model": "kling-v1-6",
+      "duration": "10",
+      "aspect_ratio": "9:16"
+    }
+  ]
+}

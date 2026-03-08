@@ -68,7 +68,8 @@ export async function uploadFile(token: string, file: File): Promise<UploadResul
   const fd = new FormData();
   fd.append('file', file);
   const data = await api<any>('/api/upload', token, { method: 'POST', formData: fd });
-  return { imageUrl: data.imageUrl || data.url, key: data.key || data.assetKey };
+  // Worker returns { imageUrl, key } — imageUrl is the full proxied URL
+  return { imageUrl: data.imageUrl || data.url, key: data.key || data.assetKey || '' };
 }
 
 /* ── Projects ── */
@@ -77,8 +78,13 @@ export async function createProject(
   token: string,
   templateId: string,
   inputs: Record<string, string>,
-): Promise<{ ok: boolean; projectId: string }> {
-  return api('/api/projects', token, { method: 'POST', body: { template_id: templateId, inputs } });
+): Promise<{ ok: boolean; projectId: string; credits_used?: number }> {
+  // templateId is actually the template NAME in the V6 pipeline
+  const data = await api<any>('/api/projects', token, {
+    method: 'POST',
+    body: { template_name: templateId, user_inputs: inputs, inputs },
+  });
+  return { ok: data.ok, projectId: data.projectId || data.project_id, credits_used: data.credits_used };
 }
 
 export async function enqueueProject(
