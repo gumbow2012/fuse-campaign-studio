@@ -41,13 +41,18 @@ function sleep(ms: number) {
   return new Promise((r) => setTimeout(r, ms));
 }
 
+// UUID v4 regex — used to validate user IDs before storing in UUID column
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
 /* ── GET /api/projects/:id — Job status ── */
 
 export async function handleProjectStatus(request: Request, env: Env, projectId: string): Promise<Response> {
   const userId = await verifyToken(request, env);
 
   const project = await getProject(env, projectId);
-  if (!project || project.user_id !== userId) {
+  // Allow access if: user_id matches, or project has no user_id (service-created), or caller used non-UUID API key
+  const callerIsUuid = UUID_RE.test(userId);
+  if (!project || (callerIsUuid && project.user_id && project.user_id !== userId)) {
     return Response.json({ error: "Project not found" }, { status: 404 });
   }
 
@@ -88,13 +93,17 @@ export async function handleCreateProject(request: Request, env: Env): Promise<R
   // Accept both inputs (frontend) and user_inputs (autorun script)
   const inputs = body.inputs || body.user_inputs || {};
 
+  // user_id must be UUID — use a fixed service UUID if API key auth supplied a non-UUID identifier
+  const SERVICE_UUID = "00000000-0000-4000-8000-000000000001";
+  const userIdForDb = UUID_RE.test(userId) ? userId : SERVICE_UUID;
+
   const now = new Date().toISOString();
   const projRes = await supabaseFetch(env, "/projects", {
     method: "POST",
     body: {
       template_id: templateId,
       template_name: templateName || null,
-      user_id: userId,
+      user_id: userIdForDb,
       status: "queued",
       progress: 0,
       inputs,
