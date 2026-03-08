@@ -93,9 +93,8 @@ export async function handleCreateProject(request: Request, env: Env): Promise<R
   // Accept both inputs (frontend) and user_inputs (autorun script)
   const inputs = body.inputs || body.user_inputs || {};
 
-  // user_id must be UUID — use a fixed service UUID if API key auth supplied a non-UUID identifier
-  const SERVICE_UUID = "00000000-0000-4000-8000-000000000001";
-  const userIdForDb = UUID_RE.test(userId) ? userId : SERVICE_UUID;
+  // user_id must be a real Supabase auth UUID — use null for service/API-key calls
+  const userIdForDb = UUID_RE.test(userId) ? userId : null;
 
   const now = new Date().toISOString();
   const projRes = await supabaseFetch(env, "/projects", {
