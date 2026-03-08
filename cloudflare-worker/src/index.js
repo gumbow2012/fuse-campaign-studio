@@ -23,13 +23,13 @@ const BUNDLED_TEMPLATES = {
       "video"
     ],
     "output_type": "video",
-    "estimated_credits_per_run": 50,
+    "estimated_credits_per_run": 572,
     "is_active": true,
     "asset_requirements": "Any bold statement piece. The cinematic heist scene is generated around it.",
     "input_manifest": [
       {
-        "key": "front_outfit",
-        "label": "Front Outfit",
+        "key": "clothing",
+        "label": "Clothing",
         "type": "image",
         "required": true,
         "accepts": [
@@ -38,20 +38,20 @@ const BUNDLED_TEMPLATES = {
           "image/webp"
         ],
         "max_size_mb": 10,
-        "hint": "Front of the product — will be worn in the armored truck heist scene."
+        "hint": "The clothing item — will be worn in the armored truck heist scene."
       },
       {
-        "key": "back_outfit",
-        "label": "Back Outfit",
+        "key": "logo",
+        "label": "Logo",
         "type": "image",
-        "required": false,
+        "required": true,
         "accepts": [
           "image/jpeg",
           "image/png",
           "image/webp"
         ],
         "max_size_mb": 10,
-        "hint": "Optional back view as the character moves in the scene."
+        "hint": "Brand logo — will be featured on the armored truck."
       }
     ],
     "steps": [
@@ -61,13 +61,13 @@ const BUNDLED_TEMPLATES = {
         "prompt": "Cinematic armored truck fashion photo. A figure wearing the clothing product stands next to or emerges from an armored truck. Urban city setting, dramatic cinematography, security guards in background. The clothing worn with extreme confidence — this is a high-value drop. Think Supreme or Kanye drop energy. Cinematic color grade, dramatic low-angle perspective.",
         "user_prompt_key": null,
         "user_input_keys": [
-          "front_outfit",
-          "back_outfit"
+          "clothing",
+          "logo"
         ],
         "locked_inputs": [],
         "settings": {
           "resolution": "2K",
-          "num_images": 1,
+          "num_images": 12,
           "output_format": "png"
         }
       },
@@ -89,7 +89,8 @@ const BUNDLED_TEMPLATES = {
     "outputs": {
       "primary_type": "video",
       "items": [
-        "image",
+        "image", "image", "image", "image", "image", "image",
+        "image", "image", "image", "image", "image", "image",
         "video"
       ]
     }
@@ -1772,11 +1773,15 @@ async function callNanoBananaPro(env, prompt, imageUrls, settings) {
           headers: { Authorization: `Key ${env.FAL_API_KEY}` },
         });
         const result = await resultRes.json();
-        const url = result.images?.[0]?.url || result.image?.url;
-        if (!url) throw new Error("FAL completed but no image URL in response");
-        const imgRes = await fetch(url);
-        if (!imgRes.ok) throw new Error("Failed to download FAL image");
-        return await imgRes.arrayBuffer();
+        // Return all images (num_images may be > 1)
+        const urls = (result.images || (result.image ? [result.image] : [])).map(i => i.url).filter(Boolean);
+        if (!urls.length) throw new Error("FAL completed but no image URL in response");
+        const buffers = await Promise.all(urls.map(async (url) => {
+          const r = await fetch(url);
+          if (!r.ok) throw new Error("Failed to download FAL image");
+          return r.arrayBuffer();
+        }));
+        return buffers; // always an array
       }
       if (statusData.status === "FAILED") {
         throw new Error(`FAL failed: ${statusData.error || "Unknown"}`);
@@ -1918,15 +1923,13 @@ async function runPipeline(env, projectId) {
 
         console.log(`[${projectId}][${step.id}] FAL: ${imageUrls.length} images, prompt: "${prompt.slice(0, 80)}..."`);
 
-        lastImageBuffer = await callNanoBananaPro(env, prompt, imageUrls, settings);
-        lastImageKey = `outputs/${projectId}/${step.id}_${Date.now()}.png`;
-        await storeInR2(env, lastImageKey, lastImageBuffer, "image/png");
-
-        outputs.items.push({
-          type: "image",
-          step_id: step.id,
-          url: `${WORKER_URL}/assets/${lastImageKey}`,
-        });
+        const imageBuffers = await callNanoBananaPro(env, prompt, imageUrls, settings);
+        for (let imgIdx = 0; imgIdx < imageBuffers.length; imgIdx++) {
+          const imgKey = `outputs/${projectId}/${step.id}_${Date.now()}_${imgIdx}.png`;
+          await storeInR2(env, imgKey, imageBuffers[imgIdx], "image/png");
+          if (imgIdx === 0) { lastImageKey = imgKey; lastImageBuffer = imageBuffers[0]; }
+          outputs.items.push({ type: "image", step_id: step.id, url: `${WORKER_URL}/assets/${imgKey}` });
+        }
 
         await updateProject(env, projectId, { progress: progress + 5, outputs });
 
