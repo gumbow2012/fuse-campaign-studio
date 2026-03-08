@@ -13,11 +13,11 @@
   "output_type": "video",
   "estimated_credits_per_run": 50,
   "is_active": true,
-  "asset_requirements": "Clear shot of the denim/pants. Add a back-view photo for more detailed output.",
+  "asset_requirements": "Clear shot of the denim/pants. Front required, back view optional.",
   "input_manifest": [
     {
       "key": "product_image",
-      "label": "Pants / Jeans (Front View)",
+      "label": "Jeans (Front)",
       "type": "image",
       "required": true,
       "accepts": [
@@ -26,11 +26,11 @@
         "image/webp"
       ],
       "max_size_mb": 10,
-      "hint": "Front view of the denim/pants. Flat lay, worn, or folded all work."
+      "hint": "Front view of the jeans/denim. Flat lay, worn, or folded."
     },
     {
       "key": "product_back",
-      "label": "Pants / Jeans (Back View)",
+      "label": "Jeans (Back)",
       "type": "image",
       "required": false,
       "accepts": [
@@ -39,7 +39,7 @@
         "image/webp"
       ],
       "max_size_mb": 10,
-      "hint": "Optional back view. Adds back detail to the generated image."
+      "hint": "Optional back view for pocket and back detail."
     }
   ],
   "steps": [

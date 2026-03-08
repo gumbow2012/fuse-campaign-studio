@@ -14,11 +14,11 @@
   "output_type": "video",
   "estimated_credits_per_run": 50,
   "is_active": true,
-  "asset_requirements": "Any bold statement piece. The cinematic heist scene is generated around your product.",
+  "asset_requirements": "Any bold statement piece. The cinematic heist scene is generated around it.",
   "input_manifest": [
     {
-      "key": "product_image",
-      "label": "Product (Front View)",
+      "key": "front_outfit",
+      "label": "Front Outfit",
       "type": "image",
       "required": true,
       "accepts": [
@@ -30,8 +30,8 @@
       "hint": "Front of the product — will be worn in the armored truck heist scene."
     },
     {
-      "key": "product_back",
-      "label": "Product (Back View) — Optional",
+      "key": "back_outfit",
+      "label": "Back Outfit",
       "type": "image",
       "required": false,
       "accepts": [
@@ -40,7 +40,7 @@
         "image/webp"
       ],
       "max_size_mb": 10,
-      "hint": "Optional back view for more detail as the character moves in the scene."
+      "hint": "Optional back view as the character moves in the scene."
     }
   ],
   "steps": [
@@ -50,8 +50,8 @@
       "prompt": "Cinematic armored truck fashion photo. A figure wearing the clothing product stands next to or emerges from an armored truck. Urban city setting, dramatic cinematography, security guards in background. The clothing worn with extreme confidence — this is a high-value drop. Think Supreme or Kanye drop energy. Cinematic color grade, dramatic low-angle perspective.",
       "user_prompt_key": null,
       "user_input_keys": [
-        "product_image",
-        "product_back"
+        "front_outfit",
+        "back_outfit"
       ],
       "locked_inputs": [],
       "settings": {

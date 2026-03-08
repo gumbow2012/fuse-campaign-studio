@@ -16,8 +16,8 @@
   "asset_requirements": "Front-facing product. Dark/black backgrounds enhance the raven aesthetic.",
   "input_manifest": [
     {
-      "key": "product_image",
-      "label": "Product (Front View)",
+      "key": "front_outfit",
+      "label": "Front Outfit",
       "type": "image",
       "required": true,
       "accepts": [
@@ -29,8 +29,8 @@
       "hint": "Front-facing product. Dark or black backgrounds work best."
     },
     {
-      "key": "product_back",
-      "label": "Product (Back View) — Optional",
+      "key": "back_outfit",
+      "label": "Back Outfit",
       "type": "image",
       "required": false,
       "accepts": [
@@ -39,7 +39,7 @@
         "image/webp"
       ],
       "max_size_mb": 10,
-      "hint": "Optional back view for more detail in the dark editorial scene."
+      "hint": "Optional back view for more detail in the editorial scene."
     }
   ],
   "steps": [
@@ -49,8 +49,8 @@
       "prompt": "Dark editorial fashion photography. A model wearing the clothing product in a dramatically lit scene. Raven-black aesthetic — deep shadows, dramatic contrast, moody atmosphere. Gothic architecture or dark industrial setting. Medium format, tack sharp clothing detail, cinematic color grading with crushed blacks and desaturated palette. High fashion Vogue editorial quality.",
       "user_prompt_key": null,
       "user_input_keys": [
-        "product_image",
-        "product_back"
+        "front_outfit",
+        "back_outfit"
       ],
       "locked_inputs": [],
       "settings": {

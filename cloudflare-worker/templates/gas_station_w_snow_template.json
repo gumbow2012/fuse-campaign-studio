@@ -14,11 +14,11 @@
   "output_type": "video",
   "estimated_credits_per_run": 50,
   "is_active": true,
-  "asset_requirements": "Upload TWO images: (1) your top/jacket, (2) your pants. Cinematic full outfit shot in a snowy gas station scene.",
+  "asset_requirements": "Upload front and back of your full outfit. Logo optional. Clean backgrounds preferred.",
   "input_manifest": [
     {
-      "key": "product_top",
-      "label": "Top (Hoodie / Jacket / Shirt)",
+      "key": "front_top_bottoms",
+      "label": "Front Top + Bottoms",
       "type": "image",
       "required": true,
       "accepts": [
@@ -27,31 +27,45 @@
         "image/webp"
       ],
       "max_size_mb": 10,
-      "hint": "Top half of the outfit — hoodie, jacket, or shirt. Clean background preferred."
+      "hint": "Front view of the full outfit on a clean background."
     },
     {
-      "key": "product_bottom",
-      "label": "Pants / Bottoms",
+      "key": "back_top_bottoms",
+      "label": "Back Top + Bottoms",
       "type": "image",
-      "required": true,
+      "required": false,
       "accepts": [
         "image/jpeg",
         "image/png",
         "image/webp"
       ],
       "max_size_mb": 10,
-      "hint": "Bottom half — pants or shorts. Clean background preferred."
+      "hint": "Back view of the full outfit."
+    },
+    {
+      "key": "logo",
+      "label": "Logo",
+      "type": "image",
+      "required": false,
+      "accepts": [
+        "image/jpeg",
+        "image/png",
+        "image/webp"
+      ],
+      "max_size_mb": 10,
+      "hint": "Brand logo — will appear in the gas station environment."
     }
   ],
   "steps": [
     {
       "id": "image_edit",
       "type": "nano_banana_pro",
-      "prompt": "Cinematic fashion photography at a snowy gas station at night. A model wearing a full outfit — jacket/top and pants shown together — standing under harsh fluorescent gas station lights with snow falling around them. Cinematic color grade, cold atmosphere, streetwear energy. The full outfit is crisp and detailed in the dramatic lighting.",
+      "prompt": "Cinematic fashion photography at a snowy gas station at night. A model wearing the full outfit — front and back details shown — stands under harsh fluorescent gas station lights with snow falling around them. The brand logo glows somewhere in the scene. Cinematic color grade, cold blue atmosphere, streetwear energy.",
       "user_prompt_key": null,
       "user_input_keys": [
-        "product_top",
-        "product_bottom"
+        "front_top_bottoms",
+        "back_top_bottoms",
+        "logo"
       ],
       "locked_inputs": [],
       "settings": {

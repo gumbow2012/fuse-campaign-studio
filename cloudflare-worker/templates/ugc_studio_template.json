@@ -16,8 +16,8 @@
   "asset_requirements": "Product on white or light background for cleanest result.",
   "input_manifest": [
     {
-      "key": "product_image",
-      "label": "Product (Front)",
+      "key": "front_outfit",
+      "label": "Front Outfit",
       "type": "image",
       "required": true,
       "accepts": [
@@ -29,8 +29,8 @@
       "hint": "Front of the product on clean/white background."
     },
     {
-      "key": "product_back",
-      "label": "Product (Back) — Optional",
+      "key": "back_outfit",
+      "label": "Back Outfit",
       "type": "image",
       "required": false,
       "accepts": [
@@ -49,8 +49,8 @@
       "prompt": "Clean studio UGC content creator photo. A person is wearing and showing off the clothing product against a clean white or light gray background. Ring light setup, direct camera facing shot, casual but styled, TikTok creator energy. The clothing product is the clear hero, crisp and detailed. Authentic Instagram/TikTok creator vibe.",
       "user_prompt_key": null,
       "user_input_keys": [
-        "product_image",
-        "product_back"
+        "front_outfit",
+        "back_outfit"
       ],
       "locked_inputs": [],
       "settings": {

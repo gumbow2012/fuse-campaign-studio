@@ -13,11 +13,11 @@
   "output_type": "video",
   "estimated_credits_per_run": 50,
   "is_active": true,
-  "asset_requirements": "Any product photo. The delivery worker outfit scene is generated around your product.",
+  "asset_requirements": "Any product photo. The delivery scene is generated around it.",
   "input_manifest": [
     {
-      "key": "product_image",
-      "label": "Product (Front View)",
+      "key": "front_outfit",
+      "label": "Front Outfit",
       "type": "image",
       "required": true,
       "accepts": [
@@ -26,11 +26,11 @@
         "image/webp"
       ],
       "max_size_mb": 10,
-      "hint": "Front of the product — will be shown being delivered in the Amazon van scene."
+      "hint": "Front of the product — will be shown delivered in the Amazon van scene."
     },
     {
-      "key": "product_back",
-      "label": "Product (Back View) — Optional",
+      "key": "back_outfit",
+      "label": "Back Outfit",
       "type": "image",
       "required": false,
       "accepts": [
@@ -39,7 +39,7 @@
         "image/webp"
       ],
       "max_size_mb": 10,
-      "hint": "Optional back view for more product detail in the shot."
+      "hint": "Optional back view for more product detail."
     }
   ],
   "steps": [
@@ -49,8 +49,8 @@
       "prompt": "Amazon delivery unboxing photo. A delivery driver in a uniform is opening a brown Amazon box to reveal the clothing product. Doorstep setting, suburban house door background, the clothing product is being pulled out of the box dramatically. Natural daylight, photorealistic, the clothing clearly visible and detailed.",
       "user_prompt_key": null,
       "user_input_keys": [
-        "product_image",
-        "product_back"
+        "front_outfit",
+        "back_outfit"
       ],
       "locked_inputs": [],
       "settings": {

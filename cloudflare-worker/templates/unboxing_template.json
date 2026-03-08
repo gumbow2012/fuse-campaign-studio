@@ -13,11 +13,11 @@
   "output_type": "video",
   "estimated_credits_per_run": 50,
   "is_active": true,
-  "asset_requirements": "Product on clean background. Add a second product or back view for a full set reveal.",
+  "asset_requirements": "Product on clean background. Add a second item for a full set reveal.",
   "input_manifest": [
     {
       "key": "product_image",
-      "label": "Product (Main)",
+      "label": "Product",
       "type": "image",
       "required": true,
       "accepts": [
@@ -26,11 +26,11 @@
         "image/webp"
       ],
       "max_size_mb": 10,
-      "hint": "Main product — the hero item being unboxed. Flat lay or folded works great."
+      "hint": "Main product — the hero item being unboxed. Flat lay or folded."
     },
     {
-      "key": "product_second",
-      "label": "Second Item (Optional)",
+      "key": "second_item",
+      "label": "Second Item",
       "type": "image",
       "required": false,
       "accepts": [
@@ -39,7 +39,7 @@
         "image/webp"
       ],
       "max_size_mb": 10,
-      "hint": "Optional — add a second item (pants, hoodie, accessories) to include in the reveal."
+      "hint": "Optional second item (pants, hoodie, accessories) for the reveal."
     }
   ],
   "steps": [
@@ -50,7 +50,7 @@
       "user_prompt_key": null,
       "user_input_keys": [
         "product_image",
-        "product_second"
+        "second_item"
       ],
       "locked_inputs": [],
       "settings": {

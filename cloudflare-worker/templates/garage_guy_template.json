@@ -13,11 +13,11 @@
   "output_type": "video",
   "estimated_credits_per_run": 50,
   "is_active": true,
-  "asset_requirements": "Any streetwear product. Workwear, hoodies, and sneakers all look great in the garage setting.",
+  "asset_requirements": "Upload your outfit front, brand logo, and back. All on clean backgrounds.",
   "input_manifest": [
     {
-      "key": "product_image",
-      "label": "Product (Front View)",
+      "key": "front_top_bottoms",
+      "label": "Front Top + Bottoms",
       "type": "image",
       "required": true,
       "accepts": [
@@ -26,11 +26,11 @@
         "image/webp"
       ],
       "max_size_mb": 10,
-      "hint": "Front of the product. Will be styled on a character in a garage/workshop setting."
+      "hint": "Front view of the full outfit — top and bottoms together on a clean background."
     },
     {
-      "key": "product_back",
-      "label": "Product (Back View) — Optional",
+      "key": "logo",
+      "label": "Logo",
       "type": "image",
       "required": false,
       "accepts": [
@@ -39,18 +39,32 @@
         "image/webp"
       ],
       "max_size_mb": 10,
-      "hint": "Optional back view for a full look at the outfit."
+      "hint": "Your brand logo. Will be subtly incorporated into the scene."
+    },
+    {
+      "key": "back_outfit",
+      "label": "Back Outfit",
+      "type": "image",
+      "required": false,
+      "accepts": [
+        "image/jpeg",
+        "image/png",
+        "image/webp"
+      ],
+      "max_size_mb": 10,
+      "hint": "Back view of the outfit for back-of-jacket or full-look detail."
     }
   ],
   "steps": [
     {
       "id": "image_edit",
       "type": "nano_banana_pro",
-      "prompt": "Garage mechanic fashion photography. A person wearing the clothing product inside a gritty auto garage or workshop. Cars or motorcycles in background, tools on walls, industrial fluorescent lighting. The clothing product is clean and stands out against the gritty garage environment. Editorial meets street — fashion in unexpected places.",
+      "prompt": "Streetwear garage editorial. A model wearing the full outfit (front and back shown) stands in a gritty urban garage or workshop. The brand logo visible in the environment. Raw cinematic lighting, concrete floors, car parts, industrial energy. The outfit is the hero — clothing shown in full detail. Think Supreme x mechanic shop aesthetic.",
       "user_prompt_key": null,
       "user_input_keys": [
-        "product_image",
-        "product_back"
+        "front_top_bottoms",
+        "logo",
+        "back_outfit"
       ],
       "locked_inputs": [],
       "settings": {
