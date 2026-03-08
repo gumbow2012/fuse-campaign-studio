@@ -38,9 +38,10 @@ export interface ApiTemplate {
   output_type: string | null;
   estimated_credits_per_run: number;
   is_active: boolean;
-  input_schema: any[] | null;
+  input_schema: Array<{ key: string; label: string; type: string; required: boolean; hint?: string; accepts?: string[]; max_size_mb?: number }> | null;
   preview_url: string | null;
   tags: string[] | null;
+  asset_requirements: string | null;
 }
 
 export async function fetchTemplates(token: string): Promise<ApiTemplate[]> {
@@ -49,10 +50,11 @@ export async function fetchTemplates(token: string): Promise<ApiTemplate[]> {
 }
 
 export interface TemplateDetail {
-  user_inputs: { key: string; label: string; type: string; required: boolean }[];
+  user_inputs: { key: string; label: string; type: string; required: boolean; hint?: string }[];
   locked_images?: Record<string, string>;
   prompt?: string;
   video_prompt?: string;
+  asset_requirements?: string;
 }
 
 export async function fetchTemplateDetail(token: string, templateName: string): Promise<TemplateDetail> {
