@@ -27,12 +27,9 @@ function checkAuth(request, env) {
 
 // ============== SUPABASE ==============
 async function sbFetch(env, path, opts = {}) {
-  const key =
-    env.SUPABASE_SERVICE_ROLE_KEY &&
-    env.SUPABASE_SERVICE_ROLE_KEY.startsWith("eyJ") &&
-    env.SUPABASE_SERVICE_ROLE_KEY.length > 200
-      ? env.SUPABASE_SERVICE_ROLE_KEY
-      : env.SUPABASE_ANON_KEY;
+  // Always use anon key — RLS policy "open_worker_access" allows all worker writes.
+  // Service role key is intentionally not used here to avoid invalid-key errors.
+  const key = env.SUPABASE_ANON_KEY;
   return fetch(`${env.SUPABASE_URL}/rest/v1${path}`, {
     method: opts.method || "GET",
     headers: {

@@ -36,6 +36,7 @@ jobs:
             key=$(basename "$file")
             echo "Uploading $key..."
             npx wrangler r2 object put "fuse-templates/$key" \
+              --remote \
               --file="$file" \
               --content-type="application/json"
           done
