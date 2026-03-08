@@ -1668,7 +1668,8 @@ function getBundledTemplate(templateName) {
 }
 
 async function loadTemplateFromR2(env, templateName) {
-  const key = `${templateName.toLowerCase().replace(/\s+/g, "_")}_template.json`;
+  // Normalize: lowercase, strip parens, collapse spaces → underscores
+  const key = `${templateName.toLowerCase().replace(/[()]/g, "").replace(/\s+/g, "_")}_template.json`;
   try {
     if (env.FUSE_TEMPLATES) {
       const obj = await env.FUSE_TEMPLATES.get(key);
@@ -1731,10 +1732,14 @@ async function callNanoBananaPro(env, prompt, imageUrls, settings) {
   const payload = {
     prompt,
     num_images: settings?.num_images || 1,
-    resolution: settings?.resolution || "2K",
     output_format: settings?.output_format || "png",
   };
-  if (imageUrls && imageUrls.length > 0) payload.image_urls = imageUrls;
+  // fal nano-banana-pro/edit expects image_url (singular) as the primary input
+  if (imageUrls && imageUrls.length > 0) {
+    payload.image_url = imageUrls[0];
+    // Additional images as reference context
+    if (imageUrls.length > 1) payload.reference_image_urls = imageUrls.slice(1);
+  }
 
   const res = await fetch("https://queue.fal.run/fal-ai/nano-banana-pro/edit", {
     method: "POST",
@@ -1750,26 +1755,34 @@ async function callNanoBananaPro(env, prompt, imageUrls, settings) {
   const { request_id } = await res.json();
   if (!request_id) throw new Error("FAL: no request_id returned");
 
-  // Poll for completion (max 10 min)
+  // Poll status endpoint for completion (max 10 min)
+  const statusBase = `https://queue.fal.run/fal-ai/nano-banana-pro/edit/requests/${request_id}`;
   for (let i = 0; i < 120; i++) {
     await sleep(5000);
-    const statusRes = await fetch(
-      `https://queue.fal.run/fal-ai/nano-banana-pro/edit/requests/${request_id}`,
-      { headers: { Authorization: `Key ${env.FAL_API_KEY}` } }
-    );
-    if (!statusRes.ok) continue;
-    const data = await statusRes.json();
+    try {
+      const statusRes = await fetch(`${statusBase}/status`, {
+        headers: { Authorization: `Key ${env.FAL_API_KEY}` },
+      });
+      if (!statusRes.ok) continue;
+      const statusData = await statusRes.json();
 
-    if (data.status === "COMPLETED") {
-      const result = data.result || data;
-      const url = result.images?.[0]?.url || result.image?.url;
-      if (!url) throw new Error("FAL completed but no image URL in response");
-      const imgRes = await fetch(url);
-      if (!imgRes.ok) throw new Error("Failed to download FAL image");
-      return await imgRes.arrayBuffer();
-    }
-    if (data.status === "FAILED") {
-      throw new Error(`FAL failed: ${data.error || "Unknown"}`);
+      if (statusData.status === "COMPLETED") {
+        // Fetch the actual result
+        const resultRes = await fetch(statusBase, {
+          headers: { Authorization: `Key ${env.FAL_API_KEY}` },
+        });
+        const result = await resultRes.json();
+        const url = result.images?.[0]?.url || result.image?.url;
+        if (!url) throw new Error("FAL completed but no image URL in response");
+        const imgRes = await fetch(url);
+        if (!imgRes.ok) throw new Error("Failed to download FAL image");
+        return await imgRes.arrayBuffer();
+      }
+      if (statusData.status === "FAILED") {
+        throw new Error(`FAL failed: ${statusData.error || "Unknown"}`);
+      }
+    } catch (e) {
+      if (e.message && (e.message.includes("FAL failed") || e.message.includes("no image URL"))) throw e;
     }
   }
   throw new Error("FAL timed out after 10 minutes");
@@ -2037,9 +2050,26 @@ async function handleListTemplates(env) {
   return Response.json(templates);
 }
 
-async function handleGetTemplate(env, name) {
-  const template = await loadTemplateFromR2(env, name);
-  return Response.json({ ok: true, template });
+async function handleGetTemplate(env, nameOrKey) {
+  // nameOrKey can be "garage_guy_template.json" (full R2 key from frontend)
+  // or "GARAGE guy" (template name). Normalize to load from R2.
+  let template;
+  if (nameOrKey.endsWith("_template.json")) {
+    // Direct R2 key — load directly
+    const obj = await env.FUSE_TEMPLATES.get(decodeURIComponent(nameOrKey));
+    if (!obj) return Response.json({ error: `Template not found: ${nameOrKey}` }, { status: 404 });
+    template = JSON.parse(await obj.text());
+  } else {
+    template = await loadTemplateFromR2(env, nameOrKey);
+  }
+  // Map input_manifest → user_inputs for frontend compatibility
+  const manifest = getInputManifest(template);
+  return Response.json({
+    ...template,
+    user_inputs: manifest,
+    input_manifest: manifest,
+    asset_requirements: template.asset_requirements || null,
+  });
 }
 
 async function handleCreateProject(request, env) {

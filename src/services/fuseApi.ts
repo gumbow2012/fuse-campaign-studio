@@ -63,7 +63,7 @@ export async function fetchTemplateDetail(token: string, templateName: string): 
   const data = await api<any>(`/api/templates/${encodeURIComponent(templateName)}`, token);
   const t = data.template || data;
   return {
-    user_inputs: (t.input_manifest || []).map((f: any) => ({
+    user_inputs: (t.input_manifest || t.user_inputs || []).map((f: any) => ({
       key: f.key,
       label: f.label,
       type: f.type || 'image',
