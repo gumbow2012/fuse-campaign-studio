@@ -72,10 +72,14 @@ const UploadZone = ({ label, required, file, onFile, hint }: UploadZoneProps) =>
     const input = document.createElement("input");
     input.type = "file";
     input.accept = "image/*";
-    input.onchange = (e) => {
+    input.style.cssText = "position:fixed;top:-200px;left:-200px;opacity:0;pointer-events:none;";
+    document.body.appendChild(input);
+    input.addEventListener("change", (e) => {
       const f = (e.target as HTMLInputElement).files?.[0];
       if (f) onFile(f);
-    };
+      document.body.removeChild(input);
+    });
+    input.addEventListener("cancel", () => { document.body.removeChild(input); });
     input.click();
   };
 
@@ -153,7 +157,7 @@ interface ProjectResult {
 const TemplateRun = () => {
   const navigate = useNavigate();
   const { slug } = useParams<{ slug: string }>();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const queryTemplateId = searchParams.get("templateId");
   const { user, profile } = useAuth();
 
@@ -168,6 +172,15 @@ const TemplateRun = () => {
 
   const [projectId, setProjectId] = useState<string | null>(null);
   const [result, setResult] = useState<ProjectResult | null>(null);
+
+  const selectTemplate = (id: string) => {
+    setSelectedTemplateId(id);
+    setSearchParams(id ? { templateId: id } : {}, { replace: true });
+    setFiles({});
+    setTextInputs({});
+    setResult(null);
+    setProjectId(null);
+  };
   const pollingRef = useRef(false);
 
   // Helper to get fresh token
@@ -430,13 +443,7 @@ const TemplateRun = () => {
                       return (
                         <button
                           key={t.id}
-                          onClick={() => {
-                            setSelectedTemplateId(t.id);
-                            setFiles({});
-                            setTextInputs({});
-                            setResult(null);
-                            setProjectId(null);
-                          }}
+                          onClick={() => selectTemplate(t.id)}
                           className="group text-left rounded-xl border border-border/20 bg-secondary/20 hover:bg-secondary/40 hover:border-primary/30 transition-all duration-200 overflow-hidden hover:-translate-y-0.5"
                         >
                           {/* Preview area */}
@@ -504,7 +511,7 @@ const TemplateRun = () => {
               {/* Template header */}
               <div className="px-5 py-4 border-b border-border/10 bg-card/50">
                 <button
-                  onClick={() => { setSelectedTemplateId(""); setFiles({}); setTextInputs({}); setResult(null); setProjectId(null); }}
+                  onClick={() => selectTemplate("")}
                   className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground hover:text-foreground transition-colors mb-3"
                 >
                   <ChevronLeft size={12} /> All Templates
@@ -786,7 +793,7 @@ const TemplateRun = () => {
                   </p>
                 </div>
                 <Button
-                  onClick={() => { setSelectedTemplateId(""); setFiles({}); setTextInputs({}); setResult(null); setProjectId(null); }}
+                  onClick={() => selectTemplate("")}
                   variant="outline"
                   size="sm"
                   className="text-[10px]"
