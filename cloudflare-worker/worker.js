@@ -258,31 +258,42 @@ async function runJob(env, projectId) {
     const project = await supabaseGetById(env, "projects", projectId);
     if (!project) throw new Error("Project not found in Supabase");
 
-    // 2 — Load template metadata
-    log.push(`[${ts()}] Loading template metadata: ${project.template_id}`);
+    // 2 — Resolve template key for R2 lookup
+    // V6 flow: project has template_name (stored in R2 as <name>_template.json)
+    // Legacy flow: project has template_id (UUID, look up in Supabase templates table)
+    const projectTemplateName = project.template_name;
+    const projectTemplateId = project.template_id;
+
+    log.push(`[${ts()}] Resolving template — name: ${projectTemplateName || "(none)"}, id: ${projectTemplateId || "(none)"}`);
     await supabaseUpdate(env, "projects", projectId, { progress: 10, logs: log });
 
-    let templateKey = project.template_id;
+    let templateKey = null;
     let templateMeta = null;
 
-    try {
-      const metaRes = await supabaseFetch(
-        env,
-        `/templates?id=eq.${project.template_id}&limit=1`
-      );
-      if (metaRes.ok) {
-        const rows = await metaRes.json();
-        if (rows[0]) {
-          templateMeta = rows[0];
-          templateKey = templateMeta.template_key || templateKey;
+    if (projectTemplateName) {
+      // V6: derive R2 key from template_name (e.g. "PAPARAZZI" → "paparazzi_template.json")
+      templateKey = projectTemplateName.toLowerCase().replace(/\s+/g, "_") + "_template.json";
+      log.push(`[${ts()}] Using template_name → R2 key: ${templateKey}`);
+    } else if (projectTemplateId) {
+      // Legacy: look up template in Supabase to get the R2 key
+      try {
+        const metaRes = await supabaseFetch(env, `/templates?id=eq.${projectTemplateId}&limit=1`);
+        if (metaRes.ok) {
+          const rows = await metaRes.json();
+          if (rows[0]) {
+            templateMeta = rows[0];
+            templateKey = templateMeta.template_key || projectTemplateId;
+          }
         }
+      } catch {
+        log.push(`[${ts()}] Warning: could not query templates table, using template_id as R2 key`);
       }
-    } catch {
-      log.push(`[${ts()}] Warning: could not query templates table, using template_id as R2 key`);
+      if (!templateKey) templateKey = projectTemplateId;
+      if (!templateKey.endsWith(".json")) templateKey = templateKey + ".json";
     }
 
-    if (!templateKey.endsWith(".json")) {
-      templateKey = templateKey + ".json";
+    if (!templateKey) {
+      throw new Error("Cannot determine template: project has neither template_name nor template_id");
     }
 
     // 3 — Load template JSON from R2
@@ -303,7 +314,8 @@ async function runJob(env, projectId) {
     log.push(`[${ts()}] Starting pipeline`);
     await supabaseUpdate(env, "projects", projectId, { progress: 20, logs: log });
 
-    const inputs = project.inputs || {};
+    // Check both inputs (frontend) and user_inputs (autorun script)
+    const inputs = project.user_inputs || project.inputs || {};
     const outputs = { items: [] };
 
     // Step A — Nano Banana (image generation / editing)
@@ -603,23 +615,29 @@ async function handleCreateProject(request, rid, auth, env, cors) {
     return json({ ok: false, rid, error: "Invalid JSON body" }, 400, cors);
   }
 
-  const templateId = String(body.template_id || "").trim();
-  if (!templateId) {
-    return json({ ok: false, rid, error: "template_id is required" }, 400, cors);
+  // Accept template_name (V6 R2-based) or template_id (UUID)
+  const templateName = String(body.template_name || "").trim();
+  const templateId = String(body.template_id || "").trim() || null;
+
+  if (!templateName && !templateId) {
+    return json({ ok: false, rid, error: "template_name or template_id is required" }, 400, cors);
   }
 
-  const inputs = body.inputs && typeof body.inputs === "object" ? body.inputs : {};
+  // Accept both inputs (frontend) and user_inputs (autorun script)
+  const inputs = body.inputs || body.user_inputs || {};
 
   const projectId = crypto.randomUUID();
   const now = new Date().toISOString();
 
   const row = {
     id: projectId,
-    template_id: templateId,
+    template_id: templateId,           // nullable after SQL fix
+    template_name: templateName || null,
     user_id: auth.userId || null,
     status: "queued",
     progress: 0,
     inputs,
+    user_inputs: inputs,               // store in both columns for compat
     outputs: { items: [] },
     logs: [`[${now}] Project created`],
     error: null,
@@ -628,14 +646,17 @@ async function handleCreateProject(request, rid, auth, env, cors) {
 
   try {
     const created = await supabaseInsert(env, "projects", row);
+    const id = created?.id || projectId;
     return json(
       {
         ok: true,
         rid,
-        projectId: created?.id || projectId,
+        project_id: id,   // snake_case for autorun script
+        projectId: id,    // camelCase for frontend
         project: {
-          id: created?.id || projectId,
+          id,
           template_id: templateId,
+          template_name: templateName || null,
           status: "queued",
           progress: 0,
           inputs,
@@ -646,7 +667,7 @@ async function handleCreateProject(request, rid, auth, env, cors) {
     );
   } catch (e) {
     return json(
-      { ok: false, rid, error: "Failed to create project", details: e.message },
+      { ok: false, rid, error: "Project creation failed", details: e.message },
       500,
       cors
     );
@@ -655,11 +676,13 @@ async function handleCreateProject(request, rid, auth, env, cors) {
 
 async function handleEnqueue(request, rid, env, cors, ctx) {
   const body = await readJsonBody(request);
-  if (!body || !body.projectId) {
-    return json({ ok: false, rid, error: "projectId is required in body" }, 400, cors);
+  // Accept both projectId (camelCase, frontend) and project_id (snake_case, autorun script)
+  const rawId = body?.projectId || body?.project_id;
+  if (!body || !rawId) {
+    return json({ ok: false, rid, error: "projectId (or project_id) is required in body" }, 400, cors);
   }
 
-  const projectId = String(body.projectId).trim();
+  const projectId = String(rawId).trim();
 
   // Verify the project exists
   if (env.SUPABASE_URL && env.SUPABASE_ANON_KEY) {

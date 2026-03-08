@@ -5,7 +5,7 @@ import { handleRerun } from "./routes/rerun";
 import { handleUpload, handleRunTemplate, handleJobStatus } from "./routes/papparazi";
 import { handleWeavyTrigger } from "./routes/weavy-trigger";
 import { handleUsage } from "./routes/usage";
-import { handleEnqueue, handleProjectStatus } from "./routes/runner";
+import { handleEnqueue, handleProjectStatus, handleCreateProject } from "./routes/runner";
 import { handlePresign, handleUploadPut, handleUploadMultipart } from "./routes/uploads";
 import { serveAsset } from "./r2";
 import { handleTestKling } from "./routes/test-kling";
@@ -42,8 +42,12 @@ export default {
     try {
       let response: Response;
 
+      // ── New: Create project (V6 — by template_name or template_id) ──
+      if (path === "/api/projects" && request.method === "POST") {
+        response = await handleCreateProject(request, env);
+
       // ── New: Project status (replaces weavy-job-status) ──
-      if (path.match(/^\/api\/projects\/[^/]+$/) && request.method === "GET") {
+      } else if (path.match(/^\/api\/projects\/[^/]+$/) && request.method === "GET") {
         const projectId = path.split("/")[3];
         response = await handleProjectStatus(request, env, projectId);
 
