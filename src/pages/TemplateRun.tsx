@@ -191,15 +191,19 @@ const TemplateRun = () => {
     enabled: !!selectedTemplateId && !!templates,
   });
 
-  // Auto-select
+  // Auto-select — match by id (name) case-insensitively, or by slug
   useEffect(() => {
     if (!templates || selectedTemplateId) return;
+    const normalize = (s: string) => s.toLowerCase().replace(/\s+/g, "-");
     if (queryTemplateId) {
-      const match = templates.find((t) => t.id === queryTemplateId);
+      const decoded = decodeURIComponent(queryTemplateId);
+      const match = templates.find((t) =>
+        t.id === decoded || normalize(t.id) === normalize(decoded)
+      );
       if (match) { setSelectedTemplateId(match.id); return; }
     }
     if (slug) {
-      const match = templates.find((t) => t.id === slug);
+      const match = templates.find((t) => normalize(t.id) === normalize(slug));
       if (match) setSelectedTemplateId(match.id);
     }
   }, [templates, slug, queryTemplateId, selectedTemplateId]);
@@ -758,7 +762,16 @@ const TemplateRun = () => {
                   {result.outputs.map((output, i) => (
                     <div key={i} className="rounded-xl border border-border/30 bg-card overflow-hidden group">
                       {output.type === "video" ? (
-                        <video src={output.url} controls autoPlay loop muted className="w-full aspect-video object-cover bg-secondary/50" />
+                        <div className="relative group">
+                          <video src={output.url} controls autoPlay loop muted className="w-full aspect-video object-cover bg-secondary/50" />
+                          <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity flex gap-1">
+                            <a href={output.url} download target="_blank" rel="noopener noreferrer">
+                              <button className="w-7 h-7 rounded-md bg-background/80 backdrop-blur-sm flex items-center justify-center text-foreground hover:bg-background transition-colors">
+                                <Download size={12} />
+                              </button>
+                            </a>
+                          </div>
+                        </div>
                       ) : (
                         <div className="relative">
                           <img src={output.url} alt={output.label || `Asset ${i + 1}`} className="w-full aspect-square object-cover bg-secondary/50" />
