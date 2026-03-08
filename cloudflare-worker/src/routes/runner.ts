@@ -9,7 +9,7 @@
 
 import { Env } from "../types";
 import { verifyToken } from "../auth";
-import { supabaseFetch, updateProjectStatus, getProject, getTemplate } from "../supabase";
+import { supabaseFetch, updateProjectStatus, getProject, getTemplate, getCreditBalance, deductCredits } from "../supabase";
 
 /* ── Helpers ── */
 
@@ -41,13 +41,18 @@ function sleep(ms: number) {
   return new Promise((r) => setTimeout(r, ms));
 }
 
+// UUID v4 regex — used to validate user IDs before storing in UUID column
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
 /* ── GET /api/projects/:id — Job status ── */
 
 export async function handleProjectStatus(request: Request, env: Env, projectId: string): Promise<Response> {
   const userId = await verifyToken(request, env);
 
   const project = await getProject(env, projectId);
-  if (!project || project.user_id !== userId) {
+  // Allow access if: user_id matches, or project has no user_id (service-created), or caller used non-UUID API key
+  const callerIsUuid = UUID_RE.test(userId);
+  if (!project || (callerIsUuid && project.user_id && project.user_id !== userId)) {
     return Response.json({ error: "Project not found" }, { status: 404 });
   }
 
@@ -88,13 +93,36 @@ export async function handleCreateProject(request: Request, env: Env): Promise<R
   // Accept both inputs (frontend) and user_inputs (autorun script)
   const inputs = body.inputs || body.user_inputs || {};
 
+  // user_id must be a real Supabase auth UUID — use null for service/API-key calls
+  const userIdForDb = UUID_RE.test(userId) ? userId : null;
+
+  // ── Credit check & deduction for authenticated users ──────────────────────
+  let creditCost = 10; // default
+  if (userIdForDb) {
+    // Determine credit cost from template
+    if (templateId) {
+      try {
+        const tmpl = await getTemplate(env, templateId);
+        creditCost = (tmpl?.estimated_credits_per_run as number) ?? 10;
+      } catch { /* use default */ }
+    }
+
+    const balance = await getCreditBalance(env, userIdForDb);
+    if (balance < creditCost) {
+      return Response.json(
+        { error: `Insufficient credits. Need ${creditCost}, have ${balance}.` },
+        { status: 402 },
+      );
+    }
+  }
+
   const now = new Date().toISOString();
   const projRes = await supabaseFetch(env, "/projects", {
     method: "POST",
     body: {
       template_id: templateId,
       template_name: templateName || null,
-      user_id: userId,
+      user_id: userIdForDb,
       status: "queued",
       progress: 0,
       inputs,
@@ -114,10 +142,23 @@ export async function handleCreateProject(request: Request, env: Env): Promise<R
   const [project] = await projRes.json() as { id: string }[];
   const id = project.id;
 
+  // Deduct credits after successful project creation
+  if (userIdForDb) {
+    await deductCredits(
+      env,
+      userIdForDb,
+      creditCost,
+      id,
+      templateId,
+      `Run template (${templateName || templateId})`,
+    ).catch((e) => console.error("Credit deduction failed:", e));
+  }
+
   return Response.json({
     ok: true,
     project_id: id,   // snake_case for autorun script
     projectId: id,    // camelCase for frontend
+    credits_used: creditCost,
   }, { status: 201 });
 }
 
@@ -334,8 +375,8 @@ async function callKling(
   prompt: string,
   onProgress?: (msg: string) => Promise<void>,
 ): Promise<string> {
-  const accessKey = env.KLING_ACCESS_KEY;
-  const secretKey = env.KLING_SECRET_KEY;
+  const accessKey = env.KLING_ACCESS_KEY || env.KLING_AK;
+  const secretKey = env.KLING_SECRET_KEY || env.KLING_SK;
   if (!accessKey || !secretKey) throw new Error("KLING_ACCESS_KEY / KLING_SECRET_KEY not configured");
 
   const jwt = await generateKlingJwt(accessKey, secretKey);
@@ -456,7 +497,7 @@ async function runJob(env: Env, projectId: string) {
       } else if (templateName) {
         // Load template JSON directly from R2 by name
         const key = templateName.toLowerCase().replace(/\s+/g, "_") + "_template.json";
-        const obj = await (env as any).FUSE_TEMPLATES?.get(key);
+        const obj = await env.FUSE_TEMPLATES?.get(key);
         if (obj) {
           try { template = JSON.parse(await obj.text()); } catch { /* ignore */ }
         }
