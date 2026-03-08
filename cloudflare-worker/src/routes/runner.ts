@@ -66,6 +66,61 @@ export async function handleProjectStatus(request: Request, env: Env, projectId:
   });
 }
 
+/* ── POST /api/projects — Create a project (V6 flow) ── */
+
+export async function handleCreateProject(request: Request, env: Env): Promise<Response> {
+  const userId = await verifyToken(request, env);
+
+  const body = await request.json() as {
+    template_name?: string;
+    template_id?: string;
+    inputs?: Record<string, string>;
+    user_inputs?: Record<string, string>;
+  };
+
+  const templateName = (body.template_name || "").trim();
+  const templateId = (body.template_id || "").trim() || null;
+
+  if (!templateName && !templateId) {
+    return Response.json({ error: "template_name or template_id is required" }, { status: 400 });
+  }
+
+  // Accept both inputs (frontend) and user_inputs (autorun script)
+  const inputs = body.inputs || body.user_inputs || {};
+
+  const now = new Date().toISOString();
+  const projRes = await supabaseFetch(env, "/projects", {
+    method: "POST",
+    body: {
+      template_id: templateId,
+      template_name: templateName || null,
+      user_id: userId,
+      status: "queued",
+      progress: 0,
+      inputs,
+      user_inputs: inputs,
+      outputs: { items: [] },
+      logs: [`[${now}] Project created`],
+      error: null,
+    },
+    headers: { Prefer: "return=representation" },
+  });
+
+  if (!projRes.ok) {
+    const txt = await projRes.text();
+    return Response.json({ error: "Project creation failed", details: txt }, { status: 500 });
+  }
+
+  const [project] = await projRes.json() as { id: string }[];
+  const id = project.id;
+
+  return Response.json({
+    ok: true,
+    project_id: id,   // snake_case for autorun script
+    projectId: id,    // camelCase for frontend
+  }, { status: 201 });
+}
+
 /* ── POST /api/enqueue — Trigger job execution ── */
 
 export async function handleEnqueue(request: Request, env: Env): Promise<Response> {
@@ -74,16 +129,18 @@ export async function handleEnqueue(request: Request, env: Env): Promise<Respons
     await verifyToken(request, env);
   }
 
-  const body = await request.json() as { projectId: string };
-  if (!body.projectId) {
-    return Response.json({ error: "projectId required" }, { status: 400 });
+  // Accept both projectId (camelCase, frontend) and project_id (snake_case, autorun script)
+  const body = await request.json() as { projectId?: string; project_id?: string };
+  const rawId = body.projectId || body.project_id;
+  if (!rawId) {
+    return Response.json({ error: "projectId (or project_id) required" }, { status: 400 });
   }
 
   // Fire and forget
   const ctx = { waitUntil: (p: Promise<unknown>) => p.catch(console.error) };
-  ctx.waitUntil(runJob(env, body.projectId));
+  ctx.waitUntil(runJob(env, rawId));
 
-  return Response.json({ queued: true, projectId: body.projectId });
+  return Response.json({ queued: true, projectId: rawId });
 }
 
 /* ══════════════════════════════════════════════════════════════
@@ -107,7 +164,7 @@ function resolveImageUrl(value: string): string {
 
 /** Find the first image value from inputs. */
 function findImageUrl(inputs: Record<string, string>): string | undefined {
-  for (const key of ["image", "image_url", "clothing_item", "photo", "input_image", "image_key"]) {
+  for (const key of ["product_image", "image", "image_url", "clothing_item", "photo", "input_image", "image_key"]) {
     if (inputs[key]?.trim()) return resolveImageUrl(inputs[key]);
   }
   // Fallback: first value that looks like a URL or R2 key
@@ -389,10 +446,27 @@ async function runJob(env: Env, projectId: string) {
       const project = await getProject(env, projectId);
       if (!project) throw new Error("Project not found");
 
-      const template = await getTemplate(env, project.template_id as string);
+      // V6: look up template by template_name (from R2) when template_id is null
+      let template: Record<string, unknown> | undefined;
+      const templateName = project.template_name as string | undefined;
+      const templateId = project.template_id as string | undefined;
+
+      if (templateId) {
+        template = await getTemplate(env, templateId);
+      } else if (templateName) {
+        // Load template JSON directly from R2 by name
+        const key = templateName.toLowerCase().replace(/\s+/g, "_") + "_template.json";
+        const obj = await (env as any).FUSE_TEMPLATES?.get(key);
+        if (obj) {
+          try { template = JSON.parse(await obj.text()); } catch { /* ignore */ }
+        }
+        if (!template) throw new Error(`Template not found in R2: ${key}`);
+      }
+
       if (!template) throw new Error("Template not found");
 
-      const inputs = (project.inputs as Record<string, string>) || {};
+      // Check both inputs (frontend) and user_inputs (autorun script)
+      const inputs = ((project.user_inputs || project.inputs) as Record<string, string>) || {};
       const imageUrl = findImageUrl(inputs);
       const prompt = findPrompt(inputs);
 
