@@ -58,7 +58,7 @@ export interface TemplateDetail {
 }
 
 export async function fetchTemplateDetail(token: string, templateName: string): Promise<TemplateDetail> {
-  const key = templateName.toLowerCase().replace(/\s+/g, '_') + '_template.json';
+  const key = templateName.toLowerCase().replace(/[()]/g, '').replace(/\s+/g, '_') + '_template.json';
   return api<TemplateDetail>(`/api/templates/${key}`, token);
 }
 

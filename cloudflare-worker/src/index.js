@@ -84,7 +84,8 @@ async function createProjectRow(env, userId, templateName, userInputs) {
 
 // ============== R2 HELPERS ==============
 async function loadTemplateFromR2(env, templateName) {
-  const key = `${templateName.toLowerCase().replace(/\s+/g, "_")}_template.json`;
+  // Normalize: lowercase, strip parens, collapse spaces → underscores
+  const key = `${templateName.toLowerCase().replace(/[()]/g, "").replace(/\s+/g, "_")}_template.json`;
   const obj = await env.FUSE_TEMPLATES.get(key);
   if (!obj) throw new Error(`Template not found in R2: ${key}`);
   return JSON.parse(await obj.text());
@@ -434,9 +435,26 @@ async function handleListTemplates(env) {
   return Response.json(templates);
 }
 
-async function handleGetTemplate(env, name) {
-  const template = await loadTemplateFromR2(env, name);
-  return Response.json({ ok: true, template });
+async function handleGetTemplate(env, nameOrKey) {
+  // nameOrKey can be "garage_guy_template.json" (full R2 key from frontend)
+  // or "GARAGE guy" (template name). Normalize to load from R2.
+  let template;
+  if (nameOrKey.endsWith("_template.json")) {
+    // Direct R2 key — load directly
+    const obj = await env.FUSE_TEMPLATES.get(decodeURIComponent(nameOrKey));
+    if (!obj) return Response.json({ error: `Template not found: ${nameOrKey}` }, { status: 404 });
+    template = JSON.parse(await obj.text());
+  } else {
+    template = await loadTemplateFromR2(env, nameOrKey);
+  }
+  // Map input_manifest → user_inputs for frontend compatibility
+  const manifest = getInputManifest(template);
+  return Response.json({
+    ...template,
+    user_inputs: manifest,
+    input_manifest: manifest,
+    asset_requirements: template.asset_requirements || null,
+  });
 }
 
 async function handleCreateProject(request, env) {
