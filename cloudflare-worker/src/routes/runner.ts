@@ -225,94 +225,113 @@ function findPrompt(inputs: Record<string, string>): string {
 }
 
 /* ══════════════════════════════════════════════════════════════
- *  Gemini image helpers (used by nano_banana_pro steps)
+ *  fal.ai nano-banana-pro (image edit / generation)
  * ══════════════════════════════════════════════════════════════ */
 
-async function imageToBase64(url: string): Promise<{ base64: string; mimeType: string }> {
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`Failed to fetch image: ${url} (${res.status})`);
-  const contentType = res.headers.get("content-type") || "image/png";
-  const buf = await res.arrayBuffer();
-  const bytes = new Uint8Array(buf);
-  let binary = "";
-  for (const b of bytes) binary += String.fromCharCode(b);
-  return { base64: btoa(binary), mimeType: contentType };
-}
-
-async function uploadBase64ToR2(env: Env, dataUri: string, key: string): Promise<string> {
-  const match = dataUri.match(/^data:([^;]+);base64,(.+)$/);
-  if (!match) throw new Error("Invalid data URI from Gemini");
-  const mimeType = match[1];
-  const binary = atob(match[2]);
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-  await env.FUSE_ASSETS.put(key, bytes, { httpMetadata: { contentType: mimeType } });
-  return `${R2_PUBLIC_DOMAIN}/${key}`;
+interface NanoBananaSettings {
+  resolution?: string;   // "2K" | "1080p" etc — maps to image_size
+  num_images?: number;
+  output_format?: string;
 }
 
 /**
- * Call Gemini image generation (nano_banana_pro) with multiple input images.
- * Returns the output image URL (uploaded to R2).
+ * Call fal.ai nano-banana-pro/edit with one or more input images.
+ * Primary image = first URL. Additional images are passed as reference_image_urls.
+ * Settings from the template (resolution, num_images) are forwarded.
  */
 async function callNanoBananaPro(
   env: Env,
   projectId: string,
   imageUrls: string[],
   prompt: string,
+  settings?: NanoBananaSettings,
   onProgress?: (msg: string) => Promise<void>,
 ): Promise<string> {
-  const apiKey = env.GEMINI_API_KEY;
-  if (!apiKey) throw new Error("GEMINI_API_KEY not configured in Worker secrets");
+  const apiKey = env.FAL_API_KEY;
+  if (!apiKey) throw new Error("FAL_API_KEY not configured in Worker secrets");
 
-  await onProgress?.(`Calling Gemini (nano_banana_pro) with ${imageUrls.length} image(s)...`);
+  const resolvedUrls = imageUrls.map(resolveImageUrl);
+  const primaryUrl = resolvedUrls[0];
+  const extraUrls = resolvedUrls.slice(1);
 
-  // Convert all images to base64
-  const images: { base64: string; mimeType: string }[] = [];
-  for (const url of imageUrls) {
-    const img = await imageToBase64(resolveImageUrl(url));
-    images.push(img);
-  }
+  // Map resolution string to fal image_size param
+  const imageSizeMap: Record<string, string> = {
+    "2K": "2048x2048",
+    "2k": "2048x2048",
+    "1080p": "1080x1080",
+    "1080": "1080x1080",
+    "4K": "4096x4096",
+    "4k": "4096x4096",
+  };
+  const imageSize = settings?.resolution ? (imageSizeMap[settings.resolution] ?? settings.resolution) : undefined;
+  const numImages = settings?.num_images ?? 1;
 
-  // Build parts: images first, then text
-  const parts: unknown[] = [
-    ...images.map((img) => ({ inline_data: { mime_type: img.mimeType, data: img.base64 } })),
-    { text: prompt },
-  ];
+  await onProgress?.(`Calling fal nano-banana-pro with ${resolvedUrls.length} image(s)${imageSize ? ` @ ${settings?.resolution}` : ""}...`);
 
-  const model = "gemini-2.0-flash-exp-image-generation";
-  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+  const payload: Record<string, unknown> = {
+    prompt,
+    image_url: primaryUrl,
+    num_images: numImages,
+    ...(imageSize ? { image_size: imageSize } : {}),
+    ...(extraUrls.length > 0 ? { reference_image_urls: extraUrls } : {}),
+    ...(settings?.output_format ? { output_format: settings.output_format } : {}),
+  };
 
-  const res = await fetch(endpoint, {
+  // Try synchronous endpoint first
+  const directRes = await fetch("https://fal.run/fal-ai/nano-banana-pro/edit", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      contents: [{ parts }],
-      generationConfig: { responseModalities: ["TEXT", "IMAGE"] },
-    }),
+    headers: { Authorization: `Key ${apiKey}`, "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
   });
 
-  if (!res.ok) {
-    const txt = await res.text();
-    throw new Error(`Gemini API error (${res.status}): ${txt.slice(0, 1000)}`);
+  if (directRes.ok) {
+    const data = await directRes.json() as { images?: { url: string }[]; image?: { url: string } };
+    const url = data.images?.[0]?.url || data.image?.url;
+    if (url) { await onProgress?.("fal nano-banana-pro complete"); return url; }
   }
 
-  const data = await res.json() as { candidates?: { content?: { parts?: { inline_data?: { mime_type: string; data: string }; text?: string }[] } }[] };
-  const candidates = data.candidates;
-  if (!candidates?.length) throw new Error("Gemini returned no candidates");
+  // Fall back to queue API
+  await onProgress?.("Direct call non-OK — falling back to fal queue...");
 
-  for (const part of candidates[0].content?.parts || []) {
-    if (part.inline_data) {
-      const dataUri = `data:${part.inline_data.mime_type};base64,${part.inline_data.data}`;
-      const key = `outputs/${projectId}/${Date.now()}.png`;
-      const url = await uploadBase64ToR2(env, dataUri, key);
-      await onProgress?.("Gemini image generated and uploaded to R2");
-      return url;
+  const submitRes = await fetch("https://queue.fal.run/fal-ai/nano-banana-pro/edit", {
+    method: "POST",
+    headers: { Authorization: `Key ${apiKey}`, "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+
+  if (!submitRes.ok) {
+    const txt = await submitRes.text();
+    throw new Error(`fal submit failed (${submitRes.status}): ${txt.slice(0, 500)}`);
+  }
+
+  const { request_id: requestId } = await submitRes.json() as { request_id: string };
+  if (!requestId) throw new Error("fal: no request_id returned");
+
+  const statusUrl = `https://queue.fal.run/fal-ai/nano-banana-pro/edit/requests/${requestId}/status`;
+  const responseUrl = `https://queue.fal.run/fal-ai/nano-banana-pro/edit/requests/${requestId}`;
+
+  await onProgress?.(`fal queued (${requestId.slice(0, 8)}...)  polling...`);
+
+  for (let i = 0; i < 120; i++) {
+    await sleep(5000);
+    try {
+      const statusRes = await fetch(statusUrl, { headers: { Authorization: `Key ${apiKey}` } });
+      if (!statusRes.ok) continue;
+      const { status } = await statusRes.json() as { status: string };
+      if (status === "COMPLETED") {
+        const resultRes = await fetch(responseUrl, { headers: { Authorization: `Key ${apiKey}` } });
+        const result = await resultRes.json() as { images?: { url: string }[]; image?: { url: string } };
+        const url = result.images?.[0]?.url || result.image?.url;
+        if (!url) throw new Error("fal completed but no image URL in response");
+        await onProgress?.("fal nano-banana-pro complete");
+        return url;
+      }
+      if (status === "FAILED") throw new Error("fal job failed");
+    } catch (e) {
+      if (e instanceof Error && (e.message.includes("fal job failed") || e.message.includes("no image URL"))) throw e;
     }
   }
-
-  const textParts = candidates[0].content?.parts?.filter((p) => p.text) || [];
-  if (textParts.length) throw new Error(`Gemini returned text only: ${textParts[0].text?.slice(0, 200)}`);
-  throw new Error("Gemini returned no image in response");
+  throw new Error("fal nano-banana-pro timed out after 10 minutes");
 }
 
 /* ══════════════════════════════════════════════════════════════
@@ -552,7 +571,7 @@ async function runJob(env: Env, projectId: string) {
         const outputType = template.output_type || "video";
 
         await setProgress(env, projectId, 15, "No steps defined — using legacy pipeline");
-        const editedImageUrl = await callNanoBananaPro(env, projectId, [imageUrl], prompt, async (msg) => {
+        const editedImageUrl = await callNanoBananaPro(env, projectId, [imageUrl], prompt, undefined, async (msg) => {
           await setProgress(env, projectId, 25, msg);
         });
         collectedOutputs.push({ type: "image", url: editedImageUrl, label: "Generated Image" });
@@ -589,7 +608,8 @@ async function runJob(env: Env, projectId: string) {
             }
 
             const prompt = step.prompt || findPrompt(inputs);
-            const outputImageUrl = await callNanoBananaPro(env, projectId, imageUrls, prompt, async (msg) => {
+            const nanoSettings = step.settings as NanoBananaSettings | undefined;
+            const outputImageUrl = await callNanoBananaPro(env, projectId, imageUrls, prompt, nanoSettings, async (msg) => {
               await setProgress(env, projectId, progressBase + Math.floor(progressPerStep * 0.7), msg);
             });
 
