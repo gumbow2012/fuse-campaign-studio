@@ -998,22 +998,25 @@ const BUNDLED_TEMPLATES = {
   "paparazzi_template": {
     "name": "PAPARAZZI",
     "slug": "paparazzi",
-    "version": "1.0",
-    "description": "Paparazzi-style candid shots. Camera flashes, fashion week chaos, celebrity energy.",
-    "category": "Street",
+    "version": "2.0",
+    "description": "Documentation-style overhead shoot. Phones and cameras capture your product from every angle. Locked cinematic reference. Clean, viral, premium.",
+    "category": "Documentation",
     "tags": [
-      "street",
-      "paparazzi",
+      "documentation",
+      "overhead",
+      "phones",
+      "viral",
       "video"
     ],
     "output_type": "video",
-    "estimated_credits_per_run": 50,
+    "estimated_credits_per_run": 75,
     "is_active": true,
-    "asset_requirements": "Front-facing outfit on clean background. Back view optional for more angles.",
+    "preview_url": "https://shiny-rice-e95bfuse-api.kade-fc1.workers.dev/assets/references/paparazzi-documentation.png",
+    "asset_requirements": "Your clothing item on a clean background. The locked reference scene handles everything else.",
     "input_manifest": [
       {
-        "key": "front_outfit",
-        "label": "Front Outfit",
+        "key": "clothing_item",
+        "label": "CLOTHING ITEM",
         "type": "image",
         "required": true,
         "accepts": [
@@ -1022,31 +1025,35 @@ const BUNDLED_TEMPLATES = {
           "image/webp"
         ],
         "max_size_mb": 10,
-        "hint": "Front-facing product on a clean/white background."
-      },
-      {
-        "key": "back_outfit",
-        "label": "Back Outfit",
-        "type": "image",
-        "required": false,
-        "accepts": [
-          "image/jpeg",
-          "image/png",
-          "image/webp"
-        ],
-        "max_size_mb": 10,
-        "hint": "Optional back view for additional outfit detail."
+        "hint": "Your product on a clean background. It will replace the shirt in the locked overhead scene."
       }
     ],
     "steps": [
       {
-        "id": "image_edit",
+        "id": "scene_gen",
         "type": "nano_banana_pro",
-        "prompt": "Paparazzi celebrity street photography. A model wearing the clothing product walks through a crowd of aggressive photographers. Camera flashes popping everywhere, chaotic fashion week sidewalk, the model looks iconic and confident. Shot on 35mm film, high contrast, cinematic grain, editorial quality. The clothing product is clearly visible and photorealistic.",
+        "prompt": "Static overhead shot of a taped-down graphic t-shirt centered against a matte black backdrop. Multiple hands enter frame from all sides holding smartphones with ring lights, each screen lit bright, capturing the shirt from every angle. The shirt lies flat and perfectly centered. Shot with a medium-format film camera from directly above. Rembrandt lighting from above, dramatic shadows framing the shirt. Hyper-realistic photographic quality, fashion documentary style.",
         "user_prompt_key": null,
         "user_input_keys": [
-          "front_outfit",
-          "back_outfit"
+          "clothing_item"
+        ],
+        "locked_inputs": [
+          "references/paparazzi-documentation.png"
+        ],
+        "settings": {
+          "resolution": "2K",
+          "num_images": 1,
+          "output_format": "png"
+        }
+      },
+      {
+        "id": "product_swap",
+        "type": "nano_banana_pro",
+        "prompt": "replace all t-shirts with uploaded black product remove hanger and tag on the right sleeve",
+        "user_prompt_key": null,
+        "image_source": "scene_gen",
+        "user_input_keys": [
+          "clothing_item"
         ],
         "locked_inputs": [],
         "settings": {
@@ -1058,9 +1065,9 @@ const BUNDLED_TEMPLATES = {
       {
         "id": "video_gen",
         "type": "kling",
-        "prompt": "Paparazzi scene in motion. The model walks confidently through a crowd of photographers, cameras flashing rapidly, dynamic handheld camera movement, bokeh background of press photographers. The clothing shown prominently as the model moves through fashion week chaos.",
+        "prompt": "Documentation overhead video. Multiple hands holding smartphones slowly circle around the clothing item laid flat on the matte black surface, ring lights glowing, each phone screen visible capturing the product. Slow cinematic rotation, dramatic top-down perspective, fashion documentary energy.",
         "user_prompt_key": null,
-        "image_source": "previous_step",
+        "image_source": "product_swap",
         "settings": {
           "model": "kling-v1-6",
           "duration": "10",
@@ -1073,6 +1080,7 @@ const BUNDLED_TEMPLATES = {
     "outputs": {
       "primary_type": "video",
       "items": [
+        "image",
         "image",
         "video"
       ]
@@ -1588,6 +1596,7 @@ const BUNDLED_TEMPLATES = {
 };
 
 
+
 // ============== AUTH ==============
 function checkAuth(request, env) {
   const apiKey = request.headers.get("X-Api-Key");
@@ -1883,7 +1892,17 @@ async function runPipeline(env, projectId) {
         const manifest = getInputManifest(template);
         const imageUrls = [];
 
-        // Add locked reference images first
+        // If this step takes output from a previous step, add it first
+        if (step.image_source) {
+          if (step.image_source === "previous_step" && lastImageKey) {
+            imageUrls.push(`${WORKER_URL}/assets/${lastImageKey}`);
+          } else {
+            const item = outputs.items.find((x) => x.step_id === step.image_source);
+            if (item) imageUrls.push(item.url.startsWith("http") ? item.url : `${WORKER_URL}${item.url}`);
+          }
+        }
+
+        // Add locked reference images
         for (const ref of step.locked_inputs || []) {
           const url = resolveInputUrl(ref);
           if (url) imageUrls.push(url);
