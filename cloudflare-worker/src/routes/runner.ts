@@ -234,6 +234,12 @@ interface NanoBananaSettings {
   output_format?: string;
 }
 
+interface LoraConfig {
+  path: string;
+  scale?: number;
+  trigger_word?: string;
+}
+
 /**
  * Call fal.ai nano-banana-pro/edit with one or more input images.
  * Primary image = first URL. Additional images are passed as reference_image_urls.
@@ -245,6 +251,7 @@ async function callNanoBananaPro(
   imageUrls: string[],
   prompt: string,
   settings?: NanoBananaSettings,
+  loras?: LoraConfig[],
   onProgress?: (msg: string) => Promise<void>,
 ): Promise<string> {
   const apiKey = env.FAL_API_KEY;
@@ -266,7 +273,8 @@ async function callNanoBananaPro(
   const imageSize = settings?.resolution ? (imageSizeMap[settings.resolution] ?? settings.resolution) : undefined;
   const numImages = settings?.num_images ?? 1;
 
-  await onProgress?.(`Calling fal nano-banana-pro with ${resolvedUrls.length} image(s)${imageSize ? ` @ ${settings?.resolution}` : ""}...`);
+  const lorasMsg = loras?.length ? ` (${loras.length} LoRA${loras.length > 1 ? "s" : ""})` : "";
+  await onProgress?.(`Calling fal nano-banana-pro with ${resolvedUrls.length} image(s)${imageSize ? ` @ ${settings?.resolution}` : ""}${lorasMsg}...`);
 
   const payload: Record<string, unknown> = {
     prompt,
@@ -276,6 +284,14 @@ async function callNanoBananaPro(
     ...(extraUrls.length > 0 ? { reference_image_urls: extraUrls } : {}),
     ...(settings?.output_format ? { output_format: settings.output_format } : {}),
   };
+
+  // Attach LoRA weights when present
+  if (loras && loras.length > 0) {
+    payload.loras = loras.map((l) => ({
+      path: l.path,
+      scale: l.scale ?? 1.0,
+    }));
+  }
 
   // Try synchronous endpoint first
   const directRes = await fetch("https://fal.run/fal-ai/nano-banana-pro/edit", {
@@ -563,6 +579,11 @@ async function runJob(env: Env, projectId: string) {
       const progressPerStep = Math.floor(75 / stepCount);
       let progressBase = 15;
 
+      // Extract LoRA configs stored on the template (populated by sync-weavy-loras)
+      const templateLoras: LoraConfig[] = Array.isArray((template as any).loras)
+        ? ((template as any).loras as LoraConfig[])
+        : [];
+
       if (steps.length === 0) {
         // ── Legacy fallback: no steps defined — use generic single-image pipeline ──
         const imageUrl = findImageUrl(inputs);
@@ -571,7 +592,7 @@ async function runJob(env: Env, projectId: string) {
         const outputType = template.output_type || "video";
 
         await setProgress(env, projectId, 15, "No steps defined — using legacy pipeline");
-        const editedImageUrl = await callNanoBananaPro(env, projectId, [imageUrl], prompt, undefined, async (msg) => {
+        const editedImageUrl = await callNanoBananaPro(env, projectId, [imageUrl], prompt, undefined, templateLoras, async (msg) => {
           await setProgress(env, projectId, 25, msg);
         });
         collectedOutputs.push({ type: "image", url: editedImageUrl, label: "Generated Image" });

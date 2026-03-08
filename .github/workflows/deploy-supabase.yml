@@ -1,0 +1,63 @@
+name: Deploy Supabase Functions & Migrations
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'supabase/**'
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      # ── Apply DB migrations ──────────────────────────────────────
+      - name: Apply Migrations
+        run: |
+          supabase db push --project-ref ${{ secrets.SUPABASE_PROJECT_REF }}
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+
+      # ── Deploy all edge functions ────────────────────────────────
+      - name: Deploy Edge Functions
+        run: |
+          for dir in supabase/functions/*/; do
+            fn=$(basename "$dir")
+            # Skip _shared directories
+            if [[ "$fn" == _* ]]; then continue; fi
+            echo "Deploying function: $fn"
+            supabase functions deploy "$fn" \
+              --project-ref ${{ secrets.SUPABASE_PROJECT_REF }} \
+              --no-verify-jwt || true
+          done
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+
+      # ── Set WEAVY + sync secrets (manual dispatch only) ─────────
+      - name: Set Function Secrets
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          supabase secrets set \
+            WEAVY_API_KEY="${{ secrets.WEAVY_API_KEY }}" \
+            WEAVY_API_BASE_URL="${{ secrets.WEAVY_API_BASE_URL }}" \
+            --project-ref ${{ secrets.SUPABASE_PROJECT_REF }}
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+
+      # ── Trigger LoRA sync after deploy ──────────────────────────
+      - name: Trigger sync-weavy-loras
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          curl -sf -X POST \
+            "https://${{ secrets.SUPABASE_PROJECT_REF }}.supabase.co/functions/v1/sync-weavy-loras" \
+            -H "Authorization: Bearer ${{ secrets.SUPABASE_ADMIN_JWT }}" \
+            -H "Content-Type: application/json" \
+            -d '{}' | jq .
+        continue-on-error: true

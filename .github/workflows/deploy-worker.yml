@@ -27,7 +27,7 @@ jobs:
       - name: Deploy Worker to Cloudflare
         run: npx wrangler deploy
         env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.uSuJEViOVkvdZO15pLRHuRIe9IBwhmYQK2FT-x7R }}
 
       # ── Upload all template JSONs to R2 ───────────────────────
       - name: Upload Template JSONs to R2
@@ -36,23 +36,24 @@ jobs:
             key=$(basename "$file")
             echo "Uploading $key..."
             npx wrangler r2 object put "fuse-templates/$key" \
+              --remote \
               --file="$file" \
               --content-type="application/json"
           done
           echo "All templates uploaded."
         env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.uSuJEViOVkvdZO15pLRHuRIe9IBwhmYQK2FT-x7R }}
 
       # ── Set ALL worker secrets (on manual dispatch only) ─────
       # Trigger via: Actions → Deploy Cloudflare Worker → Run workflow
       - name: Set Worker Secrets
         if: github.event_name == 'workflow_dispatch'
         run: |
-          echo "${{ secrets.SUPABASE_URL }}" | npx wrangler secret put SUPABASE_URL
-          echo "${{ secrets.SUPABASE_ANON_KEY }}" | npx wrangler secret put SUPABASE_ANON_KEY
+          echo "${{ secrets.https://sdmwcjfksoqbplcqqmhg.supabase.co }}" | npx wrangler secret put SUPABASE_URL
+          echo "${{ secrets.eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNkbXdjamZrc29xYnBsY3FxbWhnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzIyNTM2NDMsImV4cCI6MjA4NzgyOTY0M30.SDgCnDYOl4NRPsITqdYKhLRZrbjG_aISpgmgioQm3gw }}" | npx wrangler secret put SUPABASE_ANON_KEY
           echo "${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}" | npx wrangler secret put SUPABASE_SERVICE_ROLE_KEY
           echo "${{ secrets.FAL_API_KEY }}" | npx wrangler secret put FAL_API_KEY
-          echo "${{ secrets.KLING_AK }}" | npx wrangler secret put KLING_AK
-          echo "${{ secrets.KLING_SK }}" | npx wrangler secret put KLING_SK
+          echo "${{ ARg4FyCFkAP8MR8bCfJt3ptptMBD4KbH }}" | npx wrangler secret put KLING_AK
+          echo "${{ PGNAJGfrLnH9YNRyrfrDJyQLB8Lg3dGe }}" | npx wrangler secret put KLING_SK
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}

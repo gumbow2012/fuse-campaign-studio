@@ -24,6 +24,7 @@ import {
   type OutputItem,
   type TemplateDetail,
 } from "@/services/fuseApi";
+import { drops } from "@/components/templates/dropData";
 
 /* ─── Constants ─── */
 const CREDIT_DOLLAR_VALUE = 0.098;
@@ -36,6 +37,17 @@ const categoryConfig: Record<string, { color: string; icon: string }> = {
   Studio: { color: "text-blue-400", icon: "💡" },
   General: { color: "text-muted-foreground", icon: "✦" },
 };
+
+/* ─── Template image lookup from dropData ─── */
+const _dropImageMap: Record<string, string> = {};
+for (const drop of drops) {
+  for (const t of drop.templates) {
+    if (t.image) _dropImageMap[t.name.toUpperCase()] = t.image as string;
+  }
+}
+function getDropImage(templateName: string): string | null {
+  return _dropImageMap[templateName?.toUpperCase()] || null;
+}
 
 /* ─── Upload zone ─── */
 interface UploadZoneProps {
@@ -165,13 +177,20 @@ const TemplateRun = () => {
     return session.access_token;
   };
 
-  // Load templates from CF Worker API
+  // Load templates from CF Worker API (public endpoint — no auth needed)
   const { data: templates, isLoading: templatesLoading } = useQuery<ApiTemplate[]>({
     queryKey: ["active-templates"],
     queryFn: async () => {
-      const token = await getToken();
-      return fetchTemplates(token);
+      try {
+        const token = await getToken();
+        return await fetchTemplates(token);
+      } catch {
+        // Fallback: fetch without auth (list endpoint is public)
+        return await fetchTemplates("");
+      }
     },
+    retry: 1,
+    staleTime: 60_000,
   });
 
   // Fetch template detail (user_inputs from R2) when a template is selected
@@ -191,15 +210,19 @@ const TemplateRun = () => {
     enabled: !!selectedTemplateId && !!templates,
   });
 
-  // Auto-select
+  // Auto-select — match by id (name) case-insensitively, or by slug
   useEffect(() => {
     if (!templates || selectedTemplateId) return;
+    const normalize = (s: string) => s.toLowerCase().replace(/\s+/g, "-");
     if (queryTemplateId) {
-      const match = templates.find((t) => t.id === queryTemplateId);
+      const decoded = decodeURIComponent(queryTemplateId);
+      const match = templates.find((t) =>
+        t.id === decoded || normalize(t.id) === normalize(decoded)
+      );
       if (match) { setSelectedTemplateId(match.id); return; }
     }
     if (slug) {
-      const match = templates.find((t) => t.id === slug);
+      const match = templates.find((t) => normalize(t.id) === normalize(slug));
       if (match) setSelectedTemplateId(match.id);
     }
   }, [templates, slug, queryTemplateId, selectedTemplateId]);
@@ -418,9 +441,23 @@ const TemplateRun = () => {
                         >
                           {/* Preview area */}
                           <div className="aspect-[4/3] bg-gradient-to-br from-secondary/60 to-secondary/20 flex items-center justify-center relative overflow-hidden">
-                            <div className="text-3xl opacity-30 group-hover:opacity-50 group-hover:scale-110 transition-all duration-300">
-                              {cfg.icon}
-                            </div>
+                            {getDropImage(t.name) ? (
+                              <img
+                                src={getDropImage(t.name)!}
+                                alt={t.name}
+                                className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+                              />
+                            ) : t.preview_url ? (
+                              <img
+                                src={t.preview_url}
+                                alt={t.name}
+                                className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+                              />
+                            ) : (
+                              <div className="text-3xl opacity-30 group-hover:opacity-50 group-hover:scale-110 transition-all duration-300">
+                                {cfg.icon}
+                              </div>
+                            )}
                             <span className={`absolute top-2 left-2 text-[8px] font-black uppercase tracking-wider ${cfg.color} bg-background/70 backdrop-blur-sm px-2 py-0.5 rounded-md`}>
                               {cat}
                             </span>
@@ -473,8 +510,12 @@ const TemplateRun = () => {
                   <ChevronLeft size={12} /> All Templates
                 </button>
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center text-lg">
-                    {categoryConfig[template.category || "General"]?.icon || "✦"}
+                  <div className="w-10 h-10 rounded-lg bg-primary/10 overflow-hidden flex items-center justify-center text-lg shrink-0">
+                    {getDropImage(template.name) ? (
+                      <img src={getDropImage(template.name)!} alt={template.name} className="w-full h-full object-cover" />
+                    ) : (
+                      categoryConfig[template.category || "General"]?.icon || "✦"
+                    )}
                   </div>
                   <div className="flex-1 min-w-0">
                     <h3 className="text-sm font-bold text-foreground">{template.name}</h3>
@@ -758,7 +799,16 @@ const TemplateRun = () => {
                   {result.outputs.map((output, i) => (
                     <div key={i} className="rounded-xl border border-border/30 bg-card overflow-hidden group">
                       {output.type === "video" ? (
-                        <video src={output.url} controls autoPlay loop muted className="w-full aspect-video object-cover bg-secondary/50" />
+                        <div className="relative group">
+                          <video src={output.url} controls autoPlay loop muted className="w-full aspect-video object-cover bg-secondary/50" />
+                          <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity flex gap-1">
+                            <a href={output.url} download target="_blank" rel="noopener noreferrer">
+                              <button className="w-7 h-7 rounded-md bg-background/80 backdrop-blur-sm flex items-center justify-center text-foreground hover:bg-background transition-colors">
+                                <Download size={12} />
+                              </button>
+                            </a>
+                          </div>
+                        </div>
                       ) : (
                         <div className="relative">
                           <img src={output.url} alt={output.label || `Asset ${i + 1}`} className="w-full aspect-square object-cover bg-secondary/50" />

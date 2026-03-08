@@ -13,6 +13,7 @@
   "output_type": "video",
   "estimated_credits_per_run": 50,
   "is_active": true,
+  "preview_url": "https://shiny-rice-e95bfuse-api.kade-fc1.workers.dev/assets/references/ugc-white-girl.png",
   "asset_requirements": "Product on clean background. Back view optional for a more complete outfit shot.",
   "input_manifest": [
     {
