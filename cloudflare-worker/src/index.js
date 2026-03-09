@@ -1663,14 +1663,17 @@ async function createProjectRow(env, userId, templateName, userInputs) {
 
 // ============== R2 HELPERS ==============
 
+function normalizeTemplateName(name) {
+  return name.toLowerCase().replace(/[()]/g, "").replace(/\s+/g, "_").replace(/_+/g, "_").replace(/^_|_$/g, "");
+}
+
 function getBundledTemplate(templateName) {
-  const key = `${templateName.toLowerCase().replace(/\s+/g, "_")}_template`;
+  const key = `${normalizeTemplateName(templateName)}_template`;
   return BUNDLED_TEMPLATES[key] || null;
 }
 
 async function loadTemplateFromR2(env, templateName) {
-  // Normalize: lowercase, strip parens, collapse spaces → underscores
-  const key = `${templateName.toLowerCase().replace(/[()]/g, "").replace(/\s+/g, "_")}_template.json`;
+  const key = `${normalizeTemplateName(templateName)}_template.json`;
   try {
     if (env.FUSE_TEMPLATES) {
       const obj = await env.FUSE_TEMPLATES.get(key);
@@ -2045,14 +2048,15 @@ async function handleListTemplates(env) {
 async function handleGetTemplate(env, nameOrKey) {
   // nameOrKey can be "garage_guy_template.json" (full R2 key from frontend)
   // or "GARAGE guy" (template name). Normalize to load from R2.
+  const decoded = decodeURIComponent(nameOrKey);
   let template;
-  if (nameOrKey.endsWith("_template.json")) {
+  if (decoded.endsWith("_template.json")) {
     // Direct R2 key — load directly
-    const obj = await env.FUSE_TEMPLATES.get(decodeURIComponent(nameOrKey));
-    if (!obj) return Response.json({ error: `Template not found: ${nameOrKey}` }, { status: 404 });
+    const obj = await env.FUSE_TEMPLATES.get(decoded);
+    if (!obj) return Response.json({ error: `Template not found: ${decoded}` }, { status: 404 });
     template = JSON.parse(await obj.text());
   } else {
-    template = await loadTemplateFromR2(env, nameOrKey);
+    template = await loadTemplateFromR2(env, decoded);
   }
   // Map input_manifest → user_inputs for frontend compatibility
   const manifest = getInputManifest(template);

@@ -5,6 +5,7 @@ on:
     branches: [main, 'claude/**']
     paths:
       - 'cloudflare-worker/**'
+      - '.github/workflows/deploy-worker.yml'
   workflow_dispatch:
 
 jobs:
@@ -21,13 +22,14 @@ jobs:
         with:
           node-version: '20'
 
-      - run: npm install
+      - run: npm install && npm install --save-dev wrangler@4
 
-      # ── Deploy worker ─────────────────────────────────────────
+      # ── Deploy worker ──────────────────────────────────────
       - name: Deploy Worker to Cloudflare
         run: npx wrangler deploy
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
 
       # ── Upload all template JSONs to R2 ───────────────────────
       - name: Upload Template JSONs to R2
@@ -43,15 +45,15 @@ jobs:
           echo "All templates uploaded."
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
 
-      # ── Set ALL worker secrets (on manual dispatch only) ──────
-      # Trigger via: Actions → Deploy Cloudflare Worker → Run workflow
+      # ── Set ALL worker secrets ─────────────────────────────
       - name: Set Worker Secrets
-        if: github.event_name == 'workflow_dispatch'
         run: |
-          echo "https://sdmwcjfksoqbplcqqmhg.supabase.co" | npx wrangler secret put SUPABASE_URL
+          echo "${{ secrets.SUPABASE_URL }}" | npx wrangler secret put SUPABASE_URL
           echo "${{ secrets.SUPABASE_ANON_KEY }}" | npx wrangler secret put SUPABASE_ANON_KEY
           echo "${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}" | npx wrangler secret put SUPABASE_SERVICE_ROLE_KEY
           echo "${{ secrets.FAL_API_KEY }}" | npx wrangler secret put FAL_API_KEY
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
