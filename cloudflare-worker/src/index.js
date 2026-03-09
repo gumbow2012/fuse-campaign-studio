@@ -5,7 +5,12 @@
 // Users never see nodes — only the clean input form.
 // ============================================================
 
-const WORKER_URL = "https://shiny-rice-e95bfuse-api.kade-fc1.workers.dev";
+// WORKER_URL is resolved at request time via getWorkerUrl(env) so it picks up
+// the ASSETS_PUBLIC_URL secret when a custom domain is configured.
+const WORKER_URL_DEFAULT = "https://shiny-rice-e95bfuse-api.kade-fc1.workers.dev";
+function getWorkerUrl(env) {
+  return (env && env.ASSETS_PUBLIC_URL) ? env.ASSETS_PUBLIC_URL.replace(/\/$/, "") : WORKER_URL_DEFAULT;
+}
 
 // ============== BUNDLED TEMPLATES (fallback when R2 is empty) ==============
 const BUNDLED_TEMPLATES = {
@@ -1723,11 +1728,11 @@ function getInputManifest(template) {
 /**
  * Resolve a user input value (URL or R2 key) to a full URL.
  */
-function resolveInputUrl(value) {
+function resolveInputUrl(value, env) {
   if (!value) return null;
   if (value.startsWith("http")) return value;
   if (value.startsWith("uploads/") || value.startsWith("outputs/")) {
-    return `${WORKER_URL}/assets/${value}`;
+    return `${getWorkerUrl(env)}/assets/${value}`;
   }
   return value;
 }
@@ -1902,7 +1907,7 @@ async function runPipeline(env, projectId) {
 
         // Add locked reference images first
         for (const ref of step.locked_inputs || []) {
-          const url = resolveInputUrl(ref);
+          const url = resolveInputUrl(ref, env);
           if (url) imageUrls.push(url);
         }
 
@@ -1912,7 +1917,7 @@ async function runPipeline(env, projectId) {
           const field = manifest.find((f) => f.key === key);
           const val = userInputs[key];
           if (val && (!field || field.type === "image")) {
-            const url = resolveInputUrl(val);
+            const url = resolveInputUrl(val, env);
             if (url) imageUrls.push(url);
           }
         }
@@ -1924,14 +1929,11 @@ async function runPipeline(env, projectId) {
 
         const falImageUrls = await callNanoBananaPro(env, prompt, imageUrls, settings);
         for (let imgIdx = 0; imgIdx < falImageUrls.length; imgIdx++) {
-          let outputUrl = falImageUrls[imgIdx];
-          if (env.FUSE_ASSETS) {
-            // Persist to R2 for stable long-lived URLs
-            const imgKey = `outputs/${projectId}/${step.id}_${Date.now()}_${imgIdx}.png`;
-            const imgBuf = await (await fetch(falImageUrls[imgIdx])).arrayBuffer();
-            await env.FUSE_ASSETS.put(imgKey, imgBuf, { httpMetadata: { contentType: "image/png" } });
-            outputUrl = `${WORKER_URL}/assets/${imgKey}`;
-          }
+          // Always store in R2 — fal.ai URLs are temporary and must never be surfaced
+          const imgKey = `assets/outputs/${projectId}/${step.id}_${Date.now()}_${imgIdx}.png`;
+          const imgBuf = await (await fetch(falImageUrls[imgIdx])).arrayBuffer();
+          await env.FUSE_ASSETS.put(imgKey, imgBuf, { httpMetadata: { contentType: "image/png" } });
+          const outputUrl = `${getWorkerUrl(env)}/${imgKey}`;
           if (imgIdx === 0) lastOutputUrl = outputUrl;
           outputs.items.push({ type: "image", step_id: step.id, url: outputUrl });
         }
@@ -1947,7 +1949,7 @@ async function runPipeline(env, projectId) {
         } else {
           const item = outputs.items.find((x) => x.step_id === step.image_source);
           if (!item) throw new Error(`Step not found: ${step.image_source}`);
-          sourceImageUrl = item.url.startsWith("http") ? item.url : `${WORKER_URL}${item.url}`;
+          sourceImageUrl = item.url.startsWith("http") ? item.url : `${getWorkerUrl(env)}${item.url}`;
         }
 
         const prompt = buildStepPrompt(step, userInputs);
@@ -1956,14 +1958,11 @@ async function runPipeline(env, projectId) {
         console.log(`[${projectId}][${step.id}] Kling via fal: duration=${settings.duration || "5"}, aspect=${settings.aspect_ratio || "9:16"}`);
 
         const falVideoUrl = await callKlingViaFal(env, sourceImageUrl, prompt, settings);
-        let videoOutputUrl = falVideoUrl;
-        if (env.FUSE_ASSETS) {
-          // Persist to R2 for stable long-lived URLs
-          const videoKey = `outputs/${projectId}/${step.id}_${Date.now()}.mp4`;
-          const vidBuf = await (await fetch(falVideoUrl)).arrayBuffer();
-          await env.FUSE_ASSETS.put(videoKey, vidBuf, { httpMetadata: { contentType: "video/mp4" } });
-          videoOutputUrl = `${WORKER_URL}/assets/${videoKey}`;
-        }
+        // Always store in R2 — fal.ai URLs are temporary and must never be surfaced
+        const videoKey = `assets/outputs/${projectId}/${step.id}_${Date.now()}.mp4`;
+        const vidBuf = await (await fetch(falVideoUrl)).arrayBuffer();
+        await env.FUSE_ASSETS.put(videoKey, vidBuf, { httpMetadata: { contentType: "video/mp4" } });
+        const videoOutputUrl = `${getWorkerUrl(env)}/${videoKey}`;
 
         outputs.items.push({
           type: "video",
@@ -2140,12 +2139,11 @@ async function handleUploadFile(request, env) {
   if (!file) return Response.json({ error: "No file provided" }, { status: 400 });
 
   const ext = (file.name || "").split(".").pop() || "png";
-  const key = `uploads/${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
+  const key = `assets/uploads/${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
 
-  if (!env.FUSE_ASSETS) return Response.json({ error: "Upload storage not configured — 'fuse-assets' R2 bucket is missing. Please create it in the Cloudflare dashboard and redeploy." }, { status: 503 });
   await env.FUSE_ASSETS.put(key, file.stream(), { httpMetadata: { contentType: file.type || "image/png" } });
 
-  return Response.json({ ok: true, key, imageUrl: `${WORKER_URL}/assets/${key}` });
+  return Response.json({ ok: true, key, imageUrl: `${getWorkerUrl(env)}/${key}` });
 }
 
 async function handleUploadTemplate(request, env) {
@@ -2159,7 +2157,10 @@ async function handleUploadTemplate(request, env) {
 }
 
 async function handleServeAsset(env, assetPath) {
-  const obj = await env.FUSE_ASSETS.get(decodeURIComponent(assetPath));
+  const decoded = decodeURIComponent(assetPath);
+  // Try both key formats: new "assets/<path>" and legacy "<path>"
+  let obj = await env.FUSE_ASSETS.get(`assets/${decoded}`);
+  if (!obj) obj = await env.FUSE_ASSETS.get(decoded);
   if (!obj) return new Response("Not found", { status: 404 });
   return new Response(obj.body, {
     headers: {

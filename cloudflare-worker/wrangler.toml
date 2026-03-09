@@ -4,14 +4,21 @@ main = "src/index.js"
 compatibility_date = "2024-09-01"
 account_id = "fc1475b3027b02c9aef41534caae907d"
 
-# ── R2 bucket bindings ──
+# ── R2 bucket binding ──
+# Single bucket (fuse-templates) used for everything:
+#   *_template.json          — template definitions
+#   assets/references/*      — permanent locked reference images
+#   assets/uploads/*         — user-uploaded input images
+#   assets/outputs/*         — AI-generated results
+# Both FUSE_TEMPLATES and FUSE_ASSETS bindings point to the same bucket so all
+# existing code paths work without changes.
 [[r2_buckets]]
 binding = "FUSE_TEMPLATES"
 bucket_name = "fuse-templates"
 
 [[r2_buckets]]
 binding = "FUSE_ASSETS"
-bucket_name = "fuse-assets"
+bucket_name = "fuse-templates"
 
 # ── Secrets (set via CLI) ──
 # wrangler secret put SUPABASE_URL
@@ -19,4 +26,4 @@ bucket_name = "fuse-assets"
 # wrangler secret put SUPABASE_ANON_KEY
 # wrangler secret put FAL_API_KEY          ← used for nano-banana-pro AND Kling 2.5
 # wrangler secret put GEMINI_API_KEY       (optional — for /api/nano/run route)
-# wrangler secret put ASSETS_PUBLIC_URL    (optional)
+# wrangler secret put ASSETS_PUBLIC_URL    ← custom public base URL, e.g. https://api.fuse.us
