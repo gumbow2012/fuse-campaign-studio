@@ -24,6 +24,7 @@ import {
   type OutputItem,
   type TemplateDetail,
 } from "@/services/fuseApi";
+import { getStaticInputs } from "@/services/templateInputMap";
 import { drops } from "@/components/templates/dropData";
 
 /* ─── Constants ─── */
@@ -242,7 +243,7 @@ const TemplateRun = () => {
 
   const template = templates?.find((t) => t.id === selectedTemplateId);
 
-  // Build input fields: prefer R2 user_inputs, fall back to DB input_schema
+  // Build input fields: prefer R2 user_inputs → DB input_schema → static map → default
   const inputFields: InputField[] = (() => {
     if (templateDetail?.user_inputs?.length) {
       return templateDetail.user_inputs.map((ui) => ({
@@ -262,7 +263,10 @@ const TemplateRun = () => {
         hint: f.hint,
       }));
     }
-    // Default fallback: single product_image
+    // Static fallback: inputs embedded from template JSON files
+    const staticFields = template?.name ? getStaticInputs(template.name) : null;
+    if (staticFields?.length) return staticFields;
+    // Last resort: single product_image
     return [{ key: "product_image", label: "PRODUCT IMAGE", type: "image", required: true }];
   })();
 

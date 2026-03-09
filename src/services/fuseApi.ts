@@ -2,6 +2,7 @@
  * FUSE API Service — Single source of truth for all Cloudflare Worker calls.
  * Every request uses the Supabase JWT as Bearer token.
  */
+import { supabase } from '@/integrations/supabase/client';
 
 import { supabase } from "@/integrations/supabase/client";
 
@@ -56,14 +57,18 @@ export async function fetchTemplates(token: string): Promise<ApiTemplate[]> {
   }
 
   // Fallback: query Supabase directly (works even when worker secrets aren't configured)
-  const { supabase } = await import('@/integrations/supabase/client');
   const { data: rows, error } = await supabase
     .from('templates')
     .select('id, name, description, category, output_type, estimated_credits_per_run, is_active, input_schema, preview_url, tags')
     .eq('is_active', true)
     .order('created_at', { ascending: false });
   if (error) throw new Error(error.message);
-  return (rows || []).map(t => ({ ...t, asset_requirements: null })) as unknown as ApiTemplate[];
+  // Use `name` as `id` so the worker can look up templates by name (not UUID)
+  return (rows || []).map(t => ({
+    ...t,
+    id: t.name as string,
+    asset_requirements: null,
+  })) as unknown as ApiTemplate[];
 }
 
 export interface TemplateDetail {

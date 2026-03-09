@@ -1668,15 +1668,33 @@ function normalizeTemplateName(name) {
 }
 
 function getBundledTemplate(templateName) {
-  const key = `${normalizeTemplateName(templateName)}_template`;
-  return BUNDLED_TEMPLATES[key] || null;
+  const normalized = normalizeTemplateName(templateName);
+  const exact = `${normalized}_template`;
+  if (BUNDLED_TEMPLATES[exact]) return BUNDLED_TEMPLATES[exact];
+  // Fuzzy: find a key whose base starts with normalized_ or vice-versa
+  // e.g. "garage" matches "garage_guy_template"
+  const fuzzyKey = Object.keys(BUNDLED_TEMPLATES).find((k) => {
+    const base = k.replace(/_template$/, "");
+    return base.startsWith(normalized + "_") || normalized.startsWith(base + "_") || base === normalized;
+  });
+  return fuzzyKey ? BUNDLED_TEMPLATES[fuzzyKey] : null;
 }
 
 async function loadTemplateFromR2(env, templateName) {
-  const key = `${normalizeTemplateName(templateName)}_template.json`;
+  const normalized = normalizeTemplateName(templateName);
+  const key = `${normalized}_template.json`;
   try {
     if (env.FUSE_TEMPLATES) {
-      const obj = await env.FUSE_TEMPLATES.get(key);
+      let obj = await env.FUSE_TEMPLATES.get(key);
+      if (!obj) {
+        // Fuzzy: scan R2 list for a key whose base starts with normalized_
+        const list = await env.FUSE_TEMPLATES.list();
+        const match = list.objects.find((o) => {
+          const base = o.key.replace("_template.json", "");
+          return base.startsWith(normalized + "_") || normalized.startsWith(base + "_") || base === normalized;
+        });
+        if (match) obj = await env.FUSE_TEMPLATES.get(match.key);
+      }
       if (obj) return JSON.parse(await obj.text());
     }
   } catch (e) {
@@ -1688,6 +1706,7 @@ async function loadTemplateFromR2(env, templateName) {
 }
 
 async function storeInR2(env, r2Key, data, contentType) {
+  if (!env.FUSE_ASSETS) throw new Error("FUSE_ASSETS R2 bucket is not bound — check wrangler.toml and ensure the 'fuse-assets' bucket exists in your Cloudflare account.");
   await env.FUSE_ASSETS.put(r2Key, data, { httpMetadata: { contentType } });
 }
 
@@ -2123,6 +2142,7 @@ async function handleUploadFile(request, env) {
   const ext = (file.name || "").split(".").pop() || "png";
   const key = `uploads/${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
 
+  if (!env.FUSE_ASSETS) return Response.json({ error: "Upload storage not configured — 'fuse-assets' R2 bucket is missing. Please create it in the Cloudflare dashboard and redeploy." }, { status: 503 });
   await env.FUSE_ASSETS.put(key, file.stream(), { httpMetadata: { contentType: file.type || "image/png" } });
 
   return Response.json({ ok: true, key, imageUrl: `${WORKER_URL}/assets/${key}` });
