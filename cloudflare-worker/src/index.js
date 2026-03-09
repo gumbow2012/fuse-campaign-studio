@@ -1662,13 +1662,17 @@ async function createProjectRow(env, userId, templateName, userInputs) {
 
 // ============== R2 HELPERS ==============
 
+function normalizeTemplateName(name) {
+  return name.toLowerCase().replace(/[()]/g, "").replace(/\s+/g, "_").replace(/_+/g, "_").replace(/^_|_$/g, "");
+}
+
 function getBundledTemplate(templateName) {
-  const key = `${templateName.toLowerCase().replace(/\s+/g, "_")}_template`;
+  const key = `${normalizeTemplateName(templateName)}_template`;
   return BUNDLED_TEMPLATES[key] || null;
 }
 
 async function loadTemplateFromR2(env, templateName) {
-  const key = `${templateName.toLowerCase().replace(/\s+/g, "_")}_template.json`;
+  const key = `${normalizeTemplateName(templateName)}_template.json`;
   try {
     if (env.FUSE_TEMPLATES) {
       const obj = await env.FUSE_TEMPLATES.get(key);
