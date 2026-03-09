@@ -14,11 +14,9 @@ binding = "FUSE_ASSETS"
 bucket_name = "fuse-assets"
 
 # ── Secrets (set via CLI) ──
-# wrangler secret put AUTH_TOKEN
 # wrangler secret put SUPABASE_URL
+# wrangler secret put SUPABASE_SERVICE_ROLE_KEY
 # wrangler secret put SUPABASE_ANON_KEY
-# wrangler secret put NANO_BANANA_API_URL
-# wrangler secret put NANO_BANANA_API_KEY
-# wrangler secret put KLING_API_URL
-# wrangler secret put KLING_API_KEY
-# wrangler secret put ASSETS_PUBLIC_URL   (optional)
+# wrangler secret put FAL_API_KEY          ← used for nano-banana-pro AND Kling 2.5
+# wrangler secret put GEMINI_API_KEY       (optional — for /api/nano/run route)
+# wrangler secret put ASSETS_PUBLIC_URL    (optional)

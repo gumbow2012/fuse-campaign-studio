@@ -11,11 +11,7 @@ SUPABASE_SERVICE_ROLE_KEY: string;
   WEAVY_FIREBASE_API_KEY?: string;
   WEAVY_REFRESH_TOKEN?: string;
   // Model API keys for direct execution
-  FAL_API_KEY?: string;
-  KLING_ACCESS_KEY?: string;  // also checked as KLING_AK
-  KLING_SECRET_KEY?: string;  // also checked as KLING_SK
-  KLING_AK?: string;
-  KLING_SK?: string;
+  FAL_API_KEY?: string;       // fal.ai key — used for nano-banana-pro AND Kling 2.5
   GEMINI_API_KEY?: string;
 }
 

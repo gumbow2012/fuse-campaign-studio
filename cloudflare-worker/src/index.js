@@ -23,13 +23,13 @@ const BUNDLED_TEMPLATES = {
       "video"
     ],
     "output_type": "video",
-    "estimated_credits_per_run": 50,
+    "estimated_credits_per_run": 572,
     "is_active": true,
     "asset_requirements": "Any bold statement piece. The cinematic heist scene is generated around it.",
     "input_manifest": [
       {
-        "key": "front_outfit",
-        "label": "Front Outfit",
+        "key": "clothing",
+        "label": "Clothing",
         "type": "image",
         "required": true,
         "accepts": [
@@ -38,20 +38,20 @@ const BUNDLED_TEMPLATES = {
           "image/webp"
         ],
         "max_size_mb": 10,
-        "hint": "Front of the product — will be worn in the armored truck heist scene."
+        "hint": "The clothing item — will be worn in the armored truck heist scene."
       },
       {
-        "key": "back_outfit",
-        "label": "Back Outfit",
+        "key": "logo",
+        "label": "Logo",
         "type": "image",
-        "required": false,
+        "required": true,
         "accepts": [
           "image/jpeg",
           "image/png",
           "image/webp"
         ],
         "max_size_mb": 10,
-        "hint": "Optional back view as the character moves in the scene."
+        "hint": "Brand logo — will be featured on the armored truck."
       }
     ],
     "steps": [
@@ -61,13 +61,13 @@ const BUNDLED_TEMPLATES = {
         "prompt": "Cinematic armored truck fashion photo. A figure wearing the clothing product stands next to or emerges from an armored truck. Urban city setting, dramatic cinematography, security guards in background. The clothing worn with extreme confidence — this is a high-value drop. Think Supreme or Kanye drop energy. Cinematic color grade, dramatic low-angle perspective.",
         "user_prompt_key": null,
         "user_input_keys": [
-          "front_outfit",
-          "back_outfit"
+          "clothing",
+          "logo"
         ],
         "locked_inputs": [],
         "settings": {
           "resolution": "2K",
-          "num_images": 1,
+          "num_images": 12,
           "output_format": "png"
         }
       },
@@ -89,7 +89,8 @@ const BUNDLED_TEMPLATES = {
     "outputs": {
       "primary_type": "video",
       "items": [
-        "image",
+        "image", "image", "image", "image", "image", "image",
+        "image", "image", "image", "image", "image", "image",
         "video"
       ]
     }
@@ -1735,10 +1736,14 @@ async function callNanoBananaPro(env, prompt, imageUrls, settings) {
   const payload = {
     prompt,
     num_images: settings?.num_images || 1,
-    resolution: settings?.resolution || "2K",
     output_format: settings?.output_format || "png",
   };
-  if (imageUrls && imageUrls.length > 0) payload.image_urls = imageUrls;
+  // fal nano-banana-pro/edit expects image_url (singular) as the primary input
+  if (imageUrls && imageUrls.length > 0) {
+    payload.image_url = imageUrls[0];
+    // Additional images as reference context
+    if (imageUrls.length > 1) payload.reference_image_urls = imageUrls.slice(1);
+  }
 
   const res = await fetch("https://queue.fal.run/fal-ai/nano-banana-pro/edit", {
     method: "POST",
@@ -1754,99 +1759,100 @@ async function callNanoBananaPro(env, prompt, imageUrls, settings) {
   const { request_id } = await res.json();
   if (!request_id) throw new Error("FAL: no request_id returned");
 
-  // Poll for completion (max 10 min)
+  // Poll status endpoint for completion (max 10 min)
+  const statusBase = `https://queue.fal.run/fal-ai/nano-banana-pro/edit/requests/${request_id}`;
   for (let i = 0; i < 120; i++) {
     await sleep(5000);
-    const statusRes = await fetch(
-      `https://queue.fal.run/fal-ai/nano-banana-pro/edit/requests/${request_id}`,
-      { headers: { Authorization: `Key ${env.FAL_API_KEY}` } }
-    );
-    if (!statusRes.ok) continue;
-    const data = await statusRes.json();
+    try {
+      const statusRes = await fetch(`${statusBase}/status`, {
+        headers: { Authorization: `Key ${env.FAL_API_KEY}` },
+      });
+      if (!statusRes.ok) continue;
+      const statusData = await statusRes.json();
 
-    if (data.status === "COMPLETED") {
-      const result = data.result || data;
-      const url = result.images?.[0]?.url || result.image?.url;
-      if (!url) throw new Error("FAL completed but no image URL in response");
-      const imgRes = await fetch(url);
-      if (!imgRes.ok) throw new Error("Failed to download FAL image");
-      return await imgRes.arrayBuffer();
-    }
-    if (data.status === "FAILED") {
-      throw new Error(`FAL failed: ${data.error || "Unknown"}`);
+      if (statusData.status === "COMPLETED") {
+        // Fetch the actual result
+        const resultRes = await fetch(statusBase, {
+          headers: { Authorization: `Key ${env.FAL_API_KEY}` },
+        });
+        const result = await resultRes.json();
+        // Return all images (num_images may be > 1)
+        const urls = (result.images || (result.image ? [result.image] : [])).map(i => i.url).filter(Boolean);
+        if (!urls.length) throw new Error("FAL completed but no image URL in response");
+        const buffers = await Promise.all(urls.map(async (url) => {
+          const r = await fetch(url);
+          if (!r.ok) throw new Error("Failed to download FAL image");
+          return r.arrayBuffer();
+        }));
+        return buffers; // always an array
+      }
+      if (statusData.status === "FAILED") {
+        throw new Error(`FAL failed: ${statusData.error || "Unknown"}`);
+      }
+    } catch (e) {
+      if (e.message && (e.message.includes("FAL failed") || e.message.includes("no image URL"))) throw e;
     }
   }
   throw new Error("FAL timed out after 10 minutes");
 }
 
-// ============== KLING API ==============
-async function generateKlingJWT(ak, sk) {
-  const enc = new TextEncoder();
-  const b64url = (d) => {
-    let s = "";
-    for (const b of d) s += String.fromCharCode(b);
-    return btoa(s).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+// ============== KLING VIA FAL.AI ==============
+async function callKlingViaFal(env, imageUrl, prompt, settings) {
+  if (!env.FAL_API_KEY) throw new Error("FAL_API_KEY not configured");
+
+  const payload = {
+    prompt,
+    image_url: imageUrl,
+    duration: settings?.duration || "5",
+    aspect_ratio: settings?.aspect_ratio || "9:16",
+    cfg_scale: settings?.cfg_scale ?? 0.5,
+    negative_prompt: settings?.negative_prompt || "blur, distort, and low quality",
   };
-  const now = Math.floor(Date.now() / 1000);
-  const hdr = b64url(enc.encode(JSON.stringify({ alg: "HS256", typ: "JWT" })));
-  const pay = b64url(enc.encode(JSON.stringify({ iss: ak, iat: now, nbf: now - 5, exp: now + 1800 })));
-  const msg = `${hdr}.${pay}`;
-  const key = await crypto.subtle.importKey("raw", enc.encode(sk), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
-  const sig = b64url(new Uint8Array(await crypto.subtle.sign("HMAC", key, enc.encode(msg))));
-  return `${msg}.${sig}`;
-}
 
-async function callKling(env, imageUrl, prompt, settings) {
-  const ak = env.KLING_AK || env.KLING_ACCESS_KEY;
-  const sk = env.KLING_SK || env.KLING_SECRET_KEY;
-  if (!ak || !sk) throw new Error("KLING_AK / KLING_SK not configured");
-
-  const base = env.KLING_API_BASE || "https://api.klingai.com";
-  const jwt = await generateKlingJWT(ak, sk);
-
-  const submitRes = await fetch(`${base}/v1/videos/image2video`, {
+  const res = await fetch("https://queue.fal.run/fal-ai/kling-video/v2.5-turbo/pro/image-to-video", {
     method: "POST",
-    headers: { Authorization: `Bearer ${jwt}`, "Content-Type": "application/json" },
-    body: JSON.stringify({
-      model_name: settings?.model || "kling-v1-6",
-      image: imageUrl,
-      prompt,
-      cfg_scale: settings?.cfg_scale ?? 0.5,
-      mode: settings?.mode || "std",
-      duration: settings?.duration || "10",
-      aspect_ratio: settings?.aspect_ratio || "9:16",
-    }),
+    headers: { Authorization: `Key ${env.FAL_API_KEY}`, "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
   });
 
-  if (!submitRes.ok) {
-    const err = await submitRes.text();
-    throw new Error(`Kling submit failed (${submitRes.status}): ${err.slice(0, 500)}`);
+  if (!res.ok) {
+    const err = await res.text();
+    throw new Error(`Kling (fal) submit failed (${res.status}): ${err.slice(0, 500)}`);
   }
 
-  const taskId = (await submitRes.json()).data?.task_id;
-  if (!taskId) throw new Error("Kling: no task_id returned");
+  const { request_id } = await res.json();
+  if (!request_id) throw new Error("Kling (fal): no request_id returned");
 
   // Poll for completion (max 30 min)
+  const statusBase = `https://queue.fal.run/fal-ai/kling-video/v2.5-turbo/pro/image-to-video/requests/${request_id}`;
   for (let i = 0; i < 180; i++) {
     await sleep(10000);
-    const pollJwt = await generateKlingJWT(ak, sk);
-    const statusRes = await fetch(`${base}/v1/videos/image2video/${taskId}`, {
-      headers: { Authorization: `Bearer ${pollJwt}` },
-    });
-    if (!statusRes.ok) continue;
-    const s = await statusRes.json();
-    if (s.data?.task_status === "succeed") {
-      const url = s.data?.task_result?.videos?.[0]?.url;
-      if (!url) throw new Error("Kling succeeded but no video URL");
-      const vid = await fetch(url);
-      if (!vid.ok) throw new Error("Failed to download Kling video");
-      return await vid.arrayBuffer();
-    }
-    if (s.data?.task_status === "failed") {
-      throw new Error(`Kling failed: ${s.data?.task_status_msg || "Unknown"}`);
+    try {
+      const statusRes = await fetch(`${statusBase}/status`, {
+        headers: { Authorization: `Key ${env.FAL_API_KEY}` },
+      });
+      if (!statusRes.ok) continue;
+      const statusData = await statusRes.json();
+
+      if (statusData.status === "COMPLETED") {
+        const resultRes = await fetch(statusBase, {
+          headers: { Authorization: `Key ${env.FAL_API_KEY}` },
+        });
+        const result = await resultRes.json();
+        const videoUrl = result?.video?.url;
+        if (!videoUrl) throw new Error("Kling (fal) completed but no video URL in response");
+        const vid = await fetch(videoUrl);
+        if (!vid.ok) throw new Error("Failed to download Kling video from fal");
+        return await vid.arrayBuffer();
+      }
+      if (statusData.status === "FAILED") {
+        throw new Error(`Kling (fal) failed: ${statusData.error || "Unknown"}`);
+      }
+    } catch (e) {
+      if (e.message && (e.message.includes("FAILED") || e.message.includes("no video URL"))) throw e;
     }
   }
-  throw new Error("Kling timed out after 30 minutes");
+  throw new Error("Kling (fal) timed out after 30 minutes");
 }
 
 function sleep(ms) {
@@ -1909,15 +1915,13 @@ async function runPipeline(env, projectId) {
 
         console.log(`[${projectId}][${step.id}] FAL: ${imageUrls.length} images, prompt: "${prompt.slice(0, 80)}..."`);
 
-        lastImageBuffer = await callNanoBananaPro(env, prompt, imageUrls, settings);
-        lastImageKey = `outputs/${projectId}/${step.id}_${Date.now()}.png`;
-        await storeInR2(env, lastImageKey, lastImageBuffer, "image/png");
-
-        outputs.items.push({
-          type: "image",
-          step_id: step.id,
-          url: `${WORKER_URL}/assets/${lastImageKey}`,
-        });
+        const imageBuffers = await callNanoBananaPro(env, prompt, imageUrls, settings);
+        for (let imgIdx = 0; imgIdx < imageBuffers.length; imgIdx++) {
+          const imgKey = `outputs/${projectId}/${step.id}_${Date.now()}_${imgIdx}.png`;
+          await storeInR2(env, imgKey, imageBuffers[imgIdx], "image/png");
+          if (imgIdx === 0) { lastImageKey = imgKey; lastImageBuffer = imageBuffers[0]; }
+          outputs.items.push({ type: "image", step_id: step.id, url: `${WORKER_URL}/assets/${imgKey}` });
+        }
 
         await updateProject(env, projectId, { progress: progress + 5, outputs });
 
@@ -1936,9 +1940,9 @@ async function runPipeline(env, projectId) {
         const prompt = buildStepPrompt(step, userInputs);
         const settings = step.settings || {};
 
-        console.log(`[${projectId}][${step.id}] Kling: model=${settings.model || "kling-v1-6"}, duration=${settings.duration || "10"}`);
+        console.log(`[${projectId}][${step.id}] Kling via fal: duration=${settings.duration || "5"}, aspect=${settings.aspect_ratio || "9:16"}`);
 
-        const videoBuffer = await callKling(env, sourceImageUrl, prompt, settings);
+        const videoBuffer = await callKlingViaFal(env, sourceImageUrl, prompt, settings);
         const videoKey = `outputs/${projectId}/${step.id}_${Date.now()}.mp4`;
         await storeInR2(env, videoKey, videoBuffer, "video/mp4");
 
@@ -1983,7 +1987,7 @@ async function handleHealth(env) {
     timestamp: new Date().toISOString(),
     bindings: {
       fal: !!env.FAL_API_KEY,
-      kling: !!(env.KLING_AK || env.KLING_ACCESS_KEY),
+      kling_via_fal: !!env.FAL_API_KEY,
       r2_templates: !!env.FUSE_TEMPLATES,
       r2_assets: !!env.FUSE_ASSETS,
       supabase: !!env.SUPABASE_URL,
@@ -2041,9 +2045,27 @@ async function handleListTemplates(env) {
   return Response.json(templates);
 }
 
-async function handleGetTemplate(env, name) {
-  const template = await loadTemplateFromR2(env, decodeURIComponent(name));
-  return Response.json({ ok: true, template });
+async function handleGetTemplate(env, nameOrKey) {
+  // nameOrKey can be "garage_guy_template.json" (full R2 key from frontend)
+  // or "GARAGE guy" (template name). Normalize to load from R2.
+  const decoded = decodeURIComponent(nameOrKey);
+  let template;
+  if (decoded.endsWith("_template.json")) {
+    // Direct R2 key — load directly
+    const obj = await env.FUSE_TEMPLATES.get(decoded);
+    if (!obj) return Response.json({ error: `Template not found: ${decoded}` }, { status: 404 });
+    template = JSON.parse(await obj.text());
+  } else {
+    template = await loadTemplateFromR2(env, decoded);
+  }
+  // Map input_manifest → user_inputs for frontend compatibility
+  const manifest = getInputManifest(template);
+  return Response.json({
+    ...template,
+    user_inputs: manifest,
+    input_manifest: manifest,
+    asset_requirements: template.asset_requirements || null,
+  });
 }
 
 async function handleCreateProject(request, env) {
