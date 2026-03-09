@@ -24,6 +24,16 @@ jobs:
 
       - run: npm install && npm install --save-dev wrangler@4
 
+      # ── Ensure R2 buckets exist (idempotent) ───────────────
+      - name: Create R2 Buckets
+        run: |
+          npx wrangler r2 bucket create fuse-templates 2>/dev/null && echo "Created fuse-templates" || echo "fuse-templates already exists"
+          npx wrangler r2 bucket create fuse-assets 2>/dev/null && echo "Created fuse-assets" || echo "fuse-assets already exists"
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        continue-on-error: true
+
       # ── Deploy worker ──────────────────────────────────────
       - name: Deploy Worker to Cloudflare
         run: npx wrangler deploy
@@ -50,10 +60,11 @@ jobs:
       # ── Set ALL worker secrets ─────────────────────────────
       - name: Set Worker Secrets
         run: |
-          echo "${{ secrets.SUPABASE_URL }}" | npx wrangler secret put SUPABASE_URL
-          echo "${{ secrets.SUPABASE_ANON_KEY }}" | npx wrangler secret put SUPABASE_ANON_KEY
-          echo "${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}" | npx wrangler secret put SUPABASE_SERVICE_ROLE_KEY
-          echo "${{ secrets.FAL_API_KEY }}" | npx wrangler secret put FAL_API_KEY
+          [ -n "${{ secrets.SUPABASE_URL }}" ] && echo "${{ secrets.SUPABASE_URL }}" | npx wrangler secret put SUPABASE_URL || echo "SUPABASE_URL not configured"
+          [ -n "${{ secrets.SUPABASE_ANON_KEY }}" ] && echo "${{ secrets.SUPABASE_ANON_KEY }}" | npx wrangler secret put SUPABASE_ANON_KEY || echo "SUPABASE_ANON_KEY not configured"
+          [ -n "${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}" ] && echo "${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}" | npx wrangler secret put SUPABASE_SERVICE_ROLE_KEY || echo "SUPABASE_SERVICE_ROLE_KEY not configured"
+          [ -n "${{ secrets.FAL_API_KEY }}" ] && echo "${{ secrets.FAL_API_KEY }}" | npx wrangler secret put FAL_API_KEY || echo "FAL_API_KEY not configured"
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        continue-on-error: true
