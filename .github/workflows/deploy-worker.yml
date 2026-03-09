@@ -22,7 +22,7 @@ jobs:
         with:
           node-version: '20'
 
-      - run: npm install
+      - run: npm install && npm install --save-dev wrangler@4
 
       # ── Deploy worker ──────────────────────────────────────
       - name: Deploy Worker to Cloudflare
