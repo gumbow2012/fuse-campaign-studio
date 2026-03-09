@@ -100,12 +100,27 @@ export async function fetchTemplateDetail(token: string, templateName: string): 
 
 export interface UploadResult { imageUrl: string; key: string }
 
-export async function uploadFile(token: string, file: File): Promise<UploadResult> {
-  const fd = new FormData();
-  fd.append('file', file);
-  const data = await api<any>('/api/upload', token, { method: 'POST', formData: fd });
-  // Worker returns { imageUrl, key } — imageUrl is the full proxied URL
-  return { imageUrl: data.imageUrl || data.url, key: data.key || data.assetKey || '' };
+/**
+ * Upload a file directly to Supabase Storage (bypasses the Cloudflare Worker R2
+ * binding which is not configured in production).  The worker's resolveInputUrl
+ * already passes through any value that starts with "http", so the returned
+ * public URL can be used directly as a template input.
+ */
+export async function uploadFile(_token: string, file: File): Promise<UploadResult> {
+  const ext = file.name.split('.').pop() || 'jpg';
+  const randomStr = Math.random().toString(36).slice(2, 8);
+  const path = `${Date.now()}_${randomStr}.${ext}`;
+
+  const { error } = await supabase.storage
+    .from('uploads')
+    .upload(path, file, { contentType: file.type, upsert: false });
+
+  if (error) throw new Error(`Upload failed: ${error.message}`);
+
+  const { data: urlData } = supabase.storage.from('uploads').getPublicUrl(path);
+  const publicUrl = urlData.publicUrl;
+
+  return { imageUrl: publicUrl, key: path };
 }
 
 /* ── Projects ── */
