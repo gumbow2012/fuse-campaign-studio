@@ -2190,6 +2190,25 @@ export default {
       return new Response(res.body, { status: res.status, statusText: res.statusText, headers: h });
     };
 
+    // Fast binding check — return a clear 503 before crashing deep in handlers.
+    // Skip for health/assets which work without secrets.
+    const NEEDS_SECRETS = path !== "/health" && path !== "/debug-routes" && !path.startsWith("/assets/");
+    if (NEEDS_SECRETS) {
+      const missing = [];
+      if (!env.FUSE_ASSETS)       missing.push("FUSE_ASSETS (R2 bucket not bound — check wrangler.toml)");
+      if (!env.SUPABASE_URL)      missing.push("SUPABASE_URL secret");
+      if (!env.SUPABASE_ANON_KEY) missing.push("SUPABASE_ANON_KEY secret");
+      if (!env.FAL_API_KEY && (path === "/api/enqueue" || path === "/api/projects")) missing.push("FAL_API_KEY secret");
+      if (missing.length) {
+        console.error("[worker] Missing configuration:", missing.join(", "));
+        return wrap(Response.json({
+          error: "Worker misconfigured — missing required secrets/bindings",
+          missing,
+          fix: "Run: npx wrangler secret put <SECRET_NAME> in cloudflare-worker/, or set CLOUDFLARE_API_TOKEN in GitHub repo secrets and re-run the deploy workflow.",
+        }, { status: 503 }));
+      }
+    }
+
     try {
       let response;
 

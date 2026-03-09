@@ -374,7 +374,23 @@ const TemplateRun = () => {
       setProjectId(jobId);
       setResult({ status: "queued", progress: 0, logs: [], attempts: 0, maxAttempts: 3, outputs: [] });
     } catch (err: any) {
-      toast({ title: "Error", description: err.message, variant: "destructive" });
+      const raw: string = err?.message || String(err);
+      // Map known failure patterns to user-friendly messages
+      let description = raw;
+      if (raw.includes("missing required secrets") || raw.includes("misconfigured") || raw.includes("503")) {
+        description = "The AI worker is not fully configured yet. Ask the site owner to set the required API keys (FAL_API_KEY, SUPABASE_URL).";
+      } else if (raw.includes("Upload failed") || raw.includes("FUSE_ASSETS")) {
+        description = "File upload failed — the storage bucket may not be ready yet. Try again in a minute.";
+      } else if (raw.includes("No project ID") || raw.includes("Project creation failed")) {
+        description = "Could not create the project (database error). Check that Supabase secrets are configured.";
+      } else if (raw.includes("FAL_API_KEY")) {
+        description = "AI generation API key is not configured. Ask the site owner to add FAL_API_KEY to the worker.";
+      } else if (raw.toLowerCase().includes("unauthorized") || raw.includes("401")) {
+        description = "Session expired — please sign out and back in.";
+      } else if (raw.toLowerCase().includes("failed to fetch") || raw.includes("network")) {
+        description = "Network error — check your connection and try again.";
+      }
+      toast({ title: "Run failed", description, variant: "destructive" });
     } finally {
       setLoading(false);
     }
