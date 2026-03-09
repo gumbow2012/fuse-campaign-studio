@@ -2,7 +2,7 @@ name: Deploy Supabase Functions & Migrations
 
 on:
   push:
-    branches: [main]
+    branches: [main, 'claude/**']
     paths:
       - 'supabase/**'
   workflow_dispatch:

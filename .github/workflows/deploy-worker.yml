@@ -2,7 +2,7 @@ name: Deploy Cloudflare Worker
 
 on:
   push:
-    branches: [main]
+    branches: [main, 'claude/**']
     paths:
       - 'cloudflare-worker/**'
   workflow_dispatch:
@@ -53,7 +53,5 @@ jobs:
           echo "${{ secrets.SUPABASE_ANON_KEY }}" | npx wrangler secret put SUPABASE_ANON_KEY
           echo "${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}" | npx wrangler secret put SUPABASE_SERVICE_ROLE_KEY
           echo "${{ secrets.FAL_API_KEY }}" | npx wrangler secret put FAL_API_KEY
-          echo "${{ secrets.KLING_AK }}" | npx wrangler secret put KLING_AK
-          echo "${{ secrets.KLING_SK }}" | npx wrangler secret put KLING_SK
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
