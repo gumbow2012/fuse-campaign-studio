@@ -2042,7 +2042,7 @@ async function handleListTemplates(env) {
 }
 
 async function handleGetTemplate(env, name) {
-  const template = await loadTemplateFromR2(env, name);
+  const template = await loadTemplateFromR2(env, decodeURIComponent(name));
   return Response.json({ ok: true, template });
 }
 
