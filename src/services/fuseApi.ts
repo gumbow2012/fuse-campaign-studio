@@ -45,8 +45,23 @@ export interface ApiTemplate {
 }
 
 export async function fetchTemplates(token: string): Promise<ApiTemplate[]> {
-  const data = await api<any>('/api/templates', token);
-  return Array.isArray(data) ? data : (data.templates || []);
+  try {
+    const data = await api<any>('/api/templates', token);
+    const result: ApiTemplate[] = Array.isArray(data) ? data : (data.templates || []);
+    if (result.length > 0) return result;
+  } catch {
+    // Worker unavailable or errored — fall through to Supabase
+  }
+
+  // Fallback: query Supabase directly (works even when worker secrets aren't configured)
+  const { supabase } = await import('@/integrations/supabase/client');
+  const { data: rows, error } = await supabase
+    .from('templates')
+    .select('id, name, description, category, output_type, estimated_credits_per_run, is_active, input_schema, preview_url, tags')
+    .eq('is_active', true)
+    .order('created_at', { ascending: false });
+  if (error) throw new Error(error.message);
+  return (rows || []).map(t => ({ ...t, asset_requirements: null })) as unknown as ApiTemplate[];
 }
 
 export interface TemplateDetail {

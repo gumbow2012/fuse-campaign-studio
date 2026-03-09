@@ -29,12 +29,8 @@ const Templates = () => {
   const { data: templates, isLoading } = useQuery<ApiTemplate[]>({
     queryKey: ["all-templates-page"],
     queryFn: async () => {
-      try {
-        const { data: { session } } = await supabase.auth.getSession();
-        return await fetchTemplates(session?.access_token || "");
-      } catch {
-        return [];
-      }
+      const { data: { session } } = await supabase.auth.getSession();
+      return await fetchTemplates(session?.access_token || "");
     },
     retry: 1,
     staleTime: 60_000,
