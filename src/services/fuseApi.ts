@@ -58,8 +58,22 @@ export interface TemplateDetail {
 }
 
 export async function fetchTemplateDetail(token: string, templateName: string): Promise<TemplateDetail> {
-  const key = templateName.toLowerCase().replace(/\s+/g, '_') + '_template.json';
-  return api<TemplateDetail>(`/api/templates/${key}`, token);
+  // Pass name directly — worker builds R2 key internally.
+  // Worker returns { ok, template: { input_manifest, asset_requirements, steps, ... } }
+  const data = await api<any>(`/api/templates/${encodeURIComponent(templateName)}`, token);
+  const t = data.template || data;
+  return {
+    user_inputs: (t.input_manifest || t.user_inputs || []).map((f: any) => ({
+      key: f.key,
+      label: f.label,
+      type: f.type || 'image',
+      required: f.required ?? true,
+      hint: f.hint,
+    })),
+    asset_requirements: t.asset_requirements || null,
+    prompt: t.steps?.[0]?.prompt || null,
+    video_prompt: t.steps?.find((s: any) => s.type === 'kling')?.prompt || null,
+  };
 }
 
 /* ── Upload ── */

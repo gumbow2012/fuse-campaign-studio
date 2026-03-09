@@ -2,3 +2,24 @@ project_id = "sdmwcjfksoqbplcqqmhg"
 
 [functions.weavy-webhook]
 verify_jwt = false
+
+[functions.secret-check]
+verify_jwt = false
+
+[functions.status]
+verify_jwt = false
+
+[functions.nano-run]
+verify_jwt = false
+
+[functions.emit-analytics]
+verify_jwt = false
+
+[functions.analytics-platform]
+verify_jwt = false
+
+[functions.referrals]
+verify_jwt = false
+
+[functions.sync-weavy-loras]
+verify_jwt = true
