@@ -1757,10 +1757,8 @@ async function callNanoBananaPro(env, prompt, imageUrls, settings) {
     num_images: settings?.num_images || 1,
     output_format: settings?.output_format || "png",
   };
-  // fal nano-banana-pro/edit expects image_url (singular) as the primary input
   if (imageUrls && imageUrls.length > 0) {
     payload.image_url = imageUrls[0];
-    // Additional images as reference context
     if (imageUrls.length > 1) payload.reference_image_urls = imageUrls.slice(1);
   }
 
@@ -1790,20 +1788,13 @@ async function callNanoBananaPro(env, prompt, imageUrls, settings) {
       const statusData = await statusRes.json();
 
       if (statusData.status === "COMPLETED") {
-        // Fetch the actual result
         const resultRes = await fetch(statusBase, {
           headers: { Authorization: `Key ${env.FAL_API_KEY}` },
         });
         const result = await resultRes.json();
-        // Return all images (num_images may be > 1)
         const urls = (result.images || (result.image ? [result.image] : [])).map(i => i.url).filter(Boolean);
         if (!urls.length) throw new Error("FAL completed but no image URL in response");
-        const buffers = await Promise.all(urls.map(async (url) => {
-          const r = await fetch(url);
-          if (!r.ok) throw new Error("Failed to download FAL image");
-          return r.arrayBuffer();
-        }));
-        return buffers; // always an array
+        return urls; // Returns fal.ai URLs — caller decides whether to store in R2
       }
       if (statusData.status === "FAILED") {
         throw new Error(`FAL failed: ${statusData.error || "Unknown"}`);
@@ -1860,9 +1851,7 @@ async function callKlingViaFal(env, imageUrl, prompt, settings) {
         const result = await resultRes.json();
         const videoUrl = result?.video?.url;
         if (!videoUrl) throw new Error("Kling (fal) completed but no video URL in response");
-        const vid = await fetch(videoUrl);
-        if (!vid.ok) throw new Error("Failed to download Kling video from fal");
-        return await vid.arrayBuffer();
+        return videoUrl; // Returns fal.ai URL — caller decides whether to store in R2
       }
       if (statusData.status === "FAILED") {
         throw new Error(`Kling (fal) failed: ${statusData.error || "Unknown"}`);
@@ -1894,8 +1883,7 @@ async function runPipeline(env, projectId) {
     });
 
     const outputs = { items: [] };
-    let lastImageBuffer = null;
-    let lastImageKey = null;
+    let lastOutputUrl = null; // URL of the most recent image output (R2 or fal.ai direct)
 
     for (let si = 0; si < template.steps.length; si++) {
       const step = template.steps[si];
@@ -1934,22 +1922,28 @@ async function runPipeline(env, projectId) {
 
         console.log(`[${projectId}][${step.id}] FAL: ${imageUrls.length} images, prompt: "${prompt.slice(0, 80)}..."`);
 
-        const imageBuffers = await callNanoBananaPro(env, prompt, imageUrls, settings);
-        for (let imgIdx = 0; imgIdx < imageBuffers.length; imgIdx++) {
-          const imgKey = `outputs/${projectId}/${step.id}_${Date.now()}_${imgIdx}.png`;
-          await storeInR2(env, imgKey, imageBuffers[imgIdx], "image/png");
-          if (imgIdx === 0) { lastImageKey = imgKey; lastImageBuffer = imageBuffers[0]; }
-          outputs.items.push({ type: "image", step_id: step.id, url: `${WORKER_URL}/assets/${imgKey}` });
+        const falImageUrls = await callNanoBananaPro(env, prompt, imageUrls, settings);
+        for (let imgIdx = 0; imgIdx < falImageUrls.length; imgIdx++) {
+          let outputUrl = falImageUrls[imgIdx];
+          if (env.FUSE_ASSETS) {
+            // Persist to R2 for stable long-lived URLs
+            const imgKey = `outputs/${projectId}/${step.id}_${Date.now()}_${imgIdx}.png`;
+            const imgBuf = await (await fetch(falImageUrls[imgIdx])).arrayBuffer();
+            await env.FUSE_ASSETS.put(imgKey, imgBuf, { httpMetadata: { contentType: "image/png" } });
+            outputUrl = `${WORKER_URL}/assets/${imgKey}`;
+          }
+          if (imgIdx === 0) lastOutputUrl = outputUrl;
+          outputs.items.push({ type: "image", step_id: step.id, url: outputUrl });
         }
 
         await updateProject(env, projectId, { progress: progress + 5, outputs });
 
       } else if (step.type === "kling") {
-        // Determine source image
+        // Determine source image URL
         let sourceImageUrl;
         if (step.image_source === "previous_step") {
-          if (!lastImageKey) throw new Error("No previous image available for Kling step");
-          sourceImageUrl = `${WORKER_URL}/assets/${lastImageKey}`;
+          if (!lastOutputUrl) throw new Error("No previous image available for Kling step");
+          sourceImageUrl = lastOutputUrl;
         } else {
           const item = outputs.items.find((x) => x.step_id === step.image_source);
           if (!item) throw new Error(`Step not found: ${step.image_source}`);
@@ -1961,14 +1955,20 @@ async function runPipeline(env, projectId) {
 
         console.log(`[${projectId}][${step.id}] Kling via fal: duration=${settings.duration || "5"}, aspect=${settings.aspect_ratio || "9:16"}`);
 
-        const videoBuffer = await callKlingViaFal(env, sourceImageUrl, prompt, settings);
-        const videoKey = `outputs/${projectId}/${step.id}_${Date.now()}.mp4`;
-        await storeInR2(env, videoKey, videoBuffer, "video/mp4");
+        const falVideoUrl = await callKlingViaFal(env, sourceImageUrl, prompt, settings);
+        let videoOutputUrl = falVideoUrl;
+        if (env.FUSE_ASSETS) {
+          // Persist to R2 for stable long-lived URLs
+          const videoKey = `outputs/${projectId}/${step.id}_${Date.now()}.mp4`;
+          const vidBuf = await (await fetch(falVideoUrl)).arrayBuffer();
+          await env.FUSE_ASSETS.put(videoKey, vidBuf, { httpMetadata: { contentType: "video/mp4" } });
+          videoOutputUrl = `${WORKER_URL}/assets/${videoKey}`;
+        }
 
         outputs.items.push({
           type: "video",
           step_id: step.id,
-          url: `${WORKER_URL}/assets/${videoKey}`,
+          url: videoOutputUrl,
         });
 
         await updateProject(env, projectId, { progress: progress + 5, outputs });
