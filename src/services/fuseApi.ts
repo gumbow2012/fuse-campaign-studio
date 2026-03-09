@@ -2,8 +2,6 @@
  * FUSE API Service — Single source of truth for all Cloudflare Worker calls.
  * Every request uses the Supabase JWT as Bearer token.
  */
-import { supabase } from '@/integrations/supabase/client';
-
 import { supabase } from "@/integrations/supabase/client";
 
 const WORKER_BASE = import.meta.env.VITE_CF_WORKER_URL as string
