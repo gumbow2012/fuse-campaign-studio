@@ -3,6 +3,8 @@
  * Every request uses the Supabase JWT as Bearer token.
  */
 
+import { supabase } from "@/integrations/supabase/client";
+
 const WORKER_BASE = import.meta.env.VITE_CF_WORKER_URL as string
   || 'https://shiny-rice-e95bfuse-api.kade-fc1.workers.dev';
 
