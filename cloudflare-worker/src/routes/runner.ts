@@ -354,92 +354,56 @@ async function callNanoBananaPro(
  *  Model API Calls
  * ══════════════════════════════════════════════════════════════ */
 
-/**
- * Generate a JWT for Kling API authentication.
- * Kling uses HS256 JWTs signed with the secret key.
- */
-async function generateKlingJwt(accessKey: string, secretKey: string): Promise<string> {
-  const header = { alg: "HS256", typ: "JWT" };
-  const now = Math.floor(Date.now() / 1000);
-  const payload = {
-    iss: accessKey,
-    exp: now + 1800, // 30 min
-    nbf: now - 5,
-    iat: now,
-  };
-
-  const enc = new TextEncoder();
-  const b64url = (data: Uint8Array) => {
-    let s = "";
-    for (const b of data) s += String.fromCharCode(b);
-    return btoa(s).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
-  };
-  const b64urlStr = (str: string) => b64url(enc.encode(str));
-
-  const headerB64 = b64urlStr(JSON.stringify(header));
-  const payloadB64 = b64urlStr(JSON.stringify(payload));
-  const signingInput = `${headerB64}.${payloadB64}`;
-
-  const key = await crypto.subtle.importKey(
-    "raw",
-    enc.encode(secretKey),
-    { name: "HMAC", hash: "SHA-256" },
-    false,
-    ["sign"],
-  );
-  const sig = await crypto.subtle.sign("HMAC", key, enc.encode(signingInput));
-  const sigB64 = b64url(new Uint8Array(sig));
-
-  return `${signingInput}.${sigB64}`;
-}
-
 interface KlingSettings {
-  model?: string;
-  duration?: string;
-  aspect_ratio?: string;
+  duration?: string;       // "5" | "10"
+  aspect_ratio?: string;   // "9:16" | "16:9" | "1:1"
   cfg_scale?: number;
+  negative_prompt?: string;
+  // Kept for backward compat — ignored (always uses v2.5 pro via fal.ai)
+  model?: string;
   mode?: string;
 }
 
 /**
- * Call Kling image-to-video API.
- * Docs: https://app.klingai.com/global/dev/document-api
+ * Call Kling 2.5 image-to-video via fal.ai queue API.
+ * Endpoint: fal-ai/kling-video/v2.5-turbo/pro/image-to-video
+ * Uses FAL_API_KEY — same key as nano-banana-pro.
+ * Supports optional tail_image_url (end frame).
  */
 async function callKling(
   env: Env,
   imageUrl: string,
   prompt: string,
   settings?: KlingSettings,
+  tailImageUrl?: string,
   onProgress?: (msg: string) => Promise<void>,
 ): Promise<string> {
-  const accessKey = env.KLING_ACCESS_KEY || env.KLING_AK;
-  const secretKey = env.KLING_SECRET_KEY || env.KLING_SK;
-  if (!accessKey || !secretKey) throw new Error("KLING_ACCESS_KEY / KLING_SECRET_KEY not configured");
+  const apiKey = env.FAL_API_KEY;
+  if (!apiKey) throw new Error("FAL_API_KEY not configured in Worker secrets");
 
-  const jwt = await generateKlingJwt(accessKey, secretKey);
-
-  const modelName = settings?.model || "kling-v1-6";
   const duration = settings?.duration || "10";
-  const aspectRatio = settings?.aspect_ratio || "9:16";
   const cfgScale = settings?.cfg_scale ?? 0.5;
-  const mode = settings?.mode || "std";
+  const negativePrompt = settings?.negative_prompt || "blur, distort, and low quality";
+  const aspectRatio = settings?.aspect_ratio;
 
-  // Submit image-to-video task
-  const submitRes = await fetch("https://api.klingai.com/v1/videos/image2video", {
+  const payload: Record<string, unknown> = {
+    prompt,
+    image_url: imageUrl,
+    duration,
+    cfg_scale: cfgScale,
+    negative_prompt: negativePrompt,
+    ...(aspectRatio ? { aspect_ratio: aspectRatio } : {}),
+    ...(tailImageUrl ? { tail_image_url: tailImageUrl } : {}),
+  };
+
+  const FAL_MODEL = "fal-ai/kling-video/v2.5-turbo/pro/image-to-video";
+
+  await onProgress?.(`Submitting Kling 2.5 job via fal.ai...`);
+
+  const submitRes = await fetch(`https://queue.fal.run/${FAL_MODEL}`, {
     method: "POST",
-    headers: {
-      Authorization: `Bearer ${jwt}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model_name: modelName,
-      image: imageUrl,
-      prompt,
-      duration,
-      aspect_ratio: aspectRatio,
-      cfg_scale: cfgScale,
-      mode,
-    }),
+    headers: { Authorization: `Key ${apiKey}`, "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
   });
 
   if (!submitRes.ok) {
@@ -447,34 +411,29 @@ async function callKling(
     throw new Error(`Kling submit failed (${submitRes.status}): ${txt.slice(0, 500)}`);
   }
 
-  const submitData = await submitRes.json() as { data?: { task_id: string }; code?: number; message?: string };
-  const taskId = submitData.data?.task_id;
-  if (!taskId) throw new Error(`Kling: no task_id — ${submitData.message || "unknown error"}`);
+  const { request_id: requestId } = await submitRes.json() as { request_id: string };
+  if (!requestId) throw new Error("Kling: no request_id returned");
 
-  await onProgress?.(`Kling task submitted (${taskId.slice(0, 8)}...)`);
+  const base = `https://queue.fal.run/${FAL_MODEL}/requests/${requestId}`;
+  await onProgress?.(`Kling queued (${requestId.slice(0, 8)}...) — polling...`);
 
-  // Poll for completion (max ~30 min for video)
   for (let i = 0; i < 180; i++) {
     await sleep(10000);
     try {
-      // Need fresh JWT for long polls
-      const pollJwt = await generateKlingJwt(accessKey, secretKey);
-      const statusRes = await fetch(`https://api.klingai.com/v1/videos/image2video/${taskId}`, {
-        headers: { Authorization: `Bearer ${pollJwt}` },
-      });
+      const statusRes = await fetch(`${base}/status`, { headers: { Authorization: `Key ${apiKey}` } });
       if (!statusRes.ok) continue;
-      const status = await statusRes.json() as {
-        data?: { task_status: string; task_result?: { videos?: { url: string }[] } };
-      };
-      const taskStatus = status.data?.task_status;
-      if (taskStatus === "succeed") {
-        const videoUrl = status.data?.task_result?.videos?.[0]?.url;
-        if (!videoUrl) throw new Error("Kling succeeded but no video URL");
-        return videoUrl;
+      const { status } = await statusRes.json() as { status: string };
+      if (status === "COMPLETED") {
+        const resultRes = await fetch(base, { headers: { Authorization: `Key ${apiKey}` } });
+        const result = await resultRes.json() as { video?: { url: string } };
+        const url = result.video?.url;
+        if (!url) throw new Error("Kling completed but no video URL in response");
+        await onProgress?.("Kling 2.5 video complete");
+        return url;
       }
-      if (taskStatus === "failed") throw new Error("Kling video generation failed");
+      if (status === "FAILED") throw new Error("Kling video generation failed");
     } catch (e) {
-      if (e instanceof Error && (e.message.includes("Kling") && (e.message.includes("failed") || e.message.includes("no video")))) throw e;
+      if (e instanceof Error && e.message.includes("Kling") && (e.message.includes("failed") || e.message.includes("no video"))) throw e;
     }
   }
   throw new Error("Kling job timed out after 30 minutes");
@@ -518,6 +477,9 @@ interface TemplateStep {
   prompt?: string;
   user_input_keys?: string[];
   image_source?: "previous_step" | string;
+  // End frame for Kling 2.5 (tail_image_url)
+  end_image_source?: "previous_step" | "user_input" | string;
+  end_image_key?: string;
   settings?: Record<string, unknown>;
 }
 
@@ -599,7 +561,7 @@ async function runJob(env: Env, projectId: string) {
         previousStepImageUrl = editedImageUrl;
 
         if (outputType === "video") {
-          const videoUrl = await callKling(env, editedImageUrl, prompt, {}, async (msg) => {
+          const videoUrl = await callKling(env, editedImageUrl, prompt, {}, undefined, async (msg) => {
             await setProgress(env, projectId, 60, msg);
           });
           collectedOutputs.push({ type: "video", url: videoUrl, label: "Generated Video" });
@@ -648,7 +610,7 @@ async function runJob(env: Env, projectId: string) {
             }
 
           } else if (step.type === "kling") {
-            // Determine source image
+            // Determine start image
             let sourceImageUrl: string | undefined;
             if (step.image_source === "previous_step") {
               sourceImageUrl = previousStepImageUrl;
@@ -660,10 +622,19 @@ async function runJob(env: Env, projectId: string) {
             if (!sourceImageUrl) sourceImageUrl = previousStepImageUrl || findImageUrl(inputs);
             if (!sourceImageUrl) throw new Error(`Step "${step.id}": no source image for Kling`);
 
+            // Determine optional end/tail image
+            let tailImageUrl: string | undefined;
+            if (step.end_image_source === "previous_step") {
+              tailImageUrl = previousStepImageUrl;
+            } else if (step.end_image_source === "user_input" && step.end_image_key) {
+              const val = inputs[step.end_image_key]?.trim();
+              if (val) tailImageUrl = resolveImageUrl(val);
+            }
+
             const prompt = step.prompt || findPrompt(inputs);
             const klingSettings = step.settings as KlingSettings | undefined;
 
-            const videoUrl = await callKling(env, sourceImageUrl, prompt, klingSettings, async (msg) => {
+            const videoUrl = await callKling(env, sourceImageUrl, prompt, klingSettings, tailImageUrl, async (msg) => {
               await setProgress(env, projectId, progressBase + Math.floor(progressPerStep * 0.7), msg);
             });
 
