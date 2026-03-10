@@ -21,5 +21,8 @@ verify_jwt = false
 [functions.referrals]
 verify_jwt = false
 
+[functions.run-template]
+verify_jwt = false
+
 [functions.sync-weavy-loras]
 verify_jwt = true
