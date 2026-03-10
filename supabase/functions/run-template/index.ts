@@ -99,20 +99,23 @@ Deno.serve(async (req) => {
 
     // ── Enqueue to CF Worker for execution ──
     const cfWorkerUrl = Deno.env.get("VITE_CF_WORKER_URL") || "https://shiny-rice-e95bfuse-api.kade-fc1.workers.dev";
+    const workerAuthToken = Deno.env.get("CF_WORKER_AUTH_TOKEN");
     try {
       const enqueueRes = await fetch(`${cfWorkerUrl}/api/enqueue`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
+          "X-Api-Key": workerAuthToken || "",
+          "X-User-Id": user.id,
           "X-Service-Call": "true",
         },
         body: JSON.stringify({ projectId: project.id }),
       });
       if (!enqueueRes.ok) {
         const txt = await enqueueRes.text();
-        console.error(`[run-template] enqueue failed: ${txt}`);
-        // Don't fail — job is queued in DB, runner can pick it up
+        console.error(`[run-template] enqueue failed (${enqueueRes.status}): ${txt}`);
+      } else {
+        console.log(`[run-template] enqueue OK for project ${project.id}`);
       }
     } catch (e) {
       console.error(`[run-template] enqueue call failed: ${errText(e)}`);
