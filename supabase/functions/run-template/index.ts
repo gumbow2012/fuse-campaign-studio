@@ -98,10 +98,15 @@ Deno.serve(async (req) => {
     });
 
     // ── Enqueue to CF Worker for execution ──
-    const cfWorkerUrl = Deno.env.get("VITE_CF_WORKER_URL") || "https://shiny-rice-e95bfuse-api.kade-fc1.workers.dev";
+    const rawWorkerUrl = Deno.env.get("VITE_CF_WORKER_URL") || "https://shiny-rice-e95bfuse-api.kade-fc1.workers.dev";
+    // Strip trailing slashes and any /api suffix to avoid double-pathing
+    const cfWorkerUrl = rawWorkerUrl.replace(/\/+$/, "").replace(/\/api\/?$/, "");
     const workerAuthToken = Deno.env.get("CF_WORKER_AUTH_TOKEN");
+    const enqueueUrl = `${cfWorkerUrl}/api/enqueue`;
+    console.log(`[run-template] enqueue URL: ${enqueueUrl}`);
+    console.log(`[run-template] AUTH_TOKEN present: ${!!workerAuthToken}`);
     try {
-      const enqueueRes = await fetch(`${cfWorkerUrl}/api/enqueue`, {
+      const enqueueRes = await fetch(enqueueUrl, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -111,11 +116,11 @@ Deno.serve(async (req) => {
         },
         body: JSON.stringify({ projectId: project.id }),
       });
+      const txt = await enqueueRes.text();
       if (!enqueueRes.ok) {
-        const txt = await enqueueRes.text();
         console.error(`[run-template] enqueue failed (${enqueueRes.status}): ${txt}`);
       } else {
-        console.log(`[run-template] enqueue OK for project ${project.id}`);
+        console.log(`[run-template] enqueue OK for project ${project.id}: ${txt}`);
       }
     } catch (e) {
       console.error(`[run-template] enqueue call failed: ${errText(e)}`);
