@@ -1,6 +1,27 @@
-project_id = "sdmwcjfksoqbplcqqmhg"
+project_id = "ykrrwgkxgidoavtzcumk"
 
 [functions.weavy-webhook]
+verify_jwt = false
+
+[functions.fal-webhook]
+verify_jwt = false
+
+[functions.start-template-run]
+verify_jwt = false
+
+[functions.get-job-status]
+verify_jwt = false
+
+[functions.get-job-status-public]
+verify_jwt = false
+
+[functions.lab-template-catalog]
+verify_jwt = false
+
+[functions.lab-template-detail]
+verify_jwt = false
+
+[functions.set-user-role]
 verify_jwt = false
 
 [functions.secret-check]

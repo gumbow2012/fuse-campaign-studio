@@ -2,7 +2,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { Navigate } from "react-router-dom";
 
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
-  const { user, loading } = useAuth();
+  const { user, loading, hasAppAccess } = useAuth();
 
   if (loading) {
     return (
@@ -14,6 +14,10 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
 
   if (!user) {
     return <Navigate to="/auth" replace />;
+  }
+
+  if (!hasAppAccess) {
+    return <Navigate to="/auth?reason=restricted" replace />;
   }
 
   return <>{children}</>;

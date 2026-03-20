@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -16,11 +16,18 @@ const Auth = () => {
   const [name, setName] = useState("");
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const location = useLocation();
+  const { user, hasAppAccess, signOut, refreshAccess } = useAuth();
+  const reason = new URLSearchParams(location.search).get("reason");
 
   useEffect(() => {
-    if (user) navigate("/dashboard");
-  }, [user, navigate]);
+    if (user && hasAppAccess) navigate("/app/lab/templates");
+  }, [user, hasAppAccess, navigate]);
+
+  useEffect(() => {
+    if (!user || hasAppAccess) return;
+    void refreshAccess();
+  }, [user, hasAppAccess, refreshAccess]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -29,18 +36,17 @@ const Auth = () => {
       if (isLogin) {
         const { error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) throw error;
-        navigate("/dashboard");
       } else {
         const { error } = await supabase.auth.signUp({
           email,
           password,
           options: {
             data: { full_name: name },
-            emailRedirectTo: window.location.origin,
+            emailRedirectTo: `${window.location.origin}/app/lab/templates`,
           },
         });
         if (error) throw error;
-        toast({ title: "Check your email", description: "We sent you a confirmation link." });
+        toast({ title: "Check your email", description: "Account created. Confirm your email, then sign in." });
       }
     } catch (err: any) {
       toast({ title: "Error", description: err.message, variant: "destructive" });
@@ -59,8 +65,23 @@ const Auth = () => {
               {isLogin ? "Welcome Back" : "Create Account"}
             </h1>
             <p className="text-sm text-muted-foreground text-center mb-8">
-              {isLogin ? "Sign in to your FUSE account" : "Start creating campaign-ready assets"}
+              {isLogin ? "Sign in to your FUSE testing account" : "Create a tester account for admin or dev access"}
             </p>
+
+            {reason === "restricted" ? (
+              <div className="mb-4 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
+                This account exists, but it has not been granted tester access yet.
+              </div>
+            ) : null}
+
+            {user && !hasAppAccess ? (
+              <div className="mb-6 rounded-lg border border-border/40 bg-secondary/40 px-4 py-3 text-sm text-muted-foreground">
+                <p>Your account is signed in but not approved for testing routes yet.</p>
+                <Button type="button" variant="ghost" className="mt-3 px-0" onClick={() => void signOut()}>
+                  Sign out
+                </Button>
+              </div>
+            ) : null}
 
             <form onSubmit={handleSubmit} className="space-y-4">
               {!isLogin && (
@@ -100,7 +121,7 @@ const Auth = () => {
                 const { error } = await supabase.auth.signInWithOAuth({
                   provider: "google",
                   options: {
-                    redirectTo: window.location.origin + "/dashboard",
+                    redirectTo: window.location.origin + "/app/lab/templates",
                   },
                 });
                 if (error) {
@@ -125,7 +146,7 @@ const Auth = () => {
                 const { error } = await supabase.auth.signInWithOAuth({
                   provider: "apple",
                   options: {
-                    redirectTo: window.location.origin + "/dashboard",
+                    redirectTo: window.location.origin + "/app/lab/templates",
                   },
                 });
                 if (error) {

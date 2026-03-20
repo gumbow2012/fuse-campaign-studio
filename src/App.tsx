@@ -26,6 +26,8 @@ import Referrals from "./pages/Referrals";
 import Templates from "./pages/Templates";
 import TemplateRun from "./pages/TemplateRun";
 import PapparaziRun from "./pages/PapparaziRun";
+import PapparaziLab from "./pages/PapparaziLab";
+import TemplateLab from "./pages/TemplateLab";
 import JobStatus from "./pages/JobStatus";
 import FlowEmbed from "./pages/FlowEmbed";
 import FlowTest from "./pages/FlowTest";
@@ -47,6 +49,8 @@ const App = () => (
             <Route path="/" element={<Index />} />
             <Route path="/pricing" element={<Pricing />} />
             <Route path="/auth" element={<Auth />} />
+            <Route path="/lab/paparazzi" element={<PapparaziLab />} />
+            <Route path="/lab/templates" element={<TemplateLab />} />
             <Route path="/forgot-password" element={<ForgotPassword />} />
             <Route path="/reset-password" element={<ResetPassword />} />
 
@@ -69,6 +73,7 @@ const App = () => (
             <Route path="/app/flow/:flowId" element={<ProtectedRoute><FlowEmbed /></ProtectedRoute>} />
             <Route path="/app/flow-test" element={<FlowTest />} />
             <Route path="/app/jobs/:jobId" element={<ProtectedRoute><JobStatus /></ProtectedRoute>} />
+            <Route path="/app/lab/templates" element={<ProtectedRoute><TemplateLab /></ProtectedRoute>} />
             <Route path="/app/nano" element={<ProtectedRoute><NanoRun /></ProtectedRoute>} />
 
             {/* Admin routes */}

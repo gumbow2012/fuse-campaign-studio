@@ -141,7 +141,7 @@ const TemplatesMegaMenu = () => {
 const Navbar = () => {
   const [activeMode, setActiveMode] = useState<typeof modes[number]>("Streetwear");
   const [scrolled, setScrolled] = useState(false);
-  const { user, profile, signOut } = useAuth();
+  const { user, profile, signOut, hasAppAccess } = useAuth();
   const navigate = useNavigate();
 
   const handleScroll = useCallback(() => {
@@ -277,6 +277,13 @@ const Navbar = () => {
                   Dashboard
                 </Button>
               </Link>
+              {hasAppAccess ? (
+                <Link to="/app/lab/templates">
+                  <Button variant="outline" size="sm" className="rounded-full border-border/60 text-foreground hover:text-foreground hover:border-foreground/30 bg-transparent px-4 text-xs">
+                    Template Runner
+                  </Button>
+                </Link>
+              ) : null}
               <Button
                 variant="ghost"
                 size="sm"

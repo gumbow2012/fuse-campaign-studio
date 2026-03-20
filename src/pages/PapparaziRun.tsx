@@ -15,7 +15,7 @@ type RunResult = {
 };
 
 const PapparaziRun = () => {
-  const { user, profile, refreshProfile } = useAuth();
+  const { user } = useAuth();
   const navigate = useNavigate();
 
   const [file, setFile] = useState<File | null>(null);
@@ -30,24 +30,21 @@ const PapparaziRun = () => {
   } | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // Hardcoded Weavy recipe ID for PAPPARAZI
-  const recipeId = "dvgEXt4aeShCeokMq5MIpZ";
+  const PAPARAZZI_VERSION_ID = "34239a27-27ed-4b1f-8fc9-6a0f1e1ac778";
 
   const uploadToStorage = async (userId: string, sourceFile: File): Promise<string> => {
     const ext = sourceFile.name.split(".").pop() || "png";
-    const path = `${userId}/${Date.now()}-product_image.${ext}`;
+    const path = `${userId}/inputs/${Date.now()}-product_image.${ext}`;
 
     const { error: uploadErr } = await supabase.storage
-      .from("template-inputs")
+      .from("fuse-assets")
       .upload(path, sourceFile, { upsert: true });
     if (uploadErr) throw new Error(`Upload failed: ${uploadErr.message}`);
 
-    const { data: signedData, error: signErr } = await supabase.storage
-      .from("template-inputs")
-      .createSignedUrl(path, 3600);
-    if (signErr || !signedData?.signedUrl) throw new Error("Could not generate upload URL");
+    const { data } = supabase.storage.from("fuse-assets").getPublicUrl(path);
+    if (!data?.publicUrl) throw new Error("Could not generate upload URL");
 
-    return signedData.signedUrl;
+    return data.publicUrl;
   };
 
   // Cleanup poll on unmount
@@ -142,36 +139,32 @@ const PapparaziRun = () => {
       const token = session?.access_token;
       if (!token) throw new Error("Not authenticated");
 
-      // 1) Upload image to storage and create signed URL
+      // 1) Upload the product image to Supabase Storage
       const imageUrl = await uploadToStorage(user.id, file);
 
-      // 2) Find the template by weavy_recipe_id
-      const { data: tpl } = await supabase
-        .from("templates")
-        .select("id")
-        .eq("weavy_recipe_id", recipeId)
-        .eq("is_active", true)
-        .single();
-      if (!tpl) throw new Error("PAPPARAZI template not found in database");
-
-      // 3) Call run-template edge function (handles credits + Weavy trigger)
+      // 2) Kick off the new Supabase-only runner
       setPhase("running");
 
-      const { data: runData, error: runErr } = await supabase.functions.invoke("run-template", {
-        body: { templateId: tpl.id, inputs: { "CLOTHING ITEM": imageUrl } },
+      const { data: runData, error: runErr } = await supabase.functions.invoke("start-template-run", {
+        body: {
+          versionId: PAPARAZZI_VERSION_ID,
+          inputs: {
+            "Input: Clothing Item": imageUrl,
+          },
+        },
       });
 
       if (runErr) throw new Error(runErr.message || "Run template failed");
       if (runData?.error) throw new Error(runData.error);
 
-      const projectId = runData?.projectId;
-      if (!projectId) throw new Error("No project ID returned");
+      const jobId = runData?.jobId;
+      if (!jobId) throw new Error("No job ID returned");
 
-      // 4) Poll weavy-job-status edge function
+      // 3) Poll the Supabase job status endpoint
       pollRef.current = setInterval(async () => {
         try {
           const statusRes = await fetch(
-            `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/weavy-job-status?projectId=${projectId}`,
+            `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/get-job-status?jobId=${jobId}`,
             {
               headers: {
                 Authorization: `Bearer ${token}`,
@@ -185,13 +178,12 @@ const PapparaziRun = () => {
             clearInterval(pollRef.current!);
             pollRef.current = null;
 
-            const items = status.outputs?.items || [];
+            const items = status.outputs || [];
             setResult({
               outputImageUrl: items.find((i: any) => i.type === "image")?.url ?? null,
               outputVideoUrl: items.find((i: any) => i.type === "video")?.url ?? null,
             });
             setPhase("complete");
-            refreshProfile();
           } else if (status.status === "failed") {
             clearInterval(pollRef.current!);
             pollRef.current = null;
@@ -222,7 +214,7 @@ const PapparaziRun = () => {
     setResult(null);
   };
 
-  const isReady = !!file && !!recipeId && phase === "idle";
+  const isReady = !!file && phase === "idle";
 
   return (
     <div className="min-h-screen bg-background text-foreground">
