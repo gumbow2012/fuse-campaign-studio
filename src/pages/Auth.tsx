@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { supabase, SUPABASE_URL } from "@/integrations/supabase/client";
+import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -19,8 +19,6 @@ const Auth = () => {
   const location = useLocation();
   const { user, hasAppAccess, signOut, refreshAccess } = useAuth();
   const reason = new URLSearchParams(location.search).get("reason");
-  const currentBackend = new URL(SUPABASE_URL).host;
-  const expectedBackend = "ykrrwgkxgidoavtzcumk.supabase.co";
 
   useEffect(() => {
     if (user && hasAppAccess) navigate("/app/lab/templates");
@@ -51,13 +49,10 @@ const Auth = () => {
         toast({ title: "Check your email", description: "Account created. Confirm your email, then sign in." });
       }
     } catch (err: any) {
-      const backendMismatch = currentBackend !== expectedBackend;
       const description =
         err?.message === "Invalid login credentials"
-          ? backendMismatch
-            ? `This deployment is authenticating against ${currentBackend}, but your tester account lives in ${expectedBackend}. Fix the Vercel env vars and redeploy.`
-            : `Supabase rejected the email/password on ${currentBackend}. Double-check the password or reset it.`
-          : `${err.message}${backendMismatch ? ` Current backend: ${currentBackend}. Expected: ${expectedBackend}.` : ""}`;
+          ? "Invalid email or password."
+          : err?.message ?? "Authentication failed. Please try again.";
 
       toast({ title: "Auth Error", description, variant: "destructive" });
     } finally {
@@ -77,10 +72,6 @@ const Auth = () => {
             <p className="text-sm text-muted-foreground text-center mb-8">
               {isLogin ? "Sign in to your FUSE testing account" : "Create a tester account for admin or dev access"}
             </p>
-
-            <div className="mb-4 rounded-lg border border-border/40 bg-secondary/30 px-4 py-3 text-xs text-muted-foreground">
-              Backend: <span className="font-mono text-foreground">{currentBackend}</span>
-            </div>
 
             {reason === "restricted" ? (
               <div className="mb-4 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
