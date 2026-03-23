@@ -151,33 +151,20 @@ function getModelPromptConfig(node, prompt) {
       node?.data?.input?.prompt ??
       node?.data?.params?.prompt ??
       "",
+    aspect_ratio: "9:16",
   };
 
   if (nodeType === "video_gen") {
     const duration =
       Number(node?.data?.input?.duration ?? node?.data?.params?.duration ?? getKindParameter(node, "duration") ?? 10);
-    const aspectRatio =
-      String(
-        node?.data?.input?.ratio ??
-          node?.data?.input?.aspect_ratio ??
-          node?.data?.params?.aspect_ratio ??
-          getKindParameter(node, "aspect_ratio") ??
-          "9:16",
-      );
 
     config.duration = Number.isFinite(duration) ? duration : 10;
-    config.aspect_ratio = aspectRatio;
   } else {
-    const aspectRatio =
-      node?.data?.input?.aspect_ratio ??
-      node?.data?.params?.aspect_ratio ??
-      getKindParameter(node, "aspect_ratio");
     const resolution =
       node?.data?.input?.resolution ??
       node?.data?.params?.resolution ??
       getKindParameter(node, "resolution");
 
-    if (aspectRatio) config.aspect_ratio = String(aspectRatio);
     if (resolution) config.resolution = String(resolution);
   }
 
