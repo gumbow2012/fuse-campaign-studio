@@ -1,6 +1,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 
 import { corsHeaders, createAdminClient, errorMessage, hasValidRunnerCode, json, requireTesterUser } from "../_shared/supabase-admin.ts";
+import { buildTemplateInputPlan } from "../_shared/template-inputs.ts";
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: corsHeaders });
@@ -33,36 +34,14 @@ Deno.serve(async (req) => {
       : { data: [], error: null };
     if (nodeError) throw new Error(nodeError.message);
 
-    const assetIds = [...new Set((nodes ?? []).map((node: any) => node.default_asset_id).filter(Boolean))];
-    const { data: assets, error: assetError } = assetIds.length
-      ? await admin
-          .from("assets")
-          .select("id, supabase_storage_url")
-          .in("id", assetIds)
-      : { data: [], error: null };
-    if (assetError) throw new Error(assetError.message);
-
     const templateMap = new Map((templates ?? []).map((template: any) => [template.id, template]));
-    const assetMap = new Map((assets ?? []).map((asset: any) => [asset.id, asset.supabase_storage_url]));
 
     const catalog = (versions ?? [])
       .map((version: any) => {
         const template = templateMap.get(version.template_id);
         const versionNodes = (nodes ?? []).filter((node: any) => node.version_id === version.id);
-        const inputNodes = versionNodes
-          .filter((node: any) => node.node_type === "user_input" && !node.default_asset_id)
-          .sort((a: any, b: any) => {
-            const aOrder = Number(a.prompt_config?.sort_order ?? 999);
-            const bOrder = Number(b.prompt_config?.sort_order ?? 999);
-            if (aOrder !== bOrder) return aOrder - bOrder;
-            return a.name.localeCompare(b.name);
-          })
-          .map((node: any) => ({
-            id: node.id,
-            name: node.name,
-            expected: node.prompt_config?.expected ?? "image",
-            defaultAssetUrl: null,
-          }));
+        const inputNodes = versionNodes.filter((node: any) => node.node_type === "user_input");
+        const inputPlan = buildTemplateInputPlan(template?.name ?? "", inputNodes);
 
         return {
           templateId: version.template_id,
@@ -70,11 +49,16 @@ Deno.serve(async (req) => {
           versionId: version.id,
           versionNumber: version.version_number,
           counts: {
-            inputs: inputNodes.length,
+            inputs: inputPlan.slots.length,
             imageSteps: versionNodes.filter((node: any) => node.node_type === "image_gen").length,
             videoSteps: versionNodes.filter((node: any) => node.node_type === "video_gen").length,
           },
-          inputs: inputNodes,
+          inputs: inputPlan.slots.map((slot) => ({
+            id: slot.id,
+            name: slot.name,
+            expected: slot.expected,
+            defaultAssetUrl: null,
+          })),
         };
       })
       .sort((a, b) => a.templateName.localeCompare(b.templateName));

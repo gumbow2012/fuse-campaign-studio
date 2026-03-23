@@ -10,6 +10,7 @@ import {
   requireTesterUser,
 } from "../_shared/supabase-admin.ts";
 import { PAPARAZZI_VERSION_ID, runGraphJob } from "../_shared/executor.ts";
+import { buildTemplateInputPlan } from "../_shared/template-inputs.ts";
 
 type StartTemplateRunBody = {
   templateId?: string;
@@ -69,6 +70,51 @@ async function uploadInputFiles(
   return uploadedInputs;
 }
 
+function expandInputsForTemplate(args: {
+  templateName: string;
+  inputNodes: Array<{
+    id: string;
+    name: string;
+    prompt_config?: Record<string, unknown> | null;
+    default_asset_id?: string | null;
+  }>;
+  suppliedInputs: Record<string, string>;
+}) {
+  const finalInputs: Record<string, string> = {};
+  const plan = buildTemplateInputPlan(args.templateName, args.inputNodes);
+  const mappedNodeIds = new Set<string>();
+
+  for (const slot of plan.slots) {
+    const value = args.suppliedInputs[slot.id];
+    if (!value) continue;
+
+    for (const nodeId of slot.nodeIds) {
+      finalInputs[nodeId] = value;
+      mappedNodeIds.add(nodeId);
+    }
+  }
+
+  for (const node of args.inputNodes) {
+    const directValue = args.suppliedInputs[node.id] ?? args.suppliedInputs[node.name];
+    if (directValue) {
+      finalInputs[node.id] = directValue;
+      mappedNodeIds.add(node.id);
+      continue;
+    }
+
+    if (mappedNodeIds.has(node.id)) continue;
+
+    const sampleUrl = typeof node.prompt_config?.sample_url === "string"
+      ? node.prompt_config.sample_url
+      : null;
+    if (sampleUrl) {
+      finalInputs[node.id] = sampleUrl;
+    }
+  }
+
+  return finalInputs;
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: corsHeaders });
 
@@ -86,7 +132,7 @@ Deno.serve(async (req) => {
 
     const { data: version, error: versionError } = await admin
       .from("template_versions")
-      .select("id, template_id")
+      .select("id, template_id, fuse_templates!inner(name)")
       .eq("id", versionId)
       .single();
     if (versionError || !version) throw new Error(versionError?.message ?? "Version not found");
@@ -107,7 +153,19 @@ Deno.serve(async (req) => {
     if (jobError || !job) throw new Error(jobError?.message ?? "Failed to create job");
 
     const uploadedInputs = await uploadInputFiles(admin, job.id, body.inputFiles);
-    const finalInputs = { ...uploadedInputs, ...inputs };
+
+    const { data: inputNodes, error: inputNodesError } = await admin
+      .from("nodes")
+      .select("id, name, prompt_config, default_asset_id")
+      .eq("version_id", version.id)
+      .eq("node_type", "user_input");
+    if (inputNodesError) throw new Error(inputNodesError.message);
+
+    const finalInputs = expandInputsForTemplate({
+      templateName: (version as any).fuse_templates.name,
+      inputNodes: inputNodes ?? [],
+      suppliedInputs: { ...uploadedInputs, ...inputs },
+    });
 
     const { error: inputUpdateError } = await admin
       .from("execution_jobs")
