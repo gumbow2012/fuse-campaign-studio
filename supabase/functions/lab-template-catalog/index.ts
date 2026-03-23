@@ -50,13 +50,18 @@ Deno.serve(async (req) => {
         const template = templateMap.get(version.template_id);
         const versionNodes = (nodes ?? []).filter((node: any) => node.version_id === version.id);
         const inputNodes = versionNodes
-          .filter((node: any) => node.node_type === "user_input")
-          .sort((a: any, b: any) => a.name.localeCompare(b.name))
+          .filter((node: any) => node.node_type === "user_input" && !node.default_asset_id)
+          .sort((a: any, b: any) => {
+            const aOrder = Number(a.prompt_config?.sort_order ?? 999);
+            const bOrder = Number(b.prompt_config?.sort_order ?? 999);
+            if (aOrder !== bOrder) return aOrder - bOrder;
+            return a.name.localeCompare(b.name);
+          })
           .map((node: any) => ({
             id: node.id,
             name: node.name,
             expected: node.prompt_config?.expected ?? "image",
-            defaultAssetUrl: node.default_asset_id ? assetMap.get(node.default_asset_id) ?? null : null,
+            defaultAssetUrl: null,
           }));
 
         return {
