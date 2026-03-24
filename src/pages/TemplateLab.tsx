@@ -84,6 +84,18 @@ type JobStatus = {
   steps: JobStep[];
 };
 
+type RecentRun = {
+  id: string;
+  status: string;
+  startedAt: string | null;
+  completedAt: string | null;
+  progress: number;
+  error: string | null;
+  templateName: string;
+  versionNumber: number | null;
+  outputs: Array<{ label: string; type: "image" | "video"; url: string }>;
+};
+
 const ACCESS_CODE_STORAGE_KEY = "fuse-lab-access-code";
 const MAX_DIMENSION = 2048;
 
@@ -107,6 +119,24 @@ function formatUsd(value: number | null | undefined) {
   return `$${value.toFixed(4)}`;
 }
 
+function formatTimestamp(value: string | null | undefined) {
+  if (!value) return "Pending";
+  return new Date(value).toLocaleString([], {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
+function formatRunDuration(startedAt: string | null | undefined, completedAt: string | null | undefined) {
+  if (!startedAt || !completedAt) return "In progress";
+
+  const durationMs = new Date(completedAt).getTime() - new Date(startedAt).getTime();
+  if (Number.isNaN(durationMs) || durationMs <= 0) return "Pending";
+  return formatDuration(durationMs);
+}
+
 const TemplateLab = () => {
   const { session, hasAppAccess } = useAuth();
   const [accessCode, setAccessCode] = useState("");
@@ -115,6 +145,8 @@ const TemplateLab = () => {
   const [selectedVersionId, setSelectedVersionId] = useState("");
   const [templateDetail, setTemplateDetail] = useState<TemplateDetail | null>(null);
   const [loadingTemplateDetail, setLoadingTemplateDetail] = useState(false);
+  const [recentRuns, setRecentRuns] = useState<RecentRun[]>([]);
+  const [loadingRecentRuns, setLoadingRecentRuns] = useState(false);
   const [files, setFiles] = useState<Record<string, File | null>>({});
   const [previews, setPreviews] = useState<Record<string, string>>({});
   const [phase, setPhase] = useState<Phase>("idle");
@@ -154,6 +186,44 @@ const TemplateLab = () => {
     () => job?.outputs.find((item) => item.type === "video")?.url ?? null,
     [job],
   );
+
+  const flowLanes = useMemo(() => {
+    if (!templateDetail) return [];
+
+    const lanes = [
+      { key: "uploads", title: "Uploads", nodes: [] as TemplateDetailNode[] },
+      { key: "references", title: "References", nodes: [] as TemplateDetailNode[] },
+      { key: "images", title: "Image Steps", nodes: [] as TemplateDetailNode[] },
+      { key: "videos", title: "Video Steps", nodes: [] as TemplateDetailNode[] },
+      { key: "other", title: "Other", nodes: [] as TemplateDetailNode[] },
+    ];
+
+    for (const node of templateDetail.nodes) {
+      const summary = node.summary.toLowerCase();
+      if (node.nodeType === "user_input") {
+        if (summary.includes("built-in reference")) {
+          lanes[1].nodes.push(node);
+        } else {
+          lanes[0].nodes.push(node);
+        }
+        continue;
+      }
+
+      if (node.nodeType === "image_gen") {
+        lanes[2].nodes.push(node);
+        continue;
+      }
+
+      if (node.nodeType === "video_gen") {
+        lanes[3].nodes.push(node);
+        continue;
+      }
+
+      lanes[4].nodes.push(node);
+    }
+
+    return lanes.filter((lane) => lane.nodes.length > 0);
+  }, [templateDetail]);
 
   const normalizeFile = useCallback((sourceFile: File) => {
     return new Promise<File>((resolve, reject) => {
@@ -249,6 +319,30 @@ const TemplateLab = () => {
     }
   }, [accessCode, buildAuthHeaders, isAuthenticatedLab]);
 
+  const loadRecentRuns = useCallback(async () => {
+    if (!isAuthenticatedLab) {
+      setRecentRuns([]);
+      return;
+    }
+
+    setLoadingRecentRuns(true);
+
+    try {
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/list-recent-runs?limit=8`,
+        { headers: await buildAuthHeaders() },
+      );
+      const data = await response.json();
+      if (!response.ok) throw new Error(data?.error ?? "Could not load recent runs");
+      setRecentRuns(data.jobs ?? []);
+    } catch (historyError) {
+      const message = historyError instanceof Error ? historyError.message : "Could not load recent runs";
+      toast({ title: "Run history error", description: message, variant: "destructive" });
+    } finally {
+      setLoadingRecentRuns(false);
+    }
+  }, [buildAuthHeaders, isAuthenticatedLab]);
+
   useEffect(() => {
     const loadKey = isAuthenticatedLab ? `auth:${session?.user.id}` : accessCode.trim();
 
@@ -263,6 +357,15 @@ const TemplateLab = () => {
     lastLoadedCodeRef.current = loadKey;
     void loadTemplates();
   }, [accessCode, isAuthenticatedLab, loadTemplates, session?.user.id]);
+
+  useEffect(() => {
+    if (!isAuthenticatedLab) {
+      setRecentRuns([]);
+      return;
+    }
+
+    void loadRecentRuns();
+  }, [isAuthenticatedLab, loadRecentRuns, session?.user.id]);
 
   const resetTemplateInputs = useCallback(() => {
     Object.values(previews).forEach((url) => URL.revokeObjectURL(url));
@@ -330,34 +433,42 @@ const TemplateLab = () => {
     }
   }, [normalizeFile, previews]);
 
+  const fetchJobStatus = useCallback(async (nextJobId: string) => {
+    const headers = await buildAuthHeaders();
+    const response = await fetch(
+      `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/get-job-status-public?jobId=${nextJobId}`,
+      { headers },
+    );
+    const data = await response.json();
+    if (!response.ok) throw new Error(data?.error ?? "Could not load job status");
+
+    setJobId(nextJobId);
+    setJob(data);
+
+    if (data.status === "complete") {
+      setPhase("complete");
+      setError(null);
+    } else if (data.status === "failed") {
+      setPhase("error");
+      setError(data.error ?? "Template run failed");
+    } else {
+      setPhase("running");
+      setError(null);
+    }
+
+    return data;
+  }, [buildAuthHeaders]);
+
   const pollJob = useCallback((nextJobId: string) => {
     if (pollRef.current) clearInterval(pollRef.current);
 
     pollRef.current = setInterval(async () => {
       try {
-        const headers = await buildAuthHeaders();
-        const response = await fetch(
-          `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/get-job-status-public?jobId=${nextJobId}`,
-          {
-            headers,
-          },
-        );
-        const data = await response.json();
-        if (!response.ok) throw new Error(data?.error ?? "Could not load job status");
+        const data = await fetchJobStatus(nextJobId);
 
-        setJob(data);
-
-        if (data.status === "complete") {
+        if (data.status === "complete" || data.status === "failed") {
           if (pollRef.current) clearInterval(pollRef.current);
           pollRef.current = null;
-          setPhase("complete");
-        } else if (data.status === "failed") {
-          if (pollRef.current) clearInterval(pollRef.current);
-          pollRef.current = null;
-          setPhase("error");
-          setError(data.error ?? "Template run failed");
-        } else {
-          setPhase("running");
         }
       } catch (pollError) {
         const message = pollError instanceof Error ? pollError.message : "Polling failed";
@@ -367,7 +478,13 @@ const TemplateLab = () => {
         pollRef.current = null;
       }
     }, 2500);
-  }, [buildAuthHeaders]);
+  }, [fetchJobStatus]);
+
+  useEffect(() => {
+    if (!isAuthenticatedLab) return;
+    if (phase !== "complete" && phase !== "error") return;
+    void loadRecentRuns();
+  }, [isAuthenticatedLab, loadRecentRuns, phase]);
 
   const handleRun = useCallback(async () => {
     if (!selectedTemplate) {
@@ -603,6 +720,39 @@ const TemplateLab = () => {
                   {loadingTemplateDetail ? <Loader2 className="h-5 w-5 animate-spin text-primary" /> : null}
                 </div>
 
+                {flowLanes.length ? (
+                  <div className="mt-5 overflow-x-auto pb-2">
+                    <div className="grid min-w-[980px] gap-4 xl:grid-cols-4">
+                      {flowLanes.map((lane) => (
+                        <div key={lane.key} className="rounded-2xl border border-border/30 bg-background/70 p-4">
+                          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">{lane.title}</p>
+                          <div className="mt-4 space-y-3">
+                            {lane.nodes.map((node) => (
+                              <div key={`${lane.key}-${node.id}`} className="rounded-2xl border border-border/30 bg-background/90 p-3">
+                                <p className="font-medium leading-tight">{node.name}</p>
+                                <p className="mt-1 text-[11px] uppercase tracking-[0.15em] text-muted-foreground">{node.nodeType}</p>
+                                {node.defaultAssetUrl ? (
+                                  <img src={node.defaultAssetUrl} alt={`${node.name} reference`} className="mt-3 max-h-36 rounded-xl border border-border/30 object-contain" />
+                                ) : null}
+                                {node.incoming.length ? (
+                                  <div className="mt-3 space-y-1">
+                                    {node.incoming.map((incoming) => (
+                                      <p key={`${node.id}-${incoming.sourceNodeId}-${incoming.targetParam ?? "none"}`} className="text-xs text-muted-foreground">
+                                        {incoming.sourceName}
+                                        {incoming.targetParam ? ` -> ${incoming.targetParam}` : ""}
+                                      </p>
+                                    ))}
+                                  </div>
+                                ) : null}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
+
                 <div className="mt-5 space-y-4">
                   {templateDetail.nodes.map((node) => (
                     <div key={node.id} className="rounded-2xl border border-border/30 bg-background/70 p-4">
@@ -664,6 +814,81 @@ const TemplateLab = () => {
             </div>
 
             <div className="mt-6 space-y-4">
+              {isAuthenticatedLab ? (
+                <div className="rounded-2xl border border-border/40 bg-background/60 p-4">
+                  <div className="flex items-center justify-between gap-4">
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">Recent Runs</p>
+                      <p className="mt-1 text-sm text-muted-foreground">Completed and failed jobs tied to your tester account.</p>
+                    </div>
+                    <Button type="button" variant="outline" size="sm" onClick={() => void loadRecentRuns()} disabled={loadingRecentRuns}>
+                      {loadingRecentRuns ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
+                      Refresh
+                    </Button>
+                  </div>
+
+                  <div className="mt-4 space-y-3">
+                    {recentRuns.length === 0 ? (
+                      <div className="rounded-xl border border-border/30 bg-background/70 px-3 py-4 text-sm text-muted-foreground">
+                        No saved runs yet for this account.
+                      </div>
+                    ) : (
+                      recentRuns.map((run) => (
+                        <div key={run.id} className="rounded-2xl border border-border/30 bg-background/70 p-3">
+                          <div className="flex items-start justify-between gap-3">
+                            <div>
+                              <p className="font-medium">{run.templateName}{run.versionNumber ? ` v${run.versionNumber}` : ""}</p>
+                              <p className="mt-1 text-xs text-muted-foreground">
+                                Started {formatTimestamp(run.startedAt)} · {formatRunDuration(run.startedAt, run.completedAt)}
+                              </p>
+                            </div>
+                            <div className="text-right">
+                              <p className="text-xs uppercase tracking-[0.15em] text-muted-foreground">{run.status}</p>
+                              <p className="mt-1 text-xs text-muted-foreground">{run.outputs.length} outputs</p>
+                            </div>
+                          </div>
+
+                          {run.outputs.length ? (
+                            <div className="mt-3 flex gap-2 overflow-x-auto pb-1">
+                              {run.outputs.slice(0, 4).map((output) => (
+                                <a
+                                  key={`${run.id}-${output.url}`}
+                                  href={output.url}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="shrink-0 rounded-xl border border-border/30 bg-background/80 p-2"
+                                >
+                                  {output.type === "image" ? (
+                                    <img src={output.url} alt={output.label} className="h-20 w-16 rounded-lg object-cover" />
+                                  ) : (
+                                    <video src={output.url} className="h-20 w-16 rounded-lg object-cover" muted />
+                                  )}
+                                </a>
+                              ))}
+                            </div>
+                          ) : null}
+
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            <Button type="button" size="sm" variant="outline" onClick={() => void fetchJobStatus(run.id)}>
+                              Open Results
+                            </Button>
+                            {run.outputs[0] ? (
+                              <Button asChild type="button" size="sm" variant="ghost">
+                                <a href={run.outputs[0].url} target="_blank" rel="noreferrer">
+                                  Open First Output
+                                </a>
+                              </Button>
+                            ) : null}
+                          </div>
+
+                          {run.error ? <p className="mt-2 text-xs text-destructive">{run.error}</p> : null}
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              ) : null}
+
               <div className="rounded-2xl border border-border/40 bg-background/60 p-4">
                 <div className="flex items-center justify-between text-sm">
                   <span className="text-muted-foreground">Status</span>
