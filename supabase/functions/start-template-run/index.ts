@@ -83,6 +83,8 @@ function expandInputsForTemplate(args: {
   const finalInputs: Record<string, string> = {};
   const plan = buildTemplateInputPlan(args.templateName, args.inputNodes);
   const mappedNodeIds = new Set<string>();
+  const userFacingNodeIds = new Set(plan.slots.flatMap((slot) => slot.nodeIds));
+  const implicitReferenceNodeIds = new Set(plan.implicitReferenceNodeIds);
 
   for (const slot of plan.slots) {
     const value = args.suppliedInputs[slot.id];
@@ -103,6 +105,8 @@ function expandInputsForTemplate(args: {
     }
 
     if (mappedNodeIds.has(node.id)) continue;
+    if (userFacingNodeIds.has(node.id)) continue;
+    if (!implicitReferenceNodeIds.has(node.id)) continue;
 
     const sampleUrl = typeof node.prompt_config?.sample_url === "string"
       ? node.prompt_config.sample_url

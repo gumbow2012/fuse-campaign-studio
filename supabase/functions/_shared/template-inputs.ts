@@ -19,6 +19,7 @@ type TemplateInputPlan = {
     nodeIds: string[];
   }>;
   implicitReferenceNodeIds: string[];
+  slotByNodeId: Record<string, { id: string; name: string; expected: string }>;
 };
 
 const SLOT_CONFIG: Record<string, SlotDefinition[]> = {
@@ -122,6 +123,19 @@ export function buildTemplateInputPlan(templateName: string, nodes: InputNodeLik
     })
     .filter(Boolean) as TemplateInputPlan["slots"];
 
+  const slotByNodeId = Object.fromEntries(
+    slots.flatMap((slot) =>
+      slot.nodeIds.map((nodeId) => [
+        nodeId,
+        {
+          id: slot.id,
+          name: slot.name,
+          expected: slot.expected,
+        },
+      ]),
+    ),
+  );
+
   const implicitReferenceNodeIds = unmatched
     .filter((node) => !!node.prompt_config?.sample_url)
     .map((node) => node.id);
@@ -129,5 +143,6 @@ export function buildTemplateInputPlan(templateName: string, nodes: InputNodeLik
   return {
     slots,
     implicitReferenceNodeIds,
+    slotByNodeId,
   };
 }

@@ -90,6 +90,7 @@ Deno.serve(async (req) => {
       (nodes ?? []).filter((node: any) => node.node_type === "user_input"),
     );
     const userFacingInputNodeIds = new Set(inputPlan.slots.flatMap((slot) => slot.nodeIds));
+    const implicitReferenceNodeIds = new Set(inputPlan.implicitReferenceNodeIds);
 
     const detailNodes = (nodes ?? [])
       .map((node: any) => {
@@ -97,8 +98,12 @@ Deno.serve(async (req) => {
         const sampleUrl = typeof node.prompt_config?.sample_url === "string"
           ? node.prompt_config.sample_url
           : null;
+        const slot = inputPlan.slotByNodeId[node.id] ?? null;
         const isUserFacingInput = node.node_type !== "user_input" || userFacingInputNodeIds.has(node.id);
-        const isReferenceInput = !!defaultAsset?.supabase_storage_url || (node.node_type === "user_input" && !isUserFacingInput);
+        const isReferenceInput =
+          !!defaultAsset?.supabase_storage_url ||
+          implicitReferenceNodeIds.has(node.id) ||
+          (node.node_type === "user_input" && !isUserFacingInput);
         const incoming = (edges ?? [])
           .filter((edge: any) => edge.target_node_id === node.id)
           .map((edge: any) => {
@@ -117,15 +122,17 @@ Deno.serve(async (req) => {
 
         return {
           id: node.id,
-          name: node.name,
+          name: slot?.name ?? node.name,
           nodeType: node.node_type,
           prompt,
-          expected: node.prompt_config?.expected ?? null,
-          defaultAssetUrl: defaultAsset?.supabase_storage_url ?? sampleUrl,
+          expected: slot?.expected ?? node.prompt_config?.expected ?? null,
+          defaultAssetUrl: isUserFacingInput && node.node_type === "user_input"
+            ? null
+            : defaultAsset?.supabase_storage_url ?? sampleUrl,
           defaultAssetType: defaultAsset?.asset_type ?? null,
           incoming,
           summary: summarizeNode({
-            nodeName: node.name,
+            nodeName: slot?.name ?? node.name,
             nodeType: node.node_type,
             prompt,
             isReferenceInput,

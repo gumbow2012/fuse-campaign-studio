@@ -198,13 +198,27 @@ const TemplateLab = () => {
       { key: "other", title: "Other", nodes: [] as TemplateDetailNode[] },
     ];
 
+    if (selectedTemplate) {
+      lanes[0].nodes.push(
+        ...selectedTemplate.inputs.map((input) => ({
+          id: `upload-${input.id}`,
+          name: input.name,
+          nodeType: "user_input",
+          prompt: null,
+          expected: input.expected,
+          defaultAssetUrl: null,
+          defaultAssetType: null,
+          incoming: [],
+          summary: `${input.name} is a dynamic upload slot. The user must provide this media at run time.`,
+        })),
+      );
+    }
+
     for (const node of templateDetail.nodes) {
       const summary = node.summary.toLowerCase();
       if (node.nodeType === "user_input") {
-        if (summary.includes("built-in reference")) {
+        if (summary.includes("built-in reference") || !!node.defaultAssetUrl) {
           lanes[1].nodes.push(node);
-        } else {
-          lanes[0].nodes.push(node);
         }
         continue;
       }
@@ -223,7 +237,7 @@ const TemplateLab = () => {
     }
 
     return lanes.filter((lane) => lane.nodes.length > 0);
-  }, [templateDetail]);
+  }, [selectedTemplate, templateDetail]);
 
   const normalizeFile = useCallback((sourceFile: File) => {
     return new Promise<File>((resolve, reject) => {
