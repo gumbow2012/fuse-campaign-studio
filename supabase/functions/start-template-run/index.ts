@@ -12,6 +12,10 @@ import {
 import { PAPARAZZI_VERSION_ID, runGraphJob } from "../_shared/executor.ts";
 import { buildTemplateInputPlan } from "../_shared/template-inputs.ts";
 
+declare const EdgeRuntime: {
+  waitUntil(promise: Promise<unknown>): void;
+};
+
 type StartTemplateRunBody = {
   templateId?: string;
   versionId?: string;
@@ -122,7 +126,7 @@ function expandInputsForTemplate(args: {
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: corsHeaders });
 
-    const admin = createAdminClient();
+  const admin = createAdminClient();
 
   try {
     const runnerAccess = hasValidRunnerCode(req);
@@ -197,20 +201,21 @@ Deno.serve(async (req) => {
       })));
     if (stepsError) throw new Error(stepsError.message);
 
-    try {
-      await runGraphJob(admin, job.id);
-    } catch (error) {
-      const message = errorMessage(error);
-      await admin
-        .from("execution_jobs")
-        .update({
-          status: "failed",
-          error_log: message,
-          completed_at: new Date().toISOString(),
-        })
-        .eq("id", job.id);
-      throw error;
-    }
+    EdgeRuntime.waitUntil((async () => {
+      try {
+        await runGraphJob(admin, job.id);
+      } catch (error) {
+        const message = errorMessage(error);
+        await admin
+          .from("execution_jobs")
+          .update({
+            status: "failed",
+            error_log: message,
+            completed_at: new Date().toISOString(),
+          })
+          .eq("id", job.id);
+      }
+    })());
 
     return json({ jobId: job.id, status: "queued" }, 202);
   } catch (error) {
