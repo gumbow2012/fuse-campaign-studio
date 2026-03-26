@@ -49,7 +49,7 @@ type TemplateDetailNode = {
     targetParam: string | null;
   }>;
   summary: string;
-  editor: {
+  editor?: {
     mode: "upload" | "reference" | "workflow";
     slotKey: string | null;
     label: string | null;
@@ -158,6 +158,16 @@ function formatRunDuration(startedAt: string | null | undefined, completedAt: st
   return formatDuration(durationMs);
 }
 
+function getNodeEditorDefaults(node: TemplateDetailNode) {
+  return {
+    displayLabel: node.editor?.label ?? node.name,
+    prompt: node.prompt ?? "",
+    expected: node.editor?.expected ?? node.expected ?? "",
+    editorMode: node.editor?.mode ?? (node.nodeType === "user_input" ? "upload" : "workflow"),
+    slotKey: node.editor?.slotKey ?? "",
+  } satisfies EditorDraft;
+}
+
 const TemplateLab = () => {
   const { session, hasAppAccess } = useAuth();
   const [accessCode, setAccessCode] = useState("");
@@ -229,6 +239,7 @@ const TemplateLab = () => {
       lanes[0].nodes.push(
         ...selectedTemplate.inputs.map((input) => ({
           id: `upload-${input.id}`,
+          rawName: input.name,
           name: input.name,
           nodeType: "user_input",
           prompt: null,
@@ -237,6 +248,15 @@ const TemplateLab = () => {
           defaultAssetType: null,
           incoming: [],
           summary: `${input.name} is a dynamic upload slot. The user must provide this media at run time.`,
+          editor: {
+            mode: "upload" as const,
+            slotKey: input.id,
+            label: input.name,
+            expected: input.expected,
+            isUserFacingInput: true,
+            isReferenceInput: false,
+            sampleUrl: null,
+          },
         })),
       );
     }
@@ -493,13 +513,7 @@ const TemplateLab = () => {
       return;
     }
 
-    setEditorDraft({
-      displayLabel: selectedInspectorNode.editor.label ?? selectedInspectorNode.name,
-      prompt: selectedInspectorNode.prompt ?? "",
-      expected: selectedInspectorNode.editor.expected ?? selectedInspectorNode.expected ?? "",
-      editorMode: selectedInspectorNode.editor.mode,
-      slotKey: selectedInspectorNode.editor.slotKey ?? "",
-    });
+    setEditorDraft(getNodeEditorDefaults(selectedInspectorNode));
   }, [selectedInspectorNode]);
 
   const handleFile = useCallback(async (inputId: string, nextFile: File | null) => {
@@ -1175,7 +1189,11 @@ const TemplateLab = () => {
                             </div>
 
                             <div className="flex flex-wrap gap-3">
-                              <Button type="button" onClick={() => void saveNodeEdits()} disabled={savingNodeEdits}>
+                              <Button
+                                type="button"
+                                onClick={() => void saveNodeEdits()}
+                                disabled={savingNodeEdits || selectedInspectorNode.id.startsWith("upload-")}
+                              >
                                 {savingNodeEdits ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
                                 Save Node
                               </Button>
@@ -1184,13 +1202,7 @@ const TemplateLab = () => {
                                 variant="outline"
                                 onClick={() => {
                                   if (!selectedInspectorNode) return;
-                                  setEditorDraft({
-                                    displayLabel: selectedInspectorNode.editor.label ?? selectedInspectorNode.name,
-                                    prompt: selectedInspectorNode.prompt ?? "",
-                                    expected: selectedInspectorNode.editor.expected ?? selectedInspectorNode.expected ?? "",
-                                    editorMode: selectedInspectorNode.editor.mode,
-                                    slotKey: selectedInspectorNode.editor.slotKey ?? "",
-                                  });
+                                  setEditorDraft(getNodeEditorDefaults(selectedInspectorNode));
                                 }}
                               >
                                 Reset Draft

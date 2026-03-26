@@ -18,7 +18,12 @@ serve(async (req) => {
 
   try {
     const stripeKey = Deno.env.get("STRIPE_SECRET_KEY");
-    if (!stripeKey) throw new Error("STRIPE_SECRET_KEY not set");
+    if (!stripeKey) {
+      return new Response(JSON.stringify({ subscribed: false, plan: "free", subscription_status: "inactive" }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 200,
+      });
+    }
 
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) {

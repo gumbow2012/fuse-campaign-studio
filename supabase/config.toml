@@ -15,6 +15,9 @@ verify_jwt = false
 [functions.get-job-status-public]
 verify_jwt = false
 
+[functions.check-subscription]
+verify_jwt = false
+
 [functions.lab-template-catalog]
 verify_jwt = false
 
