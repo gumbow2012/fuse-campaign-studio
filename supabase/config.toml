@@ -21,6 +21,15 @@ verify_jwt = false
 [functions.lab-template-detail]
 verify_jwt = false
 
+[functions.list-recent-runs]
+verify_jwt = false
+
+[functions.save-template-editor]
+verify_jwt = false
+
+[functions.sync-template-editor-metadata]
+verify_jwt = false
+
 [functions.set-user-role]
 verify_jwt = false
 

@@ -6,6 +6,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
@@ -34,6 +35,7 @@ type TemplateOption = {
 
 type TemplateDetailNode = {
   id: string;
+  rawName: string;
   name: string;
   nodeType: string;
   prompt: string | null;
@@ -47,6 +49,15 @@ type TemplateDetailNode = {
     targetParam: string | null;
   }>;
   summary: string;
+  editor: {
+    mode: "upload" | "reference" | "workflow";
+    slotKey: string | null;
+    label: string | null;
+    expected: string | null;
+    isUserFacingInput: boolean;
+    isReferenceInput: boolean;
+    sampleUrl: string | null;
+  };
 };
 
 type TemplateDetail = {
@@ -96,6 +107,14 @@ type RecentRun = {
   templateName: string;
   versionNumber: number | null;
   outputs: Array<{ label: string; type: "image" | "video"; url: string }>;
+};
+
+type EditorDraft = {
+  displayLabel: string;
+  prompt: string;
+  expected: string;
+  editorMode: "upload" | "reference" | "workflow";
+  slotKey: string;
 };
 
 const ACCESS_CODE_STORAGE_KEY = "fuse-lab-access-code";
@@ -153,6 +172,8 @@ const TemplateLab = () => {
   const [inspectorTab, setInspectorTab] = useState("map");
   const [selectedInspectorNodeId, setSelectedInspectorNodeId] = useState<string | null>(null);
   const [hiddenInspectorNodeIds, setHiddenInspectorNodeIds] = useState<string[]>([]);
+  const [editorDraft, setEditorDraft] = useState<EditorDraft | null>(null);
+  const [savingNodeEdits, setSavingNodeEdits] = useState(false);
   const [files, setFiles] = useState<Record<string, File | null>>({});
   const [previews, setPreviews] = useState<Record<string, string>>({});
   const [phase, setPhase] = useState<Phase>("idle");
@@ -466,6 +487,21 @@ const TemplateLab = () => {
     }
   }, [inspectorNodes, selectedInspectorNodeId]);
 
+  useEffect(() => {
+    if (!selectedInspectorNode) {
+      setEditorDraft(null);
+      return;
+    }
+
+    setEditorDraft({
+      displayLabel: selectedInspectorNode.editor.label ?? selectedInspectorNode.name,
+      prompt: selectedInspectorNode.prompt ?? "",
+      expected: selectedInspectorNode.editor.expected ?? selectedInspectorNode.expected ?? "",
+      editorMode: selectedInspectorNode.editor.mode,
+      slotKey: selectedInspectorNode.editor.slotKey ?? "",
+    });
+  }, [selectedInspectorNode]);
+
   const handleFile = useCallback(async (inputId: string, nextFile: File | null) => {
     if (previews[inputId]) {
       URL.revokeObjectURL(previews[inputId]);
@@ -636,6 +672,43 @@ const TemplateLab = () => {
   const restoreInspectorView = useCallback(() => {
     setHiddenInspectorNodeIds([]);
   }, []);
+
+  const saveNodeEdits = useCallback(async () => {
+    if (!selectedTemplate || !selectedInspectorNode || !editorDraft) return;
+
+    setSavingNodeEdits(true);
+
+    try {
+      const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/save-template-editor`, {
+        method: "POST",
+        headers: {
+          ...(await buildAuthHeaders()),
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          versionId: selectedTemplate.versionId,
+          nodeId: selectedInspectorNode.id,
+          displayLabel: editorDraft.displayLabel,
+          prompt: editorDraft.prompt,
+          expected: editorDraft.expected,
+          editorMode: selectedInspectorNode.nodeType === "user_input" ? editorDraft.editorMode : null,
+          slotKey: selectedInspectorNode.nodeType === "user_input" ? editorDraft.slotKey : null,
+        }),
+      });
+
+      const data = await response.json();
+      if (!response.ok) throw new Error(data?.error ?? "Could not save node edits");
+
+      await loadTemplateDetail(selectedTemplate.versionId);
+      await loadTemplates();
+      toast({ title: "Saved", description: "Template node updated." });
+    } catch (saveError) {
+      const message = saveError instanceof Error ? saveError.message : "Could not save node edits";
+      toast({ title: "Save failed", description: message, variant: "destructive" });
+    } finally {
+      setSavingNodeEdits(false);
+    }
+  }, [buildAuthHeaders, editorDraft, loadTemplateDetail, loadTemplates, selectedInspectorNode, selectedTemplate]);
 
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -819,9 +892,10 @@ const TemplateLab = () => {
                 </div>
 
                 <Tabs value={inspectorTab} onValueChange={setInspectorTab} className="mt-5">
-                  <TabsList className="grid w-full grid-cols-2">
+                  <TabsList className="grid w-full grid-cols-3">
                     <TabsTrigger value="map">Map</TabsTrigger>
                     <TabsTrigger value="inspect">Inspect</TabsTrigger>
+                    <TabsTrigger value="edit">Edit</TabsTrigger>
                   </TabsList>
 
                   <TabsContent value="map" className="mt-4">
@@ -995,6 +1069,137 @@ const TemplateLab = () => {
                         ) : (
                           <div className="rounded-2xl border border-border/30 bg-background/80 p-6 text-sm text-muted-foreground">
                             Pick a node from the review queue to inspect it in detail.
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </TabsContent>
+
+                  <TabsContent value="edit" className="mt-4">
+                    <div className="grid gap-4 xl:grid-cols-[0.78fr,1.22fr]">
+                      <div className="rounded-2xl border border-border/30 bg-background/70 p-4">
+                        <div className="flex items-center justify-between gap-3">
+                          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">Editable Nodes</p>
+                          <span className="text-xs text-muted-foreground">{inspectorNodes.length} visible</span>
+                        </div>
+                        <div className="mt-4 space-y-2">
+                          {inspectorNodes.map((node) => (
+                            <button
+                              key={`edit-list-${node.id}`}
+                              type="button"
+                              onClick={() => setSelectedInspectorNodeId(node.id)}
+                              className={`w-full rounded-2xl border p-3 text-left ${
+                                selectedInspectorNode?.id === node.id
+                                  ? "border-primary/60 bg-primary/5"
+                                  : "border-border/30 bg-background/80"
+                              }`}
+                            >
+                              <p className="truncate font-medium">{node.name}</p>
+                              <p className="mt-1 text-[11px] uppercase tracking-[0.15em] text-muted-foreground">{node.nodeType}</p>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div className="rounded-2xl border border-border/30 bg-background/70 p-4">
+                        {selectedInspectorNode && editorDraft ? (
+                          <div className="space-y-4">
+                            <div>
+                              <p className="font-medium">{selectedInspectorNode.name}</p>
+                              <p className="mt-1 text-xs text-muted-foreground">
+                                Backend name: {selectedInspectorNode.rawName}
+                              </p>
+                            </div>
+
+                            <div className="grid gap-4 md:grid-cols-2">
+                              <div>
+                                <Label className="mb-2 block text-xs uppercase tracking-[0.15em]">Display Label</Label>
+                                <Input
+                                  value={editorDraft.displayLabel}
+                                  onChange={(event) => setEditorDraft((current) => current ? { ...current, displayLabel: event.target.value } : current)}
+                                />
+                              </div>
+                              <div>
+                                <Label className="mb-2 block text-xs uppercase tracking-[0.15em]">Expected Media</Label>
+                                <Input
+                                  value={editorDraft.expected}
+                                  onChange={(event) => setEditorDraft((current) => current ? { ...current, expected: event.target.value } : current)}
+                                  placeholder="image"
+                                />
+                              </div>
+                            </div>
+
+                            {selectedInspectorNode.nodeType === "user_input" ? (
+                              <div className="grid gap-4 md:grid-cols-2">
+                                <div>
+                                  <Label className="mb-2 block text-xs uppercase tracking-[0.15em]">Input Mode</Label>
+                                  <select
+                                    value={editorDraft.editorMode}
+                                    onChange={(event) =>
+                                      setEditorDraft((current) =>
+                                        current
+                                          ? { ...current, editorMode: event.target.value as EditorDraft["editorMode"] }
+                                          : current
+                                      )}
+                                    className="flex h-11 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                                  >
+                                    <option value="upload">User Upload</option>
+                                    <option value="reference">Hidden Reference</option>
+                                  </select>
+                                </div>
+                                <div>
+                                  <Label className="mb-2 block text-xs uppercase tracking-[0.15em]">Slot Key</Label>
+                                  <Input
+                                    value={editorDraft.slotKey}
+                                    onChange={(event) => setEditorDraft((current) => current ? { ...current, slotKey: event.target.value } : current)}
+                                    placeholder="logo"
+                                  />
+                                </div>
+                              </div>
+                            ) : null}
+
+                            <div>
+                              <Label className="mb-2 block text-xs uppercase tracking-[0.15em]">Prompt</Label>
+                              <Textarea
+                                value={editorDraft.prompt}
+                                onChange={(event) => setEditorDraft((current) => current ? { ...current, prompt: event.target.value } : current)}
+                                rows={8}
+                                placeholder="Prompt for this node"
+                              />
+                            </div>
+
+                            <div className="rounded-2xl border border-border/30 bg-background/80 p-4 text-sm text-muted-foreground">
+                              {selectedInspectorNode.nodeType === "user_input"
+                                ? "Use User Upload for media the tester must provide at run time. Use Hidden Reference only for fixed demo/reference media that should stay in the template."
+                                : "This edits the stored display label and prompt for the node. It does not change edge wiring yet."}
+                            </div>
+
+                            <div className="flex flex-wrap gap-3">
+                              <Button type="button" onClick={() => void saveNodeEdits()} disabled={savingNodeEdits}>
+                                {savingNodeEdits ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                                Save Node
+                              </Button>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                onClick={() => {
+                                  if (!selectedInspectorNode) return;
+                                  setEditorDraft({
+                                    displayLabel: selectedInspectorNode.editor.label ?? selectedInspectorNode.name,
+                                    prompt: selectedInspectorNode.prompt ?? "",
+                                    expected: selectedInspectorNode.editor.expected ?? selectedInspectorNode.expected ?? "",
+                                    editorMode: selectedInspectorNode.editor.mode,
+                                    slotKey: selectedInspectorNode.editor.slotKey ?? "",
+                                  });
+                                }}
+                              >
+                                Reset Draft
+                              </Button>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="rounded-2xl border border-border/30 bg-background/80 p-6 text-sm text-muted-foreground">
+                            Pick a node to edit its label, prompt, and upload/reference behavior.
                           </div>
                         )}
                       </div>

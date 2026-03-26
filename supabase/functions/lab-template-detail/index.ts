@@ -2,11 +2,13 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 
 import { corsHeaders, createAdminClient, errorMessage, json } from "../_shared/supabase-admin.ts";
 import { buildTemplateInputPlan } from "../_shared/template-inputs.ts";
+import { getNodeEditorConfig } from "../_shared/template-editor.ts";
 
 function summarizeNode(args: {
   nodeName: string;
   nodeType: string;
   prompt: string | null;
+  defaultAssetUrl?: string | null;
   isReferenceInput?: boolean;
   isUserFacingInput?: boolean;
   incoming: Array<{ sourceName: string; targetParam: string | null }>;
@@ -114,26 +116,42 @@ Deno.serve(async (req) => {
         const prompt = typeof node.prompt_config?.prompt === "string"
           ? node.prompt_config.prompt
           : null;
+        const editorConfig = getNodeEditorConfig(node);
+        const displayName = editorConfig.label ?? slot?.name ?? node.name;
+        const editorMode = editorConfig.mode ?? (isReferenceInput ? "reference" : node.node_type === "user_input" ? "upload" : "workflow");
+        const expected = editorConfig.expected ?? slot?.expected ?? node.prompt_config?.expected ?? null;
+        const defaultAssetUrl = isUserFacingInput && node.node_type === "user_input"
+          ? null
+          : defaultAsset?.supabase_storage_url ?? sampleUrl;
 
         return {
           id: node.id,
-          name: slot?.name ?? node.name,
+          rawName: node.name,
+          name: displayName,
           nodeType: node.node_type,
           prompt,
-          expected: slot?.expected ?? node.prompt_config?.expected ?? null,
-          defaultAssetUrl: isUserFacingInput && node.node_type === "user_input"
-            ? null
-            : defaultAsset?.supabase_storage_url ?? sampleUrl,
+          expected,
+          defaultAssetUrl,
           defaultAssetType: defaultAsset?.asset_type ?? null,
           incoming,
           summary: summarizeNode({
-            nodeName: slot?.name ?? node.name,
+            nodeName: displayName,
             nodeType: node.node_type,
             prompt,
+            defaultAssetUrl,
             isReferenceInput,
             isUserFacingInput,
             incoming,
           }),
+          editor: {
+            mode: editorMode,
+            slotKey: editorConfig.slotKey ?? slot?.id ?? null,
+            label: editorConfig.label ?? slot?.name ?? node.name,
+            expected,
+            isUserFacingInput,
+            isReferenceInput,
+            sampleUrl,
+          },
         };
       })
       .sort((a: any, b: any) => a.name.localeCompare(b.name));
