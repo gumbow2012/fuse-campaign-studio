@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { AlertCircle, CheckCircle2, Download, Film, Loader2, LockKeyhole, RefreshCw, Upload } from "lucide-react";
+import { AlertCircle, CheckCircle2, ChevronDown, ChevronRight, Download, EyeOff, Film, Loader2, LockKeyhole, RefreshCw, Upload } from "lucide-react";
 import Navbar from "@/components/Navbar";
 import { Button } from "@/components/ui/button";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
@@ -147,6 +149,10 @@ const TemplateLab = () => {
   const [loadingTemplateDetail, setLoadingTemplateDetail] = useState(false);
   const [recentRuns, setRecentRuns] = useState<RecentRun[]>([]);
   const [loadingRecentRuns, setLoadingRecentRuns] = useState(false);
+  const [expandedRuns, setExpandedRuns] = useState<Record<string, boolean>>({});
+  const [inspectorTab, setInspectorTab] = useState("map");
+  const [selectedInspectorNodeId, setSelectedInspectorNodeId] = useState<string | null>(null);
+  const [hiddenInspectorNodeIds, setHiddenInspectorNodeIds] = useState<string[]>([]);
   const [files, setFiles] = useState<Record<string, File | null>>({});
   const [previews, setPreviews] = useState<Record<string, string>>({});
   const [phase, setPhase] = useState<Phase>("idle");
@@ -238,6 +244,27 @@ const TemplateLab = () => {
 
     return lanes.filter((lane) => lane.nodes.length > 0);
   }, [selectedTemplate, templateDetail]);
+
+  const visibleFlowLanes = useMemo(
+    () =>
+      flowLanes
+        .map((lane) => ({
+          ...lane,
+          nodes: lane.nodes.filter((node) => !hiddenInspectorNodeIds.includes(node.id)),
+        }))
+        .filter((lane) => lane.nodes.length > 0),
+    [flowLanes, hiddenInspectorNodeIds],
+  );
+
+  const inspectorNodes = useMemo(
+    () => visibleFlowLanes.flatMap((lane) => lane.nodes),
+    [visibleFlowLanes],
+  );
+
+  const selectedInspectorNode = useMemo(
+    () => inspectorNodes.find((node) => node.id === selectedInspectorNodeId) ?? inspectorNodes[0] ?? null,
+    [inspectorNodes, selectedInspectorNodeId],
+  );
 
   const normalizeFile = useCallback((sourceFile: File) => {
     return new Promise<File>((resolve, reject) => {
@@ -422,6 +449,23 @@ const TemplateLab = () => {
     void loadTemplateDetail(selectedVersionId);
   }, [loadTemplateDetail, selectedVersionId]);
 
+  useEffect(() => {
+    setHiddenInspectorNodeIds([]);
+    setSelectedInspectorNodeId(null);
+    setInspectorTab("map");
+  }, [selectedVersionId]);
+
+  useEffect(() => {
+    if (!selectedInspectorNodeId && inspectorNodes[0]) {
+      setSelectedInspectorNodeId(inspectorNodes[0].id);
+      return;
+    }
+
+    if (selectedInspectorNodeId && !inspectorNodes.some((node) => node.id === selectedInspectorNodeId)) {
+      setSelectedInspectorNodeId(inspectorNodes[0]?.id ?? null);
+    }
+  }, [inspectorNodes, selectedInspectorNodeId]);
+
   const handleFile = useCallback(async (inputId: string, nextFile: File | null) => {
     if (previews[inputId]) {
       URL.revokeObjectURL(previews[inputId]);
@@ -580,6 +624,18 @@ const TemplateLab = () => {
   }, [accessCode, buildAuthHeaders, files, isAuthenticatedLab, loadRecentRuns, pollJob, selectedTemplate]);
 
   const canRun = !!selectedTemplate && selectedTemplate.inputs.every((input) => input.defaultAssetUrl || files[input.id]);
+
+  const setRunExpanded = useCallback((runId: string, open: boolean) => {
+    setExpandedRuns((current) => ({ ...current, [runId]: open }));
+  }, []);
+
+  const hideInspectorNode = useCallback((nodeId: string) => {
+    setHiddenInspectorNodeIds((current) => (current.includes(nodeId) ? current : [...current, nodeId]));
+  }, []);
+
+  const restoreInspectorView = useCallback(() => {
+    setHiddenInspectorNodeIds([]);
+  }, []);
 
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -740,92 +796,211 @@ const TemplateLab = () => {
                     <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">Template Wiring</p>
                     <h3 className="mt-2 text-xl font-bold">{templateDetail.templateName}</h3>
                     <p className="mt-2 text-sm text-muted-foreground">
-                      Reference scenes, prompts, and upstream mappings for this template version.
+                      Audit the real upload slots, fixed references, and generation steps without the current page dumping every detail at once.
                     </p>
                   </div>
-                  {loadingTemplateDetail ? <Loader2 className="h-5 w-5 animate-spin text-primary" /> : null}
+                  <div className="flex items-center gap-2">
+                    {hiddenInspectorNodeIds.length ? (
+                      <Button type="button" size="sm" variant="outline" onClick={restoreInspectorView}>
+                        Reset View
+                      </Button>
+                    ) : null}
+                    {loadingTemplateDetail ? <Loader2 className="h-5 w-5 animate-spin text-primary" /> : null}
+                  </div>
                 </div>
 
-                {flowLanes.length ? (
-                  <div className="mt-5 overflow-x-auto pb-2">
-                    <div className="grid min-w-[980px] gap-4 xl:grid-cols-4">
-                      {flowLanes.map((lane) => (
-                        <div key={lane.key} className="rounded-2xl border border-border/30 bg-background/70 p-4">
-                          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">{lane.title}</p>
-                          <div className="mt-4 space-y-3">
-                            {lane.nodes.map((node) => (
-                              <div key={`${lane.key}-${node.id}`} className="rounded-2xl border border-border/30 bg-background/90 p-3">
-                                <p className="font-medium leading-tight">{node.name}</p>
-                                <p className="mt-1 text-[11px] uppercase tracking-[0.15em] text-muted-foreground">{node.nodeType}</p>
-                                {node.defaultAssetUrl ? (
-                                  <img src={node.defaultAssetUrl} alt={`${node.name} reference`} className="mt-3 max-h-36 rounded-xl border border-border/30 object-contain" />
-                                ) : null}
-                                {node.incoming.length ? (
-                                  <div className="mt-3 space-y-1">
-                                    {node.incoming.map((incoming) => (
-                                      <p key={`${node.id}-${incoming.sourceNodeId}-${incoming.targetParam ?? "none"}`} className="text-xs text-muted-foreground">
-                                        {incoming.sourceName}
-                                        {incoming.targetParam ? ` -> ${incoming.targetParam}` : ""}
-                                      </p>
-                                    ))}
-                                  </div>
-                                ) : null}
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                ) : null}
-
-                <div className="mt-5 space-y-4">
-                  {templateDetail.nodes.map((node) => (
-                    <div key={node.id} className="rounded-2xl border border-border/30 bg-background/70 p-4">
-                      <div className="flex items-start justify-between gap-4">
-                        <div>
-                          <p className="font-medium">{node.name}</p>
-                          <p className="text-xs uppercase tracking-[0.15em] text-muted-foreground">{node.nodeType}</p>
-                        </div>
-                        {node.defaultAssetType ? (
-                          <div className="text-right text-[11px] uppercase tracking-[0.15em] text-muted-foreground">
-                            {node.defaultAssetType}
-                          </div>
-                        ) : null}
-                      </div>
-
-                      <p className="mt-3 text-sm text-muted-foreground">{node.summary}</p>
-
-                      {node.prompt ? (
-                        <div className="mt-3 rounded-xl border border-border/30 bg-background/80 px-3 py-2">
-                          <p className="text-[11px] uppercase tracking-[0.15em] text-muted-foreground">Prompt</p>
-                          <p className="mt-1 text-sm text-foreground">{node.prompt}</p>
-                        </div>
-                      ) : null}
-
-                      {node.incoming.length ? (
-                        <div className="mt-3 rounded-xl border border-border/30 bg-background/80 px-3 py-2">
-                          <p className="text-[11px] uppercase tracking-[0.15em] text-muted-foreground">Incoming</p>
-                          <div className="mt-2 flex flex-wrap gap-2">
-                            {node.incoming.map((incoming) => (
-                              <span key={`${node.id}-${incoming.sourceNodeId}-${incoming.targetParam ?? "none"}`} className="rounded-full border border-border/40 px-2 py-1 text-xs text-foreground/80">
-                                {incoming.sourceName}
-                                {incoming.targetParam ? ` -> ${incoming.targetParam}` : ""}
-                              </span>
-                            ))}
-                          </div>
-                        </div>
-                      ) : null}
-
-                      {node.defaultAssetUrl ? (
-                        <div className="mt-3">
-                          <p className="mb-2 text-[11px] uppercase tracking-[0.15em] text-muted-foreground">Built-in Reference</p>
-                          <img src={node.defaultAssetUrl} alt={`${node.name} reference`} className="max-h-80 rounded-2xl border border-border/30 object-contain" />
-                        </div>
-                      ) : null}
+                <div className="mt-5 grid gap-3 md:grid-cols-4">
+                  {visibleFlowLanes.map((lane) => (
+                    <div key={`summary-${lane.key}`} className="rounded-2xl border border-border/30 bg-background/70 p-4">
+                      <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">{lane.title}</p>
+                      <p className="mt-2 text-2xl font-black tracking-tight">{lane.nodes.length}</p>
                     </div>
                   ))}
                 </div>
+
+                <Tabs value={inspectorTab} onValueChange={setInspectorTab} className="mt-5">
+                  <TabsList className="grid w-full grid-cols-2">
+                    <TabsTrigger value="map">Map</TabsTrigger>
+                    <TabsTrigger value="inspect">Inspect</TabsTrigger>
+                  </TabsList>
+
+                  <TabsContent value="map" className="mt-4">
+                    {visibleFlowLanes.length ? (
+                      <div className="overflow-x-auto pb-2">
+                        <div className="grid min-w-[980px] gap-4 xl:grid-cols-4">
+                          {visibleFlowLanes.map((lane) => (
+                            <div key={lane.key} className="rounded-2xl border border-border/30 bg-background/70 p-4">
+                              <div className="flex items-center justify-between gap-3">
+                                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">{lane.title}</p>
+                                <span className="text-xs text-muted-foreground">{lane.nodes.length}</span>
+                              </div>
+                              <div className="mt-4 space-y-3">
+                                {lane.nodes.map((node) => (
+                                  <div
+                                    key={`${lane.key}-${node.id}`}
+                                    className="rounded-2xl border border-border/30 bg-background/90 p-3 transition hover:border-primary/50 hover:bg-background"
+                                  >
+                                    <div className="flex items-start justify-between gap-3">
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setSelectedInspectorNodeId(node.id);
+                                          setInspectorTab("inspect");
+                                        }}
+                                        className="min-w-0 flex-1 text-left"
+                                      >
+                                        <p className="font-medium leading-tight">{node.name}</p>
+                                        <p className="mt-1 text-[11px] uppercase tracking-[0.15em] text-muted-foreground">{node.nodeType}</p>
+                                      </button>
+                                      <button
+                                        type="button"
+                                        aria-label={`Hide ${node.name}`}
+                                        onClick={() => hideInspectorNode(node.id)}
+                                        className="rounded-full border border-border/40 p-1 text-muted-foreground transition hover:border-primary/50 hover:text-foreground"
+                                      >
+                                        <EyeOff className="h-3.5 w-3.5" />
+                                      </button>
+                                    </div>
+                                    {node.defaultAssetUrl ? (
+                                      <img src={node.defaultAssetUrl} alt={`${node.name} reference`} className="mt-3 max-h-36 rounded-xl border border-border/30 object-contain" />
+                                    ) : null}
+                                    {node.incoming.length ? (
+                                      <div className="mt-3 space-y-1">
+                                        {node.incoming.slice(0, 3).map((incoming) => (
+                                          <p key={`${node.id}-${incoming.sourceNodeId}-${incoming.targetParam ?? "none"}`} className="text-xs text-muted-foreground">
+                                            {incoming.sourceName}
+                                            {incoming.targetParam ? ` -> ${incoming.targetParam}` : ""}
+                                          </p>
+                                        ))}
+                                      </div>
+                                    ) : null}
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="rounded-2xl border border-border/30 bg-background/70 p-6 text-sm text-muted-foreground">
+                        Everything is hidden from the current review. Reset the view to bring the nodes back.
+                      </div>
+                    )}
+                  </TabsContent>
+
+                  <TabsContent value="inspect" className="mt-4">
+                    <div className="grid gap-4 xl:grid-cols-[0.78fr,1.22fr]">
+                      <div className="rounded-2xl border border-border/30 bg-background/70 p-4">
+                        <div className="flex items-center justify-between gap-3">
+                          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">Review Queue</p>
+                          <span className="text-xs text-muted-foreground">{inspectorNodes.length} visible</span>
+                        </div>
+                        <div className="mt-4 space-y-2">
+                          {inspectorNodes.map((node) => (
+                            <div
+                              key={`inspect-list-${node.id}`}
+                              className={`rounded-2xl border p-3 ${
+                                selectedInspectorNode?.id === node.id
+                                  ? "border-primary/60 bg-primary/5"
+                                  : "border-border/30 bg-background/80"
+                              }`}
+                            >
+                              <div className="flex items-start gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => setSelectedInspectorNodeId(node.id)}
+                                  className="min-w-0 flex-1 text-left"
+                                >
+                                  <p className="truncate font-medium">{node.name}</p>
+                                  <p className="mt-1 text-[11px] uppercase tracking-[0.15em] text-muted-foreground">{node.nodeType}</p>
+                                </button>
+                                <button
+                                  type="button"
+                                  aria-label={`Hide ${node.name}`}
+                                  onClick={() => hideInspectorNode(node.id)}
+                                  className="rounded-full border border-border/40 p-1 text-muted-foreground transition hover:border-primary/50 hover:text-foreground"
+                                >
+                                  <EyeOff className="h-3.5 w-3.5" />
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div className="rounded-2xl border border-border/30 bg-background/70 p-4">
+                        {selectedInspectorNode ? (
+                          <>
+                            <div className="flex items-start justify-between gap-4">
+                              <div>
+                                <p className="font-medium">{selectedInspectorNode.name}</p>
+                                <p className="text-xs uppercase tracking-[0.15em] text-muted-foreground">{selectedInspectorNode.nodeType}</p>
+                              </div>
+                              {selectedInspectorNode.defaultAssetType ? (
+                                <div className="text-right text-[11px] uppercase tracking-[0.15em] text-muted-foreground">
+                                  {selectedInspectorNode.defaultAssetType}
+                                </div>
+                              ) : null}
+                            </div>
+
+                            <div className="mt-4 grid gap-4 md:grid-cols-2">
+                              <div className="rounded-2xl border border-border/30 bg-background/80 p-4">
+                                <p className="text-[11px] uppercase tracking-[0.15em] text-muted-foreground">What This Node Does</p>
+                                <p className="mt-2 text-sm text-muted-foreground">{selectedInspectorNode.summary}</p>
+                              </div>
+                              <div className="rounded-2xl border border-border/30 bg-background/80 p-4">
+                                <p className="text-[11px] uppercase tracking-[0.15em] text-muted-foreground">Expected Media</p>
+                                <p className="mt-2 text-sm text-foreground">{selectedInspectorNode.expected ?? "No explicit media contract stored."}</p>
+                              </div>
+                            </div>
+
+                            {selectedInspectorNode.prompt ? (
+                              <div className="mt-4 rounded-2xl border border-border/30 bg-background/80 p-4">
+                                <p className="text-[11px] uppercase tracking-[0.15em] text-muted-foreground">Prompt</p>
+                                <p className="mt-2 whitespace-pre-wrap text-sm text-foreground">{selectedInspectorNode.prompt}</p>
+                              </div>
+                            ) : null}
+
+                            <div className="mt-4 grid gap-4 md:grid-cols-2">
+                              <div className="rounded-2xl border border-border/30 bg-background/80 p-4">
+                                <p className="text-[11px] uppercase tracking-[0.15em] text-muted-foreground">Incoming Sources</p>
+                                {selectedInspectorNode.incoming.length ? (
+                                  <div className="mt-3 flex flex-wrap gap-2">
+                                    {selectedInspectorNode.incoming.map((incoming) => (
+                                      <span key={`${selectedInspectorNode.id}-${incoming.sourceNodeId}-${incoming.targetParam ?? "none"}`} className="rounded-full border border-border/40 px-2 py-1 text-xs text-foreground/80">
+                                        {incoming.sourceName}
+                                        {incoming.targetParam ? ` -> ${incoming.targetParam}` : ""}
+                                      </span>
+                                    ))}
+                                  </div>
+                                ) : (
+                                  <p className="mt-2 text-sm text-muted-foreground">No upstream mappings on this node.</p>
+                                )}
+                              </div>
+
+                              <div className="rounded-2xl border border-border/30 bg-background/80 p-4">
+                                <p className="text-[11px] uppercase tracking-[0.15em] text-muted-foreground">Reference Asset</p>
+                                {selectedInspectorNode.defaultAssetUrl ? (
+                                  <img
+                                    src={selectedInspectorNode.defaultAssetUrl}
+                                    alt={`${selectedInspectorNode.name} reference`}
+                                    className="mt-3 max-h-80 rounded-2xl border border-border/30 object-contain"
+                                  />
+                                ) : (
+                                  <p className="mt-2 text-sm text-muted-foreground">No built-in reference asset on this node.</p>
+                                )}
+                              </div>
+                            </div>
+                          </>
+                        ) : (
+                          <div className="rounded-2xl border border-border/30 bg-background/80 p-6 text-sm text-muted-foreground">
+                            Pick a node from the review queue to inspect it in detail.
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </TabsContent>
+                </Tabs>
               </div>
             ) : null}
           </section>
@@ -845,7 +1020,7 @@ const TemplateLab = () => {
                   <div className="flex items-center justify-between gap-4">
                     <div>
                       <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">Recent Runs</p>
-                      <p className="mt-1 text-sm text-muted-foreground">Completed and failed jobs tied to your tester account.</p>
+                      <p className="mt-1 text-sm text-muted-foreground">Compact history. Expand only the runs you actually want to inspect.</p>
                     </div>
                     <Button type="button" variant="outline" size="sm" onClick={() => void loadRecentRuns()} disabled={loadingRecentRuns}>
                       {loadingRecentRuns ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
@@ -860,55 +1035,71 @@ const TemplateLab = () => {
                       </div>
                     ) : (
                       recentRuns.map((run) => (
-                        <div key={run.id} className="rounded-2xl border border-border/30 bg-background/70 p-3">
-                          <div className="flex items-start justify-between gap-3">
-                            <div>
-                              <p className="font-medium">{run.templateName}{run.versionNumber ? ` v${run.versionNumber}` : ""}</p>
-                              <p className="mt-1 text-xs text-muted-foreground">
-                                Started {formatTimestamp(run.startedAt)} · {formatRunDuration(run.startedAt, run.completedAt)}
-                              </p>
-                            </div>
-                            <div className="text-right">
-                              <p className="text-xs uppercase tracking-[0.15em] text-muted-foreground">{run.status}</p>
-                              <p className="mt-1 text-xs text-muted-foreground">{run.outputs.length} outputs</p>
-                            </div>
-                          </div>
-
-                          {run.outputs.length ? (
-                            <div className="mt-3 flex gap-2 overflow-x-auto pb-1">
-                              {run.outputs.slice(0, 4).map((output) => (
-                                <a
-                                  key={`${run.id}-${output.url}`}
-                                  href={output.url}
-                                  target="_blank"
-                                  rel="noreferrer"
-                                  className="shrink-0 rounded-xl border border-border/30 bg-background/80 p-2"
-                                >
-                                  {output.type === "image" ? (
-                                    <img src={output.url} alt={output.label} className="h-20 w-16 rounded-lg object-cover" />
+                        <Collapsible key={run.id} open={!!expandedRuns[run.id]} onOpenChange={(open) => setRunExpanded(run.id, open)}>
+                          <div className="rounded-2xl border border-border/30 bg-background/70">
+                            <CollapsibleTrigger asChild>
+                              <button type="button" className="flex w-full items-start justify-between gap-3 p-3 text-left">
+                                <div className="min-w-0">
+                                  <p className="truncate font-medium">
+                                    {run.templateName}
+                                    {run.versionNumber ? ` v${run.versionNumber}` : ""}
+                                  </p>
+                                  <p className="mt-1 text-xs text-muted-foreground">
+                                    {formatTimestamp(run.startedAt)} · {formatRunDuration(run.startedAt, run.completedAt)}
+                                  </p>
+                                </div>
+                                <div className="flex items-center gap-3">
+                                  <div className="text-right">
+                                    <p className="text-xs uppercase tracking-[0.15em] text-muted-foreground">{run.status}</p>
+                                    <p className="mt-1 text-xs text-muted-foreground">{run.outputs.length} outputs</p>
+                                  </div>
+                                  {expandedRuns[run.id] ? (
+                                    <ChevronDown className="mt-0.5 h-4 w-4 text-muted-foreground" />
                                   ) : (
-                                    <video src={output.url} className="h-20 w-16 rounded-lg object-cover" muted />
+                                    <ChevronRight className="mt-0.5 h-4 w-4 text-muted-foreground" />
                                   )}
-                                </a>
-                              ))}
-                            </div>
-                          ) : null}
+                                </div>
+                              </button>
+                            </CollapsibleTrigger>
 
-                          <div className="mt-3 flex flex-wrap gap-2">
-                            <Button type="button" size="sm" variant="outline" onClick={() => void fetchJobStatus(run.id)}>
-                              Open Results
-                            </Button>
-                            {run.outputs[0] ? (
-                              <Button asChild type="button" size="sm" variant="ghost">
-                                <a href={run.outputs[0].url} target="_blank" rel="noreferrer">
-                                  Open First Output
-                                </a>
-                              </Button>
-                            ) : null}
+                            <CollapsibleContent className="border-t border-border/20 px-3 pb-3 pt-3">
+                              {run.outputs.length ? (
+                                <div className="flex gap-2 overflow-x-auto pb-1">
+                                  {run.outputs.slice(0, 4).map((output) => (
+                                    <a
+                                      key={`${run.id}-${output.url}`}
+                                      href={output.url}
+                                      target="_blank"
+                                      rel="noreferrer"
+                                      className="shrink-0 rounded-xl border border-border/30 bg-background/80 p-2"
+                                    >
+                                      {output.type === "image" ? (
+                                        <img src={output.url} alt={output.label} className="h-20 w-16 rounded-lg object-cover" />
+                                      ) : (
+                                        <video src={output.url} className="h-20 w-16 rounded-lg object-cover" muted />
+                                      )}
+                                    </a>
+                                  ))}
+                                </div>
+                              ) : null}
+
+                              <div className="mt-3 flex flex-wrap gap-2">
+                                <Button type="button" size="sm" variant="outline" onClick={() => void fetchJobStatus(run.id)}>
+                                  Open Results
+                                </Button>
+                                {run.outputs[0] ? (
+                                  <Button asChild type="button" size="sm" variant="ghost">
+                                    <a href={run.outputs[0].url} target="_blank" rel="noreferrer">
+                                      Open First Output
+                                    </a>
+                                  </Button>
+                                ) : null}
+                              </div>
+
+                              {run.error ? <p className="mt-2 text-xs text-destructive">{run.error}</p> : null}
+                            </CollapsibleContent>
                           </div>
-
-                          {run.error ? <p className="mt-2 text-xs text-destructive">{run.error}</p> : null}
-                        </div>
+                        </Collapsible>
                       ))
                     )}
                   </div>
