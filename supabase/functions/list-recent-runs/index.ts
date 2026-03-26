@@ -4,8 +4,8 @@ import {
   corsHeaders,
   createAdminClient,
   errorMessage,
+  getOptionalUser,
   json,
-  requireTesterUser,
 } from "../_shared/supabase-admin.ts";
 
 Deno.serve(async (req) => {
@@ -14,13 +14,16 @@ Deno.serve(async (req) => {
   const admin = createAdminClient();
 
   try {
-    const user = await requireTesterUser(req, admin);
+    const user = await getOptionalUser(req, admin);
+    if (!user) {
+      return json({ jobs: [] });
+    }
     const url = new URL(req.url);
     const limit = Math.min(Math.max(Number(url.searchParams.get("limit") ?? 8), 1), 20);
 
     const { data: jobs, error } = await admin
       .from("execution_jobs")
-      .select("id, status, started_at, completed_at, progress, error_log, result_payload, fuse_templates(name), template_versions(version_number)")
+      .select("id, status, started_at, completed_at, progress, error_log, result_payload, fuse_templates!execution_jobs_template_id_fkey(name), template_versions!execution_jobs_version_id_fkey(version_number)")
       .eq("user_id", user.id)
       .order("started_at", { ascending: false })
       .limit(limit);

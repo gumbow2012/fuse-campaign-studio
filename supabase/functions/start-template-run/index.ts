@@ -87,7 +87,7 @@ function expandInputsForTemplate(args: {
   const implicitReferenceNodeIds = new Set(plan.implicitReferenceNodeIds);
 
   for (const slot of plan.slots) {
-    const value = args.suppliedInputs[slot.id];
+    const value = args.suppliedInputs[slot.id] ?? args.suppliedInputs[slot.name];
     if (!value) continue;
 
     for (const nodeId of slot.nodeIds) {
