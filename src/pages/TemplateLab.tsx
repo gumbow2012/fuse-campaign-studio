@@ -500,6 +500,17 @@ const TemplateLab = () => {
     void loadRecentRuns();
   }, [isAuthenticatedLab, loadRecentRuns, phase]);
 
+  useEffect(() => {
+    if (!isAuthenticatedLab) return;
+    if (jobId) return;
+    if (job) return;
+
+    const activeRun = recentRuns.find((run) => run.status === "running" || run.status === "queued");
+    if (!activeRun) return;
+
+    void fetchJobStatus(activeRun.id);
+  }, [fetchJobStatus, isAuthenticatedLab, job, jobId, recentRuns]);
+
   const handleRun = useCallback(async () => {
     if (!selectedTemplate) {
       toast({ title: "Missing template", description: "Load the catalog and choose a template first.", variant: "destructive" });
@@ -558,6 +569,7 @@ const TemplateLab = () => {
       if (!response.ok) throw new Error(data?.error ?? "Could not start template");
 
       setJobId(data.jobId);
+      void loadRecentRuns();
       pollJob(data.jobId);
     } catch (runError) {
       const message = runError instanceof Error ? runError.message : "Could not start template";
@@ -565,7 +577,7 @@ const TemplateLab = () => {
       setError(message);
       toast({ title: "Run failed", description: message, variant: "destructive" });
     }
-  }, [accessCode, buildAuthHeaders, files, isAuthenticatedLab, pollJob, selectedTemplate]);
+  }, [accessCode, buildAuthHeaders, files, isAuthenticatedLab, loadRecentRuns, pollJob, selectedTemplate]);
 
   const canRun = !!selectedTemplate && selectedTemplate.inputs.every((input) => input.defaultAssetUrl || files[input.id]);
 
@@ -912,7 +924,7 @@ const TemplateLab = () => {
                   <div className="h-full rounded-full bg-primary transition-all" style={{ width: `${job?.progress ?? (phase === "complete" ? 100 : 0)}%` }} />
                 </div>
                 <div className="mt-2 flex items-center justify-between text-xs text-muted-foreground">
-                  <span>{jobId ? `Job ${jobId.slice(0, 8)}...` : "No job started yet"}</span>
+                  <span>{jobId ? `Job ${jobId.slice(0, 8)}...` : phase === "running" ? "Starting run..." : "No job started yet"}</span>
                   <span>{job?.progress ?? 0}%</span>
                 </div>
               </div>
