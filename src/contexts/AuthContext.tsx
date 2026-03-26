@@ -53,12 +53,20 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [hasAppAccess, setHasAppAccess] = useState(false);
 
   const fetchProfile = useCallback(async (userId: string) => {
-    const { data } = await supabase
-      .from("profiles")
-      .select("*")
-      .eq("user_id", userId)
-      .single();
-    if (data) setProfile(data as Profile);
+    const { data, error } = await supabase.rpc("get_my_profile");
+    if (error) {
+      console.error("Failed to load profile:", error);
+      setProfile(null);
+      return;
+    }
+
+    const row = Array.isArray(data) ? data[0] : data;
+    if (row) {
+      setProfile(row as Profile);
+      return;
+    }
+
+    setProfile(null);
   }, []);
 
   const fetchRoles = useCallback(async (userId: string) => {

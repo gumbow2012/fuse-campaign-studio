@@ -22,6 +22,12 @@ page.on("requestfailed", (request) => {
   console.log(`[requestfailed] ${request.method()} ${request.url()} -> ${request.failure()?.errorText}`);
 });
 
+page.on("response", async (response) => {
+  if (response.status() >= 400) {
+    console.log(`[response:${response.status()}] ${response.request().method()} ${response.url()}`);
+  }
+});
+
 if (injectedSession) {
   await page.addInitScript((session) => {
     window.localStorage.setItem("sb-ykrrwgkxgidoavtzcumk-auth-token", JSON.stringify(session));
