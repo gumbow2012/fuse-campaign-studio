@@ -1,19 +1,14 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 
-import { corsHeaders, createAdminClient, errorMessage, hasValidRunnerCode, json, requireTesterUser } from "../_shared/supabase-admin.ts";
+import { corsHeaders, createAdminClient, errorMessage, json } from "../_shared/supabase-admin.ts";
 import { buildTemplateInputPlan } from "../_shared/template-inputs.ts";
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: corsHeaders });
 
   const admin = createAdminClient();
-  const runnerAccess = hasValidRunnerCode(req);
 
   try {
-    if (!runnerAccess) {
-      await requireTesterUser(req, admin);
-    }
-
     const { data: templates, error: templateError } = await admin
       .from("fuse_templates")
       .select("id, name");

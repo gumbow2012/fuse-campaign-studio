@@ -1,6 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 
-import { corsHeaders, createAdminClient, errorMessage, hasValidRunnerCode, json, requireTesterUser } from "../_shared/supabase-admin.ts";
+import { corsHeaders, createAdminClient, errorMessage, json } from "../_shared/supabase-admin.ts";
 import { buildTemplateInputPlan } from "../_shared/template-inputs.ts";
 
 function summarizeNode(args: {
@@ -47,13 +47,8 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: corsHeaders });
 
   const admin = createAdminClient();
-  const runnerAccess = hasValidRunnerCode(req);
 
   try {
-    if (!runnerAccess) {
-      await requireTesterUser(req, admin);
-    }
-
     const url = new URL(req.url);
     const versionId = url.searchParams.get("versionId");
     if (!versionId) throw new Error("versionId is required");
