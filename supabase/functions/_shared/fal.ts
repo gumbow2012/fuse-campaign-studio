@@ -118,6 +118,7 @@ export async function getFalQueueResult(endpointId: string, requestId: string) {
 export async function submitImageJob(args: {
   prompt: string;
   imageUrls: string[];
+  aspectRatio?: string;
   webhookUrl: string;
 }) {
   if (!args.imageUrls.length) throw new Error("Image edit requires at least one image");
@@ -128,6 +129,7 @@ export async function submitImageJob(args: {
       input: {
         prompt: args.prompt,
         image_urls: args.imageUrls,
+        aspect_ratio: args.aspectRatio ?? "9:16",
         output_format: "png",
       },
       webhookUrl: args.webhookUrl,
@@ -142,7 +144,7 @@ export async function submitImageJob(args: {
   return requestId as string;
 }
 
-export async function runImageEdit(prompt: string, imageUrls: string[]) {
+export async function runImageEdit(prompt: string, imageUrls: string[], aspectRatio = "9:16") {
   if (!imageUrls.length) throw new Error("Image edit requires at least one image");
 
   let result: unknown;
@@ -151,6 +153,7 @@ export async function runImageEdit(prompt: string, imageUrls: string[]) {
       input: {
         prompt,
         image_urls: imageUrls,
+        aspect_ratio: aspectRatio,
         output_format: "png",
       },
     });
@@ -182,7 +185,7 @@ export async function submitVideoJob(args: {
         image_url: args.initImageUrl,
         ...(args.endFrameUrl ? { tail_image_url: args.endFrameUrl } : {}),
         duration: args.duration ?? 10,
-        aspect_ratio: args.aspectRatio ?? "1:1",
+        aspect_ratio: args.aspectRatio ?? "9:16",
         cfg_scale: 0.5,
       },
       webhookUrl: args.webhookUrl,

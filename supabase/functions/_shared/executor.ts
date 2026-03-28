@@ -573,6 +573,7 @@ export async function runGraphJob(admin: AdminClient, jobId: string) {
         const requestId = await submitImageJob({
           prompt,
           imageUrls: effectiveInputs,
+          aspectRatio: String(node.prompt_config?.aspect_ratio ?? "9:16"),
           webhookUrl: `${Deno.env.get("SUPABASE_URL")}/functions/v1/fal-webhook`,
         });
 
@@ -611,7 +612,7 @@ export async function runGraphJob(admin: AdminClient, jobId: string) {
           initImageUrl,
           endFrameUrl,
           duration: Number(node.prompt_config?.duration ?? 10),
-          aspectRatio: String(node.prompt_config?.aspect_ratio ?? "1:1"),
+          aspectRatio: String(node.prompt_config?.aspect_ratio ?? "9:16"),
           webhookUrl: `${Deno.env.get("SUPABASE_URL")}/functions/v1/fal-webhook`,
         });
 

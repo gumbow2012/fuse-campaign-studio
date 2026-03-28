@@ -1406,14 +1406,25 @@ const TemplateLab = () => {
                       <div key={`${output.url}-${index}`} className="space-y-2 rounded-2xl border border-border/40 bg-background/60 p-3">
                         <div className="flex items-center justify-between gap-3">
                           <p className="text-xs text-muted-foreground">{output.label || `Image ${index + 1}`}</p>
-                          <Button asChild size="sm" variant="outline">
-                            <a href={output.url} download={`template-output-${index + 1}.png`}>
-                              <Download className="mr-2 h-4 w-4" />
-                              Download
-                            </a>
-                          </Button>
+                          <div className="flex items-center gap-2">
+                            <span className="rounded-full border border-border/40 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.15em] text-muted-foreground">
+                              9:16
+                            </span>
+                            <Button asChild size="sm" variant="outline">
+                              <a href={output.url} download={`template-output-${index + 1}.png`}>
+                                <Download className="mr-2 h-4 w-4" />
+                                Download
+                              </a>
+                            </Button>
+                          </div>
                         </div>
-                        <img src={output.url} alt={output.label || `Generated image ${index + 1}`} className="rounded-2xl border border-border/40" />
+                        <div className="mx-auto max-w-[280px] rounded-[28px] border border-border/40 bg-background/80 p-2 shadow-sm">
+                          <img
+                            src={output.url}
+                            alt={output.label || `Generated image ${index + 1}`}
+                            className="w-full rounded-[22px] border border-border/40"
+                          />
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -1432,14 +1443,21 @@ const TemplateLab = () => {
                       <div key={`${output.url}-${index}`} className="space-y-2 rounded-2xl border border-border/40 bg-background/60 p-3">
                         <div className="flex items-center justify-between gap-3">
                           <p className="text-xs text-muted-foreground">{output.label || `Video ${index + 1}`}</p>
-                          <Button asChild size="sm" variant="outline">
-                            <a href={output.url} download={`template-output-${index + 1}.mp4`}>
-                              <Download className="mr-2 h-4 w-4" />
-                              Download
-                            </a>
-                          </Button>
+                          <div className="flex items-center gap-2">
+                            <span className="rounded-full border border-border/40 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.15em] text-muted-foreground">
+                              9:16
+                            </span>
+                            <Button asChild size="sm" variant="outline">
+                              <a href={output.url} download={`template-output-${index + 1}.mp4`}>
+                                <Download className="mr-2 h-4 w-4" />
+                                Download
+                              </a>
+                            </Button>
+                          </div>
                         </div>
-                        <video src={output.url} controls className="w-full rounded-2xl border border-border/40" />
+                        <div className="mx-auto max-w-[280px] rounded-[28px] border border-border/40 bg-background/80 p-2 shadow-sm">
+                          <video src={output.url} controls playsInline className="w-full rounded-[22px] border border-border/40" />
+                        </div>
                       </div>
                     ))}
                   </div>
