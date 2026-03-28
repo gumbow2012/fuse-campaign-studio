@@ -10,7 +10,31 @@ import {
 import {
   collectDeliverableOutputs,
   loadOutputExposureByNodeId,
+  reconcileRunningSteps,
 } from "../_shared/executor.ts";
+
+function extractProviderDetail(value: unknown): string | null {
+  if (!value) return null;
+  if (typeof value === "string") return value;
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const nested = extractProviderDetail(item);
+      if (nested) return nested;
+    }
+    return null;
+  }
+  if (typeof value === "object") {
+    const record = value as Record<string, unknown>;
+    return extractProviderDetail(
+      record.detail ??
+        record.error ??
+        record.message ??
+        record.msg ??
+        null,
+    );
+  }
+  return String(value);
+}
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: corsHeaders });
@@ -25,7 +49,7 @@ Deno.serve(async (req) => {
     const url = new URL(req.url);
     const limit = Math.min(Math.max(Number(url.searchParams.get("limit") ?? 8), 1), 20);
 
-    const { data: jobs, error } = await admin
+    let { data: jobs, error } = await admin
       .from("execution_jobs")
       .select("id, status, started_at, completed_at, progress, error_log, result_payload, fuse_templates!execution_jobs_template_id_fkey(name), template_versions!execution_jobs_version_id_fkey(version_number)")
       .eq("user_id", user.id)
@@ -33,6 +57,22 @@ Deno.serve(async (req) => {
       .limit(limit);
 
     if (error) throw new Error(error.message);
+
+    const activeJobs = (jobs ?? []).filter((job: any) => job.status === "running" || job.status === "queued");
+    for (const job of activeJobs) {
+      await reconcileRunningSteps(admin, job.id);
+    }
+
+    if (activeJobs.length) {
+      const refreshed = await admin
+        .from("execution_jobs")
+        .select("id, status, started_at, completed_at, progress, error_log, result_payload, fuse_templates!execution_jobs_template_id_fkey(name), template_versions!execution_jobs_version_id_fkey(version_number)")
+        .eq("user_id", user.id)
+        .order("started_at", { ascending: false })
+        .limit(limit);
+      if (refreshed.error) throw new Error(refreshed.error.message);
+      jobs = refreshed.data ?? [];
+    }
 
     const jobIds = (jobs ?? []).map((job: any) => job.id);
     const { data: steps, error: stepsError } = jobIds.length
@@ -64,7 +104,7 @@ Deno.serve(async (req) => {
         startedAt: job.started_at,
         completedAt: job.completed_at,
         progress: job.progress ?? 0,
-        error: job.error_log ?? null,
+        error: extractProviderDetail(job.result_payload?.rawPayload?.detail) ?? job.error_log ?? null,
         templateName: job.fuse_templates?.name ?? "Template",
         versionNumber: job.template_versions?.version_number ?? null,
         telemetry: job.result_payload?.telemetry ?? {},

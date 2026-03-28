@@ -62,6 +62,52 @@ export function parseOutputExposed(value: unknown) {
   return null;
 }
 
+function extractProviderDetail(value: unknown): string | null {
+  if (!value) return null;
+  if (typeof value === "string") return value;
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const nested = extractProviderDetail(item);
+      if (nested) return nested;
+    }
+    return null;
+  }
+  if (typeof value === "object") {
+    const record = value as Record<string, unknown>;
+    return extractProviderDetail(
+      record.detail ??
+        record.error ??
+        record.message ??
+        record.msg ??
+        null,
+    );
+  }
+  return String(value);
+}
+
+function normalizeProviderError(error: unknown) {
+  if (error instanceof Error) {
+    const detailMatch = error.message.match(/"detail":"([^"]+)"/);
+    if (detailMatch?.[1]) {
+      return {
+        message: detailMatch[1],
+        rawPayload: { detail: detailMatch[1] },
+      };
+    }
+
+    return {
+      message: error.message,
+      rawPayload: { detail: error.message },
+    };
+  }
+
+  const message = String(error);
+  return {
+    message,
+    rawPayload: { detail: message },
+  };
+}
+
 export function collectDeliverableOutputs(steps: StepRow[], outputExposureByNodeId: Map<string, boolean | null>) {
   const completed = steps.filter((step: any) => step.output_asset_id && step.assets?.supabase_storage_url);
   const hasExplicitFlags = completed.some((step) => outputExposureByNodeId.get(step.node_id) !== null);
@@ -248,6 +294,52 @@ export async function failAsyncStep(admin: AdminClient, step: StepRow, errorMess
     .eq("id", step.id);
 }
 
+async function failJob(
+  admin: AdminClient,
+  jobId: string,
+  errorMessage: string,
+) {
+  const completedAt = new Date().toISOString();
+  const { data: steps, error } = await admin
+    .from("execution_steps")
+    .select("id, status, started_at, output_payload, error_log")
+    .eq("job_id", jobId);
+  if (error) throw new Error(error.message);
+
+  const staleSteps = (steps ?? []).filter((step: any) => step.status !== "complete" && step.status !== "failed");
+  for (const step of staleSteps) {
+    const executionTimeMs = step.started_at
+      ? Math.max(0, new Date(completedAt).getTime() - new Date(step.started_at).getTime())
+      : null;
+
+    await admin
+      .from("execution_steps")
+      .update({
+        status: "failed",
+        error_log: step.error_log ?? errorMessage,
+        completed_at: completedAt,
+        execution_time_ms: executionTimeMs,
+        output_payload: {
+          ...(step.output_payload ?? {}),
+          rawPayload: {
+            detail: step.error_log ?? errorMessage,
+          },
+        },
+      })
+      .eq("id", step.id);
+  }
+
+  await admin
+    .from("execution_jobs")
+    .update({
+      status: "failed",
+      progress: 0,
+      error_log: errorMessage,
+      completed_at: completedAt,
+    })
+    .eq("id", jobId);
+}
+
 export async function completeAsyncStep(
   admin: AdminClient,
   step: StepRow,
@@ -309,7 +401,11 @@ export async function reconcileRunningSteps(admin: AdminClient, jobId: string) {
     .eq("job_id", jobId)
     .eq("status", "running")
     .not("provider_request_id", "is", null);
-  if (error || !runningSteps?.length) return;
+  if (error) return;
+  if (!runningSteps?.length) {
+    await finalizeJobIfTerminal(admin, jobId);
+    return;
+  }
 
   for (const rawStep of runningSteps as StepRow[]) {
     if (!rawStep.provider_model || !rawStep.provider_request_id) continue;
@@ -317,7 +413,23 @@ export async function reconcileRunningSteps(admin: AdminClient, jobId: string) {
     let queueStatus: string | null = null;
     try {
       queueStatus = await getFalQueueStatus(rawStep.provider_model, rawStep.provider_request_id);
-    } catch {
+    } catch (error) {
+      const normalized = normalizeProviderError(error);
+      await admin
+        .from("execution_steps")
+        .update({
+          status: "failed",
+          error_log: normalized.message,
+          completed_at: new Date().toISOString(),
+          execution_time_ms: rawStep.started_at
+            ? Math.max(0, Date.now() - new Date(rawStep.started_at).getTime())
+            : null,
+          output_payload: {
+            ...(rawStep.output_payload ?? {}),
+            rawPayload: normalized.rawPayload,
+          },
+        })
+        .eq("id", rawStep.id);
       continue;
     }
 
@@ -332,7 +444,28 @@ export async function reconcileRunningSteps(admin: AdminClient, jobId: string) {
     }
 
     if (normalizedStatus.includes("COMPLETED")) {
-      const payload = await getFalQueueResult(rawStep.provider_model, rawStep.provider_request_id);
+      let payload: any;
+      try {
+        payload = await getFalQueueResult(rawStep.provider_model, rawStep.provider_request_id);
+      } catch (error) {
+        const normalized = normalizeProviderError(error);
+        await admin
+          .from("execution_steps")
+          .update({
+            status: "failed",
+            error_log: normalized.message,
+            completed_at: new Date().toISOString(),
+            execution_time_ms: rawStep.started_at
+              ? Math.max(0, Date.now() - new Date(rawStep.started_at).getTime())
+              : null,
+            output_payload: {
+              ...(rawStep.output_payload ?? {}),
+              rawPayload: normalized.rawPayload,
+            },
+          })
+          .eq("id", rawStep.id);
+        continue;
+      }
       const videoUrl = (payload as any)?.video?.url;
       const imageUrl = (payload as any)?.images?.[0]?.url ?? (payload as any)?.image?.url;
       const outputUrl = videoUrl ?? imageUrl;
@@ -366,15 +499,11 @@ export async function finalizeJobIfTerminal(admin: AdminClient, jobId: string) {
 
   const failedStep = steps.find((step: any) => step.status === "failed");
   if (failedStep) {
-    const providerDetail = failedStep.output_payload?.rawPayload?.detail?.[0]?.msg;
-    await admin
-      .from("execution_jobs")
-      .update({
-        status: "failed",
-        error_log: providerDetail ?? failedStep.error_log ?? `Step failed: ${failedStep.nodes?.name ?? failedStep.id}`,
-        completed_at: new Date().toISOString(),
-      })
-      .eq("id", jobId);
+    const providerDetail = extractProviderDetail(failedStep.output_payload?.rawPayload?.detail) ??
+      extractProviderDetail(failedStep.output_payload?.rawPayload) ??
+      failedStep.error_log ??
+      `Step failed: ${failedStep.nodes?.name ?? failedStep.id}`;
+    await failJob(admin, jobId, providerDetail);
     return;
   }
 
@@ -546,95 +675,137 @@ export async function runGraphJob(admin: AdminClient, jobId: string) {
       step.status = "running";
 
       if (node.node_type === "image_gen") {
-        const prompt = String(node.prompt_config?.prompt ?? "").trim();
-        const referenceAsset = getNodeReferenceAsset(node, assetMap);
-        const orderedInputs = [...params.entries()]
-          .sort(([a], [b]) => paramOrder(a) - paramOrder(b))
-          .map(([, value]) => value.url)
-          .filter(Boolean);
-        const effectiveInputs = referenceAsset
-          ? [referenceAsset.url, ...orderedInputs]
-          : orderedInputs;
+        try {
+          const prompt = String(node.prompt_config?.prompt ?? "").trim();
+          const referenceAsset = getNodeReferenceAsset(node, assetMap);
+          const orderedInputs = [...params.entries()]
+            .sort(([a], [b]) => paramOrder(a) - paramOrder(b))
+            .map(([, value]) => value.url)
+            .filter(Boolean);
+          const effectiveInputs = referenceAsset
+            ? [referenceAsset.url, ...orderedInputs]
+            : orderedInputs;
 
-        const costEstimate = await getStepCostEstimate(IMAGE_MODEL, node.prompt_config);
+          const costEstimate = await getStepCostEstimate(IMAGE_MODEL, node.prompt_config);
 
-        await admin
-          .from("execution_steps")
-          .update({
-            input_payload: {
-              ...(referenceAsset ? { reference_image: referenceAsset.url } : {}),
-              ...Object.fromEntries(
-                [...params.entries()].map(([key, value]) => [key, value.url]),
-              ),
-            },
-          })
-          .eq("id", step.id);
-
-        const requestId = await submitImageJob({
-          prompt,
-          imageUrls: effectiveInputs,
-          aspectRatio: String(node.prompt_config?.aspect_ratio ?? "9:16"),
-          webhookUrl: `${Deno.env.get("SUPABASE_URL")}/functions/v1/fal-webhook`,
-        });
-
-        await admin
-          .from("execution_steps")
-          .update({
-            provider_request_id: requestId,
-            output_payload: {
-              requestId,
-              status: "queued",
-              telemetry: {
-                estimatedCostUsd: costEstimate?.estimatedCostUsd ?? null,
-                billingUnit: costEstimate?.unit ?? null,
-                billingQuantity: costEstimate?.quantity ?? null,
-                unitPriceUsd: costEstimate?.unitPriceUsd ?? null,
-                currency: costEstimate?.currency ?? null,
+          await admin
+            .from("execution_steps")
+            .update({
+              input_payload: {
+                ...(referenceAsset ? { reference_image: referenceAsset.url } : {}),
+                ...Object.fromEntries(
+                  [...params.entries()].map(([key, value]) => [key, value.url]),
+                ),
               },
-            },
-          })
-          .eq("id", step.id);
+            })
+            .eq("id", step.id);
 
-        step.provider_request_id = requestId;
+          const requestId = await submitImageJob({
+            prompt,
+            imageUrls: effectiveInputs,
+            aspectRatio: String(node.prompt_config?.aspect_ratio ?? "9:16"),
+            webhookUrl: `${Deno.env.get("SUPABASE_URL")}/functions/v1/fal-webhook`,
+          });
+
+          await admin
+            .from("execution_steps")
+            .update({
+              provider_request_id: requestId,
+              output_payload: {
+                requestId,
+                status: "queued",
+                telemetry: {
+                  estimatedCostUsd: costEstimate?.estimatedCostUsd ?? null,
+                  billingUnit: costEstimate?.unit ?? null,
+                  billingQuantity: costEstimate?.quantity ?? null,
+                  unitPriceUsd: costEstimate?.unitPriceUsd ?? null,
+                  currency: costEstimate?.currency ?? null,
+                },
+              },
+            })
+            .eq("id", step.id);
+
+          step.provider_request_id = requestId;
+        } catch (error) {
+          const normalized = normalizeProviderError(error);
+          await admin
+            .from("execution_steps")
+            .update({
+              status: "failed",
+              error_log: normalized.message,
+              completed_at: new Date().toISOString(),
+              execution_time_ms: step.started_at
+                ? Math.max(0, Date.now() - new Date(step.started_at).getTime())
+                : null,
+              output_payload: {
+                ...(step.output_payload ?? {}),
+                rawPayload: normalized.rawPayload,
+              },
+            })
+            .eq("id", step.id);
+          await finalizeJobIfTerminal(admin, job.id);
+          return;
+        }
       } else if (node.node_type === "video_gen") {
-        const prompt = String(node.prompt_config?.prompt ?? "").trim();
-        const initImageUrl = params.get("init_image")?.url ??
-          params.get("start_frame_image")?.url ??
-          [...params.values()][0]?.url;
-        const endFrameUrl = params.get("end_frame_image")?.url;
+        try {
+          const prompt = String(node.prompt_config?.prompt ?? "").trim();
+          const initImageUrl = params.get("init_image")?.url ??
+            params.get("start_frame_image")?.url ??
+            [...params.values()][0]?.url;
+          const endFrameUrl = params.get("end_frame_image")?.url;
 
-        if (!initImageUrl) throw new Error(`Missing init image for ${node.name}`);
+          if (!initImageUrl) throw new Error(`Missing init image for ${node.name}`);
 
-        const costEstimate = await getStepCostEstimate(VIDEO_MODEL, node.prompt_config);
+          const costEstimate = await getStepCostEstimate(VIDEO_MODEL, node.prompt_config);
 
-        const requestId = await submitVideoJob({
-          prompt,
-          initImageUrl,
-          endFrameUrl,
-          duration: Number(node.prompt_config?.duration ?? 10),
-          aspectRatio: String(node.prompt_config?.aspect_ratio ?? "9:16"),
-          webhookUrl: `${Deno.env.get("SUPABASE_URL")}/functions/v1/fal-webhook`,
-        });
+          const requestId = await submitVideoJob({
+            prompt,
+            initImageUrl,
+            endFrameUrl,
+            duration: Number(node.prompt_config?.duration ?? 10),
+            aspectRatio: String(node.prompt_config?.aspect_ratio ?? "9:16"),
+            webhookUrl: `${Deno.env.get("SUPABASE_URL")}/functions/v1/fal-webhook`,
+          });
 
-        await admin
-          .from("execution_steps")
-          .update({
-            provider_request_id: requestId,
-            output_payload: {
-              requestId,
-              status: "queued",
-              telemetry: {
-                estimatedCostUsd: costEstimate?.estimatedCostUsd ?? null,
-                billingUnit: costEstimate?.unit ?? null,
-                billingQuantity: costEstimate?.quantity ?? null,
-                unitPriceUsd: costEstimate?.unitPriceUsd ?? null,
-                currency: costEstimate?.currency ?? null,
+          await admin
+            .from("execution_steps")
+            .update({
+              provider_request_id: requestId,
+              output_payload: {
+                requestId,
+                status: "queued",
+                telemetry: {
+                  estimatedCostUsd: costEstimate?.estimatedCostUsd ?? null,
+                  billingUnit: costEstimate?.unit ?? null,
+                  billingQuantity: costEstimate?.quantity ?? null,
+                  unitPriceUsd: costEstimate?.unitPriceUsd ?? null,
+                  currency: costEstimate?.currency ?? null,
+                },
               },
-            },
-          })
-          .eq("id", step.id);
+            })
+            .eq("id", step.id);
 
-        step.provider_request_id = requestId;
+          step.provider_request_id = requestId;
+        } catch (error) {
+          const normalized = normalizeProviderError(error);
+          await admin
+            .from("execution_steps")
+            .update({
+              status: "failed",
+              error_log: normalized.message,
+              completed_at: new Date().toISOString(),
+              execution_time_ms: step.started_at
+                ? Math.max(0, Date.now() - new Date(step.started_at).getTime())
+                : null,
+              output_payload: {
+                ...(step.output_payload ?? {}),
+                rawPayload: normalized.rawPayload,
+              },
+            })
+            .eq("id", step.id);
+          await finalizeJobIfTerminal(admin, job.id);
+          return;
+        }
       } else {
         throw new Error(`Unsupported node type ${node.node_type}`);
       }

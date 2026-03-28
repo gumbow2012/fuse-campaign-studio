@@ -15,6 +15,29 @@ import {
   reconcileRunningSteps,
 } from "../_shared/executor.ts";
 
+function extractProviderDetail(value: unknown): string | null {
+  if (!value) return null;
+  if (typeof value === "string") return value;
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const nested = extractProviderDetail(item);
+      if (nested) return nested;
+    }
+    return null;
+  }
+  if (typeof value === "object") {
+    const record = value as Record<string, unknown>;
+    return extractProviderDetail(
+      record.detail ??
+        record.error ??
+        record.message ??
+        record.msg ??
+        null,
+    );
+  }
+  return String(value);
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: corsHeaders });
 
@@ -29,7 +52,7 @@ Deno.serve(async (req) => {
     const jobId = url.searchParams.get("jobId");
     if (!jobId) throw new Error("jobId is required");
 
-    const { data: job, error: jobError } = await admin
+    let { data: job, error: jobError } = await admin
       .from("execution_jobs")
       .select("id, user_id, template_id, version_id, status, progress, started_at, completed_at, input_payload, result_payload, error_log")
       .eq("id", jobId)
@@ -39,6 +62,13 @@ Deno.serve(async (req) => {
 
     if (job.status === "running" || job.status === "queued") {
       await reconcileRunningSteps(admin, job.id);
+      const refreshed = await admin
+        .from("execution_jobs")
+        .select("id, user_id, template_id, version_id, status, progress, started_at, completed_at, input_payload, result_payload, error_log")
+        .eq("id", jobId)
+        .single();
+      if (refreshed.error || !refreshed.data) throw new Error(refreshed.error?.message ?? "Job not found after reconcile");
+      job = refreshed.data;
     }
 
     const { data: steps, error: stepsError } = await admin
@@ -55,7 +85,8 @@ Deno.serve(async (req) => {
     const outputs = collectDeliverableOutputs(steps ?? [], outputExposureByNodeId);
     const failedStep = (steps ?? []).find((step: any) => step.status === "failed");
     const resolvedJobError =
-      failedStep?.output_payload?.rawPayload?.detail?.[0]?.msg ??
+      extractProviderDetail(failedStep?.output_payload?.rawPayload?.detail) ??
+      extractProviderDetail(failedStep?.output_payload?.rawPayload) ??
       failedStep?.error_log ??
       job.error_log ??
       null;
@@ -77,7 +108,10 @@ Deno.serve(async (req) => {
         providerModel: step.provider_model,
         providerRequestId: step.provider_request_id,
         outputUrl: step.assets?.supabase_storage_url ?? null,
-        error: step.output_payload?.rawPayload?.detail?.[0]?.msg ?? step.error_log ?? null,
+        error: extractProviderDetail(step.output_payload?.rawPayload?.detail) ??
+          extractProviderDetail(step.output_payload?.rawPayload) ??
+          step.error_log ??
+          null,
         startedAt: step.started_at ?? null,
         completedAt: step.completed_at ?? null,
         executionTimeMs: step.execution_time_ms ?? step.output_payload?.telemetry?.executionTimeMs ?? null,
