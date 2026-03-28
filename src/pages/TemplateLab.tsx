@@ -27,8 +27,8 @@ type TemplateOption = {
   versionNumber: number;
   counts: {
     inputs: number;
-    imageSteps: number;
-    videoSteps: number;
+    imageOutputs: number;
+    videoOutputs: number;
   };
   inputs: TemplateInput[];
 };
@@ -215,12 +215,12 @@ const TemplateLab = () => {
     [templates, selectedVersionId],
   );
 
-  const outputImage = useMemo(
-    () => job?.outputs.find((item) => item.type === "image")?.url ?? null,
+  const outputImages = useMemo(
+    () => job?.outputs.filter((item) => item.type === "image") ?? [],
     [job],
   );
-  const outputVideo = useMemo(
-    () => job?.outputs.find((item) => item.type === "video")?.url ?? null,
+  const outputVideos = useMemo(
+    () => job?.outputs.filter((item) => item.type === "video") ?? [],
     [job],
   );
 
@@ -799,7 +799,7 @@ const TemplateLab = () => {
                 ) : null}
                 {templates.map((template) => (
                   <option key={template.versionId} value={template.versionId}>
-                    {template.templateName} · {template.counts.inputs} inputs · {template.counts.imageSteps} image · {template.counts.videoSteps} video
+                    {template.templateName} · {template.counts.inputs} inputs · {template.counts.imageOutputs} image output · {template.counts.videoOutputs} video output
                   </option>
                 ))}
               </select>
@@ -1394,33 +1394,55 @@ const TemplateLab = () => {
                 ))}
               </div>
 
-              {outputImage ? (
+              {outputImages.length ? (
                 <div className="space-y-3">
                   <div className="flex items-center justify-between gap-3">
-                    <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">Generated Image</p>
-                    <Button asChild size="sm" variant="outline">
-                      <a href={outputImage} download="template-output.png">
-                        <Download className="mr-2 h-4 w-4" />
-                        Download Image
-                      </a>
-                    </Button>
+                    <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">
+                      Generated Images · {outputImages.length}
+                    </p>
                   </div>
-                  <img src={outputImage} alt="Generated output" className="rounded-2xl border border-border/40" />
+                  <div className="grid gap-3 md:grid-cols-2">
+                    {outputImages.map((output, index) => (
+                      <div key={`${output.url}-${index}`} className="space-y-2 rounded-2xl border border-border/40 bg-background/60 p-3">
+                        <div className="flex items-center justify-between gap-3">
+                          <p className="text-xs text-muted-foreground">{output.label || `Image ${index + 1}`}</p>
+                          <Button asChild size="sm" variant="outline">
+                            <a href={output.url} download={`template-output-${index + 1}.png`}>
+                              <Download className="mr-2 h-4 w-4" />
+                              Download
+                            </a>
+                          </Button>
+                        </div>
+                        <img src={output.url} alt={output.label || `Generated image ${index + 1}`} className="rounded-2xl border border-border/40" />
+                      </div>
+                    ))}
+                  </div>
                 </div>
               ) : null}
 
-              {outputVideo ? (
+              {outputVideos.length ? (
                 <div className="space-y-3">
                   <div className="flex items-center justify-between gap-3">
-                    <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">Generated Video</p>
-                    <Button asChild size="sm" variant="outline">
-                      <a href={outputVideo} download="template-output.mp4">
-                        <Download className="mr-2 h-4 w-4" />
-                        Download Video
-                      </a>
-                    </Button>
+                    <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">
+                      Generated Videos · {outputVideos.length}
+                    </p>
                   </div>
-                  <video src={outputVideo} controls className="w-full rounded-2xl border border-border/40" />
+                  <div className="grid gap-3 md:grid-cols-2">
+                    {outputVideos.map((output, index) => (
+                      <div key={`${output.url}-${index}`} className="space-y-2 rounded-2xl border border-border/40 bg-background/60 p-3">
+                        <div className="flex items-center justify-between gap-3">
+                          <p className="text-xs text-muted-foreground">{output.label || `Video ${index + 1}`}</p>
+                          <Button asChild size="sm" variant="outline">
+                            <a href={output.url} download={`template-output-${index + 1}.mp4`}>
+                              <Download className="mr-2 h-4 w-4" />
+                              Download
+                            </a>
+                          </Button>
+                        </div>
+                        <video src={output.url} controls className="w-full rounded-2xl border border-border/40" />
+                      </div>
+                    ))}
+                  </div>
                 </div>
               ) : null}
             </div>

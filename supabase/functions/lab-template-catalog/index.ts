@@ -3,6 +3,12 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { corsHeaders, createAdminClient, errorMessage, json } from "../_shared/supabase-admin.ts";
 import { buildTemplateInputPlan } from "../_shared/template-inputs.ts";
 
+function parseOutputExposed(value: unknown) {
+  if (typeof value === "boolean") return value;
+  if (typeof value === "string") return value === "true";
+  return null;
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: corsHeaders });
 
@@ -37,6 +43,12 @@ Deno.serve(async (req) => {
         const versionNodes = (nodes ?? []).filter((node: any) => node.version_id === version.id);
         const inputNodes = versionNodes.filter((node: any) => node.node_type === "user_input");
         const inputPlan = buildTemplateInputPlan(template?.name ?? "", inputNodes);
+        const imageNodes = versionNodes.filter((node: any) => node.node_type === "image_gen");
+        const videoNodes = versionNodes.filter((node: any) => node.node_type === "video_gen");
+        const imageFlags = imageNodes.map((node: any) => parseOutputExposed(node.prompt_config?.output_exposed));
+        const videoFlags = videoNodes.map((node: any) => parseOutputExposed(node.prompt_config?.output_exposed));
+        const hasExplicitImageFlags = imageFlags.some((flag) => flag !== null);
+        const hasExplicitVideoFlags = videoFlags.some((flag) => flag !== null);
 
         return {
           templateId: version.template_id,
@@ -45,8 +57,12 @@ Deno.serve(async (req) => {
           versionNumber: version.version_number,
           counts: {
             inputs: inputPlan.slots.length,
-            imageSteps: versionNodes.filter((node: any) => node.node_type === "image_gen").length,
-            videoSteps: versionNodes.filter((node: any) => node.node_type === "video_gen").length,
+            imageOutputs: hasExplicitImageFlags
+              ? imageNodes.filter((node: any) => parseOutputExposed(node.prompt_config?.output_exposed) === true).length
+              : imageNodes.length,
+            videoOutputs: hasExplicitVideoFlags
+              ? videoNodes.filter((node: any) => parseOutputExposed(node.prompt_config?.output_exposed) === true).length
+              : videoNodes.length,
           },
           inputs: inputPlan.slots.map((slot) => ({
             id: slot.id,

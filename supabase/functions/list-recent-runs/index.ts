@@ -7,6 +7,10 @@ import {
   getOptionalUser,
   json,
 } from "../_shared/supabase-admin.ts";
+import {
+  collectDeliverableOutputs,
+  loadOutputExposureByNodeId,
+} from "../_shared/executor.ts";
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: corsHeaders });
@@ -30,6 +34,29 @@ Deno.serve(async (req) => {
 
     if (error) throw new Error(error.message);
 
+    const jobIds = (jobs ?? []).map((job: any) => job.id);
+    const { data: steps, error: stepsError } = jobIds.length
+      ? await admin
+        .from("execution_steps")
+        .select("id, job_id, node_id, output_asset_id, nodes!execution_steps_node_id_fkey(name, node_type), assets!execution_steps_output_asset_id_fkey(supabase_storage_url)")
+        .in("job_id", jobIds)
+        .order("created_at", { ascending: true })
+      : { data: [], error: null };
+
+    if (stepsError) throw new Error(stepsError.message);
+
+    const outputExposureByNodeId = await loadOutputExposureByNodeId(
+      admin,
+      (steps ?? []).map((step: any) => step.node_id),
+    );
+
+    const outputsByJobId = new Map<string, any[]>();
+    for (const step of steps ?? []) {
+      const existing = outputsByJobId.get((step as any).job_id) ?? [];
+      existing.push(step);
+      outputsByJobId.set((step as any).job_id, existing);
+    }
+
     return json({
       jobs: (jobs ?? []).map((job: any) => ({
         id: job.id,
@@ -41,7 +68,7 @@ Deno.serve(async (req) => {
         templateName: job.fuse_templates?.name ?? "Template",
         versionNumber: job.template_versions?.version_number ?? null,
         telemetry: job.result_payload?.telemetry ?? {},
-        outputs: Array.isArray(job.result_payload?.outputs) ? job.result_payload.outputs : [],
+        outputs: collectDeliverableOutputs(outputsByJobId.get(job.id) ?? [], outputExposureByNodeId),
       })),
     });
   } catch (error) {

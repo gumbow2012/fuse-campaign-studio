@@ -56,6 +56,46 @@ type AdminClient = ReturnType<typeof createAdminClient>;
 
 export const PAPARAZZI_VERSION_ID = "34239a27-27ed-4b1f-8fc9-6a0f1e1ac778";
 
+export function parseOutputExposed(value: unknown) {
+  if (typeof value === "boolean") return value;
+  if (typeof value === "string") return value === "true";
+  return null;
+}
+
+export function collectDeliverableOutputs(steps: StepRow[], outputExposureByNodeId: Map<string, boolean | null>) {
+  const completed = steps.filter((step: any) => step.output_asset_id && step.assets?.supabase_storage_url);
+  const hasExplicitFlags = completed.some((step) => outputExposureByNodeId.get(step.node_id) !== null);
+
+  return completed
+    .filter((step) => !hasExplicitFlags || outputExposureByNodeId.get(step.node_id) === true)
+    .map((step: any) => ({
+      stepId: step.id,
+      nodeId: step.node_id,
+      label: step.nodes?.name ?? "Output",
+      type: step.nodes?.node_type === "video_gen" ? "video" : "image",
+      url: step.assets.supabase_storage_url,
+    }));
+}
+
+export async function loadOutputExposureByNodeId(
+  admin: AdminClient,
+  nodeIds: string[],
+) {
+  const uniqueNodeIds = [...new Set(nodeIds.filter(Boolean))];
+  if (!uniqueNodeIds.length) return new Map<string, boolean | null>();
+
+  const { data: outputNodes, error } = await admin
+    .from("nodes")
+    .select("id, prompt_config")
+    .in("id", uniqueNodeIds);
+
+  if (error) throw new Error(error.message);
+
+  return new Map(
+    (outputNodes ?? []).map((node: any) => [node.id, parseOutputExposed(node.prompt_config?.output_exposed)]),
+  );
+}
+
 function isStepReady(step: StepRow, incomingEdges: EdgeRow[], resolved: Map<string, ResolvedOutput>) {
   return incomingEdges.every((edge) => resolved.has(edge.source_node_id));
 }
@@ -344,15 +384,11 @@ export async function finalizeJobIfTerminal(admin: AdminClient, jobId: string) {
     return;
   }
 
-  const outputs = steps
-    .filter((step: any) => step.output_asset_id && step.assets?.supabase_storage_url)
-    .map((step: any) => ({
-      stepId: step.id,
-      nodeId: step.node_id,
-      label: step.nodes?.name ?? "Output",
-      type: step.nodes?.node_type === "video_gen" ? "video" : "image",
-      url: step.assets.supabase_storage_url,
-    }));
+  const outputExposureByNodeId = await loadOutputExposureByNodeId(
+    admin,
+    (steps as StepRow[]).map((step) => step.node_id),
+  );
+  const outputs = collectDeliverableOutputs(steps as StepRow[], outputExposureByNodeId);
 
   const telemetry = (steps ?? []).reduce((acc: Record<string, unknown>, step: any) => {
     const stepTelemetry = step.output_payload?.telemetry;

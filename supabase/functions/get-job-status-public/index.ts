@@ -9,7 +9,11 @@ import {
   json,
   requireTesterUser,
 } from "../_shared/supabase-admin.ts";
-import { reconcileRunningSteps } from "../_shared/executor.ts";
+import {
+  collectDeliverableOutputs,
+  loadOutputExposureByNodeId,
+  reconcileRunningSteps,
+} from "../_shared/executor.ts";
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: corsHeaders });
@@ -44,15 +48,11 @@ Deno.serve(async (req) => {
       .order("created_at", { ascending: true });
     if (stepsError) throw new Error(stepsError.message);
 
-    const outputs = (steps ?? [])
-      .filter((step: any) => step.output_asset_id && step.assets?.supabase_storage_url)
-      .map((step: any) => ({
-        stepId: step.id,
-        nodeId: step.node_id,
-        label: step.nodes?.name ?? "Output",
-        type: step.nodes?.node_type === "video_gen" ? "video" : "image",
-        url: step.assets.supabase_storage_url,
-      }));
+    const outputExposureByNodeId = await loadOutputExposureByNodeId(
+      admin,
+      (steps ?? []).map((step: any) => step.node_id),
+    );
+    const outputs = collectDeliverableOutputs(steps ?? [], outputExposureByNodeId);
     const failedStep = (steps ?? []).find((step: any) => step.status === "failed");
     const resolvedJobError =
       failedStep?.output_payload?.rawPayload?.detail?.[0]?.msg ??
