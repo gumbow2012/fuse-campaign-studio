@@ -10,10 +10,14 @@ function summarizeNode(args: {
   prompt: string | null;
   defaultAssetUrl?: string | null;
   isReferenceInput?: boolean;
+  isWorkflowInput?: boolean;
   isUserFacingInput?: boolean;
   incoming: Array<{ sourceName: string; targetParam: string | null }>;
 }) {
   if (args.nodeType === "user_input") {
+    if (args.isWorkflowInput) {
+      return `${args.nodeName} is an internal template asset used to lock a branch or scene. It is not a user upload.`;
+    }
     return args.isReferenceInput || args.isUserFacingInput === false
       ? `${args.nodeName} is a built-in reference image.`
       : `${args.nodeName} is an uploaded input that you must provide at run time.`;
@@ -117,6 +121,7 @@ Deno.serve(async (req) => {
           ? node.prompt_config.prompt
           : null;
         const editorConfig = getNodeEditorConfig(node);
+        const isWorkflowInput = editorConfig.mode === "workflow";
         const displayName = editorConfig.label ?? slot?.name ?? node.name;
         const editorMode = editorConfig.mode ?? (isReferenceInput ? "reference" : node.node_type === "user_input" ? "upload" : "workflow");
         const expected = editorConfig.expected ?? slot?.expected ?? node.prompt_config?.expected ?? null;
@@ -140,6 +145,7 @@ Deno.serve(async (req) => {
             prompt,
             defaultAssetUrl,
             isReferenceInput,
+            isWorkflowInput,
             isUserFacingInput,
             incoming,
           }),

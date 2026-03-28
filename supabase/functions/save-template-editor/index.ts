@@ -67,7 +67,7 @@ Deno.serve(async (req) => {
     }
 
     if ("editorMode" in body && node.node_type === "user_input") {
-      const nextMode = body.editorMode === "upload" || body.editorMode === "reference"
+      const nextMode = body.editorMode === "upload" || body.editorMode === "reference" || body.editorMode === "workflow"
         ? body.editorMode
         : null;
       nextPromptConfig.editor_mode = nextMode;
@@ -95,4 +95,3 @@ Deno.serve(async (req) => {
     return json({ error: errorMessage(error) }, 400);
   }
 });
-

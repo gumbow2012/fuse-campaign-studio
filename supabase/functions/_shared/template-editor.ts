@@ -11,7 +11,7 @@ type SlotSeed = {
   matchNames?: string[];
 };
 
-export type EditorMode = "upload" | "reference";
+export type EditorMode = "upload" | "reference" | "workflow";
 
 type EditorSeedPatch = {
   nodeId: string;
@@ -91,7 +91,7 @@ function getText(record: Record<string, unknown> | null | undefined, key: string
 
 function getEditorMode(node: InputNodeLike): EditorMode | null {
   const configured = getText(node.prompt_config ?? {}, "editor_mode");
-  if (configured === "upload" || configured === "reference") return configured;
+  if (configured === "upload" || configured === "reference" || configured === "workflow") return configured;
   return null;
 }
 
@@ -179,4 +179,3 @@ export function buildTemplateEditorSeed(templateName: string, nodes: InputNodeLi
     };
   });
 }
-

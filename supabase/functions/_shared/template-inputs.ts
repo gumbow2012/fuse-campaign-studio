@@ -24,7 +24,10 @@ function buildPlanFromEditorMetadata(nodes: InputNodeLike[]): TemplateInputPlan 
     .sort(sortInputNodes);
 
   const referenceNodes = nodes
-    .filter((node) => getNodeEditorConfig(node).mode === "reference");
+    .filter((node) => {
+      const mode = getNodeEditorConfig(node).mode;
+      return mode === "reference" || mode === "workflow";
+    });
 
   if (!uploadNodes.length && !referenceNodes.length) {
     return null;
@@ -100,4 +103,3 @@ export function buildTemplateInputPlan(templateName: string, nodes: InputNodeLik
     slotByNodeId: {},
   };
 }
-
