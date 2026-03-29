@@ -23,6 +23,14 @@ const categoryIcons: Record<string, string> = {
 
 const CREDIT_DOLLAR_VALUE = 0.098;
 
+function toTemplateSlug(value: string) {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
 const Templates = () => {
   const navigate = useNavigate();
 
@@ -59,7 +67,7 @@ const Templates = () => {
               return (
                 <Link
                   key={t.id}
-                  to={`/app/templates/run?templateId=${encodeURIComponent(t.id)}`}
+                  to={`/app/templates/${encodeURIComponent(toTemplateSlug(t.name))}`}
                   className="group rounded-xl border border-white/[0.06] bg-white/[0.02] overflow-hidden hover:border-white/15 hover:bg-white/[0.04] transition-all"
                 >
                   <div className="aspect-[4/3] w-full overflow-hidden bg-muted/20 relative">

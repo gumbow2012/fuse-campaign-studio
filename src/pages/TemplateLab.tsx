@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AlertCircle, CheckCircle2, ChevronDown, ChevronRight, Download, EyeOff, Film, Loader2, LockKeyhole, RefreshCw, Upload } from "lucide-react";
+import { useLocation, useParams, useSearchParams } from "react-router-dom";
 import Navbar from "@/components/Navbar";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -25,6 +26,7 @@ type TemplateOption = {
   templateName: string;
   versionId: string;
   versionNumber: number;
+  reviewStatus: string;
   counts: {
     inputs: number;
     imageOutputs: number;
@@ -65,6 +67,7 @@ type TemplateDetail = {
   templateName: string;
   versionId: string;
   versionNumber: number;
+  reviewStatus: string;
   isActive: boolean;
   nodes: TemplateDetailNode[];
 };
@@ -74,6 +77,16 @@ type JobStep = {
   label: string;
   type: string;
   status: string;
+  prompt: string | null;
+  inputPayload: Record<string, string>;
+  sourceInputs: Array<{
+    sourceNodeId: string;
+    sourceName: string;
+    sourceType: string;
+    targetParam: string | null;
+    sourceUrl: string | null;
+    isHiddenReference: boolean;
+  }>;
   outputUrl: string | null;
   error: string | null;
   startedAt: string | null;
@@ -93,6 +106,25 @@ type JobStatus = {
   status: string;
   progress: number;
   error: string | null;
+  template?: {
+    templateId: string;
+    templateName: string;
+    versionId: string;
+    versionNumber: number | null;
+    reviewStatus: string;
+    inputs: Array<{
+      id: string;
+      name: string;
+      expected: string;
+      nodeIds: string[];
+    }>;
+    hiddenRefs: Array<{
+      nodeId: string;
+      name: string;
+      mode: string | null;
+      assetUrl: string | null;
+    }>;
+  };
   outputs: Array<{ label: string; type: "image" | "video"; url: string }>;
   steps: JobStep[];
 };
@@ -105,7 +137,9 @@ type RecentRun = {
   progress: number;
   error: string | null;
   templateName: string;
+  templateId: string | null;
   versionNumber: number | null;
+  reviewStatus: string;
   outputs: Array<{ label: string; type: "image" | "video"; url: string }>;
 };
 
@@ -119,6 +153,13 @@ type EditorDraft = {
 
 const ACCESS_CODE_STORAGE_KEY = "fuse-lab-access-code";
 const MAX_DIMENSION = 2048;
+const REVIEW_STATUSES = [
+  "Unreviewed",
+  "Structurally Correct",
+  "Prompt Drift",
+  "Blocked by Provider",
+  "Approved",
+] as const;
 
 function fileToDataUrl(file: File) {
   return new Promise<string>((resolve, reject) => {
@@ -168,7 +209,18 @@ function getNodeEditorDefaults(node: TemplateDetailNode) {
   } satisfies EditorDraft;
 }
 
+function normalizeTemplateKey(value: string | null | undefined) {
+  return String(value ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
 const TemplateLab = () => {
+  const location = useLocation();
+  const params = useParams<{ slug?: string; jobId?: string }>();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { session, hasAppAccess } = useAuth();
   const [accessCode, setAccessCode] = useState("");
   const [templates, setTemplates] = useState<TemplateOption[]>([]);
@@ -184,6 +236,8 @@ const TemplateLab = () => {
   const [hiddenInspectorNodeIds, setHiddenInspectorNodeIds] = useState<string[]>([]);
   const [editorDraft, setEditorDraft] = useState<EditorDraft | null>(null);
   const [savingNodeEdits, setSavingNodeEdits] = useState(false);
+  const [reviewStatusDraft, setReviewStatusDraft] = useState<string>("Unreviewed");
+  const [savingReviewStatus, setSavingReviewStatus] = useState(false);
   const [files, setFiles] = useState<Record<string, File | null>>({});
   const [previews, setPreviews] = useState<Record<string, string>>({});
   const [phase, setPhase] = useState<Phase>("idle");
@@ -192,7 +246,11 @@ const TemplateLab = () => {
   const [error, setError] = useState<string | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const lastLoadedCodeRef = useRef<string | null>(null);
-  const isAuthenticatedLab = !!session?.access_token && hasAppAccess;
+  const hasSessionRunner = !!session?.access_token;
+  const canManageTemplates = hasAppAccess;
+  const isAdminSurface = location.pathname.startsWith("/app/lab/");
+  const requestedTemplate = searchParams.get("templateId") || params.slug || "";
+  const requestedJobId = params.jobId || searchParams.get("jobId") || "";
 
   useEffect(() => {
     const savedCode = window.localStorage.getItem(ACCESS_CODE_STORAGE_KEY);
@@ -225,7 +283,7 @@ const TemplateLab = () => {
   );
 
   const flowLanes = useMemo(() => {
-    if (!templateDetail) return [];
+    if (!templateDetail || !canManageTemplates) return [];
 
     const lanes = [
       { key: "uploads", title: "Uploads", nodes: [] as TemplateDetailNode[] },
@@ -290,7 +348,7 @@ const TemplateLab = () => {
     }
 
     return lanes.filter((lane) => lane.nodes.length > 0);
-  }, [selectedTemplate, templateDetail]);
+  }, [canManageTemplates, selectedTemplate, templateDetail]);
 
   const visibleFlowLanes = useMemo(
     () =>
@@ -361,7 +419,7 @@ const TemplateLab = () => {
       apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
     };
 
-    if (isAuthenticatedLab) {
+    if (hasSessionRunner) {
       const {
         data: { session: currentSession },
       } = await supabase.auth.getSession();
@@ -376,10 +434,10 @@ const TemplateLab = () => {
     if (!runnerCode) throw new Error("Enter the lab access code first.");
     headers["x-runner-code"] = runnerCode;
     return headers;
-  }, [accessCode, isAuthenticatedLab, session?.access_token]);
+  }, [accessCode, hasSessionRunner, session?.access_token]);
 
   const loadTemplates = useCallback(async () => {
-    if (!isAuthenticatedLab && !accessCode.trim()) {
+    if (!hasSessionRunner && !accessCode.trim()) {
       toast({ title: "Missing access code", description: "Enter the lab access code first.", variant: "destructive" });
       return;
     }
@@ -405,10 +463,10 @@ const TemplateLab = () => {
     } finally {
       setLoadingTemplates(false);
     }
-  }, [accessCode, buildAuthHeaders, isAuthenticatedLab]);
+  }, [accessCode, buildAuthHeaders, hasSessionRunner]);
 
   const loadRecentRuns = useCallback(async () => {
-    if (!isAuthenticatedLab) {
+    if (!hasSessionRunner) {
       setRecentRuns([]);
       return;
     }
@@ -429,10 +487,10 @@ const TemplateLab = () => {
     } finally {
       setLoadingRecentRuns(false);
     }
-  }, [buildAuthHeaders, isAuthenticatedLab]);
+  }, [buildAuthHeaders, hasSessionRunner]);
 
   useEffect(() => {
-    const loadKey = isAuthenticatedLab ? `auth:${session?.user.id}` : accessCode.trim();
+    const loadKey = hasSessionRunner ? `auth:${session?.user.id}` : accessCode.trim();
 
     if (!loadKey) {
       lastLoadedCodeRef.current = null;
@@ -444,16 +502,33 @@ const TemplateLab = () => {
     if (lastLoadedCodeRef.current === loadKey) return;
     lastLoadedCodeRef.current = loadKey;
     void loadTemplates();
-  }, [accessCode, isAuthenticatedLab, loadTemplates, session?.user.id]);
+  }, [accessCode, hasSessionRunner, loadTemplates, session?.user.id]);
 
   useEffect(() => {
-    if (!isAuthenticatedLab) {
+    if (!templates.length || selectedVersionId) return;
+
+    const requested = normalizeTemplateKey(requestedTemplate);
+    if (!requested) return;
+
+    const match = templates.find((template) =>
+      normalizeTemplateKey(template.templateName) === requested ||
+      normalizeTemplateKey(template.templateId) === requested ||
+      normalizeTemplateKey(template.versionId) === requested,
+    );
+
+    if (match) {
+      setSelectedVersionId(match.versionId);
+    }
+  }, [requestedTemplate, selectedVersionId, templates]);
+
+  useEffect(() => {
+    if (!hasSessionRunner) {
       setRecentRuns([]);
       return;
     }
 
     void loadRecentRuns();
-  }, [isAuthenticatedLab, loadRecentRuns, session?.user.id]);
+  }, [hasSessionRunner, loadRecentRuns, session?.user.id]);
 
   const resetTemplateInputs = useCallback(() => {
     Object.values(previews).forEach((url) => URL.revokeObjectURL(url));
@@ -478,6 +553,7 @@ const TemplateLab = () => {
       const data = await response.json();
       if (!response.ok) throw new Error(data?.error ?? "Could not load template detail");
       setTemplateDetail(data);
+      setReviewStatusDraft(data.reviewStatus ?? "Unreviewed");
     } catch (detailError) {
       const message = detailError instanceof Error ? detailError.message : "Could not load template detail";
       setTemplateDetail(null);
@@ -490,6 +566,7 @@ const TemplateLab = () => {
   useEffect(() => {
     if (!selectedVersionId) {
       setTemplateDetail(null);
+      setReviewStatusDraft("Unreviewed");
       return;
     }
 
@@ -595,13 +672,13 @@ const TemplateLab = () => {
   }, [fetchJobStatus]);
 
   useEffect(() => {
-    if (!isAuthenticatedLab) return;
+    if (!hasSessionRunner) return;
     if (phase !== "complete" && phase !== "error") return;
     void loadRecentRuns();
-  }, [isAuthenticatedLab, loadRecentRuns, phase]);
+  }, [hasSessionRunner, loadRecentRuns, phase]);
 
   useEffect(() => {
-    if (!isAuthenticatedLab) return;
+    if (!hasSessionRunner) return;
     if (jobId) return;
     if (job) return;
 
@@ -609,7 +686,13 @@ const TemplateLab = () => {
     if (!activeRun) return;
 
     void fetchJobStatus(activeRun.id);
-  }, [fetchJobStatus, isAuthenticatedLab, job, jobId, recentRuns]);
+  }, [fetchJobStatus, hasSessionRunner, job, jobId, recentRuns]);
+
+  useEffect(() => {
+    if (!requestedJobId) return;
+    if (jobId === requestedJobId) return;
+    void fetchJobStatus(requestedJobId);
+  }, [fetchJobStatus, jobId, requestedJobId]);
 
   const handleRun = useCallback(async () => {
     if (!selectedTemplate) {
@@ -617,7 +700,7 @@ const TemplateLab = () => {
       return;
     }
 
-    if (!isAuthenticatedLab && !accessCode.trim()) {
+    if (!hasSessionRunner && !accessCode.trim()) {
       toast({ title: "Missing access code", description: "Enter the lab access code first.", variant: "destructive" });
       return;
     }
@@ -677,7 +760,7 @@ const TemplateLab = () => {
       setError(message);
       toast({ title: "Run failed", description: message, variant: "destructive" });
     }
-  }, [accessCode, buildAuthHeaders, files, isAuthenticatedLab, loadRecentRuns, pollJob, selectedTemplate]);
+  }, [accessCode, buildAuthHeaders, files, hasSessionRunner, loadRecentRuns, pollJob, selectedTemplate]);
 
   const canRun = !!selectedTemplate && selectedTemplate.inputs.every((input) => input.defaultAssetUrl || files[input.id]);
 
@@ -730,6 +813,38 @@ const TemplateLab = () => {
     }
   }, [buildAuthHeaders, editorDraft, loadTemplateDetail, loadTemplates, selectedInspectorNode, selectedTemplate]);
 
+  const saveReviewStatus = useCallback(async () => {
+    if (!selectedTemplate) return;
+
+    setSavingReviewStatus(true);
+
+    try {
+      const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/save-template-review-status`, {
+        method: "POST",
+        headers: {
+          ...(await buildAuthHeaders()),
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          versionId: selectedTemplate.versionId,
+          reviewStatus: reviewStatusDraft,
+        }),
+      });
+
+      const data = await response.json();
+      if (!response.ok) throw new Error(data?.error ?? "Could not save review status");
+
+      await loadTemplateDetail(selectedTemplate.versionId);
+      await loadTemplates();
+      toast({ title: "Saved", description: "Template review status updated." });
+    } catch (saveError) {
+      const message = saveError instanceof Error ? saveError.message : "Could not save review status";
+      toast({ title: "Save failed", description: message, variant: "destructive" });
+    } finally {
+      setSavingReviewStatus(false);
+    }
+  }, [buildAuthHeaders, loadTemplateDetail, loadTemplates, reviewStatusDraft, selectedTemplate]);
+
   return (
     <div className="min-h-screen bg-background text-foreground">
       <Navbar />
@@ -738,18 +853,24 @@ const TemplateLab = () => {
           <section className="rounded-3xl border border-border/50 bg-card/70 p-8 shadow-sm">
             <div className="mb-6 flex items-start justify-between gap-4">
               <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">Admin Lab</p>
+                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">
+                  {isAdminSurface ? "Admin Lab" : hasSessionRunner ? "Customer Runner" : "Public Lab"}
+                </p>
                 <h1 className="mt-2 font-display text-4xl font-black tracking-tight">Template Runner</h1>
                 <p className="mt-3 max-w-xl text-sm text-muted-foreground">
-                  Pick any active template, upload the required inputs, and run the graph against the live Supabase backend.
+                  {canManageTemplates
+                    ? "Pick any active template, upload the required inputs, and run the graph against the live Supabase backend."
+                    : "Pick a template, upload the required inputs, and run it against the live Supabase backend."}
                 </p>
               </div>
             </div>
 
             <div className="grid gap-4 md:grid-cols-[1fr,auto] md:items-end">
-              {isAuthenticatedLab ? (
+              {hasSessionRunner ? (
                 <div className="rounded-2xl border border-border/40 bg-background/60 px-4 py-3 text-sm text-muted-foreground">
-                  Signed in with tester access. The runner is using your Supabase session.
+                  {canManageTemplates
+                    ? "Signed in with admin/dev access. The runner is using your Supabase session."
+                    : "Signed in with your customer account. Runs, history, and results are tied to your session."}
                 </div>
               ) : (
                 <div>
@@ -782,7 +903,19 @@ const TemplateLab = () => {
                 id="template-select"
                 value={selectedVersionId}
                 onChange={(event) => {
-                  setSelectedVersionId(event.target.value);
+                  const nextVersionId = event.target.value;
+                  setSelectedVersionId(nextVersionId);
+                  if (location.pathname.includes("/templates")) {
+                    setSearchParams((current) => {
+                      const next = new URLSearchParams(current);
+                      if (nextVersionId) {
+                        next.set("templateId", nextVersionId);
+                      } else {
+                        next.delete("templateId");
+                      }
+                      return next;
+                    }, { replace: true });
+                  }
                   resetTemplateInputs();
                   setJob(null);
                   setJobId(null);
@@ -799,7 +932,7 @@ const TemplateLab = () => {
                 ) : null}
                 {templates.map((template) => (
                   <option key={template.versionId} value={template.versionId}>
-                    {template.templateName} · {template.counts.inputs} inputs · {template.counts.imageOutputs} image output · {template.counts.videoOutputs} video output
+                    {template.templateName} · {template.counts.inputs} inputs · {template.counts.imageOutputs} image output · {template.counts.videoOutputs} video output{canManageTemplates ? ` · ${template.reviewStatus}` : ""}
                   </option>
                 ))}
               </select>
@@ -882,7 +1015,7 @@ const TemplateLab = () => {
               </div>
             ) : null}
 
-            {templateDetail ? (
+            {templateDetail && canManageTemplates ? (
               <div className="mt-8 rounded-3xl border border-border/40 bg-background/50 p-5">
                 <div className="flex items-center justify-between gap-4">
                   <div>
@@ -892,15 +1025,58 @@ const TemplateLab = () => {
                       Audit the real upload slots, fixed references, and generation steps without the current page dumping every detail at once.
                     </p>
                   </div>
-                  <div className="flex items-center gap-2">
-                    {hiddenInspectorNodeIds.length ? (
-                      <Button type="button" size="sm" variant="outline" onClick={restoreInspectorView}>
-                        Reset View
+                  <div className="flex flex-col items-end gap-2">
+                    <div className="flex items-center gap-2">
+                      <span className="rounded-full border border-border/40 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.15em] text-muted-foreground">
+                        {templateDetail.reviewStatus}
+                      </span>
+                      {hiddenInspectorNodeIds.length ? (
+                        <Button type="button" size="sm" variant="outline" onClick={restoreInspectorView}>
+                          Reset View
+                        </Button>
+                      ) : null}
+                      {loadingTemplateDetail ? <Loader2 className="h-5 w-5 animate-spin text-primary" /> : null}
+                    </div>
+                    {canManageTemplates ? (
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        onClick={() => void saveReviewStatus()}
+                        disabled={savingReviewStatus || !selectedTemplate}
+                      >
+                        {savingReviewStatus ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                        Save Review
                       </Button>
                     ) : null}
-                    {loadingTemplateDetail ? <Loader2 className="h-5 w-5 animate-spin text-primary" /> : null}
                   </div>
                 </div>
+
+                {canManageTemplates ? (
+                  <div className="mt-4 grid gap-4 md:grid-cols-[1fr,auto] md:items-end">
+                    <div>
+                      <Label className="mb-2 block text-xs uppercase tracking-[0.15em]">Template Review Status</Label>
+                      <select
+                        value={reviewStatusDraft}
+                        onChange={(event) => setReviewStatusDraft(event.target.value)}
+                        className="flex h-11 w-full rounded-md border border-input bg-background px-3 py-2 text-sm md:max-w-sm"
+                      >
+                        {REVIEW_STATUSES.map((status) => (
+                          <option key={status} value={status}>
+                            {status}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="rounded-2xl border border-border/30 bg-background/70 px-4 py-3 text-sm text-muted-foreground">
+                      Stored on the active template version for admin QA and future builder reuse.
+                    </div>
+                  </div>
+                ) : (
+                  <div className="mt-4 rounded-2xl border border-border/30 bg-background/70 px-4 py-3 text-sm text-muted-foreground">
+                    Sign in as admin or dev to edit review status.
+                  </div>
+                )}
 
                 <div className="mt-5 grid gap-3 md:grid-cols-4">
                   {visibleFlowLanes.map((lane) => (
@@ -1239,7 +1415,7 @@ const TemplateLab = () => {
             </div>
 
             <div className="mt-6 space-y-4">
-              {isAuthenticatedLab ? (
+              {hasSessionRunner ? (
                 <div className="rounded-2xl border border-border/40 bg-background/60 p-4">
                   <div className="flex items-center justify-between gap-4">
                     <div>
@@ -1270,6 +1446,9 @@ const TemplateLab = () => {
                                   </p>
                                   <p className="mt-1 text-xs text-muted-foreground">
                                     {formatTimestamp(run.startedAt)} · {formatRunDuration(run.startedAt, run.completedAt)}
+                                  </p>
+                                  <p className="mt-1 text-[11px] uppercase tracking-[0.15em] text-muted-foreground">
+                                    {run.reviewStatus}
                                   </p>
                                 </div>
                                 <div className="flex items-center gap-3">
@@ -1335,6 +1514,15 @@ const TemplateLab = () => {
                   <span className="text-muted-foreground">Status</span>
                   <span className="font-medium uppercase tracking-wide">{job?.status ?? phase}</span>
                 </div>
+                {job?.template && canManageTemplates ? (
+                  <div className="mt-3 rounded-xl border border-border/30 bg-background/70 px-3 py-2">
+                    <p className="text-xs uppercase tracking-[0.15em] text-muted-foreground">Run Detail</p>
+                    <p className="mt-1 text-sm font-medium">{job.template.templateName} v{job.template.versionNumber ?? "?"}</p>
+                    <p className="mt-1 text-[11px] uppercase tracking-[0.15em] text-muted-foreground">
+                      {job.template.reviewStatus}
+                    </p>
+                  </div>
+                ) : null}
                 <div className="mt-3 h-2 overflow-hidden rounded-full bg-muted">
                   <div className="h-full rounded-full bg-primary transition-all" style={{ width: `${job?.progress ?? (phase === "complete" ? 100 : 0)}%` }} />
                 </div>
@@ -1343,6 +1531,38 @@ const TemplateLab = () => {
                   <span>{job?.progress ?? 0}%</span>
                 </div>
               </div>
+
+              {job?.template && canManageTemplates ? (
+                <div className="rounded-2xl border border-border/40 bg-background/60 p-4">
+                  <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">Template Contract</p>
+                  <div className="mt-3 grid gap-4 md:grid-cols-2">
+                    <div>
+                      <p className="text-[11px] uppercase tracking-[0.15em] text-muted-foreground">User Uploads</p>
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {job.template.inputs.map((input) => (
+                          <span key={input.id} className="rounded-full border border-border/40 px-2 py-1 text-[11px] text-foreground/80">
+                            {input.name}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                    <div>
+                      <p className="text-[11px] uppercase tracking-[0.15em] text-muted-foreground">Hidden Refs</p>
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {job.template.hiddenRefs.length ? (
+                          job.template.hiddenRefs.map((ref) => (
+                            <span key={ref.nodeId} className="rounded-full border border-amber-500/40 bg-amber-500/10 px-2 py-1 text-[11px] text-amber-100">
+                              {ref.name}
+                            </span>
+                          ))
+                        ) : (
+                          <span className="text-sm text-muted-foreground">None</span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ) : null}
 
               {error ? (
                 <div className="rounded-2xl border border-destructive/40 bg-destructive/10 p-4 text-sm text-destructive">
@@ -1378,6 +1598,43 @@ const TemplateLab = () => {
                         <p className="mt-1 text-sm text-foreground">{formatUsd(step.telemetry?.estimatedCostUsd)}</p>
                       </div>
                     </div>
+                    {canManageTemplates && step.prompt ? (
+                      <div className="mt-3 rounded-xl border border-border/30 bg-background/70 px-3 py-2">
+                        <p className="text-[11px] uppercase tracking-[0.15em] text-muted-foreground">Prompt</p>
+                        <p className="mt-1 whitespace-pre-wrap text-sm text-foreground">{step.prompt}</p>
+                      </div>
+                    ) : null}
+                    {canManageTemplates && step.sourceInputs.length ? (
+                      <div className="mt-3 rounded-xl border border-border/30 bg-background/70 px-3 py-2">
+                        <p className="text-[11px] uppercase tracking-[0.15em] text-muted-foreground">Sources</p>
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          {step.sourceInputs.map((source) => (
+                            <span
+                              key={`${step.id}-${source.sourceNodeId}-${source.targetParam ?? "none"}`}
+                              className={`rounded-full border px-2 py-1 text-[11px] ${
+                                source.isHiddenReference ? "border-amber-500/40 bg-amber-500/10 text-amber-200" : "border-border/40 text-foreground/80"
+                              }`}
+                            >
+                              {source.sourceName}
+                              {source.targetParam ? ` -> ${source.targetParam}` : ""}
+                              {source.isHiddenReference ? " · hidden" : ""}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    ) : null}
+                    {canManageTemplates && Object.keys(step.inputPayload ?? {}).length ? (
+                      <div className="mt-3 rounded-xl border border-border/30 bg-background/70 px-3 py-2">
+                        <p className="text-[11px] uppercase tracking-[0.15em] text-muted-foreground">Step Inputs</p>
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          {Object.entries(step.inputPayload).map(([key, value]) => (
+                            <span key={`${step.id}-${key}`} className="rounded-full border border-border/40 px-2 py-1 text-[11px] text-foreground/80">
+                              {key}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    ) : null}
                     {step.telemetry?.billingUnit ? (
                       <p className="mt-2 text-[11px] text-muted-foreground">
                         Billing: {step.telemetry.billingQuantity ?? 1} {step.telemetry.billingUnit}

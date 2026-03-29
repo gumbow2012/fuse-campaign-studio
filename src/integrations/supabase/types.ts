@@ -10,82 +10,174 @@ export type Database = {
   // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
-    PostgrestVersion: "14.1"
+    PostgrestVersion: "14.4"
   }
   public: {
     Tables: {
-      analytics_events: {
+      ai_models: {
+        Row: {
+          api_endpoint: string | null
+          cost_per_run: number | null
+          expected_input_schema: Json | null
+          id: string
+          model_name: string | null
+          provider_name: string | null
+        }
+        Insert: {
+          api_endpoint?: string | null
+          cost_per_run?: number | null
+          expected_input_schema?: Json | null
+          id?: string
+          model_name?: string | null
+          provider_name?: string | null
+        }
+        Update: {
+          api_endpoint?: string | null
+          cost_per_run?: number | null
+          expected_input_schema?: Json | null
+          id?: string
+          model_name?: string | null
+          provider_name?: string | null
+        }
+        Relationships: []
+      }
+      assets: {
+        Row: {
+          asset_type: string
+          created_at: string | null
+          id: string
+          metadata: Json | null
+          supabase_storage_url: string
+        }
+        Insert: {
+          asset_type: string
+          created_at?: string | null
+          id?: string
+          metadata?: Json | null
+          supabase_storage_url: string
+        }
+        Update: {
+          asset_type?: string
+          created_at?: string | null
+          id?: string
+          metadata?: Json | null
+          supabase_storage_url?: string
+        }
+        Relationships: []
+      }
+      audit_logs: {
+        Row: {
+          created_at: string
+          error_code: string | null
+          event_type: string
+          id: string
+          job_id: string | null
+          message: string
+          metadata: Json | null
+          request_id: string | null
+          severity: string
+          source: string
+          step_id: string | null
+          template_id: string | null
+          user_id: string | null
+          version_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          error_code?: string | null
+          event_type: string
+          id?: string
+          job_id?: string | null
+          message: string
+          metadata?: Json | null
+          request_id?: string | null
+          severity?: string
+          source?: string
+          step_id?: string | null
+          template_id?: string | null
+          user_id?: string | null
+          version_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          error_code?: string | null
+          event_type?: string
+          id?: string
+          job_id?: string | null
+          message?: string
+          metadata?: Json | null
+          request_id?: string | null
+          severity?: string
+          source?: string
+          step_id?: string | null
+          template_id?: string | null
+          user_id?: string | null
+          version_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "audit_logs_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "execution_jobs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "audit_logs_step_id_fkey"
+            columns: ["step_id"]
+            isOneToOne: false
+            referencedRelation: "execution_steps"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "audit_logs_template_id_fkey"
+            columns: ["template_id"]
+            isOneToOne: false
+            referencedRelation: "fuse_templates"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "audit_logs_version_id_fkey"
+            columns: ["version_id"]
+            isOneToOne: false
+            referencedRelation: "template_versions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      billing_events: {
         Row: {
           created_at: string
           event_type: string
           id: string
-          metadata: Json | null
-          project_id: string | null
-          template_id: string | null
-          user_id: string | null
+          payload: Json
+          stripe_customer_id: string | null
+          stripe_event_id: string
+          stripe_invoice_id: string | null
+          stripe_price_id: string | null
+          stripe_subscription_id: string | null
         }
         Insert: {
           created_at?: string
           event_type: string
           id?: string
-          metadata?: Json | null
-          project_id?: string | null
-          template_id?: string | null
-          user_id?: string | null
+          payload?: Json
+          stripe_customer_id?: string | null
+          stripe_event_id: string
+          stripe_invoice_id?: string | null
+          stripe_price_id?: string | null
+          stripe_subscription_id?: string | null
         }
         Update: {
           created_at?: string
           event_type?: string
           id?: string
-          metadata?: Json | null
-          project_id?: string | null
-          template_id?: string | null
-          user_id?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "analytics_events_project_id_fkey"
-            columns: ["project_id"]
-            isOneToOne: false
-            referencedRelation: "projects"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "analytics_events_template_id_fkey"
-            columns: ["template_id"]
-            isOneToOne: false
-            referencedRelation: "templates"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      creators: {
-        Row: {
-          connect_status: string
-          created_at: string
-          display_name: string
-          id: string
-          stripe_connect_account_id: string | null
-          updated_at: string
-          user_id: string
-        }
-        Insert: {
-          connect_status?: string
-          created_at?: string
-          display_name: string
-          id?: string
-          stripe_connect_account_id?: string | null
-          updated_at?: string
-          user_id: string
-        }
-        Update: {
-          connect_status?: string
-          created_at?: string
-          display_name?: string
-          id?: string
-          stripe_connect_account_id?: string | null
-          updated_at?: string
-          user_id?: string
+          payload?: Json
+          stripe_customer_id?: string | null
+          stripe_event_id?: string
+          stripe_invoice_id?: string | null
+          stripe_price_id?: string | null
+          stripe_subscription_id?: string | null
         }
         Relationships: []
       }
@@ -95,6 +187,7 @@ export type Database = {
           created_at: string
           description: string | null
           id: string
+          metadata: Json
           project_id: string | null
           step_id: string | null
           template_id: string | null
@@ -106,6 +199,7 @@ export type Database = {
           created_at?: string
           description?: string | null
           id?: string
+          metadata?: Json
           project_id?: string | null
           step_id?: string | null
           template_id?: string | null
@@ -117,6 +211,7 @@ export type Database = {
           created_at?: string
           description?: string | null
           id?: string
+          metadata?: Json
           project_id?: string | null
           step_id?: string | null
           template_id?: string | null
@@ -125,84 +220,274 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: "credit_ledger_project_id_fkey"
-            columns: ["project_id"]
-            isOneToOne: false
-            referencedRelation: "projects"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "credit_ledger_step_id_fkey"
-            columns: ["step_id"]
-            isOneToOne: false
-            referencedRelation: "project_steps"
-            referencedColumns: ["id"]
-          },
-          {
             foreignKeyName: "credit_ledger_template_id_fkey"
             columns: ["template_id"]
             isOneToOne: false
-            referencedRelation: "templates"
+            referencedRelation: "fuse_templates"
             referencedColumns: ["id"]
           },
         ]
       }
-      payouts: {
+      edges: {
         Row: {
-          amount_cents: number
-          beneficiary_id: string
-          beneficiary_type: string
-          created_at: string
+          condition_logic: Json | null
           id: string
-          status: string
-          stripe_transfer_id: string | null
+          mapping_logic: Json | null
+          source_node_id: string
+          target_node_id: string
+          version_id: string
         }
         Insert: {
-          amount_cents?: number
-          beneficiary_id: string
-          beneficiary_type: string
-          created_at?: string
+          condition_logic?: Json | null
           id?: string
-          status?: string
-          stripe_transfer_id?: string | null
+          mapping_logic?: Json | null
+          source_node_id: string
+          target_node_id: string
+          version_id: string
         }
         Update: {
-          amount_cents?: number
-          beneficiary_id?: string
-          beneficiary_type?: string
-          created_at?: string
+          condition_logic?: Json | null
           id?: string
-          status?: string
-          stripe_transfer_id?: string | null
+          mapping_logic?: Json | null
+          source_node_id?: string
+          target_node_id?: string
+          version_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "edges_source_node_id_fkey"
+            columns: ["source_node_id"]
+            isOneToOne: false
+            referencedRelation: "nodes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "edges_target_node_id_fkey"
+            columns: ["target_node_id"]
+            isOneToOne: false
+            referencedRelation: "nodes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "edges_version_id_fkey"
+            columns: ["version_id"]
+            isOneToOne: false
+            referencedRelation: "template_versions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      execution_jobs: {
+        Row: {
+          completed_at: string | null
+          error_log: string | null
+          id: string
+          input_payload: Json
+          progress: number
+          result_payload: Json
+          started_at: string | null
+          status: string | null
+          template_id: string | null
+          user_id: string | null
+          version_id: string | null
+        }
+        Insert: {
+          completed_at?: string | null
+          error_log?: string | null
+          id?: string
+          input_payload?: Json
+          progress?: number
+          result_payload?: Json
+          started_at?: string | null
+          status?: string | null
+          template_id?: string | null
+          user_id?: string | null
+          version_id?: string | null
+        }
+        Update: {
+          completed_at?: string | null
+          error_log?: string | null
+          id?: string
+          input_payload?: Json
+          progress?: number
+          result_payload?: Json
+          started_at?: string | null
+          status?: string | null
+          template_id?: string | null
+          user_id?: string | null
+          version_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "execution_jobs_template_id_fkey"
+            columns: ["template_id"]
+            isOneToOne: false
+            referencedRelation: "fuse_templates"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "execution_jobs_version_id_fkey"
+            columns: ["version_id"]
+            isOneToOne: false
+            referencedRelation: "template_versions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      execution_steps: {
+        Row: {
+          completed_at: string | null
+          created_at: string | null
+          error_log: string | null
+          execution_time_ms: number | null
+          id: string
+          input_payload: Json | null
+          job_id: string
+          node_id: string | null
+          output_asset_id: string | null
+          output_payload: Json | null
+          provider: string | null
+          provider_model: string | null
+          provider_request_id: string | null
+          started_at: string | null
+          status: string | null
+        }
+        Insert: {
+          completed_at?: string | null
+          created_at?: string | null
+          error_log?: string | null
+          execution_time_ms?: number | null
+          id?: string
+          input_payload?: Json | null
+          job_id: string
+          node_id?: string | null
+          output_asset_id?: string | null
+          output_payload?: Json | null
+          provider?: string | null
+          provider_model?: string | null
+          provider_request_id?: string | null
+          started_at?: string | null
+          status?: string | null
+        }
+        Update: {
+          completed_at?: string | null
+          created_at?: string | null
+          error_log?: string | null
+          execution_time_ms?: number | null
+          id?: string
+          input_payload?: Json | null
+          job_id?: string
+          node_id?: string | null
+          output_asset_id?: string | null
+          output_payload?: Json | null
+          provider?: string | null
+          provider_model?: string | null
+          provider_request_id?: string | null
+          started_at?: string | null
+          status?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "execution_steps_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "execution_jobs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "execution_steps_node_id_fkey"
+            columns: ["node_id"]
+            isOneToOne: false
+            referencedRelation: "nodes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "execution_steps_output_asset_id_fkey"
+            columns: ["output_asset_id"]
+            isOneToOne: false
+            referencedRelation: "assets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      fuse_templates: {
+        Row: {
+          created_at: string | null
+          description: string | null
+          id: string
+          name: string
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          name: string
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          name?: string
+          updated_at?: string | null
         }
         Relationships: []
       }
-      platform_config: {
+      nodes: {
         Row: {
-          affiliate_percent_of_platform: number
-          creator_share_percent: number
-          hold_period_days: number
+          created_at: string | null
+          default_asset_id: string | null
           id: string
-          platform_share_percent: number
-          updated_at: string
+          model_id: string | null
+          name: string | null
+          node_type: string
+          prompt_config: Json | null
+          version_id: string
         }
         Insert: {
-          affiliate_percent_of_platform?: number
-          creator_share_percent?: number
-          hold_period_days?: number
+          created_at?: string | null
+          default_asset_id?: string | null
           id?: string
-          platform_share_percent?: number
-          updated_at?: string
+          model_id?: string | null
+          name?: string | null
+          node_type: string
+          prompt_config?: Json | null
+          version_id: string
         }
         Update: {
-          affiliate_percent_of_platform?: number
-          creator_share_percent?: number
-          hold_period_days?: number
+          created_at?: string | null
+          default_asset_id?: string | null
           id?: string
-          platform_share_percent?: number
-          updated_at?: string
+          model_id?: string | null
+          name?: string | null
+          node_type?: string
+          prompt_config?: Json | null
+          version_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "nodes_default_asset_id_fkey"
+            columns: ["default_asset_id"]
+            isOneToOne: false
+            referencedRelation: "assets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nodes_model_id_fkey"
+            columns: ["model_id"]
+            isOneToOne: false
+            referencedRelation: "ai_models"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nodes_version_id_fkey"
+            columns: ["version_id"]
+            isOneToOne: false
+            referencedRelation: "template_versions"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       profiles: {
         Row: {
@@ -213,6 +498,11 @@ export type Database = {
           name: string | null
           plan: string | null
           stripe_customer_id: string | null
+          stripe_price_id: string | null
+          stripe_subscription_id: string | null
+          subscription_cycle_credits: number
+          subscription_period_end: string | null
+          subscription_period_start: string | null
           subscription_status: string | null
           updated_at: string
           user_id: string
@@ -225,6 +515,11 @@ export type Database = {
           name?: string | null
           plan?: string | null
           stripe_customer_id?: string | null
+          stripe_price_id?: string | null
+          stripe_subscription_id?: string | null
+          subscription_cycle_credits?: number
+          subscription_period_end?: string | null
+          subscription_period_start?: string | null
           subscription_status?: string | null
           updated_at?: string
           user_id: string
@@ -237,518 +532,129 @@ export type Database = {
           name?: string | null
           plan?: string | null
           stripe_customer_id?: string | null
+          stripe_price_id?: string | null
+          stripe_subscription_id?: string | null
+          subscription_cycle_credits?: number
+          subscription_period_end?: string | null
+          subscription_period_start?: string | null
           subscription_status?: string | null
           updated_at?: string
           user_id?: string
         }
         Relationships: []
       }
-      project_steps: {
+      subscription_period_grants: {
         Row: {
+          billing_period_end: string
+          billing_period_start: string
           created_at: string
-          duration_ms: number | null
+          credits_granted: number
           id: string
-          last_run_cost_credits: number | null
-          output_url: string | null
-          project_id: string
-          status: Database["public"]["Enums"]["step_status"]
-          step_key: string
-          updated_at: string
-        }
-        Insert: {
-          created_at?: string
-          duration_ms?: number | null
-          id?: string
-          last_run_cost_credits?: number | null
-          output_url?: string | null
-          project_id: string
-          status?: Database["public"]["Enums"]["step_status"]
-          step_key: string
-          updated_at?: string
-        }
-        Update: {
-          created_at?: string
-          duration_ms?: number | null
-          id?: string
-          last_run_cost_credits?: number | null
-          output_url?: string | null
-          project_id?: string
-          status?: Database["public"]["Enums"]["step_status"]
-          step_key?: string
-          updated_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "project_steps_project_id_fkey"
-            columns: ["project_id"]
-            isOneToOne: false
-            referencedRelation: "projects"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      projects: {
-        Row: {
-          attempts: number
-          completed_at: string | null
-          created_at: string
-          debug_trace: Json | null
-          error: string | null
-          failed_at: string | null
-          failed_source: string | null
-          id: string
-          inputs: Json | null
-          logs: Json
-          max_attempts: number
-          outputs: Json | null
-          progress: number
-          started_at: string | null
-          status: Database["public"]["Enums"]["project_status"]
-          template_id: string | null
-          template_name: string | null
-          updated_at: string
-          user_id: string | null
-          user_inputs: Json | null
-          weavy_run_id: string | null
-        }
-        Insert: {
-          attempts?: number
-          completed_at?: string | null
-          created_at?: string
-          debug_trace?: Json | null
-          error?: string | null
-          failed_at?: string | null
-          failed_source?: string | null
-          id?: string
-          inputs?: Json | null
-          logs?: Json
-          max_attempts?: number
-          outputs?: Json | null
-          progress?: number
-          started_at?: string | null
-          status?: Database["public"]["Enums"]["project_status"]
-          template_id?: string | null
-          template_name?: string | null
-          updated_at?: string
-          user_id?: string | null
-          user_inputs?: Json | null
-          weavy_run_id?: string | null
-        }
-        Update: {
-          attempts?: number
-          completed_at?: string | null
-          created_at?: string
-          debug_trace?: Json | null
-          error?: string | null
-          failed_at?: string | null
-          failed_source?: string | null
-          id?: string
-          inputs?: Json | null
-          logs?: Json
-          max_attempts?: number
-          outputs?: Json | null
-          progress?: number
-          started_at?: string | null
-          status?: Database["public"]["Enums"]["project_status"]
-          template_id?: string | null
-          template_name?: string | null
-          updated_at?: string
-          user_id?: string | null
-          user_inputs?: Json | null
-          weavy_run_id?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "projects_template_id_fkey"
-            columns: ["template_id"]
-            isOneToOne: false
-            referencedRelation: "templates"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      referral_attributions: {
-        Row: {
-          attributed_at: string
-          code_used: string
-          id: string
-          qualified_at: string | null
-          referred_user_id: string
-          referrer_user_id: string
-          rewarded_at: string | null
-          status: string
-        }
-        Insert: {
-          attributed_at?: string
-          code_used: string
-          id?: string
-          qualified_at?: string | null
-          referred_user_id: string
-          referrer_user_id: string
-          rewarded_at?: string | null
-          status?: string
-        }
-        Update: {
-          attributed_at?: string
-          code_used?: string
-          id?: string
-          qualified_at?: string | null
-          referred_user_id?: string
-          referrer_user_id?: string
-          rewarded_at?: string | null
-          status?: string
-        }
-        Relationships: []
-      }
-      referral_codes: {
-        Row: {
-          code: string
-          created_at: string
-          id: string
-          owner_user_id: string
-        }
-        Insert: {
-          code: string
-          created_at?: string
-          id?: string
-          owner_user_id: string
-        }
-        Update: {
-          code?: string
-          created_at?: string
-          id?: string
-          owner_user_id?: string
-        }
-        Relationships: []
-      }
-      referral_program_config: {
-        Row: {
-          affiliate_percent_of_platform_share: number | null
-          enabled: boolean
-          id: string
-          paid_trigger: string
-          referrer_bonus_credits_on_paid: number
-          signup_bonus_credits: number
-          updated_at: string
-        }
-        Insert: {
-          affiliate_percent_of_platform_share?: number | null
-          enabled?: boolean
-          id?: string
-          paid_trigger?: string
-          referrer_bonus_credits_on_paid?: number
-          signup_bonus_credits?: number
-          updated_at?: string
-        }
-        Update: {
-          affiliate_percent_of_platform_share?: number | null
-          enabled?: boolean
-          id?: string
-          paid_trigger?: string
-          referrer_bonus_credits_on_paid?: number
-          signup_bonus_credits?: number
-          updated_at?: string
-        }
-        Relationships: []
-      }
-      referral_rewards: {
-        Row: {
-          created_at: string
-          credits_amount: number | null
-          id: string
-          referred_user_id: string
-          referrer_user_id: string
-          revenue_allocation_id: string | null
-          reward_type: string
-        }
-        Insert: {
-          created_at?: string
-          credits_amount?: number | null
-          id?: string
-          referred_user_id: string
-          referrer_user_id: string
-          revenue_allocation_id?: string | null
-          reward_type: string
-        }
-        Update: {
-          created_at?: string
-          credits_amount?: number | null
-          id?: string
-          referred_user_id?: string
-          referrer_user_id?: string
-          revenue_allocation_id?: string | null
-          reward_type?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "referral_rewards_revenue_allocation_id_fkey"
-            columns: ["revenue_allocation_id"]
-            isOneToOne: false
-            referencedRelation: "revenue_allocations"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      refund_events: {
-        Row: {
-          amount_cents: number
-          created_at: string
-          id: string
-          reason: string | null
-          stripe_charge_id: string | null
+          ledger_id: string | null
+          stripe_customer_id: string
+          stripe_event_id: string
           stripe_invoice_id: string | null
-          stripe_payment_intent_id: string | null
-        }
-        Insert: {
-          amount_cents?: number
-          created_at?: string
-          id?: string
-          reason?: string | null
-          stripe_charge_id?: string | null
-          stripe_invoice_id?: string | null
-          stripe_payment_intent_id?: string | null
-        }
-        Update: {
-          amount_cents?: number
-          created_at?: string
-          id?: string
-          reason?: string | null
-          stripe_charge_id?: string | null
-          stripe_invoice_id?: string | null
-          stripe_payment_intent_id?: string | null
-        }
-        Relationships: []
-      }
-      revenue_allocations: {
-        Row: {
-          amount_cents: number
-          available_at: string | null
-          beneficiary_id: string | null
-          beneficiary_type: string
-          created_at: string
-          id: string
-          payout_id: string | null
-          status: string
-          usage_charge_id: string
-        }
-        Insert: {
-          amount_cents?: number
-          available_at?: string | null
-          beneficiary_id?: string | null
-          beneficiary_type: string
-          created_at?: string
-          id?: string
-          payout_id?: string | null
-          status?: string
-          usage_charge_id: string
-        }
-        Update: {
-          amount_cents?: number
-          available_at?: string | null
-          beneficiary_id?: string | null
-          beneficiary_type?: string
-          created_at?: string
-          id?: string
-          payout_id?: string | null
-          status?: string
-          usage_charge_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "revenue_allocations_usage_charge_id_fkey"
-            columns: ["usage_charge_id"]
-            isOneToOne: false
-            referencedRelation: "usage_charges"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      templates: {
-        Row: {
-          ai_prompt: string | null
-          category: string | null
-          created_at: string
-          creator_id: string | null
-          description: string | null
-          edges_count: number | null
-          estimated_credits_per_run: number
-          expected_output_count: number | null
-          id: string
-          input_schema: Json | null
-          is_active: boolean
-          name: string
-          nodes_count: number | null
-          output_type: string | null
-          owner_type: string
-          preview_url: string | null
-          raw_json: Json | null
-          required_inputs: Json | null
-          revenue_split_override: Json | null
-          tags: string[] | null
-          updated_at: string
-          weavy_flow_url: string | null
-          weavy_recipe_id: string | null
-          weavy_recipe_version: number | null
-        }
-        Insert: {
-          ai_prompt?: string | null
-          category?: string | null
-          created_at?: string
-          creator_id?: string | null
-          description?: string | null
-          edges_count?: number | null
-          estimated_credits_per_run?: number
-          expected_output_count?: number | null
-          id?: string
-          input_schema?: Json | null
-          is_active?: boolean
-          name: string
-          nodes_count?: number | null
-          output_type?: string | null
-          owner_type?: string
-          preview_url?: string | null
-          raw_json?: Json | null
-          required_inputs?: Json | null
-          revenue_split_override?: Json | null
-          tags?: string[] | null
-          updated_at?: string
-          weavy_flow_url?: string | null
-          weavy_recipe_id?: string | null
-          weavy_recipe_version?: number | null
-        }
-        Update: {
-          ai_prompt?: string | null
-          category?: string | null
-          created_at?: string
-          creator_id?: string | null
-          description?: string | null
-          edges_count?: number | null
-          estimated_credits_per_run?: number
-          expected_output_count?: number | null
-          id?: string
-          input_schema?: Json | null
-          is_active?: boolean
-          name?: string
-          nodes_count?: number | null
-          output_type?: string | null
-          owner_type?: string
-          preview_url?: string | null
-          raw_json?: Json | null
-          required_inputs?: Json | null
-          revenue_split_override?: Json | null
-          tags?: string[] | null
-          updated_at?: string
-          weavy_flow_url?: string | null
-          weavy_recipe_id?: string | null
-          weavy_recipe_version?: number | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "templates_creator_id_fkey"
-            columns: ["creator_id"]
-            isOneToOne: false
-            referencedRelation: "creators"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      usage_charges: {
-        Row: {
-          charge_type: string
-          created_at: string
-          credits_spent: number
-          id: string
-          project_id: string | null
-          step_id: string | null
-          stripe_invoice_id: string | null
-          stripe_payment_intent_id: string | null
-          template_id: string | null
-          usd_cost_basis_cents: number
-          usd_price_cents: number
+          stripe_price_id: string
+          stripe_subscription_id: string
           user_id: string
         }
         Insert: {
-          charge_type: string
+          billing_period_end: string
+          billing_period_start: string
           created_at?: string
-          credits_spent?: number
+          credits_granted: number
           id?: string
-          project_id?: string | null
-          step_id?: string | null
+          ledger_id?: string | null
+          stripe_customer_id: string
+          stripe_event_id: string
           stripe_invoice_id?: string | null
-          stripe_payment_intent_id?: string | null
-          template_id?: string | null
-          usd_cost_basis_cents?: number
-          usd_price_cents?: number
+          stripe_price_id: string
+          stripe_subscription_id: string
           user_id: string
         }
         Update: {
-          charge_type?: string
+          billing_period_end?: string
+          billing_period_start?: string
           created_at?: string
-          credits_spent?: number
+          credits_granted?: number
           id?: string
-          project_id?: string | null
-          step_id?: string | null
+          ledger_id?: string | null
+          stripe_customer_id?: string
+          stripe_event_id?: string
           stripe_invoice_id?: string | null
-          stripe_payment_intent_id?: string | null
-          template_id?: string | null
-          usd_cost_basis_cents?: number
-          usd_price_cents?: number
+          stripe_price_id?: string
+          stripe_subscription_id?: string
           user_id?: string
         }
         Relationships: [
           {
-            foreignKeyName: "usage_charges_project_id_fkey"
-            columns: ["project_id"]
+            foreignKeyName: "subscription_period_grants_ledger_id_fkey"
+            columns: ["ledger_id"]
             isOneToOne: false
-            referencedRelation: "projects"
+            referencedRelation: "credit_ledger"
             referencedColumns: ["id"]
           },
+        ]
+      }
+      template_versions: {
+        Row: {
+          created_at: string | null
+          id: string
+          is_active: boolean | null
+          review_status: string
+          reviewed_at: string | null
+          reviewed_by: string | null
+          template_id: string
+          version_number: number
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          is_active?: boolean | null
+          review_status?: string
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          template_id: string
+          version_number: number
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          is_active?: boolean | null
+          review_status?: string
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          template_id?: string
+          version_number?: number
+        }
+        Relationships: [
           {
-            foreignKeyName: "usage_charges_step_id_fkey"
-            columns: ["step_id"]
-            isOneToOne: false
-            referencedRelation: "project_steps"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "usage_charges_template_id_fkey"
+            foreignKeyName: "template_versions_template_id_fkey"
             columns: ["template_id"]
             isOneToOne: false
-            referencedRelation: "templates"
+            referencedRelation: "fuse_templates"
             referencedColumns: ["id"]
           },
         ]
       }
       user_roles: {
         Row: {
+          created_at: string
           id: string
           role: Database["public"]["Enums"]["app_role"]
           user_id: string
         }
         Insert: {
+          created_at?: string
           id?: string
           role?: Database["public"]["Enums"]["app_role"]
           user_id: string
         }
         Update: {
+          created_at?: string
           id?: string
           role?: Database["public"]["Enums"]["app_role"]
           user_id?: string
-        }
-        Relationships: []
-      }
-      users: {
-        Row: {
-          credits: number | null
-          id: string
-        }
-        Insert: {
-          credits?: number | null
-          id: string
-        }
-        Update: {
-          credits?: number | null
-          id?: string
         }
         Relationships: []
       }
@@ -757,6 +663,78 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      apply_credit_transaction: {
+        Args: {
+          p_amount: number
+          p_description?: string
+          p_project_id?: string
+          p_step_id?: string
+          p_template_id?: string
+          p_type: Database["public"]["Enums"]["credit_event_type"]
+          p_user_id: string
+        }
+        Returns: {
+          ledger_id: string
+          new_balance: number
+        }[]
+      }
+      decrement_credits: {
+        Args: {
+          p_amount: number
+          p_description?: string
+          p_project_id?: string
+          p_step_id?: string
+          p_template_id?: string
+          p_user_id: string
+        }
+        Returns: number
+      }
+      get_my_profile: {
+        Args: never
+        Returns: {
+          created_at: string
+          credits_balance: number
+          email: string
+          id: string
+          name: string
+          plan: string
+          stripe_customer_id: string
+          stripe_price_id: string
+          stripe_subscription_id: string
+          subscription_cycle_credits: number
+          subscription_period_end: string
+          subscription_period_start: string
+          subscription_status: string
+          updated_at: string
+          user_id: string
+        }[]
+      }
+      get_my_roles: {
+        Args: never
+        Returns: {
+          role: Database["public"]["Enums"]["app_role"]
+        }[]
+      }
+      grant_subscription_credits: {
+        Args: {
+          p_billing_period_end: string
+          p_billing_period_start: string
+          p_credits_granted: number
+          p_description?: string
+          p_stripe_customer_id: string
+          p_stripe_event_id: string
+          p_stripe_invoice_id: string
+          p_stripe_price_id: string
+          p_stripe_subscription_id: string
+          p_user_id: string
+        }
+        Returns: {
+          grant_id: string
+          granted: boolean
+          ledger_id: string
+          new_balance: number
+        }[]
+      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
@@ -764,9 +742,25 @@ export type Database = {
         }
         Returns: boolean
       }
+      log_audit_event: {
+        Args: {
+          p_error_code?: string
+          p_event_type: string
+          p_job_id?: string
+          p_message: string
+          p_metadata?: Json
+          p_request_id?: string
+          p_severity?: string
+          p_source?: string
+          p_step_id?: string
+          p_template_id?: string
+          p_version_id?: string
+        }
+        Returns: string
+      }
     }
     Enums: {
-      app_role: "admin" | "user"
+      app_role: "admin" | "user" | "dev"
       credit_event_type:
         | "run_template"
         | "rerun_step"
@@ -774,8 +768,6 @@ export type Database = {
         | "monthly_grant"
         | "refund"
         | "adjustment"
-      project_status: "queued" | "running" | "failed" | "complete" | "pending"
-      step_status: "queued" | "running" | "failed" | "complete"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -903,7 +895,7 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
-      app_role: ["admin", "user"],
+      app_role: ["admin", "user", "dev"],
       credit_event_type: [
         "run_template",
         "rerun_step",
@@ -912,8 +904,6 @@ export const Constants = {
         "refund",
         "adjustment",
       ],
-      project_status: ["queued", "running", "failed", "complete", "pending"],
-      step_status: ["queued", "running", "failed", "complete"],
     },
   },
 } as const

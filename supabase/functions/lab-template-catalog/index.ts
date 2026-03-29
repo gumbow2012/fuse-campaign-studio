@@ -22,7 +22,7 @@ Deno.serve(async (req) => {
 
     const { data: versions, error: versionError } = await admin
       .from("template_versions")
-      .select("id, template_id, version_number")
+      .select("id, template_id, version_number, review_status")
       .eq("is_active", true);
     if (versionError) throw new Error(versionError.message);
 
@@ -55,6 +55,7 @@ Deno.serve(async (req) => {
           templateName: template?.name ?? "Untitled Template",
           versionId: version.id,
           versionNumber: version.version_number,
+          reviewStatus: version.review_status ?? "Unreviewed",
           counts: {
             inputs: inputPlan.slots.length,
             imageOutputs: hasExplicitImageFlags

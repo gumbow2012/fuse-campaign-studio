@@ -42,7 +42,7 @@ const CreditConfirmModal = ({
               <>
                 You need <span className="text-primary font-bold">{creditCost} credits</span> but only
                 have <span className="text-destructive-foreground font-bold">{currentBalance}</span>.
-                Please upgrade your plan or purchase more credits.
+                Please upgrade your subscription or wait for your next billing cycle.
               </>
             ) : (
               <>

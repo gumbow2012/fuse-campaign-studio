@@ -5,12 +5,14 @@ import {
   createAdminClient,
   errorMessage,
   getOptionalUser,
+  getUserRoles,
   hasValidRunnerCode,
   json,
-  requireTesterUser,
+  requireUser,
 } from "../_shared/supabase-admin.ts";
 import { PAPARAZZI_VERSION_ID, runGraphJob } from "../_shared/executor.ts";
 import { buildTemplateInputPlan } from "../_shared/template-inputs.ts";
+import { getTemplateCreditCost } from "../_shared/template-pricing.ts";
 
 declare const EdgeRuntime: {
   waitUntil(promise: Promise<unknown>): void;
@@ -130,7 +132,7 @@ Deno.serve(async (req) => {
 
   try {
     const runnerAccess = hasValidRunnerCode(req);
-    const user = runnerAccess ? await getOptionalUser(req, admin) : await requireTesterUser(req, admin);
+    const user = runnerAccess ? await getOptionalUser(req, admin) : await requireUser(req, admin);
     if (!user && !runnerAccess) throw new Error("Authentication required");
 
     const body = await req.json() as StartTemplateRunBody;
@@ -144,6 +146,14 @@ Deno.serve(async (req) => {
       .eq("id", versionId)
       .single();
     if (versionError || !version) throw new Error(versionError?.message ?? "Version not found");
+
+    const userRoles = user ? await getUserRoles(user.id, admin) : [];
+    const bypassCredits = runnerAccess || userRoles.some((role) => role === "admin" || role === "dev");
+
+    let creditCost = 0;
+    if (user && !bypassCredits) {
+      creditCost = getTemplateCreditCost((version as any).fuse_templates.name);
+    }
 
     const { data: job, error: jobError } = await admin
       .from("execution_jobs")
@@ -182,6 +192,22 @@ Deno.serve(async (req) => {
       })
       .eq("id", job.id);
     if (inputUpdateError) throw new Error(inputUpdateError.message);
+
+    if (user && !bypassCredits && creditCost > 0) {
+      const { error: creditError } = await admin.rpc("apply_credit_transaction", {
+        p_user_id: user.id,
+        p_amount: -creditCost,
+        p_type: "run_template",
+        p_description: `Run template: ${(version as any).fuse_templates.name} (${job.id})`,
+        p_template_id: version.template_id,
+        p_project_id: null,
+        p_step_id: null,
+      });
+      if (creditError) {
+        await admin.from("execution_jobs").delete().eq("id", job.id);
+        throw new Error(creditError.message);
+      }
+    }
 
     const { data: nodes, error: nodesError } = await admin
       .from("nodes")

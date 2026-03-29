@@ -39,29 +39,16 @@ serve(async (req) => {
 
     const creditCost = step.last_run_cost_credits || 5;
 
-    // Check credits
-    const { data: profile } = await supabaseClient
-      .from("profiles")
-      .select("credits_balance")
-      .eq("user_id", user.id)
-      .single();
-    if (!profile || profile.credits_balance < creditCost) throw new Error("Insufficient credits");
-
-    // Deduct credits
-    await supabaseClient
-      .from("profiles")
-      .update({ credits_balance: profile.credits_balance - creditCost })
-      .eq("user_id", user.id);
-
-    // Log
-    await supabaseClient.from("credit_ledger").insert({
-      user_id: user.id,
-      type: "rerun_step",
-      amount: -creditCost,
-      project_id: projectId,
-      step_id: stepId,
-      description: `Rerun step: ${step.step_key}`,
+    const { error: creditError } = await supabaseClient.rpc("apply_credit_transaction", {
+      p_user_id: user.id,
+      p_amount: -creditCost,
+      p_type: "rerun_step",
+      p_description: `Rerun step: ${step.step_key}`,
+      p_project_id: projectId,
+      p_step_id: stepId,
+      p_template_id: null,
     });
+    if (creditError) throw new Error(creditError.message);
 
     // Mark running
     await supabaseClient

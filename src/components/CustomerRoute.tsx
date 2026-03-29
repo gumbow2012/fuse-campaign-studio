@@ -1,8 +1,8 @@
 import { useAuth } from "@/contexts/AuthContext";
 import { Navigate } from "react-router-dom";
 
-const AdminRoute = ({ children }: { children: React.ReactNode }) => {
-  const { user, loading, hasAppAccess } = useAuth();
+const CustomerRoute = ({ children }: { children: React.ReactNode }) => {
+  const { user, loading } = useAuth();
 
   if (loading) {
     return (
@@ -16,11 +16,7 @@ const AdminRoute = ({ children }: { children: React.ReactNode }) => {
     return <Navigate to="/auth" replace />;
   }
 
-  if (!hasAppAccess) {
-    return <Navigate to="/dashboard" replace />;
-  }
-
   return <>{children}</>;
 };
 
-export default AdminRoute;
+export default CustomerRoute;

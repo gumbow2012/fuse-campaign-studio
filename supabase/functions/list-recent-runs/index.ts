@@ -51,7 +51,7 @@ Deno.serve(async (req) => {
 
     let { data: jobs, error } = await admin
       .from("execution_jobs")
-      .select("id, status, started_at, completed_at, progress, error_log, result_payload, fuse_templates!execution_jobs_template_id_fkey(name), template_versions!execution_jobs_version_id_fkey(version_number)")
+      .select("id, status, started_at, completed_at, progress, error_log, result_payload, fuse_templates!execution_jobs_template_id_fkey(name), template_versions!execution_jobs_version_id_fkey(id, version_number, review_status)")
       .eq("user_id", user.id)
       .order("started_at", { ascending: false })
       .limit(limit);
@@ -66,7 +66,7 @@ Deno.serve(async (req) => {
     if (activeJobs.length) {
       const refreshed = await admin
         .from("execution_jobs")
-        .select("id, status, started_at, completed_at, progress, error_log, result_payload, fuse_templates!execution_jobs_template_id_fkey(name), template_versions!execution_jobs_version_id_fkey(version_number)")
+        .select("id, status, started_at, completed_at, progress, error_log, result_payload, fuse_templates!execution_jobs_template_id_fkey(name), template_versions!execution_jobs_version_id_fkey(id, version_number, review_status)")
         .eq("user_id", user.id)
         .order("started_at", { ascending: false })
         .limit(limit);
@@ -106,7 +106,9 @@ Deno.serve(async (req) => {
         progress: job.progress ?? 0,
         error: extractProviderDetail(job.result_payload?.rawPayload?.detail) ?? job.error_log ?? null,
         templateName: job.fuse_templates?.name ?? "Template",
+        templateId: job.template_versions?.id ?? null,
         versionNumber: job.template_versions?.version_number ?? null,
+        reviewStatus: job.template_versions?.review_status ?? "Unreviewed",
         telemetry: job.result_payload?.telemetry ?? {},
         outputs: collectDeliverableOutputs(outputsByJobId.get(job.id) ?? [], outputExposureByNodeId),
       })),

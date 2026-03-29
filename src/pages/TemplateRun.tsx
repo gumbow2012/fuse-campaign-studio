@@ -677,7 +677,7 @@ const TemplateRun = () => {
                       onClick={() => navigate("/billing")}
                       className="w-full text-center text-[10px] text-primary/70 hover:text-primary font-medium mt-2 transition-colors"
                     >
-                      Get more credits →
+                      Manage subscription →
                     </button>
                   )}
                 </div>

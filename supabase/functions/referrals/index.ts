@@ -92,19 +92,16 @@ serve(async (req) => {
       const { data: config } = await supabaseClient
         .from("referral_program_config").select("*").limit(1).single();
       if (config?.enabled && config.signup_bonus_credits > 0) {
-        const { data: profile } = await supabaseClient
-          .from("profiles").select("credits_balance").eq("user_id", user.id).single();
-        if (profile) {
-          await supabaseClient.from("profiles")
-            .update({ credits_balance: profile.credits_balance + config.signup_bonus_credits })
-            .eq("user_id", user.id);
-          await supabaseClient.from("credit_ledger").insert({
-            user_id: user.id,
-            type: "adjustment",
-            amount: config.signup_bonus_credits,
-            description: `Referral signup bonus (code: ${code.toUpperCase()})`,
-          });
-        }
+        const { error: bonusError } = await supabaseClient.rpc("apply_credit_transaction", {
+          p_user_id: user.id,
+          p_amount: config.signup_bonus_credits,
+          p_type: "adjustment",
+          p_description: `Referral signup bonus (code: ${code.toUpperCase()})`,
+          p_template_id: null,
+          p_project_id: null,
+          p_step_id: null,
+        });
+        if (bonusError) throw new Error(bonusError.message);
       }
 
       return new Response(JSON.stringify({

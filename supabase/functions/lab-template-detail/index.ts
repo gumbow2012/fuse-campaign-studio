@@ -61,7 +61,7 @@ Deno.serve(async (req) => {
 
     const { data: version, error: versionError } = await admin
       .from("template_versions")
-      .select("id, template_id, version_number, is_active, fuse_templates!inner(id, name)")
+      .select("id, template_id, version_number, is_active, review_status, fuse_templates!inner(id, name)")
       .eq("id", versionId)
       .single();
     if (versionError || !version) throw new Error(versionError?.message ?? "Template version not found");
@@ -167,6 +167,7 @@ Deno.serve(async (req) => {
       templateName: (version as any).fuse_templates.name,
       versionId: version.id,
       versionNumber: version.version_number,
+      reviewStatus: version.review_status ?? "Unreviewed",
       isActive: version.is_active,
       nodes: detailNodes,
     });

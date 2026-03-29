@@ -5,7 +5,16 @@ import { Button } from "@/components/ui/button";
 import { STRIPE_TIERS } from "@/lib/stripe-config";
 import { toast } from "@/hooks/use-toast";
 import { useState } from "react";
-import { Zap, Check, ArrowRight, Settings } from "lucide-react";
+import { Zap, ArrowRight, Settings } from "lucide-react";
+
+function formatBillingDate(value: string | null | undefined) {
+  if (!value) return "Not set";
+  return new Date(value).toLocaleDateString([], {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+}
 
 const Billing = () => {
   const { profile, refreshSubscription } = useAuth();
@@ -40,13 +49,14 @@ const Billing = () => {
   };
 
   const currentPlan = profile?.plan ?? "free";
+  const currentTier = currentPlan === "free" ? null : STRIPE_TIERS[currentPlan as keyof typeof STRIPE_TIERS];
 
   return (
     <div className="min-h-screen bg-background">
       <Navbar />
       <div className="pt-24 pb-16 container mx-auto px-6 max-w-4xl">
         <h1 className="font-display text-3xl font-black text-foreground mb-1">Billing</h1>
-        <p className="text-muted-foreground text-sm mb-8">Manage your subscription and credits.</p>
+        <p className="text-muted-foreground text-sm mb-8">Manage your subscription and included credits.</p>
 
         {/* Current Plan */}
         <div className="rounded-xl border border-border/40 bg-card p-6 mb-8">
@@ -56,7 +66,21 @@ const Billing = () => {
               <p className="font-display text-2xl font-black text-foreground capitalize">{currentPlan}</p>
               <div className="flex items-center gap-2 mt-2">
                 <Zap size={14} className="text-primary" />
-                <span className="text-sm text-foreground">{profile?.credits_balance ?? 0} credits remaining</span>
+                <span className="text-sm text-foreground">{profile?.credits_balance ?? 0} included credits remaining</span>
+              </div>
+              <div className="mt-3 grid gap-2 text-xs text-muted-foreground sm:grid-cols-3">
+                <div className="rounded-lg border border-border/30 bg-background/60 px-3 py-2">
+                  <p className="uppercase tracking-[0.15em]">Subscription</p>
+                  <p className="mt-1 text-sm text-foreground capitalize">{profile?.subscription_status ?? "inactive"}</p>
+                </div>
+                <div className="rounded-lg border border-border/30 bg-background/60 px-3 py-2">
+                  <p className="uppercase tracking-[0.15em]">Cycle Credits</p>
+                  <p className="mt-1 text-sm text-foreground">{profile?.subscription_cycle_credits ?? currentTier?.monthlyCredits ?? 0}</p>
+                </div>
+                <div className="rounded-lg border border-border/30 bg-background/60 px-3 py-2">
+                  <p className="uppercase tracking-[0.15em]">Period Ends</p>
+                  <p className="mt-1 text-sm text-foreground">{formatBillingDate(profile?.subscription_period_end)}</p>
+                </div>
               </div>
             </div>
             {currentPlan !== "free" && (
@@ -69,9 +93,9 @@ const Billing = () => {
 
         {/* Refresh */}
         <div className="mb-8 text-right">
-          <button onClick={refreshSubscription} className="text-xs text-primary hover:text-primary/80 transition-colors">
-            Refresh subscription status ↻
-          </button>
+            <button onClick={refreshSubscription} className="text-xs text-primary hover:text-primary/80 transition-colors">
+            Refresh billing status ↻
+            </button>
         </div>
 
         {/* Plan Cards */}

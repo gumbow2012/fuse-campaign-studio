@@ -37,28 +37,20 @@ serve(async (req) => {
     const { userId, amount, description } = await req.json();
     if (!userId || amount === undefined) throw new Error("userId and amount required");
 
-    // Update balance
-    const { data: profile } = await supabaseClient
-      .from("profiles")
-      .select("credits_balance")
-      .eq("user_id", userId)
-      .single();
-    if (!profile) throw new Error("User not found");
-
-    await supabaseClient
-      .from("profiles")
-      .update({ credits_balance: profile.credits_balance + amount })
-      .eq("user_id", userId);
-
-    // Log
-    await supabaseClient.from("credit_ledger").insert({
-      user_id: userId,
-      type: "adjustment",
-      amount,
-      description: description || `Admin adjustment: ${amount > 0 ? "+" : ""}${amount}`,
+    const { error: creditError, data: creditRows } = await supabaseClient.rpc("apply_credit_transaction", {
+      p_user_id: userId,
+      p_amount: amount,
+      p_type: "adjustment",
+      p_description: description || `Admin adjustment: ${amount > 0 ? "+" : ""}${amount}`,
+      p_template_id: null,
+      p_project_id: null,
+      p_step_id: null,
     });
+    if (creditError) throw new Error(creditError.message);
 
-    return new Response(JSON.stringify({ success: true, newBalance: profile.credits_balance + amount }), {
+    const newBalance = Array.isArray(creditRows) ? creditRows[0]?.new_balance ?? null : (creditRows as any)?.new_balance ?? null;
+
+    return new Response(JSON.stringify({ success: true, newBalance }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (error) {

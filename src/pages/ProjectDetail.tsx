@@ -11,7 +11,7 @@ import { RefreshCw, Download, AlertTriangle, Upload, Loader2, Check, Play, X } f
 
 const ProjectDetail = () => {
   const { projectId } = useParams<{ projectId: string }>();
-  const { profile, refreshProfile, isAdmin } = useAuth();
+  const { profile, refreshProfile, hasAppAccess } = useAuth();
   const [rerunStep, setRerunStep] = useState<{ id: string; key: string; cost: number } | null>(null);
 
   // Admin fulfillment state
@@ -199,7 +199,7 @@ const ProjectDetail = () => {
         )}
 
         {/* Admin Fulfillment Panel */}
-        {isAdmin && (project.status === "queued" || project.status === "running") && (
+        {hasAppAccess && (project.status === "queued" || project.status === "running") && (
           <div className="rounded-xl border border-accent/30 bg-accent/5 p-5 mb-8">
             <h2 className="font-display text-sm font-bold text-foreground mb-1">🔧 Admin Fulfillment</h2>
             <p className="text-xs text-muted-foreground mb-4">

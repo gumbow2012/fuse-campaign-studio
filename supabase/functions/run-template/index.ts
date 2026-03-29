@@ -54,17 +54,6 @@ Deno.serve(async (req) => {
 
     const creditCost = template.estimated_credits_per_run;
 
-    // ── Check credits ──
-    const { data: profile, error: profErr } = await sb
-      .from("profiles")
-      .select("credits_balance")
-      .eq("user_id", user.id)
-      .single();
-    if (profErr || !profile) throw new Error(`Profile not found: ${profErr?.message ?? user.id}`);
-    if (profile.credits_balance < creditCost) {
-      throw new Error(`Insufficient credits: have ${profile.credits_balance}, need ${creditCost}`);
-    }
-
     // ── Create project (job) row ──
     const { data: project, error: projErr } = await sb
       .from("projects")
@@ -82,20 +71,19 @@ Deno.serve(async (req) => {
       .single();
     if (projErr) throw new Error(`Project insert failed: ${projErr.message}`);
 
-    // ── Deduct credits ──
-    await sb
-      .from("profiles")
-      .update({ credits_balance: profile.credits_balance - creditCost })
-      .eq("user_id", user.id);
-
-    await sb.from("credit_ledger").insert({
-      user_id: user.id,
-      type: "run_template",
-      amount: -creditCost,
-      template_id: templateId,
-      project_id: project.id,
-      description: `Run template: ${template.name}`,
+    const { error: creditError } = await sb.rpc("apply_credit_transaction", {
+      p_user_id: user.id,
+      p_amount: -creditCost,
+      p_type: "run_template",
+      p_description: `Run template: ${template.name}`,
+      p_template_id: templateId,
+      p_project_id: project.id,
+      p_step_id: null,
     });
+    if (creditError) {
+      await sb.from("projects").delete().eq("id", project.id);
+      throw new Error(`Credit charge failed: ${creditError.message}`);
+    }
 
     // ── Enqueue to CF Worker for execution ──
     const WORKER_ORIGIN = "https://shiny-rice-e95bfuse-api.kade-fc1.workers.dev";

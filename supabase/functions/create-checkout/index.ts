@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import Stripe from "https://esm.sh/stripe@18.5.0";
 import { createClient } from "npm:@supabase/supabase-js@2.57.2";
+import { planFromPriceId } from "../_shared/stripe-plans.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -25,6 +26,9 @@ serve(async (req) => {
     const { priceId } = await req.json();
     if (!priceId) throw new Error("priceId is required");
 
+    const plan = planFromPriceId(priceId);
+    if (!plan) throw new Error("Unsupported subscription tier");
+
     const stripe = new Stripe(Deno.env.get("STRIPE_SECRET_KEY") || "", { apiVersion: "2025-08-27.basil" });
     const customers = await stripe.customers.list({ email: user.email, limit: 1 });
     let customerId;
@@ -33,8 +37,22 @@ serve(async (req) => {
     const session = await stripe.checkout.sessions.create({
       customer: customerId,
       customer_email: customerId ? undefined : user.email,
+      client_reference_id: user.id,
       line_items: [{ price: priceId, quantity: 1 }],
       mode: "subscription",
+      metadata: {
+        user_id: user.id,
+        plan_key: plan.key,
+        price_id: priceId,
+      },
+      subscription_data: {
+        metadata: {
+          user_id: user.id,
+          plan_key: plan.key,
+          price_id: priceId,
+          monthly_credits: String(plan.monthlyCredits),
+        },
+      },
       success_url: `${req.headers.get("origin")}/billing?success=true`,
       cancel_url: `${req.headers.get("origin")}/billing?canceled=true`,
     });

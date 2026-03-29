@@ -11,6 +11,11 @@ interface Profile {
   subscription_status: string | null;
   credits_balance: number;
   stripe_customer_id: string | null;
+  stripe_subscription_id: string | null;
+  stripe_price_id: string | null;
+  subscription_period_start: string | null;
+  subscription_period_end: string | null;
+  subscription_cycle_credits: number;
 }
 
 interface AuthContextType {
@@ -106,25 +111,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const refreshSubscription = useCallback(async () => {
     if (!session) return;
     try {
-      const { data, error } = await supabase.functions.invoke("check-subscription");
-      if (error) throw error;
-      if (data?.subscribed && data?.product_id) {
-        // Map product IDs to plan names
-        const planMap: Record<string, string> = {
-          "prod_U3o88Rn0fn4P2w": "starter",
-          "prod_U3o9Beo3BdMnId": "pro",
-          "prod_U3oAl1dM2orh9D": "studio",
-        };
-        const plan = planMap[data.product_id] || "free";
-        // Update local profile
-        if (profile) {
-          setProfile({ ...profile, plan, subscription_status: "active" });
-        }
-      }
+      await refreshProfile();
     } catch (e) {
       console.error("Failed to check subscription:", e);
     }
-  }, [session, profile]);
+  }, [session, refreshProfile]);
 
   const signOut = useCallback(async () => {
     await supabase.auth.signOut();
@@ -188,12 +179,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     return () => subscription.unsubscribe();
   }, [fetchProfile, fetchRoles]);
 
-  // Check subscription periodically
+  // Refresh subscription state on sign-in so profile billing fields stay current.
   useEffect(() => {
     if (!session) return;
     refreshSubscription();
-    const interval = setInterval(refreshSubscription, 60000);
-    return () => clearInterval(interval);
   }, [session, refreshSubscription]);
 
   return (
