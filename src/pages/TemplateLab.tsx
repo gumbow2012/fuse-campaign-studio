@@ -418,6 +418,7 @@ const TemplateLab = () => {
           runnerMode?: RunnerMode;
           selectedVersionId?: string;
           currentJobId?: string | null;
+          phase?: Phase;
           bulkSelection?: Record<string, boolean>;
           bulkRows?: BulkRunRow[];
           bulkInputs?: Record<string, PersistedBulkInput>;
@@ -427,6 +428,7 @@ const TemplateLab = () => {
         if (parsed.runnerMode) setRunnerMode(parsed.runnerMode);
         if (parsed.selectedVersionId) setSelectedVersionId(parsed.selectedVersionId);
         if (parsed.currentJobId) setJobId(parsed.currentJobId);
+        if (parsed.phase) setPhase(parsed.phase);
         if (parsed.bulkSelection) setBulkSelection(parsed.bulkSelection);
         if (parsed.bulkRows) setBulkRows(parsed.bulkRows);
 
@@ -483,6 +485,7 @@ const TemplateLab = () => {
           runnerMode,
           selectedVersionId,
           currentJobId: jobId,
+          phase,
           bulkSelection,
           bulkRows,
           bulkInputs,
@@ -495,7 +498,7 @@ const TemplateLab = () => {
     return () => {
       cancelled = true;
     };
-  }, [bulkFiles, bulkRows, bulkSelection, jobId, runnerMode, selectedVersionId]);
+  }, [bulkFiles, bulkRows, bulkSelection, jobId, phase, runnerMode, selectedVersionId]);
 
   useEffect(() => {
     bulkRowsRef.current = bulkRows;
@@ -1105,6 +1108,14 @@ const TemplateLab = () => {
 
     void fetchJobStatus(activeRun.id);
   }, [fetchJobStatus, hasSessionRunner, job, jobId, recentRuns]);
+
+  useEffect(() => {
+    if (!hasSessionRunner) return;
+    if (!jobId) return;
+    if (job?.id === jobId) return;
+
+    void fetchJobStatus(jobId);
+  }, [fetchJobStatus, hasSessionRunner, job?.id, jobId]);
 
   useEffect(() => {
     if (!requestedJobId) return;
