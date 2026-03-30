@@ -57,6 +57,13 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [isAdmin, setIsAdmin] = useState(false);
   const [hasAppAccess, setHasAppAccess] = useState(false);
 
+  const clearAccessState = useCallback(() => {
+    setProfile(null);
+    setRoles([]);
+    setIsAdmin(false);
+    setHasAppAccess(false);
+  }, []);
+
   const fetchProfile = useCallback(async (userId: string) => {
     const { data, error } = await supabase.rpc("get_my_profile");
     if (error) {
@@ -121,63 +128,69 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     await supabase.auth.signOut();
     setUser(null);
     setSession(null);
-    setProfile(null);
-    setRoles([]);
-    setIsAdmin(false);
-    setHasAppAccess(false);
-  }, []);
+    clearAccessState();
+  }, [clearAccessState]);
 
   useEffect(() => {
-    // Set up auth listener FIRST
+    let isMounted = true;
+
+    const syncAccessState = async (nextUserId: string) => {
+      try {
+        await Promise.all([
+          fetchProfile(nextUserId),
+          fetchRoles(nextUserId),
+        ]);
+      } catch (error) {
+        console.error("Failed to sync auth access state:", error);
+        clearAccessState();
+      }
+    };
+
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (_event, newSession) => {
+        if (!isMounted) return;
+
         setSession(newSession);
         setUser(newSession?.user ?? null);
 
         if (newSession?.user) {
-          setLoading(true);
-          // Use setTimeout to avoid Supabase deadlock
-          setTimeout(async () => {
-            await Promise.all([
-              fetchProfile(newSession.user.id),
-              fetchRoles(newSession.user.id),
-            ]);
-            setLoading(false);
+          // Background refresh only. Do not blank protected routes on token refresh/focus.
+          setTimeout(() => {
+            if (!isMounted) return;
+            void syncAccessState(newSession.user.id);
           }, 0);
           return;
         }
 
-        setProfile(null);
-        setRoles([]);
-        setIsAdmin(false);
-        setHasAppAccess(false);
+        clearAccessState();
         setLoading(false);
       }
     );
 
-    // THEN check existing session
-    supabase.auth.getSession().then(async ({ data: { session: existingSession } }) => {
+    void supabase.auth.getSession().then(async ({ data: { session: existingSession } }) => {
+      if (!isMounted) return;
+
       setSession(existingSession);
       setUser(existingSession?.user ?? null);
 
-      if (existingSession?.user) {
-        setLoading(true);
-        await Promise.all([
-          fetchProfile(existingSession.user.id),
-          fetchRoles(existingSession.user.id),
-        ]);
-      } else {
-        setProfile(null);
-        setRoles([]);
-        setIsAdmin(false);
-        setHasAppAccess(false);
+      try {
+        if (existingSession?.user) {
+          await syncAccessState(existingSession.user.id);
+        } else {
+          clearAccessState();
+        }
+      } finally {
+        if (isMounted) {
+          setLoading(false);
+        }
       }
-
-      setLoading(false);
     });
 
-    return () => subscription.unsubscribe();
-  }, [fetchProfile, fetchRoles]);
+    return () => {
+      isMounted = false;
+      subscription.unsubscribe();
+    };
+  }, [clearAccessState, fetchProfile, fetchRoles]);
 
   // Refresh subscription state on sign-in so profile billing fields stay current.
   useEffect(() => {
