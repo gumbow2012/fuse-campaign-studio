@@ -278,18 +278,11 @@ const Navbar = () => {
                 </Button>
               </Link>
               {hasAppAccess ? (
-                <div className="flex items-center gap-2">
-                  <Link to="/app/lab/templates">
-                    <Button variant="outline" size="sm" className="rounded-full border-border/60 text-foreground hover:text-foreground hover:border-foreground/30 bg-transparent px-4 text-xs">
-                      Template Runner
-                    </Button>
-                  </Link>
-                  <Link to="/app/lab/canvas">
-                    <Button variant="outline" size="sm" className="rounded-full border-border/60 text-foreground hover:text-foreground hover:border-foreground/30 bg-transparent px-4 text-xs">
-                      Template Canvas
-                    </Button>
-                  </Link>
-                </div>
+                <Link to="/app/lab/templates">
+                  <Button variant="outline" size="sm" className="rounded-full border-border/60 text-foreground hover:text-foreground hover:border-foreground/30 bg-transparent px-4 text-xs">
+                    Template Runner
+                  </Button>
+                </Link>
               ) : null}
               <Button
                 variant="ghost"
