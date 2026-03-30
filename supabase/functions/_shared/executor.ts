@@ -493,8 +493,7 @@ export async function reconcileRunningSteps(admin: AdminClient, jobId: string) {
     .from("execution_steps")
     .select("id, job_id, node_id, status, provider_model, provider_request_id, started_at, output_payload, nodes!execution_steps_node_id_fkey(name, node_type)")
     .eq("job_id", jobId)
-    .eq("status", "running")
-    .not("provider_request_id", "is", null);
+    .eq("status", "running");
   if (error) return;
   if (!runningSteps?.length) {
     await finalizeJobIfTerminal(admin, jobId);
@@ -502,7 +501,20 @@ export async function reconcileRunningSteps(admin: AdminClient, jobId: string) {
   }
 
   for (const rawStep of runningSteps as StepRow[]) {
-    if (!rawStep.provider_model || !rawStep.provider_request_id) continue;
+    if (!rawStep.provider_request_id) {
+      const startedAt = rawStep.started_at ? new Date(rawStep.started_at).getTime() : null;
+      const stalledMs = startedAt ? Date.now() - startedAt : 0;
+      if (startedAt && stalledMs >= 60_000) {
+        await failAsyncStep(
+          admin,
+          rawStep,
+          "Step stalled before provider request creation",
+        );
+      }
+      continue;
+    }
+
+    if (!rawStep.provider_model) continue;
 
     let queueStatus: string | null = null;
     try {

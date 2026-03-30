@@ -388,6 +388,7 @@ const TemplateLab = () => {
   const [bulkRows, setBulkRows] = useState<BulkRunRow[]>([]);
   const [bulkDispatching, setBulkDispatching] = useState(false);
   const [phase, setPhase] = useState<Phase>("idle");
+  const [startingRun, setStartingRun] = useState(false);
   const [jobId, setJobId] = useState<string | null>(null);
   const [job, setJob] = useState<JobStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -1154,6 +1155,7 @@ const TemplateLab = () => {
     setJob(null);
     setJobId(null);
     setPhase("running");
+    setStartingRun(true);
 
     try {
       const inputFiles = Object.fromEntries(
@@ -1203,10 +1205,15 @@ const TemplateLab = () => {
       setPhase("error");
       setError(message);
       toast({ title: "Run failed", description: message, variant: "destructive" });
+    } finally {
+      setStartingRun(false);
     }
   }, [accessCode, buildAuthHeaders, files, hasSessionRunner, loadRecentRuns, pollJob, selectedTemplate, setSearchParams]);
 
   const canRun = !!selectedTemplate && selectedTemplate.inputs.every((input) => input.defaultAssetUrl || files[input.id]);
+  const isSelectedTemplateJobRunning = phase === "running" &&
+    !!selectedTemplate &&
+    job?.template?.versionId === selectedTemplate.versionId;
 
   const setRunExpanded = useCallback((runId: string, open: boolean) => {
     setExpandedRuns((current) => ({ ...current, [runId]: open }));
@@ -1592,8 +1599,8 @@ const TemplateLab = () => {
                         );
                       })}
 
-                      <Button type="button" onClick={() => void handleRun()} disabled={!canRun || phase === "running"}>
-                        {phase === "running" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Film className="mr-2 h-4 w-4" />}
+                      <Button type="button" onClick={() => void handleRun()} disabled={!canRun || startingRun || isSelectedTemplateJobRunning}>
+                        {startingRun || isSelectedTemplateJobRunning ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Film className="mr-2 h-4 w-4" />}
                         Run Template
                       </Button>
                     </div>
@@ -1848,8 +1855,8 @@ const TemplateLab = () => {
                   );
                 })}
 
-                <Button type="button" onClick={() => void handleRun()} disabled={!canRun || phase === "running"}>
-                  {phase === "running" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Film className="mr-2 h-4 w-4" />}
+                <Button type="button" onClick={() => void handleRun()} disabled={!canRun || startingRun || isSelectedTemplateJobRunning}>
+                  {startingRun || isSelectedTemplateJobRunning ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Film className="mr-2 h-4 w-4" />}
                   Run Template
                 </Button>
               </div>
