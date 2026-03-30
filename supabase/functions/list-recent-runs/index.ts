@@ -78,7 +78,7 @@ Deno.serve(async (req) => {
     const { data: steps, error: stepsError } = jobIds.length
       ? await admin
         .from("execution_steps")
-        .select("id, job_id, node_id, output_asset_id, nodes!execution_steps_node_id_fkey(name, node_type), assets!execution_steps_output_asset_id_fkey(supabase_storage_url)")
+        .select("id, job_id, node_id, output_asset_id, nodes!execution_steps_node_id_fkey(name, node_type, prompt_config), assets!execution_steps_output_asset_id_fkey(supabase_storage_url)")
         .in("job_id", jobIds)
         .order("created_at", { ascending: true })
       : { data: [], error: null };

@@ -35,7 +35,11 @@ type StepRow = {
   output_payload?: Record<string, unknown> | null;
   error_log?: string | null;
   started_at?: string | null;
-  nodes?: { name?: string | null; node_type?: string | null } | null;
+  nodes?: {
+    name?: string | null;
+    node_type?: string | null;
+    prompt_config?: Record<string, unknown> | null;
+  } | null;
   assets?: { supabase_storage_url?: string | null } | null;
 };
 
@@ -112,9 +116,21 @@ export function collectDeliverableOutputs(steps: StepRow[], outputExposureByNode
   const completed = steps.filter((step: any) => step.output_asset_id && step.assets?.supabase_storage_url);
   const hasExplicitFlags = completed.some((step) => outputExposureByNodeId.get(step.node_id) !== null);
 
-  return completed
+  const deliverables = completed
     .filter((step) => !hasExplicitFlags || outputExposureByNodeId.get(step.node_id) === true)
-    .map((step: any) => ({
+    .sort((a: any, b: any) => {
+      const aPrompt = a.nodes?.prompt_config ?? {};
+      const bPrompt = b.nodes?.prompt_config ?? {};
+      const aOrder = Number(aPrompt.output_order ?? aPrompt.sort_order ?? Number.MAX_SAFE_INTEGER);
+      const bOrder = Number(bPrompt.output_order ?? bPrompt.sort_order ?? Number.MAX_SAFE_INTEGER);
+
+      if (aOrder !== bOrder) return aOrder - bOrder;
+      return String(a.node_id).localeCompare(String(b.node_id));
+    });
+
+  return deliverables
+    .map((step: any, index: number) => ({
+      outputNumber: index + 1,
       stepId: step.id,
       nodeId: step.node_id,
       label: step.nodes?.name ?? "Output",

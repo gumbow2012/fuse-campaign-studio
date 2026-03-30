@@ -108,6 +108,7 @@ type TemplateOutput = {
   label: string;
   type: "image" | "video";
   url: string;
+  outputNumber?: number;
   stepId?: string;
   nodeId?: string;
 };
@@ -580,7 +581,7 @@ const TemplateLab = () => {
   }, [authLoading, loadingTemplates, templates]);
 
   const numberedOutputs = useMemo<NumberedOutput[]>(
-    () => (job?.outputs ?? []).map((item, index) => ({ ...item, outputNumber: index + 1 })),
+    () => (job?.outputs ?? []).map((item, index) => ({ ...item, outputNumber: item.outputNumber ?? index + 1 })),
     [job],
   );
   const outputImages = useMemo(
@@ -1485,7 +1486,7 @@ const TemplateLab = () => {
   ) => {
     const numbered = outputs.map((output, index) => ({
       ...output,
-      outputNumber: index + 1,
+      outputNumber: output.outputNumber ?? index + 1,
       templateName: context?.templateName,
       versionNumber: context?.versionNumber ?? null,
     }));
@@ -2405,7 +2406,7 @@ const TemplateLab = () => {
                                       })}
                                     >
                                       <span className="absolute left-3 top-3 z-10 rounded-full bg-primary px-2 py-0.5 text-[10px] font-bold tracking-[0.15em] text-primary-foreground shadow-sm">
-                                        {index + 1}
+                                        {output.outputNumber ?? index + 1}
                                       </span>
                                       {output.type === "image" ? (
                                         <img src={output.url} alt={output.label} className="h-20 w-16 rounded-lg object-cover" />
