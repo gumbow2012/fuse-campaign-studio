@@ -103,6 +103,18 @@ type JobStep = {
   } | null;
 };
 
+type TemplateOutput = {
+  label: string;
+  type: "image" | "video";
+  url: string;
+  stepId?: string;
+  nodeId?: string;
+};
+
+type NumberedOutput = TemplateOutput & {
+  outputNumber: number;
+};
+
 type JobStatus = {
   status: string;
   progress: number;
@@ -126,7 +138,7 @@ type JobStatus = {
       assetUrl: string | null;
     }>;
   };
-  outputs: Array<{ label: string; type: "image" | "video"; url: string }>;
+  outputs: TemplateOutput[];
   steps: JobStep[];
 };
 
@@ -141,7 +153,7 @@ type RecentRun = {
   templateId: string | null;
   versionNumber: number | null;
   reviewStatus: string;
-  outputs: Array<{ label: string; type: "image" | "video"; url: string }>;
+  outputs: TemplateOutput[];
 };
 
 type EditorDraft = {
@@ -255,6 +267,11 @@ function formatRunDuration(startedAt: string | null | undefined, completedAt: st
   const durationMs = new Date(completedAt).getTime() - new Date(startedAt).getTime();
   if (Number.isNaN(durationMs) || durationMs <= 0) return "Pending";
   return formatDuration(durationMs);
+}
+
+function formatShortId(value: string | null | undefined) {
+  if (!value) return "unknown";
+  return value.slice(0, 8);
 }
 
 function getNodeEditorDefaults(node: TemplateDetailNode) {
@@ -553,13 +570,17 @@ const TemplateLab = () => {
     });
   }, [authLoading, loadingTemplates, templates]);
 
-  const outputImages = useMemo(
-    () => job?.outputs.filter((item) => item.type === "image") ?? [],
+  const numberedOutputs = useMemo<NumberedOutput[]>(
+    () => (job?.outputs ?? []).map((item, index) => ({ ...item, outputNumber: index + 1 })),
     [job],
   );
+  const outputImages = useMemo(
+    () => numberedOutputs.filter((item) => item.type === "image"),
+    [numberedOutputs],
+  );
   const outputVideos = useMemo(
-    () => job?.outputs.filter((item) => item.type === "video") ?? [],
-    [job],
+    () => numberedOutputs.filter((item) => item.type === "video"),
+    [numberedOutputs],
   );
 
   const flowLanes = useMemo(() => {
@@ -1427,6 +1448,26 @@ const TemplateLab = () => {
     if (!targetTemplates.length) return false;
     return targetTemplates.some((template) => buildBulkInputFilesForTemplate(template, bulkFiles).missing.length === 0);
   }, [bulkFiles, bulkSelection, templates]);
+
+  const copyOutputTrace = useCallback(async (output: NumberedOutput, context?: { templateName?: string; versionNumber?: number | null }) => {
+    const lines = [
+      `Output ${output.outputNumber}`,
+      context?.templateName
+        ? `Template: ${context.templateName}${context.versionNumber ? ` v${context.versionNumber}` : ""}`
+        : null,
+      `Type: ${output.type}`,
+      `Label: ${output.label || `Output ${output.outputNumber}`}`,
+      output.stepId ? `Step: ${output.stepId}` : null,
+      output.nodeId ? `Node: ${output.nodeId}` : null,
+      `URL: ${output.url}`,
+    ].filter(Boolean);
+
+    await navigator.clipboard.writeText(lines.join("\n"));
+    toast({
+      title: `Copied Output ${output.outputNumber}`,
+      description: "Trace metadata is on your clipboard.",
+    });
+  }, []);
 
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -2315,14 +2356,17 @@ const TemplateLab = () => {
                             <CollapsibleContent className="border-t border-border/20 px-3 pb-3 pt-3">
                               {run.outputs.length ? (
                                 <div className="flex gap-2 overflow-x-auto pb-1">
-                                  {run.outputs.map((output) => (
+                                  {run.outputs.map((output, index) => (
                                     <a
-                                      key={`${run.id}-${output.url}`}
+                                      key={`${run.id}-${output.stepId ?? output.url}-${index}`}
                                       href={output.url}
                                       target="_blank"
                                       rel="noreferrer"
-                                      className="shrink-0 rounded-xl border border-border/30 bg-background/80 p-2"
+                                      className="relative shrink-0 rounded-xl border border-border/30 bg-background/80 p-2"
                                     >
+                                      <span className="absolute left-3 top-3 z-10 rounded-full bg-primary px-2 py-0.5 text-[10px] font-bold tracking-[0.15em] text-primary-foreground shadow-sm">
+                                        {index + 1}
+                                      </span>
                                       {output.type === "image" ? (
                                         <img src={output.url} alt={output.label} className="h-20 w-16 rounded-lg object-cover" />
                                       ) : (
@@ -2506,26 +2550,47 @@ const TemplateLab = () => {
                     </p>
                   </div>
                   <div className="grid gap-3 md:grid-cols-2">
-                    {outputImages.map((output, index) => (
-                      <div key={`${output.url}-${index}`} className="space-y-2 rounded-2xl border border-border/40 bg-background/60 p-3">
+                    {outputImages.map((output) => (
+                      <div key={`${output.stepId ?? output.url}-${output.outputNumber}`} className="space-y-2 rounded-2xl border border-border/40 bg-background/60 p-3">
                         <div className="flex items-center justify-between gap-3">
-                          <p className="text-xs text-muted-foreground">{output.label || `Image ${index + 1}`}</p>
+                          <div>
+                            <p className="text-xs font-semibold uppercase tracking-[0.15em] text-primary">Output {output.outputNumber}</p>
+                            <p className="mt-1 text-xs text-muted-foreground">{output.label || `Image ${output.outputNumber}`}</p>
+                            <p className="mt-1 text-[11px] text-muted-foreground">
+                              Step {formatShortId(output.stepId)} · Node {formatShortId(output.nodeId)}
+                            </p>
+                          </div>
                           <div className="flex items-center gap-2">
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => void copyOutputTrace(output, {
+                                templateName: job?.template?.templateName,
+                                versionNumber: job?.template?.versionNumber,
+                              })}
+                            >
+                              <Copy className="mr-2 h-4 w-4" />
+                              Copy Trace
+                            </Button>
                             <span className="rounded-full border border-border/40 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.15em] text-muted-foreground">
                               9:16
                             </span>
                             <Button asChild size="sm" variant="outline">
-                              <a href={output.url} download={`template-output-${index + 1}.png`}>
+                              <a href={output.url} download={`template-output-${output.outputNumber}.png`}>
                                 <Download className="mr-2 h-4 w-4" />
                                 Download
                               </a>
                             </Button>
                           </div>
                         </div>
-                        <div className="mx-auto max-w-[280px] rounded-[28px] border border-border/40 bg-background/80 p-2 shadow-sm">
+                        <div className="relative mx-auto max-w-[280px] rounded-[28px] border border-border/40 bg-background/80 p-2 shadow-sm">
+                          <div className="absolute left-5 top-5 z-10 rounded-full bg-primary px-3 py-1 text-xs font-black tracking-[0.15em] text-primary-foreground shadow">
+                            {output.outputNumber}
+                          </div>
                           <img
                             src={output.url}
-                            alt={output.label || `Generated image ${index + 1}`}
+                            alt={output.label || `Generated image ${output.outputNumber}`}
                             className="w-full rounded-[22px] border border-border/40"
                           />
                         </div>
@@ -2543,23 +2608,44 @@ const TemplateLab = () => {
                     </p>
                   </div>
                   <div className="grid gap-3 md:grid-cols-2">
-                    {outputVideos.map((output, index) => (
-                      <div key={`${output.url}-${index}`} className="space-y-2 rounded-2xl border border-border/40 bg-background/60 p-3">
+                    {outputVideos.map((output) => (
+                      <div key={`${output.stepId ?? output.url}-${output.outputNumber}`} className="space-y-2 rounded-2xl border border-border/40 bg-background/60 p-3">
                         <div className="flex items-center justify-between gap-3">
-                          <p className="text-xs text-muted-foreground">{output.label || `Video ${index + 1}`}</p>
+                          <div>
+                            <p className="text-xs font-semibold uppercase tracking-[0.15em] text-primary">Output {output.outputNumber}</p>
+                            <p className="mt-1 text-xs text-muted-foreground">{output.label || `Video ${output.outputNumber}`}</p>
+                            <p className="mt-1 text-[11px] text-muted-foreground">
+                              Step {formatShortId(output.stepId)} · Node {formatShortId(output.nodeId)}
+                            </p>
+                          </div>
                           <div className="flex items-center gap-2">
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => void copyOutputTrace(output, {
+                                templateName: job?.template?.templateName,
+                                versionNumber: job?.template?.versionNumber,
+                              })}
+                            >
+                              <Copy className="mr-2 h-4 w-4" />
+                              Copy Trace
+                            </Button>
                             <span className="rounded-full border border-border/40 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.15em] text-muted-foreground">
                               9:16
                             </span>
                             <Button asChild size="sm" variant="outline">
-                              <a href={output.url} download={`template-output-${index + 1}.mp4`}>
+                              <a href={output.url} download={`template-output-${output.outputNumber}.mp4`}>
                                 <Download className="mr-2 h-4 w-4" />
                                 Download
                               </a>
                             </Button>
                           </div>
                         </div>
-                        <div className="mx-auto max-w-[280px] rounded-[28px] border border-border/40 bg-background/80 p-2 shadow-sm">
+                        <div className="relative mx-auto max-w-[280px] rounded-[28px] border border-border/40 bg-background/80 p-2 shadow-sm">
+                          <div className="absolute left-5 top-5 z-10 rounded-full bg-primary px-3 py-1 text-xs font-black tracking-[0.15em] text-primary-foreground shadow">
+                            {output.outputNumber}
+                          </div>
                           <video src={output.url} controls playsInline className="w-full rounded-[22px] border border-border/40" />
                         </div>
                       </div>
