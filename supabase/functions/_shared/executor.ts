@@ -156,6 +156,25 @@ function paramOrder(param: string) {
   return 100;
 }
 
+function pickPassthroughValue(entries: Array<[string, ResolvedOutput]>) {
+  return [...entries]
+    .sort(([a], [b]) => paramOrder(a) - paramOrder(b))
+    .at(-1)?.[1] ?? null;
+}
+
+function toVideoSafeImageUrl(url: string) {
+  const match = url.match(/^(https:\/\/[^/]+)\/storage\/v1\/object\/public\/([^/]+)\/(.+)$/);
+  if (!match) return url;
+
+  const [, origin, bucket, path] = match;
+  const transformed = new URL(`${origin}/storage/v1/render/image/public/${bucket}/${path}`);
+  transformed.searchParams.set("width", "1080");
+  transformed.searchParams.set("height", "1920");
+  transformed.searchParams.set("resize", "contain");
+  transformed.searchParams.set("quality", "75");
+  return transformed.toString();
+}
+
 function isoDiffMs(start?: string | null, end?: string | null) {
   if (!start || !end) return null;
   return Math.max(0, new Date(end).getTime() - new Date(start).getTime());
@@ -338,6 +357,81 @@ async function failJob(
       completed_at: completedAt,
     })
     .eq("id", jobId);
+}
+
+async function completeBlankPromptStep(
+  admin: AdminClient,
+  args: {
+    jobId: string;
+    stepId: string;
+    node: NodeRow;
+    params: Map<string, ResolvedOutput>;
+  },
+) {
+  const passthrough = pickPassthroughValue([...args.params.entries()]);
+  const completedAt = new Date().toISOString();
+
+  if (!passthrough) {
+    await admin
+      .from("execution_steps")
+      .update({
+        status: "complete",
+        completed_at: completedAt,
+        execution_time_ms: 0,
+        error_log: null,
+        output_payload: {
+          status: "skipped",
+          rawPayload: {
+            detail: "Skipped blank-prompt internal node",
+          },
+        },
+      })
+      .eq("id", args.stepId);
+    return null;
+  }
+
+  let outputAssetId = passthrough.assetId ?? null;
+  let outputUrl = passthrough.url;
+
+  if (!outputAssetId) {
+    const uploaded = await uploadRemoteAsset(admin, {
+      jobId: args.jobId,
+      stepId: args.stepId,
+      kind: passthrough.type,
+      sourceUrl: passthrough.url,
+      metadata: {
+        nodeId: args.node.id,
+        nodeName: args.node.name,
+        passthrough: true,
+      },
+    });
+    outputAssetId = uploaded.id;
+    outputUrl = uploaded.supabase_storage_url;
+  }
+
+  await admin
+    .from("execution_steps")
+    .update({
+      status: "complete",
+      output_asset_id: outputAssetId,
+      completed_at: completedAt,
+      execution_time_ms: 0,
+      error_log: null,
+      output_payload: {
+        status: "passthrough",
+        outputUrl,
+        rawPayload: {
+          detail: "Passed through blank-prompt internal node",
+        },
+      },
+    })
+    .eq("id", args.stepId);
+
+  return {
+    assetId: outputAssetId,
+    url: outputUrl,
+    type: passthrough.type,
+  } satisfies ResolvedOutput;
 }
 
 export async function completeAsyncStep(
@@ -686,6 +780,23 @@ export async function runGraphJob(admin: AdminClient, jobId: string) {
             ? [referenceAsset.url, ...orderedInputs]
             : orderedInputs;
 
+          if (!prompt) {
+            const passthrough = await completeBlankPromptStep(admin, {
+              jobId: job.id,
+              stepId: step.id,
+              node,
+              params,
+            });
+
+            if (passthrough) {
+              resolved.set(step.node_id, passthrough);
+            }
+
+            step.status = "complete";
+            await refreshJobProgress(admin, job.id);
+            continue;
+          }
+
           const costEstimate = await getStepCostEstimate(IMAGE_MODEL, node.prompt_config);
 
           await admin
@@ -754,14 +865,31 @@ export async function runGraphJob(admin: AdminClient, jobId: string) {
             [...params.values()][0]?.url;
           const endFrameUrl = params.get("end_frame_image")?.url;
 
+          if (!prompt) {
+            const passthrough = await completeBlankPromptStep(admin, {
+              jobId: job.id,
+              stepId: step.id,
+              node,
+              params,
+            });
+
+            if (passthrough) {
+              resolved.set(step.node_id, passthrough);
+            }
+
+            step.status = "complete";
+            await refreshJobProgress(admin, job.id);
+            continue;
+          }
+
           if (!initImageUrl) throw new Error(`Missing init image for ${node.name}`);
 
           const costEstimate = await getStepCostEstimate(VIDEO_MODEL, node.prompt_config);
 
           const requestId = await submitVideoJob({
             prompt,
-            initImageUrl,
-            endFrameUrl,
+            initImageUrl: toVideoSafeImageUrl(initImageUrl),
+            endFrameUrl: endFrameUrl ? toVideoSafeImageUrl(endFrameUrl) : undefined,
             duration: Number(node.prompt_config?.duration ?? 10),
             aspectRatio: String(node.prompt_config?.aspect_ratio ?? "9:16"),
             webhookUrl: `${Deno.env.get("SUPABASE_URL")}/functions/v1/fal-webhook`,

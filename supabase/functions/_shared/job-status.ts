@@ -29,6 +29,7 @@ function extractProviderDetail(value: unknown): string | null {
 }
 
 function resolveStepError(step: any) {
+  if (!step) return null;
   return extractProviderDetail(step.output_payload?.rawPayload?.detail) ??
     extractProviderDetail(step.output_payload?.rawPayload) ??
     step.error_log ??

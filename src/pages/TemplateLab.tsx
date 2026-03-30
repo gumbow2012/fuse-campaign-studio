@@ -188,7 +188,13 @@ type BulkRunRow = {
   usedSharedSlots: string[];
 };
 
+type PersistedBulkInput = {
+  filename: string;
+  dataUrl: string;
+};
+
 const ACCESS_CODE_STORAGE_KEY = "fuse-lab-access-code";
+const BULK_AUDIT_STORAGE_KEY = "fuse-template-lab-bulk-audit-v1";
 const MAX_DIMENSION = 2048;
 const BULK_SHARED_INPUTS: SharedInputSlot[] = [
   { key: "logo", label: "Logo", description: "Brand mark or placement asset." },
@@ -214,6 +220,12 @@ function fileToDataUrl(file: File) {
     reader.onerror = () => reject(new Error("Could not read image"));
     reader.readAsDataURL(file);
   });
+}
+
+async function dataUrlToFile(dataUrl: string, filename: string) {
+  const response = await fetch(dataUrl);
+  const blob = await response.blob();
+  return new File([blob], filename, { type: blob.type || "image/jpeg" });
 }
 
 function formatDuration(ms: number | null | undefined) {
@@ -263,8 +275,23 @@ function normalizeTemplateKey(value: string | null | undefined) {
     .replace(/^-+|-+$/g, "");
 }
 
+function revokePreviewUrl(value: string | null | undefined) {
+  if (!value || !value.startsWith("blob:")) return;
+  URL.revokeObjectURL(value);
+}
+
 function normalizeInputLabel(value: string | null | undefined) {
   return normalizeTemplateKey(value);
+}
+
+function isTransientAuthOrNetworkError(message: string | null | undefined) {
+  const normalized = String(message ?? "").toLowerCase();
+  return normalized.includes("authentication required") ||
+    normalized.includes("auth session is still loading") ||
+    normalized.includes("failed to fetch") ||
+    normalized.includes("networkerror") ||
+    normalized.includes("load failed") ||
+    normalized.includes("could not load job status");
 }
 
 function getSharedInputCandidates(label: string): SharedInputKey[] {
@@ -335,7 +362,7 @@ const TemplateLab = () => {
   const location = useLocation();
   const params = useParams<{ slug?: string; jobId?: string }>();
   const [searchParams, setSearchParams] = useSearchParams();
-  const { session, hasAppAccess } = useAuth();
+  const { session, hasAppAccess, loading: authLoading } = useAuth();
   const [accessCode, setAccessCode] = useState("");
   const [templates, setTemplates] = useState<TemplateOption[]>([]);
   const [loadingTemplates, setLoadingTemplates] = useState(false);
@@ -380,8 +407,95 @@ const TemplateLab = () => {
   }, []);
 
   useEffect(() => {
+    let active = true;
+
+    const restoreBulkAuditState = async () => {
+      const raw = window.localStorage.getItem(BULK_AUDIT_STORAGE_KEY);
+      if (!raw) return;
+
+      try {
+        const parsed = JSON.parse(raw) as {
+          runnerMode?: RunnerMode;
+          selectedVersionId?: string;
+          currentJobId?: string | null;
+          bulkSelection?: Record<string, boolean>;
+          bulkRows?: BulkRunRow[];
+          bulkInputs?: Record<string, PersistedBulkInput>;
+        };
+
+        if (!active) return;
+        if (parsed.runnerMode) setRunnerMode(parsed.runnerMode);
+        if (parsed.selectedVersionId) setSelectedVersionId(parsed.selectedVersionId);
+        if (parsed.currentJobId) setJobId(parsed.currentJobId);
+        if (parsed.bulkSelection) setBulkSelection(parsed.bulkSelection);
+        if (parsed.bulkRows) setBulkRows(parsed.bulkRows);
+
+        const restoredFiles: Record<string, File | null> = {};
+        const restoredPreviews: Record<string, string> = {};
+
+        for (const [key, value] of Object.entries(parsed.bulkInputs ?? {})) {
+          restoredFiles[key] = await dataUrlToFile(value.dataUrl, value.filename);
+          restoredPreviews[key] = value.dataUrl;
+        }
+
+        if (!active) return;
+        setBulkFiles(restoredFiles);
+        setBulkPreviews(restoredPreviews);
+      } catch {
+        window.localStorage.removeItem(BULK_AUDIT_STORAGE_KEY);
+      }
+    };
+
+    void restoreBulkAuditState();
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => {
     window.localStorage.setItem(ACCESS_CODE_STORAGE_KEY, accessCode);
   }, [accessCode]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const persist = async () => {
+      const bulkInputs = Object.fromEntries(
+        await Promise.all(
+          Object.entries(bulkFiles)
+            .filter(([, file]) => !!file)
+            .map(async ([key, file]) => [
+              key,
+              {
+                filename: file!.name,
+                dataUrl: await fileToDataUrl(file!),
+              } satisfies PersistedBulkInput,
+            ]),
+        ),
+      );
+
+      if (cancelled) return;
+
+      window.localStorage.setItem(
+        BULK_AUDIT_STORAGE_KEY,
+        JSON.stringify({
+          runnerMode,
+          selectedVersionId,
+          currentJobId: jobId,
+          bulkSelection,
+          bulkRows,
+          bulkInputs,
+        }),
+      );
+    };
+
+    void persist();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [bulkFiles, bulkRows, bulkSelection, jobId, runnerMode, selectedVersionId]);
 
   useEffect(() => {
     bulkRowsRef.current = bulkRows;
@@ -391,8 +505,8 @@ const TemplateLab = () => {
     return () => {
       if (pollRef.current) clearInterval(pollRef.current);
       if (bulkPollRef.current) clearInterval(bulkPollRef.current);
-      Object.values(previews).forEach((url) => URL.revokeObjectURL(url));
-      Object.values(bulkPreviews).forEach((url) => URL.revokeObjectURL(url));
+      Object.values(previews).forEach((url) => revokePreviewUrl(url));
+      Object.values(bulkPreviews).forEach((url) => revokePreviewUrl(url));
     };
   }, [bulkPreviews, previews]);
 
@@ -402,6 +516,8 @@ const TemplateLab = () => {
   );
 
   useEffect(() => {
+    if (authLoading || loadingTemplates || templates.length === 0) return;
+
     setBulkSelection((current) => {
       const next = { ...current };
       let changed = false;
@@ -422,7 +538,7 @@ const TemplateLab = () => {
 
       return changed ? next : current;
     });
-  }, [templates]);
+  }, [authLoading, loadingTemplates, templates]);
 
   const outputImages = useMemo(
     () => job?.outputs.filter((item) => item.type === "image") ?? [],
@@ -574,7 +690,7 @@ const TemplateLab = () => {
       previewStore: Record<string, string>,
     ) => {
       if (previewStore[inputId]) {
-        URL.revokeObjectURL(previewStore[inputId]);
+        revokePreviewUrl(previewStore[inputId]);
       }
 
       if (!nextFile) {
@@ -604,24 +720,28 @@ const TemplateLab = () => {
       apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
     };
 
-    if (hasSessionRunner) {
-      const {
-        data: { session: currentSession },
-      } = await supabase.auth.getSession();
-      const accessToken = currentSession?.access_token ?? session?.access_token;
-      if (accessToken) {
-        headers.Authorization = `Bearer ${accessToken}`;
-      }
+    const {
+      data: { session: currentSession },
+    } = await supabase.auth.getSession();
+    const accessToken = currentSession?.access_token ?? session?.access_token;
+    if (accessToken) {
+      headers.Authorization = `Bearer ${accessToken}`;
       return headers;
     }
 
     const runnerCode = accessCode.trim();
-    if (!runnerCode) throw new Error("Enter the lab access code first.");
-    headers["x-runner-code"] = runnerCode;
-    return headers;
-  }, [accessCode, hasSessionRunner, session?.access_token]);
+    if (runnerCode) {
+      headers["x-runner-code"] = runnerCode;
+      return headers;
+    }
+
+    if (authLoading) throw new Error("Auth session is still loading");
+    throw new Error("Authentication required");
+  }, [accessCode, authLoading, session?.access_token]);
 
   const loadTemplates = useCallback(async () => {
+    if (authLoading) return;
+
     if (!hasSessionRunner && !accessCode.trim()) {
       toast({ title: "Missing access code", description: "Enter the lab access code first.", variant: "destructive" });
       return;
@@ -637,18 +757,33 @@ const TemplateLab = () => {
       const data = await response.json();
       if (!response.ok) throw new Error(data?.error ?? "Could not load template catalog");
 
-      setTemplates(data.templates ?? []);
-      setSelectedVersionId((current) => current || data.templates?.[0]?.versionId || "");
+      const nextTemplates = data.templates ?? [];
+      setTemplates(nextTemplates);
+      setSelectedVersionId((current) => {
+        if (current && nextTemplates.some((template: TemplateOption) => template.versionId === current)) {
+          return current;
+        }
+
+        const requested = normalizeTemplateKey(requestedTemplate);
+        if (requested) {
+          const match = nextTemplates.find((template: TemplateOption) =>
+            normalizeTemplateKey(template.templateName) === requested ||
+            normalizeTemplateKey(template.templateId) === requested ||
+            normalizeTemplateKey(template.versionId) === requested,
+          );
+          if (match) return match.versionId;
+        }
+
+        return nextTemplates[0]?.versionId || "";
+      });
     } catch (catalogError) {
       const message = catalogError instanceof Error ? catalogError.message : "Could not load templates";
-      setTemplates([]);
-      setSelectedVersionId("");
       setError(message);
       toast({ title: "Catalog error", description: message, variant: "destructive" });
     } finally {
       setLoadingTemplates(false);
     }
-  }, [accessCode, buildAuthHeaders, hasSessionRunner]);
+  }, [accessCode, authLoading, buildAuthHeaders, hasSessionRunner, requestedTemplate]);
 
   const loadRecentRuns = useCallback(async () => {
     if (!hasSessionRunner) {
@@ -675,6 +810,8 @@ const TemplateLab = () => {
   }, [buildAuthHeaders, hasSessionRunner]);
 
   useEffect(() => {
+    if (authLoading) return;
+
     const loadKey = hasSessionRunner ? `auth:${session?.user.id}` : accessCode.trim();
 
     if (!loadKey) {
@@ -687,7 +824,7 @@ const TemplateLab = () => {
     if (lastLoadedCodeRef.current === loadKey) return;
     lastLoadedCodeRef.current = loadKey;
     void loadTemplates();
-  }, [accessCode, hasSessionRunner, loadTemplates, session?.user.id]);
+  }, [accessCode, authLoading, hasSessionRunner, loadTemplates, session?.user.id]);
 
   useEffect(() => {
     if (!templates.length || selectedVersionId) return;
@@ -716,7 +853,7 @@ const TemplateLab = () => {
   }, [hasSessionRunner, loadRecentRuns, session?.user.id]);
 
   const resetTemplateInputs = useCallback(() => {
-    Object.values(previews).forEach((url) => URL.revokeObjectURL(url));
+    Object.values(previews).forEach((url) => revokePreviewUrl(url));
     setFiles({});
     setPreviews({});
   }, [previews]);
@@ -837,6 +974,7 @@ const TemplateLab = () => {
         }
       } catch (pollError) {
         const message = pollError instanceof Error ? pollError.message : "Polling failed";
+        if (isTransientAuthOrNetworkError(message)) return;
         setPhase("error");
         setError(message);
         if (pollRef.current) clearInterval(pollRef.current);
@@ -894,18 +1032,21 @@ const TemplateLab = () => {
                     .filter(Boolean)
                     .sort()
                     .at(-1) ?? null,
+                transient: false,
               } as const;
             } catch (bulkError) {
+              const message = bulkError instanceof Error ? bulkError.message : "Could not refresh job";
               return {
                 versionId: row.versionId,
                 jobId: row.jobId,
-                status: "failed",
+                status: row.status,
                 progress: row.progress,
                 actualImageOutputs: row.actualImageOutputs,
                 actualVideoOutputs: row.actualVideoOutputs,
-                error: bulkError instanceof Error ? bulkError.message : "Could not refresh job",
+                error: isTransientAuthOrNetworkError(message) ? row.error : message,
                 startedAt: row.startedAt,
                 completedAt: row.completedAt,
+                transient: true,
               } as const;
             }
           }),
@@ -914,18 +1055,18 @@ const TemplateLab = () => {
         setBulkRows((current) =>
           current.map((row) => {
             const next = updates.find((update) => update.versionId === row.versionId && update.jobId === row.jobId);
-            return next
-              ? {
-                  ...row,
-                  status: next.status as BulkRunState,
-                  progress: next.progress,
-                  actualImageOutputs: next.actualImageOutputs,
-                  actualVideoOutputs: next.actualVideoOutputs,
-                  error: next.error,
-                  startedAt: next.startedAt,
-                  completedAt: next.completedAt,
-                }
-              : row;
+            if (!next) return row;
+            if (next.transient) return row;
+            return {
+              ...row,
+              status: next.status as BulkRunState,
+              progress: next.progress,
+              actualImageOutputs: next.actualImageOutputs,
+              actualVideoOutputs: next.actualVideoOutputs,
+              error: next.error,
+              startedAt: next.startedAt,
+              completedAt: next.completedAt,
+            };
           }),
         );
       } catch {
@@ -1029,6 +1170,12 @@ const TemplateLab = () => {
       if (!response.ok) throw new Error(data?.error ?? "Could not start template");
 
       setJobId(data.jobId);
+      setSearchParams((current) => {
+        const next = new URLSearchParams(current);
+        next.set("templateId", selectedTemplate.versionId);
+        next.set("jobId", data.jobId);
+        return next;
+      }, { replace: true });
       void loadRecentRuns();
       pollJob(data.jobId);
     } catch (runError) {
@@ -1037,7 +1184,7 @@ const TemplateLab = () => {
       setError(message);
       toast({ title: "Run failed", description: message, variant: "destructive" });
     }
-  }, [accessCode, buildAuthHeaders, files, hasSessionRunner, loadRecentRuns, pollJob, selectedTemplate]);
+  }, [accessCode, buildAuthHeaders, files, hasSessionRunner, loadRecentRuns, pollJob, selectedTemplate, setSearchParams]);
 
   const canRun = !!selectedTemplate && selectedTemplate.inputs.every((input) => input.defaultAssetUrl || files[input.id]);
 
@@ -1139,10 +1286,20 @@ const TemplateLab = () => {
 
   const openBulkRun = useCallback(async (row: BulkRunRow) => {
     setSelectedVersionId(row.versionId);
+    setSearchParams((current) => {
+      const next = new URLSearchParams(current);
+      next.set("templateId", row.versionId);
+      if (row.jobId) {
+        next.set("jobId", row.jobId);
+      } else {
+        next.delete("jobId");
+      }
+      return next;
+    }, { replace: true });
     if (row.jobId) {
       await fetchJobStatus(row.jobId);
     }
-  }, [fetchJobStatus]);
+  }, [fetchJobStatus, setSearchParams]);
 
   const handleRunAll = useCallback(async () => {
     if (!templates.length) {
