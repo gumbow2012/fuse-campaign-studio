@@ -16,6 +16,7 @@ type Body = {
   expected?: string | null;
   editorMode?: "upload" | "reference" | "workflow" | null;
   slotKey?: string | null;
+  outputExposed?: boolean | null;
 };
 
 function normalizeNullable(value: string | null | undefined) {
@@ -75,6 +76,10 @@ Deno.serve(async (req) => {
 
     if ("slotKey" in body && node.node_type === "user_input") {
       nextPromptConfig.editor_slot_key = normalizeNullable(body.slotKey);
+    }
+
+    if ("outputExposed" in body && (node.node_type === "image_gen" || node.node_type === "video_gen")) {
+      nextPromptConfig.output_exposed = typeof body.outputExposed === "boolean" ? body.outputExposed : null;
     }
 
     const { error: updateError } = await admin
