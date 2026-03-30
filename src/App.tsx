@@ -22,6 +22,7 @@ import AdminAnalytics from "./pages/AdminAnalytics";
 import CreatorAnalytics from "./pages/CreatorAnalytics";
 import Referrals from "./pages/Referrals";
 import TemplateLab from "./pages/TemplateLab";
+import TemplateCanvas from "./pages/TemplateCanvas";
 import FlowEmbed from "./pages/FlowEmbed";
 import FlowTest from "./pages/FlowTest";
 import NanoRun from "./pages/NanoRun";
@@ -66,6 +67,7 @@ const App = () => (
             <Route path="/app/flow-test" element={<FlowTest />} />
             <Route path="/app/jobs/:jobId" element={<CustomerRoute><TemplateLab /></CustomerRoute>} />
             <Route path="/app/lab/templates" element={<AdminRoute><TemplateLab /></AdminRoute>} />
+            <Route path="/app/lab/canvas" element={<AdminRoute><TemplateCanvas /></AdminRoute>} />
             <Route path="/app/nano" element={<AdminRoute><NanoRun /></AdminRoute>} />
 
             {/* Admin routes */}
