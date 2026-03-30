@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { AlertCircle, CheckCircle2, ChevronDown, ChevronRight, Download, EyeOff, Film, Loader2, LockKeyhole, RefreshCw, Upload } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from "react";
+import { AlertCircle, CheckCircle2, ChevronDown, ChevronRight, Copy, Download, EyeOff, Film, Loader2, LockKeyhole, RefreshCw, Upload } from "lucide-react";
 import { useLocation, useParams, useSearchParams } from "react-router-dom";
 import Navbar from "@/components/Navbar";
 import { Button } from "@/components/ui/button";
@@ -13,6 +13,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 
 type Phase = "idle" | "running" | "complete" | "error";
+type RunnerMode = "single" | "bulk";
 
 type TemplateInput = {
   id: string;
@@ -151,8 +152,53 @@ type EditorDraft = {
   slotKey: string;
 };
 
+type SharedInputKey =
+  | "logo"
+  | "garment"
+  | "top-garment"
+  | "bottom-garment"
+  | "accessory"
+  | "garments-front"
+  | "garments-back";
+
+type SharedInputSlot = {
+  key: SharedInputKey;
+  label: string;
+  description: string;
+};
+
+type BulkRunState = "idle" | "starting" | "queued" | "running" | "complete" | "failed" | "skipped";
+
+type BulkRunRow = {
+  templateId: string;
+  templateName: string;
+  versionId: string;
+  reviewStatus: string;
+  requiredInputs: string[];
+  expectedImageOutputs: number;
+  expectedVideoOutputs: number;
+  status: BulkRunState;
+  jobId: string | null;
+  actualImageOutputs: number;
+  actualVideoOutputs: number;
+  progress: number;
+  error: string | null;
+  startedAt: string | null;
+  completedAt: string | null;
+  usedSharedSlots: string[];
+};
+
 const ACCESS_CODE_STORAGE_KEY = "fuse-lab-access-code";
 const MAX_DIMENSION = 2048;
+const BULK_SHARED_INPUTS: SharedInputSlot[] = [
+  { key: "logo", label: "Logo", description: "Brand mark or placement asset." },
+  { key: "garment", label: "Garment", description: "Single garment fallback when a template only needs one product image." },
+  { key: "top-garment", label: "Top Garment", description: "Upper-body product shot." },
+  { key: "bottom-garment", label: "Bottom Garment", description: "Lower-body product shot." },
+  { key: "accessory", label: "Accessory", description: "Hat, bag, sunglasses, or other add-on product." },
+  { key: "garments-front", label: "Garments Front", description: "Front set shot for mirror/UGC templates." },
+  { key: "garments-back", label: "Garments Back", description: "Back set shot for mirror/UGC templates." },
+];
 const REVIEW_STATUSES = [
   "Unreviewed",
   "Structurally Correct",
@@ -217,6 +263,74 @@ function normalizeTemplateKey(value: string | null | undefined) {
     .replace(/^-+|-+$/g, "");
 }
 
+function normalizeInputLabel(value: string | null | undefined) {
+  return normalizeTemplateKey(value);
+}
+
+function getSharedInputCandidates(label: string): SharedInputKey[] {
+  const normalized = normalizeInputLabel(label);
+
+  if (normalized === "logo") return ["logo"];
+  if (normalized === "garment") return ["garment", "top-garment", "bottom-garment"];
+  if (normalized === "top-garment") return ["top-garment", "garment"];
+  if (normalized === "bottom-garment") return ["bottom-garment", "garment"];
+  if (normalized === "accessory") return ["accessory"];
+  if (normalized === "garment-1") return ["garment", "top-garment", "bottom-garment"];
+  if (normalized === "garment-2") return ["bottom-garment", "top-garment", "garment"];
+  if (normalized === "garments-front") return ["garments-front", "garment", "top-garment"];
+  if (normalized === "garments-back") return ["garments-back", "garment", "bottom-garment"];
+
+  return ["garment"];
+}
+
+function buildBulkInputFilesForTemplate(
+  template: TemplateOption,
+  sharedFiles: Record<string, File | null>,
+) {
+  const missing: string[] = [];
+  const usedSlots = new Set<string>();
+  const resolved: Array<{ inputName: string; file: File }> = [];
+
+  for (const input of template.inputs) {
+    const candidates = getSharedInputCandidates(input.name);
+    const matchedKey = candidates.find((candidate) => sharedFiles[candidate]);
+    const file = matchedKey ? sharedFiles[matchedKey] : null;
+
+    if (!file) {
+      missing.push(input.name);
+      continue;
+    }
+
+    usedSlots.add(matchedKey!);
+    resolved.push({ inputName: input.name, file });
+  }
+
+  return { missing, usedSlots: [...usedSlots], resolved };
+}
+
+function buildBulkRows(templates: TemplateOption[], selection: Record<string, boolean>) {
+  return templates
+    .filter((template) => selection[template.versionId] !== false)
+    .map((template) => ({
+      templateId: template.templateId,
+      templateName: template.templateName,
+      versionId: template.versionId,
+      reviewStatus: template.reviewStatus,
+      requiredInputs: template.inputs.map((input) => input.name),
+      expectedImageOutputs: template.counts.imageOutputs,
+      expectedVideoOutputs: template.counts.videoOutputs,
+      status: "idle" as BulkRunState,
+      jobId: null,
+      actualImageOutputs: 0,
+      actualVideoOutputs: 0,
+      progress: 0,
+      error: null,
+      startedAt: null,
+      completedAt: null,
+      usedSharedSlots: [],
+    }));
+}
+
 const TemplateLab = () => {
   const location = useLocation();
   const params = useParams<{ slug?: string; jobId?: string }>();
@@ -231,6 +345,7 @@ const TemplateLab = () => {
   const [recentRuns, setRecentRuns] = useState<RecentRun[]>([]);
   const [loadingRecentRuns, setLoadingRecentRuns] = useState(false);
   const [expandedRuns, setExpandedRuns] = useState<Record<string, boolean>>({});
+  const [runnerMode, setRunnerMode] = useState<RunnerMode>("single");
   const [inspectorTab, setInspectorTab] = useState("map");
   const [selectedInspectorNodeId, setSelectedInspectorNodeId] = useState<string | null>(null);
   const [hiddenInspectorNodeIds, setHiddenInspectorNodeIds] = useState<string[]>([]);
@@ -240,11 +355,18 @@ const TemplateLab = () => {
   const [savingReviewStatus, setSavingReviewStatus] = useState(false);
   const [files, setFiles] = useState<Record<string, File | null>>({});
   const [previews, setPreviews] = useState<Record<string, string>>({});
+  const [bulkFiles, setBulkFiles] = useState<Record<string, File | null>>({});
+  const [bulkPreviews, setBulkPreviews] = useState<Record<string, string>>({});
+  const [bulkSelection, setBulkSelection] = useState<Record<string, boolean>>({});
+  const [bulkRows, setBulkRows] = useState<BulkRunRow[]>([]);
+  const [bulkDispatching, setBulkDispatching] = useState(false);
   const [phase, setPhase] = useState<Phase>("idle");
   const [jobId, setJobId] = useState<string | null>(null);
   const [job, setJob] = useState<JobStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const bulkPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const bulkRowsRef = useRef<BulkRunRow[]>([]);
   const lastLoadedCodeRef = useRef<string | null>(null);
   const hasSessionRunner = !!session?.access_token;
   const canManageTemplates = hasAppAccess;
@@ -262,16 +384,45 @@ const TemplateLab = () => {
   }, [accessCode]);
 
   useEffect(() => {
+    bulkRowsRef.current = bulkRows;
+  }, [bulkRows]);
+
+  useEffect(() => {
     return () => {
       if (pollRef.current) clearInterval(pollRef.current);
+      if (bulkPollRef.current) clearInterval(bulkPollRef.current);
       Object.values(previews).forEach((url) => URL.revokeObjectURL(url));
+      Object.values(bulkPreviews).forEach((url) => URL.revokeObjectURL(url));
     };
-  }, [previews]);
+  }, [bulkPreviews, previews]);
 
   const selectedTemplate = useMemo(
     () => templates.find((template) => template.versionId === selectedVersionId) ?? null,
     [templates, selectedVersionId],
   );
+
+  useEffect(() => {
+    setBulkSelection((current) => {
+      const next = { ...current };
+      let changed = false;
+
+      for (const template of templates) {
+        if (!(template.versionId in next)) {
+          next[template.versionId] = true;
+          changed = true;
+        }
+      }
+
+      for (const versionId of Object.keys(next)) {
+        if (!templates.some((template) => template.versionId === versionId)) {
+          delete next[versionId];
+          changed = true;
+        }
+      }
+
+      return changed ? next : current;
+    });
+  }, [templates]);
 
   const outputImages = useMemo(
     () => job?.outputs.filter((item) => item.type === "image") ?? [],
@@ -413,6 +564,40 @@ const TemplateLab = () => {
       img.src = objectUrl;
     });
   }, []);
+
+  const setPreviewFile = useCallback(
+    async (
+      inputId: string,
+      nextFile: File | null,
+      fileSetter: Dispatch<SetStateAction<Record<string, File | null>>>,
+      previewSetter: Dispatch<SetStateAction<Record<string, string>>>,
+      previewStore: Record<string, string>,
+    ) => {
+      if (previewStore[inputId]) {
+        URL.revokeObjectURL(previewStore[inputId]);
+      }
+
+      if (!nextFile) {
+        fileSetter((current) => ({ ...current, [inputId]: null }));
+        previewSetter((current) => {
+          const next = { ...current };
+          delete next[inputId];
+          return next;
+        });
+        return;
+      }
+
+      try {
+        const normalized = await normalizeFile(nextFile);
+        fileSetter((current) => ({ ...current, [inputId]: normalized }));
+        previewSetter((current) => ({ ...current, [inputId]: URL.createObjectURL(normalized) }));
+      } catch (fileError) {
+        const message = fileError instanceof Error ? fileError.message : "Could not prepare image";
+        toast({ title: "Image error", description: message, variant: "destructive" });
+      }
+    },
+    [normalizeFile],
+  );
 
   const buildAuthHeaders = useCallback(async () => {
     const headers: Record<string, string> = {
@@ -600,31 +785,14 @@ const TemplateLab = () => {
   }, [selectedInspectorNode]);
 
   const handleFile = useCallback(async (inputId: string, nextFile: File | null) => {
-    if (previews[inputId]) {
-      URL.revokeObjectURL(previews[inputId]);
-    }
+    await setPreviewFile(inputId, nextFile, setFiles, setPreviews, previews);
+  }, [previews, setPreviewFile]);
 
-    if (!nextFile) {
-      setFiles((current) => ({ ...current, [inputId]: null }));
-      setPreviews((current) => {
-        const next = { ...current };
-        delete next[inputId];
-        return next;
-      });
-      return;
-    }
+  const handleBulkFile = useCallback(async (inputId: string, nextFile: File | null) => {
+    await setPreviewFile(inputId, nextFile, setBulkFiles, setBulkPreviews, bulkPreviews);
+  }, [bulkPreviews, setPreviewFile]);
 
-    try {
-      const normalized = await normalizeFile(nextFile);
-      setFiles((current) => ({ ...current, [inputId]: normalized }));
-      setPreviews((current) => ({ ...current, [inputId]: URL.createObjectURL(normalized) }));
-    } catch (fileError) {
-      const message = fileError instanceof Error ? fileError.message : "Could not prepare image";
-      toast({ title: "Image error", description: message, variant: "destructive" });
-    }
-  }, [normalizeFile, previews]);
-
-  const fetchJobStatus = useCallback(async (nextJobId: string) => {
+  const fetchJobStatusRaw = useCallback(async (nextJobId: string) => {
     const headers = await buildAuthHeaders();
     const response = await fetch(
       `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/get-job-status-public?jobId=${nextJobId}`,
@@ -632,6 +800,12 @@ const TemplateLab = () => {
     );
     const data = await response.json();
     if (!response.ok) throw new Error(data?.error ?? "Could not load job status");
+
+    return data as JobStatus;
+  }, [buildAuthHeaders]);
+
+  const fetchJobStatus = useCallback(async (nextJobId: string) => {
+    const data = await fetchJobStatusRaw(nextJobId);
 
     setJobId(nextJobId);
     setJob(data);
@@ -648,7 +822,7 @@ const TemplateLab = () => {
     }
 
     return data;
-  }, [buildAuthHeaders]);
+  }, [fetchJobStatusRaw]);
 
   const pollJob = useCallback((nextJobId: string) => {
     if (pollRef.current) clearInterval(pollRef.current);
@@ -671,11 +845,114 @@ const TemplateLab = () => {
     }, 2500);
   }, [fetchJobStatus]);
 
+  const startTemplateRun = useCallback(async (template: TemplateOption, inputFiles: Record<string, { dataUrl: string; filename?: string }>) => {
+    const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/start-template-run`, {
+      method: "POST",
+      headers: {
+        ...(await buildAuthHeaders()),
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        versionId: template.versionId,
+        inputFiles,
+      }),
+    });
+
+    const data = await response.json();
+    if (!response.ok) throw new Error(data?.error ?? "Could not start template");
+    return data as { jobId: string; status: string };
+  }, [buildAuthHeaders]);
+
+  const pollBulkRuns = useCallback(() => {
+    if (bulkPollRef.current) clearInterval(bulkPollRef.current);
+
+    bulkPollRef.current = setInterval(async () => {
+      const rowsToCheck = [...bulkRowsRef.current].filter((row) => row.jobId && (row.status === "queued" || row.status === "running" || row.status === "starting"));
+      if (!rowsToCheck.length) {
+        if (bulkPollRef.current) clearInterval(bulkPollRef.current);
+        bulkPollRef.current = null;
+        return;
+      }
+
+      try {
+        const updates = await Promise.all(
+          rowsToCheck.map(async (row) => {
+            try {
+              const status = await fetchJobStatusRaw(row.jobId!);
+              return {
+                versionId: row.versionId,
+                jobId: row.jobId,
+                status: status.status === "queued" ? "queued" : status.status === "failed" ? "failed" : status.status === "complete" ? "complete" : "running",
+                progress: status.progress ?? 0,
+                actualImageOutputs: status.outputs.filter((output) => output.type === "image").length,
+                actualVideoOutputs: status.outputs.filter((output) => output.type === "video").length,
+                error: status.error ?? null,
+                startedAt: status.steps.find((step) => step.startedAt)?.startedAt ?? null,
+                completedAt:
+                  status.steps
+                    .map((step) => step.completedAt)
+                    .filter(Boolean)
+                    .sort()
+                    .at(-1) ?? null,
+              } as const;
+            } catch (bulkError) {
+              return {
+                versionId: row.versionId,
+                jobId: row.jobId,
+                status: "failed",
+                progress: row.progress,
+                actualImageOutputs: row.actualImageOutputs,
+                actualVideoOutputs: row.actualVideoOutputs,
+                error: bulkError instanceof Error ? bulkError.message : "Could not refresh job",
+                startedAt: row.startedAt,
+                completedAt: row.completedAt,
+              } as const;
+            }
+          }),
+        );
+
+        setBulkRows((current) =>
+          current.map((row) => {
+            const next = updates.find((update) => update.versionId === row.versionId && update.jobId === row.jobId);
+            return next
+              ? {
+                  ...row,
+                  status: next.status as BulkRunState,
+                  progress: next.progress,
+                  actualImageOutputs: next.actualImageOutputs,
+                  actualVideoOutputs: next.actualVideoOutputs,
+                  error: next.error,
+                  startedAt: next.startedAt,
+                  completedAt: next.completedAt,
+                }
+              : row;
+          }),
+        );
+      } catch {
+        // Keep the existing state. Individual row failures are captured above.
+      }
+    }, 3000);
+  }, [fetchJobStatusRaw]);
+
   useEffect(() => {
     if (!hasSessionRunner) return;
     if (phase !== "complete" && phase !== "error") return;
     void loadRecentRuns();
   }, [hasSessionRunner, loadRecentRuns, phase]);
+
+  useEffect(() => {
+    const hasActiveBulkRuns = bulkRows.some((row) => row.status === "queued" || row.status === "running" || row.status === "starting");
+
+    if (hasActiveBulkRuns) {
+      pollBulkRuns();
+      return;
+    }
+
+    if (bulkPollRef.current) {
+      clearInterval(bulkPollRef.current);
+      bulkPollRef.current = null;
+    }
+  }, [bulkRows, pollBulkRuns]);
 
   useEffect(() => {
     if (!hasSessionRunner) return;
@@ -845,6 +1122,128 @@ const TemplateLab = () => {
     }
   }, [buildAuthHeaders, loadTemplateDetail, loadTemplates, reviewStatusDraft, selectedTemplate]);
 
+  const resetBulkSelection = useCallback((nextValue: boolean) => {
+    setBulkSelection(Object.fromEntries(templates.map((template) => [template.versionId, nextValue])));
+  }, [templates]);
+
+  const keepOnlyBulkFailures = useCallback(() => {
+    setBulkSelection(
+      Object.fromEntries(
+        templates.map((template) => [
+          template.versionId,
+          bulkRows.find((row) => row.versionId === template.versionId)?.status === "failed",
+        ]),
+      ),
+    );
+  }, [bulkRows, templates]);
+
+  const openBulkRun = useCallback(async (row: BulkRunRow) => {
+    setSelectedVersionId(row.versionId);
+    if (row.jobId) {
+      await fetchJobStatus(row.jobId);
+    }
+  }, [fetchJobStatus]);
+
+  const handleRunAll = useCallback(async () => {
+    if (!templates.length) {
+      toast({ title: "Missing templates", description: "Load the template catalog first.", variant: "destructive" });
+      return;
+    }
+
+    const targetTemplates = templates.filter((template) => bulkSelection[template.versionId] !== false);
+    if (!targetTemplates.length) {
+      toast({ title: "Nothing selected", description: "Pick at least one template for the batch run.", variant: "destructive" });
+      return;
+    }
+
+    const initialRows = buildBulkRows(templates, bulkSelection);
+    setBulkRows(initialRows);
+    setBulkDispatching(true);
+
+    try {
+      for (const template of targetTemplates) {
+        const { missing, usedSlots, resolved } = buildBulkInputFilesForTemplate(template, bulkFiles);
+
+        if (missing.length) {
+          setBulkRows((current) =>
+            current.map((row) =>
+              row.versionId === template.versionId
+                ? {
+                    ...row,
+                    status: "skipped",
+                    error: `Missing shared inputs: ${missing.join(", ")}`,
+                    usedSharedSlots: usedSlots,
+                  }
+                : row,
+            ),
+          );
+          continue;
+        }
+
+        setBulkRows((current) =>
+          current.map((row) =>
+            row.versionId === template.versionId
+              ? { ...row, status: "starting", error: null, usedSharedSlots: usedSlots }
+              : row,
+          ),
+        );
+
+        try {
+          const inputFiles = Object.fromEntries(
+            await Promise.all(
+              resolved.map(async ({ inputName, file }) => [
+                inputName,
+                {
+                  dataUrl: await fileToDataUrl(file),
+                  filename: file.name,
+                },
+              ]),
+            ),
+          );
+
+          const data = await startTemplateRun(template, inputFiles);
+
+          setBulkRows((current) =>
+            current.map((row) =>
+              row.versionId === template.versionId
+                ? {
+                    ...row,
+                    status: "queued",
+                    jobId: data.jobId,
+                    progress: 0,
+                    error: null,
+                  }
+                : row,
+            ),
+          );
+        } catch (batchRunError) {
+          const message = batchRunError instanceof Error ? batchRunError.message : "Could not start template";
+          setBulkRows((current) =>
+            current.map((row) =>
+              row.versionId === template.versionId
+                ? {
+                    ...row,
+                    status: "failed",
+                    error: message,
+                  }
+                : row,
+            ),
+          );
+        }
+      }
+    } finally {
+      setBulkDispatching(false);
+      void loadRecentRuns();
+      pollBulkRuns();
+    }
+  }, [bulkFiles, bulkSelection, loadRecentRuns, pollBulkRuns, startTemplateRun, templates]);
+
+  const canRunBulk = useMemo(() => {
+    const targetTemplates = templates.filter((template) => bulkSelection[template.versionId] !== false);
+    if (!targetTemplates.length) return false;
+    return targetTemplates.some((template) => buildBulkInputFilesForTemplate(template, bulkFiles).missing.length === 0);
+  }, [bulkFiles, bulkSelection, templates]);
+
   return (
     <div className="min-h-screen bg-background text-foreground">
       <Navbar />
@@ -938,7 +1337,271 @@ const TemplateLab = () => {
               </select>
             </div>
 
-            {selectedTemplate ? (
+            {canManageTemplates ? (
+              <Tabs value={runnerMode} onValueChange={(value) => setRunnerMode(value as RunnerMode)} className="mt-8">
+                <TabsList className="grid w-full grid-cols-2">
+                  <TabsTrigger value="single">Single Run</TabsTrigger>
+                  <TabsTrigger value="bulk">Run All Audit</TabsTrigger>
+                </TabsList>
+
+                <TabsContent value="single" className="mt-4">
+                  {selectedTemplate ? (
+                    <div className="space-y-4">
+                      {selectedTemplate.inputs.map((input) => {
+                        const previewUrl = previews[input.id];
+                        const selectedFile = files[input.id];
+
+                        return (
+                          <div key={input.id} className="rounded-3xl border border-border/40 bg-background/60 p-5">
+                            <div className="mb-4 flex items-start justify-between gap-4">
+                              <div>
+                                <p className="font-medium">{input.name}</p>
+                                <p className="text-xs uppercase tracking-[0.15em] text-muted-foreground">{input.expected}</p>
+                              </div>
+                              <div className="text-right text-xs text-muted-foreground">
+                                {input.defaultAssetUrl ? "Built-in reference available" : "Upload required"}
+                              </div>
+                            </div>
+
+                            <div className="grid gap-4 md:grid-cols-2">
+                              <div className="rounded-2xl border border-dashed border-border/60 p-4">
+                                <p className="mb-3 text-xs uppercase tracking-[0.15em] text-muted-foreground">Uploaded Override</p>
+                                {previewUrl ? (
+                                  <img src={previewUrl} alt={input.name} className="max-h-64 rounded-2xl object-contain" />
+                                ) : (
+                                  <div className="flex min-h-48 flex-col items-center justify-center rounded-2xl border border-border/30 bg-muted/20 text-center text-sm text-muted-foreground">
+                                    <Upload className="mb-3 h-8 w-8" />
+                                    No uploaded image yet
+                                  </div>
+                                )}
+
+                                <div className="mt-4 flex flex-wrap gap-3">
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    onClick={() => {
+                                      const chooser = document.createElement("input");
+                                      chooser.type = "file";
+                                      chooser.accept = "image/png,image/jpeg,image/webp";
+                                      chooser.onchange = (event) => {
+                                        const nextFile = (event.target as HTMLInputElement).files?.[0];
+                                        if (nextFile) void handleFile(input.id, nextFile);
+                                      };
+                                      chooser.click();
+                                    }}
+                                  >
+                                    Choose Image
+                                  </Button>
+                                  {selectedFile ? (
+                                    <Button type="button" variant="ghost" onClick={() => void handleFile(input.id, null)}>
+                                      Clear
+                                    </Button>
+                                  ) : null}
+                                </div>
+                              </div>
+
+                              <div className="rounded-2xl border border-border/30 bg-background/70 p-4">
+                                <p className="mb-3 text-xs uppercase tracking-[0.15em] text-muted-foreground">Template Default</p>
+                                {input.defaultAssetUrl ? (
+                                  <img src={input.defaultAssetUrl} alt={`${input.name} default`} className="max-h-64 rounded-2xl object-contain" />
+                                ) : (
+                                  <div className="flex min-h-48 items-center justify-center rounded-2xl border border-border/30 bg-muted/20 text-sm text-muted-foreground">
+                                    No default asset
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+
+                      <Button type="button" onClick={() => void handleRun()} disabled={!canRun || phase === "running"}>
+                        {phase === "running" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Film className="mr-2 h-4 w-4" />}
+                        Run Template
+                      </Button>
+                    </div>
+                  ) : null}
+                </TabsContent>
+
+                <TabsContent value="bulk" className="mt-4 space-y-4">
+                  <div className="rounded-3xl border border-border/40 bg-background/60 p-5">
+                    <div className="flex flex-wrap items-start justify-between gap-4">
+                      <div>
+                        <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">Bulk Audit</p>
+                        <h3 className="mt-2 text-xl font-bold">Run Every Selected Template</h3>
+                        <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
+                          Upload one shared input bank, dispatch all selected templates, and compare expected vs actual outputs without clicking through 13 separate runs.
+                        </p>
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        <Button type="button" size="sm" variant="outline" onClick={() => resetBulkSelection(true)}>
+                          Select All
+                        </Button>
+                        <Button type="button" size="sm" variant="outline" onClick={() => resetBulkSelection(false)}>
+                          Clear All
+                        </Button>
+                        <Button type="button" size="sm" variant="outline" onClick={keepOnlyBulkFailures}>
+                          Keep Only Failures
+                        </Button>
+                      </div>
+                    </div>
+
+                    <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                      {BULK_SHARED_INPUTS.map((slot) => {
+                        const previewUrl = bulkPreviews[slot.key];
+                        const selectedFile = bulkFiles[slot.key];
+
+                        return (
+                          <div key={slot.key} className="rounded-2xl border border-border/30 bg-background/80 p-4">
+                            <div className="flex items-start justify-between gap-3">
+                              <div>
+                                <p className="font-medium">{slot.label}</p>
+                                <p className="mt-1 text-xs text-muted-foreground">{slot.description}</p>
+                              </div>
+                              <span className="rounded-full border border-border/30 px-2 py-1 text-[10px] uppercase tracking-[0.15em] text-muted-foreground">
+                                Shared
+                              </span>
+                            </div>
+
+                            <div className="mt-4">
+                              {previewUrl ? (
+                                <img src={previewUrl} alt={slot.label} className="max-h-48 rounded-2xl object-contain" />
+                              ) : (
+                                <div className="flex min-h-40 flex-col items-center justify-center rounded-2xl border border-border/30 bg-muted/20 text-center text-sm text-muted-foreground">
+                                  <Upload className="mb-3 h-8 w-8" />
+                                  No shared image yet
+                                </div>
+                              )}
+                            </div>
+
+                            <div className="mt-4 flex flex-wrap gap-3">
+                              <Button
+                                type="button"
+                                variant="outline"
+                                onClick={() => {
+                                  const chooser = document.createElement("input");
+                                  chooser.type = "file";
+                                  chooser.accept = "image/png,image/jpeg,image/webp";
+                                  chooser.onchange = (event) => {
+                                    const nextFile = (event.target as HTMLInputElement).files?.[0];
+                                    if (nextFile) void handleBulkFile(slot.key, nextFile);
+                                  };
+                                  chooser.click();
+                                }}
+                              >
+                                Choose Image
+                              </Button>
+                              {selectedFile ? (
+                                <Button type="button" variant="ghost" onClick={() => void handleBulkFile(slot.key, null)}>
+                                  Clear
+                                </Button>
+                              ) : null}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    <div className="mt-5 flex flex-wrap gap-3">
+                      <Button type="button" onClick={() => void handleRunAll()} disabled={bulkDispatching || !canRunBulk}>
+                        {bulkDispatching ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Film className="mr-2 h-4 w-4" />}
+                        Run All Selected
+                      </Button>
+                      <div className="rounded-2xl border border-border/30 bg-background/80 px-4 py-3 text-sm text-muted-foreground">
+                        Selected templates: {templates.filter((template) => bulkSelection[template.versionId] !== false).length}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="rounded-3xl border border-border/40 bg-background/60 p-5">
+                    <div className="flex items-center justify-between gap-4">
+                      <div>
+                        <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">Batch Matrix</p>
+                        <p className="mt-2 text-sm text-muted-foreground">Expected outputs are the current template counts. Actual outputs come from the finished job payload. Click any row to load it into the run-state panel.</p>
+                      </div>
+                      <Button type="button" variant="outline" size="sm" onClick={() => pollBulkRuns()} disabled={!bulkRows.some((row) => row.jobId)}>
+                        <RefreshCw className="mr-2 h-4 w-4" />
+                        Refresh Batch
+                      </Button>
+                    </div>
+
+                    <div className="mt-4 space-y-3">
+                      {(bulkRows.length ? bulkRows : buildBulkRows(templates, bulkSelection)).map((row) => {
+                        const selected = bulkSelection[row.versionId] !== false;
+                        const expectedTotal = row.expectedImageOutputs + row.expectedVideoOutputs;
+                        const actualTotal = row.actualImageOutputs + row.actualVideoOutputs;
+
+                        return (
+                          <div key={row.versionId} className={`rounded-2xl border p-4 ${selected ? "border-border/40 bg-background/80" : "border-border/20 bg-background/40 opacity-60"}`}>
+                            <div className="flex flex-wrap items-start justify-between gap-4">
+                              <div className="min-w-0 flex-1">
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <label className="flex items-center gap-2 text-sm">
+                                    <input
+                                      type="checkbox"
+                                      checked={selected}
+                                      onChange={(event) =>
+                                        setBulkSelection((current) => ({ ...current, [row.versionId]: event.target.checked }))
+                                      }
+                                    />
+                                    <span className="font-medium">{row.templateName}</span>
+                                  </label>
+                                  <span className="rounded-full border border-border/30 px-2 py-1 text-[10px] uppercase tracking-[0.15em] text-muted-foreground">
+                                    {row.reviewStatus}
+                                  </span>
+                                  <span className="rounded-full border border-border/30 px-2 py-1 text-[10px] uppercase tracking-[0.15em] text-muted-foreground">
+                                    {row.status}
+                                  </span>
+                                </div>
+                                <p className="mt-2 text-xs text-muted-foreground">
+                                  Inputs: {row.requiredInputs.join(", ")} {row.usedSharedSlots.length ? `· using ${row.usedSharedSlots.join(", ")}` : ""}
+                                </p>
+                                <p className="mt-1 text-xs text-muted-foreground">
+                                  Expected: {row.expectedImageOutputs} image + {row.expectedVideoOutputs} video ({expectedTotal} total)
+                                  {" · "}
+                                  Actual: {row.actualImageOutputs} image + {row.actualVideoOutputs} video ({actualTotal} total)
+                                </p>
+                                {row.jobId ? (
+                                  <p className="mt-1 text-[11px] text-muted-foreground">
+                                    Job {row.jobId.slice(0, 8)}... · {row.progress}%
+                                  </p>
+                                ) : null}
+                              </div>
+                              <div className="flex flex-wrap gap-2">
+                                {row.jobId ? (
+                                  <Button type="button" size="sm" variant="outline" onClick={() => void openBulkRun(row)}>
+                                    Open
+                                  </Button>
+                                ) : null}
+                                {row.error ? (
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    variant="ghost"
+                                    onClick={async () => {
+                                      await navigator.clipboard.writeText(row.error ?? "");
+                                      toast({ title: "Copied", description: "Batch error copied to clipboard." });
+                                    }}
+                                  >
+                                    <Copy className="mr-2 h-4 w-4" />
+                                    Copy Error
+                                  </Button>
+                                ) : null}
+                              </div>
+                            </div>
+                            {row.error ? (
+                              <div className="mt-3 rounded-xl border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                                {row.error}
+                              </div>
+                            ) : null}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </TabsContent>
+              </Tabs>
+            ) : selectedTemplate ? (
               <div className="mt-8 space-y-4">
                 {selectedTemplate.inputs.map((input) => {
                   const previewUrl = previews[input.id];
