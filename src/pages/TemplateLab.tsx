@@ -419,6 +419,9 @@ const TemplateLab = () => {
           selectedVersionId?: string;
           currentJobId?: string | null;
           phase?: Phase;
+          currentJob?: JobStatus | null;
+          recentRuns?: RecentRun[];
+          error?: string | null;
           bulkSelection?: Record<string, boolean>;
           bulkRows?: BulkRunRow[];
           bulkInputs?: Record<string, PersistedBulkInput>;
@@ -429,6 +432,9 @@ const TemplateLab = () => {
         if (parsed.selectedVersionId) setSelectedVersionId(parsed.selectedVersionId);
         if (parsed.currentJobId) setJobId(parsed.currentJobId);
         if (parsed.phase) setPhase(parsed.phase);
+        if (parsed.currentJob) setJob(parsed.currentJob);
+        if (parsed.recentRuns) setRecentRuns(parsed.recentRuns);
+        if (parsed.error) setError(parsed.error);
         if (parsed.bulkSelection) setBulkSelection(parsed.bulkSelection);
         if (parsed.bulkRows) setBulkRows(parsed.bulkRows);
 
@@ -486,6 +492,9 @@ const TemplateLab = () => {
           selectedVersionId,
           currentJobId: jobId,
           phase,
+          currentJob: job,
+          recentRuns,
+          error,
           bulkSelection,
           bulkRows,
           bulkInputs,
@@ -498,7 +507,7 @@ const TemplateLab = () => {
     return () => {
       cancelled = true;
     };
-  }, [bulkFiles, bulkRows, bulkSelection, jobId, phase, runnerMode, selectedVersionId]);
+  }, [bulkFiles, bulkRows, bulkSelection, error, job, jobId, phase, recentRuns, runnerMode, selectedVersionId]);
 
   useEffect(() => {
     bulkRowsRef.current = bulkRows;
@@ -1415,9 +1424,9 @@ const TemplateLab = () => {
   return (
     <div className="min-h-screen bg-background text-foreground">
       <Navbar />
-      <div className="mx-auto flex w-full max-w-6xl flex-col gap-8 px-6 pb-16 pt-28">
-        <div className="grid gap-8 lg:grid-cols-[1.15fr,0.85fr]">
-          <section className="rounded-3xl border border-border/50 bg-card/70 p-8 shadow-sm">
+      <div className="mx-auto flex w-full max-w-[1600px] flex-col gap-8 px-4 pb-16 pt-24 sm:px-6">
+        <div className="grid gap-6 xl:grid-cols-[minmax(0,1.05fr)_minmax(520px,0.95fr)]">
+          <section className="rounded-3xl border border-border/50 bg-card/70 p-6 shadow-sm xl:p-7">
             <div className="mb-6 flex items-start justify-between gap-4">
               <div>
                 <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">
@@ -2236,7 +2245,7 @@ const TemplateLab = () => {
             ) : null}
           </section>
 
-          <section className="rounded-3xl border border-border/50 bg-card/70 p-8 shadow-sm">
+          <section className="self-start rounded-3xl border border-border/50 bg-card/70 p-6 shadow-sm xl:sticky xl:top-24 xl:max-h-[calc(100vh-7rem)] xl:overflow-y-auto xl:p-7">
             <div className="flex items-center justify-between gap-4">
               <div>
                 <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">Run State</p>
@@ -2299,7 +2308,7 @@ const TemplateLab = () => {
                             <CollapsibleContent className="border-t border-border/20 px-3 pb-3 pt-3">
                               {run.outputs.length ? (
                                 <div className="flex gap-2 overflow-x-auto pb-1">
-                                  {run.outputs.slice(0, 4).map((output) => (
+                                  {run.outputs.map((output) => (
                                     <a
                                       key={`${run.id}-${output.url}`}
                                       href={output.url}
