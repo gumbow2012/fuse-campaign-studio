@@ -17,6 +17,7 @@ type Body = {
   editorMode?: "upload" | "reference" | "workflow" | null;
   slotKey?: string | null;
   outputExposed?: boolean | null;
+  detachAsset?: boolean | null;
 };
 
 function normalizeNullable(value: string | null | undefined) {
@@ -43,7 +44,7 @@ Deno.serve(async (req) => {
 
     const { data: node, error: nodeError } = await admin
       .from("nodes")
-      .select("id, version_id, node_type, name, prompt_config")
+      .select("id, version_id, node_type, name, prompt_config, default_asset_id")
       .eq("id", nodeId)
       .eq("version_id", versionId)
       .single();
@@ -82,10 +83,24 @@ Deno.serve(async (req) => {
       nextPromptConfig.output_exposed = typeof body.outputExposed === "boolean" ? body.outputExposed : null;
     }
 
+    let nextDefaultAssetId = node.default_asset_id;
+
+    if (body.detachAsset === true) {
+      delete nextPromptConfig.sample_url;
+      nextPromptConfig.weavy_exposed = false;
+
+      if (node.node_type === "user_input" && nextPromptConfig.editor_mode !== "upload") {
+        nextPromptConfig.editor_mode = "workflow";
+      }
+
+      nextDefaultAssetId = null;
+    }
+
     const { error: updateError } = await admin
       .from("nodes")
       .update({
         prompt_config: nextPromptConfig,
+        default_asset_id: nextDefaultAssetId,
       })
       .eq("id", node.id);
     if (updateError) throw new Error(updateError.message);

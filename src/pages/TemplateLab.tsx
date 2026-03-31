@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from "react";
-import { AlertCircle, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, Copy, Download, EyeOff, Film, Loader2, LockKeyhole, RefreshCw, Upload } from "lucide-react";
+import { AlertCircle, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, Copy, Download, EyeOff, Film, Loader2, LockKeyhole, RefreshCw, Trash2, Upload } from "lucide-react";
 import { useLocation, useParams, useSearchParams } from "react-router-dom";
 import Navbar from "@/components/Navbar";
 import { Button } from "@/components/ui/button";
@@ -402,6 +402,7 @@ const TemplateLab = () => {
   const [hiddenInspectorNodeIds, setHiddenInspectorNodeIds] = useState<string[]>([]);
   const [editorDraft, setEditorDraft] = useState<EditorDraft | null>(null);
   const [savingNodeEdits, setSavingNodeEdits] = useState(false);
+  const [detachingNodeId, setDetachingNodeId] = useState<string | null>(null);
   const [reviewStatusDraft, setReviewStatusDraft] = useState<string>("Unreviewed");
   const [savingReviewStatus, setSavingReviewStatus] = useState(false);
   const [files, setFiles] = useState<Record<string, File | null>>({});
@@ -680,6 +681,17 @@ const TemplateLab = () => {
   const selectedInspectorNode = useMemo(
     () => inspectorNodes.find((node) => node.id === selectedInspectorNodeId) ?? inspectorNodes[0] ?? null,
     [inspectorNodes, selectedInspectorNodeId],
+  );
+
+  const cleanupNodes = useMemo(
+    () =>
+      (templateDetail?.nodes ?? []).filter((node) => !!node.defaultAssetUrl).sort((a, b) => {
+        const aMode = a.editor?.mode ?? "";
+        const bMode = b.editor?.mode ?? "";
+        if (aMode !== bMode) return aMode.localeCompare(bMode);
+        return a.name.localeCompare(b.name);
+      }),
+    [templateDetail],
   );
 
   const normalizeFile = useCallback((sourceFile: File) => {
@@ -1294,6 +1306,42 @@ const TemplateLab = () => {
       setSavingNodeEdits(false);
     }
   }, [buildAuthHeaders, editorDraft, loadTemplateDetail, loadTemplates, selectedInspectorNode, selectedTemplate]);
+
+  const detachTemplateAsset = useCallback(async (node: TemplateDetailNode) => {
+    if (!selectedTemplate) return;
+
+    setDetachingNodeId(node.id);
+
+    try {
+      const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/save-template-editor`, {
+        method: "POST",
+        headers: {
+          ...(await buildAuthHeaders()),
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          versionId: selectedTemplate.versionId,
+          nodeId: node.id,
+          detachAsset: true,
+        }),
+      });
+
+      const data = await response.json();
+      if (!response.ok) throw new Error(data?.error ?? "Could not detach backend image");
+
+      await loadTemplateDetail(selectedTemplate.versionId);
+      await loadTemplates();
+      toast({
+        title: "Detached",
+        description: `${node.name} no longer carries that backend image.`,
+      });
+    } catch (detachError) {
+      const message = detachError instanceof Error ? detachError.message : "Could not detach backend image";
+      toast({ title: "Detach failed", description: message, variant: "destructive" });
+    } finally {
+      setDetachingNodeId(null);
+    }
+  }, [buildAuthHeaders, loadTemplateDetail, loadTemplates, selectedTemplate]);
 
   const saveReviewStatus = useCallback(async () => {
     if (!selectedTemplate) return;
@@ -2015,10 +2063,11 @@ const TemplateLab = () => {
                 </div>
 
                 <Tabs value={inspectorTab} onValueChange={setInspectorTab} className="mt-5">
-                  <TabsList className="grid w-full grid-cols-3">
+                  <TabsList className="grid w-full grid-cols-4">
                     <TabsTrigger value="map">Map</TabsTrigger>
                     <TabsTrigger value="inspect">Inspect</TabsTrigger>
                     <TabsTrigger value="edit">Edit</TabsTrigger>
+                    <TabsTrigger value="cleanup">Cleanup</TabsTrigger>
                   </TabsList>
 
                   <TabsContent value="map" className="mt-4">
@@ -2325,6 +2374,76 @@ const TemplateLab = () => {
                           </div>
                         )}
                       </div>
+                    </div>
+                  </TabsContent>
+
+                  <TabsContent value="cleanup" className="mt-4">
+                    <div className="rounded-2xl border border-border/30 bg-background/70 p-4">
+                      <div className="flex items-start justify-between gap-4">
+                        <div>
+                          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">Backend Asset Cleanup</p>
+                          <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
+                            This lists every baked image currently attached to the selected template version. Detach removes the image from the node definition so it stops being injected on future runs. It does not rewire the graph for you.
+                          </p>
+                        </div>
+                        <div className="rounded-2xl border border-border/30 bg-background/80 px-4 py-3 text-sm text-muted-foreground">
+                          {cleanupNodes.length} backend image{cleanupNodes.length === 1 ? "" : "s"} attached
+                        </div>
+                      </div>
+
+                      {cleanupNodes.length ? (
+                        <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                          {cleanupNodes.map((node) => (
+                            <div key={`cleanup-${node.id}`} className="rounded-2xl border border-border/30 bg-background/85 p-4">
+                              <div className="flex items-start justify-between gap-3">
+                                <div className="min-w-0">
+                                  <p className="font-medium leading-tight">{node.name}</p>
+                                  <p className="mt-1 text-[11px] uppercase tracking-[0.15em] text-muted-foreground">
+                                    {node.nodeType}
+                                    {node.editor?.mode ? ` · ${node.editor.mode}` : ""}
+                                  </p>
+                                </div>
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="destructive"
+                                  onClick={() => void detachTemplateAsset(node)}
+                                  disabled={detachingNodeId === node.id}
+                                >
+                                  {detachingNodeId === node.id ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Trash2 className="mr-2 h-4 w-4" />}
+                                  Detach
+                                </Button>
+                              </div>
+
+                              {node.defaultAssetUrl ? (
+                                <img
+                                  src={node.defaultAssetUrl}
+                                  alt={`${node.name} backend asset`}
+                                  className="mt-4 h-56 w-full rounded-2xl border border-border/30 object-contain bg-muted/10"
+                                />
+                              ) : null}
+
+                              <div className="mt-4 space-y-2 text-xs text-muted-foreground">
+                                <p>Node ID: <span className="font-mono text-foreground/80">{node.id}</span></p>
+                                <p>Raw name: <span className="text-foreground/80">{node.rawName}</span></p>
+                                {node.defaultAssetType ? (
+                                  <p>Asset type: <span className="text-foreground/80">{node.defaultAssetType}</span></p>
+                                ) : (
+                                  <p>Asset type: <span className="text-foreground/80">sample_url / non-library image</span></p>
+                                )}
+                              </div>
+
+                              <div className="mt-4 rounded-2xl border border-border/30 bg-background/70 px-3 py-3 text-xs text-muted-foreground">
+                                Detach this only if it is a pollutant. If the branch actually depends on this image, the template may need rewiring or a new clean reference after removal.
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="mt-4 rounded-2xl border border-border/30 bg-background/80 p-6 text-sm text-muted-foreground">
+                          No baked backend images are attached to this template right now.
+                        </div>
+                      )}
                     </div>
                   </TabsContent>
                 </Tabs>
