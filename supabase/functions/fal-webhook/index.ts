@@ -52,6 +52,7 @@ Deno.serve(async (req) => {
   const admin = createAdminClient();
 
   try {
+    const url = new URL(req.url);
     const body = JSON.parse(new TextDecoder().decode(rawBody)) as {
       request_id?: string;
       status?: string;
@@ -62,14 +63,45 @@ Deno.serve(async (req) => {
     const requestId = body.request_id;
     if (!requestId) throw new Error("Missing request_id");
 
-    const { data: step, error: stepError } = await admin
+    let { data: step, error: stepError } = await admin
       .from("execution_steps")
       .select("id, job_id, node_id, status, provider_model, provider_request_id, started_at, output_payload, nodes!execution_steps_node_id_fkey(name, node_type)")
       .eq("provider_request_id", requestId)
       .single();
-    if (stepError || !step) throw new Error(stepError?.message ?? "Step not found for request");
+
+    if ((stepError || !step) && url.searchParams.get("stepId")) {
+      const stepId = url.searchParams.get("stepId");
+      const jobId = url.searchParams.get("jobId");
+      const fallback = await admin
+        .from("execution_steps")
+        .select("id, job_id, node_id, status, provider_model, provider_request_id, started_at, output_payload, nodes!execution_steps_node_id_fkey(name, node_type)")
+        .eq("id", stepId)
+        .maybeSingle();
+      if (fallback.error) throw new Error(fallback.error.message);
+      if (fallback.data && (!jobId || fallback.data.job_id === jobId)) {
+        step = fallback.data as any;
+        if (!step.provider_request_id) {
+          await admin
+            .from("execution_steps")
+            .update({ provider_request_id: requestId })
+            .eq("id", step.id);
+          step.provider_request_id = requestId;
+        }
+      }
+    }
+
+    if (!step) throw new Error(stepError?.message ?? "Step not found for request");
 
     if (step.status === "complete") return json({ ok: true, duplicate: true });
+
+    if (body.status && body.status !== "ERROR") {
+      const payload = (body.payload as any)?.data ?? body.payload;
+      const videoUrl = payload?.video?.url;
+      const imageUrl = payload?.images?.[0]?.url ?? payload?.image?.url;
+      if (!videoUrl && !imageUrl) {
+        return json({ ok: true, status: body.status.toLowerCase() });
+      }
+    }
 
     if (body.status === "ERROR") {
       const completedAt = new Date().toISOString();

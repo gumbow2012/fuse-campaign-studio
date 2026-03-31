@@ -329,6 +329,26 @@ export async function failAsyncStep(admin: AdminClient, step: StepRow, errorMess
     .eq("id", step.id);
 }
 
+async function resetInterruptedSubmissionStep(admin: AdminClient, step: StepRow, detail: string) {
+  await admin
+    .from("execution_steps")
+    .update({
+      status: "pending",
+      provider: null,
+      provider_model: null,
+      provider_request_id: null,
+      started_at: null,
+      completed_at: null,
+      execution_time_ms: null,
+      error_log: null,
+      output_payload: {
+        ...(step.output_payload ?? {}),
+        rawPayload: { detail },
+      },
+    })
+    .eq("id", step.id);
+}
+
 async function failJob(
   admin: AdminClient,
   jobId: string,
@@ -516,16 +536,19 @@ export async function reconcileRunningSteps(admin: AdminClient, jobId: string) {
     return;
   }
 
+  let shouldResume = false;
+
   for (const rawStep of runningSteps as StepRow[]) {
     if (!rawStep.provider_request_id) {
       const startedAt = rawStep.started_at ? new Date(rawStep.started_at).getTime() : null;
       const stalledMs = startedAt ? Date.now() - startedAt : 0;
-      if (startedAt && stalledMs >= 60_000) {
-        await failAsyncStep(
+      if (startedAt && stalledMs >= 20_000) {
+        await resetInterruptedSubmissionStep(
           admin,
           rawStep,
-          "Step stalled before provider request creation",
+          "Recovered interrupted submission before provider request creation",
         );
+        shouldResume = true;
       }
       continue;
     }
@@ -600,13 +623,18 @@ export async function reconcileRunningSteps(admin: AdminClient, jobId: string) {
         outputUrl,
         kind: videoUrl ? "video" : "image",
       });
-      await runGraphJob(admin, jobId);
+      shouldResume = true;
       continue;
     }
 
     if (normalizedStatus.includes("FAIL")) {
       await failAsyncStep(admin, rawStep, `fal job failed (${normalizedStatus})`);
     }
+  }
+
+  if (shouldResume) {
+    await runGraphJob(admin, jobId);
+    return;
   }
 
   await finalizeJobIfTerminal(admin, jobId);
@@ -631,6 +659,12 @@ export async function finalizeJobIfTerminal(admin: AdminClient, jobId: string) {
 
   const incomplete = steps.some((step: any) => step.status !== "complete");
   if (incomplete) {
+    const hasRunning = steps.some((step: any) => step.status === "running");
+    const hasPending = steps.some((step: any) => step.status === "pending");
+    if (!hasRunning && hasPending) {
+      await runGraphJob(admin, jobId);
+      return;
+    }
     await refreshJobProgress(admin, jobId);
     return;
   }
@@ -781,11 +815,13 @@ export async function runGraphJob(admin: AdminClient, jobId: string) {
         if (value) params.set(param, value);
       }
 
+      const startedAt = step.status === "running" ? step.started_at : new Date().toISOString();
+
       await admin
         .from("execution_steps")
         .update({
           status: "running",
-          started_at: step.status === "running" ? undefined : new Date().toISOString(),
+          started_at: startedAt ?? undefined,
           provider: "fal",
           provider_model: node.node_type === "video_gen" ? VIDEO_MODEL : IMAGE_MODEL,
           input_payload: Object.fromEntries(
@@ -795,6 +831,7 @@ export async function runGraphJob(admin: AdminClient, jobId: string) {
         .eq("id", step.id);
 
       step.status = "running";
+      step.started_at = startedAt ?? step.started_at ?? null;
 
       if (node.node_type === "image_gen") {
         try {
@@ -843,7 +880,7 @@ export async function runGraphJob(admin: AdminClient, jobId: string) {
             prompt,
             imageUrls: effectiveInputs,
             aspectRatio: String(node.prompt_config?.aspect_ratio ?? "9:16"),
-            webhookUrl: `${Deno.env.get("SUPABASE_URL")}/functions/v1/fal-webhook`,
+            webhookUrl: `${Deno.env.get("SUPABASE_URL")}/functions/v1/fal-webhook?jobId=${encodeURIComponent(job.id)}&stepId=${encodeURIComponent(step.id)}`,
           });
 
           await admin
@@ -920,7 +957,7 @@ export async function runGraphJob(admin: AdminClient, jobId: string) {
             endFrameUrl: endFrameUrl ? toVideoSafeImageUrl(endFrameUrl) : undefined,
             duration: Number(node.prompt_config?.duration ?? 10),
             aspectRatio: String(node.prompt_config?.aspect_ratio ?? "9:16"),
-            webhookUrl: `${Deno.env.get("SUPABASE_URL")}/functions/v1/fal-webhook`,
+            webhookUrl: `${Deno.env.get("SUPABASE_URL")}/functions/v1/fal-webhook?jobId=${encodeURIComponent(job.id)}&stepId=${encodeURIComponent(step.id)}`,
           });
 
           await admin
