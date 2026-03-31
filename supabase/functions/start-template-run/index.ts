@@ -113,6 +113,8 @@ function expandInputsForTemplate(args: {
     if (mappedNodeIds.has(node.id)) continue;
     if (userFacingNodeIds.has(node.id)) continue;
     if (!implicitReferenceNodeIds.has(node.id)) continue;
+    const weavyExposed = node.prompt_config?.weavy_exposed === true || node.prompt_config?.weavy_exposed === "true";
+    if (weavyExposed) continue;
 
     const sampleUrl = typeof node.prompt_config?.sample_url === "string"
       ? node.prompt_config.sample_url

@@ -326,8 +326,8 @@ function getSharedInputCandidates(label: string): SharedInputKey[] {
   if (normalized === "top-garment") return ["top-garment", "garment"];
   if (normalized === "bottom-garment") return ["bottom-garment", "garment"];
   if (normalized === "accessory") return ["accessory"];
-  if (normalized === "garment-1") return ["garment", "top-garment", "bottom-garment"];
-  if (normalized === "garment-2") return ["bottom-garment", "top-garment", "garment"];
+  if (normalized === "garment-1") return ["top-garment", "garment"];
+  if (normalized === "garment-2") return ["bottom-garment", "garment"];
   if (normalized === "garments-front") return ["garments-front", "garment", "top-garment"];
   if (normalized === "garments-back") return ["garments-back", "garment", "bottom-garment"];
 
@@ -839,7 +839,7 @@ const TemplateLab = () => {
 
     try {
       const response = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/list-recent-runs?limit=8`,
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/list-recent-runs?limit=20`,
         { headers: await buildAuthHeaders() },
       );
       const data = await response.json();
