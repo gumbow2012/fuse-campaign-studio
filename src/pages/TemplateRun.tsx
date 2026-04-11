@@ -216,7 +216,7 @@ const TemplateRun = () => {
       if (!t) return null;
       try {
         const token = await getToken();
-        return await fetchTemplateDetail(token, t.name);
+        return await fetchTemplateDetail(token, t);
       } catch {
         return null; // Fall back to input_schema from DB
       }

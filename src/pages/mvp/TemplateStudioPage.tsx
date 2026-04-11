@@ -98,7 +98,7 @@ export default function TemplateStudioPage() {
     queryFn: async () => {
       if (!selectedTemplate) return null;
       const token = await getAccessToken();
-      return fetchTemplateDetail(token, selectedTemplate.name);
+      return fetchTemplateDetail(token, selectedTemplate);
     },
   });
 

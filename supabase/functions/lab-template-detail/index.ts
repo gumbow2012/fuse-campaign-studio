@@ -56,7 +56,15 @@ Deno.serve(async (req) => {
 
   try {
     const url = new URL(req.url);
-    const versionId = url.searchParams.get("versionId");
+    let versionId = url.searchParams.get("versionId");
+    if (!versionId && req.method !== "GET") {
+      try {
+        const body = await req.json();
+        versionId = typeof body?.versionId === "string" ? body.versionId : null;
+      } catch {
+        // Ignore malformed JSON and fall through to the required check.
+      }
+    }
     if (!versionId) throw new Error("versionId is required");
 
     const { data: version, error: versionError } = await admin
@@ -134,6 +142,11 @@ Deno.serve(async (req) => {
           rawName: node.name,
           name: displayName,
           nodeType: node.node_type,
+          outputExposed: typeof node.prompt_config?.output_exposed === "boolean"
+            ? node.prompt_config.output_exposed
+            : typeof node.prompt_config?.output_exposed === "string"
+            ? node.prompt_config.output_exposed === "true"
+            : null,
           prompt,
           expected,
           defaultAssetUrl,
@@ -154,6 +167,9 @@ Deno.serve(async (req) => {
             slotKey: editorConfig.slotKey ?? slot?.id ?? null,
             label: editorConfig.label ?? slot?.name ?? node.name,
             expected,
+            outputExposed: node.node_type === "image_gen" || node.node_type === "video_gen"
+              ? node.prompt_config?.output_exposed ?? null
+              : null,
             isUserFacingInput,
             isReferenceInput,
             sampleUrl,
@@ -170,6 +186,11 @@ Deno.serve(async (req) => {
       reviewStatus: version.review_status ?? "Unreviewed",
       isActive: version.is_active,
       nodes: detailNodes,
+      edges: (edges ?? []).map((edge: any) => ({
+        sourceNodeId: edge.source_node_id,
+        targetNodeId: edge.target_node_id,
+        targetParam: edge.mapping_logic?.target_param ?? null,
+      })),
     });
   } catch (error) {
     return json({ error: errorMessage(error) }, 400);
