@@ -1,0 +1,206 @@
+import { useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
+import { ArrowRight, Check, Crown, Rocket, Settings, Zap } from "lucide-react";
+import SiteShell from "@/components/mvp/SiteShell";
+import { Button } from "@/components/ui/button";
+import { toast } from "@/hooks/use-toast";
+import { useAuth } from "@/contexts/AuthContext";
+import { supabase } from "@/integrations/supabase/client";
+import { STRIPE_TIERS } from "@/lib/stripe-config";
+
+const tierCopy = {
+  starter: {
+    icon: Zap,
+    description: "For smaller brands running consistent drops.",
+    features: ["500 monthly credits", "Template runner access", "Standard queue"],
+  },
+  pro: {
+    icon: Rocket,
+    description: "For brands shipping weekly campaigns.",
+    features: ["2,000 monthly credits", "Priority queueing", "Faster iteration loops"],
+  },
+  studio: {
+    icon: Crown,
+    description: "For larger teams or agencies operating multiple brands.",
+    features: ["6,000 monthly credits", "Largest monthly allotment", "Best fit for active ops"],
+  },
+} as const;
+
+function formatBillingDate(value: string | null | undefined) {
+  if (!value) return "Not set";
+  return new Date(value).toLocaleDateString([], {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+}
+
+export default function BillingPage() {
+  const navigate = useNavigate();
+  const { user, profile, refreshSubscription } = useAuth();
+  const [loading, setLoading] = useState<string | null>(null);
+
+  const handleCheckout = async (priceId: string, tierName: string) => {
+    if (!user) {
+      navigate("/auth?mode=signup");
+      return;
+    }
+
+    setLoading(tierName);
+    try {
+      const { data, error } = await supabase.functions.invoke("create-checkout", {
+        body: { priceId },
+      });
+      if (error) throw error;
+      if (!data?.url) throw new Error("Stripe checkout URL not returned.");
+      window.open(data.url, "_blank", "noopener,noreferrer");
+    } catch (error) {
+      toast({
+        title: "Checkout failed",
+        description: error instanceof Error ? error.message : "Could not start Stripe checkout.",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(null);
+    }
+  };
+
+  const handlePortal = async () => {
+    setLoading("portal");
+    try {
+      const { data, error } = await supabase.functions.invoke("customer-portal");
+      if (error) throw error;
+      if (!data?.url) throw new Error("Stripe portal URL not returned.");
+      window.open(data.url, "_blank", "noopener,noreferrer");
+    } catch (error) {
+      toast({
+        title: "Portal failed",
+        description: error instanceof Error ? error.message : "Could not open the billing portal.",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(null);
+    }
+  };
+
+  const currentPlan = profile?.plan ?? "free";
+  const currentTier = currentPlan === "free" ? null : STRIPE_TIERS[currentPlan as keyof typeof STRIPE_TIERS];
+
+  return (
+    <SiteShell>
+      <section className="container py-12 md:py-16">
+        <div className="flex flex-wrap items-end justify-between gap-4">
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.3em] text-cyan-100">Memberships</p>
+            <h1 className="mt-4 font-display text-5xl font-bold tracking-[-0.05em] text-white">Stripe-backed plans and recurring credits.</h1>
+            <p className="mt-4 max-w-3xl text-base leading-7 text-slate-300">
+              Membership state is stored in Supabase profiles, billing events, and subscription grant tables. Stripe handles checkout and portal management.
+            </p>
+          </div>
+          {user ? (
+            <Button
+              variant="outline"
+              onClick={() => void refreshSubscription()}
+              className="rounded-full border-white/15 bg-white/5 text-foreground hover:bg-white/10"
+            >
+              Refresh status
+            </Button>
+          ) : (
+            <Button asChild className="rounded-full bg-cyan-300 text-slate-950 hover:bg-cyan-200">
+              <Link to="/auth?mode=signup">Create account</Link>
+            </Button>
+          )}
+        </div>
+
+        <div className="mt-8 grid gap-6 lg:grid-cols-[0.9fr_1.1fr]">
+          <section className="rounded-[2rem] border border-white/10 bg-white/[0.03] p-6">
+            <p className="text-[11px] uppercase tracking-[0.24em] text-muted-foreground">Current state</p>
+            <div className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-1">
+              <div className="rounded-[1.5rem] border border-white/8 bg-black/20 p-4">
+                <p className="text-[11px] uppercase tracking-[0.24em] text-muted-foreground">Plan</p>
+                <p className="mt-2 text-3xl font-semibold capitalize text-white">{currentPlan}</p>
+              </div>
+              <div className="rounded-[1.5rem] border border-white/8 bg-black/20 p-4">
+                <p className="text-[11px] uppercase tracking-[0.24em] text-muted-foreground">Credits</p>
+                <p className="mt-2 text-3xl font-semibold text-white">{profile?.credits_balance ?? 0}</p>
+              </div>
+              <div className="rounded-[1.5rem] border border-white/8 bg-black/20 p-4">
+                <p className="text-[11px] uppercase tracking-[0.24em] text-muted-foreground">Subscription</p>
+                <p className="mt-2 text-xl font-semibold capitalize text-white">{profile?.subscription_status ?? "inactive"}</p>
+              </div>
+              <div className="rounded-[1.5rem] border border-white/8 bg-black/20 p-4">
+                <p className="text-[11px] uppercase tracking-[0.24em] text-muted-foreground">Period ends</p>
+                <p className="mt-2 text-xl font-semibold text-white">{formatBillingDate(profile?.subscription_period_end)}</p>
+              </div>
+            </div>
+
+            {user && currentTier ? (
+              <Button
+                onClick={() => void handlePortal()}
+                disabled={loading === "portal"}
+                variant="outline"
+                className="mt-6 rounded-full border-white/15 bg-white/5 text-foreground hover:bg-white/10"
+              >
+                <Settings className="h-4 w-4" />
+                {loading === "portal" ? "Opening portal..." : "Manage subscription"}
+              </Button>
+            ) : null}
+          </section>
+
+          <section className="grid gap-4 md:grid-cols-3">
+            {(Object.keys(STRIPE_TIERS) as Array<keyof typeof STRIPE_TIERS>).map((tierKey) => {
+              const tier = STRIPE_TIERS[tierKey];
+              const tierMeta = tierCopy[tierKey];
+              const Icon = tierMeta.icon;
+              const isCurrent = currentPlan === tierKey;
+
+              return (
+                <article
+                  key={tierKey}
+                  className={`rounded-[2rem] border p-6 ${
+                    isCurrent
+                      ? "border-cyan-300/40 bg-cyan-300/10"
+                      : "border-white/10 bg-slate-950/75"
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    <Icon className="h-4 w-4 text-cyan-100" />
+                    <p className="font-display text-xl font-semibold text-white">{tier.name}</p>
+                  </div>
+                  <p className="mt-3 text-sm leading-6 text-slate-300">{tierMeta.description}</p>
+                  <p className="mt-5 text-4xl font-semibold text-white">
+                    ${tier.price}
+                    <span className="ml-1 text-sm font-normal text-slate-400">/mo</span>
+                  </p>
+                  <p className="mt-2 text-sm text-slate-300">{tier.monthlyCredits} credits each cycle</p>
+
+                  <ul className="mt-5 space-y-3 text-sm text-slate-200">
+                    {tierMeta.features.map((feature) => (
+                      <li key={feature} className="flex items-start gap-2">
+                        <Check className="mt-0.5 h-4 w-4 text-cyan-200" />
+                        <span>{feature}</span>
+                      </li>
+                    ))}
+                  </ul>
+
+                  <Button
+                    onClick={() => void handleCheckout(tier.price_id, tierKey)}
+                    disabled={isCurrent || !!loading}
+                    className={`mt-6 w-full rounded-full ${
+                      isCurrent
+                        ? "bg-white/10 text-white hover:bg-white/10"
+                        : "bg-cyan-300 text-slate-950 hover:bg-cyan-200"
+                    }`}
+                  >
+                    {isCurrent ? "Current plan" : loading === tierKey ? "Loading..." : `Choose ${tier.name}`}
+                    {!isCurrent ? <ArrowRight className="h-4 w-4" /> : null}
+                  </Button>
+                </article>
+              );
+            })}
+          </section>
+        </div>
+      </section>
+    </SiteShell>
+  );
+}
