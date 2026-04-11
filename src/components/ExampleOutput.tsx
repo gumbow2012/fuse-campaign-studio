@@ -21,7 +21,8 @@ const ExampleOutput = () => {
         loop
         playsInline
         preload="auto"
-        className="w-full h-auto object-cover transition-transform duration-[3000ms] ease-out group-hover:scale-[1.04]"
+        className="w-full h-auto object-cover transition-transform ease-out group-hover:scale-[1.04]"
+        style={{ transitionDuration: "3000ms" }}
       />
 
       {/* Grain overlay */}

@@ -51,7 +51,8 @@ const DropTemplateCard = ({ template, volLabel }: { template: Template; volLabel
           <img
             src={template.image}
             alt={template.name}
-            className="w-full h-full object-cover transition-transform duration-[1200ms] ease-out group-hover:scale-[1.12]"
+            className="w-full h-full object-cover transition-transform ease-out group-hover:scale-[1.12]"
+            style={{ transitionDuration: "1200ms" }}
             loading="lazy"
           />
 

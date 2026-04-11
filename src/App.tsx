@@ -13,7 +13,6 @@ import AdminTemplates from "@/pages/AdminTemplates";
 import FlowEmbed from "@/pages/FlowEmbed";
 import FlowTest from "@/pages/FlowTest";
 import NanoRun from "@/pages/NanoRun";
-import TemplateCanvas from "@/pages/TemplateCanvas";
 import TemplateLab from "@/pages/TemplateLab";
 import AboutPage from "@/pages/mvp/AboutPage";
 import AccountPage from "@/pages/mvp/AccountPage";
@@ -93,14 +92,6 @@ const App = () => (
               element={
                 <AdminRoute>
                   <TemplateLab />
-                </AdminRoute>
-              }
-            />
-            <Route
-              path="/app/lab/canvas"
-              element={
-                <AdminRoute>
-                  <TemplateCanvas />
                 </AdminRoute>
               }
             />

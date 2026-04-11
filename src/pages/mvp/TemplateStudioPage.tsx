@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { Link } from "react-router-dom";
 import {
   AlertTriangle,
   CheckCircle2,
@@ -63,7 +64,7 @@ async function getAccessToken() {
 }
 
 export default function TemplateStudioPage() {
-  const { profile } = useAuth();
+  const { profile, roles } = useAuth();
   const [selectedTemplateId, setSelectedTemplateId] = useState("");
   const [files, setFiles] = useState<Record<string, File | null>>({});
   const [textInputs, setTextInputs] = useState<Record<string, string>>({});
@@ -181,6 +182,11 @@ export default function TemplateStudioPage() {
   const creditsRequired = selectedTemplate?.estimated_credits_per_run ?? 0;
   const creditBalance = profile?.credits_balance ?? 0;
   const canAfford = creditBalance >= creditsRequired;
+  const hasPrivilegedBypass = roles.includes("admin") || roles.includes("dev");
+  const hasActiveSubscription =
+    hasPrivilegedBypass ||
+    profile?.subscription_status === "active" ||
+    profile?.subscription_status === "trialing";
 
   const handleTemplateSelect = (templateId: string) => {
     setSelectedTemplateId(templateId);
@@ -452,11 +458,21 @@ export default function TemplateStudioPage() {
 
                       <Button
                         onClick={() => void handleRun()}
-                        disabled={submitting || isRunning || !requiredInputsAreReady || !canAfford}
+                        disabled={submitting || isRunning || !requiredInputsAreReady || !canAfford || !hasActiveSubscription}
                         className="mt-5 w-full rounded-full bg-cyan-300 text-slate-950 hover:bg-cyan-200"
                       >
                         {submitting || isRunning ? "Running..." : "Run template"}
                       </Button>
+
+                      {!hasActiveSubscription ? (
+                        <p className="mt-3 text-sm leading-6 text-amber-100">
+                          Active membership required before running templates.
+                          {" "}
+                          <Link to="/billing" className="underline underline-offset-4">
+                            Open billing
+                          </Link>
+                        </p>
+                      ) : null}
                     </div>
                   </div>
                 </div>

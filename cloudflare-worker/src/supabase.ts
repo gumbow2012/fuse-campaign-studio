@@ -1,5 +1,15 @@
 import { Env } from "./types";
 
+export type RunnerAccessState = {
+  exists: boolean;
+  plan: string | null;
+  subscriptionStatus: string | null;
+  creditsBalance: number;
+  roles: string[];
+  isPrivileged: boolean;
+  hasActiveSubscription: boolean;
+};
+
 /** Helper to make authenticated Supabase REST API calls.
  *  Write ops (POST/PATCH/PUT/DELETE) use SERVICE_ROLE to bypass RLS.
  *  Read ops use ANON key (RLS applies). */
@@ -93,6 +103,71 @@ export async function getCreditBalance(env: Env, userId: string): Promise<number
   if (!res.ok) return 0;
   const rows = (await res.json()) as { credits_balance: number }[];
   return rows[0]?.credits_balance ?? 0;
+}
+
+export async function getRunnerAccessState(env: Env, userId: string): Promise<RunnerAccessState> {
+  const key = env.SUPABASE_SERVICE_ROLE_KEY || env.SUPABASE_ANON_KEY;
+
+  const [profileRes, roleRes] = await Promise.all([
+    fetch(
+      `${env.SUPABASE_URL}/rest/v1/profiles?user_id=eq.${userId}&select=plan,subscription_status,credits_balance`,
+      {
+        headers: {
+          apikey: key,
+          Authorization: `Bearer ${key}`,
+          "Content-Type": "application/json",
+        },
+      },
+    ),
+    fetch(
+      `${env.SUPABASE_URL}/rest/v1/user_roles?user_id=eq.${userId}&select=role`,
+      {
+        headers: {
+          apikey: key,
+          Authorization: `Bearer ${key}`,
+          "Content-Type": "application/json",
+        },
+      },
+    ),
+  ]);
+
+  if (!profileRes.ok) {
+    throw new Error("Failed to fetch billing profile");
+  }
+
+  const profiles = await profileRes.json() as Array<{
+    plan?: string | null;
+    subscription_status?: string | null;
+    credits_balance?: number | null;
+  }>;
+  const profile = profiles[0];
+  if (!profile) {
+    return {
+      exists: false,
+      plan: null,
+      subscriptionStatus: null,
+      creditsBalance: 0,
+      roles: [],
+      isPrivileged: false,
+      hasActiveSubscription: false,
+    };
+  }
+
+  const roles = roleRes.ok
+    ? ((await roleRes.json()) as Array<{ role?: string | null }>).map((row) => row.role).filter(Boolean) as string[]
+    : [];
+  const isPrivileged = roles.includes("admin") || roles.includes("dev");
+  const subscriptionStatus = profile.subscription_status ?? null;
+
+  return {
+    exists: true,
+    plan: profile.plan ?? null,
+    subscriptionStatus,
+    creditsBalance: profile.credits_balance ?? 0,
+    roles,
+    isPrivileged,
+    hasActiveSubscription: subscriptionStatus === "active" || subscriptionStatus === "trialing",
+  };
 }
 
 /** Deduct credits via Supabase RPC and record in ledger. */

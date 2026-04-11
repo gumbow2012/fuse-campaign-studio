@@ -9,7 +9,7 @@
 
 import { Env } from "../types";
 import { verifyToken } from "../auth";
-import { supabaseFetch, updateProjectStatus, getProject, getTemplate, getCreditBalance, deductCredits } from "../supabase";
+import { supabaseFetch, updateProjectStatus, getProject, getTemplate, deductCredits, getRunnerAccessState } from "../supabase";
 
 /* ── Helpers ── */
 
@@ -98,6 +98,7 @@ export async function handleCreateProject(request: Request, env: Env): Promise<R
 
   // ── Credit check & deduction for authenticated users ──────────────────────
   let creditCost = 10; // default
+  let accessState: Awaited<ReturnType<typeof getRunnerAccessState>> | null = null;
   if (userIdForDb) {
     // Determine credit cost from template
     if (templateId) {
@@ -107,10 +108,19 @@ export async function handleCreateProject(request: Request, env: Env): Promise<R
       } catch { /* use default */ }
     }
 
-    const balance = await getCreditBalance(env, userIdForDb);
-    if (balance < creditCost) {
+    accessState = await getRunnerAccessState(env, userIdForDb);
+    if (!accessState.exists) {
+      return Response.json({ error: "Profile not found." }, { status: 404 });
+    }
+    if (!accessState.isPrivileged && !accessState.hasActiveSubscription) {
       return Response.json(
-        { error: `Insufficient credits. Need ${creditCost}, have ${balance}.` },
+        { error: "Active membership required before running templates." },
+        { status: 403 },
+      );
+    }
+    if (!accessState.isPrivileged && accessState.creditsBalance < creditCost) {
+      return Response.json(
+        { error: `Insufficient credits. Need ${creditCost}, have ${accessState.creditsBalance}.` },
         { status: 402 },
       );
     }
@@ -143,7 +153,7 @@ export async function handleCreateProject(request: Request, env: Env): Promise<R
   const id = project.id;
 
   // Deduct credits after successful project creation
-  if (userIdForDb) {
+  if (userIdForDb && !(accessState?.isPrivileged)) {
     await deductCredits(
       env,
       userIdForDb,
@@ -158,7 +168,7 @@ export async function handleCreateProject(request: Request, env: Env): Promise<R
     ok: true,
     project_id: id,   // snake_case for autorun script
     projectId: id,    // camelCase for frontend
-    credits_used: creditCost,
+    credits_used: accessState?.isPrivileged ? 0 : creditCost,
   }, { status: 201 });
 }
 
