@@ -1,9 +1,8 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 
-import Stripe from "https://esm.sh/stripe@18.5.0";
-
 import { createAdminClient, corsHeaders, json, errorMessage } from "../_shared/supabase-admin.ts";
 import { planFromPriceId, planFromProductId } from "../_shared/stripe-plans.ts";
+import { createStripeClient } from "../_shared/stripe.ts";
 
 type StripeObject = Record<string, any>;
 
@@ -94,7 +93,7 @@ Deno.serve(async (req) => {
     if (!signature) throw new Error("Missing stripe-signature header");
 
     const rawBody = await req.text();
-    const stripe = new Stripe(stripeKey, { apiVersion: "2025-08-27.basil" });
+    const stripe = createStripeClient(stripeKey);
     const event = stripe.webhooks.constructEvent(rawBody, signature, webhookSecret);
     const admin = createAdminClient();
 

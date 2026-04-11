@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
-import Stripe from "https://esm.sh/stripe@18.5.0";
 import { createClient } from "npm:@supabase/supabase-js@2.57.2";
+import { createStripeClient } from "../_shared/stripe.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -29,7 +29,7 @@ serve(async (req) => {
     const user = userData.user;
     if (!user?.email) throw new Error("User not authenticated");
 
-    const stripe = new Stripe(stripeKey, { apiVersion: "2025-08-27.basil" });
+    const stripe = createStripeClient(stripeKey);
     const customers = await stripe.customers.list({ email: user.email, limit: 1 });
     let customerId = customers.data[0]?.id ?? null;
     if (!customerId) {
@@ -45,8 +45,10 @@ serve(async (req) => {
     }
 
     const origin = req.headers.get("origin") || "http://localhost:3000";
+    const portalConfiguration = Deno.env.get("STRIPE_PORTAL_CONFIGURATION_ID")?.trim();
     const portalSession = await stripe.billingPortal.sessions.create({
       customer: customerId,
+      configuration: portalConfiguration || undefined,
       return_url: `${origin}/billing`,
     });
 

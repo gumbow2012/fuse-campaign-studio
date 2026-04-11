@@ -23,6 +23,7 @@ Set these project secrets in Supabase before testing live billing:
 
 - `STRIPE_SECRET_KEY`
 - `STRIPE_WEBHOOK_SECRET`
+- `STRIPE_PORTAL_CONFIGURATION_ID` (optional, but recommended if you want the app pinned to one known Customer Portal configuration)
 
 ## Stripe dashboard configuration required
 
@@ -31,8 +32,9 @@ Set these project secrets in Supabase before testing live billing:
    - `src/lib/stripe-config.ts`
    - `supabase/functions/_shared/stripe-plans.ts`
 3. Enable the Stripe Customer Portal.
-4. Add the webhook endpoint above.
-5. Subscribe the webhook to these events:
+4. If you want the app to use one exact portal configuration, set `STRIPE_PORTAL_CONFIGURATION_ID` in Supabase to your `bpc_...` ID.
+5. Add the webhook endpoint above.
+6. Subscribe the webhook to these events:
    - `checkout.session.completed`
    - `customer.subscription.created`
    - `customer.subscription.updated`
