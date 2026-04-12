@@ -21,7 +21,7 @@ const categoryIcons: Record<string, string> = {
   General: "✦",
 };
 
-const CREDIT_DOLLAR_VALUE = 0.098;
+const CREDIT_DOLLAR_VALUE = 0.07;
 
 function toTemplateSlug(value: string) {
   return value

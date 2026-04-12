@@ -1,6 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 
-import { createAdminClient, corsHeaders, json, errorMessage } from "../_shared/supabase-admin.ts";
+import { createAdminClient, corsHeaders, json, errorMessage, logAuditEvent } from "../_shared/supabase-admin.ts";
 import { planFromPriceId, planFromProductId } from "../_shared/stripe-plans.ts";
 import { createStripeClient } from "../_shared/stripe.ts";
 
@@ -83,6 +83,9 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: corsHeaders });
   if (req.method !== "POST") return json({ error: "Method not allowed" }, 405);
 
+  const requestId = crypto.randomUUID();
+  const admin = createAdminClient();
+
   try {
     const stripeKey = Deno.env.get("STRIPE_SECRET_KEY");
     const webhookSecret = Deno.env.get("STRIPE_WEBHOOK_SECRET");
@@ -94,34 +97,43 @@ Deno.serve(async (req) => {
 
     const rawBody = await req.text();
     const stripe = createStripeClient(stripeKey);
-    const event = stripe.webhooks.constructEvent(rawBody, signature, webhookSecret);
-    const admin = createAdminClient();
+    const event = await stripe.webhooks.constructEventAsync(rawBody, signature, webhookSecret);
+
+    await logAuditEvent({
+      eventType: "stripe.webhook.received",
+      message: `Webhook received: ${event.type}`,
+      source: "stripe-webhook",
+      requestId,
+      metadata: {
+        stripe_event_id: event.id,
+        stripe_event_type: event.type,
+      },
+    }, admin);
 
     const object = event.data.object as StripeObject;
-    const stripeCustomerId =
-      typeof object.customer === "string" ? object.customer : null;
+    const stripeCustomerId = typeof object.customer === "string" ? object.customer : null;
     const stripeSubscriptionId =
       typeof object.subscription === "string"
         ? object.subscription
         : typeof object.id === "string" && event.type.startsWith("customer.subscription")
-        ? object.id
-        : null;
+          ? object.id
+          : null;
     const stripeInvoiceId =
       typeof object.id === "string" && event.type.startsWith("invoice.") ? object.id : null;
     const stripePriceId =
       typeof object.price === "string"
         ? object.price
         : typeof object.price?.id === "string"
-        ? object.price.id
-        : null;
+          ? object.price.id
+          : null;
     const customerEmail =
       typeof object.customer_email === "string"
         ? object.customer_email
         : typeof object.customer_details?.email === "string"
-        ? object.customer_details.email
-        : typeof object.receipt_email === "string"
-        ? object.receipt_email
-        : null;
+          ? object.customer_details.email
+          : typeof object.receipt_email === "string"
+            ? object.receipt_email
+            : null;
 
     const { error: eventError } = await admin.from("billing_events").insert({
       stripe_event_id: event.id,
@@ -134,6 +146,16 @@ Deno.serve(async (req) => {
     });
     if (eventError) {
       if (eventError.code === "23505") {
+        await logAuditEvent({
+          eventType: "stripe.webhook.duplicate",
+          message: `Duplicate webhook ignored: ${event.type}`,
+          source: "stripe-webhook",
+          requestId,
+          metadata: {
+            stripe_event_id: event.id,
+            stripe_event_type: event.type,
+          },
+        }, admin);
         return json({ received: true, duplicate: true }, 200);
       }
       throw new Error(eventError.message);
@@ -252,8 +274,29 @@ Deno.serve(async (req) => {
       return json({ received: true }, 200);
     }
 
+    await logAuditEvent({
+      eventType: "stripe.webhook.ignored",
+      message: `Webhook ignored: ${event.type}`,
+      source: "stripe-webhook",
+      requestId,
+      metadata: {
+        stripe_event_id: event.id,
+        stripe_event_type: event.type,
+      },
+    }, admin);
     return json({ received: true, ignored: event.type }, 200);
   } catch (error) {
+    await logAuditEvent({
+      eventType: "stripe.webhook.failed",
+      message: errorMessage(error),
+      severity: "error",
+      source: "stripe-webhook",
+      requestId,
+      errorCode: "webhook_failed",
+      metadata: {
+        method: req.method,
+      },
+    }, admin);
     return json({ error: errorMessage(error) }, 400);
   }
 });

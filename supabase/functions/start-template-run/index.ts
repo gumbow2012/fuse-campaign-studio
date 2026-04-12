@@ -8,11 +8,12 @@ import {
   getUserRoles,
   hasValidRunnerCode,
   json,
+  logAuditEvent,
   requireUser,
 } from "../_shared/supabase-admin.ts";
 import { PAPARAZZI_VERSION_ID, runGraphJob } from "../_shared/executor.ts";
 import { buildTemplateInputPlan } from "../_shared/template-inputs.ts";
-import { getTemplateCreditCost } from "../_shared/template-pricing.ts";
+import { countTemplateDeliverables, getTemplateCreditCost } from "../_shared/template-pricing.ts";
 
 declare const EdgeRuntime: {
   waitUntil(promise: Promise<unknown>): void;
@@ -113,8 +114,6 @@ function expandInputsForTemplate(args: {
     if (mappedNodeIds.has(node.id)) continue;
     if (userFacingNodeIds.has(node.id)) continue;
     if (!implicitReferenceNodeIds.has(node.id)) continue;
-    const weavyExposed = node.prompt_config?.weavy_exposed === true || node.prompt_config?.weavy_exposed === "true";
-    if (weavyExposed) continue;
 
     const sampleUrl = typeof node.prompt_config?.sample_url === "string"
       ? node.prompt_config.sample_url
@@ -131,6 +130,8 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: corsHeaders });
 
   const admin = createAdminClient();
+  const requestId = crypto.randomUUID();
+  let jobId: string | null = null;
 
   try {
     const runnerAccess = hasValidRunnerCode(req);
@@ -138,7 +139,6 @@ Deno.serve(async (req) => {
     if (!user && !runnerAccess) throw new Error("Authentication required");
 
     const body = await req.json() as StartTemplateRunBody;
-
     const versionId = body.versionId ?? PAPARAZZI_VERSION_ID;
     const inputs = { ...(body.inputs ?? {}) };
 
@@ -149,13 +149,38 @@ Deno.serve(async (req) => {
       .single();
     if (versionError || !version) throw new Error(versionError?.message ?? "Version not found");
 
+    const templateName = (version as any).fuse_templates.name as string;
     const userRoles = user ? await getUserRoles(user.id, admin) : [];
     const bypassCredits = runnerAccess || userRoles.some((role) => role === "admin" || role === "dev");
 
-    let creditCost = 0;
     if (user && !bypassCredits) {
-      creditCost = getTemplateCreditCost((version as any).fuse_templates.name);
+      const { data: profile, error: profileError } = await admin
+        .from("profiles")
+        .select("subscription_status, credits_balance")
+        .eq("user_id", user.id)
+        .single();
+      if (profileError || !profile) throw new Error(profileError?.message ?? "Profile not found");
+
+      const subscriptionStatus = String(profile.subscription_status ?? "inactive");
+      if (subscriptionStatus !== "active" && subscriptionStatus !== "trialing") {
+        throw new Error("Active membership required before running templates");
+      }
     }
+
+    const { data: versionNodes, error: versionNodesError } = await admin
+      .from("nodes")
+      .select("id, name, node_type, prompt_config, default_asset_id")
+      .eq("version_id", version.id);
+    if (versionNodesError || !versionNodes) {
+      throw new Error(versionNodesError?.message ?? "Failed to load template nodes");
+    }
+
+    const inputNodes = versionNodes.filter((node: any) => node.node_type === "user_input");
+    const executableNodes = versionNodes.filter((node: any) => node.node_type !== "user_input");
+    const deliverableCounts = countTemplateDeliverables(versionNodes as any);
+    const creditCost = user && !bypassCredits
+      ? getTemplateCreditCost(templateName, deliverableCounts)
+      : 0;
 
     const { data: job, error: jobError } = await admin
       .from("execution_jobs")
@@ -171,18 +196,11 @@ Deno.serve(async (req) => {
       .select()
       .single();
     if (jobError || !job) throw new Error(jobError?.message ?? "Failed to create job");
+    jobId = job.id;
 
     const uploadedInputs = await uploadInputFiles(admin, job.id, body.inputFiles);
-
-    const { data: inputNodes, error: inputNodesError } = await admin
-      .from("nodes")
-      .select("id, name, prompt_config, default_asset_id")
-      .eq("version_id", version.id)
-      .eq("node_type", "user_input");
-    if (inputNodesError) throw new Error(inputNodesError.message);
-
     const finalInputs = expandInputsForTemplate({
-      templateName: (version as any).fuse_templates.name,
+      templateName,
       inputNodes: inputNodes ?? [],
       suppliedInputs: { ...uploadedInputs, ...inputs },
     });
@@ -200,7 +218,7 @@ Deno.serve(async (req) => {
         p_user_id: user.id,
         p_amount: -creditCost,
         p_type: "run_template",
-        p_description: `Run template: ${(version as any).fuse_templates.name} (${job.id})`,
+        p_description: `Run template: ${templateName} (${job.id})`,
         p_template_id: version.template_id,
         p_project_id: null,
         p_step_id: null,
@@ -211,16 +229,9 @@ Deno.serve(async (req) => {
       }
     }
 
-    const { data: nodes, error: nodesError } = await admin
-      .from("nodes")
-      .select("id, node_type")
-      .eq("version_id", version.id)
-      .neq("node_type", "user_input");
-    if (nodesError || !nodes) throw new Error(nodesError?.message ?? "Failed to load execution nodes");
-
     const { error: stepsError } = await admin
       .from("execution_steps")
-      .insert(nodes.map((node: any) => ({
+      .insert(executableNodes.map((node: any) => ({
         job_id: job.id,
         node_id: node.id,
         status: "pending",
@@ -228,6 +239,23 @@ Deno.serve(async (req) => {
         output_payload: {},
       })));
     if (stepsError) throw new Error(stepsError.message);
+
+    await logAuditEvent({
+      eventType: "template.run.queued",
+      message: `Queued template run for ${templateName}`,
+      source: "start-template-run",
+      requestId,
+      jobId: job.id,
+      templateId: version.template_id,
+      versionId: version.id,
+      metadata: {
+        user_id: user?.id ?? null,
+        bypass_credits: bypassCredits,
+        credit_cost: creditCost,
+        image_outputs: deliverableCounts.imageOutputs,
+        video_outputs: deliverableCounts.videoOutputs,
+      },
+    }, admin);
 
     EdgeRuntime.waitUntil((async () => {
       try {
@@ -242,11 +270,35 @@ Deno.serve(async (req) => {
             completed_at: new Date().toISOString(),
           })
           .eq("id", job.id);
+
+        await logAuditEvent({
+          eventType: "template.run.failed",
+          message,
+          severity: "error",
+          source: "start-template-run",
+          requestId,
+          jobId: job.id,
+          templateId: version.template_id,
+          versionId: version.id,
+          errorCode: "runner_failed",
+          metadata: {
+            user_id: user?.id ?? null,
+          },
+        }, admin);
       }
     })());
 
     return json({ jobId: job.id, status: "queued" }, 202);
   } catch (error) {
+    await logAuditEvent({
+      eventType: "template.run.rejected",
+      message: errorMessage(error),
+      severity: "error",
+      source: "start-template-run",
+      requestId,
+      jobId,
+      errorCode: "run_rejected",
+    }, admin);
     return json({ error: errorMessage(error) }, 400);
   }
 });

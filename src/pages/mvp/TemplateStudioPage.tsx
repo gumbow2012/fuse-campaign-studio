@@ -21,15 +21,14 @@ import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import {
-  createProject,
-  enqueueProject,
   fetchTemplateDetail,
   fetchTemplates,
-  getProjectStatus,
+  fileToDataUrl,
+  getTemplateRunStatus,
+  startTemplateRun,
   type ApiTemplate,
   type OutputItem,
   type TemplateDetail,
-  uploadFile,
 } from "@/services/fuseApi";
 import { getStaticInputs } from "@/services/templateInputMap";
 
@@ -68,7 +67,7 @@ export default function TemplateStudioPage() {
   const [selectedTemplateId, setSelectedTemplateId] = useState("");
   const [files, setFiles] = useState<Record<string, File | null>>({});
   const [textInputs, setTextInputs] = useState<Record<string, string>>({});
-  const [projectId, setProjectId] = useState<string | null>(null);
+  const [jobId, setJobId] = useState<string | null>(null);
   const [result, setResult] = useState<RunnerResult | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -103,7 +102,7 @@ export default function TemplateStudioPage() {
   });
 
   useEffect(() => {
-    if (!projectId) return;
+    if (!jobId) return;
 
     let cancelled = false;
     let timeoutId: number | undefined;
@@ -111,7 +110,7 @@ export default function TemplateStudioPage() {
     const poll = async () => {
       try {
         const token = await getAccessToken();
-        const status = await getProjectStatus(token, projectId);
+        const status = await getTemplateRunStatus(token, jobId);
         if (cancelled) return;
 
         const normalizedStatus = status.status as RunnerStatus;
@@ -119,21 +118,18 @@ export default function TemplateStudioPage() {
           status: normalizedStatus,
           progress: status.progress ?? 0,
           logs: status.logs ?? [],
-          outputs: (status.outputs?.items ?? []).map((output) => ({
-            type: output.type ?? "image",
-            url: output.url,
-            label: output.label,
-            key: output.key,
-          })),
+          outputs: status.outputs ?? [],
           error: status.error ?? undefined,
         });
 
         if (normalizedStatus === "queued" || normalizedStatus === "running" || normalizedStatus === "video_pending") {
-          timeoutId = window.setTimeout(poll, 8000);
+          timeoutId = window.setTimeout(poll, 4000);
         }
-      } catch {
+      } catch (error) {
         if (!cancelled) {
-          timeoutId = window.setTimeout(poll, 10000);
+          const message = error instanceof Error ? error.message : "Could not refresh the run status.";
+          setResult((current) => current ? { ...current, logs: [...current.logs, message].slice(-8) } : current);
+          timeoutId = window.setTimeout(poll, 7000);
         }
       }
     };
@@ -144,7 +140,7 @@ export default function TemplateStudioPage() {
       cancelled = true;
       if (timeoutId) window.clearTimeout(timeoutId);
     };
-  }, [projectId]);
+  }, [jobId]);
 
   const inputFields: InputField[] = (() => {
     if (templateDetailQuery.data?.user_inputs?.length) {
@@ -192,12 +188,20 @@ export default function TemplateStudioPage() {
     setSelectedTemplateId(templateId);
     setFiles({});
     setTextInputs({});
-    setProjectId(null);
+    setJobId(null);
     setResult(null);
   };
 
   const handleRun = async () => {
     if (!selectedTemplate) return;
+    if (!selectedTemplate.versionId) {
+      toast({
+        title: "Run unavailable",
+        description: "This template is missing an active version id.",
+        variant: "destructive",
+      });
+      return;
+    }
     if (!requiredInputsAreReady) {
       toast({
         title: "Missing inputs",
@@ -208,33 +212,49 @@ export default function TemplateStudioPage() {
     }
 
     setSubmitting(true);
-    setProjectId(null);
+    setJobId(null);
     setResult(null);
 
     try {
       const token = await getAccessToken();
       const inputs: Record<string, string> = {};
+      const inputFiles = Object.fromEntries(
+        (
+          await Promise.all(
+            inputFields
+              .filter((field) => field.type === "image")
+              .map(async (field) => {
+                const file = files[field.key];
+                if (!file) return null;
+                return [
+                  field.key,
+                  {
+                    dataUrl: await fileToDataUrl(file),
+                    filename: file.name,
+                  },
+                ] as const;
+              }),
+          )
+        ).filter(Boolean) as Array<readonly [string, { dataUrl: string; filename?: string }]>,
+      );
 
       for (const field of inputFields) {
-        if (field.type === "image") {
-          const file = files[field.key];
-          if (!file) continue;
-          const upload = await uploadFile(token, file);
-          inputs[field.key] = upload.imageUrl;
-          inputs[`${field.key}_key`] = upload.key;
-        } else {
-          const value = textInputs[field.key]?.trim();
-          if (value) inputs[field.key] = value;
-        }
+        if (field.type === "image") continue;
+        const value = textInputs[field.key]?.trim();
+        if (value) inputs[field.key] = value;
       }
 
-      const createdProject = await createProject(token, selectedTemplate.id, inputs);
-      if (!createdProject.projectId) {
-        throw new Error("Template run did not return a project id.");
+      const run = await startTemplateRun(token, {
+        versionId: selectedTemplate.versionId,
+        inputs,
+        inputFiles,
+      });
+
+      if (!run.jobId) {
+        throw new Error("Template run did not return a job id.");
       }
 
-      await enqueueProject(token, createdProject.projectId);
-      setProjectId(createdProject.projectId);
+      setJobId(run.jobId);
       setResult({ status: "queued", progress: 0, logs: [], outputs: [] });
       toast({ title: "Run queued", description: "The template is now executing." });
     } catch (error) {
@@ -358,18 +378,12 @@ export default function TemplateStudioPage() {
                         {selectedTemplate.description || "Run the configured workflow with the source assets you provide below."}
                       </p>
                     </div>
-
-                    {templateDetailQuery.data?.asset_requirements ? (
-                      <div className="rounded-[1.5rem] border border-amber-300/20 bg-amber-300/10 p-4 text-sm leading-6 text-amber-50">
-                        {templateDetailQuery.data.asset_requirements}
-                      </div>
-                    ) : null}
                   </div>
 
                   <div className="space-y-5">
                     <div>
                       <p className="text-[11px] uppercase tracking-[0.24em] text-muted-foreground">Inputs</p>
-                      <p className="mt-2 text-sm text-slate-300">Required inputs come from the template manifest or the static fallback map.</p>
+                      <p className="mt-2 text-sm text-slate-300">Upload the required assets and launch a real job against the active template version.</p>
                     </div>
 
                     <div className="space-y-4">
@@ -484,7 +498,7 @@ export default function TemplateStudioPage() {
                 <div>
                   <p className="text-[11px] uppercase tracking-[0.24em] text-muted-foreground">Result</p>
                   <p className="mt-2 text-sm text-slate-300">
-                    Current project {projectId ? <span className="font-mono text-slate-100">{projectId}</span> : "has not started yet"}.
+                    Current job {jobId ? <span className="font-mono text-slate-100">{jobId}</span> : "has not started yet"}.
                   </p>
                 </div>
                 {result?.status ? (

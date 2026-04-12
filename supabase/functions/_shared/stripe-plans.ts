@@ -6,7 +6,7 @@ export const STRIPE_PLANS = {
     name: "Starter",
     priceId: "price_1T5gW5AWgNdlZ1x0Qkr6636B",
     productId: "prod_U3o88Rn0fn4P2w",
-    monthlyCredits: 500,
+    monthlyCredits: 560,
     price: 49,
   },
   pro: {
@@ -14,7 +14,7 @@ export const STRIPE_PLANS = {
     name: "Pro",
     priceId: "price_1T5gXSAWgNdlZ1x0ME7M4q3N",
     productId: "prod_U3o9Beo3BdMnId",
-    monthlyCredits: 2000,
+    monthlyCredits: 1700,
     price: 149,
   },
   studio: {
@@ -22,7 +22,7 @@ export const STRIPE_PLANS = {
     name: "Studio",
     priceId: "price_1T5gXmAWgNdlZ1x05tVYQLqb",
     productId: "prod_U3oAl1dM2orh9D",
-    monthlyCredits: 6000,
+    monthlyCredits: 4560,
     price: 399,
   },
 } as const;

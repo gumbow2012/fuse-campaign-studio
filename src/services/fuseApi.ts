@@ -1,9 +1,8 @@
 /**
  * FUSE API Service.
  *
- * Templates/catalog now come from the Supabase FUSE schema.
- * Execution still flows through the Cloudflare Worker until the runner is
- * fully migrated off that service.
+ * Template catalog/detail come from the Supabase FUSE schema.
+ * Template execution now runs directly through Supabase edge functions.
  */
 import { supabase } from "@/integrations/supabase/client";
 
@@ -11,14 +10,26 @@ const WORKER_BASE =
   (import.meta.env.VITE_CF_WORKER_URL as string) ||
   "https://shiny-rice-e95bfuse-api.kade-fc1.workers.dev";
 
-function headers(token: string, isFormData = false): Record<string, string> {
-  const h: Record<string, string> = {};
-  if (token) h.Authorization = `Bearer ${token}`;
-  if (!isFormData) h["Content-Type"] = "application/json";
-  return h;
+const SUPABASE_FUNCTIONS_BASE = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1`;
+const SUPABASE_PUBLISHABLE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string;
+
+function workerHeaders(token: string, isFormData = false): Record<string, string> {
+  const headers: Record<string, string> = {};
+  if (token) headers.Authorization = `Bearer ${token}`;
+  if (!isFormData) headers["Content-Type"] = "application/json";
+  return headers;
 }
 
-async function api<T = unknown>(
+function runnerHeaders(token: string): Record<string, string> {
+  const headers: Record<string, string> = {
+    apikey: SUPABASE_PUBLISHABLE_KEY,
+    "Content-Type": "application/json",
+  };
+  if (token) headers.Authorization = `Bearer ${token}`;
+  return headers;
+}
+
+async function workerApi<T = unknown>(
   path: string,
   token: string,
   opts: { method?: string; body?: unknown; formData?: FormData } = {},
@@ -26,7 +37,7 @@ async function api<T = unknown>(
   const isForm = !!opts.formData;
   const res = await fetch(`${WORKER_BASE}${path}`, {
     method: opts.method || "GET",
-    headers: headers(token, isForm),
+    headers: workerHeaders(token, isForm),
     body: isForm
       ? opts.formData
       : opts.body
@@ -38,27 +49,36 @@ async function api<T = unknown>(
   return data as T;
 }
 
+async function runnerApi<T = unknown>(
+  path: string,
+  token: string,
+  opts: { method?: string; body?: unknown } = {},
+): Promise<T> {
+  const res = await fetch(`${SUPABASE_FUNCTIONS_BASE}${path}`, {
+    method: opts.method || "GET",
+    headers: runnerHeaders(token),
+    body: opts.body ? JSON.stringify(opts.body) : undefined,
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error((data as any)?.error || `API ${res.status}`);
+  return data as T;
+}
+
 function normalizeInputType(value: string | null | undefined) {
   const normalized = (value || "image").toLowerCase();
-  if (["prompt", "text", "textarea", "string"].includes(normalized))
+  if (["prompt", "text", "textarea", "string"].includes(normalized)) {
     return "prompt";
+  }
   return "image";
 }
 
-function describeTemplateAssets(nodes: any[]) {
-  const references = nodes.filter(
-    (node) => node.editor?.mode !== "upload" && node.defaultAssetUrl,
-  );
-  if (!references.length) return null;
-
-  const labels = references
-    .map((node) => node.editor?.label || node.name)
-    .filter(Boolean)
-    .slice(0, 3);
-
-  if (!labels.length)
-    return "Built-in references are preconfigured for this template.";
-  return `Built-in references are preconfigured: ${labels.join(", ")}${references.length > 3 ? ", and more" : ""}.`;
+export function fileToDataUrl(file: File) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = () => reject(new Error(`Failed to read ${file.name}`));
+    reader.readAsDataURL(file);
+  });
 }
 
 /* ── Templates ── */
@@ -90,12 +110,9 @@ export interface ApiTemplate {
 
 export async function fetchTemplates(token: string): Promise<ApiTemplate[]> {
   try {
-    const { data, error } = await supabase.functions.invoke(
-      "lab-template-catalog",
-      {
-        body: {},
-      },
-    );
+    const { data, error } = await supabase.functions.invoke("lab-template-catalog", {
+      body: {},
+    });
     if (error) throw error;
 
     const templates = Array.isArray((data as any)?.templates)
@@ -133,29 +150,11 @@ export async function fetchTemplates(token: string): Promise<ApiTemplate[]> {
     // Fall back to the worker API below.
   }
 
-  try {
-    const data = await api<any>("/api/templates", token);
-    const result: ApiTemplate[] = Array.isArray(data)
-      ? data
-      : data.templates || [];
-    if (result.length > 0) return result;
-  } catch {
-    // Fall through to old-table compatibility fallback.
-  }
-
-  const { data: rows, error } = await supabase
-    .from("templates")
-    .select(
-      "id, name, description, category, output_type, estimated_credits_per_run, is_active, input_schema, preview_url, tags",
-    )
-    .eq("is_active", true)
-    .order("created_at", { ascending: false });
-  if (error) throw new Error(error.message);
-  return (rows || []).map((t) => ({
-    ...t,
-    id: t.name as string,
-    asset_requirements: null,
-  })) as unknown as ApiTemplate[];
+  const data = await workerApi<any>("/api/templates", token);
+  const result: ApiTemplate[] = Array.isArray(data)
+    ? data
+    : data.templates || [];
+  return result;
 }
 
 export interface TemplateDetail {
@@ -169,7 +168,6 @@ export interface TemplateDetail {
   locked_images?: Record<string, string>;
   prompt?: string;
   video_prompt?: string;
-  asset_requirements?: string;
 }
 
 export async function fetchTemplateDetail(
@@ -178,12 +176,9 @@ export async function fetchTemplateDetail(
 ): Promise<TemplateDetail> {
   if (templateRef.versionId) {
     try {
-      const { data, error } = await supabase.functions.invoke(
-        "lab-template-detail",
-        {
-          body: { versionId: templateRef.versionId },
-        },
-      );
+      const { data, error } = await supabase.functions.invoke("lab-template-detail", {
+        body: { versionId: templateRef.versionId },
+      });
       if (error) throw error;
 
       const nodes = Array.isArray((data as any)?.nodes)
@@ -223,78 +218,49 @@ export async function fetchTemplateDetail(
           : undefined,
         prompt: promptNode?.prompt || null,
         video_prompt: videoNode?.prompt || null,
-        asset_requirements: describeTemplateAssets(nodes),
       };
     } catch {
       // Fall back to worker detail below.
     }
   }
 
-  const data = await api<any>(
+  const data = await workerApi<any>(
     `/api/templates/${encodeURIComponent(templateRef.name)}`,
     token,
   );
-  const t = data.template || data;
+  const template = data.template || data;
   return {
-    user_inputs: (t.input_manifest || t.user_inputs || []).map((f: any) => ({
-      key: f.key,
-      label: f.label,
-      type: normalizeInputType(f.type),
-      required: f.required ?? true,
-      hint: f.hint,
+    user_inputs: (template.input_manifest || template.user_inputs || []).map((field: any) => ({
+      key: field.key,
+      label: field.label,
+      type: normalizeInputType(field.type),
+      required: field.required ?? true,
+      hint: field.hint,
     })),
-    asset_requirements: t.asset_requirements || null,
-    prompt: t.steps?.[0]?.prompt || null,
-    video_prompt: t.steps?.find((s: any) => s.type === "kling")?.prompt || null,
+    prompt: template.steps?.[0]?.prompt || null,
+    video_prompt: template.steps?.find((step: any) => step.type === "kling")?.prompt || null,
   };
 }
 
-/* ── Upload ── */
+/* ── Runner ── */
 
-export interface UploadResult {
-  imageUrl: string;
-  key: string;
-}
+export type TemplateRunInputFile = {
+  dataUrl: string;
+  filename?: string;
+};
 
-export async function uploadFile(
+export async function startTemplateRun(
   token: string,
-  file: File,
-): Promise<UploadResult> {
-  const fd = new FormData();
-  fd.append("file", file);
-  const data = await api<any>("/api/upload", token, {
+  args: {
+    versionId: string;
+    inputs?: Record<string, string>;
+    inputFiles?: Record<string, TemplateRunInputFile>;
+  },
+): Promise<{ jobId: string; status: string }> {
+  return runnerApi("/start-template-run", token, {
     method: "POST",
-    formData: fd,
+    body: args,
   });
-  return {
-    imageUrl: data.imageUrl || data.url,
-    key: data.key || data.assetKey || "",
-  };
-}
-
-/* ── Projects ── */
-
-export async function createProject(
-  token: string,
-  templateId: string,
-  inputs: Record<string, string>,
-): Promise<{ ok: boolean; projectId: string; credits_used?: number }> {
-  const data = await api<any>("/api/projects", token, {
-    method: "POST",
-    body: { template_name: templateId, user_inputs: inputs, inputs },
-  });
-  return {
-    ok: data.ok,
-    projectId: data.projectId || data.project_id,
-    credits_used: data.credits_used,
-  };
-}
-
-export async function enqueueProject(
-  token: string,
-  projectId: string,
-): Promise<{ ok: boolean; projectId: string; message: string }> {
-  return api("/api/enqueue", token, { method: "POST", body: { projectId } });
 }
 
 export interface OutputItem {
@@ -304,22 +270,43 @@ export interface OutputItem {
   key?: string;
 }
 
-export interface ProjectStatus {
-  ok: boolean;
-  id: string;
+export interface TemplateJobStatus {
+  jobId: string;
   status: "queued" | "running" | "video_pending" | "complete" | "failed";
   progress: number;
-  outputs: { items?: OutputItem[] } | null;
-  kling_status?: string;
+  outputs: OutputItem[];
   error: string | null;
-  logs?: string[];
-  attempts?: number;
-  maxAttempts?: number;
+  logs: string[];
+  template?: {
+    templateId?: string | null;
+    templateName?: string | null;
+    versionId?: string | null;
+    versionNumber?: number | null;
+  };
 }
 
-export async function getProjectStatus(
+export async function getTemplateRunStatus(
   token: string,
-  projectId: string,
-): Promise<ProjectStatus> {
-  return api(`/api/projects/${projectId}`, token);
+  jobId: string,
+): Promise<TemplateJobStatus> {
+  const data = await runnerApi<any>(`/get-job-status?jobId=${encodeURIComponent(jobId)}`, token);
+  const logs = Array.isArray(data?.steps)
+    ? data.steps
+        .map((step: any) => {
+          const parts = [step.label, step.status].filter(Boolean);
+          if (step.error) parts.push(step.error);
+          return parts.join(" — ");
+        })
+        .filter(Boolean)
+    : [];
+
+  return {
+    jobId: String(data?.jobId ?? jobId),
+    status: String(data?.status ?? "failed") as TemplateJobStatus["status"],
+    progress: Number(data?.progress ?? 0),
+    outputs: Array.isArray(data?.outputs) ? data.outputs : [],
+    error: typeof data?.error === "string" ? data.error : null,
+    logs,
+    template: data?.template ?? undefined,
+  };
 }

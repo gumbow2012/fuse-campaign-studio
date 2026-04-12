@@ -27,6 +27,43 @@ export function errorMessage(error: unknown) {
   return String(error);
 }
 
+type AuditEventInput = {
+  eventType: string;
+  message: string;
+  severity?: "debug" | "info" | "warn" | "error" | "critical";
+  source?: string;
+  jobId?: string | null;
+  stepId?: string | null;
+  templateId?: string | null;
+  versionId?: string | null;
+  errorCode?: string | null;
+  requestId?: string | null;
+  metadata?: Record<string, unknown> | null;
+};
+
+export async function logAuditEvent(
+  input: AuditEventInput,
+  admin = createAdminClient(),
+) {
+  const { error } = await admin.rpc("log_audit_event", {
+    p_event_type: input.eventType,
+    p_message: input.message,
+    p_severity: input.severity ?? "info",
+    p_source: input.source ?? "system",
+    p_job_id: input.jobId ?? null,
+    p_step_id: input.stepId ?? null,
+    p_template_id: input.templateId ?? null,
+    p_version_id: input.versionId ?? null,
+    p_error_code: input.errorCode ?? null,
+    p_request_id: input.requestId ?? null,
+    p_metadata: input.metadata ?? {},
+  });
+
+  if (error) {
+    console.error("log_audit_event failed:", error.message);
+  }
+}
+
 export async function requireUser(req: Request, admin = createAdminClient()) {
   const authHeader = req.headers.get("Authorization");
   if (!authHeader) throw new Error("Missing authorization header");

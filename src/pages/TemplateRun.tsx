@@ -28,7 +28,7 @@ import { getStaticInputs } from "@/services/templateInputMap";
 import { drops } from "@/components/templates/dropData";
 
 /* ─── Constants ─── */
-const CREDIT_DOLLAR_VALUE = 0.098;
+const CREDIT_DOLLAR_VALUE = 0.07;
 
 /* ─── Category icons/colors ─── */
 const categoryConfig: Record<string, { color: string; icon: string }> = {

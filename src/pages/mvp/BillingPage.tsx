@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { ArrowRight, Check, Crown, Rocket, Settings, Zap } from "lucide-react";
 import SiteShell from "@/components/mvp/SiteShell";
 import { Button } from "@/components/ui/button";
@@ -12,17 +12,17 @@ const tierCopy = {
   starter: {
     icon: Zap,
     description: "For smaller brands running consistent drops.",
-    features: ["500 monthly credits", "Template runner access", "Standard queue"],
+    features: ["560 monthly credits", "Template runner access", "Standard queue"],
   },
   pro: {
     icon: Rocket,
     description: "For brands shipping weekly campaigns.",
-    features: ["2,000 monthly credits", "Priority queueing", "Faster iteration loops"],
+    features: ["1,700 monthly credits", "Priority queueing", "Faster iteration loops"],
   },
   studio: {
     icon: Crown,
     description: "For larger teams or agencies operating multiple brands.",
-    features: ["6,000 monthly credits", "Largest monthly allotment", "Best fit for active ops"],
+    features: ["4,560 monthly credits", "Largest monthly allotment", "Best fit for active ops"],
   },
 } as const;
 
@@ -37,8 +37,48 @@ function formatBillingDate(value: string | null | undefined) {
 
 export default function BillingPage() {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { user, profile, refreshSubscription } = useAuth();
   const [loading, setLoading] = useState<string | null>(null);
+
+  useEffect(() => {
+    const success = searchParams.get("success");
+    const canceled = searchParams.get("canceled");
+    if (!success && !canceled) return;
+
+    if (success === "true") {
+      toast({
+        title: "Checkout complete",
+        description: "Refreshing your billing state from Supabase.",
+      });
+
+      const timers = [0, 2000, 5000, 9000].map((delay) =>
+        window.setTimeout(() => {
+          void refreshSubscription();
+        }, delay),
+      );
+
+      setSearchParams((current) => {
+        const next = new URLSearchParams(current);
+        next.delete("success");
+        return next;
+      }, { replace: true });
+
+      return () => timers.forEach((timer) => window.clearTimeout(timer));
+    }
+
+    if (canceled === "true") {
+      toast({
+        title: "Checkout canceled",
+        description: "No changes were made to your membership.",
+      });
+      setSearchParams((current) => {
+        const next = new URLSearchParams(current);
+        next.delete("canceled");
+        return next;
+      }, { replace: true });
+    }
+  }, [refreshSubscription, searchParams, setSearchParams]);
 
   const handleCheckout = async (priceId: string, tierName: string) => {
     if (!user) {
@@ -53,14 +93,13 @@ export default function BillingPage() {
       });
       if (error) throw error;
       if (!data?.url) throw new Error("Stripe checkout URL not returned.");
-      window.open(data.url, "_blank", "noopener,noreferrer");
+      window.location.assign(data.url);
     } catch (error) {
       toast({
         title: "Checkout failed",
         description: error instanceof Error ? error.message : "Could not start Stripe checkout.",
         variant: "destructive",
       });
-    } finally {
       setLoading(null);
     }
   };
@@ -71,20 +110,20 @@ export default function BillingPage() {
       const { data, error } = await supabase.functions.invoke("customer-portal");
       if (error) throw error;
       if (!data?.url) throw new Error("Stripe portal URL not returned.");
-      window.open(data.url, "_blank", "noopener,noreferrer");
+      window.location.assign(data.url);
     } catch (error) {
       toast({
         title: "Portal failed",
         description: error instanceof Error ? error.message : "Could not open the billing portal.",
         variant: "destructive",
       });
-    } finally {
       setLoading(null);
     }
   };
 
   const currentPlan = profile?.plan ?? "free";
   const currentTier = currentPlan === "free" ? null : STRIPE_TIERS[currentPlan as keyof typeof STRIPE_TIERS];
+  const stripeLinked = !!profile?.stripe_customer_id;
 
   return (
     <SiteShell>
@@ -94,7 +133,7 @@ export default function BillingPage() {
             <p className="text-[11px] font-semibold uppercase tracking-[0.3em] text-cyan-100">Memberships</p>
             <h1 className="mt-4 font-display text-5xl font-bold tracking-[-0.05em] text-white">Stripe-backed plans and recurring credits.</h1>
             <p className="mt-4 max-w-3xl text-base leading-7 text-slate-300">
-              Membership state is stored in Supabase profiles, billing events, and subscription grant tables. Stripe handles checkout and portal management.
+              Checkout writes membership state into Supabase profiles. Webhooks reconcile billing events and monthly credit grants. Template runs debit credits directly from the same balance.
             </p>
           </div>
           {user ? (
@@ -131,6 +170,14 @@ export default function BillingPage() {
               <div className="rounded-[1.5rem] border border-white/8 bg-black/20 p-4">
                 <p className="text-[11px] uppercase tracking-[0.24em] text-muted-foreground">Period ends</p>
                 <p className="mt-2 text-xl font-semibold text-white">{formatBillingDate(profile?.subscription_period_end)}</p>
+              </div>
+              <div className="rounded-[1.5rem] border border-white/8 bg-black/20 p-4">
+                <p className="text-[11px] uppercase tracking-[0.24em] text-muted-foreground">Cycle grant</p>
+                <p className="mt-2 text-xl font-semibold text-white">{profile?.subscription_cycle_credits ?? currentTier?.monthlyCredits ?? 0} credits</p>
+              </div>
+              <div className="rounded-[1.5rem] border border-white/8 bg-black/20 p-4">
+                <p className="text-[11px] uppercase tracking-[0.24em] text-muted-foreground">Stripe link</p>
+                <p className="mt-2 text-xl font-semibold text-white">{stripeLinked ? "Connected" : "Not linked yet"}</p>
               </div>
             </div>
 
