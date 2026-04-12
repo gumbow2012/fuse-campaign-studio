@@ -147,7 +147,7 @@ export default function TemplateStudioPage() {
       const token = await getAccessToken();
       return fetchTemplates(token);
     },
-    initialData: loadCachedTemplates,
+    placeholderData: loadCachedTemplates,
     staleTime: 60_000,
   });
 
@@ -175,7 +175,7 @@ export default function TemplateStudioPage() {
   const templateDetailQuery = useQuery<TemplateDetail | null>({
     queryKey: ["mvp-template-detail", selectedTemplateId],
     enabled: !!selectedTemplate,
-    initialData: selectedTemplate ? loadCachedTemplateDetail(selectedTemplate.id) : null,
+    placeholderData: selectedTemplate ? loadCachedTemplateDetail(selectedTemplate.id) : undefined,
     staleTime: 60_000,
     queryFn: async () => {
       if (!selectedTemplate) return null;
