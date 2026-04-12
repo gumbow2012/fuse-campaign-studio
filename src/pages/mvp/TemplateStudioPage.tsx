@@ -19,17 +19,9 @@ import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/hooks/use-toast";
-import { supabase } from "@/integrations/supabase/client";
-import {
-  fetchTemplateDetail,
-  fetchTemplates,
-  fileToDataUrl,
-  getTemplateRunStatus,
-  startTemplateRun,
-  type ApiTemplate,
-  type OutputItem,
-  type TemplateDetail,
-} from "@/services/fuseApi";
+import { SUPABASE_PUBLISHABLE_KEY, SUPABASE_URL, supabase } from "@/integrations/supabase/client";
+import { ADMIN_VISUAL_BUDGET_TOTAL, getAdminVisualCreditsRemaining, getAdminVisualCreditsSpent, recordAdminVisualCreditUsage } from "@/lib/adminBudget";
+import { fetchTemplateDetail, fetchTemplates, type ApiTemplate, type TemplateDetail } from "@/services/fuseApi";
 import { getStaticInputs } from "@/services/templateInputMap";
 
 type RunnerStatus = "queued" | "running" | "video_pending" | "complete" | "failed";
@@ -42,12 +34,52 @@ interface InputField {
   hint?: string;
 }
 
+interface RunnerOutput {
+  type: string;
+  url: string;
+  label?: string;
+  key?: string;
+}
+
 interface RunnerResult {
   status: RunnerStatus;
   progress: number;
-  logs: string[];
-  outputs: OutputItem[];
+  outputs: RunnerOutput[];
   error?: string;
+}
+
+const TEMPLATE_CACHE_KEY = "fuse.templateStudio.templates";
+const TEMPLATE_DETAIL_CACHE_KEY = "fuse.templateStudio.templateDetails";
+const TEMPLATE_SELECTION_KEY = "fuse.templateStudio.selectedTemplateId";
+
+function readCachedJson<T>(key: string, fallback: T) {
+  if (typeof window === "undefined") return fallback;
+
+  try {
+    const raw = window.localStorage.getItem(key);
+    if (!raw) return fallback;
+    return JSON.parse(raw) as T;
+  } catch {
+    return fallback;
+  }
+}
+
+function loadCachedTemplates() {
+  const parsed = readCachedJson<unknown>(TEMPLATE_CACHE_KEY, []);
+  return Array.isArray(parsed) ? (parsed as ApiTemplate[]) : [];
+}
+
+function loadCachedTemplateDetail(templateId: string) {
+  const cached = readCachedJson<Record<string, TemplateDetail | null>>(TEMPLATE_DETAIL_CACHE_KEY, {});
+  const detail = cached[templateId];
+  return detail ?? null;
+}
+
+function storeCachedTemplateDetail(templateId: string, detail: TemplateDetail | null) {
+  if (typeof window === "undefined") return;
+  const cached = readCachedJson<Record<string, TemplateDetail | null>>(TEMPLATE_DETAIL_CACHE_KEY, {});
+  cached[templateId] = detail;
+  window.localStorage.setItem(TEMPLATE_DETAIL_CACHE_KEY, JSON.stringify(cached));
 }
 
 async function getAccessToken() {
@@ -62,14 +94,52 @@ async function getAccessToken() {
   return session.access_token;
 }
 
+async function fileToDataUrl(file: File) {
+  return await new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result ?? ""));
+    reader.onerror = () => reject(reader.error ?? new Error("Could not read file"));
+    reader.readAsDataURL(file);
+  });
+}
+
+async function fetchJobStatus(jobId: string) {
+  const token = await getAccessToken();
+  const response = await fetch(
+    `${SUPABASE_URL}/functions/v1/get-job-status?jobId=${encodeURIComponent(jobId)}`,
+    {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        apikey: SUPABASE_PUBLISHABLE_KEY,
+      },
+    },
+  );
+
+  const data = await response.json().catch(() => null);
+  if (!response.ok) {
+    throw new Error(data?.error ?? "Could not load run status.");
+  }
+
+  return data as {
+    status: RunnerStatus;
+    progress?: number;
+    outputs?: RunnerOutput[];
+    error?: string | null;
+  };
+}
+
 export default function TemplateStudioPage() {
-  const { profile, roles } = useAuth();
-  const [selectedTemplateId, setSelectedTemplateId] = useState("");
+  const { isAdmin, profile } = useAuth();
+  const [selectedTemplateId, setSelectedTemplateId] = useState(() => {
+    if (typeof window === "undefined") return "";
+    return window.localStorage.getItem(TEMPLATE_SELECTION_KEY) ?? "";
+  });
   const [files, setFiles] = useState<Record<string, File | null>>({});
   const [textInputs, setTextInputs] = useState<Record<string, string>>({});
   const [jobId, setJobId] = useState<string | null>(null);
   const [result, setResult] = useState<RunnerResult | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [adminVisualSpent, setAdminVisualSpent] = useState(() => getAdminVisualCreditsSpent());
 
   const templatesQuery = useQuery<ApiTemplate[]>({
     queryKey: ["mvp-templates"],
@@ -77,6 +147,7 @@ export default function TemplateStudioPage() {
       const token = await getAccessToken();
       return fetchTemplates(token);
     },
+    initialData: loadCachedTemplates,
     staleTime: 60_000,
   });
 
@@ -89,15 +160,29 @@ export default function TemplateStudioPage() {
     }
   }, [selectedTemplateId, templates]);
 
+  useEffect(() => {
+    if (typeof window === "undefined" || !templates.length) return;
+    window.localStorage.setItem(TEMPLATE_CACHE_KEY, JSON.stringify(templates));
+  }, [templates]);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !selectedTemplateId) return;
+    window.localStorage.setItem(TEMPLATE_SELECTION_KEY, selectedTemplateId);
+  }, [selectedTemplateId]);
+
   const selectedTemplate = templates.find((template) => template.id === selectedTemplateId) ?? null;
 
   const templateDetailQuery = useQuery<TemplateDetail | null>({
     queryKey: ["mvp-template-detail", selectedTemplateId],
     enabled: !!selectedTemplate,
+    initialData: selectedTemplate ? loadCachedTemplateDetail(selectedTemplate.id) : null,
+    staleTime: 60_000,
     queryFn: async () => {
       if (!selectedTemplate) return null;
       const token = await getAccessToken();
-      return fetchTemplateDetail(token, selectedTemplate);
+      const detail = await fetchTemplateDetail(token, selectedTemplate);
+      storeCachedTemplateDetail(selectedTemplate.id, detail);
+      return detail;
     },
   });
 
@@ -109,28 +194,24 @@ export default function TemplateStudioPage() {
 
     const poll = async () => {
       try {
-        const token = await getAccessToken();
-        const status = await getTemplateRunStatus(token, jobId);
+        const status = await fetchJobStatus(jobId);
         if (cancelled) return;
 
-        const normalizedStatus = status.status as RunnerStatus;
         setResult({
-          status: normalizedStatus,
+          status: status.status,
           progress: status.progress ?? 0,
-          logs: status.logs ?? [],
-          outputs: status.outputs ?? [],
+          outputs: Array.isArray(status.outputs) ? status.outputs : [],
           error: status.error ?? undefined,
         });
 
-        if (normalizedStatus === "queued" || normalizedStatus === "running" || normalizedStatus === "video_pending") {
-          timeoutId = window.setTimeout(poll, 4000);
+        if (status.status === "queued" || status.status === "running" || status.status === "video_pending") {
+          timeoutId = window.setTimeout(poll, 3000);
         }
       } catch (error) {
         if (!cancelled) {
-          const message = error instanceof Error ? error.message : "Could not refresh the run status.";
-          setResult((current) => current ? { ...current, logs: [...current.logs, message].slice(-8) } : current);
-          timeoutId = window.setTimeout(poll, 7000);
+          timeoutId = window.setTimeout(poll, 6000);
         }
+        console.error("Job polling failed:", error);
       }
     };
 
@@ -177,12 +258,17 @@ export default function TemplateStudioPage() {
 
   const creditsRequired = selectedTemplate?.estimated_credits_per_run ?? 0;
   const creditBalance = profile?.credits_balance ?? 0;
-  const canAfford = creditBalance >= creditsRequired;
-  const hasPrivilegedBypass = roles.includes("admin") || roles.includes("dev");
-  const hasActiveSubscription =
-    hasPrivilegedBypass ||
+  const canAfford = isAdmin || creditBalance >= creditsRequired;
+  const hasActiveMembership =
+    isAdmin ||
     profile?.subscription_status === "active" ||
     profile?.subscription_status === "trialing";
+  const canRun = requiredInputsAreReady && hasActiveMembership && canAfford;
+  const adminVisualRemaining = getAdminVisualCreditsRemaining();
+  const creditBanner = isAdmin
+    ? `Admin budget ${adminVisualRemaining}/${ADMIN_VISUAL_BUDGET_TOTAL}`
+    : `Balance ${creditBalance} credits`;
+  const costDisplay = isAdmin ? "Bypassed for admin" : `${creditsRequired} credits`;
 
   const handleTemplateSelect = (templateId: string) => {
     setSelectedTemplateId(templateId);
@@ -196,8 +282,8 @@ export default function TemplateStudioPage() {
     if (!selectedTemplate) return;
     if (!selectedTemplate.versionId) {
       toast({
-        title: "Run unavailable",
-        description: "This template is missing an active version id.",
+        title: "Template unavailable",
+        description: "This template is missing a live version.",
         variant: "destructive",
       });
       return;
@@ -216,46 +302,54 @@ export default function TemplateStudioPage() {
     setResult(null);
 
     try {
-      const token = await getAccessToken();
-      const inputs: Record<string, string> = {};
       const inputFiles = Object.fromEntries(
-        (
-          await Promise.all(
-            inputFields
-              .filter((field) => field.type === "image")
-              .map(async (field) => {
-                const file = files[field.key];
-                if (!file) return null;
-                return [
-                  field.key,
-                  {
-                    dataUrl: await fileToDataUrl(file),
-                    filename: file.name,
-                  },
-                ] as const;
-              }),
-          )
-        ).filter(Boolean) as Array<readonly [string, { dataUrl: string; filename?: string }]>,
+        await Promise.all(
+          inputFields
+            .filter((field) => field.type === "image" && files[field.key])
+            .map(async (field) => {
+              const file = files[field.key]!;
+              const dataUrl = await fileToDataUrl(file);
+              return [
+                field.key,
+                {
+                  dataUrl,
+                  filename: file.name,
+                },
+              ];
+            }),
+        ),
       );
 
-      for (const field of inputFields) {
-        if (field.type === "image") continue;
-        const value = textInputs[field.key]?.trim();
-        if (value) inputs[field.key] = value;
-      }
+      const inputs = Object.fromEntries(
+        inputFields
+          .filter((field) => field.type !== "image")
+          .map((field) => [field.key, textInputs[field.key]?.trim() ?? ""])
+          .filter(([, value]) => value.length > 0),
+      );
 
-      const run = await startTemplateRun(token, {
-        versionId: selectedTemplate.versionId,
-        inputs,
-        inputFiles,
+      const { data, error } = await supabase.functions.invoke("start-template-run", {
+        body: {
+          versionId: selectedTemplate.versionId,
+          inputFiles,
+          inputs,
+        },
       });
 
-      if (!run.jobId) {
-        throw new Error("Template run did not return a job id.");
+      if (error) throw new Error(error.message || "Could not start the template run.");
+      if (data?.error) throw new Error(String(data.error));
+      if (!data?.jobId) throw new Error("Template run did not return a job id.");
+
+      if (isAdmin) {
+        recordAdminVisualCreditUsage(creditsRequired);
+        setAdminVisualSpent(getAdminVisualCreditsSpent());
       }
 
-      setJobId(run.jobId);
-      setResult({ status: "queued", progress: 0, logs: [], outputs: [] });
+      setJobId(String(data.jobId));
+      setResult({
+        status: "queued",
+        progress: 0,
+        outputs: [],
+      });
       toast({ title: "Run queued", description: "The template is now executing." });
     } catch (error) {
       toast({
@@ -277,10 +371,12 @@ export default function TemplateStudioPage() {
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
             <p className="text-[11px] font-semibold uppercase tracking-[0.3em] text-cyan-100">Template Studio</p>
-            <h1 className="mt-4 font-display text-5xl font-bold tracking-[-0.05em] text-white">One page. Pick a template. Run it.</h1>
+            <h1 className="mt-4 font-display text-5xl font-bold tracking-[-0.05em] text-white">
+              Run production workflows without leaving the page.
+            </h1>
           </div>
           <div className="rounded-full border border-white/10 bg-white/[0.04] px-4 py-2 text-xs uppercase tracking-[0.24em] text-muted-foreground">
-            Balance {creditBalance} credits
+            {creditBanner}
           </div>
         </div>
 
@@ -309,6 +405,7 @@ export default function TemplateStudioPage() {
 
               {templates.map((template) => {
                 const selected = template.id === selectedTemplateId;
+
                 return (
                   <button
                     key={template.id}
@@ -383,7 +480,7 @@ export default function TemplateStudioPage() {
                   <div className="space-y-5">
                     <div>
                       <p className="text-[11px] uppercase tracking-[0.24em] text-muted-foreground">Inputs</p>
-                      <p className="mt-2 text-sm text-slate-300">Upload the required assets and launch a real job against the active template version.</p>
+                      <p className="mt-2 text-sm text-slate-300">Upload the required assets and add any prompt text the template expects.</p>
                     </div>
 
                     <div className="space-y-4">
@@ -463,28 +560,41 @@ export default function TemplateStudioPage() {
                       <div className="flex items-center justify-between gap-3">
                         <div>
                           <p className="text-[11px] uppercase tracking-[0.24em] text-muted-foreground">Run cost</p>
-                          <p className="mt-2 text-2xl font-semibold text-white">{creditsRequired} credits</p>
+                          <p className="mt-2 text-2xl font-semibold text-white">{costDisplay}</p>
+                          {isAdmin ? (
+                            <p className="mt-2 text-xs text-slate-500">
+                              Visual admin spend {adminVisualSpent}. Runs stay unblocked.
+                            </p>
+                          ) : null}
                         </div>
-                        <div className={`rounded-full px-3 py-1 text-[10px] uppercase tracking-[0.2em] ${canAfford ? "bg-emerald-400/10 text-emerald-100" : "bg-rose-400/10 text-rose-100"}`}>
-                          {canAfford ? "Ready" : "Insufficient balance"}
+                        <div className={`rounded-full px-3 py-1 text-[10px] uppercase tracking-[0.2em] ${
+                          canRun ? "bg-emerald-400/10 text-emerald-100" : "bg-rose-400/10 text-rose-100"
+                        }`}>
+                          {canRun ? "Ready" : "Blocked"}
                         </div>
                       </div>
 
                       <Button
                         onClick={() => void handleRun()}
-                        disabled={submitting || isRunning || !requiredInputsAreReady || !canAfford || !hasActiveSubscription}
+                        disabled={submitting || isRunning || !canRun}
                         className="mt-5 w-full rounded-full bg-cyan-300 text-slate-950 hover:bg-cyan-200"
                       >
                         {submitting || isRunning ? "Running..." : "Run template"}
                       </Button>
 
-                      {!hasActiveSubscription ? (
+                      {!hasActiveMembership ? (
                         <p className="mt-3 text-sm leading-6 text-amber-100">
                           Active membership required before running templates.
                           {" "}
                           <Link to="/billing" className="underline underline-offset-4">
                             Open billing
                           </Link>
+                        </p>
+                      ) : null}
+
+                      {!isAdmin && hasActiveMembership && !canAfford ? (
+                        <p className="mt-3 text-sm leading-6 text-rose-100">
+                          This run costs {creditsRequired} credits and your balance is {creditBalance}.
                         </p>
                       ) : null}
                     </div>
@@ -498,7 +608,7 @@ export default function TemplateStudioPage() {
                 <div>
                   <p className="text-[11px] uppercase tracking-[0.24em] text-muted-foreground">Result</p>
                   <p className="mt-2 text-sm text-slate-300">
-                    Current job {jobId ? <span className="font-mono text-slate-100">{jobId}</span> : "has not started yet"}.
+                    Current run {jobId ? <span className="font-mono text-slate-100">{jobId}</span> : "has not started yet"}.
                   </p>
                 </div>
                 {result?.status ? (
@@ -573,17 +683,6 @@ export default function TemplateStudioPage() {
                           </a>
                         </div>
                       </article>
-                    ))}
-                  </div>
-                </div>
-              ) : null}
-
-              {result?.logs?.length ? (
-                <div className="mt-6 rounded-[1.5rem] border border-white/8 bg-black/20 p-4">
-                  <p className="text-[11px] uppercase tracking-[0.24em] text-muted-foreground">Runner log</p>
-                  <div className="mt-3 space-y-2 font-mono text-xs text-slate-300">
-                    {result.logs.slice(-6).map((entry, index) => (
-                      <p key={`${entry}-${index}`}>{entry}</p>
                     ))}
                   </div>
                 </div>

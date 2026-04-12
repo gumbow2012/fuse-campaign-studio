@@ -7,25 +7,36 @@ import { Label } from "@/components/ui/label";
 import { toast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
+import { ADMIN_VISUAL_BUDGET_TOTAL, getAdminVisualCreditsRemaining, getAdminVisualCreditsSpent } from "@/lib/adminBudget";
+import { updateAccountProfile } from "@/services/account";
 
 export default function AccountPage() {
-  const { profile, refreshProfile, user } = useAuth();
+  const { isAdmin, profile, refreshProfile, user } = useAuth();
   const [name, setName] = useState("");
   const [password, setPassword] = useState("");
   const [savingName, setSavingName] = useState(false);
   const [savingPassword, setSavingPassword] = useState(false);
+  const [adminVisualSpent, setAdminVisualSpent] = useState(0);
+  const trimmedName = name.trim();
+  const creditsLabel = isAdmin ? "Access" : "Credits";
+  const creditsValue = isAdmin ? "∞" : String(profile?.credits_balance ?? 0);
+  const planValue = isAdmin ? "Admin" : profile?.plan ?? "free";
+  const adminVisualRemaining = getAdminVisualCreditsRemaining();
 
   useEffect(() => {
     setName(profile?.name ?? "");
   }, [profile?.name]);
+
+  useEffect(() => {
+    setAdminVisualSpent(getAdminVisualCreditsSpent());
+  }, []);
 
   const handleSaveName = async () => {
     if (!user) return;
     setSavingName(true);
 
     try {
-      const { error } = await supabase.from("profiles").update({ name }).eq("user_id", user.id);
-      if (error) throw error;
+      await updateAccountProfile({ name: trimmedName });
       await refreshProfile();
       toast({ title: "Profile updated" });
     } catch (error) {
@@ -64,7 +75,7 @@ export default function AccountPage() {
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
             <p className="text-[11px] font-semibold uppercase tracking-[0.3em] text-cyan-100">Account</p>
-            <h1 className="mt-4 font-display text-5xl font-bold tracking-[-0.05em] text-white">Keep the basics tight.</h1>
+            <h1 className="mt-4 font-display text-5xl font-bold tracking-[-0.05em] text-white">Manage the account that runs Fuse.</h1>
           </div>
           <Button
             asChild
@@ -85,12 +96,20 @@ export default function AccountPage() {
 
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-1">
               <div className="rounded-[1.5rem] border border-white/8 bg-black/20 p-4">
-                <p className="text-[11px] uppercase tracking-[0.24em] text-muted-foreground">Credits</p>
-                <p className="mt-2 text-3xl font-semibold text-white">{profile?.credits_balance ?? 0}</p>
+                <p className="text-[11px] uppercase tracking-[0.24em] text-muted-foreground">{creditsLabel}</p>
+                <p className="mt-2 text-3xl font-semibold text-white">{creditsValue}</p>
+                <p className="mt-2 text-sm text-slate-400">
+                  {isAdmin ? "Admin accounts bypass credit locks for template runs." : "Credits are deducted when customer runs start."}
+                </p>
+                {isAdmin ? (
+                  <p className="mt-2 text-xs text-slate-500">
+                    Visual budget {adminVisualRemaining}/{ADMIN_VISUAL_BUDGET_TOTAL} remaining. Spent {adminVisualSpent}.
+                  </p>
+                ) : null}
               </div>
               <div className="rounded-[1.5rem] border border-white/8 bg-black/20 p-4">
                 <p className="text-[11px] uppercase tracking-[0.24em] text-muted-foreground">Plan</p>
-                <p className="mt-2 text-2xl font-semibold capitalize text-white">{profile?.plan ?? "free"}</p>
+                <p className="mt-2 text-2xl font-semibold capitalize text-white">{planValue}</p>
               </div>
             </div>
           </aside>
@@ -125,7 +144,7 @@ export default function AccountPage() {
 
               <Button
                 onClick={handleSaveName}
-                disabled={savingName}
+                disabled={savingName || trimmedName.length < 2 || trimmedName === (profile?.name ?? "")}
                 className="mt-6 rounded-full bg-cyan-300 text-slate-950 hover:bg-cyan-200"
               >
                 {savingName ? "Saving..." : "Save profile"}
