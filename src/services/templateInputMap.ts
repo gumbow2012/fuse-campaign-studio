@@ -14,7 +14,8 @@ export interface InputField {
 
 const MAP: Record<string, InputField[]> = {
   armored_truck: [
-    { key: "clothing", label: "Clothing", type: "image", required: true },
+    { key: "front-garment", label: "Front of Garment", type: "image", required: true },
+    { key: "back-garment", label: "Back of Garment", type: "image", required: false },
     { key: "logo", label: "Logo", type: "image", required: true },
   ],
   blue_lab: [

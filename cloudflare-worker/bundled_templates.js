@@ -2,7 +2,7 @@ const BUNDLED_TEMPLATES = {
   "armored_truck_template": {
     "name": "ARMORED TRUCK",
     "slug": "armored-truck",
-    "version": "1.0",
+    "version": "1.1",
     "description": "Armored truck heist aesthetic — guards, dramatic cinematic, product drop energy.",
     "category": "Street",
     "tags": [
@@ -13,13 +13,13 @@ const BUNDLED_TEMPLATES = {
       "video"
     ],
     "output_type": "video",
-    "estimated_credits_per_run": 50,
+    "estimated_credits_per_run": 572,
     "is_active": true,
-    "asset_requirements": "Any bold statement piece. The cinematic heist scene is generated around it.",
+    "asset_requirements": "Upload the front of garment, back of garment, and logo on clean backgrounds.",
     "input_manifest": [
       {
-        "key": "front_outfit",
-        "label": "Front Outfit",
+        "key": "front-garment",
+        "label": "Front of Garment",
         "type": "image",
         "required": true,
         "accepts": [
@@ -28,11 +28,11 @@ const BUNDLED_TEMPLATES = {
           "image/webp"
         ],
         "max_size_mb": 10,
-        "hint": "Front of the product — will be worn in the armored truck heist scene."
+        "hint": "Primary front-facing garment reference for the hero and close-up outputs."
       },
       {
-        "key": "back_outfit",
-        "label": "Back Outfit",
+        "key": "back-garment",
+        "label": "Back of Garment",
         "type": "image",
         "required": false,
         "accepts": [
@@ -41,23 +41,37 @@ const BUNDLED_TEMPLATES = {
           "image/webp"
         ],
         "max_size_mb": 10,
-        "hint": "Optional back view as the character moves in the scene."
+        "hint": "Optional back-facing garment reference to preserve rear graphics, seams, and silhouette in turnaround outputs."
+      },
+      {
+        "key": "logo",
+        "label": "Logo",
+        "type": "image",
+        "required": true,
+        "accepts": [
+          "image/jpeg",
+          "image/png",
+          "image/webp"
+        ],
+        "max_size_mb": 10,
+        "hint": "Brand logo — forged into the armored truck details."
       }
     ],
     "steps": [
       {
         "id": "image_edit",
         "type": "nano_banana_pro",
-        "prompt": "Cinematic armored truck fashion photo. A figure wearing the clothing product stands next to or emerges from an armored truck. Urban city setting, dramatic cinematography, security guards in background. The clothing worn with extreme confidence — this is a high-value drop. Think Supreme or Kanye drop energy. Cinematic color grade, dramatic low-angle perspective.",
+        "prompt": "Cinematic armored truck fashion photo. Use the uploaded front garment and back garment references together to preserve the exact front print, rear print, silhouette, seams, and garment proportions. A figure wearing the clothing product stands next to or emerges from an armored truck. Urban city setting, dramatic cinematography, security guards in background. The clothing worn with extreme confidence — this is a high-value drop. Think Supreme or Kanye drop energy. Cinematic color grade, dramatic low-angle perspective.",
         "user_prompt_key": null,
         "user_input_keys": [
-          "front_outfit",
-          "back_outfit"
+          "front-garment",
+          "back-garment",
+          "logo"
         ],
         "locked_inputs": [],
         "settings": {
           "resolution": "2K",
-          "num_images": 1,
+          "num_images": 12,
           "output_format": "png"
         }
       },
@@ -79,7 +93,8 @@ const BUNDLED_TEMPLATES = {
     "outputs": {
       "primary_type": "video",
       "items": [
-        "image",
+        "image", "image", "image", "image", "image", "image",
+        "image", "image", "image", "image", "image", "image",
         "video"
       ]
     }

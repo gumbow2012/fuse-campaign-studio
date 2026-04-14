@@ -24,8 +24,9 @@ const SLOT_SEEDS: Record<string, SlotSeed[]> = {
     { key: "garment", label: "Garment", matchNames: ["Input 2"] },
   ],
   "ARMORED TRUCK": [
+    { key: "front-garment", label: "Front of Garment", matchNames: ["Input 1"] },
+    { key: "back-garment", label: "Back of Garment", matchNames: ["Input 2"] },
     { key: "logo", label: "Logo", matchNames: ["Input: Gemini 3 (Nano Banana Pro)"] },
-    { key: "garment", label: "Garment", matchNames: ["Input 1"] },
   ],
   "BLUE LAB": [
     { key: "logo", label: "Logo", matchNames: ["Logo"] },
@@ -40,8 +41,8 @@ const SLOT_SEEDS: Record<string, SlotSeed[]> = {
     { key: "logo", label: "Logo", matchNames: ["Input: Gemini 3 (Nano Banana Pro)"] },
   ],
   "GAS STATION": [
-    { key: "top-garment", label: "Top Garment", matchNames: ["Input 1"] },
-    { key: "bottom-garment", label: "Bottom Garment", matchNames: ["Input: Gemini 3 (Nano Banana Pro)"] },
+    { key: "garment-1", label: "Garment 1", matchNames: ["Input 1"] },
+    { key: "garment-2", label: "Garment 2", matchNames: ["Input: Gemini 3 (Nano Banana Pro)"] },
     { key: "logo", label: "Logo", matchNames: ["Input: Gemini 3 (Nano Banana Pro)"] },
   ],
   "ICE PICK": [

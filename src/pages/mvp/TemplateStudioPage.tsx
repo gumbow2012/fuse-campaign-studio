@@ -4,16 +4,20 @@ import { Link } from "react-router-dom";
 import {
   AlertTriangle,
   CheckCircle2,
+  ChevronDown,
+  ChevronRight,
   Download,
   Film,
   Image as ImageIcon,
   Loader2,
+  RefreshCw,
   Sparkles,
   Upload,
 } from "lucide-react";
 import SiteShell from "@/components/mvp/SiteShell";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
@@ -48,9 +52,21 @@ interface RunnerResult {
   error?: string;
 }
 
+interface RecentRun {
+  id: string;
+  status: RunnerStatus;
+  startedAt: string | null;
+  completedAt: string | null;
+  progress: number;
+  error: string | null;
+  templateName: string;
+  outputs: RunnerOutput[];
+}
+
 const TEMPLATE_CACHE_KEY = "fuse.templateStudio.templates";
 const TEMPLATE_DETAIL_CACHE_KEY = "fuse.templateStudio.templateDetails";
 const TEMPLATE_SELECTION_KEY = "fuse.templateStudio.selectedTemplateId";
+const ACTIVE_RUN_STATUSES = new Set<RunnerStatus>(["queued", "running", "video_pending"]);
 
 function readCachedJson<T>(key: string, fallback: T) {
   if (typeof window === "undefined") return fallback;
@@ -128,8 +144,47 @@ async function fetchJobStatus(jobId: string) {
   };
 }
 
+async function fetchRecentRuns(limit: number) {
+  const token = await getAccessToken();
+  const response = await fetch(
+    `${SUPABASE_URL}/functions/v1/list-recent-runs?limit=${limit}`,
+    {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        apikey: SUPABASE_PUBLISHABLE_KEY,
+      },
+    },
+  );
+
+  const data = await response.json().catch(() => null);
+  if (!response.ok) {
+    throw new Error(data?.error ?? "Could not load recent runs.");
+  }
+
+  return Array.isArray(data?.jobs) ? (data.jobs as RecentRun[]) : [];
+}
+
+function formatRunTimestamp(value: string | null | undefined) {
+  if (!value) return "Pending";
+  return new Date(value).toLocaleString([], {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
+function formatRunDuration(startedAt: string | null | undefined, completedAt: string | null | undefined) {
+  if (!startedAt || !completedAt) return "In progress";
+
+  const durationMs = new Date(completedAt).getTime() - new Date(startedAt).getTime();
+  if (Number.isNaN(durationMs) || durationMs <= 0) return "Pending";
+  if (durationMs < 1000) return `${durationMs} ms`;
+  return `${(durationMs / 1000).toFixed(1)} s`;
+}
+
 export default function TemplateStudioPage() {
-  const { isAdmin, profile } = useAuth();
+  const { hasAppAccess, profile } = useAuth();
   const [selectedTemplateId, setSelectedTemplateId] = useState(() => {
     if (typeof window === "undefined") return "";
     return window.localStorage.getItem(TEMPLATE_SELECTION_KEY) ?? "";
@@ -140,6 +195,9 @@ export default function TemplateStudioPage() {
   const [result, setResult] = useState<RunnerResult | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [adminVisualSpent, setAdminVisualSpent] = useState(() => getAdminVisualCreditsSpent());
+  const [expandedRuns, setExpandedRuns] = useState<Record<string, boolean>>({});
+  const isPrivilegedUser = hasAppAccess;
+  const recentRunsLimit = isPrivilegedUser ? 4 : 1;
 
   const templatesQuery = useQuery<ApiTemplate[]>({
     queryKey: ["mvp-templates"],
@@ -147,7 +205,7 @@ export default function TemplateStudioPage() {
       const token = await getAccessToken();
       return fetchTemplates(token);
     },
-    placeholderData: loadCachedTemplates,
+    initialData: loadCachedTemplates,
     staleTime: 60_000,
   });
 
@@ -175,7 +233,7 @@ export default function TemplateStudioPage() {
   const templateDetailQuery = useQuery<TemplateDetail | null>({
     queryKey: ["mvp-template-detail", selectedTemplateId],
     enabled: !!selectedTemplate,
-    placeholderData: selectedTemplate ? loadCachedTemplateDetail(selectedTemplate.id) : undefined,
+    initialData: selectedTemplate ? loadCachedTemplateDetail(selectedTemplate.id) : null,
     staleTime: 60_000,
     queryFn: async () => {
       if (!selectedTemplate) return null;
@@ -185,6 +243,38 @@ export default function TemplateStudioPage() {
       return detail;
     },
   });
+
+  const recentRunsQuery = useQuery<RecentRun[]>({
+    queryKey: ["mvp-recent-runs", recentRunsLimit],
+    queryFn: () => fetchRecentRuns(recentRunsLimit),
+    staleTime: 5_000,
+    refetchInterval: (query) => {
+      const runs = query.state.data ?? [];
+      return jobId || runs.some((run) => ACTIVE_RUN_STATUSES.has(run.status)) ? 5_000 : false;
+    },
+  });
+
+  const recentRuns = recentRunsQuery.data ?? [];
+  const refetchRecentRuns = recentRunsQuery.refetch;
+
+  useEffect(() => {
+    if (!recentRuns.length) {
+      setExpandedRuns({});
+      return;
+    }
+
+    setExpandedRuns((current) => {
+      const next: Record<string, boolean> = {};
+      for (const run of recentRuns) {
+        if (run.id in current) {
+          next[run.id] = current[run.id];
+          continue;
+        }
+        next[run.id] = !isPrivilegedUser;
+      }
+      return next;
+    });
+  }, [isPrivilegedUser, recentRuns]);
 
   useEffect(() => {
     if (!jobId) return;
@@ -204,7 +294,11 @@ export default function TemplateStudioPage() {
           error: status.error ?? undefined,
         });
 
-        if (status.status === "queued" || status.status === "running" || status.status === "video_pending") {
+        if (!ACTIVE_RUN_STATUSES.has(status.status)) {
+          void refetchRecentRuns();
+        }
+
+        if (ACTIVE_RUN_STATUSES.has(status.status)) {
           timeoutId = window.setTimeout(poll, 3000);
         }
       } catch (error) {
@@ -221,7 +315,7 @@ export default function TemplateStudioPage() {
       cancelled = true;
       if (timeoutId) window.clearTimeout(timeoutId);
     };
-  }, [jobId]);
+  }, [jobId, refetchRecentRuns]);
 
   const inputFields: InputField[] = (() => {
     if (templateDetailQuery.data?.user_inputs?.length) {
@@ -258,17 +352,17 @@ export default function TemplateStudioPage() {
 
   const creditsRequired = selectedTemplate?.estimated_credits_per_run ?? 0;
   const creditBalance = profile?.credits_balance ?? 0;
-  const canAfford = isAdmin || creditBalance >= creditsRequired;
+  const canAfford = isPrivilegedUser || creditBalance >= creditsRequired;
   const hasActiveMembership =
-    isAdmin ||
+    isPrivilegedUser ||
     profile?.subscription_status === "active" ||
     profile?.subscription_status === "trialing";
   const canRun = requiredInputsAreReady && hasActiveMembership && canAfford;
   const adminVisualRemaining = getAdminVisualCreditsRemaining();
-  const creditBanner = isAdmin
-    ? `Admin budget ${adminVisualRemaining}/${ADMIN_VISUAL_BUDGET_TOTAL}`
+  const creditBanner = isPrivilegedUser
+    ? `Team access ${adminVisualRemaining}/${ADMIN_VISUAL_BUDGET_TOTAL}`
     : `Balance ${creditBalance} credits`;
-  const costDisplay = isAdmin ? "Bypassed for admin" : `${creditsRequired} credits`;
+  const costDisplay = isPrivilegedUser ? "Bypassed for team access" : `${creditsRequired} credits`;
 
   const handleTemplateSelect = (templateId: string) => {
     setSelectedTemplateId(templateId);
@@ -339,7 +433,7 @@ export default function TemplateStudioPage() {
       if (data?.error) throw new Error(String(data.error));
       if (!data?.jobId) throw new Error("Template run did not return a job id.");
 
-      if (isAdmin) {
+      if (isPrivilegedUser) {
         recordAdminVisualCreditUsage(creditsRequired);
         setAdminVisualSpent(getAdminVisualCreditsSpent());
       }
@@ -350,6 +444,7 @@ export default function TemplateStudioPage() {
         progress: 0,
         outputs: [],
       });
+      void refetchRecentRuns();
       toast({ title: "Run queued", description: "The template is now executing." });
     } catch (error) {
       toast({
@@ -362,8 +457,7 @@ export default function TemplateStudioPage() {
     }
   };
 
-  const isRunning =
-    result?.status === "queued" || result?.status === "running" || result?.status === "video_pending";
+  const isRunning = result?.status === "queued" || result?.status === "running" || result?.status === "video_pending";
 
   return (
     <SiteShell>
@@ -561,9 +655,9 @@ export default function TemplateStudioPage() {
                         <div>
                           <p className="text-[11px] uppercase tracking-[0.24em] text-muted-foreground">Run cost</p>
                           <p className="mt-2 text-2xl font-semibold text-white">{costDisplay}</p>
-                          {isAdmin ? (
+                          {isPrivilegedUser ? (
                             <p className="mt-2 text-xs text-slate-500">
-                              Visual admin spend {adminVisualSpent}. Runs stay unblocked.
+                              Visual team spend {adminVisualSpent}. Runs stay unblocked.
                             </p>
                           ) : null}
                         </div>
@@ -592,7 +686,7 @@ export default function TemplateStudioPage() {
                         </p>
                       ) : null}
 
-                      {!isAdmin && hasActiveMembership && !canAfford ? (
+                      {!isPrivilegedUser && hasActiveMembership && !canAfford ? (
                         <p className="mt-3 text-sm leading-6 text-rose-100">
                           This run costs {creditsRequired} credits and your balance is {creditBalance}.
                         </p>
@@ -630,7 +724,7 @@ export default function TemplateStudioPage() {
                 </div>
               ) : null}
 
-              {result && (result.status === "queued" || result.status === "running" || result.status === "video_pending") ? (
+              {result && ACTIVE_RUN_STATUSES.has(result.status) ? (
                 <div className="mt-6 rounded-[1.5rem] border border-white/8 bg-black/20 p-5">
                   <div className="flex items-center gap-3">
                     <Loader2 className="h-5 w-5 animate-spin text-cyan-100" />
@@ -687,6 +781,137 @@ export default function TemplateStudioPage() {
                   </div>
                 </div>
               ) : null}
+
+              <div className="mt-8 border-t border-white/8 pt-6">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <p className="text-[11px] uppercase tracking-[0.24em] text-muted-foreground">Recent runs</p>
+                    <p className="mt-2 text-sm text-slate-300">
+                      {isPrivilegedUser
+                        ? "Last 4 runs for this account. Compact by default."
+                        : "Most recent run for this account."}
+                    </p>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => void refetchRecentRuns()}
+                    disabled={recentRunsQuery.isFetching}
+                    className="rounded-full border-white/10 bg-white/[0.03] text-slate-200 hover:bg-white/[0.08]"
+                  >
+                    {recentRunsQuery.isFetching ? (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    ) : (
+                      <RefreshCw className="mr-2 h-4 w-4" />
+                    )}
+                    Refresh
+                  </Button>
+                </div>
+
+                {recentRunsQuery.isError ? (
+                  <div className="mt-4 rounded-[1.5rem] border border-rose-400/20 bg-rose-400/10 p-4 text-sm text-rose-100">
+                    Could not load recent runs.
+                  </div>
+                ) : null}
+
+                {!recentRunsQuery.isError && !recentRuns.length ? (
+                  <div className="mt-4 rounded-[1.5rem] border border-dashed border-white/10 bg-black/20 p-4 text-sm text-slate-400">
+                    No saved runs yet for this account.
+                  </div>
+                ) : null}
+
+                <div className="mt-4 space-y-3">
+                  {recentRuns.map((run) => (
+                    <Collapsible
+                      key={run.id}
+                      open={!!expandedRuns[run.id]}
+                      onOpenChange={(open) =>
+                        setExpandedRuns((current) => ({
+                          ...current,
+                          [run.id]: open,
+                        }))
+                      }
+                    >
+                      <div className="overflow-hidden rounded-[1.5rem] border border-white/8 bg-black/20">
+                        <CollapsibleTrigger asChild>
+                          <button type="button" className="flex w-full items-start justify-between gap-3 p-4 text-left">
+                            <div className="min-w-0">
+                              <p className="truncate text-sm font-semibold text-white">{run.templateName}</p>
+                              <p className="mt-1 text-xs text-slate-400">
+                                {formatRunTimestamp(run.startedAt)} · {formatRunDuration(run.startedAt, run.completedAt)}
+                              </p>
+                              <p className="mt-1 text-[10px] uppercase tracking-[0.2em] text-slate-500">
+                                {run.outputs.length} deliverable{run.outputs.length === 1 ? "" : "s"}
+                              </p>
+                            </div>
+
+                            <div className="flex items-center gap-3">
+                              <div className="text-right">
+                                <p className={`text-[10px] uppercase tracking-[0.2em] ${
+                                  run.status === "failed"
+                                    ? "text-rose-200"
+                                    : run.status === "complete"
+                                      ? "text-emerald-200"
+                                      : "text-cyan-100"
+                                }`}>
+                                  {run.status.replace("_", " ")}
+                                </p>
+                                <p className="mt-1 text-xs text-slate-400">{run.progress}%</p>
+                              </div>
+                              {expandedRuns[run.id] ? (
+                                <ChevronDown className="mt-0.5 h-4 w-4 text-slate-400" />
+                              ) : (
+                                <ChevronRight className="mt-0.5 h-4 w-4 text-slate-400" />
+                              )}
+                            </div>
+                          </button>
+                        </CollapsibleTrigger>
+
+                        <CollapsibleContent className="border-t border-white/8 px-4 pb-4 pt-4">
+                          {run.outputs.length ? (
+                            <div className="flex gap-3 overflow-x-auto pb-1">
+                              {run.outputs.map((output, index) => (
+                                <a
+                                  key={`${run.id}-${output.url}-${index}`}
+                                  href={output.url}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="shrink-0 overflow-hidden rounded-[1.25rem] border border-white/8 bg-black/30"
+                                >
+                                  {output.type === "video" ? (
+                                    <video src={output.url} className="h-28 w-24 object-cover" muted playsInline />
+                                  ) : (
+                                    <img src={output.url} alt={output.label || `Run output ${index + 1}`} className="h-28 w-24 object-cover" />
+                                  )}
+                                </a>
+                              ))}
+                            </div>
+                          ) : (
+                            <p className="text-sm text-slate-400">No deliverables attached yet.</p>
+                          )}
+
+                          <div className="mt-4 flex flex-wrap gap-2">
+                            {run.outputs[0] ? (
+                              <a
+                                href={run.outputs[0].url}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="inline-flex items-center gap-2 rounded-full border border-white/10 px-3 py-1.5 text-xs uppercase tracking-[0.2em] text-slate-300 hover:bg-white/[0.06]"
+                              >
+                                <Download className="h-3.5 w-3.5" />
+                                Open first
+                              </a>
+                            ) : null}
+                          </div>
+
+                          {run.error ? <p className="mt-3 text-sm text-rose-200">{run.error}</p> : null}
+                        </CollapsibleContent>
+                      </div>
+                    </Collapsible>
+                  ))}
+                </div>
+              </div>
             </section>
           </div>
         </div>
