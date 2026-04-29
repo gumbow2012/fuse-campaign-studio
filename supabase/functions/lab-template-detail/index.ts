@@ -82,7 +82,7 @@ Deno.serve(async (req) => {
 
     const { data: edges, error: edgeError } = await admin
       .from("edges")
-      .select("source_node_id, target_node_id, mapping_logic")
+      .select("id, source_node_id, target_node_id, mapping_logic")
       .eq("version_id", versionId);
     if (edgeError) throw new Error(edgeError.message);
 
@@ -118,6 +118,7 @@ Deno.serve(async (req) => {
           .map((edge: any) => {
             const source = nodeMap.get(edge.source_node_id);
             return {
+              edgeId: edge.id,
               sourceNodeId: edge.source_node_id,
               sourceName: source?.name ?? "Unknown",
               sourceType: source?.node_type ?? "unknown",
@@ -178,6 +179,24 @@ Deno.serve(async (req) => {
       })
       .sort((a: any, b: any) => a.name.localeCompare(b.name));
 
+    const hasExplicitOutputFlags = detailNodes.some((node: any) =>
+      (node.nodeType === "image_gen" || node.nodeType === "video_gen") &&
+      node.outputExposed !== null
+    );
+    let nextOutputNumber = 1;
+    const numberedNodes = detailNodes.map((node: any, index: number) => {
+      const isOutputNode = node.nodeType === "image_gen" || node.nodeType === "video_gen";
+      const isDeliverable = isOutputNode && (
+        hasExplicitOutputFlags ? node.outputExposed === true : true
+      );
+      const outputNumber = isDeliverable ? nextOutputNumber++ : null;
+      return {
+        ...node,
+        nodeNumber: index + 1,
+        outputNumber,
+      };
+    });
+
     return json({
       templateId: (version as any).fuse_templates.id,
       templateName: (version as any).fuse_templates.name,
@@ -185,8 +204,9 @@ Deno.serve(async (req) => {
       versionNumber: version.version_number,
       reviewStatus: version.review_status ?? "Unreviewed",
       isActive: version.is_active,
-      nodes: detailNodes,
+      nodes: numberedNodes,
       edges: (edges ?? []).map((edge: any) => ({
+        id: edge.id,
         sourceNodeId: edge.source_node_id,
         targetNodeId: edge.target_node_id,
         targetParam: edge.mapping_logic?.target_param ?? null,

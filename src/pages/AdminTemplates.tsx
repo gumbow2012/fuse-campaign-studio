@@ -1,154 +1,232 @@
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
-import Navbar from "@/components/Navbar";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
-} from "@/components/ui/table";
-import {
-  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
-  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
-  AlertDialogTrigger,
-} from "@/components/ui/alert-dialog";
+import { GitBranch, Loader2, Network, Plus, TestTube2 } from "lucide-react";
+import SiteShell from "@/components/mvp/SiteShell";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { supabase } from "@/integrations/supabase/client";
-import { toast } from "@/hooks/use-toast";
-import { Plus, Trash2, Play, Eye, Loader2 } from "lucide-react";
-import { useState } from "react";
+
+type WorkbenchVersion = {
+  id: string;
+  version_number: number;
+  is_active: boolean;
+  review_status: string;
+  counts: {
+    total: number;
+    inputs: number;
+    images: number;
+    videos: number;
+    edges: number;
+  };
+};
+
+type WorkbenchTemplate = {
+  id: string;
+  name: string;
+  description: string | null;
+  versions: WorkbenchVersion[];
+};
+
+type WorkbenchCatalogResponse = {
+  templates?: WorkbenchTemplate[];
+};
+
+function getLiveVersion(template: WorkbenchTemplate) {
+  return template.versions.find((version) => version.is_active) ?? template.versions[0] ?? null;
+}
+
+function getOutputCount(version: WorkbenchVersion | null) {
+  return Number(version?.counts.images ?? 0) + Number(version?.counts.videos ?? 0);
+}
 
 export default function AdminTemplates() {
-  const qc = useQueryClient();
-  const [deleting, setDeleting] = useState<string | null>(null);
-
   const { data: templates, isLoading } = useQuery({
-    queryKey: ["admin-templates-list"],
+    queryKey: ["admin-template-workbench-catalog"],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("templates")
-        .select("*")
-        .order("created_at", { ascending: false });
+      const { data, error } = await supabase.functions.invoke("admin-template-workbench", {
+        body: { action: "catalog" },
+      });
       if (error) throw error;
-      return data;
+      return ((data as WorkbenchCatalogResponse | null)?.templates ?? []) as WorkbenchTemplate[];
     },
   });
 
-  const handleDelete = async (id: string) => {
-    setDeleting(id);
-    const { error } = await supabase.from("templates").delete().eq("id", id);
-    if (error) {
-      toast({ title: "Delete failed", description: error.message, variant: "destructive" });
-    } else {
-      toast({ title: "Template deleted" });
-      qc.invalidateQueries({ queryKey: ["admin-templates-list"] });
-    }
-    setDeleting(null);
-  };
-
   return (
-    <div className="min-h-screen bg-background">
-      <Navbar />
-      <div className="container mx-auto px-4 pt-24 pb-12 max-w-5xl">
-        <div className="flex items-center justify-between mb-6">
-          <h1 className="text-2xl font-bold">Templates</h1>
-          <Button asChild size="sm">
-            <Link to="/admin/templates/import">
-              <Plus className="h-4 w-4 mr-1" /> Import from HAR
-            </Link>
-          </Button>
+    <SiteShell>
+      <div className="container mx-auto max-w-6xl px-4 pb-12 pt-10 sm:pt-12">
+        <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-muted-foreground">Admin</p>
+            <h1 className="mt-2 text-3xl font-black tracking-tight">Template Workbench</h1>
+            <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
+              Admin graph editor, version control, cloning, and template test runs.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button asChild variant="outline" size="sm" className="rounded-full border-white/15 bg-white/5">
+              <Link to="/admin/templates/import">
+                <Plus className="mr-2 h-4 w-4" />
+                Import HAR
+              </Link>
+            </Button>
+            <Button asChild size="sm" className="rounded-full bg-cyan-300 text-slate-950 hover:bg-cyan-200">
+              <Link to="/app/lab/canvas">
+                <Network className="mr-2 h-4 w-4" />
+                New / Edit Draft
+              </Link>
+            </Button>
+          </div>
         </div>
 
-        <Card>
+        <Card className="border-white/10 bg-white/[0.03]">
           <CardContent className="p-0">
             {isLoading ? (
               <div className="flex justify-center py-12">
                 <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
               </div>
             ) : !templates?.length ? (
-              <p className="text-center text-muted-foreground py-12">
-                No templates yet.{" "}
-                <Link to="/admin/templates/import" className="underline text-primary">
-                  Import some
-                </Link>
-              </p>
+              <div className="py-12 text-center">
+                <p className="text-muted-foreground">No graph templates found.</p>
+                <Button asChild className="mt-4" size="sm">
+                  <Link to="/app/lab/canvas">Create a draft template</Link>
+                </Button>
+              </div>
             ) : (
-              <Table>
+              <>
+              <div className="grid gap-3 p-3 md:hidden">
+                {templates.map((template) => {
+                  const liveVersion = getLiveVersion(template);
+                  const totalOutputs = getOutputCount(liveVersion);
+
+                  return (
+                    <div key={template.id} className="rounded-lg border border-white/10 bg-background/60 p-4">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="truncate text-sm font-semibold">{template.name}</div>
+                          {template.description ? (
+                            <div className="mt-1 line-clamp-2 text-xs leading-5 text-muted-foreground">
+                              {template.description}
+                            </div>
+                          ) : null}
+                        </div>
+                        {liveVersion ? (
+                          <Badge variant="default">v{liveVersion.version_number}</Badge>
+                        ) : (
+                          <Badge variant="secondary">None</Badge>
+                        )}
+                      </div>
+
+                      <div className="mt-4 grid grid-cols-4 gap-2 text-center text-xs">
+                        <div className="rounded-md bg-white/[0.04] p-2">
+                          <div className="text-muted-foreground">Versions</div>
+                          <div className="mt-1 font-semibold">{template.versions.length}</div>
+                        </div>
+                        <div className="rounded-md bg-white/[0.04] p-2">
+                          <div className="text-muted-foreground">Nodes</div>
+                          <div className="mt-1 font-semibold">{liveVersion?.counts.total ?? 0}</div>
+                        </div>
+                        <div className="rounded-md bg-white/[0.04] p-2">
+                          <div className="text-muted-foreground">Edges</div>
+                          <div className="mt-1 font-semibold">{liveVersion?.counts.edges ?? 0}</div>
+                        </div>
+                        <div className="rounded-md bg-white/[0.04] p-2">
+                          <div className="text-muted-foreground">Outputs</div>
+                          <div className="mt-1 font-semibold">{totalOutputs}</div>
+                        </div>
+                      </div>
+
+                      <div className="mt-4 flex gap-2">
+                        <Button asChild size="sm" className="flex-1 rounded-full">
+                          <Link to={`/app/lab/canvas${liveVersion ? `?versionId=${liveVersion.id}` : ""}`}>
+                            <GitBranch className="mr-2 h-4 w-4" />
+                            Canvas
+                          </Link>
+                        </Button>
+                        <Button asChild size="sm" variant="outline" className="flex-1 rounded-full border-white/15 bg-white/5">
+                          <Link to="/admin/audits">
+                            <TestTube2 className="mr-2 h-4 w-4" />
+                            Audit
+                          </Link>
+                        </Button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div className="hidden md:block">
+                <Table>
                 <TableHeader>
                   <TableRow>
                     <TableHead>Name</TableHead>
-                    <TableHead>Recipe ID</TableHead>
+                    <TableHead className="text-center">Versions</TableHead>
+                    <TableHead className="text-center">Live</TableHead>
                     <TableHead className="text-center">Nodes</TableHead>
                     <TableHead className="text-center">Edges</TableHead>
-                    <TableHead className="text-center">Active</TableHead>
+                    <TableHead className="text-center">Outputs</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {templates.map((t: any) => (
-                    <TableRow key={t.id}>
-                      <TableCell className="font-medium">{t.name}</TableCell>
-                      <TableCell className="font-mono text-xs text-muted-foreground max-w-[140px] truncate">
-                        {t.weavy_recipe_id || "—"}
-                      </TableCell>
-                      <TableCell className="text-center">{t.nodes_count ?? "—"}</TableCell>
-                      <TableCell className="text-center">{t.edges_count ?? "—"}</TableCell>
-                      <TableCell className="text-center">
-                        <Badge variant={t.is_active ? "default" : "secondary"}>
-                          {t.is_active ? "Yes" : "No"}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-right space-x-1">
-                        <Button size="icon" variant="ghost" asChild title="View raw JSON">
-                          <Link to={`/admin/templates/${t.id}`}>
-                            <Eye className="h-4 w-4" />
-                          </Link>
-                        </Button>
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          asChild
-                          title="Run"
-                        >
-                          <Link to={`/app/templates/run?templateId=${t.id}`}>
-                            <Play className="h-4 w-4" />
-                          </Link>
-                        </Button>
-                        <AlertDialog>
-                          <AlertDialogTrigger asChild>
-                            <Button size="icon" variant="ghost" title="Delete">
-                              <Trash2 className="h-4 w-4 text-destructive" />
+                  {templates.map((template) => {
+                    const liveVersion = getLiveVersion(template);
+                    const totalOutputs = getOutputCount(liveVersion);
+
+                    return (
+                      <TableRow key={template.id}>
+                        <TableCell>
+                          <div className="font-medium">{template.name}</div>
+                          {template.description ? (
+                            <div className="mt-1 max-w-[320px] truncate text-xs text-muted-foreground">
+                              {template.description}
+                            </div>
+                          ) : null}
+                        </TableCell>
+                        <TableCell className="text-center">{template.versions.length}</TableCell>
+                        <TableCell className="text-center">
+                          {liveVersion ? (
+                            <Badge variant="default">v{liveVersion.version_number}</Badge>
+                          ) : (
+                            <Badge variant="secondary">None</Badge>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-center">{liveVersion?.counts.total ?? 0}</TableCell>
+                        <TableCell className="text-center">{liveVersion?.counts.edges ?? 0}</TableCell>
+                        <TableCell className="text-center">{totalOutputs}</TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex justify-end gap-1">
+                            <Button size="icon" variant="ghost" asChild title="Graph editor">
+                              <Link to={`/app/lab/canvas${liveVersion ? `?versionId=${liveVersion.id}` : ""}`}>
+                                <GitBranch className="h-4 w-4" />
+                              </Link>
                             </Button>
-                          </AlertDialogTrigger>
-                          <AlertDialogContent>
-                            <AlertDialogHeader>
-                              <AlertDialogTitle>Delete "{t.name}"?</AlertDialogTitle>
-                              <AlertDialogDescription>
-                                This action cannot be undone.
-                              </AlertDialogDescription>
-                            </AlertDialogHeader>
-                            <AlertDialogFooter>
-                              <AlertDialogCancel>Cancel</AlertDialogCancel>
-                              <AlertDialogAction
-                                onClick={() => handleDelete(t.id)}
-                                disabled={deleting === t.id}
-                              >
-                                {deleting === t.id && (
-                                  <Loader2 className="h-4 w-4 animate-spin mr-1" />
-                                )}
-                                Delete
-                              </AlertDialogAction>
-                            </AlertDialogFooter>
-                          </AlertDialogContent>
-                        </AlertDialog>
-                      </TableCell>
-                    </TableRow>
-                  ))}
+                            <Button size="icon" variant="ghost" asChild title="Audit runs">
+                              <Link to="/admin/audits">
+                                <TestTube2 className="h-4 w-4" />
+                              </Link>
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
                 </TableBody>
-              </Table>
+                </Table>
+              </div>
+              </>
             )}
           </CardContent>
         </Card>
       </div>
-    </div>
+    </SiteShell>
   );
 }

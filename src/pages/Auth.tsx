@@ -8,6 +8,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useEffect } from "react";
 import { toast } from "@/hooks/use-toast";
 import Navbar from "@/components/Navbar";
+import { getAbsoluteSiteUrl } from "@/lib/site-url";
 
 const Auth = () => {
   const [isLogin, setIsLogin] = useState(true);
@@ -38,11 +39,11 @@ const Auth = () => {
           password,
           options: {
             data: { full_name: name },
-            emailRedirectTo: `${window.location.origin}/auth`,
+            emailRedirectTo: getAbsoluteSiteUrl("/auth"),
           },
         });
         if (error) throw error;
-        toast({ title: "Check your email", description: "Account created. Confirm your email, then sign in." });
+        toast({ title: "Check your email", description: "Account created. Confirm your email on fuse-us.com, then sign in." });
       }
     } catch (err: any) {
       const description =

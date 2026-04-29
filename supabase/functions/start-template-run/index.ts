@@ -11,9 +11,9 @@ import {
   logAuditEvent,
   requireUser,
 } from "../_shared/supabase-admin.ts";
-import { PAPARAZZI_VERSION_ID, runGraphJob } from "../_shared/executor.ts";
+import { PAPARAZZI_VERSION_ID, refundJobCreditsIfNeeded, runGraphJob } from "../_shared/executor.ts";
 import { buildTemplateInputPlan } from "../_shared/template-inputs.ts";
-import { countTemplateDeliverables, getTemplateCreditCost } from "../_shared/template-pricing.ts";
+import { getTemplateCreditCost } from "../_shared/template-pricing.ts";
 
 declare const EdgeRuntime: {
   waitUntil(promise: Promise<unknown>): void;
@@ -131,15 +131,21 @@ Deno.serve(async (req) => {
 
   const admin = createAdminClient();
   const requestId = crypto.randomUUID();
+  let userId: string | null = null;
+  let templateId: string | null = null;
+  let versionId: string | null = null;
   let jobId: string | null = null;
+  let chargedCredits = 0;
 
   try {
     const runnerAccess = hasValidRunnerCode(req);
     const user = runnerAccess ? await getOptionalUser(req, admin) : await requireUser(req, admin);
     if (!user && !runnerAccess) throw new Error("Authentication required");
+    userId = user?.id ?? null;
 
     const body = await req.json() as StartTemplateRunBody;
-    const versionId = body.versionId ?? PAPARAZZI_VERSION_ID;
+
+    versionId = body.versionId ?? PAPARAZZI_VERSION_ID;
     const inputs = { ...(body.inputs ?? {}) };
 
     const { data: version, error: versionError } = await admin
@@ -148,39 +154,29 @@ Deno.serve(async (req) => {
       .eq("id", versionId)
       .single();
     if (versionError || !version) throw new Error(versionError?.message ?? "Version not found");
+    templateId = version.template_id;
 
-    const templateName = (version as any).fuse_templates.name as string;
     const userRoles = user ? await getUserRoles(user.id, admin) : [];
     const bypassCredits = runnerAccess || userRoles.some((role) => role === "admin" || role === "dev");
+    const templateName = (version as any).fuse_templates.name;
 
+    let creditCost = 0;
     if (user && !bypassCredits) {
       const { data: profile, error: profileError } = await admin
         .from("profiles")
-        .select("subscription_status, credits_balance")
+        .select("subscription_status")
         .eq("user_id", user.id)
-        .single();
-      if (profileError || !profile) throw new Error(profileError?.message ?? "Profile not found");
+        .maybeSingle();
+      if (profileError) throw new Error(profileError.message);
+      if (!profile) throw new Error("Profile not found");
 
-      const subscriptionStatus = String(profile.subscription_status ?? "inactive");
-      if (subscriptionStatus !== "active" && subscriptionStatus !== "trialing") {
-        throw new Error("Active membership required before running templates");
+      const subscriptionStatus = String(profile.subscription_status ?? "").toLowerCase();
+      if (!["active", "trialing"].includes(subscriptionStatus)) {
+        throw new Error("Active membership required before running templates.");
       }
-    }
 
-    const { data: versionNodes, error: versionNodesError } = await admin
-      .from("nodes")
-      .select("id, name, node_type, prompt_config, default_asset_id")
-      .eq("version_id", version.id);
-    if (versionNodesError || !versionNodes) {
-      throw new Error(versionNodesError?.message ?? "Failed to load template nodes");
+      creditCost = getTemplateCreditCost(templateName);
     }
-
-    const inputNodes = versionNodes.filter((node: any) => node.node_type === "user_input");
-    const executableNodes = versionNodes.filter((node: any) => node.node_type !== "user_input");
-    const deliverableCounts = countTemplateDeliverables(versionNodes as any);
-    const creditCost = user && !bypassCredits
-      ? getTemplateCreditCost(templateName, deliverableCounts)
-      : 0;
 
     const { data: job, error: jobError } = await admin
       .from("execution_jobs")
@@ -199,8 +195,16 @@ Deno.serve(async (req) => {
     jobId = job.id;
 
     const uploadedInputs = await uploadInputFiles(admin, job.id, body.inputFiles);
+
+    const { data: inputNodes, error: inputNodesError } = await admin
+      .from("nodes")
+      .select("id, name, prompt_config, default_asset_id")
+      .eq("version_id", version.id)
+      .eq("node_type", "user_input");
+    if (inputNodesError) throw new Error(inputNodesError.message);
+
     const finalInputs = expandInputsForTemplate({
-      templateName,
+      templateName: (version as any).fuse_templates.name,
       inputNodes: inputNodes ?? [],
       suppliedInputs: { ...uploadedInputs, ...inputs },
     });
@@ -218,7 +222,7 @@ Deno.serve(async (req) => {
         p_user_id: user.id,
         p_amount: -creditCost,
         p_type: "run_template",
-        p_description: `Run template: ${templateName} (${job.id})`,
+        p_description: `Run template: ${(version as any).fuse_templates.name} (${job.id})`,
         p_template_id: version.template_id,
         p_project_id: null,
         p_step_id: null,
@@ -227,11 +231,19 @@ Deno.serve(async (req) => {
         await admin.from("execution_jobs").delete().eq("id", job.id);
         throw new Error(creditError.message);
       }
+      chargedCredits = creditCost;
     }
+
+    const { data: nodes, error: nodesError } = await admin
+      .from("nodes")
+      .select("id, node_type")
+      .eq("version_id", version.id)
+      .neq("node_type", "user_input");
+    if (nodesError || !nodes) throw new Error(nodesError?.message ?? "Failed to load execution nodes");
 
     const { error: stepsError } = await admin
       .from("execution_steps")
-      .insert(executableNodes.map((node: any) => ({
+      .insert(nodes.map((node: any) => ({
         job_id: job.id,
         node_id: node.id,
         status: "pending",
@@ -239,23 +251,6 @@ Deno.serve(async (req) => {
         output_payload: {},
       })));
     if (stepsError) throw new Error(stepsError.message);
-
-    await logAuditEvent({
-      eventType: "template.run.queued",
-      message: `Queued template run for ${templateName}`,
-      source: "start-template-run",
-      requestId,
-      jobId: job.id,
-      templateId: version.template_id,
-      versionId: version.id,
-      metadata: {
-        user_id: user?.id ?? null,
-        bypass_credits: bypassCredits,
-        credit_cost: creditCost,
-        image_outputs: deliverableCounts.imageOutputs,
-        video_outputs: deliverableCounts.videoOutputs,
-      },
-    }, admin);
 
     EdgeRuntime.waitUntil((async () => {
       try {
@@ -270,35 +265,77 @@ Deno.serve(async (req) => {
             completed_at: new Date().toISOString(),
           })
           .eq("id", job.id);
-
-        await logAuditEvent({
-          eventType: "template.run.failed",
-          message,
-          severity: "error",
-          source: "start-template-run",
-          requestId,
-          jobId: job.id,
-          templateId: version.template_id,
-          versionId: version.id,
-          errorCode: "runner_failed",
-          metadata: {
-            user_id: user?.id ?? null,
-          },
-        }, admin);
+        if (chargedCredits > 0) {
+          await refundJobCreditsIfNeeded(admin, {
+            jobId: job.id,
+            reason: message,
+            requestId,
+          });
+        }
       }
     })());
 
+    await logAuditEvent({
+      eventType: "template.run.started",
+      message: `Template run queued for ${templateName}.`,
+      source: "template-runner",
+      requestId,
+      jobId: job.id,
+      templateId: version.template_id,
+      versionId: version.id,
+      metadata: {
+        user_id: user?.id ?? null,
+        bypass_credits: bypassCredits,
+        credit_cost: creditCost,
+        runner_access: runnerAccess,
+      },
+    }, admin);
+
     return json({ jobId: job.id, status: "queued" }, 202);
   } catch (error) {
+    const message = errorMessage(error);
+
+    if (chargedCredits > 0 && jobId) {
+      try {
+        await refundJobCreditsIfNeeded(admin, {
+          jobId,
+          reason: message,
+          requestId,
+        });
+      } catch (refundError) {
+        await logAuditEvent({
+          eventType: "template.run.refund_failed",
+          message: errorMessage(refundError),
+          severity: "error",
+          source: "template-runner",
+          requestId,
+          jobId,
+          templateId,
+          versionId,
+          errorCode: "template_run_refund_failed",
+          metadata: {
+            user_id: userId,
+            original_error: message,
+          },
+        }, admin);
+      }
+    }
+
     await logAuditEvent({
-      eventType: "template.run.rejected",
-      message: errorMessage(error),
+      eventType: "template.run.failed_to_start",
+      message,
       severity: "error",
-      source: "start-template-run",
+      source: "template-runner",
       requestId,
       jobId,
-      errorCode: "run_rejected",
+      templateId,
+      versionId,
+      errorCode: "template_run_failed_to_start",
+      metadata: {
+        user_id: userId,
+      },
     }, admin);
-    return json({ error: errorMessage(error) }, 400);
+
+    return json({ error: message }, 400);
   }
 });

@@ -8,13 +8,16 @@ import {
   ChevronRight,
   Download,
   Film,
+  GitBranch,
   Image as ImageIcon,
   Loader2,
+  Network,
   RefreshCw,
   Sparkles,
   Upload,
 } from "lucide-react";
 import SiteShell from "@/components/mvp/SiteShell";
+import RunFeedbackCard from "@/components/mvp/RunFeedbackCard";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -25,7 +28,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/hooks/use-toast";
 import { SUPABASE_PUBLISHABLE_KEY, SUPABASE_URL, supabase } from "@/integrations/supabase/client";
 import { ADMIN_VISUAL_BUDGET_TOTAL, getAdminVisualCreditsRemaining, getAdminVisualCreditsSpent, recordAdminVisualCreditUsage } from "@/lib/adminBudget";
-import { fetchTemplateDetail, fetchTemplates, type ApiTemplate, type TemplateDetail } from "@/services/fuseApi";
+import { fetchTemplateDetail, fetchTemplates, type ApiTemplate, type RunFeedbackRecord, type TemplateDetail } from "@/services/fuseApi";
 import { getStaticInputs } from "@/services/templateInputMap";
 
 type RunnerStatus = "queued" | "running" | "video_pending" | "complete" | "failed";
@@ -61,6 +64,7 @@ interface RecentRun {
   error: string | null;
   templateName: string;
   outputs: RunnerOutput[];
+  feedback: RunFeedbackRecord | null;
 }
 
 const TEMPLATE_CACHE_KEY = "fuse.templateStudio.templates";
@@ -183,6 +187,50 @@ function formatRunDuration(startedAt: string | null | undefined, completedAt: st
   return `${(durationMs / 1000).toFixed(1)} s`;
 }
 
+function isVideoPreview(template: Pick<ApiTemplate, "preview_url" | "preview_asset_type">) {
+  if (template.preview_asset_type === "video") return true;
+  return /\.(mp4|mov|webm)(\?|$)/i.test(template.preview_url ?? "");
+}
+
+function TemplateVibeMedia({
+  template,
+  className,
+}: {
+  template: ApiTemplate;
+  className: string;
+}) {
+  if (!template.preview_url) {
+    return (
+      <div className={`${className} flex items-center justify-center bg-[radial-gradient(circle_at_top,rgba(34,211,238,0.18),transparent_38%),linear-gradient(180deg,rgba(255,255,255,0.03),rgba(255,255,255,0.01))]`}>
+        <Sparkles className="h-8 w-8 text-cyan-100/60" />
+      </div>
+    );
+  }
+
+  if (isVideoPreview(template)) {
+    return (
+      <video
+        src={template.preview_url}
+        className={className}
+        muted
+        loop
+        playsInline
+        autoPlay
+        preload="metadata"
+      />
+    );
+  }
+
+  return (
+    <img
+      src={template.preview_url}
+      alt={`${template.name} vibe preview`}
+      className={className}
+      loading="lazy"
+    />
+  );
+}
+
 export default function TemplateStudioPage() {
   const { hasAppAccess, profile } = useAuth();
   const [selectedTemplateId, setSelectedTemplateId] = useState(() => {
@@ -196,6 +244,7 @@ export default function TemplateStudioPage() {
   const [submitting, setSubmitting] = useState(false);
   const [adminVisualSpent, setAdminVisualSpent] = useState(() => getAdminVisualCreditsSpent());
   const [expandedRuns, setExpandedRuns] = useState<Record<string, boolean>>({});
+  const [feedbackOverrides, setFeedbackOverrides] = useState<Record<string, RunFeedbackRecord | null>>({});
   const isPrivilegedUser = hasAppAccess;
   const recentRunsLimit = isPrivilegedUser ? 4 : 1;
 
@@ -205,7 +254,7 @@ export default function TemplateStudioPage() {
       const token = await getAccessToken();
       return fetchTemplates(token);
     },
-    initialData: loadCachedTemplates,
+    placeholderData: loadCachedTemplates,
     staleTime: 60_000,
   });
 
@@ -233,7 +282,7 @@ export default function TemplateStudioPage() {
   const templateDetailQuery = useQuery<TemplateDetail | null>({
     queryKey: ["mvp-template-detail", selectedTemplateId],
     enabled: !!selectedTemplate,
-    initialData: selectedTemplate ? loadCachedTemplateDetail(selectedTemplate.id) : null,
+    placeholderData: selectedTemplate ? loadCachedTemplateDetail(selectedTemplate.id) : null,
     staleTime: 60_000,
     queryFn: async () => {
       if (!selectedTemplate) return null;
@@ -256,6 +305,21 @@ export default function TemplateStudioPage() {
 
   const recentRuns = recentRunsQuery.data ?? [];
   const refetchRecentRuns = recentRunsQuery.refetch;
+  const currentResultFeedback = jobId
+    ? feedbackOverrides[jobId]
+      ?? recentRuns.find((run) => run.id === jobId)?.feedback
+      ?? null
+    : null;
+
+  const resolveFeedback = (runId: string, fallback: RunFeedbackRecord | null) =>
+    feedbackOverrides[runId] ?? fallback ?? null;
+
+  const handleFeedbackSaved = (runId: string, feedback: RunFeedbackRecord) => {
+    setFeedbackOverrides((current) => ({
+      ...current,
+      [runId]: feedback,
+    }));
+  };
 
   useEffect(() => {
     if (!recentRuns.length) {
@@ -474,6 +538,41 @@ export default function TemplateStudioPage() {
           </div>
         </div>
 
+        {isPrivilegedUser ? (
+          <section className="mt-6 rounded-[1.75rem] border border-cyan-300/20 bg-cyan-300/[0.06] p-4">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+              <div>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-cyan-100">
+                  Admin Template Operations
+                </p>
+                <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-300">
+                  Use the node workbench for graph editing, template creation, cloning, version activation, node numbering, output numbering, and canvas test runs.
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Button asChild className="rounded-full bg-cyan-300 text-slate-950 hover:bg-cyan-200">
+                  <Link to="/app/lab/canvas">
+                    <Network className="mr-2 h-4 w-4" />
+                    Open Node Workbench
+                  </Link>
+                </Button>
+                <Button asChild variant="outline" className="rounded-full border-white/15 bg-white/5 text-foreground hover:bg-white/10">
+                  <Link to="/admin/templates">
+                    <GitBranch className="mr-2 h-4 w-4" />
+                    Versions
+                  </Link>
+                </Button>
+                <Button asChild variant="outline" className="rounded-full border-white/15 bg-white/5 text-foreground hover:bg-white/10">
+                  <Link to="/admin/audits">
+                    <Film className="mr-2 h-4 w-4" />
+                    Test Runs
+                  </Link>
+                </Button>
+              </div>
+            </div>
+          </section>
+        ) : null}
+
         <div className="mt-8 grid gap-6 xl:grid-cols-[340px_1fr]">
           <aside className="rounded-[2rem] border border-white/10 bg-white/[0.03] p-5">
             <div className="flex items-center justify-between">
@@ -481,7 +580,7 @@ export default function TemplateStudioPage() {
                 <p className="text-[11px] uppercase tracking-[0.24em] text-muted-foreground">Templates</p>
                 <p className="mt-2 text-sm text-slate-300">Choose the workflow you want to run.</p>
               </div>
-              {templatesQuery.isLoading ? <Loader2 className="h-4 w-4 animate-spin text-cyan-100" /> : null}
+              {templatesQuery.isFetching ? <Loader2 className="h-4 w-4 animate-spin text-cyan-100" /> : null}
             </div>
 
             <div className="mt-5 space-y-3">
@@ -491,7 +590,7 @@ export default function TemplateStudioPage() {
                 </div>
               ) : null}
 
-              {!templatesQuery.isLoading && !templates.length ? (
+              {!templatesQuery.isFetching && !templates.length ? (
                 <div className="rounded-[1.5rem] border border-white/8 bg-black/20 p-4 text-sm text-slate-300">
                   No active templates were returned.
                 </div>
@@ -505,27 +604,46 @@ export default function TemplateStudioPage() {
                     key={template.id}
                     type="button"
                     onClick={() => handleTemplateSelect(template.id)}
-                    className={`w-full rounded-[1.5rem] border p-4 text-left transition-colors ${
+                    className={`group w-full rounded-[1.5rem] border p-4 text-left transition-colors ${
                       selected
                         ? "border-cyan-300/40 bg-cyan-300/10"
                         : "border-white/8 bg-black/20 hover:border-white/20 hover:bg-white/[0.05]"
                     }`}
                   >
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <p className="text-sm font-semibold text-white">{template.name}</p>
-                        <p className="mt-1 text-xs uppercase tracking-[0.2em] text-muted-foreground">
-                          {template.category || "General"}
-                        </p>
+                    <div className="grid grid-cols-[96px_minmax(0,1fr)] gap-3">
+                      <div className="relative overflow-hidden rounded-[1rem] border border-white/10 bg-black/30">
+                        <TemplateVibeMedia
+                          template={template}
+                          className="aspect-[4/5] h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.04]"
+                        />
+                        <div className="pointer-events-none absolute inset-x-0 bottom-0 h-1/2 bg-gradient-to-t from-black/70 to-transparent" />
+                        <div className="absolute bottom-2 left-2 rounded-full border border-white/15 bg-black/45 px-2 py-0.5 text-[9px] uppercase tracking-[0.16em] text-white/80 backdrop-blur">
+                          Vibe
+                        </div>
                       </div>
-                      <div className="rounded-full border border-white/10 px-3 py-1 text-[10px] uppercase tracking-[0.2em] text-slate-300">
-                        {template.estimated_credits_per_run || 0} cr
+
+                      <div className="min-w-0">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <p className="truncate text-sm font-semibold text-white">{template.name}</p>
+                            <p className="mt-1 text-xs uppercase tracking-[0.2em] text-muted-foreground">
+                              {template.category || "General"}
+                            </p>
+                          </div>
+                          <div className="shrink-0 rounded-full border border-white/10 px-3 py-1 text-[10px] uppercase tracking-[0.2em] text-slate-300">
+                            {template.estimated_credits_per_run || 0} cr
+                          </div>
+                        </div>
+
+                        {template.description ? (
+                          <p className="mt-3 line-clamp-3 text-sm leading-6 text-slate-300">{template.description}</p>
+                        ) : (
+                          <p className="mt-3 line-clamp-3 text-sm leading-6 text-slate-300">
+                            Preview the visual direction before running this workflow.
+                          </p>
+                        )}
                       </div>
                     </div>
-
-                    {template.description ? (
-                      <p className="mt-3 text-sm leading-6 text-slate-300">{template.description}</p>
-                    ) : null}
                   </button>
                 );
               })}
@@ -540,17 +658,10 @@ export default function TemplateStudioPage() {
                 <div className="grid gap-6 lg:grid-cols-[0.9fr_1.1fr]">
                   <div className="space-y-4">
                     <div className="overflow-hidden rounded-[1.75rem] border border-white/8 bg-black/25">
-                      {selectedTemplate.preview_url ? (
-                        <img
-                          src={selectedTemplate.preview_url}
-                          alt={selectedTemplate.name}
-                          className="aspect-[4/3] w-full object-cover"
-                        />
-                      ) : (
-                        <div className="flex aspect-[4/3] items-center justify-center bg-[radial-gradient(circle_at_top,rgba(34,211,238,0.18),transparent_38%),linear-gradient(180deg,rgba(255,255,255,0.03),rgba(255,255,255,0.01))]">
-                          <Sparkles className="h-10 w-10 text-cyan-100/60" />
-                        </div>
-                      )}
+                      <TemplateVibeMedia
+                        template={selectedTemplate}
+                        className="aspect-[4/3] w-full object-cover"
+                      />
                     </div>
 
                     <div>
@@ -753,6 +864,14 @@ export default function TemplateStudioPage() {
                     <p className="text-sm text-emerald-50">The template completed successfully.</p>
                   </div>
 
+                  {jobId ? (
+                    <RunFeedbackCard
+                      jobId={jobId}
+                      initialFeedback={currentResultFeedback}
+                      onSaved={(feedback) => handleFeedbackSaved(jobId, feedback)}
+                    />
+                  ) : null}
+
                   <div className="grid gap-4 md:grid-cols-2">
                     {result.outputs.map((output, index) => (
                       <article key={`${output.url}-${index}`} className="overflow-hidden rounded-[1.5rem] border border-white/8 bg-black/20">
@@ -904,6 +1023,16 @@ export default function TemplateStudioPage() {
                               </a>
                             ) : null}
                           </div>
+
+                          {!ACTIVE_RUN_STATUSES.has(run.status) ? (
+                            <RunFeedbackCard
+                              jobId={run.id}
+                              compact
+                              initialFeedback={resolveFeedback(run.id, run.feedback)}
+                              onSaved={(feedback) => handleFeedbackSaved(run.id, feedback)}
+                              className="mt-4"
+                            />
+                          ) : null}
 
                           {run.error ? <p className="mt-3 text-sm text-rose-200">{run.error}</p> : null}
                         </CollapsibleContent>

@@ -24,7 +24,7 @@ export default function ContactPage() {
       setEmail("");
       setCompany("");
       setMessage("");
-      toast({ title: "Message received", description: "It landed in the Fuse ops queue." });
+      toast({ title: "Message received", description: "It was stored and logged for the Fuse ops queue." });
     } catch (error) {
       toast({
         title: "Contact failed",
@@ -47,7 +47,7 @@ export default function ContactPage() {
             </h1>
           </div>
           <p className="text-base leading-7 text-slate-300">
-            This form writes directly into Supabase so the inbound queue lives with the rest of the product ops data. Use it for support, template requests, or partnership conversations.
+            Use this for support, template requests, or partnership conversations. Every submission is written into Supabase and logged for follow-up.
           </p>
 
           <div className="rounded-[1.75rem] border border-white/10 bg-white/[0.03] p-6">

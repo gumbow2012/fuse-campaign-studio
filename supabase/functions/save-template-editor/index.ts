@@ -16,6 +16,7 @@ type Body = {
   expected?: string | null;
   editorMode?: "upload" | "reference" | "workflow" | null;
   slotKey?: string | null;
+  sampleUrl?: string | null;
   outputExposed?: boolean | null;
   detachAsset?: boolean | null;
 };
@@ -77,6 +78,10 @@ Deno.serve(async (req) => {
 
     if ("slotKey" in body && node.node_type === "user_input") {
       nextPromptConfig.editor_slot_key = normalizeNullable(body.slotKey);
+    }
+
+    if ("sampleUrl" in body && node.node_type === "user_input") {
+      nextPromptConfig.sample_url = normalizeNullable(body.sampleUrl);
     }
 
     if ("outputExposed" in body && (node.node_type === "image_gen" || node.node_type === "video_gen")) {

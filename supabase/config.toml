@@ -1,10 +1,32 @@
 project_id = "ykrrwgkxgidoavtzcumk"
 
+[auth]
+site_url = "https://fuse-us.com"
+additional_redirect_urls = [
+  "http://localhost:3000/**",
+  "http://localhost:5173/**",
+  "https://*.vercel.app/**",
+  "https://fuse-us.com/**",
+]
+
+[auth.mfa.totp]
+enroll_enabled = true
+verify_enabled = true
+
+[auth.email]
+enable_confirmations = true
+max_frequency = "1m0s"
+otp_length = 6
+
+[auth.email.template.magic_link]
+subject = "Your Fuse verification code"
+content_path = "./supabase/templates/magic-link.html"
+
 [functions.create-checkout]
-verify_jwt = true
+verify_jwt = false
 
 [functions.customer-portal]
-verify_jwt = true
+verify_jwt = false
 
 [functions.weavy-webhook]
 verify_jwt = false
@@ -22,9 +44,15 @@ verify_jwt = false
 verify_jwt = false
 
 [functions.check-subscription]
-verify_jwt = true
+verify_jwt = false
 
 [functions.stripe-webhook]
+verify_jwt = false
+
+[functions.stripe-webhook-live]
+verify_jwt = false
+
+[functions.stripe-webhook-test]
 verify_jwt = false
 
 [functions.lab-template-catalog]
@@ -66,8 +94,29 @@ verify_jwt = false
 [functions.referrals]
 verify_jwt = false
 
+[functions.submit-contact-message]
+verify_jwt = false
+
+[functions.update-account-profile]
+verify_jwt = true
+
 [functions.run-template]
 verify_jwt = false
 
 [functions.sync-weavy-loras]
 verify_jwt = true
+
+[functions.admin-billing-smoke]
+verify_jwt = false
+
+[functions.admin-recurring-billing-smoke]
+verify_jwt = false
+
+[functions.admin-billing-debug]
+verify_jwt = false
+
+[functions.admin-template-workbench]
+verify_jwt = false
+
+[functions.resume-template-job]
+verify_jwt = false

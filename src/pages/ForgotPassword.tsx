@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "@/hooks/use-toast";
 import Navbar from "@/components/Navbar";
+import { getAbsoluteSiteUrl } from "@/lib/site-url";
 
 const ForgotPassword = () => {
   const [email, setEmail] = useState("");
@@ -15,7 +16,7 @@ const ForgotPassword = () => {
     setLoading(true);
     try {
       const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: `${window.location.origin}/reset-password`,
+        redirectTo: getAbsoluteSiteUrl("/reset-password"),
       });
       if (error) throw error;
       toast({ title: "Check your email", description: "We sent you a password reset link." });

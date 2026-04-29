@@ -1,4 +1,4 @@
-import { createAdminClient } from "./supabase-admin.ts";
+import { createAdminClient, logAuditEvent } from "./supabase-admin.ts";
 import {
   getFalPricing,
   getFalQueueResult,
@@ -59,6 +59,93 @@ type ResolvedOutput = {
 type AdminClient = ReturnType<typeof createAdminClient>;
 
 export const PAPARAZZI_VERSION_ID = "34239a27-27ed-4b1f-8fc9-6a0f1e1ac778";
+
+function refundDescription(jobId: string) {
+  return `Refund template run credits (${jobId})`;
+}
+
+export async function refundJobCreditsIfNeeded(
+  admin: AdminClient,
+  args: {
+    jobId: string;
+    reason: string;
+    requestId?: string | null;
+  },
+) {
+  const { data: job, error: jobError } = await admin
+    .from("execution_jobs")
+    .select("id, user_id, template_id")
+    .eq("id", args.jobId)
+    .maybeSingle();
+  if (jobError) throw new Error(jobError.message);
+  if (!job?.user_id) {
+    return { refunded: false, reason: "no_user" as const };
+  }
+
+  const refundDesc = refundDescription(args.jobId);
+  const { data: existingRefund, error: existingRefundError } = await admin
+    .from("credit_ledger")
+    .select("id")
+    .eq("user_id", job.user_id)
+    .eq("type", "refund")
+    .eq("description", refundDesc)
+    .maybeSingle();
+  if (existingRefundError) throw new Error(existingRefundError.message);
+  if (existingRefund?.id) {
+    return { refunded: false, reason: "already_refunded" as const };
+  }
+
+  const { data: debitRows, error: debitError } = await admin
+    .from("credit_ledger")
+    .select("id, amount, description")
+    .eq("user_id", job.user_id)
+    .eq("type", "run_template")
+    .lt("amount", 0)
+    .ilike("description", `%(${args.jobId})`)
+    .order("created_at", { ascending: true })
+    .limit(1);
+  if (debitError) throw new Error(debitError.message);
+
+  const debit = debitRows?.[0];
+  if (!debit) {
+    return { refunded: false, reason: "no_debit_found" as const };
+  }
+
+  const refundAmount = Math.abs(Number(debit.amount ?? 0));
+  if (!refundAmount) {
+    return { refunded: false, reason: "invalid_debit_amount" as const };
+  }
+
+  const { data: refundRows, error: refundError } = await admin.rpc("apply_credit_transaction", {
+    p_user_id: job.user_id,
+    p_amount: refundAmount,
+    p_type: "refund",
+    p_description: refundDesc,
+    p_template_id: job.template_id,
+    p_project_id: null,
+    p_step_id: null,
+  });
+  if (refundError) throw new Error(refundError.message);
+
+  const refundRow = Array.isArray(refundRows) ? refundRows[0] : null;
+  await logAuditEvent({
+    eventType: "template.run.refunded",
+    message: `Refunded ${refundAmount} credits for failed template run.`,
+    source: "template-runner",
+    requestId: args.requestId ?? null,
+    jobId: job.id,
+    templateId: job.template_id,
+    metadata: {
+      refund_amount: refundAmount,
+      refund_ledger_id: refundRow?.ledger_id ?? null,
+      refund_reason: args.reason,
+      original_ledger_id: debit.id,
+      original_description: debit.description ?? null,
+    },
+  }, admin);
+
+  return { refunded: true, amount: refundAmount, ledgerId: refundRow?.ledger_id ?? null };
+}
 
 export function parseOutputExposed(value: unknown) {
   if (typeof value === "boolean") return value;
@@ -393,6 +480,11 @@ async function failJob(
       completed_at: completedAt,
     })
     .eq("id", jobId);
+
+  await refundJobCreditsIfNeeded(admin, {
+    jobId,
+    reason: errorMessage,
+  });
 }
 
 async function completeBlankPromptStep(
@@ -733,8 +825,10 @@ export async function runGraphJob(admin: AdminClient, jobId: string) {
   const nodeMap = new Map((nodes as NodeRow[]).map((node) => [node.id, node]));
   const assetMap = new Map((assets ?? []).map((asset) => [asset.id, asset as AssetRow]));
   const incomingByTarget = new Map<string, EdgeRow[]>();
+  const nodeIdsWithOutgoingEdges = new Set<string>();
 
   for (const edge of edges as EdgeRow[]) {
+    nodeIdsWithOutgoingEdges.add(edge.source_node_id);
     const list = incomingByTarget.get(edge.target_node_id) ?? [];
     list.push(edge);
     incomingByTarget.set(edge.target_node_id, list);
@@ -745,8 +839,18 @@ export async function runGraphJob(admin: AdminClient, jobId: string) {
 
   for (const node of nodes as NodeRow[]) {
     if (node.node_type !== "user_input") continue;
-
+    const editorMode = typeof node.prompt_config?.editor_mode === "string"
+      ? node.prompt_config.editor_mode
+      : null;
     const explicitUrl = jobInputs[node.id] ?? jobInputs[node.name];
+    const isHiddenWorkflowPlaceholder =
+      node.prompt_config?.weavy_exposed === false &&
+      (editorMode === "workflow" || editorMode === "reference") &&
+      !node.default_asset_id &&
+      !explicitUrl;
+    if (isHiddenWorkflowPlaceholder) continue;
+    if (!nodeIdsWithOutgoingEdges.has(node.id)) continue;
+
     if (explicitUrl) {
       resolved.set(node.id, { url: explicitUrl, type: "image" });
       continue;

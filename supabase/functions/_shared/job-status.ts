@@ -30,6 +30,7 @@ function extractProviderDetail(value: unknown): string | null {
 
 function resolveStepError(step: any) {
   if (!step) return null;
+  if (step.status !== "failed" && !step.error_log) return null;
   return extractProviderDetail(step.output_payload?.rawPayload?.detail) ??
     extractProviderDetail(step.output_payload?.rawPayload) ??
     step.error_log ??
@@ -165,6 +166,30 @@ export async function buildJobStatusResponse(admin: AdminClient, jobId: string, 
     nodeIds: slot.nodeIds,
   }));
 
+  const profile = job.user_id
+    ? await admin
+      .from("profiles")
+      .select("user_id, name, email, plan, subscription_status")
+      .eq("user_id", job.user_id)
+      .maybeSingle()
+    : { data: null, error: null };
+  if (profile.error) throw new Error(profile.error.message);
+
+  const userInputs = inputPlan.slots.map((slot) => {
+    const value = slot.nodeIds
+      .map((nodeId) => jobInputs[nodeId])
+      .find((candidate) => typeof candidate === "string" && candidate.length > 0)
+      ?? null;
+
+    return {
+      id: slot.id,
+      name: slot.name,
+      expected: slot.expected,
+      value,
+      nodeIds: slot.nodeIds,
+    };
+  });
+
   const templateRefs = (nodes ?? [])
     .filter((node: any) => node.node_type === "user_input" && classifyHiddenReference(node))
     .map((node: any) => {
@@ -178,12 +203,52 @@ export async function buildJobStatusResponse(admin: AdminClient, jobId: string, 
       };
     });
 
+  const outputMetricsByStepId = new Map(
+    (steps ?? []).map((step: any) => [
+      step.id,
+      {
+        estimatedCostUsd: typeof step.output_payload?.telemetry?.estimatedCostUsd === "number"
+          ? step.output_payload.telemetry.estimatedCostUsd
+          : null,
+        executionTimeMs: step.execution_time_ms ?? step.output_payload?.telemetry?.executionTimeMs ?? null,
+      },
+    ]),
+  );
+
+  const numberedOutputs = outputs.map((output: any, index: number) => {
+    const metrics = output.stepId ? outputMetricsByStepId.get(output.stepId) : null;
+    return {
+      ...output,
+      outputNumber: index + 1,
+      estimatedCostUsd: metrics?.estimatedCostUsd ?? null,
+      executionTimeMs: metrics?.executionTimeMs ?? null,
+    };
+  });
+
+  const totals = {
+    estimatedCostUsd: Number(
+      numberedOutputs
+        .reduce((sum: number, output: any) => sum + Number(output.estimatedCostUsd ?? 0), 0)
+        .toFixed(6),
+    ),
+    executionTimeMs: numberedOutputs.reduce((sum: number, output: any) => sum + Number(output.executionTimeMs ?? 0), 0),
+  };
+
   return {
     jobId: job.id,
+    startedAt: job.started_at ?? null,
+    completedAt: job.completed_at ?? null,
     status: job.status,
     progress: job.progress ?? 0,
     error: resolvedJobError,
     telemetry: job.result_payload?.telemetry ?? {},
+    user: {
+      id: job.user_id ?? null,
+      name: profile.data?.name ?? null,
+      email: profile.data?.email ?? null,
+      plan: profile.data?.plan ?? null,
+      subscriptionStatus: profile.data?.subscription_status ?? null,
+    },
     template: {
       templateId: job.template_id,
       templateName: job.fuse_templates?.name ?? "Template",
@@ -193,7 +258,10 @@ export async function buildJobStatusResponse(admin: AdminClient, jobId: string, 
       inputs: templateInputs,
       hiddenRefs: templateRefs,
     },
-    outputs,
+    inputPayload: jobInputs,
+    userInputs,
+    outputTotals: totals,
+    outputs: numberedOutputs,
     steps: (steps ?? []).map((step: any) => {
       const node = step.nodes ?? {};
       const incoming = [...(incomingByTarget.get(step.node_id) ?? [])].sort((a, b) =>

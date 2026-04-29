@@ -12,17 +12,17 @@ const tierCopy = {
   starter: {
     icon: Zap,
     description: "For smaller brands running consistent drops.",
-    features: ["560 monthly credits", "Template runner access", "Standard queue"],
+    features: ["500 monthly credits", "Template runner access", "Standard queue"],
   },
   pro: {
     icon: Rocket,
     description: "For brands shipping weekly campaigns.",
-    features: ["1,700 monthly credits", "Priority queueing", "Faster iteration loops"],
+    features: ["2,000 monthly credits", "Priority queueing", "Faster iteration loops"],
   },
   studio: {
     icon: Crown,
     description: "For larger teams or agencies operating multiple brands.",
-    features: ["4,560 monthly credits", "Largest monthly allotment", "Best fit for active ops"],
+    features: ["6,000 monthly credits", "Largest monthly allotment", "Best fit for active ops"],
   },
 } as const;
 
@@ -38,7 +38,7 @@ function formatBillingDate(value: string | null | undefined) {
 export default function BillingPage() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const { user, profile, refreshSubscription } = useAuth();
+  const { isAdmin, user, profile, refreshSubscription } = useAuth();
   const [loading, setLoading] = useState<string | null>(null);
 
   useEffect(() => {
@@ -46,50 +46,47 @@ export default function BillingPage() {
     const canceled = searchParams.get("canceled");
     if (!success && !canceled) return;
 
-    if (success === "true") {
-      toast({
-        title: "Checkout complete",
-        description: "Refreshing your billing state from Supabase.",
-      });
-
-      const timers = [0, 2000, 5000, 9000].map((delay) =>
-        window.setTimeout(() => {
-          void refreshSubscription();
-        }, delay),
-      );
-
-      setSearchParams((current) => {
-        const next = new URLSearchParams(current);
-        next.delete("success");
-        return next;
-      }, { replace: true });
-
-      return () => timers.forEach((timer) => window.clearTimeout(timer));
+    if (success) {
+      setLoading("refresh");
+      void refreshSubscription()
+        .then(() => {
+          toast({
+            title: "Membership updated",
+            description: "Stripe returned successfully. Billing state has been refreshed.",
+          });
+        })
+        .catch((error) => {
+          toast({
+            title: "Refresh failed",
+            description: error instanceof Error ? error.message : "Could not refresh billing state.",
+            variant: "destructive",
+          });
+        })
+        .finally(() => {
+          setLoading(null);
+          setSearchParams({}, { replace: true });
+        });
+      return;
     }
 
-    if (canceled === "true") {
-      toast({
-        title: "Checkout canceled",
-        description: "No changes were made to your membership.",
-      });
-      setSearchParams((current) => {
-        const next = new URLSearchParams(current);
-        next.delete("canceled");
-        return next;
-      }, { replace: true });
-    }
+    toast({
+      title: "Checkout canceled",
+      description: "No billing change was made.",
+    });
+    setSearchParams({}, { replace: true });
   }, [refreshSubscription, searchParams, setSearchParams]);
 
-  const handleCheckout = async (priceId: string, tierName: string) => {
+  const handleCheckout = async (tierKey: keyof typeof STRIPE_TIERS) => {
     if (!user) {
       navigate("/auth?mode=signup");
       return;
     }
+    if (isAdmin) return;
 
-    setLoading(tierName);
+    setLoading(tierKey);
     try {
       const { data, error } = await supabase.functions.invoke("create-checkout", {
-        body: { priceId },
+        body: { planKey: tierKey },
       });
       if (error) throw error;
       if (!data?.url) throw new Error("Stripe checkout URL not returned.");
@@ -100,6 +97,7 @@ export default function BillingPage() {
         description: error instanceof Error ? error.message : "Could not start Stripe checkout.",
         variant: "destructive",
       });
+    } finally {
       setLoading(null);
     }
   };
@@ -117,13 +115,16 @@ export default function BillingPage() {
         description: error instanceof Error ? error.message : "Could not open the billing portal.",
         variant: "destructive",
       });
+    } finally {
       setLoading(null);
     }
   };
 
   const currentPlan = profile?.plan ?? "free";
   const currentTier = currentPlan === "free" ? null : STRIPE_TIERS[currentPlan as keyof typeof STRIPE_TIERS];
-  const stripeLinked = !!profile?.stripe_customer_id;
+  const creditValue = isAdmin ? "∞" : String(profile?.credits_balance ?? 0);
+  const currentPlanLabel = isAdmin ? "admin" : currentPlan;
+  const subscriptionLabel = isAdmin ? "bypass enabled" : profile?.subscription_status ?? "inactive";
 
   return (
     <SiteShell>
@@ -131,9 +132,9 @@ export default function BillingPage() {
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
             <p className="text-[11px] font-semibold uppercase tracking-[0.3em] text-cyan-100">Memberships</p>
-            <h1 className="mt-4 font-display text-5xl font-bold tracking-[-0.05em] text-white">Stripe-backed plans and recurring credits.</h1>
+            <h1 className="mt-4 font-display text-5xl font-bold tracking-[-0.05em] text-white">Membership controls, credits, and billing state.</h1>
             <p className="mt-4 max-w-3xl text-base leading-7 text-slate-300">
-              Checkout writes membership state into Supabase profiles. Webhooks reconcile billing events and monthly credit grants. Template runs debit credits directly from the same balance.
+              Stripe handles checkout and subscription management. Supabase stores the member state, credit balance, billing events, and entitlement gates used by the runner.
             </p>
           </div>
           {user ? (
@@ -157,31 +158,29 @@ export default function BillingPage() {
             <div className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-1">
               <div className="rounded-[1.5rem] border border-white/8 bg-black/20 p-4">
                 <p className="text-[11px] uppercase tracking-[0.24em] text-muted-foreground">Plan</p>
-                <p className="mt-2 text-3xl font-semibold capitalize text-white">{currentPlan}</p>
+                <p className="mt-2 text-3xl font-semibold capitalize text-white">{currentPlanLabel}</p>
               </div>
               <div className="rounded-[1.5rem] border border-white/8 bg-black/20 p-4">
                 <p className="text-[11px] uppercase tracking-[0.24em] text-muted-foreground">Credits</p>
-                <p className="mt-2 text-3xl font-semibold text-white">{profile?.credits_balance ?? 0}</p>
+                <p className="mt-2 text-3xl font-semibold text-white">{creditValue}</p>
               </div>
               <div className="rounded-[1.5rem] border border-white/8 bg-black/20 p-4">
                 <p className="text-[11px] uppercase tracking-[0.24em] text-muted-foreground">Subscription</p>
-                <p className="mt-2 text-xl font-semibold capitalize text-white">{profile?.subscription_status ?? "inactive"}</p>
+                <p className="mt-2 text-xl font-semibold capitalize text-white">{subscriptionLabel}</p>
               </div>
               <div className="rounded-[1.5rem] border border-white/8 bg-black/20 p-4">
                 <p className="text-[11px] uppercase tracking-[0.24em] text-muted-foreground">Period ends</p>
                 <p className="mt-2 text-xl font-semibold text-white">{formatBillingDate(profile?.subscription_period_end)}</p>
               </div>
-              <div className="rounded-[1.5rem] border border-white/8 bg-black/20 p-4">
-                <p className="text-[11px] uppercase tracking-[0.24em] text-muted-foreground">Cycle grant</p>
-                <p className="mt-2 text-xl font-semibold text-white">{profile?.subscription_cycle_credits ?? currentTier?.monthlyCredits ?? 0} credits</p>
-              </div>
-              <div className="rounded-[1.5rem] border border-white/8 bg-black/20 p-4">
-                <p className="text-[11px] uppercase tracking-[0.24em] text-muted-foreground">Stripe link</p>
-                <p className="mt-2 text-xl font-semibold text-white">{stripeLinked ? "Connected" : "Not linked yet"}</p>
-              </div>
             </div>
 
-            {user && currentTier ? (
+            {isAdmin ? (
+              <div className="mt-6 rounded-[1.5rem] border border-cyan-300/20 bg-cyan-300/10 p-4 text-sm leading-6 text-cyan-50">
+                Admin accounts bypass membership and credit locks inside the runner. Use a normal user account when you want to test the real customer subscription flow.
+              </div>
+            ) : null}
+
+            {user && currentTier && !isAdmin ? (
               <Button
                 onClick={() => void handlePortal()}
                 disabled={loading === "portal"}
@@ -200,6 +199,13 @@ export default function BillingPage() {
               const tierMeta = tierCopy[tierKey];
               const Icon = tierMeta.icon;
               const isCurrent = currentPlan === tierKey;
+              const ctaLabel = isAdmin
+                ? "Admin access"
+                : isCurrent
+                  ? "Current plan"
+                  : loading === tierKey
+                    ? "Loading..."
+                    : `Choose ${tier.name}`;
 
               return (
                 <article
@@ -231,16 +237,16 @@ export default function BillingPage() {
                   </ul>
 
                   <Button
-                    onClick={() => void handleCheckout(tier.price_id, tierKey)}
-                    disabled={isCurrent || !!loading}
+                    onClick={() => void handleCheckout(tierKey)}
+                    disabled={isAdmin || isCurrent || !!loading}
                     className={`mt-6 w-full rounded-full ${
-                      isCurrent
+                      isCurrent || isAdmin
                         ? "bg-white/10 text-white hover:bg-white/10"
                         : "bg-cyan-300 text-slate-950 hover:bg-cyan-200"
                     }`}
                   >
-                    {isCurrent ? "Current plan" : loading === tierKey ? "Loading..." : `Choose ${tier.name}`}
-                    {!isCurrent ? <ArrowRight className="h-4 w-4" /> : null}
+                    {ctaLabel}
+                    {!isCurrent && !isAdmin ? <ArrowRight className="h-4 w-4" /> : null}
                   </Button>
                 </article>
               );

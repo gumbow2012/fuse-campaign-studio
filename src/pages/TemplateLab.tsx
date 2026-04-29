@@ -1,10 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from "react";
-import { AlertCircle, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, Copy, Download, EyeOff, Film, Loader2, LockKeyhole, RefreshCw, Trash2, Upload } from "lucide-react";
+import { AlertCircle, CheckCircle2, ChevronDown, ChevronRight, Copy, Download, EyeOff, Film, Loader2, LockKeyhole, RefreshCw, Upload } from "lucide-react";
 import { useLocation, useParams, useSearchParams } from "react-router-dom";
-import Navbar from "@/components/Navbar";
+import SiteShell from "@/components/mvp/SiteShell";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -108,18 +107,12 @@ type TemplateOutput = {
   label: string;
   type: "image" | "video";
   url: string;
-  outputNumber?: number;
   stepId?: string;
   nodeId?: string;
 };
 
 type NumberedOutput = TemplateOutput & {
   outputNumber: number;
-};
-
-type ViewerOutput = NumberedOutput & {
-  templateName?: string;
-  versionNumber?: number | null;
 };
 
 type JobStatus = {
@@ -326,8 +319,8 @@ function getSharedInputCandidates(label: string): SharedInputKey[] {
   if (normalized === "top-garment") return ["top-garment", "garment"];
   if (normalized === "bottom-garment") return ["bottom-garment", "garment"];
   if (normalized === "accessory") return ["accessory"];
-  if (normalized === "garment-1") return ["top-garment", "garment"];
-  if (normalized === "garment-2") return ["bottom-garment", "garment"];
+  if (normalized === "garment-1") return ["garment", "top-garment", "bottom-garment"];
+  if (normalized === "garment-2") return ["bottom-garment", "top-garment", "garment"];
   if (normalized === "garments-front") return ["garments-front", "garment", "top-garment"];
   if (normalized === "garments-back") return ["garments-back", "garment", "bottom-garment"];
 
@@ -402,7 +395,6 @@ const TemplateLab = () => {
   const [hiddenInspectorNodeIds, setHiddenInspectorNodeIds] = useState<string[]>([]);
   const [editorDraft, setEditorDraft] = useState<EditorDraft | null>(null);
   const [savingNodeEdits, setSavingNodeEdits] = useState(false);
-  const [detachingNodeId, setDetachingNodeId] = useState<string | null>(null);
   const [reviewStatusDraft, setReviewStatusDraft] = useState<string>("Unreviewed");
   const [savingReviewStatus, setSavingReviewStatus] = useState(false);
   const [files, setFiles] = useState<Record<string, File | null>>({});
@@ -417,9 +409,6 @@ const TemplateLab = () => {
   const [jobId, setJobId] = useState<string | null>(null);
   const [job, setJob] = useState<JobStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [viewerOpen, setViewerOpen] = useState(false);
-  const [viewerOutputs, setViewerOutputs] = useState<ViewerOutput[]>([]);
-  const [viewerIndex, setViewerIndex] = useState(0);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const bulkPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const bulkRowsRef = useRef<BulkRunRow[]>([]);
@@ -582,7 +571,7 @@ const TemplateLab = () => {
   }, [authLoading, loadingTemplates, templates]);
 
   const numberedOutputs = useMemo<NumberedOutput[]>(
-    () => (job?.outputs ?? []).map((item, index) => ({ ...item, outputNumber: item.outputNumber ?? index + 1 })),
+    () => (job?.outputs ?? []).map((item, index) => ({ ...item, outputNumber: index + 1 })),
     [job],
   );
   const outputImages = useMemo(
@@ -681,17 +670,6 @@ const TemplateLab = () => {
   const selectedInspectorNode = useMemo(
     () => inspectorNodes.find((node) => node.id === selectedInspectorNodeId) ?? inspectorNodes[0] ?? null,
     [inspectorNodes, selectedInspectorNodeId],
-  );
-
-  const cleanupNodes = useMemo(
-    () =>
-      (templateDetail?.nodes ?? []).filter((node) => !!node.defaultAssetUrl).sort((a, b) => {
-        const aMode = a.editor?.mode ?? "";
-        const bMode = b.editor?.mode ?? "";
-        if (aMode !== bMode) return aMode.localeCompare(bMode);
-        return a.name.localeCompare(b.name);
-      }),
-    [templateDetail],
   );
 
   const normalizeFile = useCallback((sourceFile: File) => {
@@ -851,7 +829,7 @@ const TemplateLab = () => {
 
     try {
       const response = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/list-recent-runs?limit=20`,
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/list-recent-runs?limit=8`,
         { headers: await buildAuthHeaders() },
       );
       const data = await response.json();
@@ -1307,42 +1285,6 @@ const TemplateLab = () => {
     }
   }, [buildAuthHeaders, editorDraft, loadTemplateDetail, loadTemplates, selectedInspectorNode, selectedTemplate]);
 
-  const detachTemplateAsset = useCallback(async (node: TemplateDetailNode) => {
-    if (!selectedTemplate) return;
-
-    setDetachingNodeId(node.id);
-
-    try {
-      const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/save-template-editor`, {
-        method: "POST",
-        headers: {
-          ...(await buildAuthHeaders()),
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          versionId: selectedTemplate.versionId,
-          nodeId: node.id,
-          detachAsset: true,
-        }),
-      });
-
-      const data = await response.json();
-      if (!response.ok) throw new Error(data?.error ?? "Could not detach backend image");
-
-      await loadTemplateDetail(selectedTemplate.versionId);
-      await loadTemplates();
-      toast({
-        title: "Detached",
-        description: `${node.name} no longer carries that backend image.`,
-      });
-    } catch (detachError) {
-      const message = detachError instanceof Error ? detachError.message : "Could not detach backend image";
-      toast({ title: "Detach failed", description: message, variant: "destructive" });
-    } finally {
-      setDetachingNodeId(null);
-    }
-  }, [buildAuthHeaders, loadTemplateDetail, loadTemplates, selectedTemplate]);
-
   const saveReviewStatus = useCallback(async () => {
     if (!selectedTemplate) return;
 
@@ -1527,39 +1469,9 @@ const TemplateLab = () => {
     });
   }, []);
 
-  const openOutputViewer = useCallback((
-    outputs: TemplateOutput[],
-    startIndex: number,
-    context?: { templateName?: string; versionNumber?: number | null },
-  ) => {
-    const numbered = outputs.map((output, index) => ({
-      ...output,
-      outputNumber: output.outputNumber ?? index + 1,
-      templateName: context?.templateName,
-      versionNumber: context?.versionNumber ?? null,
-    }));
-
-    setViewerOutputs(numbered);
-    setViewerIndex(Math.min(Math.max(startIndex, 0), Math.max(numbered.length - 1, 0)));
-    setViewerOpen(true);
-  }, []);
-
-  const activeViewerOutput = viewerOutputs[viewerIndex] ?? null;
-  const canViewPrevious = viewerIndex > 0;
-  const canViewNext = viewerIndex < viewerOutputs.length - 1;
-
-  const showPreviousOutput = useCallback(() => {
-    setViewerIndex((current) => Math.max(current - 1, 0));
-  }, []);
-
-  const showNextOutput = useCallback(() => {
-    setViewerIndex((current) => Math.min(current + 1, Math.max(viewerOutputs.length - 1, 0)));
-  }, [viewerOutputs.length]);
-
   return (
-    <div className="min-h-screen bg-background text-foreground">
-      <Navbar />
-      <div className="mx-auto flex w-full max-w-[1600px] flex-col gap-8 px-4 pb-16 pt-24 sm:px-6">
+    <SiteShell>
+      <div className="mx-auto flex w-full max-w-[1600px] flex-col gap-8 px-4 pb-16 pt-10 sm:px-6">
         <div className="grid gap-6 xl:grid-cols-[minmax(0,1.05fr)_minmax(520px,0.95fr)]">
           <section className="rounded-3xl border border-border/50 bg-card/70 p-6 shadow-sm xl:p-7">
             <div className="mb-6 flex items-start justify-between gap-4">
@@ -2063,11 +1975,10 @@ const TemplateLab = () => {
                 </div>
 
                 <Tabs value={inspectorTab} onValueChange={setInspectorTab} className="mt-5">
-                  <TabsList className="grid w-full grid-cols-4">
+                  <TabsList className="grid w-full grid-cols-3">
                     <TabsTrigger value="map">Map</TabsTrigger>
                     <TabsTrigger value="inspect">Inspect</TabsTrigger>
                     <TabsTrigger value="edit">Edit</TabsTrigger>
-                    <TabsTrigger value="cleanup">Cleanup</TabsTrigger>
                   </TabsList>
 
                   <TabsContent value="map" className="mt-4">
@@ -2376,76 +2287,6 @@ const TemplateLab = () => {
                       </div>
                     </div>
                   </TabsContent>
-
-                  <TabsContent value="cleanup" className="mt-4">
-                    <div className="rounded-2xl border border-border/30 bg-background/70 p-4">
-                      <div className="flex items-start justify-between gap-4">
-                        <div>
-                          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">Backend Asset Cleanup</p>
-                          <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
-                            This lists every baked image currently attached to the selected template version. Detach removes the image from the node definition so it stops being injected on future runs. It does not rewire the graph for you.
-                          </p>
-                        </div>
-                        <div className="rounded-2xl border border-border/30 bg-background/80 px-4 py-3 text-sm text-muted-foreground">
-                          {cleanupNodes.length} backend image{cleanupNodes.length === 1 ? "" : "s"} attached
-                        </div>
-                      </div>
-
-                      {cleanupNodes.length ? (
-                        <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-                          {cleanupNodes.map((node) => (
-                            <div key={`cleanup-${node.id}`} className="rounded-2xl border border-border/30 bg-background/85 p-4">
-                              <div className="flex items-start justify-between gap-3">
-                                <div className="min-w-0">
-                                  <p className="font-medium leading-tight">{node.name}</p>
-                                  <p className="mt-1 text-[11px] uppercase tracking-[0.15em] text-muted-foreground">
-                                    {node.nodeType}
-                                    {node.editor?.mode ? ` · ${node.editor.mode}` : ""}
-                                  </p>
-                                </div>
-                                <Button
-                                  type="button"
-                                  size="sm"
-                                  variant="destructive"
-                                  onClick={() => void detachTemplateAsset(node)}
-                                  disabled={detachingNodeId === node.id}
-                                >
-                                  {detachingNodeId === node.id ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Trash2 className="mr-2 h-4 w-4" />}
-                                  Detach
-                                </Button>
-                              </div>
-
-                              {node.defaultAssetUrl ? (
-                                <img
-                                  src={node.defaultAssetUrl}
-                                  alt={`${node.name} backend asset`}
-                                  className="mt-4 h-56 w-full rounded-2xl border border-border/30 object-contain bg-muted/10"
-                                />
-                              ) : null}
-
-                              <div className="mt-4 space-y-2 text-xs text-muted-foreground">
-                                <p>Node ID: <span className="font-mono text-foreground/80">{node.id}</span></p>
-                                <p>Raw name: <span className="text-foreground/80">{node.rawName}</span></p>
-                                {node.defaultAssetType ? (
-                                  <p>Asset type: <span className="text-foreground/80">{node.defaultAssetType}</span></p>
-                                ) : (
-                                  <p>Asset type: <span className="text-foreground/80">sample_url / non-library image</span></p>
-                                )}
-                              </div>
-
-                              <div className="mt-4 rounded-2xl border border-border/30 bg-background/70 px-3 py-3 text-xs text-muted-foreground">
-                                Detach this only if it is a pollutant. If the branch actually depends on this image, the template may need rewiring or a new clean reference after removal.
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      ) : (
-                        <div className="mt-4 rounded-2xl border border-border/30 bg-background/80 p-6 text-sm text-muted-foreground">
-                          No baked backend images are attached to this template right now.
-                        </div>
-                      )}
-                    </div>
-                  </TabsContent>
                 </Tabs>
               </div>
             ) : null}
@@ -2515,24 +2356,22 @@ const TemplateLab = () => {
                               {run.outputs.length ? (
                                 <div className="flex gap-2 overflow-x-auto pb-1">
                                   {run.outputs.map((output, index) => (
-                                    <button
-                                      type="button"
+                                    <a
                                       key={`${run.id}-${output.stepId ?? output.url}-${index}`}
+                                      href={output.url}
+                                      target="_blank"
+                                      rel="noreferrer"
                                       className="relative shrink-0 rounded-xl border border-border/30 bg-background/80 p-2"
-                                      onClick={() => openOutputViewer(run.outputs, index, {
-                                        templateName: run.templateName,
-                                        versionNumber: run.versionNumber,
-                                      })}
                                     >
                                       <span className="absolute left-3 top-3 z-10 rounded-full bg-primary px-2 py-0.5 text-[10px] font-bold tracking-[0.15em] text-primary-foreground shadow-sm">
-                                        {output.outputNumber ?? index + 1}
+                                        {index + 1}
                                       </span>
                                       {output.type === "image" ? (
                                         <img src={output.url} alt={output.label} className="h-20 w-16 rounded-lg object-cover" />
                                       ) : (
                                         <video src={output.url} className="h-20 w-16 rounded-lg object-cover" muted />
                                       )}
-                                    </button>
+                                    </a>
                                   ))}
                                 </div>
                               ) : null}
@@ -2542,16 +2381,10 @@ const TemplateLab = () => {
                                   Open Results
                                 </Button>
                                 {run.outputs[0] ? (
-                                  <Button
-                                    type="button"
-                                    size="sm"
-                                    variant="ghost"
-                                    onClick={() => openOutputViewer(run.outputs, 0, {
-                                      templateName: run.templateName,
-                                      versionNumber: run.versionNumber,
-                                    })}
-                                  >
-                                    Open Viewer
+                                  <Button asChild type="button" size="sm" variant="ghost">
+                                    <a href={run.outputs[0].url} target="_blank" rel="noreferrer">
+                                      Open First Output
+                                    </a>
                                   </Button>
                                 ) : null}
                               </div>
@@ -2750,7 +2583,7 @@ const TemplateLab = () => {
                             </Button>
                           </div>
                         </div>
-                        <div className="relative mx-auto w-full max-w-[280px] rounded-[28px] border border-border/40 bg-background/80 p-2 text-left shadow-sm">
+                        <div className="relative mx-auto max-w-[280px] rounded-[28px] border border-border/40 bg-background/80 p-2 shadow-sm">
                           <div className="absolute left-5 top-5 z-10 rounded-full bg-primary px-3 py-1 text-xs font-black tracking-[0.15em] text-primary-foreground shadow">
                             {output.outputNumber}
                           </div>
@@ -2759,17 +2592,6 @@ const TemplateLab = () => {
                             alt={output.label || `Generated image ${output.outputNumber}`}
                             className="w-full rounded-[22px] border border-border/40"
                           />
-                          <Button
-                            type="button"
-                            size="sm"
-                            className="absolute bottom-5 right-5"
-                            onClick={() => openOutputViewer(outputImages, output.outputNumber - 1, {
-                              templateName: job?.template?.templateName,
-                              versionNumber: job?.template?.versionNumber,
-                            })}
-                          >
-                            Open Viewer
-                          </Button>
                         </div>
                       </div>
                     ))}
@@ -2819,130 +2641,22 @@ const TemplateLab = () => {
                             </Button>
                           </div>
                         </div>
-                        <div className="relative mx-auto w-full max-w-[280px] rounded-[28px] border border-border/40 bg-background/80 p-2 text-left shadow-sm">
+                        <div className="relative mx-auto max-w-[280px] rounded-[28px] border border-border/40 bg-background/80 p-2 shadow-sm">
                           <div className="absolute left-5 top-5 z-10 rounded-full bg-primary px-3 py-1 text-xs font-black tracking-[0.15em] text-primary-foreground shadow">
                             {output.outputNumber}
                           </div>
                           <video src={output.url} controls playsInline className="w-full rounded-[22px] border border-border/40" />
-                          <Button
-                            type="button"
-                            size="sm"
-                            className="absolute bottom-5 right-5"
-                            onClick={() => openOutputViewer(outputVideos, output.outputNumber - 1, {
-                              templateName: job?.template?.templateName,
-                              versionNumber: job?.template?.versionNumber,
-                            })}
-                          >
-                            Open Viewer
-                          </Button>
                         </div>
                       </div>
                     ))}
                   </div>
                 </div>
               ) : null}
-
-              <Dialog open={viewerOpen} onOpenChange={setViewerOpen}>
-                <DialogContent className="max-h-[92vh] max-w-[1100px] overflow-hidden border-border/50 bg-card/95 p-0 text-foreground">
-                  {activeViewerOutput ? (
-                    <div className="grid gap-0 md:grid-cols-[minmax(0,1fr)_320px]">
-                      <div className="flex min-h-[70vh] items-center justify-center bg-background/80 p-4">
-                        <div className="relative w-full max-w-[430px]">
-                          <div className="absolute left-4 top-4 z-10 rounded-full bg-primary px-3 py-1 text-xs font-black tracking-[0.15em] text-primary-foreground shadow">
-                            {activeViewerOutput.outputNumber}
-                          </div>
-                          {activeViewerOutput.type === "image" ? (
-                            <img
-                              src={activeViewerOutput.url}
-                              alt={activeViewerOutput.label || `Output ${activeViewerOutput.outputNumber}`}
-                              className="w-full rounded-[28px] border border-border/40 bg-background object-contain shadow-sm"
-                            />
-                          ) : (
-                            <video
-                              src={activeViewerOutput.url}
-                              controls
-                              autoPlay
-                              playsInline
-                              className="w-full rounded-[28px] border border-border/40 bg-background shadow-sm"
-                            />
-                          )}
-                        </div>
-                      </div>
-
-                      <div className="flex flex-col border-l border-border/30 bg-background/70 p-6">
-                        <DialogHeader className="text-left">
-                          <DialogTitle>Output {activeViewerOutput.outputNumber}</DialogTitle>
-                          <DialogDescription>
-                            {activeViewerOutput.templateName
-                              ? `${activeViewerOutput.templateName}${activeViewerOutput.versionNumber ? ` v${activeViewerOutput.versionNumber}` : ""}`
-                              : "Run output viewer"}
-                          </DialogDescription>
-                        </DialogHeader>
-
-                        <div className="mt-6 space-y-4 text-sm">
-                          <div className="rounded-2xl border border-border/30 bg-background/80 p-4">
-                            <p className="text-[11px] uppercase tracking-[0.15em] text-muted-foreground">Label</p>
-                            <p className="mt-1 font-medium">{activeViewerOutput.label || `Output ${activeViewerOutput.outputNumber}`}</p>
-                            <p className="mt-2 text-[11px] uppercase tracking-[0.15em] text-muted-foreground">Trace</p>
-                            <p className="mt-1 text-xs text-muted-foreground">Step {formatShortId(activeViewerOutput.stepId)} · Node {formatShortId(activeViewerOutput.nodeId)}</p>
-                          </div>
-
-                          <div className="grid grid-cols-2 gap-3">
-                            <div className="rounded-2xl border border-border/30 bg-background/80 p-4">
-                              <p className="text-[11px] uppercase tracking-[0.15em] text-muted-foreground">Type</p>
-                              <p className="mt-1 font-medium capitalize">{activeViewerOutput.type}</p>
-                            </div>
-                            <div className="rounded-2xl border border-border/30 bg-background/80 p-4">
-                              <p className="text-[11px] uppercase tracking-[0.15em] text-muted-foreground">Aspect</p>
-                              <p className="mt-1 font-medium">9:16</p>
-                            </div>
-                          </div>
-
-                          <div className="flex flex-wrap gap-2">
-                            <Button type="button" variant="outline" onClick={showPreviousOutput} disabled={!canViewPrevious}>
-                              <ChevronLeft className="mr-2 h-4 w-4" />
-                              Previous
-                            </Button>
-                            <Button type="button" variant="outline" onClick={showNextOutput} disabled={!canViewNext}>
-                              Next
-                              <ChevronRight className="ml-2 h-4 w-4" />
-                            </Button>
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              onClick={() => void copyOutputTrace(activeViewerOutput, {
-                                templateName: activeViewerOutput.templateName,
-                                versionNumber: activeViewerOutput.versionNumber,
-                              })}
-                            >
-                              <Copy className="mr-2 h-4 w-4" />
-                              Copy Trace
-                            </Button>
-                            <Button asChild variant="outline">
-                              <a href={activeViewerOutput.url} download={`template-output-${activeViewerOutput.outputNumber}.${activeViewerOutput.type === "video" ? "mp4" : "png"}`}>
-                                <Download className="mr-2 h-4 w-4" />
-                                Download
-                              </a>
-                            </Button>
-                          </div>
-
-                          <div className="rounded-2xl border border-border/30 bg-background/80 p-4">
-                            <p className="text-[11px] uppercase tracking-[0.15em] text-muted-foreground">Position</p>
-                            <p className="mt-1 font-medium">
-                              {activeViewerOutput.outputNumber} of {viewerOutputs.length}
-                            </p>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  ) : null}
-                </DialogContent>
-              </Dialog>
             </div>
           </section>
         </div>
       </div>
-    </div>
+    </SiteShell>
   );
 };
 

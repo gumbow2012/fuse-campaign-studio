@@ -7,12 +7,14 @@ import { AuthProvider } from "@/contexts/AuthContext";
 import CustomerRoute from "@/components/CustomerRoute";
 import AdminRoute from "@/components/AdminRoute";
 import Admin from "@/pages/Admin";
+import AdminAudits from "@/pages/AdminAudits";
 import AdminAnalytics from "@/pages/AdminAnalytics";
 import AdminTemplateImport from "@/pages/AdminTemplateImport";
 import AdminTemplates from "@/pages/AdminTemplates";
 import FlowEmbed from "@/pages/FlowEmbed";
 import FlowTest from "@/pages/FlowTest";
 import NanoRun from "@/pages/NanoRun";
+import TemplateCanvas from "@/pages/TemplateCanvas";
 import TemplateLab from "@/pages/TemplateLab";
 import AboutPage from "@/pages/mvp/AboutPage";
 import AccountPage from "@/pages/mvp/AccountPage";
@@ -96,6 +98,14 @@ const App = () => (
               }
             />
             <Route
+              path="/app/lab/canvas"
+              element={
+                <AdminRoute>
+                  <TemplateCanvas />
+                </AdminRoute>
+              }
+            />
+            <Route
               path="/app/nano"
               element={
                 <AdminRoute>
@@ -124,6 +134,22 @@ const App = () => (
               element={
                 <AdminRoute>
                   <AdminTemplates />
+                </AdminRoute>
+              }
+            />
+            <Route
+              path="/admin/audits"
+              element={
+                <AdminRoute>
+                  <AdminAudits />
+                </AdminRoute>
+              }
+            />
+            <Route
+              path="/admin/developer"
+              element={
+                <AdminRoute>
+                  <AdminAudits />
                 </AdminRoute>
               }
             />

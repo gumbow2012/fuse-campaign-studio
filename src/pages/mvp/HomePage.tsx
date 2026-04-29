@@ -6,18 +6,18 @@ import SiteShell from "@/components/mvp/SiteShell";
 
 const pillars = [
   {
-    title: "Authenticated by default",
-    body: "Email/password auth, profile persistence, and a locked app surface are the only public gates in the MVP.",
+    title: "Production workflows",
+    body: "Reusable generation templates turn source assets into customer-ready campaign outputs without custom ops per run.",
     icon: LockKeyhole,
   },
   {
-    title: "Template runner first",
-    body: "The app now centers on picking a template, uploading source assets, and running the existing backend pipeline.",
+    title: "Fast execution loop",
+    body: "Pick a workflow, upload the required inputs, and track the job until the final images or videos are ready.",
     icon: Layers3,
   },
   {
-    title: "Ops loop intact",
-    body: "Contact flows, audit logging, and backend orchestration stay online while the presentation layer gets dramatically simpler.",
+    title: "Operational visibility",
+    body: "Account changes, billing events, inbound contact, and runner failures stay visible in Supabase instead of disappearing into the UI.",
     icon: Sparkles,
   },
 ];
@@ -30,14 +30,14 @@ export default function HomePage() {
       <section className="container grid gap-10 py-16 md:py-24 lg:grid-cols-[1.1fr_0.9fr] lg:items-center">
         <div className="space-y-6">
           <div className="inline-flex rounded-full border border-cyan-300/20 bg-cyan-300/10 px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.28em] text-cyan-100">
-            April MVP Cut
+            AI Campaign Production
           </div>
           <div className="space-y-4">
             <h1 className="max-w-4xl font-display text-5xl font-bold leading-[0.92] tracking-[-0.05em] text-foreground md:text-7xl">
-              Template-driven asset generation without the old surface noise.
+              Turn product inputs into campaign assets without a messy workflow stack.
             </h1>
             <p className="max-w-2xl text-base leading-7 text-slate-300 md:text-lg">
-              FUSE now ships a lean public shell: auth, account control, contact intake, and one focused template runner wired to the existing backend.
+              FUSE gives brands a clean path from upload to output: secure accounts, subscription-backed access, and template runs powered by the live execution pipeline.
             </p>
           </div>
 
@@ -54,22 +54,22 @@ export default function HomePage() {
               variant="outline"
               className="rounded-full border-white/15 bg-white/5 px-7 text-foreground hover:bg-white/10"
             >
-              <Link to="/about">Read the product brief</Link>
+              <Link to="/pricing">View memberships</Link>
             </Button>
           </div>
 
           <div className="grid gap-3 pt-4 sm:grid-cols-3">
             <div className="rounded-3xl border border-white/10 bg-white/[0.03] p-5">
               <p className="text-[11px] uppercase tracking-[0.24em] text-muted-foreground">Flow</p>
-              <p className="mt-2 text-sm text-slate-200">Sign in, pick a template, upload inputs, run.</p>
+              <p className="mt-2 text-sm text-slate-200">Create an account, become a member, run templates, download deliverables.</p>
             </div>
             <div className="rounded-3xl border border-white/10 bg-white/[0.03] p-5">
               <p className="text-[11px] uppercase tracking-[0.24em] text-muted-foreground">Backend</p>
-              <p className="mt-2 text-sm text-slate-200">Supabase auth/storage plus the existing execution pipeline.</p>
+              <p className="mt-2 text-sm text-slate-200">Supabase auth, storage, billing state, and execution jobs with live status tracking.</p>
             </div>
             <div className="rounded-3xl border border-white/10 bg-white/[0.03] p-5">
-              <p className="text-[11px] uppercase tracking-[0.24em] text-muted-foreground">Ops</p>
-              <p className="mt-2 text-sm text-slate-200">Public contact intake lands directly in your database.</p>
+              <p className="text-[11px] uppercase tracking-[0.24em] text-muted-foreground">Support</p>
+              <p className="mt-2 text-sm text-slate-200">Customer messages land directly in the database and audit trail for follow-up.</p>
             </div>
           </div>
         </div>
@@ -78,11 +78,11 @@ export default function HomePage() {
           <div className="rounded-[1.5rem] border border-cyan-300/15 bg-[linear-gradient(180deg,rgba(20,24,33,0.95),rgba(8,11,17,0.92))] p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-[11px] uppercase tracking-[0.3em] text-cyan-100">MVP Surface</p>
-                <h2 className="mt-2 font-display text-2xl font-bold tracking-[-0.03em] text-white">What remains live</h2>
+                <p className="text-[11px] uppercase tracking-[0.3em] text-cyan-100">What Fuse Handles</p>
+                <h2 className="mt-2 font-display text-2xl font-bold tracking-[-0.03em] text-white">Built for actual customer use</h2>
               </div>
               <div className="rounded-full border border-cyan-300/20 bg-cyan-300/10 px-3 py-1 text-[10px] uppercase tracking-[0.24em] text-cyan-100">
-                Lean
+                Live
               </div>
             </div>
 
@@ -103,19 +103,19 @@ export default function HomePage() {
             </div>
 
             <div className="mt-6 rounded-2xl border border-white/8 bg-black/25 p-4">
-              <p className="text-[11px] uppercase tracking-[0.24em] text-muted-foreground">Current scope</p>
+              <p className="text-[11px] uppercase tracking-[0.24em] text-muted-foreground">Customer path</p>
               <ul className="mt-3 space-y-3 text-sm text-slate-200">
                 <li className="flex items-start gap-2">
                   <Check className="mt-0.5 h-4 w-4 text-cyan-200" />
-                  Public home, about, contact, auth
+                  Account creation, sign-in, recovery, and protected workspace access
                 </li>
                 <li className="flex items-start gap-2">
                   <Check className="mt-0.5 h-4 w-4 text-cyan-200" />
-                  Protected account settings
+                  Membership management with Stripe-backed checkout and portal flows
                 </li>
                 <li className="flex items-start gap-2">
                   <Check className="mt-0.5 h-4 w-4 text-cyan-200" />
-                  Minimal template runner and result viewer
+                  Template execution with job polling, outputs, and credit-based access control
                 </li>
               </ul>
             </div>

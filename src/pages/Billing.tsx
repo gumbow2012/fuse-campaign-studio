@@ -20,11 +20,11 @@ const Billing = () => {
   const { profile, refreshSubscription } = useAuth();
   const [loading, setLoading] = useState<string | null>(null);
 
-  const handleCheckout = async (priceId: string, tierName: string) => {
-    setLoading(tierName);
+  const handleCheckout = async (tierKey: keyof typeof STRIPE_TIERS) => {
+    setLoading(tierKey);
     try {
       const { data, error } = await supabase.functions.invoke("create-checkout", {
-        body: { priceId },
+        body: { planKey: tierKey },
       });
       if (error) throw error;
       if (data?.url) window.open(data.url, "_blank");
@@ -114,7 +114,7 @@ const Billing = () => {
                 <p className="text-xs text-muted-foreground mb-4">{tier.monthlyCredits} credits/month</p>
                 
                 <Button
-                  onClick={() => handleCheckout(tier.price_id, key)}
+                  onClick={() => handleCheckout(key as keyof typeof STRIPE_TIERS)}
                   disabled={isCurrentPlan || !!loading}
                   className={`w-full ${isCurrentPlan ? "bg-secondary text-muted-foreground" : "gradient-primary text-primary-foreground border-0 glow-blue-sm"} font-bold`}
                 >

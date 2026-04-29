@@ -6,7 +6,7 @@
  *   2. Manual Edit — write / paste a V6 template JSON directly and upload to R2
  */
 import { useState, useCallback } from "react";
-import Navbar from "@/components/Navbar";
+import SiteShell from "@/components/mvp/SiteShell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -311,9 +311,8 @@ export default function AdminTemplateImport() {
   }, [manualJson]);
 
   return (
-    <div className="min-h-screen bg-background">
-      <Navbar />
-      <div className="container mx-auto px-4 pt-24 pb-12 max-w-5xl">
+    <SiteShell>
+      <div className="container mx-auto max-w-5xl px-4 pb-12 pt-10">
         <h1 className="text-2xl font-bold mb-2">Template Manager</h1>
         <p className="text-sm text-muted-foreground mb-8">
           Upload V6 step-based templates to R2. Each template defines a FAL image edit +
@@ -438,6 +437,6 @@ export default function AdminTemplateImport() {
           </TabsContent>
         </Tabs>
       </div>
-    </div>
+    </SiteShell>
   );
 }

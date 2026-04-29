@@ -1,25 +1,20 @@
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "POST,OPTIONS",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-};
-
-function json(body: unknown, status = 200) {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: {
-      ...corsHeaders,
-      "Content-Type": "application/json",
-    },
-  });
-}
+import {
+  corsHeaders,
+  createAdminClient,
+  errorMessage,
+  json,
+  logAuditEvent,
+} from "../_shared/supabase-admin.ts";
 
 Deno.serve(async (request) => {
   if (request.method === "OPTIONS") {
     return new Response(null, { status: 204, headers: corsHeaders });
   }
+
+  const admin = createAdminClient();
+  const requestId = crypto.randomUUID();
 
   if (request.method !== "POST") {
     return json({ error: "Method not allowed" }, 405);
@@ -42,18 +37,11 @@ Deno.serve(async (request) => {
       return json({ error: "Message must be between 10 and 4000 characters." }, 400);
     }
 
-    const supabaseUrl = Deno.env.get("SUPABASE_URL");
-    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-    if (!supabaseUrl || !serviceRoleKey) {
-      return json({ error: "Supabase service credentials are not configured." }, 500);
-    }
-
-    const supabase = createClient(supabaseUrl, serviceRoleKey);
     const forwardedFor = request.headers.get("x-forwarded-for");
     const userAgent = request.headers.get("user-agent");
     const origin = request.headers.get("origin");
 
-    const { data, error } = await supabase
+    const { data, error } = await admin
       .from("contact_messages")
       .insert({
         name,
@@ -70,13 +58,39 @@ Deno.serve(async (request) => {
       .single();
 
     if (error) {
-      console.error("contact insert failed", error);
-      return json({ error: "Could not store contact message." }, 500);
+      throw new Error(error.message);
     }
+
+    await logAuditEvent({
+      eventType: "contact.message.submitted",
+      message: "Contact message stored successfully.",
+      source: "contact-form",
+      requestId,
+      metadata: {
+        contact_message_id: data.id,
+        email,
+        company,
+        origin,
+      },
+    }, admin);
 
     return json({ ok: true, id: data.id });
   } catch (error) {
+    const message = errorMessage(error);
     console.error("submit-contact-message failed", error);
-    return json({ error: "Unexpected server error." }, 500);
+
+    await logAuditEvent({
+      eventType: "contact.message.failed",
+      message,
+      severity: "error",
+      source: "contact-form",
+      requestId,
+      errorCode: "contact_message_failed",
+      metadata: {
+        origin: request.headers.get("origin"),
+      },
+    }, admin);
+
+    return json({ error: message }, 500);
   }
 });

@@ -90,11 +90,30 @@ Deno.serve(async (req) => {
       (steps ?? []).map((step: any) => step.node_id),
     );
 
+    const { data: feedbackRows, error: feedbackError } = jobIds.length
+      ? await admin
+        .from("template_run_feedback")
+        .select("job_id, vote, feedback, updated_at")
+        .eq("user_id", user.id)
+        .in("job_id", jobIds)
+      : { data: [], error: null };
+
+    if (feedbackError) throw new Error(feedbackError.message);
+
     const outputsByJobId = new Map<string, any[]>();
     for (const step of steps ?? []) {
       const existing = outputsByJobId.get((step as any).job_id) ?? [];
       existing.push(step);
       outputsByJobId.set((step as any).job_id, existing);
+    }
+
+    const feedbackByJobId = new Map<string, { vote: string | null; feedback: string | null; updatedAt: string | null }>();
+    for (const row of feedbackRows ?? []) {
+      feedbackByJobId.set((row as any).job_id, {
+        vote: (row as any).vote ?? null,
+        feedback: (row as any).feedback ?? null,
+        updatedAt: (row as any).updated_at ?? null,
+      });
     }
 
     return json({
@@ -111,6 +130,7 @@ Deno.serve(async (req) => {
         reviewStatus: job.template_versions?.review_status ?? "Unreviewed",
         telemetry: job.result_payload?.telemetry ?? {},
         outputs: collectDeliverableOutputs(outputsByJobId.get(job.id) ?? [], outputExposureByNodeId),
+        feedback: feedbackByJobId.get(job.id) ?? null,
       })),
     });
   } catch (error) {

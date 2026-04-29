@@ -112,6 +112,14 @@ export function hasValidRunnerCode(req: Request) {
   return !!actual && actual === expected;
 }
 
+export function hasValidBillingSmokeSecret(req: Request) {
+  const expected = Deno.env.get("BILLING_SMOKE_SECRET")?.trim();
+  if (!expected) return false;
+
+  const actual = req.headers.get("x-billing-smoke-secret")?.trim();
+  return !!actual && actual === expected;
+}
+
 export async function getOptionalUser(req: Request, admin = createAdminClient()) {
   const authHeader = req.headers.get("Authorization");
   if (!authHeader) return null;

@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import { getAbsoluteSiteUrl } from "@/lib/site-url";
 
 export default function AuthPage() {
   const [searchParams] = useSearchParams();
@@ -16,11 +17,14 @@ export default function AuthPage() {
   const [mode, setMode] = useState<"signin" | "signup">(searchParams.get("mode") === "signup" ? "signup" : "signin");
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
+  const [token, setToken] = useState("");
+  const [step, setStep] = useState<"request" | "verify">("request");
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
     setMode(searchParams.get("mode") === "signup" ? "signup" : "signin");
+    setStep("request");
+    setToken("");
   }, [searchParams]);
 
   useEffect(() => {
@@ -33,35 +37,73 @@ export default function AuthPage() {
     setSubmitting(true);
 
     try {
-      if (mode === "signin") {
-        const { error } = await supabase.auth.signInWithPassword({ email, password });
-        if (error) throw error;
-        navigate("/app/templates", { replace: true });
-      } else {
-        const { error } = await supabase.auth.signUp({
+      if (step === "request") {
+        const { error } = await supabase.auth.signInWithOtp({
           email,
-          password,
           options: {
-            data: { full_name: name },
-            emailRedirectTo: `${window.location.origin}/auth`,
+            // Use one code-based auth path so a fresh email never silently dead-ends.
+            shouldCreateUser: true,
+            data: name ? { full_name: name } : undefined,
+            emailRedirectTo: getAbsoluteSiteUrl("/auth"),
           },
         });
         if (error) throw error;
+        setStep("verify");
         toast({
-          title: "Account created",
-          description: "Check your inbox, confirm the email, then sign in.",
+          title: "Code sent",
+          description: `Enter the 6-digit code we sent to ${email}.`,
         });
-        setMode("signin");
+      } else {
+        const { error } = await supabase.auth.verifyOtp({
+          email,
+          token,
+          type: "email",
+        });
+        if (error) throw error;
+        toast({
+          title: "Verified",
+          description: "Your account is active.",
+        });
+        navigate("/app/templates", { replace: true });
       }
     } catch (error) {
       toast({
         title: "Authentication failed",
         description:
           error instanceof Error && error.message === "Invalid login credentials"
-            ? "Invalid email or password."
+            ? "Invalid email or code."
             : error instanceof Error
               ? error.message
               : "Could not complete authentication.",
+        variant: "destructive",
+      });
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleResend = async () => {
+    if (!email) return;
+    setSubmitting(true);
+
+    try {
+      const { error } = await supabase.auth.signInWithOtp({
+        email,
+        options: {
+          shouldCreateUser: true,
+          data: name ? { full_name: name } : undefined,
+          emailRedirectTo: getAbsoluteSiteUrl("/auth"),
+        },
+      });
+      if (error) throw error;
+      toast({
+        title: "Code resent",
+        description: `A new code was sent to ${email}.`,
+      });
+    } catch (error) {
+      toast({
+        title: "Could not resend code",
+        description: error instanceof Error ? error.message : "Try again.",
         variant: "destructive",
       });
     } finally {
@@ -76,18 +118,21 @@ export default function AuthPage() {
           <div className="rounded-[2rem] border border-white/10 bg-white/[0.03] p-7">
             <p className="text-[11px] font-semibold uppercase tracking-[0.3em] text-cyan-100">Access</p>
             <h1 className="mt-4 font-display text-4xl font-bold tracking-[-0.05em] text-white md:text-5xl">
-              {mode === "signin" ? "Return to the template runner." : "Open a Fuse account."}
+              {mode === "signin" ? "Sign in with your email code." : "Create a Fuse account with a code."}
             </h1>
             <p className="mt-4 text-base leading-7 text-slate-300">
-              The MVP uses email and password only. Once you are in, the app is intentionally narrow: account control and template execution.
+              Enter your email, we send a 6-digit code, you enter it here, and you are in. No dead-end signup links and no password bullshit.
             </p>
 
             <div className="mt-8 rounded-[1.5rem] border border-cyan-300/15 bg-cyan-300/10 p-5">
-              <p className="text-[11px] uppercase tracking-[0.24em] text-cyan-100">Current flow</p>
+              <p className="text-[11px] uppercase tracking-[0.24em] text-cyan-100">Account flow</p>
               <ul className="mt-4 space-y-3 text-sm leading-6 text-slate-200">
-                <li>Create an account or sign in</li>
-                <li>Open the template studio</li>
-                <li>Upload assets and run the workflow</li>
+                <li>Enter your email</li>
+                <li>Get a 6-digit code</li>
+                <li>Type the code here and continue</li>
+                <li>First-time emails are created automatically</li>
+                <li>Activate membership when you are ready to run as a customer</li>
+                <li>Open Template Studio and run workflows</li>
               </ul>
             </div>
           </div>
@@ -128,7 +173,7 @@ export default function AuthPage() {
               </div>
             ) : (
               <form onSubmit={handleSubmit} className="mt-6 space-y-5">
-                {mode === "signup" ? (
+                {mode === "signup" && step === "request" ? (
                   <div className="space-y-2">
                     <Label htmlFor="auth-name" className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
                       Name
@@ -153,46 +198,79 @@ export default function AuthPage() {
                     value={email}
                     onChange={(event) => setEmail(event.target.value)}
                     required
+                    disabled={step === "verify"}
                     className="rounded-2xl border-white/10 bg-white/[0.03] text-white"
                   />
                 </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="auth-password" className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
-                    Password
-                  </Label>
-                  <Input
-                    id="auth-password"
-                    type="password"
-                    value={password}
-                    onChange={(event) => setPassword(event.target.value)}
-                    required
-                    minLength={6}
-                    className="rounded-2xl border-white/10 bg-white/[0.03] text-white"
-                  />
-                </div>
+                {step === "verify" ? (
+                  <div className="space-y-2">
+                    <Label htmlFor="auth-token" className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
+                      Verification code
+                    </Label>
+                    <Input
+                      id="auth-token"
+                      inputMode="numeric"
+                      autoComplete="one-time-code"
+                      pattern="[0-9]*"
+                      maxLength={6}
+                      value={token}
+                      onChange={(event) => setToken(event.target.value.replace(/\D/g, "").slice(0, 6))}
+                      required
+                      className="rounded-2xl border-white/10 bg-white/[0.03] text-white tracking-[0.4em]"
+                    />
+                    <p className="text-xs text-slate-400">We sent the code to {email}.</p>
+                  </div>
+                ) : null}
 
                 <Button
                   type="submit"
                   disabled={submitting}
                   className="w-full rounded-full bg-cyan-300 text-slate-950 hover:bg-cyan-200"
                 >
-                  {submitting ? "Working..." : mode === "signin" ? "Sign in" : "Create account"}
+                  {submitting
+                    ? "Working..."
+                    : step === "request"
+                      ? mode === "signin"
+                        ? "Send sign-in code"
+                        : "Send account code"
+                      : "Verify code"}
                 </Button>
 
                 <div className="flex flex-wrap items-center justify-between gap-3 text-sm text-slate-400">
-                  <button
-                    type="button"
-                    onClick={() => setMode(mode === "signin" ? "signup" : "signin")}
-                    className="hover:text-white"
-                  >
-                    {mode === "signin" ? "Need an account?" : "Already have an account?"}
-                  </button>
-                  {mode === "signin" ? (
-                    <Link to="/forgot-password" className="hover:text-white">
-                      Forgot password
-                    </Link>
-                  ) : null}
+                  {step === "request" ? (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => setMode(mode === "signin" ? "signup" : "signin")}
+                        className="hover:text-white"
+                      >
+                        {mode === "signin" ? "Need a name field?" : "Already have an account?"}
+                      </button>
+                      <span>Same email code flow either way.</span>
+                    </>
+                  ) : (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setStep("request");
+                          setToken("");
+                        }}
+                        className="hover:text-white"
+                      >
+                        Change email
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void handleResend()}
+                        className="hover:text-white"
+                        disabled={submitting}
+                      >
+                        Resend code
+                      </button>
+                    </>
+                  )}
                 </div>
               </form>
             )}

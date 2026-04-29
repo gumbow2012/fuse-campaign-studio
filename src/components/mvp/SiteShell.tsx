@@ -12,7 +12,8 @@ const navLinkClass = ({ isActive }: { isActive: boolean }) =>
 
 export default function SiteShell({ children }: { children: ReactNode }) {
   const navigate = useNavigate();
-  const { user, profile, signOut } = useAuth();
+  const { user, profile, isAdmin, hasAppAccess, signOut } = useAuth();
+  const creditDisplay = isAdmin ? "Admin access" : `${profile?.credits_balance ?? 0} credits`;
 
   const handleSignOut = async () => {
     await signOut();
@@ -30,7 +31,7 @@ export default function SiteShell({ children }: { children: ReactNode }) {
             </div>
             <div>
               <p className="font-display text-xl font-bold tracking-[0.22em] text-foreground">FUSE</p>
-              <p className="text-[10px] uppercase tracking-[0.28em] text-muted-foreground">Lean Campaign Studio</p>
+              <p className="text-[10px] uppercase tracking-[0.28em] text-muted-foreground">Campaign Asset Studio</p>
             </div>
           </Link>
 
@@ -43,7 +44,7 @@ export default function SiteShell({ children }: { children: ReactNode }) {
                 About
               </NavLink>
               <NavLink to="/pricing" className={navLinkClass}>
-                Pricing
+                Membership
               </NavLink>
               <NavLink to="/contact" className={navLinkClass}>
                 Contact
@@ -59,6 +60,16 @@ export default function SiteShell({ children }: { children: ReactNode }) {
                   <NavLink to="/billing" className={navLinkClass}>
                     Billing
                   </NavLink>
+                  {hasAppAccess ? (
+                    <>
+                      <NavLink to="/app/lab/canvas" className={navLinkClass}>
+                        Node Workbench
+                      </NavLink>
+                      <NavLink to="/admin/templates" className={navLinkClass}>
+                        Admin Templates
+                      </NavLink>
+                    </>
+                  ) : null}
                 </>
               ) : null}
             </nav>
@@ -67,7 +78,7 @@ export default function SiteShell({ children }: { children: ReactNode }) {
               {user ? (
                 <>
                   <div className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-xs uppercase tracking-[0.22em] text-muted-foreground">
-                    {profile?.credits_balance ?? 0} credits
+                    {creditDisplay}
                   </div>
                   <Button
                     variant="outline"
