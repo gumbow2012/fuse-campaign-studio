@@ -11,7 +11,7 @@ Set these in the same Supabase project that serves production traffic:
 - `STRIPE_SECRET_KEY_LIVE`
 - `STRIPE_WEBHOOK_SECRET_LIVE`
 - `STRIPE_PORTAL_CONFIGURATION_ID_LIVE` optional
-- `STRIPE_STARTER_PRICE_ID_LIVE` optional if you keep the current fallback live IDs
+- `STRIPE_STARTER_PRICE_ID_LIVE` required before live Starter checkout, because the old fallback price is `$49/month` and Starter must be `$25/month`
 - `STRIPE_PRO_PRICE_ID_LIVE` optional if you keep the current fallback live IDs
 - `STRIPE_STUDIO_PRICE_ID_LIVE` optional if you keep the current fallback live IDs
 - `STRIPE_STARTER_PRODUCT_ID_LIVE` optional if you keep the current fallback live IDs

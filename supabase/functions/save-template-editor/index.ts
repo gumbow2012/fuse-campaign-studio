@@ -7,6 +7,7 @@ import {
   json,
   requireTesterUser,
 } from "../_shared/supabase-admin.ts";
+import { uploadTemplateReferenceAsset } from "../_shared/template-assets.ts";
 
 type Body = {
   versionId?: string;
@@ -14,11 +15,15 @@ type Body = {
   displayLabel?: string | null;
   prompt?: string | null;
   expected?: string | null;
-  editorMode?: "upload" | "reference" | "workflow" | null;
+  editorMode?: "upload" | "reference" | null;
   slotKey?: string | null;
   sampleUrl?: string | null;
   outputExposed?: boolean | null;
   detachAsset?: boolean | null;
+  referenceFile?: {
+    dataUrl?: string | null;
+    filename?: string | null;
+  } | null;
 };
 
 function normalizeNullable(value: string | null | undefined) {
@@ -70,7 +75,7 @@ Deno.serve(async (req) => {
     }
 
     if ("editorMode" in body && node.node_type === "user_input") {
-      const nextMode = body.editorMode === "upload" || body.editorMode === "reference" || body.editorMode === "workflow"
+      const nextMode = body.editorMode === "upload" || body.editorMode === "reference"
         ? body.editorMode
         : null;
       nextPromptConfig.editor_mode = nextMode;
@@ -90,12 +95,41 @@ Deno.serve(async (req) => {
 
     let nextDefaultAssetId = node.default_asset_id;
 
+    let uploadedAsset = null;
+
+    if (body.referenceFile?.dataUrl) {
+      if (node.node_type !== "user_input") {
+        throw new Error("Reference assets can only be attached to input nodes");
+      }
+
+      const { data: version, error: versionError } = await admin
+        .from("template_versions")
+        .select("template_id")
+        .eq("id", versionId)
+        .single();
+      if (versionError || !version) throw new Error(versionError?.message ?? "Version not found");
+
+      uploadedAsset = await uploadTemplateReferenceAsset({
+        admin,
+        file: body.referenceFile,
+        templateId: version.template_id,
+        versionId,
+        nodeId: node.id,
+        label: normalizeNullable(body.displayLabel) ?? normalizeNullable(body.slotKey) ?? node.name,
+      });
+
+      nextDefaultAssetId = uploadedAsset.id;
+      nextPromptConfig.editor_mode = "reference";
+      nextPromptConfig.weavy_exposed = false;
+      delete nextPromptConfig.sample_url;
+    }
+
     if (body.detachAsset === true) {
       delete nextPromptConfig.sample_url;
       nextPromptConfig.weavy_exposed = false;
 
       if (node.node_type === "user_input" && nextPromptConfig.editor_mode !== "upload") {
-        nextPromptConfig.editor_mode = "workflow";
+        nextPromptConfig.editor_mode = "reference";
       }
 
       nextDefaultAssetId = null;
@@ -115,6 +149,7 @@ Deno.serve(async (req) => {
       nodeId: node.id,
       versionId,
       promptConfig: nextPromptConfig,
+      asset: uploadedAsset,
     });
   } catch (error) {
     return json({ error: errorMessage(error) }, 400);

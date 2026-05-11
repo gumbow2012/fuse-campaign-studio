@@ -1,6 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 
-import { corsHeaders, createAdminClient, errorMessage, json } from "../_shared/supabase-admin.ts";
+import { corsHeaders, createAdminClient, errorMessage, getUserRoles, json, requireUser } from "../_shared/supabase-admin.ts";
 import { buildTemplateInputPlan } from "../_shared/template-inputs.ts";
 import { getNodeEditorConfig } from "../_shared/template-editor.ts";
 
@@ -10,14 +10,10 @@ function summarizeNode(args: {
   prompt: string | null;
   defaultAssetUrl?: string | null;
   isReferenceInput?: boolean;
-  isWorkflowInput?: boolean;
   isUserFacingInput?: boolean;
   incoming: Array<{ sourceName: string; targetParam: string | null }>;
 }) {
   if (args.nodeType === "user_input") {
-    if (args.isWorkflowInput) {
-      return `${args.nodeName} is an internal template asset used to lock a branch or scene. It is not a user upload.`;
-    }
     return args.isReferenceInput || args.isUserFacingInput === false
       ? `${args.nodeName} is a built-in reference image.`
       : `${args.nodeName} is an uploaded input that you must provide at run time.`;
@@ -55,6 +51,10 @@ Deno.serve(async (req) => {
   const admin = createAdminClient();
 
   try {
+    const user = await requireUser(req, admin);
+    const roles = await getUserRoles(user.id, admin);
+    const canInspectGraph = roles.some((role) => role === "admin" || role === "dev");
+
     const url = new URL(req.url);
     let versionId = url.searchParams.get("versionId");
     if (!versionId && req.method !== "GET") {
@@ -130,9 +130,8 @@ Deno.serve(async (req) => {
           ? node.prompt_config.prompt
           : null;
         const editorConfig = getNodeEditorConfig(node);
-        const isWorkflowInput = editorConfig.mode === "workflow";
         const displayName = editorConfig.label ?? slot?.name ?? node.name;
-        const editorMode = editorConfig.mode ?? (isReferenceInput ? "reference" : node.node_type === "user_input" ? "upload" : "workflow");
+        const editorMode = editorConfig.mode ?? (isReferenceInput ? "reference" : "upload");
         const expected = editorConfig.expected ?? slot?.expected ?? node.prompt_config?.expected ?? null;
         const defaultAssetUrl = isUserFacingInput && node.node_type === "user_input"
           ? null
@@ -150,6 +149,7 @@ Deno.serve(async (req) => {
             : null,
           prompt,
           expected,
+          defaultAssetId: defaultAsset?.id ?? null,
           defaultAssetUrl,
           defaultAssetType: defaultAsset?.asset_type ?? null,
           incoming,
@@ -159,7 +159,6 @@ Deno.serve(async (req) => {
             prompt,
             defaultAssetUrl,
             isReferenceInput,
-            isWorkflowInput,
             isUserFacingInput,
             incoming,
           }),
@@ -197,6 +196,28 @@ Deno.serve(async (req) => {
       };
     });
 
+    const userInputs = inputPlan.slots.map((slot) => ({
+      key: slot.id,
+      label: slot.name,
+      type: slot.expected ?? "image",
+      required: true,
+      hint: `${slot.name} is required for this template.`,
+    }));
+
+    if (!canInspectGraph) {
+      return json({
+        templateId: (version as any).fuse_templates.id,
+        templateName: (version as any).fuse_templates.name,
+        versionId: version.id,
+        versionNumber: version.version_number,
+        reviewStatus: version.review_status ?? "Unreviewed",
+        isActive: version.is_active,
+        userInputs,
+        nodes: [],
+        edges: [],
+      });
+    }
+
     return json({
       templateId: (version as any).fuse_templates.id,
       templateName: (version as any).fuse_templates.name,
@@ -204,6 +225,7 @@ Deno.serve(async (req) => {
       versionNumber: version.version_number,
       reviewStatus: version.review_status ?? "Unreviewed",
       isActive: version.is_active,
+      userInputs,
       nodes: numberedNodes,
       edges: (edges ?? []).map((edge: any) => ({
         id: edge.id,

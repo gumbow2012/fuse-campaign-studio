@@ -53,7 +53,7 @@ type TemplateDetailNode = {
   }>;
   summary: string;
   editor?: {
-    mode: "upload" | "reference" | "workflow";
+    mode: "upload" | "reference";
     slotKey: string | null;
     label: string | null;
     expected: string | null;
@@ -160,7 +160,7 @@ type EditorDraft = {
   displayLabel: string;
   prompt: string;
   expected: string;
-  editorMode: "upload" | "reference" | "workflow";
+  editorMode: "upload" | "reference";
   slotKey: string;
 };
 
@@ -279,7 +279,7 @@ function getNodeEditorDefaults(node: TemplateDetailNode) {
     displayLabel: node.editor?.label ?? node.name,
     prompt: node.prompt ?? "",
     expected: node.editor?.expected ?? node.expected ?? "",
-    editorMode: node.editor?.mode ?? (node.nodeType === "user_input" ? "upload" : "workflow"),
+    editorMode: node.editor?.mode ?? "upload",
     slotKey: node.editor?.slotKey ?? "",
   } satisfies EditorDraft;
 }
@@ -589,7 +589,6 @@ const TemplateLab = () => {
     const lanes = [
       { key: "uploads", title: "Uploads", nodes: [] as TemplateDetailNode[] },
       { key: "references", title: "References", nodes: [] as TemplateDetailNode[] },
-      { key: "internals", title: "Internal Scene Locks", nodes: [] as TemplateDetailNode[] },
       { key: "images", title: "Image Steps", nodes: [] as TemplateDetailNode[] },
       { key: "videos", title: "Video Steps", nodes: [] as TemplateDetailNode[] },
       { key: "other", title: "Other", nodes: [] as TemplateDetailNode[] },
@@ -624,11 +623,6 @@ const TemplateLab = () => {
     for (const node of templateDetail.nodes) {
       const summary = node.summary.toLowerCase();
       if (node.nodeType === "user_input") {
-        if (node.editor?.mode === "workflow") {
-          lanes[2].nodes.push(node);
-          continue;
-        }
-
         if (summary.includes("built-in reference") || !!node.defaultAssetUrl) {
           lanes[1].nodes.push(node);
         }
@@ -636,16 +630,16 @@ const TemplateLab = () => {
       }
 
       if (node.nodeType === "image_gen") {
-        lanes[3].nodes.push(node);
+        lanes[2].nodes.push(node);
         continue;
       }
 
       if (node.nodeType === "video_gen") {
-        lanes[4].nodes.push(node);
+        lanes[3].nodes.push(node);
         continue;
       }
 
-      lanes[5].nodes.push(node);
+      lanes[4].nodes.push(node);
     }
 
     return lanes.filter((lane) => lane.nodes.length > 0);
@@ -2228,7 +2222,6 @@ const TemplateLab = () => {
                                   >
                                     <option value="upload">User Upload</option>
                                     <option value="reference">Hidden Reference</option>
-                                    <option value="workflow">Internal Scene Lock</option>
                                   </select>
                                 </div>
                                 <div>
@@ -2254,7 +2247,7 @@ const TemplateLab = () => {
 
                             <div className="rounded-2xl border border-border/30 bg-background/80 p-4 text-sm text-muted-foreground">
                               {selectedInspectorNode.nodeType === "user_input"
-                                ? "Use User Upload for media the tester must provide at run time. Use Hidden Reference only for true fixed scene refs. Use Internal Scene Lock for baked demo assets the graph still depends on but the tester should not treat as a real reference."
+                                ? "Use User Upload for media the tester must provide at run time. Use Hidden Reference only for fixed scene refs."
                                 : "This edits the stored display label and prompt for the node. It does not change edge wiring yet."}
                             </div>
 
@@ -2463,6 +2456,7 @@ const TemplateLab = () => {
                 </div>
               ) : null}
 
+              {canManageTemplates ? (
               <div className="space-y-3">
                 {(job?.steps ?? []).map((step) => (
                   <div key={step.id} className="rounded-2xl border border-border/40 bg-background/60 p-4">
@@ -2540,6 +2534,7 @@ const TemplateLab = () => {
                   </div>
                 ))}
               </div>
+              ) : null}
 
               {outputImages.length ? (
                 <div className="space-y-3">

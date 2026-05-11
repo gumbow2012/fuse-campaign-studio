@@ -28,7 +28,7 @@ const PLAN_META = {
     key: "starter" as const,
     name: "Starter",
     monthlyCredits: 500,
-    price: 49,
+    price: 25,
   },
   pro: {
     key: "pro" as const,
@@ -97,7 +97,9 @@ export function getStripePlans(mode: StripeBillingMode = "live") {
 
 export type StripePlan = StripePlanDefinition;
 
-export const STRIPE_PLANS = getStripePlans("live");
+export function isLegacyStarterFallbackPrice(plan: StripePlanDefinition, mode: StripeBillingMode) {
+  return mode === "live" && plan.key === "starter" && plan.priceId === FALLBACK_PRICE_IDS.starter;
+}
 
 export function planFromKey(
   planKey: string | null | undefined,

@@ -9,6 +9,7 @@ import {
   logAuditEvent,
   requireAdminUser,
 } from "../_shared/supabase-admin.ts";
+import { uploadTemplateReferenceAsset } from "../_shared/template-assets.ts";
 
 type Action =
   | "catalog"
@@ -23,6 +24,26 @@ type Action =
 
 type NodeType = "user_input" | "image_gen" | "video_gen";
 type StarterPreset = "campaign" | "reference" | "blank";
+type ReferenceAssetDraft = {
+  label?: string | null;
+  prompt?: string | null;
+  file?: {
+    dataUrl?: string | null;
+    filename?: string | null;
+  } | null;
+};
+type InputSlotDraft = {
+  key: string;
+  label: string;
+  expected: string;
+  targetParam: string;
+};
+
+const DEFAULT_INPUT_SLOTS: InputSlotDraft[] = [
+  { key: "top_garment", label: "Top Garment", expected: "image", targetParam: "top_garment_image" },
+  { key: "bottom_garment", label: "Bottom Garment", expected: "image", targetParam: "bottom_garment_image" },
+  { key: "logo", label: "Logo", expected: "image", targetParam: "logo_image" },
+];
 
 function cleanText(value: unknown, fallback = "") {
   if (typeof value !== "string") return fallback;
@@ -34,6 +55,48 @@ function nullableText(value: unknown) {
   if (typeof value !== "string") return null;
   const next = value.trim();
   return next || null;
+}
+
+function cleanInteger(value: unknown, fallback: number, min: number, max: number) {
+  const next = typeof value === "number" ? value : Number.parseInt(String(value ?? ""), 10);
+  if (!Number.isFinite(next)) return fallback;
+  return Math.max(min, Math.min(max, Math.trunc(next)));
+}
+
+function readReferenceDrafts(value: unknown): ReferenceAssetDraft[] {
+  if (!Array.isArray(value)) return [];
+  return value.map((item, index) => {
+    const record = item && typeof item === "object" ? item as Record<string, unknown> : {};
+    const file = record.file && typeof record.file === "object"
+      ? record.file as ReferenceAssetDraft["file"]
+      : null;
+    return {
+      label: cleanText(record.label, `Reference ${index + 1}`),
+      prompt: nullableText(record.prompt),
+      file,
+    };
+  });
+}
+
+function cleanKey(value: unknown, fallback: string) {
+  const text = cleanText(value, fallback).toLowerCase().replace(/[^a-z0-9_]+/g, "_").replace(/^_+|_+$/g, "");
+  return text || fallback;
+}
+
+function readInputSlots(value: unknown): InputSlotDraft[] {
+  if (!Array.isArray(value)) return DEFAULT_INPUT_SLOTS;
+  const slots = value.slice(0, 8).map((item, index) => {
+    const record = item && typeof item === "object" ? item as Record<string, unknown> : {};
+    const fallback = DEFAULT_INPUT_SLOTS[index] ?? DEFAULT_INPUT_SLOTS[0];
+    const key = cleanKey(record.key, fallback.key);
+    return {
+      key,
+      label: cleanText(record.label, fallback.label),
+      expected: cleanText(record.expected, "image"),
+      targetParam: cleanKey(record.targetParam, `${key}_image`),
+    };
+  });
+  return slots.length ? slots : DEFAULT_INPUT_SLOTS;
 }
 
 async function nextVersionNumber(admin: ReturnType<typeof createAdminClient>, templateId: string) {
@@ -61,7 +124,11 @@ async function setActiveVersion(
 
   const { error: activateError } = await admin
     .from("template_versions")
-    .update({ is_active: true })
+    .update({
+      is_active: true,
+      review_status: "Approved",
+      reviewed_at: new Date().toISOString(),
+    })
     .eq("id", versionId);
   if (activateError) throw new Error(activateError.message);
 }
@@ -113,7 +180,7 @@ async function cloneVersion(args: {
       template_id: targetTemplateId,
       version_number: versionNumber,
       is_active: makeActive,
-      review_status: "Unreviewed",
+      review_status: makeActive ? "Approved" : "Testing",
     });
   if (insertVersionError) throw new Error(insertVersionError.message);
 
@@ -162,99 +229,178 @@ async function cloneVersion(args: {
   };
 }
 
-function starterNodes(versionId: string, preset: StarterPreset = "campaign") {
-  const inputId = crypto.randomUUID();
-  const referenceId = crypto.randomUUID();
-  const imageId = crypto.randomUUID();
-  const videoId = crypto.randomUUID();
+async function starterNodes(args: {
+  admin: ReturnType<typeof createAdminClient>;
+  templateId: string;
+  versionId: string;
+  preset?: StarterPreset;
+  inputSlots?: InputSlotDraft[];
+  outputCount?: number;
+  referenceAssets?: ReferenceAssetDraft[];
+  imagePrompt?: string | null;
+  videoPrompt?: string | null;
+  uploadedBy?: string | null;
+}) {
+  const {
+    admin,
+    templateId,
+    versionId,
+    preset = "campaign",
+    uploadedBy,
+  } = args;
+  const inputSlots = args.inputSlots?.length ? args.inputSlots.slice(0, 8) : DEFAULT_INPUT_SLOTS;
+  const inputNodes = inputSlots.map((slot, index) => ({
+    id: crypto.randomUUID(),
+    slot,
+    index,
+  }));
+  const outputCount = Math.max(1, Math.min(6, args.outputCount ?? 1));
+  const imagePrompt = cleanText(
+    args.imagePrompt,
+    "Create a polished fashion campaign image using the uploaded product and hidden brand reference for scene direction.",
+  );
+  const videoPrompt = cleanText(
+    args.videoPrompt,
+    "Animate the campaign image into a short fashion ad with natural motion and premium brand pacing.",
+  );
   const withReference = preset === "reference";
+  const referenceAssets = args.referenceAssets ?? [];
+  const referenceCount = withReference ? Math.max(outputCount, referenceAssets.length || 1) : referenceAssets.length;
+  const references = await Promise.all(
+    Array.from({ length: referenceCount }).map(async (_, index) => {
+      const draft = referenceAssets[index] ?? {};
+      const nodeId = crypto.randomUUID();
+      const label = cleanText(draft.label, referenceCount === 1 ? "Reference Image" : `Reference ${index + 1}`);
+      const asset = draft.file?.dataUrl
+        ? await uploadTemplateReferenceAsset({
+            admin,
+            file: draft.file,
+            templateId,
+            versionId,
+            nodeId,
+            label,
+            uploadedBy,
+            source: "template-onboarding",
+          })
+        : null;
+
+      return {
+        nodeId,
+        label,
+        prompt: nullableText(draft.prompt),
+        asset,
+      };
+    }),
+  );
+
+  const outputGroups = Array.from({ length: outputCount }).map((_, index) => ({
+    imageId: crypto.randomUUID(),
+    videoId: crypto.randomUUID(),
+    reference: references[index] ?? references[0] ?? null,
+    index,
+  }));
 
   return {
     nodes: [
-      {
-        id: inputId,
+      ...inputNodes.map((input) => ({
+        id: input.id,
         version_id: versionId,
         node_type: "user_input",
         model_id: null,
         prompt_config: {
           editor_mode: "upload",
-          editor_slot_key: "garment",
-          editor_label: "Garment",
-          editor_expected: "image",
-          sort_order: 1,
+          editor_slot_key: input.slot.key,
+          editor_label: input.slot.label,
+          editor_expected: input.slot.expected,
+          sort_order: input.index + 1,
         },
         default_asset_id: null,
-        name: "Garment",
-      },
-      ...(withReference ? [{
-        id: referenceId,
+        name: input.slot.label,
+      })),
+      ...references.map((reference, index) => ({
+        id: reference.nodeId,
         version_id: versionId,
         node_type: "user_input",
         model_id: null,
         prompt_config: {
           editor_mode: "reference",
-          editor_slot_key: "reference-image",
-          editor_label: "Reference Image",
+          editor_slot_key: `reference-${index + 1}`,
+          editor_label: reference.label,
           editor_expected: "image",
-          sample_url: null,
-          sort_order: 2,
+          weavy_exposed: false,
+          sort_order: inputNodes.length + index + 1,
         },
-        default_asset_id: null,
-        name: "Reference Image",
-      }] : []),
-      {
-        id: imageId,
+        default_asset_id: reference.asset?.id ?? null,
+        name: reference.label,
+      })),
+      ...outputGroups.flatMap((group) => {
+        const numberSuffix = outputCount > 1 ? ` ${group.index + 1}` : "";
+        const imagePromptWithReference = group.reference?.prompt
+          ? `${imagePrompt}\n\nHidden guide prompt: ${group.reference.prompt}`
+          : imagePrompt;
+        return [{
+        id: group.imageId,
         version_id: versionId,
         node_type: "image_gen",
         model_id: null,
         prompt_config: {
-          prompt: withReference
-            ? "Create a polished fashion campaign image using the uploaded garment and the hidden reference image for scene direction."
-            : "Create a polished fashion campaign image using the uploaded garment.",
+          prompt: imagePromptWithReference,
           output_exposed: true,
         },
         default_asset_id: null,
-        name: "Image Output",
+        name: `Image Output${numberSuffix}`,
       },
       {
-        id: videoId,
+        id: group.videoId,
         version_id: versionId,
         node_type: "video_gen",
         model_id: null,
         prompt_config: {
-          prompt: "Animate the campaign image into a short fashion ad with natural motion.",
+          prompt: videoPrompt,
           output_exposed: true,
         },
         default_asset_id: null,
-        name: "Video Output",
-      },
+        name: `Video Output${numberSuffix}`,
+      }];
+      }),
     ],
     edges: [
-      {
+      ...outputGroups.flatMap((group) => {
+        const edges = inputNodes.map((input, inputIndex) => ({
+          id: crypto.randomUUID(),
+          version_id: versionId,
+          source_node_id: input.id,
+          target_node_id: group.imageId,
+          mapping_logic: { target_param: input.slot.targetParam || (inputIndex === 0 ? "image_1" : `image_${inputIndex + 1}`) },
+          condition_logic: null,
+        }));
+        if (group.reference) {
+          edges.push({
+            id: crypto.randomUUID(),
+            version_id: versionId,
+            source_node_id: group.reference.nodeId,
+            target_node_id: group.imageId,
+            mapping_logic: { target_param: "reference_image" },
+            condition_logic: null,
+          });
+        }
+        edges.push({
         id: crypto.randomUUID(),
         version_id: versionId,
-        source_node_id: inputId,
-        target_node_id: imageId,
-        mapping_logic: { target_param: "image_1" },
-        condition_logic: null,
-      },
-      ...(withReference ? [{
-        id: crypto.randomUUID(),
-        version_id: versionId,
-        source_node_id: referenceId,
-        target_node_id: imageId,
-        mapping_logic: { target_param: "reference_image" },
-        condition_logic: null,
-      }] : []),
-      {
-        id: crypto.randomUUID(),
-        version_id: versionId,
-        source_node_id: imageId,
-        target_node_id: videoId,
+          source_node_id: group.imageId,
+          target_node_id: group.videoId,
         mapping_logic: { target_param: "start_frame_image" },
         condition_logic: null,
-      },
+        });
+        return edges;
+      }),
     ],
+    referenceAssets: references.map((reference) => ({
+      nodeId: reference.nodeId,
+      label: reference.label,
+      assetId: reference.asset?.id ?? null,
+      assetUrl: reference.asset?.supabase_storage_url ?? null,
+    })),
   };
 }
 
@@ -357,21 +503,34 @@ Deno.serve(async (req) => {
           template_id: template.id,
           version_number: 1,
           is_active: false,
-          review_status: "Unreviewed",
+          review_status: "Testing",
         });
       if (versionError) throw new Error(versionError.message);
 
       const withStarterGraph = body.withStarterGraph !== false;
+      let uploadedReferenceAssets: unknown[] = [];
       if (withStarterGraph) {
         const requestedPreset = cleanText(body.starterPreset, "campaign") as StarterPreset;
         const starterPreset: StarterPreset = requestedPreset === "reference" || requestedPreset === "blank" || requestedPreset === "campaign"
           ? requestedPreset
           : "campaign";
-        const starter = starterNodes(versionId, starterPreset);
+        const starter = await starterNodes({
+          admin,
+          templateId: template.id,
+          versionId,
+          preset: starterPreset,
+          inputSlots: readInputSlots(body.inputSlots),
+          outputCount: cleanInteger(body.outputCount, 1, 1, 6),
+          referenceAssets: readReferenceDrafts(body.referenceAssets),
+          imagePrompt: nullableText(body.imagePrompt),
+          videoPrompt: nullableText(body.videoPrompt),
+          uploadedBy: user.id,
+        });
         const { error: nodesError } = await admin.from("nodes").insert(starter.nodes);
         if (nodesError) throw new Error(nodesError.message);
         const { error: edgesError } = await admin.from("edges").insert(starter.edges);
         if (edgesError) throw new Error(edgesError.message);
+        uploadedReferenceAssets = starter.referenceAssets;
       }
 
       await logAuditEvent({
@@ -383,7 +542,13 @@ Deno.serve(async (req) => {
         metadata: { adminUserId: user.id },
       }, admin);
 
-      return json({ templateId: template.id, templateName: template.name, versionId, versionNumber: 1 });
+      return json({
+        templateId: template.id,
+        templateName: template.name,
+        versionId,
+        versionNumber: 1,
+        referenceAssets: uploadedReferenceAssets,
+      });
     }
 
     if (action === "clone_version") {
@@ -469,7 +634,7 @@ Deno.serve(async (req) => {
 
       const promptConfig = nodeType === "user_input"
         ? {
-            editor_mode: cleanText(body.editorMode, "upload"),
+            editor_mode: cleanText(body.editorMode) === "reference" ? "reference" : "upload",
             editor_slot_key: cleanText(body.slotKey, name.toLowerCase().replace(/[^a-z0-9]+/g, "-")),
             editor_label: name,
             editor_expected: cleanText(body.expected, "image"),

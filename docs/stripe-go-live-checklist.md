@@ -27,7 +27,7 @@ Set these project secrets in Supabase before testing live billing:
 
 ## Stripe dashboard configuration required
 
-1. Create or confirm the three recurring prices used by the app.
+1. Create or confirm the three recurring prices used by the app. Stripe prices are immutable, so changing Starter from $49 to $25 requires creating a new recurring $25/month price.
 2. Confirm the product and price IDs match both files below:
    - `src/lib/stripe-config.ts`
    - `supabase/functions/_shared/stripe-plans.ts`
@@ -47,6 +47,9 @@ Set these project secrets in Supabase before testing live billing:
 - Starter
   - Product: `prod_U3o88Rn0fn4P2w`
   - Price: `price_1T5gW5AWgNdlZ1x0Qkr6636B`
+  - Live Stripe amount found during QA: `$49/month`
+  - Required amount: `$25/month`
+  - Status: blocked for new Starter checkout until `STRIPE_STARTER_PRICE_ID_LIVE` points at a real `$25/month` recurring price.
   - Monthly credits: `500`
 - Pro
   - Product: `prod_U3o9Beo3BdMnId`

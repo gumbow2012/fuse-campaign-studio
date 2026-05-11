@@ -845,7 +845,7 @@ export async function runGraphJob(admin: AdminClient, jobId: string) {
     const explicitUrl = jobInputs[node.id] ?? jobInputs[node.name];
     const isHiddenWorkflowPlaceholder =
       node.prompt_config?.weavy_exposed === false &&
-      (editorMode === "workflow" || editorMode === "reference") &&
+      editorMode === "reference" &&
       !node.default_asset_id &&
       !explicitUrl;
     if (isHiddenWorkflowPlaceholder) continue;

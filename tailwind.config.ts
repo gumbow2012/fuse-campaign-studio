@@ -15,7 +15,7 @@ export default {
     extend: {
       fontFamily: {
         sans: ["IBM Plex Sans", "system-ui", "sans-serif"],
-        display: ["Space Grotesk", "IBM Plex Sans", "system-ui", "sans-serif"],
+        display: ["Orbitron Variable", "Orbitron", "IBM Plex Sans", "system-ui", "sans-serif"],
       },
       colors: {
         border: "hsl(var(--border))",

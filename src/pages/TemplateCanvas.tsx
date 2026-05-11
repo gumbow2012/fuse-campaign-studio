@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { CheckCircle2, ChevronLeft, ChevronRight, Copy, Film, GitBranch, Loader2, Maximize2, Minus, Move, Plus, RefreshCw, Save, Trash2 } from "lucide-react";
+import { CheckCircle2, ChevronLeft, ChevronRight, Copy, Film, GitBranch, Loader2, Maximize2, Minus, Move, Plus, RefreshCw, Save, Trash2, Upload } from "lucide-react";
 import { useSearchParams } from "react-router-dom";
 import SiteShell from "@/components/mvp/SiteShell";
 import { Button } from "@/components/ui/button";
@@ -76,6 +76,7 @@ type TemplateDetailNode = {
   nodeType: string;
   prompt: string | null;
   expected: string | null;
+  defaultAssetId: string | null;
   defaultAssetUrl: string | null;
   incoming: Array<{
     edgeId?: string;
@@ -86,7 +87,7 @@ type TemplateDetailNode = {
   }>;
   summary: string;
   editor?: {
-    mode: "upload" | "reference" | "workflow";
+    mode: "upload" | "reference";
     slotKey: string | null;
     label: string | null;
     expected: string | null;
@@ -123,14 +124,34 @@ type NodeDraft = {
   displayLabel: string;
   expected: string;
   prompt: string;
-  editorMode: "upload" | "reference" | "workflow";
+  editorMode: "upload" | "reference";
   slotKey: string;
   sampleUrl: string;
   outputExposed: boolean | null;
 };
 
 type NewNodeKind = NodeDraft["editorMode"] | "image_gen" | "video_gen";
-type StarterPreset = "campaign" | "reference" | "blank";
+type TemplateWizardStep = "name" | "inputs" | "outputs" | "references" | "prompts";
+
+type TemplateInputSlotDraft = {
+  id: string;
+  slotKey: string;
+};
+
+type TemplateInputSlotOption = {
+  key: string;
+  label: string;
+  targetParam: string;
+  expected: string;
+};
+
+type TemplateReferenceDraft = {
+  id: string;
+  label: string;
+  prompt: string;
+  file: File | null;
+  previewUrl: string | null;
+};
 
 const NODE_WIDTH = 288;
 const NODE_HEIGHT = 188;
@@ -144,31 +165,45 @@ const ROW_GAP = 258;
 const LANE_WIDTH = 340;
 const LANE_HEADER_HEIGHT = 62;
 const LAYOUT_PREFIX = "fuse-template-canvas-layout-v1";
-const LANE_KEYS = ["uploads", "references", "internals", "images", "videos", "other"] as const;
+const LANE_KEYS = ["uploads", "references", "images", "videos", "other"] as const;
 const LANE_LABELS: Record<(typeof LANE_KEYS)[number], string> = {
   uploads: "User Uploads",
   references: "Hidden References",
-  internals: "Internal Locks",
   images: "Image Steps",
   videos: "Video Steps",
   other: "Other",
 };
 const LANE_DESCRIPTIONS: Record<(typeof LANE_KEYS)[number], string> = {
   uploads: "Customer supplied assets",
-  references: "Locked reference assets",
-  internals: "Hidden scene controls",
-  images: "Image generation branches",
-  videos: "Final motion outputs",
+  references: "Admin-only guide assets",
+  images: "Generated image steps",
+  videos: "Generated video steps",
   other: "Unclassified graph nodes",
 };
 const LANE_STYLES: Record<(typeof LANE_KEYS)[number], string> = {
   uploads: "border-cyan-300/20 bg-cyan-300/[0.035]",
   references: "border-amber-300/20 bg-amber-300/[0.035]",
-  internals: "border-violet-300/20 bg-violet-300/[0.035]",
   images: "border-emerald-300/20 bg-emerald-300/[0.035]",
   videos: "border-rose-300/20 bg-rose-300/[0.035]",
   other: "border-slate-300/15 bg-slate-300/[0.025]",
 };
+
+const TEMPLATE_INPUT_SLOT_OPTIONS: TemplateInputSlotOption[] = [
+  { key: "top_garment", label: "Top Garment", targetParam: "top_garment_image", expected: "image" },
+  { key: "bottom_garment", label: "Bottom Garment", targetParam: "bottom_garment_image", expected: "image" },
+  { key: "logo", label: "Logo", targetParam: "logo_image", expected: "image" },
+  { key: "head_accessory", label: "Head Accessory", targetParam: "head_accessory_image", expected: "image" },
+  { key: "footwear", label: "Footwear", targetParam: "footwear_image", expected: "image" },
+  { key: "model_reference", label: "Model Reference", targetParam: "model_reference_image", expected: "image" },
+  { key: "scene_reference", label: "Scene Reference", targetParam: "scene_reference_image", expected: "image" },
+  { key: "product_image", label: "Product Image", targetParam: "product_image", expected: "image" },
+];
+
+const DEFAULT_TEMPLATE_INPUT_SLOT_KEYS = ["top_garment", "bottom_garment", "logo"];
+
+function inputSlotOption(slotKey: string) {
+  return TEMPLATE_INPUT_SLOT_OPTIONS.find((option) => option.key === slotKey) ?? TEMPLATE_INPUT_SLOT_OPTIONS[0];
+}
 
 function compactText(value: string | null | undefined, maxLength = 150) {
   const normalized = String(value ?? "").replace(/\s+/g, " ").trim();
@@ -182,7 +217,6 @@ function nodeKindLabel(node: TemplateDetailNode) {
   if (node.nodeType === "image_gen") return "Image model";
   if (node.editor?.mode === "upload") return "Upload input";
   if (node.editor?.mode === "reference") return "Reference asset";
-  if (node.editor?.mode === "workflow") return "Internal lock";
   return node.nodeType.replace("_", " ");
 }
 
@@ -215,11 +249,28 @@ function fileToDataUrl(file: File) {
   });
 }
 
+function createTemplateReferenceDraft(index: number): TemplateReferenceDraft {
+  return {
+    id: `${Date.now()}-${index}-${Math.random().toString(36).slice(2)}`,
+    label: `Reference ${index + 1}`,
+    prompt: "",
+    file: null,
+    previewUrl: null,
+  };
+}
+
+function createTemplateInputSlotDraft(index: number): TemplateInputSlotDraft {
+  return {
+    id: `${Date.now()}-input-${index}-${Math.random().toString(36).slice(2)}`,
+    slotKey: DEFAULT_TEMPLATE_INPUT_SLOT_KEYS[index] ?? TEMPLATE_INPUT_SLOT_OPTIONS[index % TEMPLATE_INPUT_SLOT_OPTIONS.length].key,
+  };
+}
+
 function laneForNode(node: TemplateDetailNode): (typeof LANE_KEYS)[number] {
   if (node.nodeType === "user_input") {
     if (node.editor?.mode === "upload") return "uploads";
     if (node.editor?.mode === "reference") return "references";
-    return "internals";
+    return "other";
   }
   if (node.nodeType === "image_gen") return "images";
   if (node.nodeType === "video_gen") return "videos";
@@ -260,13 +311,29 @@ const TemplateCanvas = () => {
   const [mutating, setMutating] = useState<string | null>(null);
   const [newTemplateName, setNewTemplateName] = useState("");
   const [newTemplateDescription, setNewTemplateDescription] = useState("");
-  const [starterPreset, setStarterPreset] = useState<StarterPreset>("reference");
+  const [templateWizardStep, setTemplateWizardStep] = useState<TemplateWizardStep>("name");
+  const [newTemplateInputSlots, setNewTemplateInputSlots] = useState<TemplateInputSlotDraft[]>(
+    DEFAULT_TEMPLATE_INPUT_SLOT_KEYS.map((_, index) => createTemplateInputSlotDraft(index)),
+  );
+  const [newTemplateOutputCount, setNewTemplateOutputCount] = useState(1);
+  const [newTemplateReferences, setNewTemplateReferences] = useState<TemplateReferenceDraft[]>([
+    createTemplateReferenceDraft(0),
+  ]);
+  const [newTemplateImagePrompt, setNewTemplateImagePrompt] = useState(
+    "Create a polished fashion campaign image using the uploaded product and hidden brand reference for scene direction.",
+  );
+  const [newTemplateVideoPrompt, setNewTemplateVideoPrompt] = useState(
+    "Animate the campaign image into a short fashion ad with natural motion and premium brand pacing.",
+  );
   const [cloneTemplateName, setCloneTemplateName] = useState("");
   const [addNodeType, setAddNodeType] = useState<NewNodeKind>("upload");
   const [addNodeName, setAddNodeName] = useState("");
   const [addNodeExpected, setAddNodeExpected] = useState("image");
   const [addNodePrompt, setAddNodePrompt] = useState("");
   const [edgeDraft, setEdgeDraft] = useState({ sourceNodeId: "", targetNodeId: "", targetParam: "" });
+  const [referenceUploadFile, setReferenceUploadFile] = useState<File | null>(null);
+  const [referenceUploadPreview, setReferenceUploadPreview] = useState<string | null>(null);
+  const [uploadingReference, setUploadingReference] = useState(false);
   const dragRef = useRef<{ nodeId: string; origin: Point; start: Point } | null>(null);
   const positionsRef = useRef<Record<string, Point>>({});
   const scrollRef = useRef<HTMLDivElement | null>(null);
@@ -274,6 +341,10 @@ const TemplateCanvas = () => {
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [canvasZoom, setCanvasZoom] = useState(DEFAULT_CANVAS_ZOOM);
   const [isPanning, setIsPanning] = useState(false);
+  const [showInternalNodes, setShowInternalNodes] = useState(false);
+  const [showRunnerPanel, setShowRunnerPanel] = useState(false);
+  const [testingGateVersionId, setTestingGateVersionId] = useState<string | null>(null);
+  const [testedVersionId, setTestedVersionId] = useState<string | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const buildAuthHeaders = useCallback(async () => {
@@ -396,7 +467,7 @@ const TemplateCanvas = () => {
     }
   }, [buildAuthHeaders]);
 
-  const fetchJobStatus = useCallback(async (nextJobId: string) => {
+  const fetchJobStatus = useCallback(async (nextJobId: string, runVersionId?: string) => {
     const response = await fetch(
       `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/get-job-status-public?jobId=${encodeURIComponent(nextJobId)}`,
       { headers: await buildAuthHeaders() },
@@ -406,15 +477,16 @@ const TemplateCanvas = () => {
     setJobId(nextJobId);
     setJob(data);
     setPhase(data.status === "complete" ? "complete" : data.status === "failed" ? "error" : "running");
+    if (data.status === "complete" && runVersionId) setTestedVersionId(runVersionId);
     setError(data.error ?? null);
     return data as JobStatus;
   }, [buildAuthHeaders]);
 
-  const pollJob = useCallback((nextJobId: string) => {
+  const pollJob = useCallback((nextJobId: string, runVersionId?: string) => {
     if (pollRef.current) clearInterval(pollRef.current);
     pollRef.current = setInterval(async () => {
       try {
-        const data = await fetchJobStatus(nextJobId);
+        const data = await fetchJobStatus(nextJobId, runVersionId);
         if (data.status === "complete" || data.status === "failed") {
           if (pollRef.current) clearInterval(pollRef.current);
           pollRef.current = null;
@@ -550,23 +622,35 @@ const TemplateCanvas = () => {
       displayLabel: selectedNode.editor?.label ?? selectedNode.name,
       expected: selectedNode.editor?.expected ?? selectedNode.expected ?? "",
       prompt: selectedNode.prompt ?? "",
-      editorMode: selectedNode.editor?.mode ?? (selectedNode.nodeType === "user_input" ? "upload" : "workflow"),
+      editorMode: selectedNode.editor?.mode ?? "upload",
       slotKey: selectedNode.editor?.slotKey ?? "",
       sampleUrl: selectedNode.editor?.sampleUrl ?? selectedNode.defaultAssetUrl ?? "",
       outputExposed: typeof selectedNode.editor?.outputExposed === "boolean" ? selectedNode.editor.outputExposed : null,
     });
   }, [selectedNode]);
 
+  useEffect(() => {
+    setReferenceUploadFile(null);
+    setReferenceUploadPreview((current) => {
+      if (current?.startsWith("blob:")) URL.revokeObjectURL(current);
+      return null;
+    });
+  }, [selectedNode?.id]);
+
   const graphNodes = useMemo(() => {
     if (!detail) return [];
+    const visibleLanes = showInternalNodes
+      ? LANE_KEYS
+      : LANE_KEYS.filter((lane) => lane !== "references");
     const buckets = new Map<(typeof LANE_KEYS)[number], TemplateDetailNode[]>();
-    for (const lane of LANE_KEYS) buckets.set(lane, []);
+    for (const lane of visibleLanes) buckets.set(lane, []);
     for (const node of detail.nodes) {
+      if (!showInternalNodes && laneForNode(node) === "references") continue;
       buckets.get(laneForNode(node))?.push(node);
     }
 
     const next: Array<TemplateDetailNode & { lane: string; position: Point }> = [];
-    LANE_KEYS.forEach((lane, laneIndex) => {
+    visibleLanes.forEach((lane, laneIndex) => {
       const laneNodes = (buckets.get(lane) ?? []).sort((a, b) => {
         const numberDelta = Number(a.nodeNumber ?? 9999) - Number(b.nodeNumber ?? 9999);
         if (numberDelta !== 0) return numberDelta;
@@ -581,7 +665,7 @@ const TemplateCanvas = () => {
       });
     });
     return next;
-  }, [detail, positions]);
+  }, [detail, positions, showInternalNodes]);
 
   const nodeMap = useMemo(() => new Map(graphNodes.map((node) => [node.id, node])), [graphNodes]);
 
@@ -595,7 +679,8 @@ const TemplateCanvas = () => {
   }, [graphNodes]);
 
   const canvasSize = useMemo(() => {
-    const laneWidth = CANVAS_PADDING_X * 2 + (LANE_KEYS.length - 1) * LANE_GAP + Math.max(LANE_WIDTH, NODE_WIDTH);
+    const visibleLaneCount = showInternalNodes ? LANE_KEYS.length : LANE_KEYS.length - 1;
+    const laneWidth = CANVAS_PADDING_X * 2 + (visibleLaneCount - 1) * LANE_GAP + Math.max(LANE_WIDTH, NODE_WIDTH);
     if (!graphNodes.length) return { width: Math.max(2200, laneWidth), height: 980 };
     const maxX = Math.max(...graphNodes.map((node) => node.position.x + NODE_WIDTH));
     const maxY = Math.max(...graphNodes.map((node) => node.position.y + NODE_HEIGHT));
@@ -603,29 +688,32 @@ const TemplateCanvas = () => {
       width: Math.max(2200, laneWidth, maxX + CANVAS_PADDING_X),
       height: Math.max(980, maxY + 160),
     };
-  }, [graphNodes]);
+  }, [graphNodes, showInternalNodes]);
 
   const graphSummary = useMemo(() => {
-    const outputs = graphNodes.filter((node) => node.outputNumber).length;
+    const allNodes = detail?.nodes ?? [];
+    const outputs = allNodes.filter((node) => node.outputNumber).length;
     return {
-      nodes: graphNodes.length,
+      nodes: allNodes.length,
       edges: detail?.edges.length ?? 0,
       outputs,
-      uploads: laneStats.get("uploads") ?? 0,
+      uploads: allNodes.filter((node) => node.nodeType === "user_input" && node.editor?.mode === "upload").length,
+      references: allNodes.filter((node) => node.nodeType === "user_input" && node.editor?.mode === "reference").length,
     };
-  }, [detail?.edges.length, graphNodes, laneStats]);
+  }, [detail?.edges.length, detail?.nodes]);
 
   const graphValidation = useMemo(() => {
-    const missingReferenceAssets = graphNodes.filter((node) =>
+    const allNodes = detail?.nodes ?? [];
+    const missingReferenceAssets = allNodes.filter((node) =>
       node.nodeType === "user_input" &&
-      (node.editor?.mode === "reference" || node.editor?.mode === "workflow") &&
+      node.editor?.mode === "reference" &&
       !node.defaultAssetUrl
     );
-    const missingPrompts = graphNodes.filter((node) =>
+    const missingPrompts = allNodes.filter((node) =>
       (node.nodeType === "image_gen" || node.nodeType === "video_gen") &&
       !node.prompt
     );
-    const disconnectedSteps = graphNodes.filter((node) =>
+    const disconnectedSteps = allNodes.filter((node) =>
       (node.nodeType === "image_gen" || node.nodeType === "video_gen") &&
       !node.incoming.length
     );
@@ -634,17 +722,17 @@ const TemplateCanvas = () => {
       ...missingPrompts.map((node) => `Node ${node.nodeNumber ?? "?"}: prompt is empty`),
       ...disconnectedSteps.map((node) => `Node ${node.nodeNumber ?? "?"}: no incoming source`),
     ];
-    if (!graphNodes.length) {
+    if (!allNodes.length) {
       issues.push("No nodes in this version yet");
     }
-    if (graphNodes.length && !graphNodes.some((node) => node.outputNumber)) {
+    if (allNodes.length && !allNodes.some((node) => node.outputNumber)) {
       issues.push("No final deliverable output is exposed");
     }
     return {
       issues,
-      ready: issues.length === 0 && graphNodes.length > 0,
+      ready: issues.length === 0 && allNodes.length > 0,
     };
-  }, [graphNodes]);
+  }, [detail?.nodes]);
 
   const onPointerMove = useCallback((event: PointerEvent) => {
     if (!dragRef.current) return;
@@ -756,6 +844,58 @@ const TemplateCanvas = () => {
     toast({ title: "Auto layout restored", description: "Nodes are back in spaced lanes." });
   }, [detail?.versionId]);
 
+  const setTemplateOutputCount = useCallback((nextValue: number) => {
+    const nextCount = Math.max(1, Math.min(6, nextValue));
+    setNewTemplateOutputCount(nextCount);
+    setNewTemplateReferences((current) => {
+      const next = current.slice(0, nextCount);
+      current.slice(nextCount).forEach((reference) => {
+        if (reference.previewUrl?.startsWith("blob:")) URL.revokeObjectURL(reference.previewUrl);
+      });
+      while (next.length < nextCount) {
+        next.push(createTemplateReferenceDraft(next.length));
+      }
+      return next;
+    });
+  }, []);
+
+  const setTemplateInputCount = useCallback((nextValue: number) => {
+    const nextCount = Math.max(1, Math.min(8, nextValue));
+    setNewTemplateInputSlots((current) => {
+      const next = current.slice(0, nextCount);
+      while (next.length < nextCount) {
+        next.push(createTemplateInputSlotDraft(next.length));
+      }
+      return next;
+    });
+  }, []);
+
+  const setTemplateInputSlot = useCallback((slotId: string, slotKey: string) => {
+    setNewTemplateInputSlots((current) =>
+      current.map((slot) => slot.id === slotId ? { ...slot, slotKey } : slot),
+    );
+  }, []);
+
+  const handleNewTemplateReferenceFile = useCallback((referenceId: string, file: File | null) => {
+    setNewTemplateReferences((current) =>
+      current.map((reference) => {
+        if (reference.id !== referenceId) return reference;
+        if (reference.previewUrl?.startsWith("blob:")) URL.revokeObjectURL(reference.previewUrl);
+        return {
+          ...reference,
+          file,
+          previewUrl: file ? URL.createObjectURL(file) : null,
+        };
+      }),
+    );
+  }, []);
+
+  const handleReferenceUploadFile = useCallback((file: File | null) => {
+    if (referenceUploadPreview?.startsWith("blob:")) URL.revokeObjectURL(referenceUploadPreview);
+    setReferenceUploadFile(file);
+    setReferenceUploadPreview(file ? URL.createObjectURL(file) : null);
+  }, [referenceUploadPreview]);
+
   const handleFile = useCallback((inputId: string, nextFile: File | null) => {
     setFiles((current) => ({ ...current, [inputId]: nextFile }));
     setPreviews((current) => {
@@ -814,8 +954,8 @@ const TemplateCanvas = () => {
       const data = await response.json();
       if (!response.ok) throw new Error(data?.error ?? "Could not start template");
       setJobId(data.jobId);
-      void fetchJobStatus(data.jobId);
-      pollJob(data.jobId);
+      void fetchJobStatus(data.jobId, detail.versionId);
+      pollJob(data.jobId, detail.versionId);
     } catch (runError) {
       const message = runError instanceof Error ? runError.message : "Could not start template";
       setPhase("error");
@@ -861,6 +1001,51 @@ const TemplateCanvas = () => {
     }
   }, [buildAuthHeaders, detail, draft, loadDetail, loadTemplates, selectedNode]);
 
+  const uploadReferenceAsset = useCallback(async () => {
+    if (!detail || !selectedNode || !draft || !referenceUploadFile) return;
+    if (selectedNode.nodeType !== "user_input" || draft.editorMode !== "reference") {
+      toast({ title: "Pick a hidden reference input first", variant: "destructive" });
+      return;
+    }
+
+    setUploadingReference(true);
+    try {
+      const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/save-template-editor`, {
+        method: "POST",
+        headers: {
+          ...(await buildAuthHeaders()),
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          versionId: detail.versionId,
+          nodeId: selectedNode.id,
+          displayLabel: draft.displayLabel,
+          expected: draft.expected,
+          editorMode: "reference",
+          slotKey: draft.slotKey,
+          referenceFile: {
+            filename: referenceUploadFile.name,
+            dataUrl: await fileToDataUrl(referenceUploadFile),
+          },
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data?.error ?? "Could not upload reference");
+      handleReferenceUploadFile(null);
+      await loadDetail(detail.versionId);
+      await loadTemplates();
+      toast({
+        title: "Reference attached",
+        description: data?.asset?.id ? `Asset ${String(data.asset.id).slice(0, 8)} saved to the template.` : "Hidden asset saved to the template.",
+      });
+    } catch (uploadError) {
+      const message = uploadError instanceof Error ? uploadError.message : "Could not upload reference";
+      toast({ title: "Upload failed", description: message, variant: "destructive" });
+    } finally {
+      setUploadingReference(false);
+    }
+  }, [buildAuthHeaders, detail, draft, handleReferenceUploadFile, loadDetail, loadTemplates, referenceUploadFile, selectedNode]);
+
   const refreshAfterMutation = useCallback(async (versionId?: string) => {
     await loadTemplates();
     if (versionId) setSelectedVersionId(versionId);
@@ -873,27 +1058,87 @@ const TemplateCanvas = () => {
       toast({ title: "Template name required", variant: "destructive" });
       return;
     }
+    const missingReference = newTemplateReferences.find((reference) => !reference.file);
+    if (missingReference) {
+      toast({ title: "Hidden guide image required", description: `${missingReference.label} still needs an image.`, variant: "destructive" });
+      setTemplateWizardStep("references");
+      return;
+    }
     setMutating("create-template");
     try {
+      const referenceAssets = await Promise.all(newTemplateReferences.map(async (reference) => ({
+        label: reference.label,
+        prompt: reference.prompt,
+        file: reference.file
+          ? {
+              filename: reference.file.name,
+              dataUrl: await fileToDataUrl(reference.file),
+            }
+          : null,
+      })));
+      const inputSlots = newTemplateInputSlots.map((slot) => {
+        const option = inputSlotOption(slot.slotKey);
+        return {
+          key: option.key,
+          label: option.label,
+          expected: option.expected,
+          targetParam: option.targetParam,
+        };
+      });
       const data = await invokeWorkbench({
         action: "create_template",
         name,
         description: newTemplateDescription,
-        withStarterGraph: starterPreset !== "blank",
-        starterPreset,
+        withStarterGraph: true,
+        starterPreset: "reference",
+        inputSlots,
+        outputCount: newTemplateOutputCount,
+        referenceAssets,
+        imagePrompt: newTemplateImagePrompt,
+        videoPrompt: newTemplateVideoPrompt,
       });
       setNewTemplateName("");
       setNewTemplateDescription("");
-      setStarterPreset("reference");
+      setTemplateWizardStep("name");
+      setTemplateInputCount(DEFAULT_TEMPLATE_INPUT_SLOT_KEYS.length);
+      setNewTemplateInputSlots(DEFAULT_TEMPLATE_INPUT_SLOT_KEYS.map((_, index) => createTemplateInputSlotDraft(index)));
+      setTemplateOutputCount(1);
+      setNewTemplateReferences((current) => {
+        current.forEach((reference) => {
+          if (reference.previewUrl?.startsWith("blob:")) URL.revokeObjectURL(reference.previewUrl);
+        });
+        return [createTemplateReferenceDraft(0)];
+      });
+      setNewTemplateImagePrompt("Create a polished fashion campaign image using the uploaded product and hidden brand reference for scene direction.");
+      setNewTemplateVideoPrompt("Animate the campaign image into a short fashion ad with natural motion and premium brand pacing.");
+      setTestingGateVersionId(data.versionId);
+      setShowRunnerPanel(true);
+      setPhase("idle");
+      setJob(null);
+      setJobId(null);
+      setTestedVersionId(null);
+      setError(null);
       await refreshAfterMutation(data.versionId);
-      toast({ title: "Template created", description: `${name} v1 is ready on the canvas.` });
+      toast({ title: "Template created", description: `${name} v1 is in testing. Run it once before publishing.` });
     } catch (createError) {
       const message = createError instanceof Error ? createError.message : "Could not create template";
       toast({ title: "Create failed", description: message, variant: "destructive" });
     } finally {
       setMutating(null);
     }
-  }, [invokeWorkbench, newTemplateDescription, newTemplateName, refreshAfterMutation, starterPreset]);
+  }, [
+    invokeWorkbench,
+    newTemplateDescription,
+    newTemplateImagePrompt,
+    newTemplateInputSlots,
+    newTemplateName,
+    newTemplateOutputCount,
+    newTemplateReferences,
+    newTemplateVideoPrompt,
+    refreshAfterMutation,
+    setTemplateInputCount,
+    setTemplateOutputCount,
+  ]);
 
   const cloneCurrentVersion = useCallback(async (asNewTemplate: boolean) => {
     if (!detail) return;
@@ -928,9 +1173,20 @@ const TemplateCanvas = () => {
 
   const activateCurrentVersion = useCallback(async () => {
     if (!detail) return;
+    const requiresTestRun = testingGateVersionId === detail.versionId && testedVersionId !== detail.versionId;
+    if (requiresTestRun) {
+      setShowRunnerPanel(true);
+      toast({
+        title: "Test run required",
+        description: "Upload the admin test inputs and complete one canvas run before publishing.",
+        variant: "destructive",
+      });
+      return;
+    }
     setMutating("activate-version");
     try {
       await invokeWorkbench({ action: "activate_version", versionId: detail.versionId });
+      setTestingGateVersionId(null);
       await refreshAfterMutation(detail.versionId);
       toast({ title: "Version activated", description: `${detail.templateName} v${detail.versionNumber} is now live.` });
     } catch (activateError) {
@@ -939,11 +1195,11 @@ const TemplateCanvas = () => {
     } finally {
       setMutating(null);
     }
-  }, [detail, invokeWorkbench, refreshAfterMutation]);
+  }, [detail, invokeWorkbench, refreshAfterMutation, testedVersionId, testingGateVersionId]);
 
   const addNode = useCallback(async () => {
     if (!detail) return;
-    const isInput = addNodeType === "upload" || addNodeType === "reference" || addNodeType === "workflow";
+    const isInput = addNodeType === "upload" || addNodeType === "reference";
     setMutating("add-node");
     try {
       await invokeWorkbench({
@@ -1028,17 +1284,288 @@ const TemplateCanvas = () => {
     }
   }, [detail, invokeWorkbench, refreshAfterMutation]);
 
+  const wizardSteps: Array<{ id: TemplateWizardStep; label: string }> = [
+    { id: "name", label: "Name" },
+    { id: "inputs", label: "Inputs" },
+    { id: "outputs", label: "Outputs" },
+    { id: "references", label: "Guides" },
+    { id: "prompts", label: "Prompts" },
+  ];
+  const wizardStepIndex = wizardSteps.findIndex((step) => step.id === templateWizardStep);
+  const wizardProgress = ((wizardStepIndex + 1) / wizardSteps.length) * 100;
+  const testingGateActive = !!detail && !detail.isActive && (testingGateVersionId === detail.versionId || detail.reviewStatus === "Testing");
+  const testingGateSatisfied = !testingGateActive || testedVersionId === detail?.versionId;
+  const goWizard = (direction: -1 | 1) => {
+    const nextIndex = Math.max(0, Math.min(wizardSteps.length - 1, wizardStepIndex + direction));
+    setTemplateWizardStep(wizardSteps[nextIndex].id);
+  };
+
   return (
     <SiteShell>
-      <div className="mx-auto flex w-full max-w-[1900px] gap-5 px-5 py-8 xl:px-8">
-        <section className="max-h-[calc(100vh-120px)] w-[320px] shrink-0 overflow-y-auto rounded-3xl border border-border/50 bg-card/70 p-5 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">Admin Canvas</p>
-          <h1 className="mt-2 text-3xl font-black tracking-tight">Template Canvas</h1>
-          <p className="mt-2 text-sm text-muted-foreground">
-            Internal-only graph surface for visualizing, editing, and running the live templates.
-          </p>
+      <div className="mx-auto flex w-full max-w-[1900px] flex-col gap-5 px-4 py-6 sm:px-5 xl:px-8">
+        <section className="w-full">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">Admin Canvas</p>
+              <h1 className="mt-2 text-3xl font-black tracking-tight">Template Canvas</h1>
+              <p className="mt-2 text-sm text-muted-foreground">
+                Internal-only graph surface for live template creation, edits, validation, and testing.
+              </p>
+            </div>
+            <div className="grid grid-cols-2 gap-2 text-xs sm:flex">
+              <Button type="button" variant="outline" size="sm" onClick={() => void loadTemplates()} disabled={loadingTemplates}>
+                <RefreshCw className={`mr-2 h-4 w-4 ${loadingTemplates ? "animate-spin" : ""}`} />
+                Refresh
+              </Button>
+              <Button type="button" variant="outline" size="sm" onClick={saveLayout} disabled={!detail}>
+                <Save className="mr-2 h-4 w-4" />
+                Save Layout
+              </Button>
+              <Button type="button" variant="outline" size="sm" onClick={resetLayout} disabled={!detail}>
+                Auto Layout
+              </Button>
+            </div>
+          </div>
 
-          <div className="mt-6 space-y-3">
+          <div className="mt-5 rounded-3xl border border-border/50 bg-card/70 p-5 shadow-sm">
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Create New Template</p>
+                <h2 className="mt-2 text-2xl font-bold tracking-tight">Draft Builder</h2>
+              </div>
+              <div className="flex flex-wrap gap-2 text-[11px] uppercase tracking-[0.16em] text-muted-foreground">
+                <span className="rounded-full border border-border/60 bg-background/60 px-3 py-1">{newTemplateInputSlots.length} inputs</span>
+                <span className="rounded-full border border-border/60 bg-background/60 px-3 py-1">{newTemplateOutputCount} outputs</span>
+                <span className="rounded-full border border-border/60 bg-background/60 px-3 py-1">{newTemplateReferences.length} guides</span>
+              </div>
+            </div>
+            <div className="mt-5">
+              <div className="mb-2 flex items-center justify-between gap-3 text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+                <span>Step {wizardStepIndex + 1} / {wizardSteps.length}</span>
+                <span>{wizardSteps[wizardStepIndex]?.label}</span>
+              </div>
+              <div className="h-1.5 overflow-hidden rounded-full bg-background">
+                <div className="h-full rounded-full bg-primary transition-all duration-300" style={{ width: `${wizardProgress}%` }} />
+              </div>
+            </div>
+
+            <div className="mt-5 grid gap-5 xl:grid-cols-[260px_minmax(0,1fr)]">
+              <div className="grid gap-2 sm:grid-cols-5 xl:grid-cols-1">
+                {wizardSteps.map((step, index) => (
+                  <button
+                    key={step.id}
+                    type="button"
+                    onClick={() => setTemplateWizardStep(step.id)}
+                    className={`rounded-2xl border px-4 py-3 text-left text-xs font-semibold uppercase tracking-[0.14em] transition ${
+                      templateWizardStep === step.id
+                        ? "border-primary/50 bg-primary text-primary-foreground"
+                        : index < wizardStepIndex
+                        ? "border-border/60 bg-background/70 text-foreground"
+                        : "border-border/50 bg-background/40 text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    <span className="mr-2 text-[10px] opacity-70">{index + 1}</span>
+                    {step.label}
+                  </button>
+                ))}
+              </div>
+
+              <div className="min-h-[360px] rounded-3xl border border-border/50 bg-background/45 p-4">
+                {templateWizardStep === "name" ? (
+                  <div className="grid gap-4 lg:grid-cols-2">
+                    <div className="space-y-2">
+                      <Label>Template Name</Label>
+                      <Input
+                        value={newTemplateName}
+                        onChange={(event) => setNewTemplateName(event.target.value)}
+                        placeholder="Template name"
+                        className="h-12 rounded-2xl"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Description</Label>
+                      <Input
+                        value={newTemplateDescription}
+                        onChange={(event) => setNewTemplateDescription(event.target.value)}
+                        placeholder="Short description"
+                        className="h-12 rounded-2xl"
+                      />
+                    </div>
+                  </div>
+                ) : null}
+
+                {templateWizardStep === "inputs" ? (
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-[1fr_auto] items-center gap-3 rounded-2xl border border-border/50 bg-card/70 p-4">
+                      <div>
+                        <Label>Input Count</Label>
+                        <p className="mt-1 text-xs uppercase tracking-[0.16em] text-muted-foreground">{newTemplateInputSlots.length} user upload slot{newTemplateInputSlots.length === 1 ? "" : "s"}</p>
+                      </div>
+                      <Input
+                        type="number"
+                        min={1}
+                        max={8}
+                        value={newTemplateInputSlots.length}
+                        onChange={(event) => setTemplateInputCount(Number(event.target.value))}
+                        className="h-11 w-20 rounded-xl"
+                      />
+                    </div>
+                    <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                      {newTemplateInputSlots.map((slot, index) => (
+                        <div key={slot.id} className="rounded-2xl border border-border/50 bg-card/70 p-3">
+                          <Label className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground">Input {index + 1}</Label>
+                          <select
+                            value={slot.slotKey}
+                            onChange={(event) => setTemplateInputSlot(slot.id, event.target.value)}
+                            className="mt-2 h-11 w-full rounded-xl border border-border bg-background px-3 text-sm"
+                          >
+                            {TEMPLATE_INPUT_SLOT_OPTIONS.map((option) => (
+                              <option key={option.key} value={option.key}>
+                                {option.label}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
+
+                {templateWizardStep === "outputs" ? (
+                  <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_220px]">
+                    <div className="rounded-2xl border border-border/50 bg-card/70 p-4">
+                      <Label>Output Count</Label>
+                      <p className="mt-3 text-4xl font-black tracking-tight">{newTemplateOutputCount}</p>
+                      <p className="mt-1 text-xs uppercase tracking-[0.16em] text-muted-foreground">deliverable set{newTemplateOutputCount === 1 ? "" : "s"}</p>
+                    </div>
+                    <Input
+                      type="number"
+                      min={1}
+                      max={6}
+                      value={newTemplateOutputCount}
+                      onChange={(event) => setTemplateOutputCount(Number(event.target.value))}
+                      className="h-16 rounded-2xl text-center text-xl font-bold"
+                    />
+                  </div>
+                ) : null}
+
+                {templateWizardStep === "references" ? (
+                  <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                    {newTemplateReferences.map((reference, index) => (
+                      <div key={reference.id} className="rounded-2xl border border-border/50 bg-card/70 p-3">
+                        <div className="flex items-center justify-between gap-2">
+                          <Input
+                            value={reference.label}
+                            onChange={(event) =>
+                              setNewTemplateReferences((current) =>
+                                current.map((item) => item.id === reference.id ? { ...item, label: event.target.value } : item),
+                              )
+                            }
+                            className="h-9 rounded-xl"
+                            placeholder={`Guide ${index + 1}`}
+                          />
+                          <span className="shrink-0 rounded-md border border-amber-300/30 px-2 py-1 text-[10px] font-semibold uppercase text-amber-100">
+                            hidden
+                          </span>
+                        </div>
+                        {reference.previewUrl ? (
+                          <img src={reference.previewUrl} alt={reference.label} className="mt-3 aspect-square w-full rounded-xl border border-border/50 bg-background object-contain" />
+                        ) : (
+                          <div className="mt-3 flex aspect-square items-center justify-center rounded-xl border border-dashed border-border/60 bg-background/50 text-xs text-muted-foreground">
+                            Hidden guide image
+                          </div>
+                        )}
+                        <div className="mt-3 flex gap-2">
+                          <label className="inline-flex h-10 flex-1 cursor-pointer items-center justify-center gap-2 rounded-xl border border-border bg-background px-3 text-sm font-medium transition hover:border-primary/50 hover:text-foreground">
+                            <Upload className="h-4 w-4" />
+                            {reference.file ? "Replace guide" : "Upload guide"}
+                            <input
+                              type="file"
+                              accept="image/*"
+                              className="hidden"
+                              onChange={(event) => handleNewTemplateReferenceFile(reference.id, event.target.files?.[0] ?? null)}
+                            />
+                          </label>
+                          <Button type="button" variant="outline" size="icon" onClick={() => handleNewTemplateReferenceFile(reference.id, null)} title="Clear guide">
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                        <Textarea
+                          value={reference.prompt}
+                          onChange={(event) =>
+                            setNewTemplateReferences((current) =>
+                              current.map((item) => item.id === reference.id ? { ...item, prompt: event.target.value } : item),
+                            )
+                          }
+                          placeholder="Hidden guide prompt"
+                          className="mt-3 min-h-[84px] rounded-xl"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+
+                {templateWizardStep === "prompts" ? (
+                  <div className="grid gap-4 lg:grid-cols-2">
+                    <div className="space-y-2">
+                      <Label>Image Prompt</Label>
+                      <Textarea value={newTemplateImagePrompt} onChange={(event) => setNewTemplateImagePrompt(event.target.value)} className="min-h-[220px] rounded-2xl" />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Video Prompt</Label>
+                      <Textarea value={newTemplateVideoPrompt} onChange={(event) => setNewTemplateVideoPrompt(event.target.value)} className="min-h-[220px] rounded-2xl" />
+                    </div>
+                  </div>
+                ) : null}
+
+                <div className="mt-5 flex gap-2">
+                  <Button type="button" variant="outline" onClick={() => goWizard(-1)} disabled={wizardStepIndex <= 0 || !!mutating}>
+                    Back
+                  </Button>
+                  {templateWizardStep === "prompts" ? (
+                    <Button type="button" className="flex-1" onClick={() => void createTemplate()} disabled={!!mutating}>
+                      {mutating === "create-template" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Plus className="mr-2 h-4 w-4" />}
+                      Create Draft
+                    </Button>
+                  ) : (
+                    <Button type="button" className="flex-1" onClick={() => goWizard(1)} disabled={!!mutating}>
+                      Next
+                    </Button>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {testingGateActive ? (
+            <div className={`mt-5 rounded-3xl border p-5 shadow-sm ${
+              testingGateSatisfied
+                ? "border-emerald-400/30 bg-emerald-400/[0.08]"
+                : "border-amber-300/30 bg-amber-300/[0.08]"
+            }`}>
+              <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Testing Phase</p>
+                  <p className="mt-2 text-sm text-foreground">
+                    {testingGateSatisfied
+                      ? "This draft has a completed admin test run and can be published."
+                      : "Upload the admin test inputs in Run Selected Template and complete one run before publishing live."}
+                  </p>
+                </div>
+                <Button type="button" variant="outline" size="sm" onClick={() => setShowRunnerPanel(true)}>
+                  <Upload className="mr-2 h-4 w-4" />
+                  Open Test Inputs
+                </Button>
+              </div>
+            </div>
+          ) : null}
+
+          <div className="mt-5 rounded-3xl border border-border/50 bg-card/70 p-5 shadow-sm">
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Manage Templates</p>
+            <div className="mt-4 grid gap-4 xl:grid-cols-12">
+            <div className="rounded-2xl border border-border/50 bg-card/70 p-4 shadow-sm xl:col-span-5">
+              <p className="text-xs font-semibold uppercase tracking-[0.15em] text-muted-foreground">Manage Existing Template</p>
+              <div className="mt-3 space-y-3">
             <Label>Template</Label>
             <select
               value={selectedTemplate?.templateId ?? ""}
@@ -1094,22 +1621,10 @@ const TemplateCanvas = () => {
                 </div>
               </div>
             ) : null}
-            <div className="flex gap-2">
-              <Button type="button" variant="outline" size="sm" onClick={() => void loadTemplates()} disabled={loadingTemplates}>
-                <RefreshCw className={`mr-2 h-4 w-4 ${loadingTemplates ? "animate-spin" : ""}`} />
-                Refresh
-              </Button>
-              <Button type="button" variant="outline" size="sm" onClick={saveLayout} disabled={!detail}>
-                <Save className="mr-2 h-4 w-4" />
-                Save Layout
-              </Button>
-              <Button type="button" variant="outline" size="sm" onClick={resetLayout} disabled={!detail}>
-                Auto Layout
-              </Button>
+              </div>
             </div>
-          </div>
 
-          <div className="mt-6 rounded-2xl border border-border/50 bg-background/60 p-4">
+          <div className="rounded-2xl border border-border/50 bg-card/70 p-4 shadow-sm xl:col-span-3">
             <p className="text-xs font-semibold uppercase tracking-[0.15em] text-muted-foreground">Version Control</p>
             <div className="mt-3 grid gap-2">
               <Button type="button" variant="outline" size="sm" onClick={() => void cloneCurrentVersion(false)} disabled={!detail || !!mutating}>
@@ -1128,44 +1643,20 @@ const TemplateCanvas = () => {
                 </Button>
               </div>
               {detail && !detail.isActive ? (
-                <Button type="button" size="sm" onClick={() => void activateCurrentVersion()} disabled={!!mutating}>
+                <Button type="button" size="sm" onClick={() => void activateCurrentVersion()} disabled={!!mutating || !testingGateSatisfied}>
                   <CheckCircle2 className="mr-2 h-4 w-4" />
                   Publish Version Live
                 </Button>
               ) : null}
+              {testingGateActive && !testingGateSatisfied ? (
+                <p className="rounded-xl border border-amber-300/20 bg-amber-300/[0.06] px-3 py-2 text-xs text-amber-100">
+                  Complete one admin test run before publishing this draft.
+                </p>
+              ) : null}
             </div>
           </div>
 
-          <div className="mt-6 rounded-2xl border border-border/50 bg-background/60 p-4">
-            <p className="text-xs font-semibold uppercase tracking-[0.15em] text-muted-foreground">Create Draft Template</p>
-            <div className="mt-3 grid gap-2">
-              <Input
-                value={newTemplateName}
-                onChange={(event) => setNewTemplateName(event.target.value)}
-                placeholder="Template name"
-              />
-              <Input
-                value={newTemplateDescription}
-                onChange={(event) => setNewTemplateDescription(event.target.value)}
-                placeholder="Description"
-              />
-              <select
-                value={starterPreset}
-                onChange={(event) => setStarterPreset(event.target.value as StarterPreset)}
-                className="h-10 w-full rounded-xl border border-border bg-background px-3 text-sm"
-              >
-                <option value="reference">Upload + hidden reference + image/video draft</option>
-                <option value="campaign">Upload + image/video draft</option>
-                <option value="blank">Blank draft canvas</option>
-              </select>
-              <Button type="button" size="sm" onClick={() => void createTemplate()} disabled={!!mutating}>
-                <Plus className="mr-2 h-4 w-4" />
-                Create Draft
-              </Button>
-            </div>
-          </div>
-
-          <div className="mt-6 rounded-2xl border border-border/50 bg-background/60 p-4">
+          <div className="rounded-2xl border border-border/50 bg-card/70 p-4 shadow-sm xl:col-span-4">
             <p className="text-xs font-semibold uppercase tracking-[0.15em] text-muted-foreground">Add Node</p>
             <div className="mt-3 grid gap-2">
               <select
@@ -1175,7 +1666,6 @@ const TemplateCanvas = () => {
               >
                 <option value="upload">User Upload</option>
                 <option value="reference">Hidden Reference</option>
-                <option value="workflow">Internal Lock</option>
                 <option value="image_gen">Image Step</option>
                 <option value="video_gen">Video Step</option>
               </select>
@@ -1197,7 +1687,7 @@ const TemplateCanvas = () => {
             </div>
           </div>
 
-          <div className="mt-6 rounded-2xl border border-border/50 bg-background/60 p-4 text-sm">
+          <div className="rounded-2xl border border-border/50 bg-card/70 p-4 text-sm shadow-sm xl:col-span-4">
             <div className="flex items-center justify-between gap-3">
               <p className="text-xs font-semibold uppercase tracking-[0.15em] text-muted-foreground">Readiness</p>
               <span className={`rounded-full border px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] ${graphValidation.ready ? "border-emerald-400/40 text-emerald-200" : "border-amber-400/40 text-amber-200"}`}>
@@ -1218,8 +1708,17 @@ const TemplateCanvas = () => {
           </div>
 
           {detail ? (
-            <div className="mt-6 rounded-2xl border border-border/50 bg-background/60 p-4">
-              <p className="text-xs font-semibold uppercase tracking-[0.15em] text-muted-foreground">Run Selected Template</p>
+            <div className="rounded-2xl border border-border/50 bg-card/70 p-4 shadow-sm xl:col-span-4">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-[0.15em] text-muted-foreground">Run Selected Template</p>
+                  <p className="mt-1 text-xs text-muted-foreground">{runInputs.length} upload input{runInputs.length === 1 ? "" : "s"} required</p>
+                </div>
+                <Button type="button" variant="outline" size="sm" onClick={() => setShowRunnerPanel((current) => !current)}>
+                  {showRunnerPanel ? "Hide" : "Open"}
+                </Button>
+              </div>
+              {showRunnerPanel ? (
               <div className="mt-4 space-y-4">
                 {runInputs.map((input) => (
                   <div key={input.id} className="space-y-2">
@@ -1233,11 +1732,20 @@ const TemplateCanvas = () => {
                       <img src={input.defaultAssetUrl} alt={`${input.name} default`} className="h-28 w-full rounded-2xl border border-border/50 bg-background object-contain" />
                     ) : (
                       <div className="flex h-28 items-center justify-center rounded-2xl border border-dashed border-border/50 bg-background/50 text-sm text-muted-foreground">
-                        Upload required
+                        Upload image
                       </div>
                     )}
                     <div className="flex gap-2">
-                      <Input type="file" accept="image/*" onChange={(event) => handleFile(input.id, event.target.files?.[0] ?? null)} />
+                      <label className="inline-flex h-10 flex-1 cursor-pointer items-center justify-center gap-2 rounded-xl border border-border bg-background px-3 text-sm font-medium transition hover:border-primary/50 hover:text-foreground">
+                        <Upload className="h-4 w-4" />
+                        {files[input.id] ? "Replace image" : "Upload image"}
+                        <input
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          onChange={(event) => handleFile(input.id, event.target.files?.[0] ?? null)}
+                        />
+                      </label>
                       <Button type="button" variant="outline" size="sm" onClick={() => handleFile(input.id, null)}>Clear</Button>
                     </div>
                   </div>
@@ -1252,27 +1760,33 @@ const TemplateCanvas = () => {
                   Run From Canvas
                 </Button>
               </div>
+              ) : (
+                <div className="mt-4 rounded-xl border border-border/50 bg-background/60 px-3 py-2 text-xs text-muted-foreground">
+                  Keep this closed while editing the graph. Open it only when testing a live template run.
+                </div>
+              )}
+              <div className="mt-3 grid grid-cols-3 gap-2 text-xs">
+                <div className="rounded-xl border border-border/40 bg-background/50 px-3 py-2">
+                  <p className="text-muted-foreground">Status</p>
+                  <p className="mt-1 font-semibold uppercase text-foreground">{phase}</p>
+                </div>
+                <div className="rounded-xl border border-border/40 bg-background/50 px-3 py-2">
+                  <p className="text-muted-foreground">Job</p>
+                  <p className="mt-1 font-mono text-foreground">{jobId ? jobId.slice(0, 8) : "none"}</p>
+                </div>
+                <div className="rounded-xl border border-border/40 bg-background/50 px-3 py-2">
+                  <p className="text-muted-foreground">Outputs</p>
+                  <p className="mt-1 font-semibold text-foreground">{job?.outputs.length ?? 0}</p>
+                </div>
+              </div>
+              {error ? <p className="mt-3 rounded-xl border border-destructive/30 bg-destructive/10 p-3 text-xs text-destructive">{error}</p> : null}
             </div>
           ) : null}
-
-          <div className="mt-6 rounded-2xl border border-border/50 bg-background/60 p-4 text-sm">
-            <div className="flex items-center justify-between">
-              <span className="text-muted-foreground">Status</span>
-              <span className="font-medium uppercase">{phase}</span>
-            </div>
-            <div className="mt-2 flex items-center justify-between">
-              <span className="text-muted-foreground">Job</span>
-              <span className="font-mono text-xs">{jobId ? jobId.slice(0, 8) : "none"}</span>
-            </div>
-            <div className="mt-2 flex items-center justify-between">
-              <span className="text-muted-foreground">Outputs</span>
-              <span className="font-medium">{job?.outputs.length ?? 0}</span>
-            </div>
-            {error ? <p className="mt-3 rounded-xl border border-destructive/30 bg-destructive/10 p-3 text-xs text-destructive">{error}</p> : null}
+          </div>
           </div>
         </section>
 
-        <section className="min-w-0 flex-1 basis-0 rounded-3xl border border-border/50 bg-card/70 p-4 shadow-sm">
+        <section className="min-w-0 rounded-3xl border border-border/50 bg-card/70 p-4 shadow-sm">
           <div className="flex flex-wrap items-center justify-between gap-4 px-2 pb-4">
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">Canvas</p>
@@ -1283,6 +1797,7 @@ const TemplateCanvas = () => {
                 ["Nodes", graphSummary.nodes],
                 ["Edges", graphSummary.edges],
                 ["Inputs", graphSummary.uploads],
+                ["Refs", graphSummary.references],
                 ["Outputs", graphSummary.outputs],
               ].map(([label, value]) => (
                 <span key={label} className="rounded-full border border-border/60 bg-background/70 px-3 py-1 text-xs text-muted-foreground">
@@ -1303,12 +1818,21 @@ const TemplateCanvas = () => {
                   <Maximize2 className="h-3.5 w-3.5" />
                 </Button>
               </div>
+              <Button
+                type="button"
+                variant={showInternalNodes ? "default" : "outline"}
+                size="sm"
+                className="rounded-full"
+                onClick={() => setShowInternalNodes((current) => !current)}
+              >
+                {showInternalNodes ? "Hide Internals" : "Show Internals"}
+              </Button>
               {loadingDetail ? <Loader2 className="h-5 w-5 animate-spin text-primary" /> : null}
             </div>
           </div>
           <div
             ref={scrollRef}
-            className={`h-[calc(100vh-215px)] min-h-[620px] overflow-auto rounded-3xl border border-border/50 bg-background/60 ${isPanning ? "cursor-grabbing" : "cursor-grab"}`}
+            className={`h-[min(72vh,760px)] min-h-[520px] overflow-auto rounded-3xl border border-border/50 bg-background/60 ${isPanning ? "cursor-grabbing" : "cursor-grab"}`}
             onPointerDown={startCanvasPan}
             onPointerMove={moveCanvasPan}
             onPointerUp={endCanvasPan}
@@ -1334,7 +1858,7 @@ const TemplateCanvas = () => {
                 }}
               />
 
-              {LANE_KEYS.map((lane, laneIndex) => {
+              {(showInternalNodes ? LANE_KEYS : LANE_KEYS.filter((lane) => lane !== "references")).map((lane, laneIndex) => {
                 const left = CANVAS_PADDING_X + laneIndex * LANE_GAP - 28;
                 return (
                   <div
@@ -1456,7 +1980,7 @@ const TemplateCanvas = () => {
           </div>
         </section>
 
-        <aside className="max-h-[calc(100vh-120px)] w-[350px] shrink-0 overflow-y-auto rounded-3xl border border-border/50 bg-card/70 p-5 shadow-sm">
+        <aside className="w-full rounded-3xl border border-border/50 bg-card/70 p-5 shadow-sm">
           <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">Inspector</p>
           {selectedNode && draft ? (
             <div className="mt-4 space-y-4">
@@ -1510,20 +2034,46 @@ const TemplateCanvas = () => {
                     >
                       <option value="upload">User Upload</option>
                       <option value="reference">Hidden Reference</option>
-                      <option value="workflow">Internal Scene Lock</option>
                     </select>
                   </div>
                   <div className="space-y-2">
                     <Label>Slot Key</Label>
                     <Input value={draft.slotKey} onChange={(event) => setDraft((current) => current ? { ...current, slotKey: event.target.value } : current)} />
                   </div>
-                  {(draft.editorMode === "reference" || draft.editorMode === "workflow") ? (
-                    <div className="space-y-2">
-                      <Label>Reference / Sample Image URL</Label>
+                  {draft.editorMode === "reference" ? (
+                    <div className="space-y-3 rounded-2xl border border-border/50 bg-background/50 p-3">
+                      <div className="flex items-center justify-between gap-3">
+                        <Label>Hidden Reference Asset</Label>
+                        {selectedNode.defaultAssetId ? (
+                          <span className="font-mono text-[10px] text-muted-foreground">{selectedNode.defaultAssetId.slice(0, 8)}</span>
+                        ) : null}
+                      </div>
+                      {referenceUploadPreview ? (
+                        <img src={referenceUploadPreview} alt="Reference upload preview" className="h-32 w-full rounded-xl border border-border/50 bg-background object-contain" />
+                      ) : selectedNode.defaultAssetUrl ? (
+                        <img src={selectedNode.defaultAssetUrl} alt={selectedNode.name} className="h-32 w-full rounded-xl border border-border/50 bg-background object-contain" />
+                      ) : (
+                        <div className="flex h-32 items-center justify-center rounded-xl border border-dashed border-border/60 bg-background/50 text-xs text-muted-foreground">
+                          No hidden asset attached
+                        </div>
+                      )}
+                      <div className="flex gap-2">
+                        <Input type="file" accept="image/*" onChange={(event) => handleReferenceUploadFile(event.target.files?.[0] ?? null)} />
+                        <Button
+                          type="button"
+                          size="icon"
+                          variant="outline"
+                          onClick={() => void uploadReferenceAsset()}
+                          disabled={!referenceUploadFile || uploadingReference}
+                          title="Upload hidden reference"
+                        >
+                          {uploadingReference ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+                        </Button>
+                      </div>
                       <Input
                         value={draft.sampleUrl}
                         onChange={(event) => setDraft((current) => current ? { ...current, sampleUrl: event.target.value } : current)}
-                        placeholder="https://..."
+                        placeholder="Fallback URL"
                       />
                     </div>
                   ) : null}
@@ -1559,7 +2109,12 @@ const TemplateCanvas = () => {
 
               {selectedNode.defaultAssetUrl ? (
                 <div className="space-y-2">
-                  <Label>Built-in Asset</Label>
+                  <div className="flex items-center justify-between gap-3">
+                    <Label>Built-in Asset</Label>
+                    {selectedNode.defaultAssetId ? (
+                      <span className="font-mono text-[10px] text-muted-foreground">{selectedNode.defaultAssetId}</span>
+                    ) : null}
+                  </div>
                   <img src={selectedNode.defaultAssetUrl} alt={selectedNode.name} className="h-44 w-full rounded-2xl border border-border/50 object-cover" />
                 </div>
               ) : null}

@@ -11,7 +11,7 @@ type SlotSeed = {
   matchNames?: string[];
 };
 
-export type EditorMode = "upload" | "reference" | "workflow";
+export type EditorMode = "upload" | "reference";
 
 type EditorSeedPatch = {
   nodeId: string;
@@ -92,7 +92,7 @@ function getText(record: Record<string, unknown> | null | undefined, key: string
 
 function getEditorMode(node: InputNodeLike): EditorMode | null {
   const configured = getText(node.prompt_config ?? {}, "editor_mode");
-  if (configured === "upload" || configured === "reference" || configured === "workflow") return configured;
+  if (configured === "upload" || configured === "reference") return configured;
   return null;
 }
 

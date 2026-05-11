@@ -2,6 +2,7 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 
 import { corsHeaders, createAdminClient, errorMessage, json } from "../_shared/supabase-admin.ts";
 import { buildTemplateInputPlan } from "../_shared/template-inputs.ts";
+import { getTemplateCreditCost } from "../_shared/template-pricing.ts";
 
 function parseOutputExposed(value: unknown) {
   if (typeof value === "boolean") return value;
@@ -184,6 +185,15 @@ Deno.serve(async (req) => {
         const hasExplicitVideoFlags = videoFlags.some((flag) => flag !== null);
         const cover = resolveCoverForVersion(version.id, template?.name);
 
+        const counts = {
+          imageOutputs: hasExplicitImageFlags
+            ? imageNodes.filter((node: any) => parseOutputExposed(node.prompt_config?.output_exposed) === true).length
+            : imageNodes.length,
+          videoOutputs: hasExplicitVideoFlags
+            ? videoNodes.filter((node: any) => parseOutputExposed(node.prompt_config?.output_exposed) === true).length
+            : videoNodes.length,
+        };
+
         return {
           templateId: version.template_id,
           templateName: template?.name ?? "Untitled Template",
@@ -192,14 +202,11 @@ Deno.serve(async (req) => {
           reviewStatus: version.review_status ?? "Unreviewed",
           previewUrl: cover.url,
           previewAssetType: cover.type,
+          estimatedCreditsPerRun: getTemplateCreditCost(template?.name, counts),
           counts: {
             inputs: inputPlan.slots.length,
-            imageOutputs: hasExplicitImageFlags
-              ? imageNodes.filter((node: any) => parseOutputExposed(node.prompt_config?.output_exposed) === true).length
-              : imageNodes.length,
-            videoOutputs: hasExplicitVideoFlags
-              ? videoNodes.filter((node: any) => parseOutputExposed(node.prompt_config?.output_exposed) === true).length
-              : videoNodes.length,
+            imageOutputs: counts.imageOutputs,
+            videoOutputs: counts.videoOutputs,
           },
           inputs: inputPlan.slots.map((slot) => ({
             id: slot.id,

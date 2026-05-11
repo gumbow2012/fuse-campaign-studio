@@ -175,28 +175,26 @@ export async function fetchTemplateDetail(
       );
       if (error) throw error;
 
+      const projectedInputs = Array.isArray((data as any)?.userInputs)
+        ? (data as any).userInputs
+        : [];
+      if (projectedInputs.length) {
+        return {
+          user_inputs: projectedInputs.map((field: any) => ({
+            key: String(field.key),
+            label: String(field.label),
+            type: normalizeInputType(field.type),
+            required: field.required ?? true,
+            hint: typeof field.hint === "string" ? field.hint : undefined,
+          })),
+        };
+      }
+
       const nodes = Array.isArray((data as any)?.nodes)
         ? (data as any).nodes
         : [];
       const uploadNodes = nodes.filter(
         (node: any) => node.editor?.mode === "upload",
-      );
-      const promptNode = nodes.find(
-        (node: any) => node.nodeType === "image_gen" && node.prompt,
-      );
-      const videoNode = nodes.find(
-        (node: any) => node.nodeType === "video_gen" && node.prompt,
-      );
-      const lockedImages = Object.fromEntries(
-        nodes
-          .filter(
-            (node: any) =>
-              node.editor?.mode !== "upload" && node.defaultAssetUrl,
-          )
-          .map((node: any) => [
-            String(node.editor?.slotKey || node.id),
-            String(node.defaultAssetUrl),
-          ]),
       );
 
       return {
@@ -207,12 +205,6 @@ export async function fetchTemplateDetail(
           required: true,
           hint: typeof node.summary === "string" ? node.summary : undefined,
         })),
-        locked_images: Object.keys(lockedImages).length
-          ? lockedImages
-          : undefined,
-        prompt: promptNode?.prompt || null,
-        video_prompt: videoNode?.prompt || null,
-        asset_requirements: describeTemplateAssets(nodes),
       };
     } catch {
       // Fall back to worker detail below.

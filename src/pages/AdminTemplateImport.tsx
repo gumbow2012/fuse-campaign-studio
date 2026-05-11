@@ -2,9 +2,10 @@
  * Admin — V6 Template Manager
  *
  * Two modes:
- *   1. HAR Import  — upload a Weavy HAR → parse recipes → convert to V6 steps → upload to R2
- *   2. Manual Edit — write / paste a V6 template JSON directly and upload to R2
+ *   1. Legacy Weavy Import — upload a browser network export → convert recipes to drafts
+ *   2. Manual Edit — write / paste a V6 template JSON directly and create a draft
  */
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { useState, useCallback } from "react";
 import SiteShell from "@/components/mvp/SiteShell";
 import { Button } from "@/components/ui/button";
@@ -16,10 +17,6 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 import { Upload, FileJson, Check, AlertCircle, Loader2 } from "lucide-react";
 
-const WORKER_BASE =
-  (import.meta.env.VITE_CF_WORKER_URL as string) ||
-  "https://shiny-rice-e95bfuse-api.kade-fc1.workers.dev";
-
 async function getToken(): Promise<string> {
   const {
     data: { session },
@@ -29,16 +26,36 @@ async function getToken(): Promise<string> {
 }
 
 async function uploadTemplateToWorker(token: string, name: string, template: object) {
-  const res = await fetch(`${WORKER_BASE}/admin/upload-template`, {
+  const steps = Array.isArray((template as any).steps) ? (template as any).steps : [];
+  const imageStep = steps.find((step: any) => {
+    const marker = `${step.type ?? ""} ${step.id ?? ""}`.toLowerCase();
+    return marker.includes("image") || marker.includes("nano") || marker.includes("banana");
+  });
+  const videoStep = steps.find((step: any) => {
+    const marker = `${step.type ?? ""} ${step.id ?? ""}`.toLowerCase();
+    return marker.includes("video") || marker.includes("kling") || marker.includes("i2v");
+  });
+  const outputCount = Math.max(1, Math.min(6, Number((template as any).expected_output_count ?? 1) || 1));
+
+  const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/admin-template-workbench`, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${token}`,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({ name, template }),
+    body: JSON.stringify({
+      action: "create_template",
+      name,
+      description: (template as any).description ?? "",
+      withStarterGraph: true,
+      starterPreset: "campaign",
+      outputCount,
+      imagePrompt: imageStep?.prompt ?? "Create a polished fashion campaign image using the uploaded product.",
+      videoPrompt: videoStep?.prompt ?? "Animate the generated campaign image into a short fashion ad.",
+    }),
   });
   const data = await res.json();
-  if (!res.ok) throw new Error((data as any).error || `Upload failed (${res.status})`);
+  if (!res.ok) throw new Error((data as any).error || `Draft create failed (${res.status})`);
   return data;
 }
 
@@ -83,7 +100,9 @@ function extractRecipesFromHar(har: any): WeavyRecipe[] {
           });
           break;
         }
-      } catch {}
+      } catch {
+        // Some HAR bodies are not JSON; keep scanning the next payload.
+      }
     }
   }
   return Array.from(seen.values());
@@ -209,7 +228,7 @@ const BLANK_TEMPLATE = {
 
 /* ═══════════════════════════════════════════════════════ */
 export default function AdminTemplateImport() {
-  /* ── HAR tab ── */
+  /* ── Legacy import tab ── */
   const [harTemplates, setHarTemplates] = useState<
     { recipe: WeavyRecipe; v6: any; uploaded: boolean }[]
   >([]);
@@ -222,7 +241,7 @@ export default function AdminTemplateImport() {
   const [manualError, setManualError] = useState<string | null>(null);
   const [manualUploading, setManualUploading] = useState(false);
 
-  /* ── HAR handlers ── */
+  /* ── Legacy import handlers ── */
   const handleFile = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     setParseError(null);
     setHarTemplates([]);
@@ -260,7 +279,7 @@ export default function AdminTemplateImport() {
         setHarTemplates((prev) =>
           prev.map((t, i) => (i === idx ? { ...t, uploaded: true } : t))
         );
-        toast({ title: `✅ Uploaded "${item.v6.name}"` });
+        toast({ title: `Draft created: "${item.v6.name}"` });
       } catch (err: any) {
         toast({ title: "Upload failed", description: err.message, variant: "destructive" });
       } finally {
@@ -302,7 +321,7 @@ export default function AdminTemplateImport() {
     try {
       const token = await getToken();
       const res = await uploadTemplateToWorker(token, parsed.name, parsed);
-      toast({ title: `✅ Uploaded "${parsed.name}"`, description: (res as any).key });
+      toast({ title: `Draft created: "${parsed.name}"`, description: (res as any).versionId });
     } catch (err: any) {
       setManualError(err.message);
     } finally {
@@ -315,14 +334,13 @@ export default function AdminTemplateImport() {
       <div className="container mx-auto max-w-5xl px-4 pb-12 pt-10">
         <h1 className="text-2xl font-bold mb-2">Template Manager</h1>
         <p className="text-sm text-muted-foreground mb-8">
-          Upload V6 step-based templates to R2. Each template defines a FAL image edit +
-          Kling video pipeline.
+          Convert step-based templates into editable Fuse drafts.
         </p>
 
         <Tabs defaultValue="manual">
           <TabsList className="mb-6">
             <TabsTrigger value="manual">Manual / Edit JSON</TabsTrigger>
-            <TabsTrigger value="har">Import from Weavy HAR</TabsTrigger>
+            <TabsTrigger value="har">Legacy Weavy Import</TabsTrigger>
           </TabsList>
 
           {/* ── Manual tab ── */}
@@ -347,7 +365,7 @@ export default function AdminTemplateImport() {
                 )}
                 <Button onClick={handleManualUpload} disabled={manualUploading}>
                   {manualUploading && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
-                  <Upload className="h-4 w-4 mr-2" /> Upload to R2
+                  <Upload className="h-4 w-4 mr-2" /> Create Draft
                 </Button>
               </CardContent>
             </Card>
@@ -358,14 +376,13 @@ export default function AdminTemplateImport() {
             <Card className="mb-6">
               <CardHeader>
                 <CardTitle className="text-base flex items-center gap-2">
-                  <FileJson className="h-5 w-5" /> Upload Weavy HAR File
+                  <FileJson className="h-5 w-5" /> Upload Legacy Weavy Export
                 </CardTitle>
               </CardHeader>
               <CardContent>
                 <p className="text-xs text-muted-foreground mb-3">
-                  In Chrome DevTools → Network tab, click "Save all as HAR with content" while
-                  working in the Weavy editor. Upload that file here to extract and convert all
-                  recipe node graphs to V6 steps format.
+                  HAR is a Chrome Network export from the old Weavy editor. Use this only for
+                  converting legacy recipe node graphs.
                 </p>
                 <Input
                   type="file"
@@ -396,7 +413,7 @@ export default function AdminTemplateImport() {
                     {harTemplates.length !== 1 && "s"}
                   </CardTitle>
                   <Button size="sm" onClick={uploadAll}>
-                    Upload All to R2
+                    Create All Drafts
                   </Button>
                 </CardHeader>
                 <CardContent className="space-y-3">
@@ -414,7 +431,7 @@ export default function AdminTemplateImport() {
                       </div>
                       {item.uploaded ? (
                         <Badge variant="secondary" className="gap-1">
-                          <Check className="h-3 w-3" /> Uploaded
+                          <Check className="h-3 w-3" /> Created
                         </Badge>
                       ) : (
                         <Button
@@ -426,7 +443,7 @@ export default function AdminTemplateImport() {
                           {uploadingIds.has(item.recipe.id) && (
                             <Loader2 className="h-3 w-3 animate-spin mr-1" />
                           )}
-                          Upload
+                          Create
                         </Button>
                       )}
                     </div>

@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { toast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
-import { STRIPE_TIERS } from "@/lib/stripe-config";
+import { CREDIT_PACKS, STRIPE_TIERS } from "@/lib/stripe-config";
 
 const tierCopy = {
   starter: {
@@ -113,6 +113,32 @@ export default function BillingPage() {
       toast({
         title: "Portal failed",
         description: error instanceof Error ? error.message : "Could not open the billing portal.",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(null);
+    }
+  };
+
+  const handleCreditCheckout = async (packKey: keyof typeof CREDIT_PACKS) => {
+    if (!user) {
+      navigate("/auth?mode=signup");
+      return;
+    }
+    if (isAdmin) return;
+
+    setLoading(packKey);
+    try {
+      const { data, error } = await supabase.functions.invoke("create-credit-checkout", {
+        body: { packKey },
+      });
+      if (error) throw error;
+      if (!data?.url) throw new Error("Stripe checkout URL not returned.");
+      window.location.assign(data.url);
+    } catch (error) {
+      toast({
+        title: "Credit checkout failed",
+        description: error instanceof Error ? error.message : "Could not start credit checkout.",
         variant: "destructive",
       });
     } finally {
@@ -253,6 +279,44 @@ export default function BillingPage() {
             })}
           </section>
         </div>
+
+        <section className="mt-8 rounded-[2rem] border border-white/10 bg-white/[0.03] p-6">
+          <div className="flex flex-wrap items-end justify-between gap-4">
+            <div>
+              <p className="text-[11px] uppercase tracking-[0.24em] text-muted-foreground">Credit packs</p>
+              <h2 className="mt-2 font-display text-3xl font-semibold tracking-[-0.04em] text-white">
+                Top up without changing your plan.
+              </h2>
+              <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-300">
+                One-time Stripe checkout. Credits post automatically after payment clears.
+              </p>
+            </div>
+          </div>
+
+          <div className="mt-6 grid gap-4 md:grid-cols-3">
+            {(Object.keys(CREDIT_PACKS) as Array<keyof typeof CREDIT_PACKS>).map((packKey) => {
+              const pack = CREDIT_PACKS[packKey];
+              return (
+                <article key={packKey} className="rounded-[1.5rem] border border-white/10 bg-slate-950/75 p-5">
+                  <p className="font-display text-xl font-semibold text-white">{pack.name}</p>
+                  <p className="mt-3 text-4xl font-semibold text-white">
+                    ${pack.price}
+                    <span className="ml-1 text-sm font-normal text-slate-400">one-time</span>
+                  </p>
+                  <p className="mt-2 text-sm text-slate-300">{pack.credits} credits</p>
+                  <Button
+                    onClick={() => void handleCreditCheckout(packKey)}
+                    disabled={isAdmin || !!loading}
+                    className="mt-6 w-full rounded-full bg-cyan-300 text-slate-950 hover:bg-cyan-200"
+                  >
+                    {isAdmin ? "Admin access" : loading === packKey ? "Loading..." : "Buy credits"}
+                    {!isAdmin ? <ArrowRight className="h-4 w-4" /> : null}
+                  </Button>
+                </article>
+              );
+            })}
+          </div>
+        </section>
       </section>
     </SiteShell>
   );

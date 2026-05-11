@@ -39,7 +39,7 @@ function resolveStepError(step: any) {
 
 function classifyHiddenReference(node: any) {
   const editor = getNodeEditorConfig(node);
-  return editor.mode === "reference" || editor.mode === "workflow" || !!node.default_asset_id;
+  return editor.mode === "reference" || !!node.default_asset_id;
 }
 
 function sortByParam(a: string | null | undefined, b: string | null | undefined) {
@@ -272,7 +272,6 @@ export async function buildJobStatusResponse(admin: AdminClient, jobId: string, 
         const resolvedSource = resolved.get(edge.source_node_id);
         const isHiddenReference = !!source && source.node_type === "user_input" && (
           sourceEditor?.mode === "reference" ||
-          sourceEditor?.mode === "workflow" ||
           !inputPlan.slotByNodeId[source.id]
         );
 

@@ -55,6 +55,12 @@ verify_jwt = false
 [functions.stripe-webhook-test]
 verify_jwt = false
 
+[functions.create-credit-checkout]
+verify_jwt = false
+
+[functions.create-credit-checkout-test]
+verify_jwt = false
+
 [functions.lab-template-catalog]
 verify_jwt = false
 

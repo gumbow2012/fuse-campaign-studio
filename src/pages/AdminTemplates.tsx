@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
-import { GitBranch, Loader2, Network, Plus, TestTube2 } from "lucide-react";
+import { GitBranch, Loader2, Network, TestTube2 } from "lucide-react";
 import SiteShell from "@/components/mvp/SiteShell";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -72,12 +72,6 @@ export default function AdminTemplates() {
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
-            <Button asChild variant="outline" size="sm" className="rounded-full border-white/15 bg-white/5">
-              <Link to="/admin/templates/import">
-                <Plus className="mr-2 h-4 w-4" />
-                Import HAR
-              </Link>
-            </Button>
             <Button asChild size="sm" className="rounded-full bg-cyan-300 text-slate-950 hover:bg-cyan-200">
               <Link to="/app/lab/canvas">
                 <Network className="mr-2 h-4 w-4" />
