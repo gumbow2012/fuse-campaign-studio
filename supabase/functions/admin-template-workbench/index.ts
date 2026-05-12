@@ -27,6 +27,9 @@ type StarterPreset = "campaign" | "reference" | "blank";
 type ReferenceAssetDraft = {
   label?: string | null;
   prompt?: string | null;
+  inputSlotKey?: string | null;
+  imagePrompt?: string | null;
+  videoPrompt?: string | null;
   file?: {
     dataUrl?: string | null;
     filename?: string | null;
@@ -73,6 +76,9 @@ function readReferenceDrafts(value: unknown): ReferenceAssetDraft[] {
     return {
       label: cleanText(record.label, `Reference ${index + 1}`),
       prompt: nullableText(record.prompt),
+      inputSlotKey: nullableText(record.inputSlotKey),
+      imagePrompt: nullableText(record.imagePrompt),
+      videoPrompt: nullableText(record.videoPrompt),
       file,
     };
   });
@@ -254,12 +260,12 @@ async function starterNodes(args: {
     slot,
     index,
   }));
-  const outputCount = Math.max(1, Math.min(6, args.outputCount ?? 1));
-  const imagePrompt = cleanText(
+  const outputCount = Math.max(1, Math.min(8, args.outputCount ?? (inputNodes.length || 1)));
+  const fallbackImagePrompt = cleanText(
     args.imagePrompt,
-    "Create a polished fashion campaign image using the uploaded product and hidden brand reference for scene direction.",
+    "Create a polished fashion campaign image using the uploaded input and hidden brand reference for scene direction.",
   );
-  const videoPrompt = cleanText(
+  const fallbackVideoPrompt = cleanText(
     args.videoPrompt,
     "Animate the campaign image into a short fashion ad with natural motion and premium brand pacing.",
   );
@@ -293,12 +299,19 @@ async function starterNodes(args: {
     }),
   );
 
-  const outputGroups = Array.from({ length: outputCount }).map((_, index) => ({
-    imageId: crypto.randomUUID(),
-    videoId: crypto.randomUUID(),
-    reference: references[index] ?? references[0] ?? null,
-    index,
-  }));
+  const outputGroups = Array.from({ length: outputCount }).map((_, index) => {
+    const draft = referenceAssets[index] ?? {};
+    const input = inputNodes.find((node) => node.slot.key === draft.inputSlotKey) ?? inputNodes[index % inputNodes.length] ?? inputNodes[0];
+    return {
+      imageId: crypto.randomUUID(),
+      videoId: crypto.randomUUID(),
+      reference: references[index] ?? references[0] ?? null,
+      input,
+      imagePrompt: cleanText(draft.imagePrompt, fallbackImagePrompt),
+      videoPrompt: cleanText(draft.videoPrompt, fallbackVideoPrompt),
+      index,
+    };
+  });
 
   return {
     nodes: [
@@ -336,8 +349,8 @@ async function starterNodes(args: {
       ...outputGroups.flatMap((group) => {
         const numberSuffix = outputCount > 1 ? ` ${group.index + 1}` : "";
         const imagePromptWithReference = group.reference?.prompt
-          ? `${imagePrompt}\n\nHidden guide prompt: ${group.reference.prompt}`
-          : imagePrompt;
+          ? `${group.imagePrompt}\n\nHidden guide prompt: ${group.reference.prompt}`
+          : group.imagePrompt;
         return [{
         id: group.imageId,
         version_id: versionId,
@@ -348,7 +361,7 @@ async function starterNodes(args: {
           output_exposed: true,
         },
         default_asset_id: null,
-        name: `Image Output${numberSuffix}`,
+        name: `${group.input.slot.label} Image Output${numberSuffix}`,
       },
       {
         id: group.videoId,
@@ -356,24 +369,24 @@ async function starterNodes(args: {
         node_type: "video_gen",
         model_id: null,
         prompt_config: {
-          prompt: videoPrompt,
+          prompt: group.videoPrompt,
           output_exposed: true,
         },
         default_asset_id: null,
-        name: `Video Output${numberSuffix}`,
+        name: `${group.input.slot.label} Video Output${numberSuffix}`,
       }];
       }),
     ],
     edges: [
       ...outputGroups.flatMap((group) => {
-        const edges = inputNodes.map((input, inputIndex) => ({
+        const edges = [{
           id: crypto.randomUUID(),
           version_id: versionId,
-          source_node_id: input.id,
+          source_node_id: group.input.id,
           target_node_id: group.imageId,
-          mapping_logic: { target_param: input.slot.targetParam || (inputIndex === 0 ? "image_1" : `image_${inputIndex + 1}`) },
+          mapping_logic: { target_param: group.input.slot.targetParam || "image_1" },
           condition_logic: null,
-        }));
+        }];
         if (group.reference) {
           edges.push({
             id: crypto.randomUUID(),

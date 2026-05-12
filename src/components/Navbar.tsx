@@ -164,9 +164,9 @@ const Navbar = () => {
     >
       <div className="container mx-auto flex items-center justify-between h-16 px-6">
         {/* Logo */}
-        <Link to="/" className="flex items-center gap-2.5">
-          <img src="/fuse-icon.svg" alt="" className="h-8 w-8 rounded-xl" />
-          <span className="font-display text-2xl font-extrabold tracking-tight text-foreground">FUSE</span>
+        <Link to="/" className="flex items-center gap-3">
+          <img src="/fuse-icon.png" alt="" className="h-9 w-9 rounded-xl object-contain" />
+          <img src="/fuse-wordmark.png" alt="FUSE" className="h-6 w-auto object-contain" />
         </Link>
 
         {/* Center nav */}

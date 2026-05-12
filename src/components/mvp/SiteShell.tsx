@@ -26,9 +26,9 @@ export default function SiteShell({ children }: { children: ReactNode }) {
       <header className="sticky top-0 z-40 border-b border-white/10 bg-background/75 backdrop-blur-xl">
         <div className="container flex flex-col gap-3 py-4 md:flex-row md:items-center md:justify-between">
           <Link to="/" className="flex items-center gap-3">
-            <img src="/fuse-icon.svg" alt="" className="h-11 w-11 rounded-2xl" />
+            <img src="/fuse-icon.png" alt="" className="h-11 w-11 rounded-2xl object-contain" />
             <div>
-              <p className="font-display text-xl font-bold tracking-[0.22em] text-foreground">FUSE</p>
+              <img src="/fuse-wordmark.png" alt="FUSE" className="h-5 w-auto object-contain" />
               <p className="text-[10px] uppercase tracking-[0.28em] text-muted-foreground">Campaign Asset Studio</p>
             </div>
           </Link>
