@@ -11,18 +11,18 @@ import { CREDIT_PACKS, STRIPE_TIERS } from "@/lib/stripe-config";
 const tierCopy = {
   starter: {
     icon: Zap,
-    description: "For smaller brands running consistent drops.",
-    features: ["500 monthly credits", "Template runner access", "Standard queue"],
+    description: "For streetwear brands testing their first AI campaign drops.",
+    features: ["3,000 monthly credits", "About 3 eight-output runs", "About 7 three-output runs"],
   },
   pro: {
     icon: Rocket,
-    description: "For brands shipping weekly campaigns.",
-    features: ["2,000 monthly credits", "Priority queueing", "Faster iteration loops"],
+    description: "For brands running weekly content across multiple templates.",
+    features: ["18,000 monthly credits", "About 19 eight-output runs", "About 42 three-output runs"],
   },
   studio: {
     icon: Crown,
-    description: "For larger teams or agencies operating multiple brands.",
-    features: ["6,000 monthly credits", "Largest monthly allotment", "Best fit for active ops"],
+    description: "For agencies and teams managing multiple brands at scale.",
+    features: ["55,000 monthly credits", "About 58 eight-output runs", "About 130 three-output runs"],
   },
 } as const;
 
@@ -343,7 +343,7 @@ export default function BillingPage() {
                     ${tier.price}
                     <span className="ml-1 text-sm font-normal text-slate-400">/mo</span>
                   </p>
-                  <p className="mt-2 text-sm text-slate-300">{tier.monthlyCredits} credits each cycle</p>
+                  <p className="mt-2 text-sm text-slate-300">{tier.monthlyCredits.toLocaleString()} credits each cycle</p>
 
                   <ul className="mt-5 space-y-3 text-sm text-slate-200">
                     {tierMeta.features.map((feature) => (

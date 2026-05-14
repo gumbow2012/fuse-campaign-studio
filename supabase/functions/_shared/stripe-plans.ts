@@ -27,19 +27,19 @@ const PLAN_META = {
   starter: {
     key: "starter" as const,
     name: "Starter",
-    monthlyCredits: 500,
+    monthlyCredits: 3000,
     price: 25,
   },
   pro: {
     key: "pro" as const,
     name: "Pro",
-    monthlyCredits: 2000,
+    monthlyCredits: 18000,
     price: 149,
   },
   studio: {
     key: "studio" as const,
     name: "Studio",
-    monthlyCredits: 6000,
+    monthlyCredits: 55000,
     price: 399,
   },
 } as const;

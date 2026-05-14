@@ -21,6 +21,14 @@ import RunFeedbackCard from "@/components/mvp/RunFeedbackCard";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
 import { Textarea } from "@/components/ui/textarea";
@@ -69,10 +77,17 @@ interface RecentRun {
 const EMPTY_TEMPLATES: ApiTemplate[] = [];
 const EMPTY_RECENT_RUNS: RecentRun[] = [];
 
-const TEMPLATE_CACHE_KEY = "fuse.templateStudio.templates.v3";
+const TEMPLATE_CACHE_KEY = "fuse.templateStudio.templates.v4";
 const TEMPLATE_DETAIL_CACHE_KEY = "fuse.templateStudio.templateDetails.v3";
 const TEMPLATE_SELECTION_KEY = "fuse.templateStudio.selectedTemplateId";
+const UPLOAD_GUIDELINES_KEY = "fuse.templateStudio.uploadGuidelinesSeen.v1";
 const ACTIVE_RUN_STATUSES = new Set<RunnerStatus>(["queued", "running", "video_pending"]);
+const UPLOAD_GUIDELINES = [
+  ["Recommended size", "1080 x 1920px or larger"],
+  ["Max file size", "10 MB per image"],
+  ["Background", "White or clean neutral surface"],
+  ["Image quality", "Clear, sharp, and well lit"],
+] as const;
 
 function readCachedJson<T>(key: string, fallback: T) {
   if (typeof window === "undefined") return fallback;
@@ -194,6 +209,115 @@ function isVideoPreview(template: Pick<ApiTemplate, "preview_url" | "preview_ass
   return /\.(mp4|mov|webm)(\?|$)/i.test(template.preview_url ?? "");
 }
 
+function getTemplateInputCount(template: ApiTemplate) {
+  return Number(template.counts?.inputs ?? template.input_schema?.length ?? 0);
+}
+
+function getTemplateOutputCount(template: Pick<ApiTemplate, "counts" | "output_type"> | null | undefined) {
+  const countedOutputs = Number(template?.counts?.imageOutputs ?? 0) + Number(template?.counts?.videoOutputs ?? 0);
+  if (countedOutputs > 0) return countedOutputs;
+  return template?.output_type ? 1 : 0;
+}
+
+function formatCount(count: number, singular: string, plural: string) {
+  return `${count} ${count === 1 ? singular : plural}`;
+}
+
+function getUploadIllustrationKind(label: string) {
+  const normalized = label.toLowerCase();
+  if (/(logo|brand|mark)/.test(normalized)) return "logo";
+  if (/(bottom|pant|trouser|short|jean)/.test(normalized)) return "pants";
+  if (/(hat|cap|head|accessory|accessories)/.test(normalized)) return "accessory";
+  if (/(shoe|sneaker|boot|footwear)/.test(normalized)) return "shoe";
+  if (/(model|person|human|reference)/.test(normalized)) return "model";
+  return "shirt";
+}
+
+function UploadPlaceholderIllustration({
+  file,
+  label,
+}: {
+  file: File | null;
+  label: string;
+}) {
+  const previewUrl = useMemo(() => (file ? URL.createObjectURL(file) : null), [file]);
+
+  useEffect(() => {
+    return () => {
+      if (previewUrl) URL.revokeObjectURL(previewUrl);
+    };
+  }, [previewUrl]);
+
+  if (previewUrl) {
+    return (
+      <img
+        src={previewUrl}
+        alt={`${label} preview`}
+        className="h-full w-full object-cover"
+      />
+    );
+  }
+
+  const kind = getUploadIllustrationKind(label);
+
+  return (
+    <div className="flex h-full w-full items-center justify-center bg-[radial-gradient(circle_at_top,rgba(34,211,238,0.08),transparent_44%),linear-gradient(180deg,rgba(255,255,255,0.035),rgba(255,255,255,0.015))] text-cyan-100/28">
+      <svg
+        viewBox="0 0 120 180"
+        aria-hidden="true"
+        className="h-[72%] w-[72%]"
+        fill="none"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="3"
+      >
+        {kind === "logo" ? (
+          <>
+            <rect x="28" y="34" width="64" height="64" rx="14" />
+            <path d="M43 82V50h36" />
+            <path d="M43 66h29" />
+            <path d="M43 82h32" />
+            <path d="M35 122h50" />
+            <path d="M44 138h32" />
+          </>
+        ) : kind === "pants" ? (
+          <>
+            <path d="M43 32h34l7 122H67L60 86l-7 68H36L43 32Z" />
+            <path d="M43 48h34" />
+            <path d="M60 38v48" />
+          </>
+        ) : kind === "accessory" ? (
+          <>
+            <path d="M36 82c8-24 40-24 48 0" />
+            <path d="M28 84h64c8 0 15 5 18 12" />
+            <path d="M38 108h44" />
+            <path d="M44 124h32" />
+          </>
+        ) : kind === "shoe" ? (
+          <>
+            <path d="M33 101c12 4 25 2 39-10 12 12 23 21 38 22 0 13-9 20-25 20H38c-10 0-16-8-13-19l8-13Z" />
+            <path d="M69 96l-8 14" />
+            <path d="M79 102l-8 13" />
+          </>
+        ) : kind === "model" ? (
+          <>
+            <circle cx="60" cy="42" r="14" />
+            <path d="M42 78c5-14 31-14 36 0l8 64H34l8-64Z" />
+            <path d="M46 104h28" />
+          </>
+        ) : (
+          <>
+            <path d="M43 47 25 65l14 24 12-8v73h18V81l12 8 14-24-18-18-12 10H55l-12-10Z" />
+            <path d="M51 58h18" />
+            <path d="M51 139h18" />
+          </>
+        )}
+      </svg>
+    </div>
+  );
+}
+
 function TemplateVibeMedia({
   template,
   className,
@@ -239,6 +363,7 @@ export default function TemplateStudioPage() {
     if (typeof window === "undefined") return "";
     return window.localStorage.getItem(TEMPLATE_SELECTION_KEY) ?? "";
   });
+  const [showUploadGuidelines, setShowUploadGuidelines] = useState(false);
   const [files, setFiles] = useState<Record<string, File | null>>({});
   const [textInputs, setTextInputs] = useState<Record<string, string>>({});
   const [jobId, setJobId] = useState<string | null>(null);
@@ -250,6 +375,13 @@ export default function TemplateStudioPage() {
   const runnerSectionRef = useRef<HTMLElement | null>(null);
   const isPrivilegedUser = hasAppAccess;
   const recentRunsLimit = isPrivilegedUser ? 4 : 1;
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (!window.localStorage.getItem(UPLOAD_GUIDELINES_KEY)) {
+      setShowUploadGuidelines(true);
+    }
+  }, []);
 
   const templatesQuery = useQuery<ApiTemplate[]>({
     queryKey: ["mvp-templates"],
@@ -429,6 +561,7 @@ export default function TemplateStudioPage() {
     .every((field) => (field.type === "image" ? !!files[field.key] : !!textInputs[field.key]?.trim()));
 
   const creditsRequired = selectedTemplate?.estimated_credits_per_run ?? 0;
+  const selectedTemplateOutputCount = getTemplateOutputCount(selectedTemplate);
   const creditBalance = profile?.credits_balance ?? 0;
   const canAfford = isPrivilegedUser || creditBalance >= creditsRequired;
   const hasActiveMembership =
@@ -452,6 +585,13 @@ export default function TemplateStudioPage() {
       window.requestAnimationFrame(() => {
         runnerSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
       });
+    }
+  };
+
+  const handleUploadGuidelinesOpenChange = (open: boolean) => {
+    setShowUploadGuidelines(open);
+    if (!open && typeof window !== "undefined") {
+      window.localStorage.setItem(UPLOAD_GUIDELINES_KEY, "true");
     }
   };
 
@@ -544,6 +684,38 @@ export default function TemplateStudioPage() {
 
   return (
     <SiteShell>
+      <Dialog open={showUploadGuidelines} onOpenChange={handleUploadGuidelinesOpenChange}>
+        <DialogContent className="border-white/10 bg-slate-950 text-white shadow-[0_28px_90px_rgba(0,0,0,0.55)] sm:max-w-xl sm:rounded-[1.75rem]">
+          <DialogHeader>
+            <DialogTitle className="font-display text-3xl tracking-[-0.04em] text-white">
+              Upload guidelines
+            </DialogTitle>
+            <DialogDescription className="text-sm leading-6 text-slate-300">
+              Use clean vertical assets so the templates can preserve product detail and brand consistency.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="grid gap-3 sm:grid-cols-2">
+            {UPLOAD_GUIDELINES.map(([label, value]) => (
+              <div key={label} className="rounded-[1.25rem] border border-white/10 bg-white/[0.04] p-4">
+                <p className="text-[10px] uppercase tracking-[0.22em] text-slate-500">{label}</p>
+                <p className="mt-2 text-sm font-medium text-slate-100">{value}</p>
+              </div>
+            ))}
+          </div>
+
+          <DialogFooter>
+            <Button
+              type="button"
+              onClick={() => handleUploadGuidelinesOpenChange(false)}
+              className="rounded-full bg-cyan-300 text-slate-950 hover:bg-cyan-200"
+            >
+              Got it
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <section className="container py-12 md:py-16">
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
@@ -615,7 +787,8 @@ export default function TemplateStudioPage() {
               {templates.map((template) => {
                 const selected = template.id === selectedTemplateId;
                 const credits = template.estimated_credits_per_run || 0;
-                const inputCount = template.input_schema?.length || 0;
+                const inputCount = getTemplateInputCount(template);
+                const outputCount = getTemplateOutputCount(template);
 
                 return (
                   <button
@@ -653,8 +826,8 @@ export default function TemplateStudioPage() {
                       </div>
 
                       <div className="flex items-center justify-between gap-2 text-[10px] uppercase tracking-[0.18em] text-slate-400">
-                        <span>{inputCount} input{inputCount === 1 ? "" : "s"}</span>
-                        <span>{template.output_type || "image"}</span>
+                        <span>{formatCount(inputCount, "INPUT", "INPUTS")}</span>
+                        <span>{formatCount(outputCount, "OUTPUT", "OUTPUTS")}</span>
                       </div>
                     </div>
                   </button>
@@ -681,7 +854,10 @@ export default function TemplateStudioPage() {
                     </div>
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="rounded-full border border-white/10 px-3 py-1 text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
-                        {inputFields.length} input{inputFields.length === 1 ? "" : "s"}
+                        {formatCount(inputFields.length, "input", "inputs")}
+                      </span>
+                      <span className="rounded-full border border-white/10 px-3 py-1 text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
+                        {formatCount(selectedTemplateOutputCount, "output", "outputs")}
                       </span>
                       <span className="rounded-full border border-white/10 px-3 py-1 text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
                         {isPrivilegedUser ? <span className="line-through decoration-cyan-200/90 decoration-2">{creditsRequired} cr</span> : `${creditsRequired} cr`}
@@ -693,14 +869,19 @@ export default function TemplateStudioPage() {
                     {inputFields.map((field) => (
                       <div key={field.key} className="rounded-[1.5rem] border border-white/8 bg-black/20 p-4">
                         {field.type === "image" ? (
-                          <label className="group/upload flex aspect-[9/16] cursor-pointer flex-col items-center justify-center rounded-[1.25rem] border border-dashed border-white/14 bg-white/[0.03] p-5 text-center transition hover:border-cyan-200/45 hover:bg-cyan-300/[0.06]">
-                            <span className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-300">{field.label}</span>
-                            <span className="mt-5 flex h-12 w-12 items-center justify-center rounded-full border border-white/10 bg-black/25 text-cyan-100">
-                              <Upload className="h-5 w-5" />
-                            </span>
-                            <span className="mt-3 text-sm font-medium text-white">
-                              {files[field.key] ? files[field.key]?.name : "Upload image"}
-                            </span>
+                          <label className="group/upload flex aspect-[9/16] cursor-pointer flex-col overflow-hidden rounded-[1.25rem] border border-dashed border-white/14 bg-white/[0.03] transition hover:border-cyan-200/45 hover:bg-cyan-300/[0.06]">
+                            <div className="min-h-0 flex-1 overflow-hidden">
+                              <UploadPlaceholderIllustration file={files[field.key] ?? null} label={field.label} />
+                            </div>
+                            <div className="border-t border-white/10 bg-black/30 p-3">
+                              <span className="block truncate text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-300">{field.label}</span>
+                              <span className="mt-2 flex min-w-0 items-center gap-2 text-sm font-medium text-white">
+                                <Upload className="h-4 w-4 shrink-0 text-cyan-100" />
+                                <span className="truncate">
+                                  {files[field.key] ? files[field.key]?.name : "Upload image"}
+                                </span>
+                              </span>
+                            </div>
                             <input
                               type="file"
                               accept="image/*"

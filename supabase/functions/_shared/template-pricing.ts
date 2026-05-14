@@ -1,10 +1,13 @@
-const DEFAULT_TEMPLATE_CREDIT_COST = 50;
-const BASE_IMAGE_OUTPUT_CREDITS = 50;
-const ADDITIONAL_IMAGE_OUTPUT_CREDITS = 12;
-const VIDEO_OUTPUT_CREDITS = 35;
+const TEMPLATE_CREDIT_COST_BY_OUTPUT_COUNT = [
+  { maxOutputs: 1, credits: 210 },
+  { maxOutputs: 2, credits: 315 },
+  { maxOutputs: 3, credits: 420 },
+  { maxOutputs: 4, credits: 525 },
+  { maxOutputs: 5, credits: 735 },
+  { maxOutputs: Number.POSITIVE_INFINITY, credits: 945 },
+] as const;
 
 const TEMPLATE_CREDIT_COSTS: Record<string, number> = {
-  "armored truck": 572,
 };
 
 function normalizeTemplateName(value: string | null | undefined) {
@@ -46,19 +49,17 @@ export function estimateTemplateCreditCost(args: {
 }) {
   const imageOutputs = Math.max(0, Number(args.imageOutputs ?? 0));
   const videoOutputs = Math.max(0, Number(args.videoOutputs ?? 0));
+  return getTemplateCreditCostByOutputCount(imageOutputs + videoOutputs);
+}
 
-  let credits = 0;
+export function getTemplateCreditCostByOutputCount(outputCount: number | null | undefined) {
+  const parsedOutputCount = Math.ceil(Number(outputCount ?? 0));
+  if (!Number.isFinite(parsedOutputCount) || parsedOutputCount <= 0) return 0;
 
-  if (imageOutputs > 0) {
-    credits += BASE_IMAGE_OUTPUT_CREDITS;
-    credits += Math.max(0, imageOutputs - 1) * ADDITIONAL_IMAGE_OUTPUT_CREDITS;
-  }
-
-  if (videoOutputs > 0) {
-    credits += videoOutputs * VIDEO_OUTPUT_CREDITS;
-  }
-
-  return Math.max(DEFAULT_TEMPLATE_CREDIT_COST, credits);
+  const pricingTier = TEMPLATE_CREDIT_COST_BY_OUTPUT_COUNT.find(
+    (tier) => parsedOutputCount <= tier.maxOutputs,
+  );
+  return pricingTier?.credits ?? 945;
 }
 
 export function getTemplateCreditCost(

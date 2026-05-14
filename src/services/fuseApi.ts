@@ -48,6 +48,36 @@ function describeTemplateAssets(nodes: any[]) {
   return null;
 }
 
+type CatalogTemplate = {
+  counts?: {
+    inputs?: unknown;
+    imageOutputs?: unknown;
+    videoOutputs?: unknown;
+  } | null;
+  inputs?: CatalogTemplateInput[] | null;
+  templateId?: unknown;
+  templateName?: unknown;
+  versionId?: unknown;
+  estimatedCreditsPerRun?: unknown;
+  previewUrl?: string | null;
+  previewAssetType?: "image" | "video" | null;
+  reviewStatus?: string | null;
+};
+
+type CatalogTemplateInput = {
+  id?: unknown;
+  name?: unknown;
+  expected?: string | null;
+};
+
+type LegacyTemplateRow = {
+  name: string | null;
+  input_schema: unknown;
+  output_type: string | null;
+  expected_output_count?: number | null;
+  [key: string]: unknown;
+};
+
 /* ── Templates ── */
 
 export interface ApiTemplate {
@@ -74,6 +104,11 @@ export interface ApiTemplate {
   tags: string[] | null;
   asset_requirements: string | null;
   review_status?: string | null;
+  counts?: {
+    inputs: number;
+    imageOutputs: number;
+    videoOutputs: number;
+  } | null;
 }
 
 export async function fetchTemplates(token: string): Promise<ApiTemplate[]> {
@@ -86,11 +121,17 @@ export async function fetchTemplates(token: string): Promise<ApiTemplate[]> {
     );
     if (error) throw error;
 
-    const templates = Array.isArray((data as any)?.templates)
-      ? (data as any).templates
+    const catalogPayload = data as { templates?: unknown } | null;
+    const templates: CatalogTemplate[] = Array.isArray(catalogPayload?.templates)
+      ? catalogPayload.templates as CatalogTemplate[]
       : [];
     if (templates.length) {
-      return templates.map((template: any) => ({
+      return templates.map((template) => ({
+        counts: {
+          inputs: Number(template?.counts?.inputs ?? 0),
+          imageOutputs: Number(template?.counts?.imageOutputs ?? 0),
+          videoOutputs: Number(template?.counts?.videoOutputs ?? 0),
+        },
         id: String(template.templateName),
         templateId: template.templateId ?? null,
         versionId: template.versionId ?? null,
@@ -104,7 +145,7 @@ export async function fetchTemplates(token: string): Promise<ApiTemplate[]> {
         ),
         is_active: true,
         input_schema: Array.isArray(template.inputs)
-          ? template.inputs.map((input: any) => ({
+          ? template.inputs.map((input) => ({
               key: String(input.id),
               label: String(input.name),
               type: normalizeInputType(input.expected),
@@ -123,7 +164,7 @@ export async function fetchTemplates(token: string): Promise<ApiTemplate[]> {
   }
 
   try {
-    const data = await api<any>("/api/templates", token);
+    const data = await api<{ templates?: ApiTemplate[] } | ApiTemplate[]>("/api/templates", token);
     const result: ApiTemplate[] = Array.isArray(data)
       ? data
       : data.templates || [];
@@ -135,15 +176,20 @@ export async function fetchTemplates(token: string): Promise<ApiTemplate[]> {
   const { data: rows, error } = await supabase
     .from("templates")
     .select(
-      "id, name, description, category, output_type, estimated_credits_per_run, is_active, input_schema, preview_url, tags",
+      "id, name, description, category, output_type, estimated_credits_per_run, expected_output_count, is_active, input_schema, preview_url, tags",
     )
     .eq("is_active", true)
     .order("created_at", { ascending: false });
   if (error) throw new Error(error.message);
-  return (rows || []).map((t) => ({
+  return ((rows || []) as LegacyTemplateRow[]).map((t) => ({
     ...t,
     id: t.name as string,
     asset_requirements: null,
+    counts: {
+      inputs: Array.isArray(t.input_schema) ? t.input_schema.length : 0,
+      imageOutputs: t.output_type === "video" ? 0 : Number(t.expected_output_count ?? 1),
+      videoOutputs: t.output_type === "video" ? Number(t.expected_output_count ?? 1) : 0,
+    },
   })) as unknown as ApiTemplate[];
 }
 

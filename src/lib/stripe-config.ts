@@ -4,17 +4,17 @@ export type CreditPackKey = "boost" | "growth" | "bulk";
 export const STRIPE_TIERS = {
   starter: {
     name: "Starter",
-    monthlyCredits: 500,
+    monthlyCredits: 3000,
     price: 25,
   },
   pro: {
     name: "Pro",
-    monthlyCredits: 2000,
+    monthlyCredits: 18000,
     price: 149,
   },
   studio: {
     name: "Studio",
-    monthlyCredits: 6000,
+    monthlyCredits: 55000,
     price: 399,
   },
 } as const satisfies Record<StripeTierKey, {

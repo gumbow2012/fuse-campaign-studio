@@ -13,7 +13,7 @@ import {
 } from "../_shared/supabase-admin.ts";
 import { PAPARAZZI_VERSION_ID, refundJobCreditsIfNeeded, runGraphJob } from "../_shared/executor.ts";
 import { buildTemplateInputPlan } from "../_shared/template-inputs.ts";
-import { getTemplateCreditCost } from "../_shared/template-pricing.ts";
+import { countTemplateDeliverables, getTemplateCreditCost } from "../_shared/template-pricing.ts";
 
 declare const EdgeRuntime: {
   waitUntil(promise: Promise<unknown>): void;
@@ -25,6 +25,23 @@ type StartTemplateRunBody = {
   inputs?: Record<string, string>;
   inputFiles?: Record<string, { dataUrl: string; filename?: string }>;
 };
+
+type VersionNode = {
+  id: string;
+  name: string;
+  node_type?: string | null;
+  prompt_config?: Record<string, unknown> | null;
+  default_asset_id?: string | null;
+};
+
+function getVersionTemplateName(version: { fuse_templates?: unknown }) {
+  const relation = version.fuse_templates;
+  const template = Array.isArray(relation) ? relation[0] : relation;
+  if (!template || typeof template !== "object" || !("name" in template)) {
+    return "Untitled Template";
+  }
+  return String((template as { name?: unknown }).name ?? "Untitled Template");
+}
 
 function parseDataUrl(dataUrl: string) {
   const match = dataUrl.match(/^data:([^;]+);base64,(.+)$/);
@@ -156,9 +173,20 @@ Deno.serve(async (req) => {
     if (versionError || !version) throw new Error(versionError?.message ?? "Version not found");
     templateId = version.template_id;
 
+    const { data: versionNodes, error: versionNodesError } = await admin
+      .from("nodes")
+      .select("id, name, node_type, prompt_config, default_asset_id")
+      .eq("version_id", version.id);
+    if (versionNodesError) throw new Error(versionNodesError.message);
+
+    const allVersionNodes = (versionNodes ?? []) as VersionNode[];
+    const inputNodes = allVersionNodes.filter((node) => node.node_type === "user_input");
+    const executionNodes = allVersionNodes.filter((node) => node.node_type !== "user_input");
+    const deliverableCounts = countTemplateDeliverables(allVersionNodes);
+
     const userRoles = user ? await getUserRoles(user.id, admin) : [];
     const bypassCredits = runnerAccess || userRoles.some((role) => role === "admin" || role === "dev");
-    const templateName = (version as any).fuse_templates.name;
+    const templateName = getVersionTemplateName(version);
 
     let creditCost = 0;
     if (user && !bypassCredits) {
@@ -175,7 +203,7 @@ Deno.serve(async (req) => {
         throw new Error("Active membership required before running templates.");
       }
 
-      creditCost = getTemplateCreditCost(templateName);
+      creditCost = getTemplateCreditCost(templateName, deliverableCounts);
     }
 
     const { data: job, error: jobError } = await admin
@@ -196,15 +224,8 @@ Deno.serve(async (req) => {
 
     const uploadedInputs = await uploadInputFiles(admin, job.id, body.inputFiles);
 
-    const { data: inputNodes, error: inputNodesError } = await admin
-      .from("nodes")
-      .select("id, name, prompt_config, default_asset_id")
-      .eq("version_id", version.id)
-      .eq("node_type", "user_input");
-    if (inputNodesError) throw new Error(inputNodesError.message);
-
     const finalInputs = expandInputsForTemplate({
-      templateName: (version as any).fuse_templates.name,
+      templateName,
       inputNodes: inputNodes ?? [],
       suppliedInputs: { ...uploadedInputs, ...inputs },
     });
@@ -222,7 +243,7 @@ Deno.serve(async (req) => {
         p_user_id: user.id,
         p_amount: -creditCost,
         p_type: "run_template",
-        p_description: `Run template: ${(version as any).fuse_templates.name} (${job.id})`,
+        p_description: `Run template: ${templateName} (${job.id})`,
         p_template_id: version.template_id,
         p_project_id: null,
         p_step_id: null,
@@ -234,16 +255,11 @@ Deno.serve(async (req) => {
       chargedCredits = creditCost;
     }
 
-    const { data: nodes, error: nodesError } = await admin
-      .from("nodes")
-      .select("id, node_type")
-      .eq("version_id", version.id)
-      .neq("node_type", "user_input");
-    if (nodesError || !nodes) throw new Error(nodesError?.message ?? "Failed to load execution nodes");
+    if (!executionNodes.length) throw new Error("Template version has no execution nodes");
 
     const { error: stepsError } = await admin
       .from("execution_steps")
-      .insert(nodes.map((node: any) => ({
+      .insert(executionNodes.map((node) => ({
         job_id: job.id,
         node_id: node.id,
         status: "pending",
