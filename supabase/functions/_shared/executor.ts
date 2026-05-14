@@ -6,6 +6,7 @@ import {
   getFalRequestTelemetry,
   IMAGE_MODEL,
   VIDEO_MODEL,
+  VERTICAL_VIDEO_ASPECT_RATIO,
   submitImageJob,
   submitVideoJob,
 } from "./fal.ts";
@@ -32,6 +33,7 @@ type StepRow = {
   provider_model?: string | null;
   provider_request_id: string | null;
   output_asset_id: string | null;
+  input_payload?: Record<string, unknown> | null;
   output_payload?: Record<string, unknown> | null;
   error_log?: string | null;
   started_at?: string | null;
@@ -307,6 +309,11 @@ function estimateBillingQuantity(args: {
     return Number(args.promptConfig?.duration ?? 10);
   }
   return 1;
+}
+
+function videoDuration(value: unknown) {
+  const duration = Number(value ?? 10);
+  return Number.isFinite(duration) && duration > 0 ? duration : 10;
 }
 
 async function getStepCostEstimate(endpointId: string, promptConfig?: Record<string, unknown> | null) {
@@ -1059,8 +1066,8 @@ export async function runGraphJob(admin: AdminClient, jobId: string) {
             prompt,
             initImageUrl: toVideoSafeImageUrl(initImageUrl),
             endFrameUrl: endFrameUrl ? toVideoSafeImageUrl(endFrameUrl) : undefined,
-            duration: Number(node.prompt_config?.duration ?? 10),
-            aspectRatio: String(node.prompt_config?.aspect_ratio ?? "9:16"),
+            duration: videoDuration(node.prompt_config?.duration),
+            aspectRatio: VERTICAL_VIDEO_ASPECT_RATIO,
             webhookUrl: `${Deno.env.get("SUPABASE_URL")}/functions/v1/fal-webhook?jobId=${encodeURIComponent(job.id)}&stepId=${encodeURIComponent(step.id)}`,
           });
 
@@ -1068,6 +1075,13 @@ export async function runGraphJob(admin: AdminClient, jobId: string) {
             .from("execution_steps")
             .update({
               provider_request_id: requestId,
+              input_payload: {
+                ...(step.input_payload ?? {}),
+                init_image: initImageUrl,
+                ...(endFrameUrl ? { end_frame_image: endFrameUrl } : {}),
+                aspect_ratio: VERTICAL_VIDEO_ASPECT_RATIO,
+                duration: videoDuration(node.prompt_config?.duration),
+              },
               output_payload: {
                 requestId,
                 status: "queued",

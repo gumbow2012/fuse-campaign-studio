@@ -2450,9 +2450,9 @@ const TemplateCanvas = () => {
                           Output {output.outputNumber ?? "?"}: {output.label}
                         </p>
                         {output.type === "video" ? (
-                          <video src={output.url} controls className="mt-2 w-full rounded-xl border border-border/50" />
+                          <video src={output.url} controls className="mt-2 aspect-[9/16] w-full rounded-xl border border-border/50 bg-black object-cover" />
                         ) : (
-                          <img src={output.url} alt={output.label} className="mt-2 w-full rounded-xl border border-border/50 object-cover" />
+                          <img src={output.url} alt={output.label} className="mt-2 aspect-[9/16] w-full rounded-xl border border-border/50 object-cover" />
                         )}
                       </div>
                     ))}

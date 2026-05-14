@@ -25,4 +25,14 @@ describe("admin template workbench contract", () => {
     expect(source).toContain('verdict", "approved"');
     expect(source).toContain("template_output_reports");
   });
+
+  it("creates video outputs with explicit vertical aspect ratio", () => {
+    const source = readFileSync(
+      resolve(process.cwd(), "supabase/functions/admin-template-workbench/index.ts"),
+      "utf8",
+    );
+
+    expect(source).toContain('const VERTICAL_VIDEO_ASPECT_RATIO = "9:16"');
+    expect(source).toContain("aspect_ratio: VERTICAL_VIDEO_ASPECT_RATIO");
+  });
 });

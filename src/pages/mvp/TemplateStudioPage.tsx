@@ -693,7 +693,7 @@ export default function TemplateStudioPage() {
                     {inputFields.map((field) => (
                       <div key={field.key} className="rounded-[1.5rem] border border-white/8 bg-black/20 p-4">
                         {field.type === "image" ? (
-                          <label className="group/upload flex aspect-square cursor-pointer flex-col items-center justify-center rounded-[1.25rem] border border-dashed border-white/14 bg-white/[0.03] p-5 text-center transition hover:border-cyan-200/45 hover:bg-cyan-300/[0.06]">
+                          <label className="group/upload flex aspect-[9/16] cursor-pointer flex-col items-center justify-center rounded-[1.25rem] border border-dashed border-white/14 bg-white/[0.03] p-5 text-center transition hover:border-cyan-200/45 hover:bg-cyan-300/[0.06]">
                             <span className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-300">{field.label}</span>
                             <span className="mt-5 flex h-12 w-12 items-center justify-center rounded-full border border-white/10 bg-black/25 text-cyan-100">
                               <Upload className="h-5 w-5" />
@@ -860,9 +860,9 @@ export default function TemplateStudioPage() {
                     {result.outputs.map((output, index) => (
                       <article key={`${output.url}-${index}`} className="overflow-hidden rounded-[1.5rem] border border-white/8 bg-black/20">
                         {output.type === "video" ? (
-                          <video src={output.url} controls className="aspect-video w-full bg-black" />
+                          <video src={output.url} controls className="aspect-[9/16] w-full bg-black object-cover" />
                         ) : (
-                          <img src={output.url} alt={output.label || `Output ${index + 1}`} className="aspect-square w-full object-cover" />
+                          <img src={output.url} alt={output.label || `Output ${index + 1}`} className="aspect-[9/16] w-full object-cover" />
                         )}
                         <div className="flex items-center justify-between gap-3 p-4">
                           <div className="flex items-center gap-2 text-sm text-slate-300">

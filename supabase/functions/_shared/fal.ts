@@ -2,6 +2,7 @@ import { fal } from "npm:@fal-ai/client";
 
 export const IMAGE_MODEL = "fal-ai/nano-banana-pro/edit";
 export const VIDEO_MODEL = "fal-ai/kling-video/v2.5-turbo/pro/image-to-video";
+export const VERTICAL_VIDEO_ASPECT_RATIO = "9:16";
 const FAL_PLATFORM_URL = "https://api.fal.ai/v1/models";
 
 fal.config({
@@ -177,6 +178,10 @@ export async function submitVideoJob(args: {
   duration?: number;
   webhookUrl: string;
 }) {
+  const duration = Number.isFinite(args.duration) ? args.duration : 10;
+  const aspectRatio = args.aspectRatio === VERTICAL_VIDEO_ASPECT_RATIO
+    ? args.aspectRatio
+    : VERTICAL_VIDEO_ASPECT_RATIO;
   let queued: unknown;
   try {
     queued = await fal.queue.submit(VIDEO_MODEL, {
@@ -184,8 +189,8 @@ export async function submitVideoJob(args: {
         prompt: args.prompt,
         image_url: args.initImageUrl,
         ...(args.endFrameUrl ? { tail_image_url: args.endFrameUrl } : {}),
-        duration: args.duration ?? 10,
-        aspect_ratio: args.aspectRatio ?? "9:16",
+        duration,
+        aspect_ratio: aspectRatio,
         cfg_scale: 0.5,
       },
       webhookUrl: args.webhookUrl,

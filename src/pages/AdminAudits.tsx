@@ -352,7 +352,7 @@ function OutputFrame({
       <video
         src={url}
         controls
-        className={cn(outputFrameClass(compact), compact ? "aspect-video" : "aspect-video")}
+        className={cn(outputFrameClass(compact), "aspect-[9/16]")}
       />
     );
   }
@@ -361,7 +361,7 @@ function OutputFrame({
     <img
       src={url}
       alt={label}
-      className={cn(outputFrameClass(compact), compact ? "aspect-[4/3]" : "aspect-[4/5]")}
+      className={cn(outputFrameClass(compact), "aspect-[9/16]")}
     />
   );
 }
@@ -548,10 +548,10 @@ function StepTraceCard({
                   <img
                     src={input.sourceUrl}
                     alt={input.sourceName}
-                    className="mt-3 aspect-[4/3] w-full rounded-xl border border-white/10 object-cover"
+                    className="mt-3 aspect-[9/16] w-full rounded-xl border border-white/10 object-cover"
                   />
                 ) : (
-                  <div className="mt-3 flex aspect-[4/3] items-center justify-center rounded-xl border border-dashed border-white/10 text-xs text-muted-foreground">
+                  <div className="mt-3 flex aspect-[9/16] items-center justify-center rounded-xl border border-dashed border-white/10 text-xs text-muted-foreground">
                     No asset captured
                   </div>
                 )}
@@ -1716,7 +1716,7 @@ const AdminAudits = () => {
                                               </div>
                                             </>
                                           ) : (
-                                            <div className="mt-3 flex aspect-[4/3] items-center justify-center rounded-xl border border-dashed border-white/10 text-sm text-muted-foreground">
+                                            <div className="mt-3 flex aspect-[9/16] items-center justify-center rounded-xl border border-dashed border-white/10 text-sm text-muted-foreground">
                                               No output recorded
                                             </div>
                                           )}
@@ -1753,7 +1753,7 @@ const AdminAudits = () => {
                                 <img
                                   src={input.value!}
                                   alt={input.name}
-                                  className="mt-3 aspect-[4/3] w-full rounded-xl border border-white/10 object-cover"
+                                  className="mt-3 aspect-[9/16] w-full rounded-xl border border-white/10 object-cover"
                                 />
                               ) : (
                                 <pre className="mt-3 whitespace-pre-wrap rounded-xl border border-white/10 bg-slate-950/70 p-3 text-xs leading-6 text-slate-300">

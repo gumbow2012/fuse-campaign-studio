@@ -9,6 +9,8 @@ import {
 } from "../_shared/supabase-admin.ts";
 import { uploadTemplateReferenceAsset } from "../_shared/template-assets.ts";
 
+const VERTICAL_VIDEO_ASPECT_RATIO = "9:16";
+
 type Body = {
   versionId?: string;
   nodeId?: string;
@@ -30,6 +32,11 @@ function normalizeNullable(value: string | null | undefined) {
   if (value == null) return null;
   const trimmed = value.trim();
   return trimmed.length ? trimmed : null;
+}
+
+function normalizeDuration(value: unknown) {
+  const next = Number(value ?? 10);
+  return Number.isFinite(next) && next > 0 ? next : 10;
 }
 
 async function markVersionNeedsReview(
@@ -107,6 +114,11 @@ Deno.serve(async (req) => {
 
     if ("outputExposed" in body && (node.node_type === "image_gen" || node.node_type === "video_gen")) {
       nextPromptConfig.output_exposed = typeof body.outputExposed === "boolean" ? body.outputExposed : null;
+    }
+
+    if (node.node_type === "video_gen") {
+      nextPromptConfig.aspect_ratio = VERTICAL_VIDEO_ASPECT_RATIO;
+      nextPromptConfig.duration = normalizeDuration(nextPromptConfig.duration);
     }
 
     let nextDefaultAssetId = node.default_asset_id;
