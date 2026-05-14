@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import {
   AlertTriangle,
   ArrowRightLeft,
@@ -37,6 +37,7 @@ import {
   type AdminAuditDetailResponse,
   type AdminAuditQueueItem,
   type AdminAuditRecord,
+  type AdminOutputReportRecord,
 } from "@/services/fuseApi";
 
 type QueueFilter = "all" | "pending" | "needs_attention" | "approved";
@@ -363,6 +364,95 @@ function OutputFrame({
       alt={label}
       className={cn(outputFrameClass(compact), "aspect-[9/16]")}
     />
+  );
+}
+
+type PublishChecklistStep = {
+  title: string;
+  detail: string;
+  state: "complete" | "active" | "locked";
+  href?: string;
+  actionLabel?: string;
+};
+
+function PublishGatePanel({
+  title,
+  description,
+  steps,
+  tone = "warning",
+}: {
+  title: string;
+  description: string;
+  steps: PublishChecklistStep[];
+  tone?: "warning" | "success";
+}) {
+  const panelClass = tone === "success"
+    ? "border-emerald-400/20 bg-emerald-400/[0.06] text-emerald-50"
+    : "border-amber-300/20 bg-amber-400/[0.06] text-amber-50";
+
+  return (
+    <div className={cn("rounded-2xl border p-4 text-sm", panelClass)}>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <p className="font-semibold">{title}</p>
+          <p className="mt-1 max-w-3xl text-xs leading-5 opacity-80">{description}</p>
+        </div>
+        <Badge
+          variant="outline"
+          className={tone === "success"
+            ? "border-emerald-300/30 bg-emerald-400/10 text-emerald-100"
+            : "border-amber-300/30 bg-amber-400/10 text-amber-100"}
+        >
+          {tone === "success" ? "Ready to publish" : "Publish locked"}
+        </Badge>
+      </div>
+      <div className="mt-4 grid gap-3 lg:grid-cols-4">
+        {steps.map((step, index) => {
+          const complete = step.state === "complete";
+          const active = step.state === "active";
+          return (
+            <div
+              key={step.title}
+              className={cn(
+                "rounded-2xl border bg-black/20 p-3",
+                complete ? "border-emerald-300/30" : active ? "border-cyan-300/30" : "border-white/10 opacity-70",
+              )}
+            >
+              <div className="flex items-center gap-2">
+                <span
+                  className={cn(
+                    "flex h-7 w-7 shrink-0 items-center justify-center rounded-full border text-xs font-black",
+                    complete
+                      ? "border-emerald-300/40 bg-emerald-400/15 text-emerald-100"
+                      : active
+                      ? "border-cyan-300/40 bg-cyan-400/15 text-cyan-100"
+                      : "border-white/10 bg-white/[0.03] text-slate-400",
+                  )}
+                >
+                  {complete ? <CheckCircle2 className="h-4 w-4" /> : index + 1}
+                </span>
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-200">
+                  {complete ? "Done" : active ? "Current" : "Locked"}
+                </p>
+              </div>
+              <p className="mt-3 font-semibold text-foreground">{step.title}</p>
+              <p className="mt-1 min-h-[40px] text-xs leading-5 text-slate-300">{step.detail}</p>
+              {step.href && step.actionLabel && !complete ? (
+                <Button
+                  asChild
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="mt-3 h-8 rounded-full border-white/10 bg-white/[0.04] px-3 text-xs text-slate-100 hover:bg-white/[0.08]"
+                >
+                  <Link to={step.href}>{step.actionLabel}</Link>
+                </Button>
+              ) : null}
+            </div>
+          );
+        })}
+      </div>
+    </div>
   );
 }
 
@@ -1018,11 +1108,83 @@ const AdminAudits = () => {
   const detail = detailQuery.data;
   const publishBlockingReports = detail?.outputReports.filter(isPublishBlockingReport) ?? [];
   const hasApprovedRunAudit = (detail?.audits ?? []).some((audit) => audit.verdict === "approved" && audit.overallScore >= 75);
+  const selectedRunCompleteWithOutputs = detail?.job.status === "complete" && (detail?.job.outputs.length ?? 0) > 0;
+  const selectedVersionId = detail?.job.template.versionId ?? versionIdParam ?? null;
+  const selectedVersionCanvasHref = selectedVersionId ? `/app/lab/canvas?versionId=${selectedVersionId}` : "/app/lab/canvas";
+  const selectedAuditHref = selectedJobId
+    ? `/admin/audits?jobId=${selectedJobId}`
+    : versionIdParam
+    ? `/admin/audits?versionId=${versionIdParam}`
+    : "/admin/audits";
   const selectedRunPublishEligible =
-    detail?.job.status === "complete" &&
+    selectedRunCompleteWithOutputs &&
     hasApprovedRunAudit &&
     publishBlockingReports.length === 0 &&
     (detail?.job.outputs.length ?? 0) > 0;
+  const selectedPublishSteps: PublishChecklistStep[] = detail
+    ? [
+      {
+        title: "Run test inputs",
+        detail: selectedRunCompleteWithOutputs
+          ? `${detail.job.outputs.length} deliverable output${detail.job.outputs.length === 1 ? "" : "s"} came back from this run.`
+          : "Open the canvas runner, upload the required inputs, and let the test run finish.",
+        state: selectedRunCompleteWithOutputs ? "complete" : "active",
+        href: selectedVersionCanvasHref,
+        actionLabel: "Open runner",
+      },
+      {
+        title: "Review outputs",
+        detail: publishBlockingReports.length
+          ? `${publishBlockingReports.length} open or bad output report${publishBlockingReports.length === 1 ? "" : "s"} must be fixed or marked good.`
+          : "No blocking output reports are attached to the approved run.",
+        state: !selectedRunCompleteWithOutputs ? "locked" : publishBlockingReports.length ? "active" : "complete",
+        href: selectedAuditHref,
+        actionLabel: "Review outputs",
+      },
+      {
+        title: "Save approved audit",
+        detail: hasApprovedRunAudit
+          ? "An admin audit is saved as Good with a score of 75 or higher."
+          : "Set the audit verdict to Good, keep the score at 75+, add the summary, and save.",
+        state: hasApprovedRunAudit ? "complete" : selectedRunCompleteWithOutputs && publishBlockingReports.length === 0 ? "active" : "locked",
+        href: selectedAuditHref,
+        actionLabel: "Save audit",
+      },
+      {
+        title: "Publish live",
+        detail: selectedRunPublishEligible
+          ? "This version is clear to publish from the template canvas."
+          : "The live publish button unlocks after the first three steps are complete.",
+        state: selectedRunPublishEligible ? "complete" : hasApprovedRunAudit && publishBlockingReports.length === 0 ? "active" : "locked",
+        href: selectedVersionCanvasHref,
+        actionLabel: "Back to canvas",
+      },
+    ]
+    : [];
+  const emptyVersionPublishSteps: PublishChecklistStep[] = [
+    {
+      title: "Run test inputs",
+      detail: "No run is selected for this version yet. Open the canvas, upload test inputs, and start a validation run.",
+      state: "active",
+      href: selectedVersionCanvasHref,
+      actionLabel: "Open runner",
+    },
+    {
+      title: "Review outputs",
+      detail: "The output audit unlocks after the test run creates deliverables.",
+      state: "locked",
+    },
+    {
+      title: "Save approved audit",
+      detail: "Approve only after the outputs are visually correct and score 75+.",
+      state: "locked",
+    },
+    {
+      title: "Publish live",
+      detail: "Publishing stays locked until the validation run and audit pass.",
+      state: "locked",
+    },
+  ];
 
   return (
     <SiteShell>
@@ -1166,7 +1328,9 @@ const AdminAudits = () => {
                 </div>
               ) : (
                 <div className="rounded-2xl border border-dashed border-white/10 bg-white/[0.02] p-5 text-sm text-muted-foreground">
-                  {allJobs.length
+                  {versionIdParam && !jobIdParam
+                    ? "No validation runs exist for this version yet. Open the canvas runner, run test inputs, then come back here to approve outputs."
+                    : allJobs.length
                     ? "No runs match the current filter. Clear filters or switch to all time."
                     : "No runs returned yet. The inspector will populate as soon as template runs exist."}
                 </div>
@@ -1177,12 +1341,36 @@ const AdminAudits = () => {
           <section className="rounded-[2rem] border border-white/10 bg-black/20 p-5">
             {!selectedJobId ? (
               <div className="flex min-h-[60vh] items-center justify-center">
-                <div className="max-w-md rounded-2xl border border-dashed border-white/10 bg-white/[0.02] p-6 text-center">
-                  <p className="text-lg font-semibold text-foreground">No run selected</p>
-                  <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                    Choose a run on the left, clear the filters, or retry the queue if the backend returned an error.
-                  </p>
-                </div>
+                {versionIdParam ? (
+                  <div className="w-full max-w-5xl">
+                    <PublishGatePanel
+                      title="This version still needs validation"
+                      description="Publishing is blocked on purpose until a real test run produces outputs, those outputs are reviewed, and an approved audit is saved."
+                      steps={emptyVersionPublishSteps}
+                    />
+                    <div className="mt-4 flex flex-wrap justify-center gap-2">
+                      <Button asChild type="button" className="rounded-full bg-cyan-300 text-slate-950 hover:bg-cyan-200">
+                        <Link to={selectedVersionCanvasHref}>Open template runner</Link>
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => void queueQuery.refetch()}
+                        className="rounded-full border-white/10 bg-white/[0.03] text-slate-100 hover:bg-white/[0.06]"
+                      >
+                        <RefreshCw className="mr-2 h-4 w-4" />
+                        Retry queue
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="max-w-md rounded-2xl border border-dashed border-white/10 bg-white/[0.02] p-6 text-center">
+                    <p className="text-lg font-semibold text-foreground">No run selected</p>
+                    <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                      Choose a run on the left, clear the filters, or retry the queue if the backend returned an error.
+                    </p>
+                  </div>
+                )}
               </div>
             ) : detailQuery.isLoading ? (
               <div className="flex min-h-[60vh] items-center justify-center">
@@ -1282,22 +1470,12 @@ const AdminAudits = () => {
                   </div>
                 </div>
 
-                {!selectedRunPublishEligible ? (
-                  <div className="rounded-2xl border border-amber-300/20 bg-amber-400/[0.06] p-4 text-sm text-amber-50">
-                    <p className="font-semibold">Publish requirements for this version</p>
-                    <div className="mt-3 grid gap-2 md:grid-cols-3">
-                      <div className="rounded-xl border border-white/10 bg-black/20 px-3 py-2">
-                        Completed run: {detail.job.status === "complete" ? "yes" : "no"}
-                      </div>
-                      <div className="rounded-xl border border-white/10 bg-black/20 px-3 py-2">
-                        Approved audit: {hasApprovedRunAudit ? "yes" : "no"}
-                      </div>
-                      <div className="rounded-xl border border-white/10 bg-black/20 px-3 py-2">
-                        Blocking output reports: {publishBlockingReports.length}
-                      </div>
-                    </div>
-                  </div>
-                ) : null}
+                <PublishGatePanel
+                  title="Live publish checklist"
+                  description="This is the exact gate the backend enforces before a draft version can become live."
+                  steps={selectedPublishSteps}
+                  tone={selectedRunPublishEligible ? "success" : "warning"}
+                />
 
                 <div className="grid gap-4 xl:grid-cols-[minmax(0,1.25fr),360px]">
                   <div className="space-y-6">

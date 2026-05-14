@@ -1410,6 +1410,52 @@ const TemplateCanvas = () => {
   const publishGateReasons = selectedPublishGate?.reasons?.length
     ? selectedPublishGate.reasons
     : ["Complete a run and save an approved audit before publishing."];
+  const publishRunComplete = (selectedPublishGate?.completedRunCount ?? 0) > 0;
+  const publishAuditApproved = (selectedPublishGate?.approvedAuditCount ?? 0) > 0;
+  const publishBlockingOutputCount = selectedPublishGate?.blockingOutputReportCount ?? 0;
+  const publishAuditHref = selectedPublishGate?.latestCompletedJobId
+    ? `/admin/audits?jobId=${selectedPublishGate.latestCompletedJobId}`
+    : detail
+    ? `/admin/audits?versionId=${detail.versionId}`
+    : "/admin/audits";
+  const publishSteps = [
+    {
+      label: "1",
+      title: "Run test inputs",
+      complete: publishRunComplete,
+      active: !publishRunComplete,
+      detail: publishRunComplete
+        ? `${selectedPublishGate?.completedRunCount ?? 0} completed test run${(selectedPublishGate?.completedRunCount ?? 0) === 1 ? "" : "s"}.`
+        : "Upload real inputs and run this draft once.",
+    },
+    {
+      label: "2",
+      title: "Review outputs",
+      complete: publishRunComplete && publishBlockingOutputCount === 0,
+      active: publishRunComplete && publishBlockingOutputCount > 0,
+      detail: publishBlockingOutputCount
+        ? `${publishBlockingOutputCount} open or bad output report${publishBlockingOutputCount === 1 ? "" : "s"} left.`
+        : "No blocking output issues are attached.",
+    },
+    {
+      label: "3",
+      title: "Approve audit",
+      complete: publishAuditApproved,
+      active: publishRunComplete && publishBlockingOutputCount === 0 && !publishAuditApproved,
+      detail: publishAuditApproved
+        ? `${selectedPublishGate?.approvedAuditCount ?? 0} approved audit${(selectedPublishGate?.approvedAuditCount ?? 0) === 1 ? "" : "s"} saved.`
+        : "Save a Good audit with score 75+.",
+    },
+    {
+      label: "4",
+      title: "Publish live",
+      complete: testingGateSatisfied,
+      active: testingGateActive && !detail?.isActive && selectedPublishGate?.publishable === true,
+      detail: testingGateSatisfied
+        ? "This draft can be pushed live."
+        : "Unlocks after testing and approval.",
+    },
+  ];
   const goWizard = (direction: -1 | 1) => {
     const nextIndex = Math.max(0, Math.min(wizardSteps.length - 1, wizardStepIndex + direction));
     setTemplateWizardStep(wizardSteps[nextIndex].id);
@@ -1727,35 +1773,64 @@ const TemplateCanvas = () => {
               <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                 <div>
                   <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Testing Phase</p>
-                  <p className="mt-2 text-sm text-foreground">
+                  <p className="mt-2 text-base font-semibold text-foreground">
+                    Validate this draft before it can go live.
+                  </p>
+                  <p className="mt-1 text-sm text-muted-foreground">
                     {testingGateSatisfied
-                      ? "This draft has a completed run, an approved audit, and no blocking output reports."
+                      ? "The publish gate is clear. You can publish this version live now."
                       : publishGateReasons[0]}
                   </p>
-                  <div className="mt-3 flex flex-wrap gap-2 text-[11px] uppercase tracking-[0.14em] text-muted-foreground">
-                    <span className="rounded-full border border-border/50 bg-background/50 px-2.5 py-1">
-                      {selectedPublishGate?.completedRunCount ?? 0} complete run{(selectedPublishGate?.completedRunCount ?? 0) === 1 ? "" : "s"}
-                    </span>
-                    <span className="rounded-full border border-border/50 bg-background/50 px-2.5 py-1">
-                      {selectedPublishGate?.approvedAuditCount ?? 0} approved audit{(selectedPublishGate?.approvedAuditCount ?? 0) === 1 ? "" : "s"}
-                    </span>
-                    <span className="rounded-full border border-border/50 bg-background/50 px-2.5 py-1">
-                      {selectedPublishGate?.blockingOutputReportCount ?? 0} blocking output issue{(selectedPublishGate?.blockingOutputReportCount ?? 0) === 1 ? "" : "s"}
-                    </span>
-                  </div>
                 </div>
                 <div className="flex flex-wrap gap-2">
                   <Button type="button" variant="outline" size="sm" onClick={() => setShowRunnerPanel(true)}>
                     <Upload className="mr-2 h-4 w-4" />
-                    Open Test Inputs
+                    Run Test Inputs
                   </Button>
                   <Button asChild variant="outline" size="sm">
-                    <Link to={`/admin/audits?versionId=${detail.versionId}`}>
+                    <Link to={publishAuditHref}>
                       <CheckCircle2 className="mr-2 h-4 w-4" />
                       Open Output Audit
                     </Link>
                   </Button>
+                  {testingGateSatisfied && detail && !detail.isActive ? (
+                    <Button type="button" size="sm" onClick={() => void activateCurrentVersion()} disabled={!!mutating}>
+                      {mutating === "activate-version" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle2 className="mr-2 h-4 w-4" />}
+                      Publish Live
+                    </Button>
+                  ) : null}
                 </div>
+              </div>
+              <div className="mt-4 grid gap-3 lg:grid-cols-4">
+                {publishSteps.map((step) => (
+                  <div
+                    key={step.title}
+                    className={`rounded-2xl border bg-background/45 p-3 ${
+                      step.complete
+                        ? "border-emerald-400/30"
+                        : step.active
+                        ? "border-cyan-300/35"
+                        : "border-border/50 opacity-75"
+                    }`}
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className={`flex h-7 w-7 items-center justify-center rounded-full border text-xs font-black ${
+                        step.complete
+                          ? "border-emerald-400/40 bg-emerald-400/15 text-emerald-100"
+                          : step.active
+                          ? "border-cyan-300/40 bg-cyan-400/15 text-cyan-100"
+                          : "border-border/60 bg-card/70 text-muted-foreground"
+                      }`}>
+                        {step.complete ? <CheckCircle2 className="h-4 w-4" /> : step.label}
+                      </span>
+                      <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                        {step.complete ? "Done" : step.active ? "Current" : "Locked"}
+                      </p>
+                    </div>
+                    <p className="mt-3 text-sm font-semibold text-foreground">{step.title}</p>
+                    <p className="mt-1 text-xs leading-5 text-muted-foreground">{step.detail}</p>
+                  </div>
+                ))}
               </div>
             </div>
           ) : null}
