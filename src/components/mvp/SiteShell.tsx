@@ -66,6 +66,9 @@ export default function SiteShell({ children }: { children: ReactNode }) {
                       <NavLink to="/admin/templates" className={navLinkClass}>
                         Admin Templates
                       </NavLink>
+                      <NavLink to="/admin/audits" className={navLinkClass}>
+                        Output Audit
+                      </NavLink>
                     </>
                   ) : null}
                 </>

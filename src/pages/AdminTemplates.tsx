@@ -20,6 +20,14 @@ type WorkbenchVersion = {
   version_number: number;
   is_active: boolean;
   review_status: string;
+  activationGate?: {
+    publishable: boolean;
+    reasons: string[];
+    completedRunCount: number;
+    approvedAuditCount: number;
+    blockingOutputReportCount: number;
+    latestApprovedJobId: string | null;
+  } | null;
   counts: {
     total: number;
     inputs: number;
@@ -46,6 +54,21 @@ function getLiveVersion(template: WorkbenchTemplate) {
 
 function getOutputCount(version: WorkbenchVersion | null) {
   return Number(version?.counts.images ?? 0) + Number(version?.counts.videos ?? 0);
+}
+
+function publishGateLabel(version: WorkbenchVersion | null) {
+  if (!version) return "No version";
+  if (version.is_active) return "Live";
+  if (version.activationGate?.publishable) return "Ready";
+  return "Testing";
+}
+
+function publishGateClass(version: WorkbenchVersion | null) {
+  if (!version) return "border-white/10 bg-white/[0.03] text-slate-300";
+  if (version.is_active || version.activationGate?.publishable) {
+    return "border-emerald-400/30 bg-emerald-400/10 text-emerald-100";
+  }
+  return "border-amber-300/30 bg-amber-400/10 text-amber-100";
 }
 
 export default function AdminTemplates() {
@@ -137,6 +160,10 @@ export default function AdminTemplates() {
                           <div className="mt-1 font-semibold">{totalOutputs}</div>
                         </div>
                       </div>
+                      <div className="mt-3 rounded-md border border-white/10 bg-white/[0.03] px-3 py-2 text-xs text-muted-foreground">
+                        Publish gate: {publishGateLabel(liveVersion)}
+                        {!liveVersion?.is_active && liveVersion?.activationGate?.reasons?.[0] ? ` · ${liveVersion.activationGate.reasons[0]}` : ""}
+                      </div>
 
                       <div className="mt-4 flex gap-2">
                         <Button asChild size="sm" className="flex-1 rounded-full">
@@ -146,7 +173,7 @@ export default function AdminTemplates() {
                           </Link>
                         </Button>
                         <Button asChild size="sm" variant="outline" className="flex-1 rounded-full border-white/15 bg-white/5">
-                          <Link to="/admin/audits">
+                          <Link to={`/admin/audits${liveVersion ? `?versionId=${liveVersion.id}` : ""}`}>
                             <TestTube2 className="mr-2 h-4 w-4" />
                             Audit
                           </Link>
@@ -167,6 +194,7 @@ export default function AdminTemplates() {
                     <TableHead className="text-center">Nodes</TableHead>
                     <TableHead className="text-center">Edges</TableHead>
                     <TableHead className="text-center">Outputs</TableHead>
+                    <TableHead className="text-center">Publish Gate</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -196,6 +224,11 @@ export default function AdminTemplates() {
                         <TableCell className="text-center">{liveVersion?.counts.total ?? 0}</TableCell>
                         <TableCell className="text-center">{liveVersion?.counts.edges ?? 0}</TableCell>
                         <TableCell className="text-center">{totalOutputs}</TableCell>
+                        <TableCell className="text-center">
+                          <Badge variant="outline" className={publishGateClass(liveVersion)}>
+                            {publishGateLabel(liveVersion)}
+                          </Badge>
+                        </TableCell>
                         <TableCell className="text-right">
                           <div className="flex justify-end gap-1">
                             <Button size="icon" variant="ghost" asChild title="Graph editor">
@@ -204,7 +237,7 @@ export default function AdminTemplates() {
                               </Link>
                             </Button>
                             <Button size="icon" variant="ghost" asChild title="Audit runs">
-                              <Link to="/admin/audits">
+                              <Link to={`/admin/audits${liveVersion ? `?versionId=${liveVersion.id}` : ""}`}>
                                 <TestTube2 className="h-4 w-4" />
                               </Link>
                             </Button>

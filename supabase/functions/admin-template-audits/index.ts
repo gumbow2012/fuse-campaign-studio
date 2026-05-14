@@ -253,6 +253,12 @@ function buildQueueState(args: {
   return "approved";
 }
 
+function reviewStatusForAuditVerdict(verdict: string) {
+  if (verdict === "approved") return "Approved";
+  if (verdict === "blocked" || verdict === "critical") return "Blocked by Provider";
+  return "Prompt Drift";
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { status: 204, headers: corsHeaders });
@@ -535,6 +541,19 @@ Deno.serve(async (req) => {
           automation_flags: automationFlags,
         },
       }, admin);
+
+      if (jobRow.version_id) {
+        const nextReviewStatus = reviewStatusForAuditVerdict(verdict);
+        const { error: versionError } = await admin
+          .from("template_versions")
+          .update({
+            review_status: nextReviewStatus,
+            reviewed_at: new Date().toISOString(),
+            reviewed_by: user.id,
+          })
+          .eq("id", jobRow.version_id);
+        if (versionError) throw new Error(versionError.message);
+      }
 
       return json({
         options: buildOptions(),

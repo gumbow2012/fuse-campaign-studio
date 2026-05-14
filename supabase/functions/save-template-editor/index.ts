@@ -32,6 +32,22 @@ function normalizeNullable(value: string | null | undefined) {
   return trimmed.length ? trimmed : null;
 }
 
+async function markVersionNeedsReview(
+  admin: ReturnType<typeof createAdminClient>,
+  versionId: string,
+) {
+  const { error } = await admin
+    .from("template_versions")
+    .update({
+      review_status: "Unreviewed",
+      reviewed_at: null,
+      reviewed_by: null,
+    })
+    .eq("id", versionId)
+    .eq("is_active", false);
+  if (error) throw new Error(error.message);
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: corsHeaders });
   if (req.method !== "POST") return json({ error: "Method not allowed" }, 405);
@@ -143,6 +159,7 @@ Deno.serve(async (req) => {
       })
       .eq("id", node.id);
     if (updateError) throw new Error(updateError.message);
+    await markVersionNeedsReview(admin, versionId);
 
     return json({
       ok: true,

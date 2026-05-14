@@ -108,9 +108,17 @@ Deno.serve(async (req) => {
           ? node.prompt_config.sample_url
           : null;
         const slot = inputPlan.slotByNodeId[node.id] ?? null;
+        const editorConfig = getNodeEditorConfig(node);
         const isUserFacingInput = node.node_type !== "user_input" || userFacingInputNodeIds.has(node.id);
+        const editorMode = editorConfig.mode ?? (
+          node.node_type === "user_input" && (
+            implicitReferenceNodeIds.has(node.id) || !isUserFacingInput
+          )
+            ? "reference"
+            : "upload"
+        );
         const isReferenceInput =
-          !!defaultAsset?.supabase_storage_url ||
+          editorMode === "reference" ||
           implicitReferenceNodeIds.has(node.id) ||
           (node.node_type === "user_input" && !isUserFacingInput);
         const incoming = (edges ?? [])
@@ -129,13 +137,9 @@ Deno.serve(async (req) => {
         const prompt = typeof node.prompt_config?.prompt === "string"
           ? node.prompt_config.prompt
           : null;
-        const editorConfig = getNodeEditorConfig(node);
         const displayName = editorConfig.label ?? slot?.name ?? node.name;
-        const editorMode = editorConfig.mode ?? (isReferenceInput ? "reference" : "upload");
         const expected = editorConfig.expected ?? slot?.expected ?? node.prompt_config?.expected ?? null;
-        const defaultAssetUrl = isUserFacingInput && node.node_type === "user_input"
-          ? null
-          : defaultAsset?.supabase_storage_url ?? sampleUrl;
+        const defaultAssetUrl = defaultAsset?.supabase_storage_url ?? sampleUrl;
 
         return {
           id: node.id,

@@ -11,7 +11,8 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
-    "billing:recurring-smoke": "node scripts/billing-recurring-smoke.mjs"
+    "billing:recurring-smoke": "node scripts/billing-recurring-smoke.mjs",
+    "billing:credit-pack-smoke": "node scripts/billing-credit-pack-smoke.mjs"
   },
   "dependencies": {
     "@fontsource-variable/orbitron": "^5.2.8",

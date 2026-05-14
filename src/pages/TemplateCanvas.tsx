@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CheckCircle2, ChevronLeft, ChevronRight, Copy, Film, GitBranch, Loader2, Maximize2, Minus, Move, Plus, RefreshCw, Save, Trash2, Upload } from "lucide-react";
-import { useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import SiteShell from "@/components/mvp/SiteShell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,12 +8,31 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
+import {
+  MAX_TEMPLATE_BRANCHES,
+  MAX_TEMPLATE_INPUTS,
+  canAdvanceTemplateBuilder,
+  clampTemplateBranchCount,
+  clampTemplateInputCount,
+  resolveTemplateBranchInputIndex,
+} from "@/lib/templateBuilder";
 
 type TemplateInput = {
   id: string;
   name: string;
   expected: string;
   defaultAssetUrl: string | null;
+};
+
+type ActivationGate = {
+  publishable: boolean;
+  reasons: string[];
+  completedRunCount: number;
+  approvedAuditCount: number;
+  blockingOutputReportCount: number;
+  latestCompletedJobId: string | null;
+  latestApprovedJobId: string | null;
+  latestApprovedAt: string | null;
 };
 
 type TemplateOption = {
@@ -31,6 +50,7 @@ type TemplateOption = {
     total?: number;
   };
   inputs: TemplateInput[];
+  activationGate?: ActivationGate | null;
 };
 
 type WorkbenchCatalogVersion = {
@@ -45,6 +65,7 @@ type WorkbenchCatalogVersion = {
     edges?: number;
     total?: number;
   };
+  activationGate?: ActivationGate | null;
 };
 
 type WorkbenchCatalogTemplate = {
@@ -117,6 +138,15 @@ type JobStatus = {
   progress: number;
   error: string | null;
   outputs: Array<{ label: string; type: "image" | "video"; url: string; outputNumber?: number }>;
+};
+
+type RecentRun = {
+  id: string;
+  status: string;
+  progress: number;
+  error: string | null;
+  templateId: string | null;
+  outputs: JobStatus["outputs"];
 };
 
 type Point = { x: number; y: number };
@@ -209,6 +239,10 @@ function inputSlotOption(slotKey: string) {
   return TEMPLATE_INPUT_SLOT_OPTIONS.find((option) => option.key === slotKey) ?? TEMPLATE_INPUT_SLOT_OPTIONS[0];
 }
 
+function imagePromptForInput(label: string, hasGuide = false) {
+  return `Create a polished campaign image using the uploaded ${label.toLowerCase()}${hasGuide ? " and the hidden guide image" : ""}.`;
+}
+
 function compactText(value: string | null | undefined, maxLength = 150) {
   const normalized = String(value ?? "").replace(/\s+/g, " ").trim();
   if (!normalized) return "No prompt captured.";
@@ -261,7 +295,7 @@ function createTemplateReferenceDraft(index: number, inputSlot?: TemplateInputSl
     inputSlotKey: slot.key,
     label: `${slot.label} Guide`,
     prompt: "",
-    imagePrompt: `Create a polished campaign image using the uploaded ${slot.label.toLowerCase()} and the hidden guide image.`,
+    imagePrompt: imagePromptForInput(slot.label),
     videoPrompt: "Animate this image into a short fashion ad with natural motion and premium pacing.",
     file: null,
     previewUrl: null,
@@ -320,6 +354,7 @@ const TemplateCanvas = () => {
   const [job, setJob] = useState<JobStatus | null>(null);
   const [phase, setPhase] = useState<"idle" | "running" | "complete" | "error">("idle");
   const [error, setError] = useState<string | null>(null);
+  const [loadingLatestOutputs, setLoadingLatestOutputs] = useState(false);
   const [startingRun, setStartingRun] = useState(false);
   const [mutating, setMutating] = useState<string | null>(null);
   const [newTemplateName, setNewTemplateName] = useState("");
@@ -348,8 +383,6 @@ const TemplateCanvas = () => {
   const [isPanning, setIsPanning] = useState(false);
   const [showInternalNodes, setShowInternalNodes] = useState(false);
   const [showRunnerPanel, setShowRunnerPanel] = useState(false);
-  const [testingGateVersionId, setTestingGateVersionId] = useState<string | null>(null);
-  const [testedVersionId, setTestedVersionId] = useState<string | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const buildAuthHeaders = useCallback(async () => {
@@ -398,6 +431,7 @@ const TemplateCanvas = () => {
               Number(template.counts?.imageOutputs ?? 0) +
               Number(template.counts?.videoOutputs ?? 0),
           },
+          activationGate: null,
         }],
       })),
     };
@@ -430,6 +464,7 @@ const TemplateCanvas = () => {
             total: Number(version.counts?.total ?? 0),
           },
           inputs: [],
+          activationGate: version.activationGate ?? null,
         })),
       );
       setTemplates(nextTemplates);
@@ -482,10 +517,41 @@ const TemplateCanvas = () => {
     setJobId(nextJobId);
     setJob(data);
     setPhase(data.status === "complete" ? "complete" : data.status === "failed" ? "error" : "running");
-    if (data.status === "complete" && runVersionId) setTestedVersionId(runVersionId);
+    if (data.status === "complete" && runVersionId) void loadTemplates();
     setError(data.error ?? null);
     return data as JobStatus;
-  }, [buildAuthHeaders]);
+  }, [buildAuthHeaders, loadTemplates]);
+
+  const loadLatestOutputsForVersion = useCallback(async (versionId: string) => {
+    if (!versionId || !session?.access_token) return;
+    setLoadingLatestOutputs(true);
+    try {
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/list-recent-runs?limit=20`,
+        { headers: await buildAuthHeaders() },
+      );
+      const data = await response.json();
+      if (!response.ok) throw new Error(data?.error ?? "Could not load recent outputs");
+
+      const latest = (data.jobs ?? []).find((run: RecentRun) => run.templateId === versionId) as RecentRun | undefined;
+      if (!latest) return;
+
+      setJobId(latest.id);
+      setJob({
+        status: latest.status,
+        progress: latest.progress ?? 0,
+        error: latest.error ?? null,
+        outputs: latest.outputs ?? [],
+      });
+      setPhase(latest.status === "complete" ? "complete" : latest.status === "failed" ? "error" : "running");
+      setError(latest.error ?? null);
+    } catch (latestError) {
+      const message = latestError instanceof Error ? latestError.message : "Could not load recent outputs";
+      toast({ title: "Output history error", description: message, variant: "destructive" });
+    } finally {
+      setLoadingLatestOutputs(false);
+    }
+  }, [buildAuthHeaders, session?.access_token]);
 
   const pollJob = useCallback((nextJobId: string, runVersionId?: string) => {
     if (pollRef.current) clearInterval(pollRef.current);
@@ -513,6 +579,10 @@ const TemplateCanvas = () => {
   useEffect(() => {
     void loadDetail(selectedVersionId);
   }, [loadDetail, selectedVersionId]);
+
+  useEffect(() => {
+    void loadLatestOutputsForVersion(selectedVersionId);
+  }, [loadLatestOutputsForVersion, selectedVersionId]);
 
   useEffect(() => {
     if (!selectedVersionId) return;
@@ -850,19 +920,44 @@ const TemplateCanvas = () => {
   }, [detail?.versionId]);
 
   const setTemplateInputCount = useCallback((nextValue: number) => {
-    const nextCount = Math.max(1, Math.min(8, nextValue));
+    const nextCount = clampTemplateInputCount(nextValue);
     setNewTemplateInputSlots((current) => {
       const next = current.slice(0, nextCount);
       while (next.length < nextCount) {
         next.push(createTemplateInputSlotDraft(next.length));
       }
       setNewTemplateReferences((currentReferences) => {
-        const byInputId = new Map(currentReferences.map((reference) => [reference.inputSlotId, reference]));
-        return next.map((slot, index) => byInputId.get(slot.id) ?? createTemplateReferenceDraft(index, slot));
+        return currentReferences.map((reference, index) => {
+          const existingSlot = next.find((slot) => slot.id === reference.inputSlotId);
+          if (existingSlot) return { ...reference, inputSlotKey: existingSlot.slotKey };
+
+          const fallbackSlot = next[index % next.length] ?? next[0];
+          const fallbackOption = inputSlotOption(fallbackSlot.slotKey);
+          return {
+            ...reference,
+            inputSlotId: fallbackSlot.id,
+            inputSlotKey: fallbackOption.key,
+          };
+        });
       });
       return next;
     });
   }, []);
+
+  const setTemplateBranchCount = useCallback((nextValue: number) => {
+    const nextCount = clampTemplateBranchCount(nextValue);
+    setNewTemplateReferences((current) => {
+      const next = current.slice(0, nextCount);
+      current.slice(nextCount).forEach((reference) => {
+        if (reference.previewUrl?.startsWith("blob:")) URL.revokeObjectURL(reference.previewUrl);
+      });
+      while (next.length < nextCount) {
+        const slot = newTemplateInputSlots[next.length % newTemplateInputSlots.length] ?? newTemplateInputSlots[0];
+        next.push(createTemplateReferenceDraft(next.length, slot));
+      }
+      return next;
+    });
+  }, [newTemplateInputSlots]);
 
   const setTemplateInputSlot = useCallback((slotId: string, slotKey: string) => {
     setNewTemplateInputSlots((current) =>
@@ -875,12 +970,33 @@ const TemplateCanvas = () => {
             ...reference,
             inputSlotKey: option.key,
             label: `${option.label} Guide`,
-            imagePrompt: `Create a polished campaign image using the uploaded ${option.label.toLowerCase()} and the hidden guide image.`,
+            imagePrompt: imagePromptForInput(option.label, Boolean(reference.file)),
           }
         : reference,
       ),
     );
   }, []);
+
+  const setTemplateBranchInput = useCallback((referenceId: string, slotId: string) => {
+    const slot = newTemplateInputSlots.find((item) => item.id === slotId);
+    if (!slot) return;
+    const option = inputSlotOption(slot.slotKey);
+    setNewTemplateReferences((current) =>
+      current.map((reference) => {
+        if (reference.id !== referenceId) return reference;
+        const shouldRefreshLabel = !reference.label.trim() || reference.label.endsWith(" Guide");
+        return {
+          ...reference,
+          inputSlotId: slot.id,
+          inputSlotKey: option.key,
+          label: shouldRefreshLabel ? `${option.label} Guide` : reference.label,
+          imagePrompt: reference.imagePrompt.trim()
+            ? reference.imagePrompt
+            : imagePromptForInput(option.label, Boolean(reference.file)),
+        };
+      }),
+    );
+  }, [newTemplateInputSlots]);
 
   const handleNewTemplateReferenceFile = useCallback((referenceId: string, file: File | null) => {
     setNewTemplateReferences((current) =>
@@ -1064,27 +1180,28 @@ const TemplateCanvas = () => {
       toast({ title: "Template name required", variant: "destructive" });
       return;
     }
-    const missingReference = newTemplateReferences.find((reference) => !reference.file);
-    if (missingReference) {
-      toast({ title: "Hidden guide image required", description: `${missingReference.label} still needs an image.`, variant: "destructive" });
-      setTemplateWizardStep("branches");
-      return;
-    }
     setMutating("create-template");
     try {
-      const referenceAssets = await Promise.all(newTemplateReferences.map(async (reference) => ({
-        label: reference.label,
-        prompt: reference.prompt,
-        inputSlotKey: reference.inputSlotKey,
-        imagePrompt: reference.imagePrompt,
-        videoPrompt: reference.videoPrompt,
-        file: reference.file
-          ? {
-              filename: reference.file.name,
-              dataUrl: await fileToDataUrl(reference.file),
-            }
-          : null,
-      })));
+      const inputSlotIds = newTemplateInputSlots.map((slot) => slot.id);
+      const referenceAssets = await Promise.all(newTemplateReferences.map(async (reference, index) => {
+        const inputSlotIndex = resolveTemplateBranchInputIndex(inputSlotIds, reference.inputSlotId, index);
+        const resolvedSlot = newTemplateInputSlots[inputSlotIndex] ?? newTemplateInputSlots[0];
+        const resolvedOption = inputSlotOption(resolvedSlot?.slotKey ?? reference.inputSlotKey);
+        return {
+          label: reference.label,
+          prompt: reference.prompt,
+          inputSlotKey: resolvedOption.key,
+          inputSlotIndex,
+          imagePrompt: reference.imagePrompt,
+          videoPrompt: reference.videoPrompt,
+          file: reference.file
+            ? {
+                filename: reference.file.name,
+                dataUrl: await fileToDataUrl(reference.file),
+              }
+            : null,
+        };
+      }));
       const inputSlots = newTemplateInputSlots.map((slot) => {
         const option = inputSlotOption(slot.slotKey);
         return {
@@ -1107,7 +1224,6 @@ const TemplateCanvas = () => {
       setNewTemplateName("");
       setNewTemplateDescription("");
       setTemplateWizardStep("setup");
-      setTemplateInputCount(DEFAULT_TEMPLATE_INPUT_SLOT_KEYS.length);
       const resetSlots = createDefaultTemplateInputSlots();
       setNewTemplateInputSlots(resetSlots);
       setNewTemplateReferences((current) => {
@@ -1116,12 +1232,10 @@ const TemplateCanvas = () => {
         });
         return resetSlots.map((slot, index) => createTemplateReferenceDraft(index, slot));
       });
-      setTestingGateVersionId(data.versionId);
       setShowRunnerPanel(true);
       setPhase("idle");
       setJob(null);
       setJobId(null);
-      setTestedVersionId(null);
       setError(null);
       await refreshAfterMutation(data.versionId);
       toast({ title: "Template created", description: `${name} v1 is in testing. Run it once before publishing.` });
@@ -1138,7 +1252,6 @@ const TemplateCanvas = () => {
     newTemplateName,
     newTemplateReferences,
     refreshAfterMutation,
-    setTemplateInputCount,
   ]);
 
   const cloneCurrentVersion = useCallback(async (asNewTemplate: boolean) => {
@@ -1174,12 +1287,12 @@ const TemplateCanvas = () => {
 
   const activateCurrentVersion = useCallback(async () => {
     if (!detail) return;
-    const requiresTestRun = testingGateVersionId === detail.versionId && testedVersionId !== detail.versionId;
-    if (requiresTestRun) {
+    const gate = selectedTemplate?.activationGate ?? null;
+    if (gate && !gate.publishable) {
       setShowRunnerPanel(true);
       toast({
-        title: "Test run required",
-        description: "Upload the admin test inputs and complete one canvas run before publishing.",
+        title: "Publish gate blocked",
+        description: gate.reasons[0] ?? "Complete a run and save an approved output audit before publishing.",
         variant: "destructive",
       });
       return;
@@ -1187,7 +1300,6 @@ const TemplateCanvas = () => {
     setMutating("activate-version");
     try {
       await invokeWorkbench({ action: "activate_version", versionId: detail.versionId });
-      setTestingGateVersionId(null);
       await refreshAfterMutation(detail.versionId);
       toast({ title: "Version activated", description: `${detail.templateName} v${detail.versionNumber} is now live.` });
     } catch (activateError) {
@@ -1196,7 +1308,7 @@ const TemplateCanvas = () => {
     } finally {
       setMutating(null);
     }
-  }, [detail, invokeWorkbench, refreshAfterMutation, testedVersionId, testingGateVersionId]);
+  }, [detail, invokeWorkbench, refreshAfterMutation, selectedTemplate?.activationGate]);
 
   const addNode = useCallback(async () => {
     if (!detail) return;
@@ -1291,15 +1403,19 @@ const TemplateCanvas = () => {
   ];
   const wizardStepIndex = wizardSteps.findIndex((step) => step.id === templateWizardStep);
   const wizardProgress = ((wizardStepIndex + 1) / wizardSteps.length) * 100;
-  const hasTemplateName = !!newTemplateName.trim();
-  const testingGateActive = !!detail && !detail.isActive && (testingGateVersionId === detail.versionId || detail.reviewStatus === "Testing");
-  const testingGateSatisfied = !testingGateActive || testedVersionId === detail?.versionId;
+  const hasTemplateName = canAdvanceTemplateBuilder("setup", newTemplateName);
+  const selectedPublishGate = selectedTemplate?.activationGate ?? null;
+  const testingGateActive = !!detail && !detail.isActive;
+  const testingGateSatisfied = !testingGateActive || selectedPublishGate?.publishable === true;
+  const publishGateReasons = selectedPublishGate?.reasons?.length
+    ? selectedPublishGate.reasons
+    : ["Complete a run and save an approved audit before publishing."];
   const goWizard = (direction: -1 | 1) => {
     const nextIndex = Math.max(0, Math.min(wizardSteps.length - 1, wizardStepIndex + direction));
     setTemplateWizardStep(wizardSteps[nextIndex].id);
   };
   const goNextWizard = () => {
-    if (templateWizardStep === "setup" && !hasTemplateName) {
+    if (!canAdvanceTemplateBuilder(templateWizardStep, newTemplateName)) {
       toast({ title: "Template name required", variant: "destructive" });
       return;
     }
@@ -1348,8 +1464,8 @@ const TemplateCanvas = () => {
               </div>
               <div className="flex flex-wrap gap-2 text-[11px] uppercase tracking-[0.16em] text-muted-foreground">
                 <span className="rounded-full border border-border/60 bg-background/60 px-3 py-1">{newTemplateInputSlots.length} inputs</span>
-                <span className="rounded-full border border-border/60 bg-background/60 px-3 py-1">{newTemplateReferences.length} image branches</span>
-                <span className="rounded-full border border-border/60 bg-background/60 px-3 py-1">{newTemplateReferences.length} video branches</span>
+                <span className="rounded-full border border-border/60 bg-background/60 px-3 py-1">{newTemplateReferences.length} branches</span>
+                <span className="rounded-full border border-border/60 bg-background/60 px-3 py-1">{newTemplateReferences.filter((reference) => reference.file).length} guide images</span>
               </div>
             </div>
             <div className="mt-5">
@@ -1405,19 +1521,35 @@ const TemplateCanvas = () => {
                         />
                       </div>
                     </div>
-                    <div className="grid grid-cols-[1fr_auto] items-center gap-3 rounded-2xl border border-border/50 bg-card/70 p-4">
-                      <div>
-                        <Label>Inputs</Label>
-                        <p className="mt-1 text-xs uppercase tracking-[0.16em] text-muted-foreground">{newTemplateInputSlots.length} user upload slot{newTemplateInputSlots.length === 1 ? "" : "s"}</p>
+                    <div className="grid gap-3 rounded-2xl border border-border/50 bg-card/70 p-4 md:grid-cols-2">
+                      <div className="grid grid-cols-[1fr_auto] items-center gap-3">
+                        <div>
+                          <Label>Inputs</Label>
+                          <p className="mt-1 text-xs uppercase tracking-[0.16em] text-muted-foreground">{newTemplateInputSlots.length} user upload slot{newTemplateInputSlots.length === 1 ? "" : "s"}</p>
+                        </div>
+                        <Input
+                          type="number"
+                          min={1}
+                          max={MAX_TEMPLATE_INPUTS}
+                          value={newTemplateInputSlots.length}
+                          onChange={(event) => setTemplateInputCount(Number(event.target.value))}
+                          className="h-11 w-20 rounded-xl"
+                        />
                       </div>
-                      <Input
-                        type="number"
-                        min={1}
-                        max={8}
-                        value={newTemplateInputSlots.length}
-                        onChange={(event) => setTemplateInputCount(Number(event.target.value))}
-                        className="h-11 w-20 rounded-xl"
-                      />
+                      <div className="grid grid-cols-[1fr_auto] items-center gap-3 border-t border-border/50 pt-3 md:border-l md:border-t-0 md:pl-4 md:pt-0">
+                        <div>
+                          <Label>Branches</Label>
+                          <p className="mt-1 text-xs uppercase tracking-[0.16em] text-muted-foreground">{newTemplateReferences.length} output path{newTemplateReferences.length === 1 ? "" : "s"}</p>
+                        </div>
+                        <Input
+                          type="number"
+                          min={1}
+                          max={MAX_TEMPLATE_BRANCHES}
+                          value={newTemplateReferences.length}
+                          onChange={(event) => setTemplateBranchCount(Number(event.target.value))}
+                          className="h-11 w-20 rounded-xl"
+                        />
+                      </div>
                     </div>
                     <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
                       {newTemplateInputSlots.map((slot, index) => (
@@ -1446,12 +1578,23 @@ const TemplateCanvas = () => {
                       <div>
                         <Label>Output Branches</Label>
                         <p className="mt-1 text-xs text-muted-foreground">
-                          One branch per input: upload plus hidden guide to image, then image to video.
+                          Branches are outputs. Pick a source upload for each branch; hidden guide images are optional.
                         </p>
                       </div>
-                      <span className="rounded-full border border-border/60 bg-background/60 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-                        Scroll snaps horizontally
-                      </span>
+                      <div className="flex items-center gap-2">
+                        <span className="rounded-full border border-border/60 bg-background/60 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                          Horizontal snap
+                        </span>
+                        <Input
+                          type="number"
+                          min={1}
+                          max={MAX_TEMPLATE_BRANCHES}
+                          value={newTemplateReferences.length}
+                          onChange={(event) => setTemplateBranchCount(Number(event.target.value))}
+                          className="h-9 w-20 rounded-xl"
+                          aria-label="Branch count"
+                        />
+                      </div>
                     </div>
                     <div className="-mx-1 flex snap-x snap-mandatory gap-3 overflow-x-auto px-1 pb-3">
                     {newTemplateReferences.map((reference, index) => (
@@ -1468,19 +1611,33 @@ const TemplateCanvas = () => {
                             <span className="rounded-md border border-rose-300/30 px-1.5 py-1">Video</span>
                           </div>
                         </div>
+                        <div className="mt-3 grid gap-3 rounded-xl border border-border/50 bg-background/45 p-3 sm:grid-cols-[140px_minmax(0,1fr)] sm:items-center">
+                          <Label className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground">Source upload</Label>
+                          <select
+                            value={reference.inputSlotId}
+                            onChange={(event) => setTemplateBranchInput(reference.id, event.target.value)}
+                            className="h-9 w-full rounded-xl border border-border bg-background px-3 text-sm"
+                          >
+                            {newTemplateInputSlots.map((slot, slotIndex) => (
+                              <option key={slot.id} value={slot.id}>
+                                {slotIndex + 1}. {inputSlotOption(slot.slotKey).label}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
                         <div className="mt-3 grid gap-3 sm:grid-cols-[150px_minmax(0,1fr)]">
                           <div className="min-w-0">
                             {reference.previewUrl ? (
                               <img src={reference.previewUrl} alt={reference.label} className="aspect-[9/16] max-h-[250px] w-full rounded-xl border border-border/50 bg-background object-contain" />
                             ) : (
                               <div className="flex aspect-[9/16] max-h-[250px] w-full items-center justify-center rounded-xl border border-dashed border-border/60 bg-background/50 px-3 text-center text-xs text-muted-foreground">
-                                Hidden guide image
+                                Optional guide image
                               </div>
                             )}
                             <div className="mt-2 flex gap-2">
                               <label className="inline-flex h-9 flex-1 cursor-pointer items-center justify-center gap-2 rounded-xl border border-border bg-background px-2 text-xs font-medium transition hover:border-primary/50 hover:text-foreground">
                                 <Upload className="h-4 w-4" />
-                                {reference.file ? "Replace" : "Upload"}
+                                {reference.file ? "Replace" : "Add guide"}
                                 <input
                                   type="file"
                                   accept="image/*"
@@ -1547,7 +1704,7 @@ const TemplateCanvas = () => {
                     Back
                   </Button>
                   {templateWizardStep === "branches" ? (
-                    <Button type="button" className="flex-1" onClick={() => void createTemplate()} disabled={!!mutating}>
+                    <Button type="button" className="flex-1" onClick={() => void createTemplate()} disabled={!!mutating || !hasTemplateName}>
                       {mutating === "create-template" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Plus className="mr-2 h-4 w-4" />}
                       Create Draft
                     </Button>
@@ -1572,14 +1729,33 @@ const TemplateCanvas = () => {
                   <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Testing Phase</p>
                   <p className="mt-2 text-sm text-foreground">
                     {testingGateSatisfied
-                      ? "This draft has a completed admin test run and can be published."
-                      : "Upload the admin test inputs in Run Selected Template and complete one run before publishing live."}
+                      ? "This draft has a completed run, an approved audit, and no blocking output reports."
+                      : publishGateReasons[0]}
                   </p>
+                  <div className="mt-3 flex flex-wrap gap-2 text-[11px] uppercase tracking-[0.14em] text-muted-foreground">
+                    <span className="rounded-full border border-border/50 bg-background/50 px-2.5 py-1">
+                      {selectedPublishGate?.completedRunCount ?? 0} complete run{(selectedPublishGate?.completedRunCount ?? 0) === 1 ? "" : "s"}
+                    </span>
+                    <span className="rounded-full border border-border/50 bg-background/50 px-2.5 py-1">
+                      {selectedPublishGate?.approvedAuditCount ?? 0} approved audit{(selectedPublishGate?.approvedAuditCount ?? 0) === 1 ? "" : "s"}
+                    </span>
+                    <span className="rounded-full border border-border/50 bg-background/50 px-2.5 py-1">
+                      {selectedPublishGate?.blockingOutputReportCount ?? 0} blocking output issue{(selectedPublishGate?.blockingOutputReportCount ?? 0) === 1 ? "" : "s"}
+                    </span>
+                  </div>
                 </div>
-                <Button type="button" variant="outline" size="sm" onClick={() => setShowRunnerPanel(true)}>
-                  <Upload className="mr-2 h-4 w-4" />
-                  Open Test Inputs
-                </Button>
+                <div className="flex flex-wrap gap-2">
+                  <Button type="button" variant="outline" size="sm" onClick={() => setShowRunnerPanel(true)}>
+                    <Upload className="mr-2 h-4 w-4" />
+                    Open Test Inputs
+                  </Button>
+                  <Button asChild variant="outline" size="sm">
+                    <Link to={`/admin/audits?versionId=${detail.versionId}`}>
+                      <CheckCircle2 className="mr-2 h-4 w-4" />
+                      Open Output Audit
+                    </Link>
+                  </Button>
+                </div>
               </div>
             </div>
           ) : null}
@@ -1674,7 +1850,7 @@ const TemplateCanvas = () => {
               ) : null}
               {testingGateActive && !testingGateSatisfied ? (
                 <p className="rounded-xl border border-amber-300/20 bg-amber-300/[0.06] px-3 py-2 text-xs text-amber-100">
-                  Complete one admin test run before publishing this draft.
+                  {publishGateReasons.join(" ")}
                 </p>
               ) : null}
             </div>
@@ -1804,6 +1980,65 @@ const TemplateCanvas = () => {
                 </div>
               </div>
               {error ? <p className="mt-3 rounded-xl border border-destructive/30 bg-destructive/10 p-3 text-xs text-destructive">{error}</p> : null}
+              <div className="mt-4 rounded-2xl border border-border/50 bg-background/60 p-3">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-[0.15em] text-muted-foreground">Latest Job Outputs</p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      {jobId ? `Job ${jobId.slice(0, 8)}` : "No job loaded"}
+                    </p>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => void loadLatestOutputsForVersion(detail.versionId)}
+                    disabled={loadingLatestOutputs}
+                  >
+                    {loadingLatestOutputs ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
+                    Refresh
+                  </Button>
+                  {jobId ? (
+                    <Button asChild variant="outline" size="sm">
+                      <Link to={`/admin/audits?jobId=${jobId}`}>
+                        <CheckCircle2 className="mr-2 h-4 w-4" />
+                        Audit
+                      </Link>
+                    </Button>
+                  ) : null}
+                </div>
+                {job?.outputs.length ? (
+                  <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                    {job.outputs.map((output) => (
+                      <a
+                        key={`${output.label}-${output.url}`}
+                        href={output.url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="block overflow-hidden rounded-2xl border border-border/50 bg-card/70 transition hover:border-primary/50"
+                      >
+                        <div className="aspect-[9/16] bg-background">
+                          {output.type === "video" ? (
+                            <video src={output.url} controls className="h-full w-full object-cover" />
+                          ) : (
+                            <img src={output.url} alt={output.label} className="h-full w-full object-cover" />
+                          )}
+                        </div>
+                        <div className="p-3">
+                          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                            {output.type} {output.outputNumber ? `#${output.outputNumber}` : ""}
+                          </p>
+                          <p className="mt-1 text-sm font-medium text-foreground">{output.label}</p>
+                        </div>
+                      </a>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="mt-3 rounded-xl border border-border/40 bg-background/50 p-3 text-xs text-muted-foreground">
+                    No outputs loaded for this version yet. Click refresh after a run completes.
+                  </div>
+                )}
+              </div>
             </div>
           ) : null}
           </div>

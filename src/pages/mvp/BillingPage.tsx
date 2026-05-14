@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import { ArrowRight, Check, Crown, Rocket, Settings, Zap } from "lucide-react";
+import { ArrowRight, Check, Crown, Loader2, Rocket, Settings, ShieldCheck, Zap } from "lucide-react";
 import SiteShell from "@/components/mvp/SiteShell";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/hooks/use-toast";
@@ -26,6 +26,29 @@ const tierCopy = {
   },
 } as const;
 
+type CreditPackSmokeResult = {
+  ok?: boolean;
+  request_id?: string;
+  pack?: {
+    name?: string;
+    credits?: number;
+  };
+  profile?: {
+    credits_balance?: number;
+  };
+  purchase?: {
+    status?: string;
+    ledger_id?: string | null;
+  };
+  first_webhook?: {
+    status?: number;
+  };
+  duplicate_webhook?: {
+    status?: number;
+  };
+  error?: string;
+};
+
 function formatBillingDate(value: string | null | undefined) {
   if (!value) return "Not set";
   return new Date(value).toLocaleDateString([], {
@@ -40,6 +63,7 @@ export default function BillingPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const { isAdmin, user, profile, refreshSubscription } = useAuth();
   const [loading, setLoading] = useState<string | null>(null);
+  const [creditPackSmoke, setCreditPackSmoke] = useState<CreditPackSmokeResult | null>(null);
 
   useEffect(() => {
     const success = searchParams.get("success");
@@ -146,6 +170,36 @@ export default function BillingPage() {
     }
   };
 
+  const handleCreditPackSmoke = async () => {
+    if (!isAdmin) return;
+    setLoading("credit-pack-smoke");
+    setCreditPackSmoke(null);
+    try {
+      const { data, error } = await supabase.functions.invoke("admin-credit-pack-smoke", {
+        body: {
+          packKey: "boost",
+          cleanup: true,
+        },
+      });
+      if (error) throw error;
+      const result = data as CreditPackSmokeResult | null;
+      if (!result?.ok) throw new Error(result?.error ?? "Credit-pack smoke did not return ok.");
+      setCreditPackSmoke(result);
+      toast({
+        title: "Credit-pack smoke passed",
+        description: `Webhook credited ${result.profile?.credits_balance ?? result.pack?.credits ?? 0} test credits and stayed idempotent.`,
+      });
+    } catch (error) {
+      toast({
+        title: "Credit-pack smoke failed",
+        description: error instanceof Error ? error.message : "Could not validate credit-pack billing.",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(null);
+    }
+  };
+
   const currentPlan = profile?.plan ?? "free";
   const currentTier = currentPlan === "free" ? null : STRIPE_TIERS[currentPlan as keyof typeof STRIPE_TIERS];
   const creditValue = isAdmin ? "∞" : String(profile?.credits_balance ?? 0);
@@ -203,6 +257,44 @@ export default function BillingPage() {
             {isAdmin ? (
               <div className="mt-6 rounded-[1.5rem] border border-cyan-300/20 bg-cyan-300/10 p-4 text-sm leading-6 text-cyan-50">
                 Admin accounts bypass membership and credit locks inside the runner. Use a normal user account when you want to test the real customer subscription flow.
+              </div>
+            ) : null}
+
+            {isAdmin ? (
+              <div className="mt-6 rounded-[1.5rem] border border-white/10 bg-black/20 p-4">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <p className="text-[11px] uppercase tracking-[0.24em] text-muted-foreground">Billing QA</p>
+                    <p className="mt-2 text-sm leading-6 text-slate-300">
+                      Runs a signed Stripe test webhook against a temporary user, confirms the credit ledger top-up, then cleans up.
+                    </p>
+                  </div>
+                  <Button
+                    type="button"
+                    onClick={() => void handleCreditPackSmoke()}
+                    disabled={loading === "credit-pack-smoke"}
+                    className="rounded-full bg-cyan-300 text-slate-950 hover:bg-cyan-200"
+                  >
+                    {loading === "credit-pack-smoke" ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />}
+                    Run credit smoke
+                  </Button>
+                </div>
+                {creditPackSmoke ? (
+                  <div className="mt-4 grid gap-2 text-xs text-slate-200 sm:grid-cols-4">
+                    <div className="rounded-xl border border-white/10 bg-slate-950/80 px-3 py-2">
+                      Webhook {creditPackSmoke.first_webhook?.status ?? "?"}
+                    </div>
+                    <div className="rounded-xl border border-white/10 bg-slate-950/80 px-3 py-2">
+                      Duplicate {creditPackSmoke.duplicate_webhook?.status ?? "?"}
+                    </div>
+                    <div className="rounded-xl border border-white/10 bg-slate-950/80 px-3 py-2">
+                      {creditPackSmoke.profile?.credits_balance ?? 0} credits
+                    </div>
+                    <div className="rounded-xl border border-white/10 bg-slate-950/80 px-3 py-2">
+                      {creditPackSmoke.purchase?.status ?? "unknown"}
+                    </div>
+                  </div>
+                ) : null}
               </div>
             ) : null}
 

@@ -44,14 +44,11 @@ Live vs draft is version-level:
 Use this when the template is new and you are building it manually.
 
 1. Open `/app/lab/canvas`.
-2. In `Draft Builder`, move through the five steps:
-   - `Name`: public/internal template name and short description.
-   - `Inputs`: choose the count and select slots such as `Top Garment`, `Bottom Garment`, `Logo`, `Head Accessory`, or `Product Image`.
-   - `Outputs`: choose how many deliverables the template should create.
-   - `Guides`: upload hidden brand/reference images and write their hidden guide prompts.
-   - `Prompts`: write the image prompt and video prompt.
+2. In `Draft Builder`, move through the two steps:
+   - `Setup`: enter the required template name, optional description, user upload inputs, and output branch count.
+   - `Branches`: pick the source upload for each output branch, add optional hidden guide images, and write image/video prompts.
 3. Click `Create Draft`.
-4. The draft opens in Testing status. Upload admin test images in `Run Selected Template` and complete one canvas run before publishing.
+4. The draft opens as an internal draft. Upload admin test images in `Run Selected Template` and complete one canvas run before publishing.
 5. If needed, refine labels, prompts, hidden references, and edges directly on the canvas.
 6. Configure image steps:
    - Select each Image Step.
@@ -213,8 +210,9 @@ For each template:
 
 - Name is final.
 - Description is not placeholder.
-- User Upload nodes are correctly labeled.
-- Hidden references are not exposed as user uploads.
+- User Upload nodes are correctly labeled and capped to real customer inputs.
+- Output branches can differ from the upload count when the workflow needs multiple deliverables from the same input.
+- Hidden reference images are optional per branch and are never exposed as customer uploads.
 - Every image/video step has a prompt.
 - Every generation node has incoming sources.
 - Final outputs are explicitly marked as deliverables.

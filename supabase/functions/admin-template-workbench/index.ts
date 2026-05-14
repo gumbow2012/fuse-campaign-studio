@@ -28,6 +28,7 @@ type ReferenceAssetDraft = {
   label?: string | null;
   prompt?: string | null;
   inputSlotKey?: string | null;
+  inputSlotIndex?: number | null;
   imagePrompt?: string | null;
   videoPrompt?: string | null;
   file?: {
@@ -35,12 +36,25 @@ type ReferenceAssetDraft = {
     filename?: string | null;
   } | null;
 };
+type PublishGateResult = {
+  publishable: boolean;
+  reasons: string[];
+  completedRunCount: number;
+  approvedAuditCount: number;
+  blockingOutputReportCount: number;
+  latestCompletedJobId: string | null;
+  latestApprovedJobId: string | null;
+  latestApprovedAt: string | null;
+};
 type InputSlotDraft = {
   key: string;
   label: string;
   expected: string;
   targetParam: string;
 };
+
+const MAX_INPUT_SLOTS = 5;
+const MAX_OUTPUT_BRANCHES = 8;
 
 const DEFAULT_INPUT_SLOTS: InputSlotDraft[] = [
   { key: "top_garment", label: "Top Garment", expected: "image", targetParam: "top_garment_image" },
@@ -73,10 +87,14 @@ function readReferenceDrafts(value: unknown): ReferenceAssetDraft[] {
     const file = record.file && typeof record.file === "object"
       ? record.file as ReferenceAssetDraft["file"]
       : null;
+    const rawInputSlotIndex = typeof record.inputSlotIndex === "number" && Number.isFinite(record.inputSlotIndex)
+      ? Math.trunc(record.inputSlotIndex)
+      : null;
     return {
       label: cleanText(record.label, `Reference ${index + 1}`),
       prompt: nullableText(record.prompt),
       inputSlotKey: nullableText(record.inputSlotKey),
+      inputSlotIndex: rawInputSlotIndex !== null && rawInputSlotIndex >= 0 ? rawInputSlotIndex : null,
       imagePrompt: nullableText(record.imagePrompt),
       videoPrompt: nullableText(record.videoPrompt),
       file,
@@ -91,7 +109,7 @@ function cleanKey(value: unknown, fallback: string) {
 
 function readInputSlots(value: unknown): InputSlotDraft[] {
   if (!Array.isArray(value)) return DEFAULT_INPUT_SLOTS;
-  const slots = value.slice(0, 8).map((item, index) => {
+  const slots = value.slice(0, MAX_INPUT_SLOTS).map((item, index) => {
     const record = item && typeof item === "object" ? item as Record<string, unknown> : {};
     const fallback = DEFAULT_INPUT_SLOTS[index] ?? DEFAULT_INPUT_SLOTS[0];
     const key = cleanKey(record.key, fallback.key);
@@ -103,6 +121,23 @@ function readInputSlots(value: unknown): InputSlotDraft[] {
     };
   });
   return slots.length ? slots : DEFAULT_INPUT_SLOTS;
+}
+
+function resolveInputForBranch(args: {
+  inputNodes: Array<{ id: string; slot: InputSlotDraft; index: number }>;
+  draft: ReferenceAssetDraft;
+  branchIndex: number;
+}) {
+  const { inputNodes, draft, branchIndex } = args;
+  const indexedInput = typeof draft.inputSlotIndex === "number" &&
+    draft.inputSlotIndex >= 0 &&
+    draft.inputSlotIndex < inputNodes.length
+    ? inputNodes[draft.inputSlotIndex]
+    : null;
+  return indexedInput ??
+    inputNodes.find((node) => node.slot.key === draft.inputSlotKey) ??
+    inputNodes[branchIndex % inputNodes.length] ??
+    inputNodes[0];
 }
 
 async function nextVersionNumber(admin: ReturnType<typeof createAdminClient>, templateId: string) {
@@ -122,6 +157,11 @@ async function setActiveVersion(
   templateId: string,
   versionId: string,
 ) {
+  const gate = await getVersionPublishGate(admin, versionId);
+  if (!gate.publishable) {
+    throw new Error(`Publish blocked: ${gate.reasons.join(" ")}`);
+  }
+
   const { error: deactivateError } = await admin
     .from("template_versions")
     .update({ is_active: false })
@@ -137,6 +177,121 @@ async function setActiveVersion(
     })
     .eq("id", versionId);
   if (activateError) throw new Error(activateError.message);
+
+  return gate;
+}
+
+function resultOutputCount(job: any) {
+  return Array.isArray(job?.result_payload?.outputs) ? job.result_payload.outputs.length : 0;
+}
+
+function isBlockingOutputReport(row: any) {
+  if (row.status === "fixed") return false;
+  return row.status === "open" || row.verdict !== "good" || row.severity === "blocking";
+}
+
+async function getVersionPublishGate(
+  admin: ReturnType<typeof createAdminClient>,
+  versionId: string,
+): Promise<PublishGateResult> {
+  const reasons: string[] = [];
+
+  const { data: version, error: versionError } = await admin
+    .from("template_versions")
+    .select("id, review_status")
+    .eq("id", versionId)
+    .maybeSingle();
+  if (versionError) throw new Error(versionError.message);
+  if (version?.review_status !== "Approved") {
+    reasons.push("Approve this version in the output audit before publishing.");
+  }
+
+  const { data: completedJobs, error: jobsError } = await admin
+    .from("execution_jobs")
+    .select("id, status, completed_at, started_at, result_payload")
+    .eq("version_id", versionId)
+    .eq("status", "complete")
+    .order("completed_at", { ascending: false })
+    .limit(20);
+  if (jobsError) throw new Error(jobsError.message);
+
+  const jobsWithOutputs = (completedJobs ?? []).filter((job: any) => resultOutputCount(job) > 0);
+  const latestCompletedJob = jobsWithOutputs[0] ?? null;
+  if (!jobsWithOutputs.length) {
+    reasons.push("Run this version to completion before publishing.");
+  }
+
+  const jobIds = jobsWithOutputs.map((job: any) => job.id);
+  const { data: approvedAudits, error: auditsError } = jobIds.length
+    ? await admin
+        .from("template_run_admin_audits")
+        .select("id, job_id, verdict, overall_score, updated_at")
+        .in("job_id", jobIds)
+        .eq("verdict", "approved")
+        .gte("overall_score", 75)
+        .order("updated_at", { ascending: false })
+    : { data: [], error: null };
+  if (auditsError) throw new Error(auditsError.message);
+
+  if (!approvedAudits?.length) {
+    reasons.push("Save an approved admin audit with score 75+ before publishing.");
+  }
+
+  const approvedJobIds = [...new Set((approvedAudits ?? []).map((audit: any) => audit.job_id).filter(Boolean))];
+  const { data: outputReports, error: reportsError } = approvedJobIds.length
+    ? await admin
+        .from("template_output_reports")
+        .select("job_id, verdict, severity, status")
+        .in("job_id", approvedJobIds)
+    : { data: [], error: null };
+  if (reportsError) throw new Error(reportsError.message);
+
+  const reportsByJobId = new Map<string, any[]>();
+  for (const report of outputReports ?? []) {
+    const rows = reportsByJobId.get(report.job_id) ?? [];
+    rows.push(report);
+    reportsByJobId.set(report.job_id, rows);
+  }
+
+  const selectedApproval = (approvedAudits ?? []).find((audit: any) => {
+    const reports = reportsByJobId.get(audit.job_id) ?? [];
+    return !reports.some(isBlockingOutputReport);
+  }) ?? null;
+
+  const blockingOutputReportCount = selectedApproval
+    ? (reportsByJobId.get(selectedApproval.job_id) ?? []).filter(isBlockingOutputReport).length
+    : (outputReports ?? []).filter(isBlockingOutputReport).length;
+
+  if ((approvedAudits?.length ?? 0) > 0 && !selectedApproval) {
+    reasons.push(`Resolve ${blockingOutputReportCount || "the"} open or bad output report${blockingOutputReportCount === 1 ? "" : "s"} before publishing.`);
+  }
+
+  return {
+    publishable: reasons.length === 0 && !!selectedApproval,
+    reasons,
+    completedRunCount: jobsWithOutputs.length,
+    approvedAuditCount: approvedAudits?.length ?? 0,
+    blockingOutputReportCount,
+    latestCompletedJobId: latestCompletedJob?.id ?? null,
+    latestApprovedJobId: selectedApproval?.job_id ?? null,
+    latestApprovedAt: selectedApproval?.updated_at ?? null,
+  };
+}
+
+async function markVersionNeedsReview(
+  admin: ReturnType<typeof createAdminClient>,
+  versionId: string,
+) {
+  const { error } = await admin
+    .from("template_versions")
+    .update({
+      review_status: "Unreviewed",
+      reviewed_at: null,
+      reviewed_by: null,
+    })
+    .eq("id", versionId)
+    .eq("is_active", false);
+  if (error) throw new Error(error.message);
 }
 
 async function cloneVersion(args: {
@@ -146,6 +301,9 @@ async function cloneVersion(args: {
   makeActive: boolean;
 }) {
   const { admin, sourceVersionId, targetTemplateId, makeActive } = args;
+  if (makeActive) {
+    throw new Error("Cloned versions always start as drafts. Run and approve the clone before publishing.");
+  }
 
   const { data: sourceVersion, error: versionError } = await admin
     .from("template_versions")
@@ -171,22 +329,14 @@ async function cloneVersion(args: {
   const versionNumber = await nextVersionNumber(admin, targetTemplateId);
   const versionId = crypto.randomUUID();
 
-  if (makeActive) {
-    const { error: deactivateError } = await admin
-      .from("template_versions")
-      .update({ is_active: false })
-      .eq("template_id", targetTemplateId);
-    if (deactivateError) throw new Error(deactivateError.message);
-  }
-
   const { error: insertVersionError } = await admin
     .from("template_versions")
     .insert({
       id: versionId,
       template_id: targetTemplateId,
       version_number: versionNumber,
-      is_active: makeActive,
-      review_status: makeActive ? "Approved" : "Testing",
+      is_active: false,
+      review_status: "Unreviewed",
     });
   if (insertVersionError) throw new Error(insertVersionError.message);
 
@@ -254,13 +404,13 @@ async function starterNodes(args: {
     preset = "campaign",
     uploadedBy,
   } = args;
-  const inputSlots = args.inputSlots?.length ? args.inputSlots.slice(0, 8) : DEFAULT_INPUT_SLOTS;
+  const inputSlots = args.inputSlots?.length ? args.inputSlots.slice(0, MAX_INPUT_SLOTS) : DEFAULT_INPUT_SLOTS;
   const inputNodes = inputSlots.map((slot, index) => ({
     id: crypto.randomUUID(),
     slot,
     index,
   }));
-  const outputCount = Math.max(1, Math.min(8, args.outputCount ?? (inputNodes.length || 1)));
+  const outputCount = Math.max(1, Math.min(MAX_OUTPUT_BRANCHES, args.outputCount ?? (inputNodes.length || 1)));
   const fallbackImagePrompt = cleanText(
     args.imagePrompt,
     "Create a polished fashion campaign image using the uploaded input and hidden brand reference for scene direction.",
@@ -269,29 +419,28 @@ async function starterNodes(args: {
     args.videoPrompt,
     "Animate the campaign image into a short fashion ad with natural motion and premium brand pacing.",
   );
-  const withReference = preset === "reference";
   const referenceAssets = args.referenceAssets ?? [];
-  const referenceCount = withReference ? Math.max(outputCount, referenceAssets.length || 1) : referenceAssets.length;
+  const referenceDraftsWithFiles = referenceAssets
+    .map((draft, branchIndex) => ({ draft, branchIndex }))
+    .filter(({ draft }) => !!draft.file?.dataUrl);
   const references = await Promise.all(
-    Array.from({ length: referenceCount }).map(async (_, index) => {
-      const draft = referenceAssets[index] ?? {};
+    referenceDraftsWithFiles.map(async ({ draft, branchIndex }, index) => {
       const nodeId = crypto.randomUUID();
-      const label = cleanText(draft.label, referenceCount === 1 ? "Reference Image" : `Reference ${index + 1}`);
-      const asset = draft.file?.dataUrl
-        ? await uploadTemplateReferenceAsset({
-            admin,
-            file: draft.file,
-            templateId,
-            versionId,
-            nodeId,
-            label,
-            uploadedBy,
-            source: "template-onboarding",
-          })
-        : null;
+      const label = cleanText(draft.label, referenceDraftsWithFiles.length === 1 ? "Reference Image" : `Reference ${index + 1}`);
+      const asset = await uploadTemplateReferenceAsset({
+        admin,
+        file: draft.file!,
+        templateId,
+        versionId,
+        nodeId,
+        label,
+        uploadedBy,
+        source: "template-onboarding",
+      });
 
       return {
         nodeId,
+        branchIndex,
         label,
         prompt: nullableText(draft.prompt),
         asset,
@@ -301,11 +450,13 @@ async function starterNodes(args: {
 
   const outputGroups = Array.from({ length: outputCount }).map((_, index) => {
     const draft = referenceAssets[index] ?? {};
-    const input = inputNodes.find((node) => node.slot.key === draft.inputSlotKey) ?? inputNodes[index % inputNodes.length] ?? inputNodes[0];
+    const input = resolveInputForBranch({ inputNodes, draft, branchIndex: index });
+    const reference = references.find((item) => item.branchIndex === index) ?? null;
     return {
       imageId: crypto.randomUUID(),
       videoId: crypto.randomUUID(),
-      reference: references[index] ?? references[0] ?? null,
+      reference,
+      guidePrompt: nullableText(draft.prompt),
       input,
       imagePrompt: cleanText(draft.imagePrompt, fallbackImagePrompt),
       videoPrompt: cleanText(draft.videoPrompt, fallbackVideoPrompt),
@@ -348,8 +499,8 @@ async function starterNodes(args: {
       })),
       ...outputGroups.flatMap((group) => {
         const numberSuffix = outputCount > 1 ? ` ${group.index + 1}` : "";
-        const imagePromptWithReference = group.reference?.prompt
-          ? `${group.imagePrompt}\n\nHidden guide prompt: ${group.reference.prompt}`
+        const imagePromptWithReference = group.guidePrompt
+          ? `${group.imagePrompt}\n\nHidden guide prompt: ${group.guidePrompt}`
           : group.imagePrompt;
         return [{
         id: group.imageId,
@@ -478,6 +629,15 @@ Deno.serve(async (req) => {
         edgeCounts.set(edge.version_id, (edgeCounts.get(edge.version_id) ?? 0) + 1);
       }
 
+      const publishGates = new Map(
+        await Promise.all(
+          versionIds.map(async (versionId: string) => [
+            versionId,
+            await getVersionPublishGate(admin, versionId),
+          ] as const),
+        ),
+      );
+
       return json({
         templates: (templates ?? []).map((template: any) => ({
           ...template,
@@ -489,6 +649,7 @@ Deno.serve(async (req) => {
                 ...(nodeCounts.get(version.id) ?? { total: 0, inputs: 0, images: 0, videos: 0 }),
                 edges: edgeCounts.get(version.id) ?? 0,
               },
+              activationGate: publishGates.get(version.id) ?? null,
             })),
         })),
       });
@@ -516,7 +677,7 @@ Deno.serve(async (req) => {
           template_id: template.id,
           version_number: 1,
           is_active: false,
-          review_status: "Testing",
+          review_status: "Unreviewed",
         });
       if (versionError) throw new Error(versionError.message);
 
@@ -533,7 +694,7 @@ Deno.serve(async (req) => {
           versionId,
           preset: starterPreset,
           inputSlots: readInputSlots(body.inputSlots),
-          outputCount: cleanInteger(body.outputCount, 1, 1, 6),
+          outputCount: cleanInteger(body.outputCount, 1, 1, MAX_OUTPUT_BRANCHES),
           referenceAssets: readReferenceDrafts(body.referenceAssets),
           imagePrompt: nullableText(body.imagePrompt),
           videoPrompt: nullableText(body.videoPrompt),
@@ -590,7 +751,7 @@ Deno.serve(async (req) => {
         admin,
         sourceVersionId,
         targetTemplateId,
-        makeActive: body.makeActive !== false,
+        makeActive: body.makeActive === true,
       });
 
       await logAuditEvent({
@@ -616,8 +777,8 @@ Deno.serve(async (req) => {
         .single();
       if (error || !version) throw new Error(error?.message ?? "Version not found");
 
-      await setActiveVersion(admin, version.template_id, version.id);
-      return json({ versionId: version.id, templateId: version.template_id, isActive: true });
+      const activationGate = await setActiveVersion(admin, version.template_id, version.id);
+      return json({ versionId: version.id, templateId: version.template_id, isActive: true, activationGate });
     }
 
     if (action === "update_template") {
@@ -670,12 +831,20 @@ Deno.serve(async (req) => {
         .select("id")
         .single();
       if (error || !data) throw new Error(error?.message ?? "Node create failed");
+      await markVersionNeedsReview(admin, versionId);
       return json({ nodeId: data.id, versionId });
     }
 
     if (action === "delete_node") {
       const nodeId = cleanText(body.nodeId);
       if (!nodeId) throw new Error("nodeId is required");
+
+      const { data: node, error: nodeLookupError } = await admin
+        .from("nodes")
+        .select("version_id")
+        .eq("id", nodeId)
+        .maybeSingle();
+      if (nodeLookupError) throw new Error(nodeLookupError.message);
 
       const { error: edgeError } = await admin
         .from("edges")
@@ -685,6 +854,7 @@ Deno.serve(async (req) => {
 
       const { error } = await admin.from("nodes").delete().eq("id", nodeId);
       if (error) throw new Error(error.message);
+      if (node?.version_id) await markVersionNeedsReview(admin, node.version_id);
       return json({ nodeId, deleted: true });
     }
 
@@ -710,14 +880,22 @@ Deno.serve(async (req) => {
         .select("id")
         .single();
       if (error || !data) throw new Error(error?.message ?? "Edge create failed");
+      await markVersionNeedsReview(admin, versionId);
       return json({ edgeId: data.id, versionId });
     }
 
     if (action === "delete_edge") {
       const edgeId = cleanText(body.edgeId);
       if (!edgeId) throw new Error("edgeId is required");
+      const { data: edge, error: edgeLookupError } = await admin
+        .from("edges")
+        .select("version_id")
+        .eq("id", edgeId)
+        .maybeSingle();
+      if (edgeLookupError) throw new Error(edgeLookupError.message);
       const { error } = await admin.from("edges").delete().eq("id", edgeId);
       if (error) throw new Error(error.message);
+      if (edge?.version_id) await markVersionNeedsReview(admin, edge.version_id);
       return json({ edgeId, deleted: true });
     }
 

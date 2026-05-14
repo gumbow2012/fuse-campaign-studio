@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useSearchParams } from "react-router-dom";
 import {
   AlertTriangle,
   ArrowRightLeft,
@@ -147,6 +148,11 @@ function summarizePrompt(prompt: string | null | undefined) {
   const normalized = prompt.replace(/\s+/g, " ").trim();
   if (!normalized) return "No prompt captured";
   return normalized.length > 140 ? `${normalized.slice(0, 140)}…` : normalized;
+}
+
+function isPublishBlockingReport(report: AdminOutputReportRecord) {
+  if (report.status === "fixed") return false;
+  return report.status === "open" || report.verdict !== "good" || report.severity === "blocking";
 }
 
 function buildRunBundle(
@@ -668,6 +674,9 @@ function AuditQueueCard({
 const AdminAudits = () => {
   const { isAdmin } = useAuth();
   const queryClient = useQueryClient();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const jobIdParam = searchParams.get("jobId");
+  const versionIdParam = searchParams.get("versionId");
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<QueueFilter>("all");
   const [templateFilter, setTemplateFilter] = useState("all");
@@ -709,6 +718,7 @@ const AdminAudits = () => {
     const cutoff = getDateCutoff(dateWindow);
 
     return allJobs.filter((job) => {
+      if (!jobIdParam && versionIdParam && job.versionId !== versionIdParam) return false;
       if (filter !== "all" && job.queueState !== filter) return false;
       if (templateFilter !== "all" && job.templateName !== templateFilter) return false;
       if (planFilter !== "all" && (job.userPlan ?? "free") !== planFilter) return false;
@@ -731,12 +741,34 @@ const AdminAudits = () => {
         .filter(Boolean)
         .some((value) => String(value).toLowerCase().includes(query));
     });
-  }, [allJobs, dateWindow, filter, planFilter, search, subscriptionFilter, templateFilter]);
+  }, [allJobs, dateWindow, filter, jobIdParam, planFilter, search, subscriptionFilter, templateFilter, versionIdParam]);
 
   const selectedQueueItem = useMemo(
     () => filteredJobs.find((job) => job.id === selectedJobId) ?? null,
     [filteredJobs, selectedJobId],
   );
+
+  useEffect(() => {
+    if (jobIdParam && allJobs.some((job) => job.id === jobIdParam)) {
+      setSelectedJobId(jobIdParam);
+      if (search) setSearch("");
+      if (filter !== "all") setFilter("all");
+      if (dateWindow !== "all") setDateWindow("all");
+      if (templateFilter !== "all") setTemplateFilter("all");
+      if (planFilter !== "all") setPlanFilter("all");
+      if (subscriptionFilter !== "all") setSubscriptionFilter("all");
+    }
+  }, [allJobs, dateWindow, filter, jobIdParam, planFilter, search, subscriptionFilter, templateFilter]);
+
+  useEffect(() => {
+    if (!versionIdParam || jobIdParam) return;
+    if (search) setSearch("");
+    if (filter !== "all") setFilter("all");
+    if (dateWindow !== "all") setDateWindow("all");
+    if (templateFilter !== "all") setTemplateFilter("all");
+    if (planFilter !== "all") setPlanFilter("all");
+    if (subscriptionFilter !== "all") setSubscriptionFilter("all");
+  }, [dateWindow, filter, jobIdParam, planFilter, search, subscriptionFilter, templateFilter, versionIdParam]);
 
   useEffect(() => {
     if (!filteredJobs.length) {
@@ -748,6 +780,14 @@ const AdminAudits = () => {
       setSelectedJobId(filteredJobs[0].id);
     }
   }, [filteredJobs, selectedJobId]);
+
+  useEffect(() => {
+    if (!selectedJobId) return;
+    if (searchParams.get("jobId") === selectedJobId) return;
+    const next = new URLSearchParams(searchParams);
+    next.set("jobId", selectedJobId);
+    setSearchParams(next, { replace: true });
+  }, [searchParams, selectedJobId, setSearchParams]);
 
   const detailQuery = useQuery({
     queryKey: ["admin-audit-detail", selectedJobId],
@@ -976,6 +1016,13 @@ const AdminAudits = () => {
   }
 
   const detail = detailQuery.data;
+  const publishBlockingReports = detail?.outputReports.filter(isPublishBlockingReport) ?? [];
+  const hasApprovedRunAudit = (detail?.audits ?? []).some((audit) => audit.verdict === "approved" && audit.overallScore >= 75);
+  const selectedRunPublishEligible =
+    detail?.job.status === "complete" &&
+    hasApprovedRunAudit &&
+    publishBlockingReports.length === 0 &&
+    (detail?.job.outputs.length ?? 0) > 0;
 
   return (
     <SiteShell>
@@ -1224,8 +1271,33 @@ const AdminAudits = () => {
                     <Badge variant="outline" className="border-white/10 bg-white/[0.03] text-slate-200">
                       {detail.job.outputs.length} outputs
                     </Badge>
+                    <Badge
+                      variant="outline"
+                      className={selectedRunPublishEligible
+                        ? "border-emerald-400/30 bg-emerald-400/10 text-emerald-100"
+                        : "border-amber-300/30 bg-amber-400/10 text-amber-100"}
+                    >
+                      {selectedRunPublishEligible ? "Publish gate pass" : "Publish gate blocked"}
+                    </Badge>
                   </div>
                 </div>
+
+                {!selectedRunPublishEligible ? (
+                  <div className="rounded-2xl border border-amber-300/20 bg-amber-400/[0.06] p-4 text-sm text-amber-50">
+                    <p className="font-semibold">Publish requirements for this version</p>
+                    <div className="mt-3 grid gap-2 md:grid-cols-3">
+                      <div className="rounded-xl border border-white/10 bg-black/20 px-3 py-2">
+                        Completed run: {detail.job.status === "complete" ? "yes" : "no"}
+                      </div>
+                      <div className="rounded-xl border border-white/10 bg-black/20 px-3 py-2">
+                        Approved audit: {hasApprovedRunAudit ? "yes" : "no"}
+                      </div>
+                      <div className="rounded-xl border border-white/10 bg-black/20 px-3 py-2">
+                        Blocking output reports: {publishBlockingReports.length}
+                      </div>
+                    </div>
+                  </div>
+                ) : null}
 
                 <div className="grid gap-4 xl:grid-cols-[minmax(0,1.25fr),360px]">
                   <div className="space-y-6">

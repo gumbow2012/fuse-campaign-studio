@@ -47,7 +47,7 @@ Run the recurring billing smoke after test-mode Stripe secrets and test price/pr
 
 `BILLING_SMOKE_SECRET=... npm run billing:recurring-smoke`
 
-The smoke verifies:
+The recurring smoke verifies:
 
 - initial subscription charge
 - `invoice.paid` webhook delivery
@@ -58,6 +58,20 @@ The smoke verifies:
 - failed renewal via failing payment method
 - optional subscription cancellation
 
+Run the credit-pack smoke after `STRIPE_SECRET_KEY_TEST`, `STRIPE_WEBHOOK_SECRET_TEST`, and `BILLING_SMOKE_SECRET` are present:
+
+`BILLING_SMOKE_SECRET=... npm run billing:credit-pack-smoke`
+
+The credit-pack smoke verifies:
+
+- a signed test-mode `checkout.session.completed` webhook
+- credit-pack purchase fulfillment
+- top-up ledger insertion
+- profile `credits_balance` increase
+- duplicate webhook idempotency
+
 ## Expected outcome
 
-A passing run returns a JSON report with the Stripe test clock ID, customer ID, subscription ID, and snapshots for initial charge, renewal, failure, and cancellation.
+A passing recurring run returns a JSON report with the Stripe test clock ID, customer ID, subscription ID, and snapshots for initial charge, renewal, failure, and cancellation.
+
+A passing credit-pack run returns a JSON report with the smoke user, pack, checkout session ID, webhook responses, fulfilled purchase row, and ledger rows.

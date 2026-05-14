@@ -3,10 +3,26 @@
 Use this as the working contract while dialing templates in.
 
 Rules:
-- `User uploads` are always dynamic. They should never fall back to demo media.
+- `User uploads` are always dynamic. They should never fall back to demo media unless an admin intentionally attaches a default asset for a smoke run.
 - `Hidden references` are built-in scene assets that stay fixed unless we intentionally replace them.
 - If Supabase has more raw `user_input` nodes than the `User uploads` count below, the extras should be demoted to hidden refs.
 - The Weavy recipe is the source of truth for step count and flow shape.
+
+## Validation Runs
+
+### 2026-05-13 Codex Branch Mapping Smoke
+
+- Template: `Codex Branch Mapping Smoke 2026-05-13T20-46-35`
+- Version: `03d347b2-7d37-4a7b-b6a8-b2bf915c42e9`
+- Job: `2aa92fa1-851e-484d-b93c-bc28f3aef283`
+- Status: `complete`
+- Graph check: `5` user upload inputs, `0` hidden reference uploads, `8` image branches, `8` video branches.
+- Branch wiring check: image branches map to Top Garment, Bottom Garment, Logo, Head Accessory, and Footwear instead of all mapping to the first upload.
+- Runner check: all `8` image steps and all `8` video steps completed.
+- Asset shape check: generated images are `768 x 1376`, matching the required 9:16 output direction.
+- Visual verdict: `prompt drift`
+- Reason: the smoke used existing generated assets as seeded test inputs, so the workflow proved the graph and runner path, but several visual outputs were not publishable brand outputs. Some branches generated generic fashion/ad imagery instead of cleanly preserving the intended upload category.
+- Publish decision: do not publish this smoke template. It exists only to verify the builder, graph creation, default test assets, and runner automation path.
 
 ## Count Summary
 

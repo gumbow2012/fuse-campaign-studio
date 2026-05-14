@@ -10,7 +10,7 @@ Use this to verify the project is on the right path before user testing.
 - [ ] Hidden guide/reference uploads save to Supabase storage and come back as asset UUIDs on the template nodes.
 - [ ] Starter membership is configured as $25 in app config and shared Stripe plan metadata.
 - [ ] Subscription checkout and credit-pack checkout both support Stripe promotion codes.
-- [ ] Credit packs/top-ups can create Checkout Sessions and the webhook credits the user after paid checkout.
+- [ ] Credit packs/top-ups can create Checkout Sessions and the signed webhook path credits the user after paid checkout.
 - [ ] The admin template builder starts at the top of the canvas page.
 - [ ] New template creation uses name -> input slots -> output count -> hidden guides -> prompts.
 - [ ] The input slot picker uses controlled labels such as Top Garment, Bottom Garment, Logo, Head Accessory, Footwear, Model Reference, Scene Reference, and Product Image.
@@ -19,7 +19,7 @@ Use this to verify the project is on the right path before user testing.
 - [ ] Manage existing templates sits below create-new, not beside it in a cramped trailing panel.
 - [ ] Orbitron is installed locally and wired as the display/brand font.
 - [ ] The normal admin template page no longer links to the legacy HAR/Weavy importer.
-- [ ] New draft versions start in Testing status and cannot be published until an admin canvas run completes.
+- [ ] New draft versions cannot be published until a completed run has an approved admin audit and no blocking output reports.
 
 ## Needs Manual QA
 
@@ -29,7 +29,7 @@ Use this to verify the project is on the right path before user testing.
 - [ ] Confirm the hidden guide image appears as a hidden/reference node with an asset UUID.
 - [ ] Publish the new version and run it from `/app/templates` as admin.
 - [ ] Run the same live template as a non-admin test user and confirm hidden internals are not visible.
-- [ ] Buy a credit pack in Stripe test mode and confirm `credits_balance` increases.
+- [ ] Run `npm run billing:credit-pack-smoke` with `BILLING_SMOKE_SECRET` and confirm `credits_balance` increases in the generated report.
 - [ ] Run a subscription checkout with a promo code and confirm Stripe accepts it.
 - [ ] Test mobile widths for `/app/templates` and `/app/lab/canvas`.
 
@@ -37,7 +37,7 @@ Use this to verify the project is on the right path before user testing.
 
 - [ ] Final logo/favicon asset approval beyond the interim `/fuse-icon.svg` mark.
 - [ ] A cleaner admin-edit surface for template description and preview/sample output media.
-- [ ] Create a real live `$25/month` Starter price in Stripe and set `STRIPE_STARTER_PRICE_ID_LIVE`; current live Starter fallback is still `$49/month` and checkout is blocked to avoid overcharging.
+- [ ] Confirm the live `$25/month` Starter price is present in Stripe and `STRIPE_STARTER_PRICE_ID_LIVE` is set; checkout is blocked if the app falls back to the old live Starter price.
 - [ ] Full live Stripe webhook smoke test with the corrected live Starter price ID.
 - [ ] Decide whether to delete the hidden legacy HAR/Weavy importer route entirely.
 
