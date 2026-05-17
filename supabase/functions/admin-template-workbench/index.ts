@@ -862,6 +862,12 @@ Deno.serve(async (req) => {
         .or(`source_node_id.eq.${nodeId},target_node_id.eq.${nodeId}`);
       if (edgeError) throw new Error(edgeError.message);
 
+      const { error: stepDetachError } = await admin
+        .from("execution_steps")
+        .update({ node_id: null })
+        .eq("node_id", nodeId);
+      if (stepDetachError) throw new Error(stepDetachError.message);
+
       const { error } = await admin.from("nodes").delete().eq("id", nodeId);
       if (error) throw new Error(error.message);
       if (node?.version_id) await markVersionNeedsReview(admin, node.version_id);

@@ -223,6 +223,15 @@ function formatCount(count: number, singular: string, plural: string) {
   return `${count} ${count === 1 ? singular : plural}`;
 }
 
+function clampPercent(value: number) {
+  if (!Number.isFinite(value)) return 0;
+  return Math.max(0, Math.min(100, Math.round(value)));
+}
+
+function formatCredits(value: number | null | undefined) {
+  return Number(value ?? 0).toLocaleString();
+}
+
 function getUploadIllustrationKind(label: string) {
   const normalized = label.toLowerCase();
   if (/(logo|brand|mark)/.test(normalized)) return "logo";
@@ -314,6 +323,74 @@ function UploadPlaceholderIllustration({
           </>
         )}
       </svg>
+    </div>
+  );
+}
+
+function CreditRemainingMeter({
+  label,
+  percent,
+  value,
+}: {
+  label: string;
+  percent: number;
+  value: string;
+}) {
+  return (
+    <div className="min-w-[230px] rounded-[1.5rem] border border-white/10 bg-slate-950/75 p-4 shadow-[0_18px_60px_rgba(0,0,0,0.32)] backdrop-blur-xl">
+      <div className="flex items-end justify-between gap-3">
+        <div>
+          <p className="font-display text-5xl font-semibold tracking-[-0.06em] text-white">{percent}%</p>
+          <p className="mt-1 text-[11px] uppercase tracking-[0.24em] text-slate-400">{label}</p>
+        </div>
+        <p className="pb-1 text-sm font-medium text-cyan-100">{value}</p>
+      </div>
+      <div className="mt-4 h-1.5 overflow-hidden rounded-full bg-white/10">
+        <div
+          className="h-full rounded-full bg-cyan-300 shadow-[0_0_18px_rgba(103,232,249,0.65)]"
+          style={{ width: `${percent}%` }}
+        />
+      </div>
+    </div>
+  );
+}
+
+function RunProgressBeacon({
+  progress,
+  status,
+}: {
+  progress: number;
+  status: RunnerStatus;
+}) {
+  const safeProgress = clampPercent(progress);
+  const message = status === "video_pending"
+    ? "Video render in progress"
+    : "Template run in progress";
+
+  return (
+    <div className="rounded-[1.5rem] border border-white/8 bg-black/20 p-5">
+      <div className="flex items-center gap-3">
+        <span className="relative flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-cyan-200/25 bg-cyan-300/10 text-cyan-100">
+          <span className="absolute inset-0 rounded-full bg-cyan-300/15 blur-md" />
+          <Loader2 className="relative h-5 w-5 animate-spin" />
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-medium text-slate-100">{message}</p>
+          <p className="mt-1 text-xs text-slate-500">{safeProgress}% complete</p>
+        </div>
+      </div>
+      <div className="relative mt-5 h-8">
+        <div className="absolute left-0 right-0 top-1/2 h-px -translate-y-1/2 bg-cyan-200/18" />
+        <div
+          className="absolute left-0 top-1/2 h-px -translate-y-1/2 bg-cyan-300 shadow-[0_0_16px_rgba(103,232,249,0.8)]"
+          style={{ width: `${safeProgress}%` }}
+        />
+        <div
+          className="absolute top-1/2 h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full bg-cyan-200 shadow-[0_0_18px_rgba(103,232,249,0.9)]"
+          style={{ left: `${safeProgress}%` }}
+        />
+      </div>
+      <Progress value={safeProgress} className="h-2" />
     </div>
   );
 }
@@ -570,9 +647,16 @@ export default function TemplateStudioPage() {
     profile?.subscription_status === "trialing";
   const canRun = requiredInputsAreReady && hasActiveMembership && canAfford;
   const adminVisualRemaining = getAdminVisualCreditsRemaining();
-  const creditBanner = isPrivilegedUser
-    ? `Team access ${adminVisualRemaining}/${ADMIN_VISUAL_BUDGET_TOTAL}`
-    : `Balance ${creditBalance} credits`;
+  const creditCycleTotal = isPrivilegedUser
+    ? ADMIN_VISUAL_BUDGET_TOTAL
+    : Math.max(profile?.subscription_cycle_credits ?? 0, creditBalance);
+  const creditsRemaining = isPrivilegedUser ? adminVisualRemaining : creditBalance;
+  const creditsRemainingPercent = creditCycleTotal > 0
+    ? clampPercent((creditsRemaining / creditCycleTotal) * 100)
+    : 0;
+  const creditsRemainingValue = isPrivilegedUser
+    ? `${formatCredits(adminVisualRemaining)} / ${formatCredits(ADMIN_VISUAL_BUDGET_TOTAL)}`
+    : `${formatCredits(creditBalance)} cr`;
   const costDisplay = isPrivilegedUser ? "Bypassed for team access" : `${creditsRequired} credits`;
 
   const handleTemplateSelect = (templateId: string) => {
@@ -717,16 +801,18 @@ export default function TemplateStudioPage() {
       </Dialog>
 
       <section className="container py-12 md:py-16">
-        <div className="flex flex-wrap items-end justify-between gap-4">
+        <div className="flex flex-wrap items-end justify-between gap-6">
           <div>
             <p className="text-[11px] font-semibold uppercase tracking-[0.3em] text-cyan-100">Template Studio</p>
             <h1 className="mt-4 font-display text-5xl font-bold tracking-[-0.05em] text-white">
               Run production workflows without leaving the page.
             </h1>
           </div>
-          <div className="rounded-full border border-white/10 bg-white/[0.04] px-4 py-2 text-xs uppercase tracking-[0.24em] text-muted-foreground">
-            {creditBanner}
-          </div>
+          <CreditRemainingMeter
+            label={isPrivilegedUser ? "Team Credits Remaining" : "Credits Remaining"}
+            percent={creditsRemainingPercent}
+            value={creditsRemainingValue}
+          />
         </div>
 
         {isPrivilegedUser ? (
@@ -994,22 +1080,21 @@ export default function TemplateStudioPage() {
                 ) : null}
               </div>
 
-              {!result ? (
+              {!result && !submitting ? (
                 <div className="mt-6 flex min-h-[220px] items-center justify-center rounded-[1.5rem] border border-dashed border-white/10 bg-black/20 text-slate-400">
                   Output will appear here after you run a template.
                 </div>
               ) : null}
 
+              {submitting && !result ? (
+                <div className="mt-6">
+                  <RunProgressBeacon progress={3} status="queued" />
+                </div>
+              ) : null}
+
               {result && ACTIVE_RUN_STATUSES.has(result.status) ? (
-                <div className="mt-6 rounded-[1.5rem] border border-white/8 bg-black/20 p-5">
-                  <div className="flex items-center gap-3">
-                    <Loader2 className="h-5 w-5 animate-spin text-cyan-100" />
-                    <p className="text-sm text-slate-200">
-                      {result.status === "video_pending" ? "Video rendering is still in progress." : "The runner is processing your request."}
-                    </p>
-                  </div>
-                  <Progress value={result.progress} className="mt-4 h-2" />
-                  <p className="mt-2 text-xs text-slate-400">{result.progress}% complete</p>
+                <div className="mt-6">
+                  <RunProgressBeacon progress={result.progress} status={result.status} />
                 </div>
               ) : null}
 

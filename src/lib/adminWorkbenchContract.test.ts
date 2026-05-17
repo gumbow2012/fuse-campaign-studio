@@ -36,6 +36,22 @@ describe("admin template workbench contract", () => {
     expect(source).toContain("aspect_ratio: VERTICAL_VIDEO_ASPECT_RATIO");
   });
 
+  it("deletes canvas nodes without destroying historical execution steps", () => {
+    const workbenchSource = readFileSync(
+      resolve(process.cwd(), "supabase/functions/admin-template-workbench/index.ts"),
+      "utf8",
+    );
+    const migrationSource = readFileSync(
+      resolve(process.cwd(), "supabase/migrations/20260517022000_set_execution_steps_node_delete_null.sql"),
+      "utf8",
+    );
+
+    expect(workbenchSource).toContain('.from("execution_steps")');
+    expect(workbenchSource).toContain("update({ node_id: null })");
+    expect(workbenchSource).toContain('.eq("node_id", nodeId)');
+    expect(migrationSource).toContain("on delete set null");
+  });
+
   it("prices templates from the output-count credit table", () => {
     const source = readFileSync(
       resolve(process.cwd(), "supabase/functions/_shared/template-pricing.ts"),
