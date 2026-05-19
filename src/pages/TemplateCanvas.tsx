@@ -80,6 +80,11 @@ type WorkbenchCatalogTemplate = {
   versions?: WorkbenchCatalogVersion[];
 };
 
+type WorkbenchResponse = Record<string, unknown> & {
+  error?: string;
+  activationGate?: ActivationGate | null;
+};
+
 type LabCatalogTemplate = {
   templateId: string;
   templateName: string;
@@ -382,6 +387,8 @@ const TemplateCanvas = () => {
   const [templateMetaPreviewAssetType, setTemplateMetaPreviewAssetType] = useState<"image" | "video" | null>(null);
   const [templateMetaCoverFile, setTemplateMetaCoverFile] = useState<File | null>(null);
   const [templateMetaCoverPreview, setTemplateMetaCoverPreview] = useState<string | null>(null);
+  const [selectedActivationGate, setSelectedActivationGate] = useState<ActivationGate | null>(null);
+  const [loadingActivationGate, setLoadingActivationGate] = useState(false);
   const [cloneTemplateName, setCloneTemplateName] = useState("");
   const [addNodeType, setAddNodeType] = useState<NewNodeKind>("upload");
   const [addNodeName, setAddNodeName] = useState("");
@@ -404,6 +411,9 @@ const TemplateCanvas = () => {
 
   const buildAuthHeaders = useCallback(async () => {
     const headers: Record<string, string> = {};
+    if (import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY) {
+      headers.apikey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+    }
     if (session?.access_token) headers.Authorization = `Bearer ${session.access_token}`;
     return headers;
   }, [session?.access_token]);
@@ -417,8 +427,16 @@ const TemplateCanvas = () => {
       },
       body: JSON.stringify(body),
     });
-    const data = await response.json();
-    if (!response.ok) throw new Error(data?.error ?? "Template workbench request failed");
+    const rawBody = await response.text();
+    let data: WorkbenchResponse = {};
+    if (rawBody) {
+      try {
+        data = JSON.parse(rawBody) as WorkbenchResponse;
+      } catch {
+        data = { error: rawBody };
+      }
+    }
+    if (!response.ok) throw new Error(data?.error ?? `Template workbench request failed (${response.status})`);
     return data;
   }, [buildAuthHeaders]);
 
@@ -602,6 +620,34 @@ const TemplateCanvas = () => {
   useEffect(() => {
     void loadDetail(selectedVersionId);
   }, [loadDetail, selectedVersionId]);
+
+  useEffect(() => {
+    let isCancelled = false;
+    if (!detail?.versionId) {
+      setSelectedActivationGate(null);
+      setLoadingActivationGate(false);
+      return () => {
+        isCancelled = true;
+      };
+    }
+
+    setLoadingActivationGate(true);
+    void invokeWorkbench({ action: "publish_gate", versionId: detail.versionId })
+      .then((data) => {
+        if (!isCancelled) setSelectedActivationGate(data.activationGate ?? null);
+      })
+      .catch((gateError) => {
+        console.error("Failed to load publish gate:", gateError);
+        if (!isCancelled) setSelectedActivationGate(null);
+      })
+      .finally(() => {
+        if (!isCancelled) setLoadingActivationGate(false);
+      });
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [detail?.versionId, invokeWorkbench]);
 
   useEffect(() => {
     void loadLatestOutputsForVersion(selectedVersionId);
@@ -1357,7 +1403,7 @@ const TemplateCanvas = () => {
 
   const activateCurrentVersion = useCallback(async () => {
     if (!detail) return;
-    const gate = selectedTemplate?.activationGate ?? null;
+    const gate = selectedActivationGate ?? selectedTemplate?.activationGate ?? null;
     if (gate && !gate.publishable) {
       setShowRunnerPanel(true);
       toast({
@@ -1378,7 +1424,7 @@ const TemplateCanvas = () => {
     } finally {
       setMutating(null);
     }
-  }, [detail, invokeWorkbench, refreshAfterMutation, selectedTemplate?.activationGate]);
+  }, [detail, invokeWorkbench, refreshAfterMutation, selectedActivationGate, selectedTemplate?.activationGate]);
 
   const saveTemplateMetadata = useCallback(async () => {
     if (!selectedTemplate) return;
@@ -1558,12 +1604,12 @@ const TemplateCanvas = () => {
   const wizardStepIndex = wizardSteps.findIndex((step) => step.id === templateWizardStep);
   const wizardProgress = ((wizardStepIndex + 1) / wizardSteps.length) * 100;
   const hasTemplateName = canAdvanceTemplateBuilder("setup", newTemplateName);
-  const selectedPublishGate = selectedTemplate?.activationGate ?? null;
+  const selectedPublishGate = selectedActivationGate ?? selectedTemplate?.activationGate ?? null;
   const testingGateActive = !!detail && !detail.isActive;
-  const testingGateSatisfied = !testingGateActive || selectedPublishGate?.publishable === true;
+  const testingGateSatisfied = !testingGateActive || (!loadingActivationGate && selectedPublishGate?.publishable === true);
   const publishGateReasons = selectedPublishGate?.reasons?.length
     ? selectedPublishGate.reasons
-    : ["Complete a run and save an approved audit before publishing."];
+    : [loadingActivationGate ? "Checking publish requirements..." : "Complete a run and save an approved audit before publishing."];
   const publishRunComplete = (selectedPublishGate?.completedRunCount ?? 0) > 0;
   const publishAuditApproved = (selectedPublishGate?.approvedAuditCount ?? 0) > 0;
   const publishBlockingOutputCount = selectedPublishGate?.blockingOutputReportCount ?? 0;

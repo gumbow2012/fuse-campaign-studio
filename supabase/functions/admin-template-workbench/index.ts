@@ -16,6 +16,7 @@ type Action =
   | "create_template"
   | "clone_version"
   | "activate_version"
+  | "publish_gate"
   | "unpublish_template"
   | "update_template"
   | "add_node"
@@ -653,15 +654,6 @@ Deno.serve(async (req) => {
         edgeCounts.set(edge.version_id, (edgeCounts.get(edge.version_id) ?? 0) + 1);
       }
 
-      const publishGates = new Map(
-        await Promise.all(
-          versionIds.map(async (versionId: string) => [
-            versionId,
-            await getVersionPublishGate(admin, versionId),
-          ] as const),
-        ),
-      );
-
       return json({
         templates: (templates ?? []).map((template: any) => ({
           ...template,
@@ -673,7 +665,7 @@ Deno.serve(async (req) => {
                 ...(nodeCounts.get(version.id) ?? { total: 0, inputs: 0, images: 0, videos: 0 }),
                 edges: edgeCounts.get(version.id) ?? 0,
               },
-              activationGate: publishGates.get(version.id) ?? null,
+              activationGate: null,
             })),
         })),
       });
@@ -825,6 +817,12 @@ Deno.serve(async (req) => {
 
       const activationGate = await setActiveVersion(admin, version.template_id, version.id);
       return json({ versionId: version.id, templateId: version.template_id, isActive: true, activationGate });
+    }
+
+    if (action === "publish_gate") {
+      const versionId = cleanText(body.versionId);
+      if (!versionId) throw new Error("versionId is required");
+      return json({ versionId, activationGate: await getVersionPublishGate(admin, versionId) });
     }
 
     if (action === "unpublish_template") {
