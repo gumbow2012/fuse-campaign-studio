@@ -1,0 +1,9 @@
+This file is a placeholder for the revert operation. 
+
+To properly revert the commit d35dbd47656a3c8f59d79dc39d1b8895393bb489, you need to use the command line:
+
+git revert d35dbd47656a3c8f59d79dc39d1b8895393bb489
+
+Or if you want to undo it completely without keeping history:
+
+git reset --hard 24ee0b47ae03176995f5d101a615a7c3ae0d8b02
