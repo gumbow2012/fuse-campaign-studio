@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { CheckCircle2, ChevronLeft, ChevronRight, Copy, Film, GitBranch, Loader2, Maximize2, Minus, Move, Plus, RefreshCw, Save, Trash2, Upload } from "lucide-react";
+import { CheckCircle2, ChevronLeft, ChevronRight, Copy, EyeOff, Film, GitBranch, Image as ImageIcon, Loader2, Maximize2, Minus, Move, Plus, RefreshCw, Save, Trash2, Upload } from "lucide-react";
 import { Link, useSearchParams } from "react-router-dom";
 import SiteShell from "@/components/mvp/SiteShell";
 import { Button } from "@/components/ui/button";
@@ -38,6 +38,9 @@ type ActivationGate = {
 type TemplateOption = {
   templateId: string;
   templateName: string;
+  description: string | null;
+  previewUrl: string | null;
+  previewAssetType: "image" | "video" | null;
   versionId: string;
   versionNumber: number;
   reviewStatus: string;
@@ -71,12 +74,18 @@ type WorkbenchCatalogVersion = {
 type WorkbenchCatalogTemplate = {
   id: string;
   name: string;
+  description?: string | null;
+  preview_url?: string | null;
+  preview_asset_type?: "image" | "video" | null;
   versions?: WorkbenchCatalogVersion[];
 };
 
 type LabCatalogTemplate = {
   templateId: string;
   templateName: string;
+  description?: string | null;
+  previewUrl?: string | null;
+  previewAssetType?: "image" | "video" | null;
   versionId: string;
   versionNumber: number;
   reviewStatus?: string | null;
@@ -359,12 +368,20 @@ const TemplateCanvas = () => {
   const [mutating, setMutating] = useState<string | null>(null);
   const [newTemplateName, setNewTemplateName] = useState("");
   const [newTemplateDescription, setNewTemplateDescription] = useState("");
+  const [newTemplateCoverFile, setNewTemplateCoverFile] = useState<File | null>(null);
+  const [newTemplateCoverPreview, setNewTemplateCoverPreview] = useState<string | null>(null);
   const [templateWizardStep, setTemplateWizardStep] = useState<TemplateWizardStep>("setup");
   const [newTemplateInputSlots, setNewTemplateInputSlots] = useState<TemplateInputSlotDraft[]>(createDefaultTemplateInputSlots);
   const [newTemplateReferences, setNewTemplateReferences] = useState<TemplateReferenceDraft[]>(() => {
     const slots = createDefaultTemplateInputSlots();
     return slots.map((slot, index) => createTemplateReferenceDraft(index, slot));
   });
+  const [templateMetaName, setTemplateMetaName] = useState("");
+  const [templateMetaDescription, setTemplateMetaDescription] = useState("");
+  const [templateMetaPreviewUrl, setTemplateMetaPreviewUrl] = useState<string | null>(null);
+  const [templateMetaPreviewAssetType, setTemplateMetaPreviewAssetType] = useState<"image" | "video" | null>(null);
+  const [templateMetaCoverFile, setTemplateMetaCoverFile] = useState<File | null>(null);
+  const [templateMetaCoverPreview, setTemplateMetaCoverPreview] = useState<string | null>(null);
   const [cloneTemplateName, setCloneTemplateName] = useState("");
   const [addNodeType, setAddNodeType] = useState<NewNodeKind>("upload");
   const [addNodeName, setAddNodeName] = useState("");
@@ -416,6 +433,9 @@ const TemplateCanvas = () => {
       templates: ((data.templates ?? []) as LabCatalogTemplate[]).map((template) => ({
         id: template.templateId,
         name: template.templateName,
+        description: template.description ?? null,
+        preview_url: template.previewUrl ?? null,
+        preview_asset_type: template.previewAssetType ?? null,
         versions: [{
           id: template.versionId,
           version_number: template.versionNumber,
@@ -452,6 +472,9 @@ const TemplateCanvas = () => {
         (template.versions ?? []).map((version) => ({
           templateId: template.id,
           templateName: template.name,
+          description: template.description ?? null,
+          previewUrl: template.preview_url ?? null,
+          previewAssetType: template.preview_asset_type ?? null,
           versionId: version.id,
           versionNumber: version.version_number,
           reviewStatus: version.review_status ?? "Unreviewed",
@@ -623,6 +646,28 @@ const TemplateCanvas = () => {
     () => templates.find((template) => template.versionId === selectedVersionId) ?? null,
     [selectedVersionId, templates],
   );
+
+  useEffect(() => {
+    if (!selectedTemplate) {
+      setTemplateMetaName("");
+      setTemplateMetaDescription("");
+      setTemplateMetaPreviewUrl(null);
+      setTemplateMetaPreviewAssetType(null);
+      setTemplateMetaCoverFile(null);
+      setTemplateMetaCoverPreview(null);
+      return;
+    }
+
+    setTemplateMetaName(selectedTemplate.templateName);
+    setTemplateMetaDescription(selectedTemplate.description ?? "");
+    setTemplateMetaPreviewUrl(selectedTemplate.previewUrl ?? null);
+    setTemplateMetaPreviewAssetType(selectedTemplate.previewAssetType ?? null);
+    setTemplateMetaCoverFile(null);
+    setTemplateMetaCoverPreview((current) => {
+      if (current?.startsWith("blob:")) URL.revokeObjectURL(current);
+      return null;
+    });
+  }, [selectedTemplate]);
 
   const versionOptions = useMemo(() => {
     if (!selectedTemplate) return [];
@@ -1012,6 +1057,22 @@ const TemplateCanvas = () => {
     );
   }, []);
 
+  const handleNewTemplateCoverFile = useCallback((file: File | null) => {
+    setNewTemplateCoverPreview((current) => {
+      if (current?.startsWith("blob:")) URL.revokeObjectURL(current);
+      return file ? URL.createObjectURL(file) : null;
+    });
+    setNewTemplateCoverFile(file);
+  }, []);
+
+  const handleTemplateMetaCoverFile = useCallback((file: File | null) => {
+    setTemplateMetaCoverPreview((current) => {
+      if (current?.startsWith("blob:")) URL.revokeObjectURL(current);
+      return file ? URL.createObjectURL(file) : null;
+    });
+    setTemplateMetaCoverFile(file);
+  }, []);
+
   const handleReferenceUploadFile = useCallback((file: File | null) => {
     if (referenceUploadPreview?.startsWith("blob:")) URL.revokeObjectURL(referenceUploadPreview);
     setReferenceUploadFile(file);
@@ -1215,6 +1276,12 @@ const TemplateCanvas = () => {
         action: "create_template",
         name,
         description: newTemplateDescription,
+        previewFile: newTemplateCoverFile
+          ? {
+              filename: newTemplateCoverFile.name,
+              dataUrl: await fileToDataUrl(newTemplateCoverFile),
+            }
+          : null,
         withStarterGraph: true,
         starterPreset: "reference",
         inputSlots,
@@ -1223,6 +1290,7 @@ const TemplateCanvas = () => {
       });
       setNewTemplateName("");
       setNewTemplateDescription("");
+      handleNewTemplateCoverFile(null);
       setTemplateWizardStep("setup");
       const resetSlots = createDefaultTemplateInputSlots();
       setNewTemplateInputSlots(resetSlots);
@@ -1247,7 +1315,9 @@ const TemplateCanvas = () => {
     }
   }, [
     invokeWorkbench,
+    handleNewTemplateCoverFile,
     newTemplateDescription,
+    newTemplateCoverFile,
     newTemplateInputSlots,
     newTemplateName,
     newTemplateReferences,
@@ -1309,6 +1379,90 @@ const TemplateCanvas = () => {
       setMutating(null);
     }
   }, [detail, invokeWorkbench, refreshAfterMutation, selectedTemplate?.activationGate]);
+
+  const saveTemplateMetadata = useCallback(async () => {
+    if (!selectedTemplate) return;
+    const name = templateMetaName.trim();
+    if (!name) {
+      toast({ title: "Template name required", variant: "destructive" });
+      return;
+    }
+
+    setMutating("save-template-meta");
+    try {
+      await invokeWorkbench({
+        action: "update_template",
+        templateId: selectedTemplate.templateId,
+        name,
+        description: templateMetaDescription,
+        previewUrl: templateMetaPreviewUrl,
+        previewAssetType: templateMetaPreviewAssetType ?? "image",
+        previewFile: templateMetaCoverFile
+          ? {
+              filename: templateMetaCoverFile.name,
+              dataUrl: await fileToDataUrl(templateMetaCoverFile),
+            }
+          : null,
+      });
+      await refreshAfterMutation(selectedTemplate.versionId);
+      handleTemplateMetaCoverFile(null);
+      toast({ title: "Template updated", description: "Name, description, and cover are saved." });
+    } catch (metadataError) {
+      const message = metadataError instanceof Error ? metadataError.message : "Could not update template";
+      toast({ title: "Update failed", description: message, variant: "destructive" });
+    } finally {
+      setMutating(null);
+    }
+  }, [
+    handleTemplateMetaCoverFile,
+    invokeWorkbench,
+    refreshAfterMutation,
+    selectedTemplate,
+    templateMetaCoverFile,
+    templateMetaDescription,
+    templateMetaName,
+    templateMetaPreviewAssetType,
+    templateMetaPreviewUrl,
+  ]);
+
+  const clearTemplateCover = useCallback(async () => {
+    if (!selectedTemplate) return;
+    setMutating("clear-template-cover");
+    try {
+      await invokeWorkbench({
+        action: "update_template",
+        templateId: selectedTemplate.templateId,
+        clearPreview: true,
+      });
+      setTemplateMetaPreviewUrl(null);
+      handleTemplateMetaCoverFile(null);
+      await refreshAfterMutation(selectedTemplate.versionId);
+      toast({ title: "Template cover cleared" });
+    } catch (clearError) {
+      const message = clearError instanceof Error ? clearError.message : "Could not clear template cover";
+      toast({ title: "Clear failed", description: message, variant: "destructive" });
+    } finally {
+      setMutating(null);
+    }
+  }, [handleTemplateMetaCoverFile, invokeWorkbench, refreshAfterMutation, selectedTemplate]);
+
+  const unpublishCurrentTemplate = useCallback(async () => {
+    if (!selectedTemplate) return;
+    setMutating("unpublish-template");
+    try {
+      await invokeWorkbench({
+        action: "unpublish_template",
+        templateId: selectedTemplate.templateId,
+      });
+      await refreshAfterMutation(selectedTemplate.versionId);
+      toast({ title: "Template unpublished", description: "It no longer appears in the live template grid." });
+    } catch (unpublishError) {
+      const message = unpublishError instanceof Error ? unpublishError.message : "Could not unpublish template";
+      toast({ title: "Unpublish failed", description: message, variant: "destructive" });
+    } finally {
+      setMutating(null);
+    }
+  }, [invokeWorkbench, refreshAfterMutation, selectedTemplate]);
 
   const addNode = useCallback(async () => {
     if (!detail) return;
@@ -1418,6 +1572,10 @@ const TemplateCanvas = () => {
     : detail
     ? `/admin/audits?versionId=${detail.versionId}`
     : "/admin/audits";
+  const selectedTemplateHasLiveVersion = selectedTemplate
+    ? templates.some((template) => template.templateId === selectedTemplate.templateId && template.isActive)
+    : false;
+  const templateCoverPreviewUrl = templateMetaCoverPreview ?? templateMetaPreviewUrl;
   const publishSteps = [
     {
       label: "1",
@@ -1565,6 +1723,45 @@ const TemplateCanvas = () => {
                           placeholder="Optional"
                           className="h-12 rounded-2xl"
                         />
+                      </div>
+                    </div>
+                    <div className="grid gap-4 rounded-2xl border border-border/50 bg-card/70 p-4 lg:grid-cols-[180px_minmax(0,1fr)]">
+                      <div className="overflow-hidden rounded-2xl border border-border/50 bg-background/70">
+                        <div className="aspect-[9/16] bg-background">
+                          {newTemplateCoverPreview ? (
+                            <img src={newTemplateCoverPreview} alt="New template cover preview" className="h-full w-full object-cover" />
+                          ) : (
+                            <div className="flex h-full w-full flex-col items-center justify-center gap-3 bg-[radial-gradient(circle_at_top,rgba(34,211,238,0.12),transparent_42%)] px-4 text-center text-muted-foreground">
+                              <ImageIcon className="h-9 w-9 text-cyan-100/55" />
+                              <span className="text-xs leading-5">9:16 template thumbnail</span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex flex-col justify-center gap-3">
+                        <div>
+                          <Label>Template Thumbnail</Label>
+                          <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                            This is what customers see on the template card. Use a vertical 9:16 image.
+                          </p>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          <label className="inline-flex h-10 cursor-pointer items-center justify-center gap-2 rounded-xl border border-border bg-background px-4 text-sm font-medium transition hover:border-primary/50 hover:text-foreground">
+                            <Upload className="h-4 w-4" />
+                            {newTemplateCoverFile ? "Replace thumbnail" : "Upload thumbnail"}
+                            <input
+                              type="file"
+                              accept="image/*"
+                              className="hidden"
+                              onChange={(event) => handleNewTemplateCoverFile(event.target.files?.[0] ?? null)}
+                            />
+                          </label>
+                          {newTemplateCoverFile ? (
+                            <Button type="button" variant="outline" onClick={() => handleNewTemplateCoverFile(null)}>
+                              Clear
+                            </Button>
+                          ) : null}
+                        </div>
                       </div>
                     </div>
                     <div className="grid gap-3 rounded-2xl border border-border/50 bg-card/70 p-4 md:grid-cols-2">
@@ -1837,6 +2034,98 @@ const TemplateCanvas = () => {
 
           <div className="mt-5 rounded-3xl border border-border/50 bg-card/70 p-5 shadow-sm">
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Manage Templates</p>
+            <div className="mt-4 grid gap-4 rounded-2xl border border-border/50 bg-background/45 p-4 lg:grid-cols-[190px_minmax(0,1fr)_auto]">
+              <div className="overflow-hidden rounded-2xl border border-border/50 bg-card/70">
+                <div className="aspect-[9/16] bg-background">
+                  {templateCoverPreviewUrl ? (
+                    templateMetaPreviewAssetType === "video" && !templateMetaCoverPreview ? (
+                      <video src={templateCoverPreviewUrl} className="h-full w-full object-cover" muted loop playsInline autoPlay />
+                    ) : (
+                      <img src={templateCoverPreviewUrl} alt="Template thumbnail preview" className="h-full w-full object-cover" />
+                    )
+                  ) : (
+                    <div className="flex h-full w-full flex-col items-center justify-center gap-3 bg-[radial-gradient(circle_at_top,rgba(34,211,238,0.1),transparent_42%)] px-4 text-center text-muted-foreground">
+                      <ImageIcon className="h-9 w-9 text-cyan-100/55" />
+                      <span className="text-xs leading-5">No thumbnail set</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+              <div className="grid min-w-0 content-start gap-3">
+                <div className="grid gap-3 md:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label>Template Name</Label>
+                    <Input
+                      value={templateMetaName}
+                      onChange={(event) => setTemplateMetaName(event.target.value)}
+                      className="h-11 rounded-xl"
+                      disabled={!selectedTemplate}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Status</Label>
+                    <div className={`flex h-11 items-center rounded-xl border px-3 text-sm ${
+                      selectedTemplateHasLiveVersion
+                        ? "border-emerald-400/30 bg-emerald-400/10 text-emerald-100"
+                        : "border-amber-300/30 bg-amber-400/10 text-amber-100"
+                    }`}>
+                      {selectedTemplateHasLiveVersion ? "Live on site" : "Unpublished"}
+                    </div>
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label>Description</Label>
+                  <Textarea
+                    value={templateMetaDescription}
+                    onChange={(event) => setTemplateMetaDescription(event.target.value)}
+                    placeholder="Short card and selected-template description"
+                    className="min-h-[86px] rounded-xl"
+                    disabled={!selectedTemplate}
+                  />
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <label className={`inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-border bg-background px-4 text-sm font-medium transition ${
+                    selectedTemplate ? "cursor-pointer hover:border-primary/50 hover:text-foreground" : "cursor-not-allowed opacity-60"
+                  }`}>
+                    <Upload className="h-4 w-4" />
+                    {templateMetaCoverFile ? "Replace pending cover" : "Upload cover"}
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      disabled={!selectedTemplate}
+                      onChange={(event) => handleTemplateMetaCoverFile(event.target.files?.[0] ?? null)}
+                    />
+                  </label>
+                  {templateMetaCoverFile ? (
+                    <Button type="button" variant="outline" onClick={() => handleTemplateMetaCoverFile(null)}>
+                      Clear Pending
+                    </Button>
+                  ) : null}
+                  {templateMetaPreviewUrl ? (
+                    <Button type="button" variant="outline" onClick={() => void clearTemplateCover()} disabled={!!mutating || !selectedTemplate}>
+                      Clear Saved Cover
+                    </Button>
+                  ) : null}
+                </div>
+              </div>
+              <div className="flex min-w-[180px] flex-col justify-between gap-3">
+                <Button type="button" onClick={() => void saveTemplateMetadata()} disabled={!selectedTemplate || !!mutating || !templateMetaName.trim()}>
+                  {mutating === "save-template-meta" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+                  Save Details
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="border-amber-300/30 bg-amber-300/[0.06] text-amber-100 hover:bg-amber-300/10"
+                  onClick={() => void unpublishCurrentTemplate()}
+                  disabled={!selectedTemplate || !!mutating || !selectedTemplateHasLiveVersion}
+                >
+                  {mutating === "unpublish-template" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <EyeOff className="mr-2 h-4 w-4" />}
+                  Unpublish Live
+                </Button>
+              </div>
+            </div>
             <div className="mt-4 grid gap-4 xl:grid-cols-12">
             <div className="rounded-2xl border border-border/50 bg-card/70 p-4 shadow-sm xl:col-span-5">
               <p className="text-xs font-semibold uppercase tracking-[0.15em] text-muted-foreground">Manage Existing Template</p>

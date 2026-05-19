@@ -6,6 +6,63 @@
  */
 import { supabase } from "@/integrations/supabase/client";
 
+type ApiErrorPayload = {
+  error?: string;
+};
+
+type SupabaseTemplateDetailPayload = {
+  userInputs?: TemplateDetailField[];
+  nodes?: TemplateDetailNodePayload[];
+};
+
+type TemplateDetailField = {
+  key?: unknown;
+  label?: unknown;
+  type?: string | null;
+  required?: boolean | null;
+  hint?: unknown;
+};
+
+type TemplateDetailNodePayload = {
+  id?: unknown;
+  name?: unknown;
+  summary?: unknown;
+  editor?: {
+    mode?: string | null;
+    slotKey?: unknown;
+    label?: unknown;
+    expected?: string | null;
+  } | null;
+};
+
+type WorkerTemplateDetailPayload = {
+  template?: WorkerTemplateDetailBody;
+} & WorkerTemplateDetailBody;
+
+type WorkerTemplateDetailBody = {
+  input_manifest?: TemplateDetailField[];
+  user_inputs?: TemplateDetailField[];
+  asset_requirements?: string | null;
+  steps?: Array<{
+    prompt?: string | null;
+    type?: string | null;
+  }>;
+};
+
+type UploadApiPayload = {
+  imageUrl?: string;
+  url?: string;
+  key?: string;
+  assetKey?: string;
+};
+
+type CreateProjectPayload = {
+  ok?: boolean;
+  projectId?: string;
+  project_id?: string;
+  credits_used?: number;
+};
+
 const WORKER_BASE =
   (import.meta.env.VITE_CF_WORKER_URL as string) ||
   "https://shiny-rice-e95bfuse-api.kade-fc1.workers.dev";
@@ -32,8 +89,8 @@ async function api<T = unknown>(
         ? JSON.stringify(opts.body)
         : undefined,
   });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error((data as any)?.error || `API ${res.status}`);
+  const data = (await res.json().catch(() => ({}))) as ApiErrorPayload;
+  if (!res.ok) throw new Error(data.error || `API ${res.status}`);
   return data as T;
 }
 
@@ -42,10 +99,6 @@ function normalizeInputType(value: string | null | undefined) {
   if (["prompt", "text", "textarea", "string"].includes(normalized))
     return "prompt";
   return "image";
-}
-
-function describeTemplateAssets(nodes: any[]) {
-  return null;
 }
 
 type CatalogTemplate = {
@@ -57,6 +110,7 @@ type CatalogTemplate = {
   inputs?: CatalogTemplateInput[] | null;
   templateId?: unknown;
   templateName?: unknown;
+  description?: string | null;
   versionId?: unknown;
   estimatedCreditsPerRun?: unknown;
   previewUrl?: string | null;
@@ -136,7 +190,7 @@ export async function fetchTemplates(token: string): Promise<ApiTemplate[]> {
         templateId: template.templateId ?? null,
         versionId: template.versionId ?? null,
         name: String(template.templateName),
-        description: null,
+        description: template.description ?? null,
         category: "General",
         output_type:
           (template?.counts?.videoOutputs ?? 0) > 0 ? "video" : "image",
@@ -221,12 +275,13 @@ export async function fetchTemplateDetail(
       );
       if (error) throw error;
 
-      const projectedInputs = Array.isArray((data as any)?.userInputs)
-        ? (data as any).userInputs
+      const detailData = data as SupabaseTemplateDetailPayload | null;
+      const projectedInputs = Array.isArray(detailData?.userInputs)
+        ? detailData.userInputs
         : [];
       if (projectedInputs.length) {
         return {
-          user_inputs: projectedInputs.map((field: any) => ({
+          user_inputs: projectedInputs.map((field) => ({
             key: String(field.key),
             label: String(field.label),
             type: normalizeInputType(field.type),
@@ -236,15 +291,15 @@ export async function fetchTemplateDetail(
         };
       }
 
-      const nodes = Array.isArray((data as any)?.nodes)
-        ? (data as any).nodes
+      const nodes = Array.isArray(detailData?.nodes)
+        ? detailData.nodes
         : [];
       const uploadNodes = nodes.filter(
-        (node: any) => node.editor?.mode === "upload",
+        (node) => node.editor?.mode === "upload",
       );
 
       return {
-        user_inputs: uploadNodes.map((node: any) => ({
+        user_inputs: uploadNodes.map((node) => ({
           key: String(node.editor?.slotKey || node.id),
           label: String(node.editor?.label || node.name),
           type: normalizeInputType(node.editor?.expected),
@@ -257,22 +312,22 @@ export async function fetchTemplateDetail(
     }
   }
 
-  const data = await api<any>(
+  const data = await api<WorkerTemplateDetailPayload>(
     `/api/templates/${encodeURIComponent(templateRef.name)}`,
     token,
   );
   const t = data.template || data;
   return {
-    user_inputs: (t.input_manifest || t.user_inputs || []).map((f: any) => ({
-      key: f.key,
-      label: f.label,
-      type: normalizeInputType(f.type),
-      required: f.required ?? true,
-      hint: f.hint,
+    user_inputs: (t.input_manifest || t.user_inputs || []).map((field) => ({
+      key: String(field.key),
+      label: String(field.label),
+      type: normalizeInputType(field.type),
+      required: field.required ?? true,
+      hint: typeof field.hint === "string" ? field.hint : undefined,
     })),
     asset_requirements: t.asset_requirements || null,
     prompt: t.steps?.[0]?.prompt || null,
-    video_prompt: t.steps?.find((s: any) => s.type === "kling")?.prompt || null,
+    video_prompt: t.steps?.find((step) => step.type === "kling")?.prompt || null,
   };
 }
 
@@ -289,7 +344,7 @@ export async function uploadFile(
 ): Promise<UploadResult> {
   const fd = new FormData();
   fd.append("file", file);
-  const data = await api<any>("/api/upload", token, {
+  const data = await api<UploadApiPayload>("/api/upload", token, {
     method: "POST",
     formData: fd,
   });
@@ -306,7 +361,7 @@ export async function createProject(
   templateId: string,
   inputs: Record<string, string>,
 ): Promise<{ ok: boolean; projectId: string; credits_used?: number }> {
-  const data = await api<any>("/api/projects", token, {
+  const data = await api<CreateProjectPayload>("/api/projects", token, {
     method: "POST",
     body: { template_name: templateId, user_inputs: inputs, inputs },
   });

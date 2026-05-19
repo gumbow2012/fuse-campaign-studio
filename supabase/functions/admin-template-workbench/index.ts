@@ -9,13 +9,14 @@ import {
   logAuditEvent,
   requireAdminUser,
 } from "../_shared/supabase-admin.ts";
-import { uploadTemplateReferenceAsset } from "../_shared/template-assets.ts";
+import { uploadTemplateCoverAsset, uploadTemplateReferenceAsset } from "../_shared/template-assets.ts";
 
 type Action =
   | "catalog"
   | "create_template"
   | "clone_version"
   | "activate_version"
+  | "unpublish_template"
   | "update_template"
   | "add_node"
   | "delete_node"
@@ -36,6 +37,10 @@ type ReferenceAssetDraft = {
     filename?: string | null;
   } | null;
 };
+type TemplatePreviewFile = {
+  dataUrl?: string | null;
+  filename?: string | null;
+} | null;
 type PublishGateResult = {
   publishable: boolean;
   reasons: string[];
@@ -73,6 +78,22 @@ function nullableText(value: unknown) {
   if (typeof value !== "string") return null;
   const next = value.trim();
   return next || null;
+}
+
+function readTemplatePreviewFile(value: unknown): TemplatePreviewFile {
+  if (!value || typeof value !== "object") return null;
+  const record = value as Record<string, unknown>;
+  const dataUrl = typeof record.dataUrl === "string" ? record.dataUrl : null;
+  if (!dataUrl) return null;
+  return {
+    dataUrl,
+    filename: typeof record.filename === "string" ? record.filename : null,
+  };
+}
+
+function cleanPreviewAssetType(value: unknown) {
+  const next = cleanText(value, "image").toLowerCase();
+  return next === "video" ? "video" : "image";
 }
 
 function cleanInteger(value: unknown, fallback: number, min: number, max: number) {
@@ -585,7 +606,7 @@ Deno.serve(async (req) => {
     if (action === "catalog") {
       const { data: templates, error: templateError } = await admin
         .from("fuse_templates")
-        .select("id, name, description, created_at, updated_at")
+        .select("id, name, description, preview_url, preview_asset_type, created_at, updated_at")
         .order("name", { ascending: true });
       if (templateError) throw new Error(templateError.message);
 
@@ -684,6 +705,26 @@ Deno.serve(async (req) => {
         });
       if (versionError) throw new Error(versionError.message);
 
+      const previewFile = readTemplatePreviewFile(body.previewFile);
+      if (previewFile) {
+        const asset = await uploadTemplateCoverAsset({
+          admin,
+          file: previewFile,
+          templateId: template.id,
+          uploadedBy: user.id,
+        });
+        const { error: coverUpdateError } = await admin
+          .from("fuse_templates")
+          .update({
+            preview_url: asset.supabase_storage_url,
+            preview_asset_type: "image",
+          })
+          .eq("id", template.id);
+        if (coverUpdateError) throw new Error(coverUpdateError.message);
+        (template as any).preview_url = asset.supabase_storage_url;
+        (template as any).preview_asset_type = "image";
+      }
+
       const withStarterGraph = body.withStarterGraph !== false;
       let uploadedReferenceAssets: unknown[] = [];
       if (withStarterGraph) {
@@ -722,6 +763,8 @@ Deno.serve(async (req) => {
       return json({
         templateId: template.id,
         templateName: template.name,
+        previewUrl: (template as any).preview_url ?? null,
+        previewAssetType: (template as any).preview_asset_type ?? null,
         versionId,
         versionNumber: 1,
         referenceAssets: uploadedReferenceAssets,
@@ -784,19 +827,57 @@ Deno.serve(async (req) => {
       return json({ versionId: version.id, templateId: version.template_id, isActive: true, activationGate });
     }
 
+    if (action === "unpublish_template") {
+      const templateId = cleanText(body.templateId);
+      if (!templateId) throw new Error("templateId is required");
+
+      const { error: deactivateError } = await admin
+        .from("template_versions")
+        .update({ is_active: false })
+        .eq("template_id", templateId);
+      if (deactivateError) throw new Error(deactivateError.message);
+
+      await logAuditEvent({
+        eventType: "template_unpublished",
+        message: `Admin unpublished template ${templateId}`,
+        source: "admin-template-workbench",
+        templateId,
+        metadata: { adminUserId: user.id },
+      }, admin);
+
+      return json({ templateId, isActive: false });
+    }
+
     if (action === "update_template") {
       const templateId = cleanText(body.templateId);
       if (!templateId) throw new Error("templateId is required");
       const patch: Record<string, unknown> = {};
       if ("name" in body) patch.name = cleanText(body.name);
       if ("description" in body) patch.description = nullableText(body.description);
+      if ("previewUrl" in body) patch.preview_url = nullableText(body.previewUrl);
+      if ("previewAssetType" in body) patch.preview_asset_type = patch.preview_url ? cleanPreviewAssetType(body.previewAssetType) : null;
+      if (body.clearPreview === true) {
+        patch.preview_url = null;
+        patch.preview_asset_type = null;
+      }
+      const previewFile = readTemplatePreviewFile(body.previewFile);
+      if (previewFile) {
+        const asset = await uploadTemplateCoverAsset({
+          admin,
+          file: previewFile,
+          templateId,
+          uploadedBy: user.id,
+        });
+        patch.preview_url = asset.supabase_storage_url;
+        patch.preview_asset_type = "image";
+      }
       if (!Object.keys(patch).length) throw new Error("No template fields supplied");
 
       const { data, error } = await admin
         .from("fuse_templates")
         .update(patch)
         .eq("id", templateId)
-        .select("id, name, description")
+        .select("id, name, description, preview_url, preview_asset_type")
         .single();
       if (error || !data) throw new Error(error?.message ?? "Template update failed");
       return json({ template: data });

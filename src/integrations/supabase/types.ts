@@ -416,6 +416,8 @@ export type Database = {
           description: string | null
           id: string
           name: string
+          preview_asset_type: string | null
+          preview_url: string | null
           updated_at: string | null
         }
         Insert: {
@@ -423,6 +425,8 @@ export type Database = {
           description?: string | null
           id?: string
           name: string
+          preview_asset_type?: string | null
+          preview_url?: string | null
           updated_at?: string | null
         }
         Update: {
@@ -430,6 +434,8 @@ export type Database = {
           description?: string | null
           id?: string
           name?: string
+          preview_asset_type?: string | null
+          preview_url?: string | null
           updated_at?: string | null
         }
         Relationships: []

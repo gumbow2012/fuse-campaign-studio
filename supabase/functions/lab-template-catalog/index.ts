@@ -61,7 +61,7 @@ Deno.serve(async (req) => {
   try {
     const { data: templates, error: templateError } = await admin
       .from("fuse_templates")
-      .select("id, name");
+      .select("id, name, description, preview_url, preview_asset_type");
     if (templateError) throw new Error(templateError.message);
 
     const { data: versions, error: versionError } = await admin
@@ -117,7 +117,15 @@ Deno.serve(async (req) => {
       stepsByJobId.set(step.job_id, list);
     }
 
-    const resolveCoverForVersion = (versionId: string, templateName: string | null | undefined) => {
+    const resolveCoverForVersion = (versionId: string, template: any) => {
+      const templateName = template?.name;
+      if (template?.preview_url) {
+        return {
+          url: template.preview_url,
+          type: template.preview_asset_type === "video" ? "video" : "image",
+        };
+      }
+
       const curated = CURATED_TEMPLATE_COVERS.get(String(templateName ?? "").trim().toLowerCase());
       if (curated) return curated;
 
@@ -183,7 +191,7 @@ Deno.serve(async (req) => {
         const videoFlags = videoNodes.map((node: any) => parseOutputExposed(node.prompt_config?.output_exposed));
         const hasExplicitImageFlags = imageFlags.some((flag) => flag !== null);
         const hasExplicitVideoFlags = videoFlags.some((flag) => flag !== null);
-        const cover = resolveCoverForVersion(version.id, template?.name);
+        const cover = resolveCoverForVersion(version.id, template);
 
         const counts = {
           imageOutputs: hasExplicitImageFlags
@@ -197,6 +205,7 @@ Deno.serve(async (req) => {
         return {
           templateId: version.template_id,
           templateName: template?.name ?? "Untitled Template",
+          description: template?.description ?? null,
           versionId: version.id,
           versionNumber: version.version_number,
           reviewStatus: version.review_status ?? "Unreviewed",

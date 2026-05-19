@@ -14,6 +14,13 @@ type TemplateAssetUploadArgs = {
   source?: string;
 };
 
+type TemplateCoverUploadArgs = {
+  admin: any;
+  file: UploadableImage;
+  templateId: string;
+  uploadedBy?: string | null;
+};
+
 function parseDataUrl(dataUrl: string) {
   const match = dataUrl.match(/^data:([^;]+);base64,(.+)$/);
   if (!match) throw new Error("Invalid image payload");
@@ -82,5 +89,41 @@ export async function uploadTemplateReferenceAsset(args: TemplateAssetUploadArgs
     .single();
 
   if (assetError || !asset) throw new Error(assetError?.message ?? "Failed to create reference asset");
+  return asset;
+}
+
+export async function uploadTemplateCoverAsset(args: TemplateCoverUploadArgs) {
+  const { admin, file, templateId, uploadedBy } = args;
+  if (!file?.dataUrl) throw new Error("previewFile.dataUrl is required");
+
+  const { bytes, contentType, extension } = parseDataUrl(file.dataUrl);
+  const safeName = safeStorageName(file.filename, "template-cover");
+  const storagePath = `system/template-covers/${templateId}/${crypto.randomUUID()}-${safeName}.${extension}`;
+
+  const { error: uploadError } = await admin.storage
+    .from("fuse-assets")
+    .upload(storagePath, bytes, {
+      upsert: true,
+      contentType,
+    });
+  if (uploadError) throw new Error(uploadError.message);
+
+  const publicUrl = `${Deno.env.get("SUPABASE_URL")}/storage/v1/object/public/fuse-assets/${storagePath}`;
+  const { data: asset, error: assetError } = await admin
+    .from("assets")
+    .insert({
+      supabase_storage_url: publicUrl,
+      asset_type: "template_cover",
+      metadata: {
+        templateId,
+        originalFilename: file.filename ?? null,
+        uploadedBy: uploadedBy ?? null,
+        source: "template-cover",
+      },
+    })
+    .select("id, supabase_storage_url, asset_type, metadata")
+    .single();
+
+  if (assetError || !asset) throw new Error(assetError?.message ?? "Failed to create template cover asset");
   return asset;
 }

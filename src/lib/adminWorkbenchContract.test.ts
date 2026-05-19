@@ -52,6 +52,30 @@ describe("admin template workbench contract", () => {
     expect(migrationSource).toContain("on delete set null");
   });
 
+  it("supports template cover metadata and live unpublishing", () => {
+    const workbenchSource = readFileSync(
+      resolve(process.cwd(), "supabase/functions/admin-template-workbench/index.ts"),
+      "utf8",
+    );
+    const catalogSource = readFileSync(
+      resolve(process.cwd(), "supabase/functions/lab-template-catalog/index.ts"),
+      "utf8",
+    );
+    const migrationSource = readFileSync(
+      resolve(process.cwd(), "supabase/migrations/20260519013000_add_fuse_template_preview_metadata.sql"),
+      "utf8",
+    );
+
+    expect(workbenchSource).toContain('"unpublish_template"');
+    expect(workbenchSource).toContain("uploadTemplateCoverAsset");
+    expect(workbenchSource).toContain("preview_url");
+    expect(workbenchSource).toContain("preview_asset_type");
+    expect(catalogSource).toContain("template?.preview_url");
+    expect(catalogSource).toContain("description: template?.description ?? null");
+    expect(migrationSource).toContain("add column if not exists preview_url text");
+    expect(migrationSource).toContain("fuse_templates_preview_asset_type_check");
+  });
+
   it("prices templates from the output-count credit table", () => {
     const source = readFileSync(
       resolve(process.cwd(), "supabase/functions/_shared/template-pricing.ts"),

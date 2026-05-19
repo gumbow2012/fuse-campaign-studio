@@ -89,6 +89,15 @@ const UPLOAD_GUIDELINES = [
   ["Image quality", "Clear, sharp, and well lit"],
 ] as const;
 
+const UPLOAD_PLACEHOLDER_ASSETS: Record<string, string> = {
+  accessory: "/template-placeholders/accessory.jpeg",
+  logo: "/template-placeholders/logo.jpeg",
+  model: "/template-placeholders/model.jpeg",
+  pants: "/template-placeholders/pants.jpeg",
+  shirt: "/template-placeholders/shirt.jpeg",
+  shoe: "/template-placeholders/accessory.jpeg",
+};
+
 function readCachedJson<T>(key: string, fallback: T) {
   if (typeof window === "undefined") return fallback;
 
@@ -236,7 +245,7 @@ function getUploadIllustrationKind(label: string) {
   const normalized = label.toLowerCase();
   if (/(logo|brand|mark)/.test(normalized)) return "logo";
   if (/(bottom|pant|trouser|short|jean)/.test(normalized)) return "pants";
-  if (/(hat|cap|head|accessory|accessories)/.test(normalized)) return "accessory";
+  if (/(hat|cap|head|accessory|accessories|watch|bag|jewel)/.test(normalized)) return "accessory";
   if (/(shoe|sneaker|boot|footwear)/.test(normalized)) return "shoe";
   if (/(model|person|human|reference)/.test(normalized)) return "model";
   return "shirt";
@@ -268,61 +277,17 @@ function UploadPlaceholderIllustration({
   }
 
   const kind = getUploadIllustrationKind(label);
+  const assetUrl = UPLOAD_PLACEHOLDER_ASSETS[kind] ?? UPLOAD_PLACEHOLDER_ASSETS.shirt;
 
   return (
-    <div className="flex h-full w-full items-center justify-center bg-[radial-gradient(circle_at_top,rgba(34,211,238,0.08),transparent_44%),linear-gradient(180deg,rgba(255,255,255,0.035),rgba(255,255,255,0.015))] text-cyan-100/28">
-      <svg
-        viewBox="0 0 120 180"
+    <div className="flex h-full w-full items-center justify-center bg-[radial-gradient(circle_at_top,rgba(34,211,238,0.1),transparent_42%),linear-gradient(180deg,rgba(15,23,42,0.6),rgba(2,6,23,0.92))]">
+      <img
+        src={assetUrl}
+        alt=""
         aria-hidden="true"
-        className="h-[72%] w-[72%]"
-        fill="none"
-        stroke="currentColor"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth="3"
-      >
-        {kind === "logo" ? (
-          <>
-            <rect x="28" y="34" width="64" height="64" rx="14" />
-            <path d="M43 82V50h36" />
-            <path d="M43 66h29" />
-            <path d="M43 82h32" />
-            <path d="M35 122h50" />
-            <path d="M44 138h32" />
-          </>
-        ) : kind === "pants" ? (
-          <>
-            <path d="M43 32h34l7 122H67L60 86l-7 68H36L43 32Z" />
-            <path d="M43 48h34" />
-            <path d="M60 38v48" />
-          </>
-        ) : kind === "accessory" ? (
-          <>
-            <path d="M36 82c8-24 40-24 48 0" />
-            <path d="M28 84h64c8 0 15 5 18 12" />
-            <path d="M38 108h44" />
-            <path d="M44 124h32" />
-          </>
-        ) : kind === "shoe" ? (
-          <>
-            <path d="M33 101c12 4 25 2 39-10 12 12 23 21 38 22 0 13-9 20-25 20H38c-10 0-16-8-13-19l8-13Z" />
-            <path d="M69 96l-8 14" />
-            <path d="M79 102l-8 13" />
-          </>
-        ) : kind === "model" ? (
-          <>
-            <circle cx="60" cy="42" r="14" />
-            <path d="M42 78c5-14 31-14 36 0l8 64H34l8-64Z" />
-            <path d="M46 104h28" />
-          </>
-        ) : (
-          <>
-            <path d="M43 47 25 65l14 24 12-8v73h18V81l12 8 14-24-18-18-12 10H55l-12-10Z" />
-            <path d="M51 58h18" />
-            <path d="M51 139h18" />
-          </>
-        )}
-      </svg>
+        className="h-full w-full object-contain opacity-80 saturate-125 transition duration-300 group-hover/upload:scale-[1.02] group-hover/upload:opacity-95"
+        loading="lazy"
+      />
     </div>
   );
 }
@@ -937,6 +902,11 @@ export default function TemplateStudioPage() {
                       <h2 className="mt-2 font-display text-3xl font-bold tracking-[-0.04em] text-white">
                         {selectedTemplate.name}
                       </h2>
+                      {selectedTemplate.description ? (
+                        <p className="mt-2 max-w-sm text-sm leading-6 text-slate-400">
+                          {selectedTemplate.description}
+                        </p>
+                      ) : null}
                     </div>
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="rounded-full border border-white/10 px-3 py-1 text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
