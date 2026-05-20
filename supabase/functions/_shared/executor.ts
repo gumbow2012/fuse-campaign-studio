@@ -10,6 +10,7 @@ import {
   submitImageJob,
   submitVideoJob,
 } from "./fal.ts";
+import { sortEdgesByExecutionOrder, targetParamOrder } from "./edge-order.ts";
 
 type NodeRow = {
   id: string;
@@ -20,9 +21,10 @@ type NodeRow = {
 };
 
 type EdgeRow = {
+  id?: string;
   source_node_id: string;
   target_node_id: string;
-  mapping_logic: { target_param?: string } | null;
+  mapping_logic: { target_param?: string; edge_order?: number; sort_order?: number } | null;
 };
 
 type StepRow = {
@@ -251,19 +253,9 @@ function isStepReady(step: StepRow, incomingEdges: EdgeRow[], resolved: Map<stri
   return incomingEdges.every((edge) => resolved.has(edge.source_node_id));
 }
 
-function paramOrder(param: string) {
-  if (param.startsWith("image_")) return Number(param.slice("image_".length));
-  if (param === "user_garment") return 20;
-  if (param === "user_logo") return 21;
-  if (param === "start_frame_image") return 30;
-  if (param === "end_frame_image") return 31;
-  if (param === "init_image") return 40;
-  return 100;
-}
-
 function pickPassthroughValue(entries: Array<[string, ResolvedOutput]>) {
   return [...entries]
-    .sort(([a], [b]) => paramOrder(a) - paramOrder(b))
+    .sort(([a], [b]) => targetParamOrder(a) - targetParamOrder(b))
     .at(-1)?.[1] ?? null;
 }
 
@@ -809,7 +801,7 @@ export async function runGraphJob(admin: AdminClient, jobId: string) {
 
   const { data: edges, error: edgeError } = await admin
     .from("edges")
-    .select("source_node_id, target_node_id, mapping_logic")
+    .select("id, source_node_id, target_node_id, mapping_logic")
     .eq("version_id", job.version_id);
   if (edgeError || !edges) throw new Error(edgeError?.message ?? "Failed to load edges");
 
@@ -913,17 +905,17 @@ export async function runGraphJob(admin: AdminClient, jobId: string) {
       const node = nodeMap.get(step.node_id);
       if (!node) throw new Error(`Node missing for step ${step.id}`);
 
-      const incoming = [...(incomingByTarget.get(step.node_id) ?? [])].sort((a, b) => {
-        const aParam = a.mapping_logic?.target_param ?? "";
-        const bParam = b.mapping_logic?.target_param ?? "";
-        return paramOrder(aParam) - paramOrder(bParam);
-      });
+      const incoming = sortEdgesByExecutionOrder(incomingByTarget.get(step.node_id) ?? []);
 
       const params = new Map<string, ResolvedOutput>();
+      const orderedParamEntries: Array<[string, ResolvedOutput]> = [];
       for (const edge of incoming) {
         const param = edge.mapping_logic?.target_param ?? "image";
         const value = resolved.get(edge.source_node_id);
-        if (value) params.set(param, value);
+        if (value) {
+          params.set(param, value);
+          orderedParamEntries.push([param, value]);
+        }
       }
 
       const startedAt = step.status === "running" ? step.started_at : new Date().toISOString();
@@ -936,7 +928,7 @@ export async function runGraphJob(admin: AdminClient, jobId: string) {
           provider: "fal",
           provider_model: node.node_type === "video_gen" ? VIDEO_MODEL : IMAGE_MODEL,
           input_payload: Object.fromEntries(
-            [...params.entries()].map(([key, value]) => [key, value.url]),
+            orderedParamEntries.map(([key, value]) => [key, value.url]),
           ),
         })
         .eq("id", step.id);
@@ -948,8 +940,7 @@ export async function runGraphJob(admin: AdminClient, jobId: string) {
         try {
           const prompt = String(node.prompt_config?.prompt ?? "").trim();
           const referenceAsset = getNodeReferenceAsset(node, assetMap);
-          const orderedInputs = [...params.entries()]
-            .sort(([a], [b]) => paramOrder(a) - paramOrder(b))
+          const orderedInputs = orderedParamEntries
             .map(([, value]) => value.url)
             .filter(Boolean);
           const effectiveInputs = referenceAsset
@@ -975,14 +966,19 @@ export async function runGraphJob(admin: AdminClient, jobId: string) {
 
           const costEstimate = await getStepCostEstimate(IMAGE_MODEL, node.prompt_config);
 
+          if (!effectiveInputs.length) {
+            throw new Error(
+              `${node.name} needs at least one incoming image. Connect a user upload, hidden guide, or prior image output before running this step.`,
+            );
+          }
+
           await admin
             .from("execution_steps")
             .update({
               input_payload: {
                 ...(referenceAsset ? { reference_image: referenceAsset.url } : {}),
-                ...Object.fromEntries(
-                  [...params.entries()].map(([key, value]) => [key, value.url]),
-                ),
+                ...Object.fromEntries(orderedParamEntries.map(([key, value]) => [key, value.url])),
+                image_urls: effectiveInputs,
               },
             })
             .eq("id", step.id);

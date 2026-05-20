@@ -135,4 +135,26 @@ describe("admin template workbench contract", () => {
       expect(edgeSource).toContain(`monthlyCredits: ${credits}`);
     }
   });
+
+  it("supports ordered incoming references in the workbench and executor", () => {
+    const workbenchSource = readFileSync(
+      resolve(process.cwd(), "supabase/functions/admin-template-workbench/index.ts"),
+      "utf8",
+    );
+    const executorSource = readFileSync(
+      resolve(process.cwd(), "supabase/functions/_shared/executor.ts"),
+      "utf8",
+    );
+    const detailSource = readFileSync(
+      resolve(process.cwd(), "supabase/functions/lab-template-detail/index.ts"),
+      "utf8",
+    );
+
+    expect(workbenchSource).toContain('"reorder_edge"');
+    expect(workbenchSource).toContain("inferEdgeTargetParam");
+    expect(workbenchSource).toContain("edge_order");
+    expect(executorSource).toContain("sortEdgesByExecutionOrder");
+    expect(executorSource).toContain("image_urls: effectiveInputs");
+    expect(detailSource).toContain("sortOrder: readEdgeOrder(edge)");
+  });
 });

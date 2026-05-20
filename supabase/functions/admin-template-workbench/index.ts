@@ -10,6 +10,7 @@ import {
   requireAdminUser,
 } from "../_shared/supabase-admin.ts";
 import { uploadTemplateCoverAsset, uploadTemplateReferenceAsset } from "../_shared/template-assets.ts";
+import { nextEdgeOrder, sortEdgesByExecutionOrder } from "../_shared/edge-order.ts";
 
 type Action =
   | "catalog"
@@ -22,6 +23,7 @@ type Action =
   | "add_node"
   | "delete_node"
   | "add_edge"
+  | "reorder_edge"
   | "delete_edge";
 
 type NodeType = "user_input" | "image_gen" | "video_gen";
@@ -128,6 +130,99 @@ function readReferenceDrafts(value: unknown): ReferenceAssetDraft[] {
 function cleanKey(value: unknown, fallback: string) {
   const text = cleanText(value, fallback).toLowerCase().replace(/[^a-z0-9_]+/g, "_").replace(/^_+|_+$/g, "");
   return text || fallback;
+}
+
+function asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {};
+}
+
+function imageParamFromSlotKey(value: unknown, fallback: string) {
+  const key = cleanKey(value, fallback);
+  return key.endsWith("_image") ? key : `${key}_image`;
+}
+
+function inferEdgeTargetParam(args: {
+  sourceNode: any;
+  targetNode: any;
+  incomingCount: number;
+}) {
+  const { sourceNode, targetNode, incomingCount } = args;
+
+  if (targetNode?.node_type === "video_gen") {
+    return "start_frame_image";
+  }
+
+  if (targetNode?.node_type !== "image_gen") {
+    return "image";
+  }
+
+  const sourceConfig = asRecord(sourceNode?.prompt_config);
+  const sourceMode = cleanText(sourceConfig.editor_mode);
+  const isReferenceSource = sourceNode?.node_type === "user_input" &&
+    (sourceMode === "reference" || !!sourceNode?.default_asset_id);
+
+  if (isReferenceSource) {
+    return "reference_image";
+  }
+
+  if (sourceNode?.node_type === "user_input") {
+    return imageParamFromSlotKey(sourceConfig.editor_slot_key, `image_${incomingCount + 1}`);
+  }
+
+  return `image_${Math.max(1, incomingCount + 1)}`;
+}
+
+async function loadEndpointNodes(
+  admin: ReturnType<typeof createAdminClient>,
+  versionId: string,
+  sourceNodeId: string,
+  targetNodeId: string,
+) {
+  const { data: nodes, error } = await admin
+    .from("nodes")
+    .select("id, version_id, node_type, prompt_config, default_asset_id")
+    .eq("version_id", versionId)
+    .in("id", [sourceNodeId, targetNodeId]);
+  if (error) throw new Error(error.message);
+
+  const sourceNode = (nodes ?? []).find((node: any) => node.id === sourceNodeId);
+  const targetNode = (nodes ?? []).find((node: any) => node.id === targetNodeId);
+  if (!sourceNode || !targetNode) throw new Error("Source and target nodes must belong to this version");
+  return { sourceNode, targetNode };
+}
+
+async function loadTargetEdges(
+  admin: ReturnType<typeof createAdminClient>,
+  versionId: string,
+  targetNodeId: string,
+) {
+  const { data, error } = await admin
+    .from("edges")
+    .select("id, source_node_id, target_node_id, mapping_logic")
+    .eq("version_id", versionId)
+    .eq("target_node_id", targetNodeId);
+  if (error) throw new Error(error.message);
+  return data ?? [];
+}
+
+async function persistTargetEdgeOrder(
+  admin: ReturnType<typeof createAdminClient>,
+  edges: any[],
+) {
+  for (const [index, edge] of edges.entries()) {
+    const { error } = await admin
+      .from("edges")
+      .update({
+        mapping_logic: {
+          ...asRecord(edge.mapping_logic),
+          edge_order: index + 1,
+        },
+      })
+      .eq("id", edge.id);
+    if (error) throw new Error(error.message);
+  }
 }
 
 function readInputSlots(value: unknown): InputSlotDraft[] {
@@ -562,7 +657,7 @@ async function starterNodes(args: {
           version_id: versionId,
           source_node_id: group.input.id,
           target_node_id: group.imageId,
-          mapping_logic: { target_param: group.input.slot.targetParam || "image_1" },
+          mapping_logic: { target_param: group.input.slot.targetParam || "image_1", edge_order: 1 },
           condition_logic: null,
         }];
         if (group.reference) {
@@ -571,7 +666,7 @@ async function starterNodes(args: {
             version_id: versionId,
             source_node_id: group.reference.nodeId,
             target_node_id: group.imageId,
-            mapping_logic: { target_param: "reference_image" },
+            mapping_logic: { target_param: "reference_image", edge_order: 2 },
             condition_logic: null,
           });
         }
@@ -580,7 +675,7 @@ async function starterNodes(args: {
         version_id: versionId,
           source_node_id: group.imageId,
           target_node_id: group.videoId,
-        mapping_logic: { target_param: "start_frame_image" },
+        mapping_logic: { target_param: "start_frame_image", edge_order: 1 },
         condition_logic: null,
         });
         return edges;
@@ -966,20 +1061,68 @@ Deno.serve(async (req) => {
       }
       if (sourceNodeId === targetNodeId) throw new Error("An edge cannot target the same node");
 
+      const { sourceNode, targetNode } = await loadEndpointNodes(admin, versionId, sourceNodeId, targetNodeId);
+      const targetEdges = await loadTargetEdges(admin, versionId, targetNodeId);
+      const resolvedTargetParam = targetParam ??
+        inferEdgeTargetParam({
+          sourceNode,
+          targetNode,
+          incomingCount: targetEdges.length,
+        });
+
       const { data, error } = await admin
         .from("edges")
         .insert({
           version_id: versionId,
           source_node_id: sourceNodeId,
           target_node_id: targetNodeId,
-          mapping_logic: targetParam ? { target_param: targetParam } : {},
+          mapping_logic: {
+            target_param: resolvedTargetParam,
+            edge_order: nextEdgeOrder(targetEdges),
+          },
           condition_logic: null,
         })
         .select("id")
         .single();
       if (error || !data) throw new Error(error?.message ?? "Edge create failed");
       await markVersionNeedsReview(admin, versionId);
-      return json({ edgeId: data.id, versionId });
+      return json({ edgeId: data.id, versionId, targetParam: resolvedTargetParam });
+    }
+
+    if (action === "reorder_edge") {
+      const edgeId = cleanText(body.edgeId);
+      const direction = cleanInteger(body.direction, 0, -1, 1);
+      if (!edgeId) throw new Error("edgeId is required");
+      if (direction !== -1 && direction !== 1) throw new Error("direction must be -1 or 1");
+
+      const { data: edge, error: edgeLookupError } = await admin
+        .from("edges")
+        .select("id, version_id, target_node_id, source_node_id, mapping_logic")
+        .eq("id", edgeId)
+        .maybeSingle();
+      if (edgeLookupError) throw new Error(edgeLookupError.message);
+      if (!edge) throw new Error("Edge not found");
+
+      const orderedEdges = sortEdgesByExecutionOrder(
+        await loadTargetEdges(admin, edge.version_id, edge.target_node_id),
+      );
+      const currentIndex = orderedEdges.findIndex((item: any) => item.id === edgeId);
+      if (currentIndex < 0) throw new Error("Edge order could not be resolved");
+
+      const targetIndex = Math.max(0, Math.min(orderedEdges.length - 1, currentIndex + direction));
+      if (targetIndex !== currentIndex) {
+        const [moved] = orderedEdges.splice(currentIndex, 1);
+        orderedEdges.splice(targetIndex, 0, moved);
+        await persistTargetEdgeOrder(admin, orderedEdges);
+        await markVersionNeedsReview(admin, edge.version_id);
+      }
+
+      return json({
+        edgeId,
+        versionId: edge.version_id,
+        targetNodeId: edge.target_node_id,
+        order: orderedEdges.map((item: any, index) => ({ edgeId: item.id, edgeOrder: index + 1 })),
+      });
     }
 
     if (action === "delete_edge") {
@@ -987,13 +1130,21 @@ Deno.serve(async (req) => {
       if (!edgeId) throw new Error("edgeId is required");
       const { data: edge, error: edgeLookupError } = await admin
         .from("edges")
-        .select("version_id")
+        .select("version_id, target_node_id")
         .eq("id", edgeId)
         .maybeSingle();
       if (edgeLookupError) throw new Error(edgeLookupError.message);
       const { error } = await admin.from("edges").delete().eq("id", edgeId);
       if (error) throw new Error(error.message);
-      if (edge?.version_id) await markVersionNeedsReview(admin, edge.version_id);
+      if (edge?.version_id && edge?.target_node_id) {
+        const orderedEdges = sortEdgesByExecutionOrder(
+          await loadTargetEdges(admin, edge.version_id, edge.target_node_id),
+        );
+        await persistTargetEdgeOrder(admin, orderedEdges);
+        await markVersionNeedsReview(admin, edge.version_id);
+      } else if (edge?.version_id) {
+        await markVersionNeedsReview(admin, edge.version_id);
+      }
       return json({ edgeId, deleted: true });
     }
 

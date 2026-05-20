@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { CheckCircle2, ChevronLeft, ChevronRight, Copy, EyeOff, Film, GitBranch, Image as ImageIcon, Loader2, Maximize2, Minus, Move, Plus, RefreshCw, Save, Trash2, Upload } from "lucide-react";
+import { CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Copy, EyeOff, Film, GitBranch, Image as ImageIcon, Loader2, Maximize2, Minus, Move, Plus, RefreshCw, Save, Trash2, Upload } from "lucide-react";
 import { Link, useSearchParams } from "react-router-dom";
 import SiteShell from "@/components/mvp/SiteShell";
 import { Button } from "@/components/ui/button";
@@ -119,6 +119,7 @@ type TemplateDetailNode = {
     sourceName: string;
     sourceType: string;
     targetParam: string | null;
+    sortOrder?: number | null;
   }>;
   summary: string;
   editor?: {
@@ -128,6 +129,8 @@ type TemplateDetailNode = {
     expected: string | null;
     outputExposed?: boolean | null;
     sampleUrl?: string | null;
+    isUserFacingInput?: boolean;
+    isReferenceInput?: boolean;
   };
 };
 
@@ -176,6 +179,7 @@ type NodeDraft = {
 
 type NewNodeKind = NodeDraft["editorMode"] | "image_gen" | "video_gen";
 type TemplateWizardStep = "setup" | "branches";
+type EdgeMoveDirection = -1 | 1;
 
 type TemplateInputSlotDraft = {
   id: string;
@@ -251,6 +255,39 @@ const DEFAULT_TEMPLATE_INPUT_SLOT_KEYS = ["top_garment", "bottom_garment", "logo
 
 function inputSlotOption(slotKey: string) {
   return TEMPLATE_INPUT_SLOT_OPTIONS.find((option) => option.key === slotKey) ?? TEMPLATE_INPUT_SLOT_OPTIONS[0];
+}
+
+function toParamKey(value: string | null | undefined, fallback: string) {
+  const normalized = String(value || fallback)
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9_]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+  return normalized || fallback;
+}
+
+function imageParamFromSlot(slotKey: string | null | undefined, fallback: string) {
+  const key = toParamKey(slotKey, fallback);
+  return key.endsWith("_image") ? key : `${key}_image`;
+}
+
+function inferEdgeTargetParam(
+  sourceNode: TemplateDetailNode | undefined,
+  targetNode: TemplateDetailNode | undefined,
+  incomingCount: number,
+) {
+  if (targetNode?.nodeType === "video_gen") return "start_frame_image";
+  if (targetNode?.nodeType !== "image_gen") return "image";
+
+  const isHiddenReference = sourceNode?.nodeType === "user_input" &&
+    (sourceNode.editor?.mode === "reference" || sourceNode.editor?.isReferenceInput === true);
+
+  if (isHiddenReference) return "reference_image";
+  if (sourceNode?.nodeType === "user_input") {
+    return imageParamFromSlot(sourceNode.editor?.slotKey, `image_${incomingCount + 1}`);
+  }
+
+  return `image_${Math.max(1, incomingCount + 1)}`;
 }
 
 function imagePromptForInput(label: string, hasGuide = false) {
@@ -782,6 +819,15 @@ const TemplateCanvas = () => {
   const selectedNode = useMemo(
     () => detail?.nodes.find((node) => node.id === selectedNodeId) ?? detail?.nodes[0] ?? null,
     [detail?.nodes, selectedNodeId],
+  );
+
+  const edgeDraftSourceNode = useMemo(
+    () => detail?.nodes.find((node) => node.id === edgeDraft.sourceNodeId),
+    [detail?.nodes, edgeDraft.sourceNodeId],
+  );
+  const inferredIncomingTargetParam = useMemo(
+    () => inferEdgeTargetParam(edgeDraftSourceNode, selectedNode ?? undefined, selectedNode?.incoming.length ?? 0),
+    [edgeDraftSourceNode, selectedNode],
   );
 
   useEffect(() => {
@@ -1644,6 +1690,10 @@ const TemplateCanvas = () => {
       toast({ title: "Pick source and target nodes", variant: "destructive" });
       return;
     }
+    const sourceNode = detail.nodes.find((node) => node.id === edgeDraft.sourceNodeId);
+    const targetNode = detail.nodes.find((node) => node.id === resolvedTargetNodeId);
+    const targetParam = edgeDraft.targetParam.trim() ||
+      inferEdgeTargetParam(sourceNode, targetNode, targetNode?.incoming.length ?? 0);
     setMutating("add-edge");
     try {
       await invokeWorkbench({
@@ -1651,11 +1701,11 @@ const TemplateCanvas = () => {
         versionId: detail.versionId,
         sourceNodeId: edgeDraft.sourceNodeId,
         targetNodeId: resolvedTargetNodeId,
-        targetParam: edgeDraft.targetParam,
+        targetParam,
       });
       setEdgeDraft({ sourceNodeId: "", targetNodeId: "", targetParam: "" });
       await refreshAfterMutation(detail.versionId);
-      toast({ title: "Edge added" });
+      toast({ title: "Edge added", description: `Mapped to ${targetParam}.` });
     } catch (edgeError) {
       const message = edgeError instanceof Error ? edgeError.message : "Could not add edge";
       toast({ title: "Add edge failed", description: message, variant: "destructive" });
@@ -1663,6 +1713,21 @@ const TemplateCanvas = () => {
       setMutating(null);
     }
   }, [detail, edgeDraft, invokeWorkbench, refreshAfterMutation]);
+
+  const reorderEdge = useCallback(async (edgeId: string | undefined, direction: EdgeMoveDirection) => {
+    if (!edgeId || !detail) return;
+    setMutating(`reorder-edge:${edgeId}:${direction}`);
+    try {
+      await invokeWorkbench({ action: "reorder_edge", edgeId, direction });
+      await refreshAfterMutation(detail.versionId);
+      toast({ title: "Incoming priority updated" });
+    } catch (edgeError) {
+      const message = edgeError instanceof Error ? edgeError.message : "Could not reorder edge";
+      toast({ title: "Reorder edge failed", description: message, variant: "destructive" });
+    } finally {
+      setMutating(null);
+    }
+  }, [detail, invokeWorkbench, refreshAfterMutation]);
 
   const deleteEdge = useCallback(async (edgeId: string | undefined) => {
     if (!edgeId || !detail) return;
@@ -2780,11 +2845,19 @@ const TemplateCanvas = () => {
                   <span className="rounded-full border border-border/60 px-3 py-1 text-xs uppercase tracking-[0.18em] text-muted-foreground">
                     {selectedNode.nodeType.replace("_", " ")}
                   </span>
-                  <Button type="button" variant="ghost" size="icon" onClick={() => void deleteSelectedNode()} disabled={!!mutating} title="Delete node">
-                    <Trash2 className="h-4 w-4 text-destructive" />
-                  </Button>
                 </div>
               </div>
+
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full border-destructive/40 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                onClick={() => void deleteSelectedNode()}
+                disabled={!!mutating}
+              >
+                <Trash2 className="mr-2 h-4 w-4" />
+                Delete Node and Connections
+              </Button>
 
               <div className="space-y-2">
                 <Label>Display Label</Label>
@@ -2898,17 +2971,55 @@ const TemplateCanvas = () => {
 
               {selectedNode.incoming.length ? (
                 <div className="space-y-2">
-                  <Label>Incoming</Label>
+                  <div className="flex items-center justify-between gap-3">
+                    <Label>Incoming Priority</Label>
+                    <span className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground">Top runs first</span>
+                  </div>
                   <div className="space-y-2">
-                    {selectedNode.incoming.map((edge) => (
-                      <div key={`${edge.edgeId ?? edge.sourceNodeId}-${edge.targetParam ?? "image"}`} className="flex items-center justify-between gap-3 rounded-2xl border border-border/50 bg-background/50 px-4 py-3 text-sm">
-                        <span>
-                          {edge.sourceName}
-                          {edge.targetParam ? ` -> ${edge.targetParam}` : ""}
-                        </span>
-                        <Button type="button" variant="ghost" size="icon" onClick={() => void deleteEdge(edge.edgeId)} disabled={!edge.edgeId || !!mutating} title="Delete edge">
-                          <Trash2 className="h-4 w-4 text-destructive" />
-                        </Button>
+                    {selectedNode.incoming.map((edge, index) => (
+                      <div
+                        key={`${edge.edgeId ?? edge.sourceNodeId}-${edge.targetParam ?? "image"}-${edge.sortOrder ?? index}`}
+                        className="grid gap-3 rounded-2xl border border-border/50 bg-background/50 px-4 py-3 text-sm sm:grid-cols-[minmax(0,1fr)_auto]"
+                      >
+                        <div className="min-w-0">
+                          <p className="truncate font-medium">{index + 1}. {edge.sourceName}</p>
+                          <p className="mt-1 truncate font-mono text-[11px] text-muted-foreground">
+                            {edge.targetParam ? `maps to ${edge.targetParam}` : "target param will be normalized on save"}
+                          </p>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="icon"
+                            onClick={() => void reorderEdge(edge.edgeId, -1)}
+                            disabled={!edge.edgeId || index === 0 || !!mutating}
+                            title="Move incoming earlier"
+                          >
+                            <ChevronUp className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="icon"
+                            onClick={() => void reorderEdge(edge.edgeId, 1)}
+                            disabled={!edge.edgeId || index === selectedNode.incoming.length - 1 || !!mutating}
+                            title="Move incoming later"
+                          >
+                            <ChevronDown className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            className="border-destructive/40 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                            onClick={() => void deleteEdge(edge.edgeId)}
+                            disabled={!edge.edgeId || !!mutating}
+                            title="Delete incoming connection"
+                          >
+                            <Trash2 className="mr-2 h-4 w-4" />
+                            Remove
+                          </Button>
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -2935,8 +3046,11 @@ const TemplateCanvas = () => {
                   <Input
                     value={edgeDraft.targetParam}
                     onChange={(event) => setEdgeDraft((current) => ({ ...current, targetParam: event.target.value }))}
-                    placeholder="target param: image_1, start_frame_image"
+                    placeholder={`auto: ${inferredIncomingTargetParam}`}
                   />
+                  <p className="text-xs text-muted-foreground">
+                    Leave blank to auto-map this connection to <span className="font-mono text-foreground/80">{inferredIncomingTargetParam}</span>.
+                  </p>
                   <Button
                     type="button"
                     variant="outline"

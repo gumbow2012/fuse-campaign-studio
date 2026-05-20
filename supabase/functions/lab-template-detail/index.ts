@@ -2,7 +2,14 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 
 import { corsHeaders, createAdminClient, errorMessage, getUserRoles, json, requireUser } from "../_shared/supabase-admin.ts";
 import { buildTemplateInputPlan } from "../_shared/template-inputs.ts";
+import { readEdgeOrder, sortEdgesByExecutionOrder } from "../_shared/edge-order.ts";
 import { getNodeEditorConfig } from "../_shared/template-editor.ts";
+
+function readNodeSortOrder(node: any, fallbackIndex = 999) {
+  const raw = node?.prompt_config?.sort_order;
+  const parsed = typeof raw === "number" ? raw : Number.parseInt(String(raw ?? ""), 10);
+  return Number.isFinite(parsed) ? parsed : fallbackIndex;
+}
 
 function summarizeNode(args: {
   nodeName: string;
@@ -121,8 +128,10 @@ Deno.serve(async (req) => {
           editorMode === "reference" ||
           implicitReferenceNodeIds.has(node.id) ||
           (node.node_type === "user_input" && !isUserFacingInput);
-        const incoming = (edges ?? [])
-          .filter((edge: any) => edge.target_node_id === node.id)
+        const incomingEdges = sortEdgesByExecutionOrder(
+          (edges ?? []).filter((edge: any) => edge.target_node_id === node.id),
+        );
+        const incoming = incomingEdges
           .map((edge: any) => {
             const source = nodeMap.get(edge.source_node_id);
             return {
@@ -131,6 +140,7 @@ Deno.serve(async (req) => {
               sourceName: source?.name ?? "Unknown",
               sourceType: source?.node_type ?? "unknown",
               targetParam: edge.mapping_logic?.target_param ?? null,
+              sortOrder: readEdgeOrder(edge),
             };
           });
 
@@ -180,7 +190,16 @@ Deno.serve(async (req) => {
           },
         };
       })
-      .sort((a: any, b: any) => a.name.localeCompare(b.name));
+      .sort((a: any, b: any) => {
+        const rawA = nodeMap.get(a.id);
+        const rawB = nodeMap.get(b.id);
+        const orderDelta = readNodeSortOrder(rawA) - readNodeSortOrder(rawB);
+        if (orderDelta !== 0) return orderDelta;
+        const typeOrder = (type: string) => type === "user_input" ? 1 : type === "image_gen" ? 2 : 3;
+        const typeDelta = typeOrder(a.nodeType) - typeOrder(b.nodeType);
+        if (typeDelta !== 0) return typeDelta;
+        return a.name.localeCompare(b.name);
+      });
 
     const hasExplicitOutputFlags = detailNodes.some((node: any) =>
       (node.nodeType === "image_gen" || node.nodeType === "video_gen") &&
@@ -236,6 +255,7 @@ Deno.serve(async (req) => {
         sourceNodeId: edge.source_node_id,
         targetNodeId: edge.target_node_id,
         targetParam: edge.mapping_logic?.target_param ?? null,
+        sortOrder: readEdgeOrder(edge),
       })),
     });
   } catch (error) {

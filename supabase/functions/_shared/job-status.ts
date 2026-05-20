@@ -4,6 +4,7 @@ import {
   loadOutputExposureByNodeId,
   reconcileRunningSteps,
 } from "./executor.ts";
+import { sortEdgesByExecutionOrder } from "./edge-order.ts";
 import { buildTemplateInputPlan } from "./template-inputs.ts";
 import { getNodeEditorConfig } from "./template-editor.ts";
 
@@ -42,20 +43,6 @@ function classifyHiddenReference(node: any) {
   return editor.mode === "reference" || !!node.default_asset_id;
 }
 
-function sortByParam(a: string | null | undefined, b: string | null | undefined) {
-  const normalize = (value?: string | null) => {
-    const next = String(value ?? "");
-    if (next.startsWith("image_")) return Number(next.slice("image_".length));
-    if (next === "user_garment") return 20;
-    if (next === "user_logo") return 21;
-    if (next === "start_frame_image") return 30;
-    if (next === "end_frame_image") return 31;
-    if (next === "init_image") return 40;
-    return 100;
-  };
-  return normalize(a) - normalize(b);
-}
-
 export async function buildJobStatusResponse(admin: AdminClient, jobId: string, runnerAccess: boolean, userId: string | null) {
   let { data: job, error: jobError } = await admin
     .from("execution_jobs")
@@ -91,7 +78,7 @@ export async function buildJobStatusResponse(admin: AdminClient, jobId: string, 
 
   const { data: edges, error: edgeError } = await admin
     .from("edges")
-    .select("source_node_id, target_node_id, mapping_logic")
+    .select("id, source_node_id, target_node_id, mapping_logic")
     .eq("version_id", job.version_id);
   if (edgeError) throw new Error(edgeError.message);
 
@@ -264,9 +251,7 @@ export async function buildJobStatusResponse(admin: AdminClient, jobId: string, 
     outputs: numberedOutputs,
     steps: (steps ?? []).map((step: any) => {
       const node = step.nodes ?? {};
-      const incoming = [...(incomingByTarget.get(step.node_id) ?? [])].sort((a, b) =>
-        sortByParam(a.mapping_logic?.target_param, b.mapping_logic?.target_param)
-      ).map((edge: any) => {
+      const incoming = sortEdgesByExecutionOrder(incomingByTarget.get(step.node_id) ?? []).map((edge: any) => {
         const source = nodeMap.get(edge.source_node_id);
         const sourceEditor = source ? getNodeEditorConfig(source) : null;
         const resolvedSource = resolved.get(edge.source_node_id);
