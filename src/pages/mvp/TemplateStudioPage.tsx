@@ -21,14 +21,6 @@ import RunFeedbackCard from "@/components/mvp/RunFeedbackCard";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
 import { Textarea } from "@/components/ui/textarea";
@@ -80,14 +72,7 @@ const EMPTY_RECENT_RUNS: RecentRun[] = [];
 const TEMPLATE_CACHE_KEY = "fuse.templateStudio.templates.v4";
 const TEMPLATE_DETAIL_CACHE_KEY = "fuse.templateStudio.templateDetails.v3";
 const TEMPLATE_SELECTION_KEY = "fuse.templateStudio.selectedTemplateId";
-const UPLOAD_GUIDELINES_KEY = "fuse.templateStudio.uploadGuidelinesSeen.v1";
 const ACTIVE_RUN_STATUSES = new Set<RunnerStatus>(["queued", "running", "video_pending"]);
-const UPLOAD_GUIDELINES = [
-  ["Recommended size", "1080 x 1920px or larger"],
-  ["Max file size", "10 MB per image"],
-  ["Background", "White or clean neutral surface"],
-  ["Image quality", "Clear, sharp, and well lit"],
-] as const;
 
 const UPLOAD_PLACEHOLDER_ASSETS: Record<string, string> = {
   accessory: "/template-placeholders/accessory.png?v=20260519",
@@ -405,7 +390,6 @@ export default function TemplateStudioPage() {
     if (typeof window === "undefined") return "";
     return window.localStorage.getItem(TEMPLATE_SELECTION_KEY) ?? "";
   });
-  const [showUploadGuidelines, setShowUploadGuidelines] = useState(false);
   const [files, setFiles] = useState<Record<string, File | null>>({});
   const [textInputs, setTextInputs] = useState<Record<string, string>>({});
   const [jobId, setJobId] = useState<string | null>(null);
@@ -417,13 +401,6 @@ export default function TemplateStudioPage() {
   const runnerSectionRef = useRef<HTMLElement | null>(null);
   const isPrivilegedUser = hasAppAccess;
   const recentRunsLimit = isPrivilegedUser ? 4 : 1;
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    if (!window.localStorage.getItem(UPLOAD_GUIDELINES_KEY)) {
-      setShowUploadGuidelines(true);
-    }
-  }, []);
 
   const templatesQuery = useQuery<ApiTemplate[]>({
     queryKey: ["mvp-templates"],
@@ -637,13 +614,6 @@ export default function TemplateStudioPage() {
     }
   };
 
-  const handleUploadGuidelinesOpenChange = (open: boolean) => {
-    setShowUploadGuidelines(open);
-    if (!open && typeof window !== "undefined") {
-      window.localStorage.setItem(UPLOAD_GUIDELINES_KEY, "true");
-    }
-  };
-
   const handleRun = async () => {
     if (!selectedTemplate) return;
     if (!selectedTemplate.versionId) {
@@ -733,38 +703,6 @@ export default function TemplateStudioPage() {
 
   return (
     <SiteShell>
-      <Dialog open={showUploadGuidelines} onOpenChange={handleUploadGuidelinesOpenChange}>
-        <DialogContent className="border-white/10 bg-slate-950 text-white shadow-[0_28px_90px_rgba(0,0,0,0.55)] sm:max-w-xl sm:rounded-[1.75rem]">
-          <DialogHeader>
-            <DialogTitle className="font-display text-3xl tracking-[-0.04em] text-white">
-              Upload guidelines
-            </DialogTitle>
-            <DialogDescription className="text-sm leading-6 text-slate-300">
-              Use clean vertical assets so the templates can preserve product detail and brand consistency.
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="grid gap-3 sm:grid-cols-2">
-            {UPLOAD_GUIDELINES.map(([label, value]) => (
-              <div key={label} className="rounded-[1.25rem] border border-white/10 bg-white/[0.04] p-4">
-                <p className="text-[10px] uppercase tracking-[0.22em] text-slate-500">{label}</p>
-                <p className="mt-2 text-sm font-medium text-slate-100">{value}</p>
-              </div>
-            ))}
-          </div>
-
-          <DialogFooter>
-            <Button
-              type="button"
-              onClick={() => handleUploadGuidelinesOpenChange(false)}
-              className="rounded-full bg-cyan-300 text-slate-950 hover:bg-cyan-200"
-            >
-              Got it
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
       <section className="container py-12 md:py-16">
         <div className="flex flex-wrap items-end justify-between gap-6">
           <div>
