@@ -906,15 +906,16 @@ const TemplateCanvas = () => {
   }, [detail?.nodes]);
 
   const onPointerMove = useCallback((event: PointerEvent) => {
-    if (!dragRef.current) return;
-    const deltaX = (event.clientX - dragRef.current.start.x) / canvasZoom;
-    const deltaY = (event.clientY - dragRef.current.start.y) / canvasZoom;
+    const activeDrag = dragRef.current;
+    if (!activeDrag) return;
+    const deltaX = (event.clientX - activeDrag.start.x) / canvasZoom;
+    const deltaY = (event.clientY - activeDrag.start.y) / canvasZoom;
     setPositions((current) => {
       const next = {
         ...current,
-        [dragRef.current!.nodeId]: {
-          x: Math.max(32, dragRef.current!.origin.x + deltaX),
-          y: Math.max(76, dragRef.current!.origin.y + deltaY),
+        [activeDrag.nodeId]: {
+          x: Math.max(32, activeDrag.origin.x + deltaX),
+          y: Math.max(76, activeDrag.origin.y + deltaY),
         },
       };
       positionsRef.current = next;
@@ -923,8 +924,11 @@ const TemplateCanvas = () => {
   }, [canvasZoom]);
 
   const onPointerUp = useCallback(() => {
-    if (!dragRef.current || !detail?.versionId) return;
-    window.localStorage.setItem(layoutKey(detail.versionId), JSON.stringify(positionsRef.current));
+    const activeDrag = dragRef.current;
+    if (!activeDrag) return;
+    if (detail?.versionId) {
+      window.localStorage.setItem(layoutKey(detail.versionId), JSON.stringify(positionsRef.current));
+    }
     dragRef.current = null;
     setDraggingId(null);
   }, [detail?.versionId]);
@@ -972,11 +976,12 @@ const TemplateCanvas = () => {
   }, [canvasSize.height, canvasSize.width]);
 
   const startCanvasPan = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
-    if (event.button !== 0) return;
+    if (event.button !== 1 && !(event.button === 0 && event.shiftKey)) return;
     const target = event.target as HTMLElement;
     if (target.closest("[data-node-card], button, input, textarea, select, a")) return;
     const scrollEl = scrollRef.current;
     if (!scrollEl) return;
+    event.preventDefault();
     panRef.current = {
       x: event.clientX,
       y: event.clientY,
@@ -1093,6 +1098,17 @@ const TemplateCanvas = () => {
       }),
     );
   }, [newTemplateInputSlots]);
+
+  const moveTemplateBranch = useCallback((referenceId: string, direction: -1 | 1) => {
+    setNewTemplateReferences((current) => {
+      const index = current.findIndex((reference) => reference.id === referenceId);
+      const nextIndex = index + direction;
+      if (index < 0 || nextIndex < 0 || nextIndex >= current.length) return current;
+      const next = [...current];
+      [next[index], next[nextIndex]] = [next[nextIndex], next[index]];
+      return next;
+    });
+  }, []);
 
   const handleNewTemplateReferenceFile = useCallback((referenceId: string, file: File | null) => {
     setNewTemplateReferences((current) =>
@@ -1959,11 +1975,37 @@ const TemplateCanvas = () => {
                             <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Branch {index + 1}</p>
                             <h3 className="mt-1 font-semibold">{inputSlotOption(reference.inputSlotKey).label}</h3>
                           </div>
-                          <div className="flex shrink-0 gap-1 text-[9px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">
-                            <span className="rounded-md border border-cyan-300/30 px-1.5 py-1">Input</span>
-                            <span className="rounded-md border border-amber-300/30 px-1.5 py-1">Guide</span>
-                            <span className="rounded-md border border-emerald-300/30 px-1.5 py-1">Image</span>
-                            <span className="rounded-md border border-rose-300/30 px-1.5 py-1">Video</span>
+                          <div className="flex shrink-0 items-center gap-2">
+                            <div className="flex gap-1">
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="icon"
+                                className="h-8 w-8 rounded-lg"
+                                onClick={() => moveTemplateBranch(reference.id, -1)}
+                                disabled={index === 0 || !!mutating}
+                                title="Move branch earlier"
+                              >
+                                <ChevronLeft className="h-3.5 w-3.5" />
+                              </Button>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="icon"
+                                className="h-8 w-8 rounded-lg"
+                                onClick={() => moveTemplateBranch(reference.id, 1)}
+                                disabled={index === newTemplateReferences.length - 1 || !!mutating}
+                                title="Move branch later"
+                              >
+                                <ChevronRight className="h-3.5 w-3.5" />
+                              </Button>
+                            </div>
+                            <div className="hidden gap-1 text-[9px] font-semibold uppercase tracking-[0.1em] text-muted-foreground sm:flex">
+                              <span className="rounded-md border border-cyan-300/30 px-1.5 py-1">Input</span>
+                              <span className="rounded-md border border-amber-300/30 px-1.5 py-1">Guide</span>
+                              <span className="rounded-md border border-emerald-300/30 px-1.5 py-1">Image</span>
+                              <span className="rounded-md border border-rose-300/30 px-1.5 py-1">Video</span>
+                            </div>
                           </div>
                         </div>
                         <div className="mt-3 grid gap-3 rounded-xl border border-border/50 bg-background/45 p-3 sm:grid-cols-[140px_minmax(0,1fr)] sm:items-center">
@@ -2567,7 +2609,7 @@ const TemplateCanvas = () => {
           </div>
           <div
             ref={scrollRef}
-            className={`h-[min(72vh,760px)] min-h-[520px] overflow-auto rounded-3xl border border-border/50 bg-background/60 ${isPanning ? "cursor-grabbing" : "cursor-grab"}`}
+            className={`h-[min(72vh,760px)] min-h-[520px] overflow-auto rounded-3xl border border-border/50 bg-background/60 ${isPanning ? "cursor-grabbing" : "cursor-default"}`}
             onPointerDown={startCanvasPan}
             onPointerMove={moveCanvasPan}
             onPointerUp={endCanvasPan}
