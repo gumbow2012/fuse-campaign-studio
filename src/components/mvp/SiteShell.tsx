@@ -10,6 +10,9 @@ const navLinkClass = ({ isActive }: { isActive: boolean }) =>
     isActive ? "bg-white/10 text-foreground" : "text-muted-foreground hover:text-foreground",
   );
 
+const FUSE_ICON_SRC = "/fuse-icon.png?v=20260519";
+const FUSE_WORDMARK_SRC = "/fuse-wordmark.png?v=20260519";
+
 export default function SiteShell({ children }: { children: ReactNode }) {
   const navigate = useNavigate();
   const { user, profile, isAdmin, hasAppAccess, signOut } = useAuth();
@@ -26,9 +29,9 @@ export default function SiteShell({ children }: { children: ReactNode }) {
       <header className="sticky top-0 z-40 border-b border-white/10 bg-background/75 backdrop-blur-xl">
         <div className="container flex flex-col gap-3 py-4 md:flex-row md:items-center md:justify-between">
           <Link to="/" className="flex items-center gap-3">
-            <img src="/fuse-icon.png" alt="" className="h-11 w-11 rounded-2xl object-contain" />
+            <img src={FUSE_ICON_SRC} alt="" className="h-11 w-11 rounded-2xl object-contain" />
             <div>
-              <img src="/fuse-wordmark.png" alt="FUSE" className="h-5 w-auto object-contain" />
+              <img src={FUSE_WORDMARK_SRC} alt="FUSE" className="h-5 w-auto object-contain" />
               <p className="text-[10px] uppercase tracking-[0.28em] text-muted-foreground">Campaign Asset Studio</p>
             </div>
           </Link>

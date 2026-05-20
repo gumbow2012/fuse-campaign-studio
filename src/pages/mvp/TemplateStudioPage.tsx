@@ -90,12 +90,12 @@ const UPLOAD_GUIDELINES = [
 ] as const;
 
 const UPLOAD_PLACEHOLDER_ASSETS: Record<string, string> = {
-  accessory: "/template-placeholders/accessory.jpeg",
-  logo: "/template-placeholders/logo.jpeg",
-  model: "/template-placeholders/model.jpeg",
-  pants: "/template-placeholders/pants.jpeg",
-  shirt: "/template-placeholders/shirt.jpeg",
-  shoe: "/template-placeholders/accessory.jpeg",
+  accessory: "/template-placeholders/accessory.png?v=20260519",
+  logo: "/template-placeholders/logo.png?v=20260519",
+  model: "/template-placeholders/model.png?v=20260519",
+  pants: "/template-placeholders/pants.png?v=20260519",
+  shirt: "/template-placeholders/shirt.png?v=20260519",
+  shoe: "/template-placeholders/accessory.png?v=20260519",
 };
 
 function readCachedJson<T>(key: string, fallback: T) {
