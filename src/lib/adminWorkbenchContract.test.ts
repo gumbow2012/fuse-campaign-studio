@@ -101,6 +101,25 @@ describe("admin template workbench contract", () => {
     expect(source).toContain("getTemplateCreditCost(templateName, deliverableCounts)");
   });
 
+  it("splits draft creation from hidden guide image uploads", () => {
+    const workbenchSource = readFileSync(
+      resolve(process.cwd(), "supabase/functions/admin-template-workbench/index.ts"),
+      "utf8",
+    );
+    const canvasSource = readFileSync(
+      resolve(process.cwd(), "src/pages/TemplateCanvas.tsx"),
+      "utf8",
+    );
+
+    expect(workbenchSource).toContain("const referenceDrafts = referenceAssets");
+    expect(workbenchSource).toContain("const asset = draft.file?.dataUrl");
+    expect(workbenchSource).toContain("branchIndex: reference.branchIndex");
+    expect(canvasSource).toContain("const preparedReferences = newTemplateReferences.map");
+    expect(canvasSource).toContain("file: null");
+    expect(canvasSource).toContain("/functions/v1/save-template-editor");
+    expect(canvasSource).toContain("Number(item.branchIndex) === reference.branchIndex");
+  });
+
   it("keeps frontend and webhook plan credit grants aligned", () => {
     const frontendSource = readFileSync(
       resolve(process.cwd(), "src/lib/stripe-config.ts"),

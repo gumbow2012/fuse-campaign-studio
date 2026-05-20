@@ -443,23 +443,25 @@ async function starterNodes(args: {
     "Animate the campaign image into a short fashion ad with natural motion and premium brand pacing.",
   );
   const referenceAssets = args.referenceAssets ?? [];
-  const referenceDraftsWithFiles = referenceAssets
-    .map((draft, branchIndex) => ({ draft, branchIndex }))
-    .filter(({ draft }) => !!draft.file?.dataUrl);
+  const referenceDrafts = referenceAssets
+    .slice(0, outputCount)
+    .map((draft, branchIndex) => ({ draft, branchIndex }));
   const references = await Promise.all(
-    referenceDraftsWithFiles.map(async ({ draft, branchIndex }, index) => {
+    referenceDrafts.map(async ({ draft, branchIndex }, index) => {
       const nodeId = crypto.randomUUID();
-      const label = cleanText(draft.label, referenceDraftsWithFiles.length === 1 ? "Reference Image" : `Reference ${index + 1}`);
-      const asset = await uploadTemplateReferenceAsset({
-        admin,
-        file: draft.file!,
-        templateId,
-        versionId,
-        nodeId,
-        label,
-        uploadedBy,
-        source: "template-onboarding",
-      });
+      const label = cleanText(draft.label, referenceDrafts.length === 1 ? "Reference Image" : `Reference ${index + 1}`);
+      const asset = draft.file?.dataUrl
+        ? await uploadTemplateReferenceAsset({
+            admin,
+            file: draft.file,
+            templateId,
+            versionId,
+            nodeId,
+            label,
+            uploadedBy,
+            source: "template-onboarding",
+          })
+        : null;
 
       return {
         nodeId,
@@ -586,6 +588,7 @@ async function starterNodes(args: {
     ],
     referenceAssets: references.map((reference) => ({
       nodeId: reference.nodeId,
+      branchIndex: reference.branchIndex,
       label: reference.label,
       assetId: reference.asset?.id ?? null,
       assetUrl: reference.asset?.supabase_storage_url ?? null,

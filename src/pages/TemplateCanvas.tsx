@@ -436,7 +436,12 @@ const TemplateCanvas = () => {
         data = { error: rawBody };
       }
     }
-    if (!response.ok) throw new Error(data?.error ?? `Template workbench request failed (${response.status})`);
+    if (!response.ok) {
+      const fallback = response.status === 546
+        ? "Template workbench rejected the request before it could finish. Large uploaded images are the usual cause; retry with smaller files if this persists."
+        : `Template workbench request failed (${response.status})`;
+      throw new Error(data?.error ?? fallback);
+    }
     return data;
   }, [buildAuthHeaders]);
 
@@ -1290,24 +1295,29 @@ const TemplateCanvas = () => {
     setMutating("create-template");
     try {
       const inputSlotIds = newTemplateInputSlots.map((slot) => slot.id);
-      const referenceAssets = await Promise.all(newTemplateReferences.map(async (reference, index) => {
+      const preparedReferences = newTemplateReferences.map((reference, index) => {
         const inputSlotIndex = resolveTemplateBranchInputIndex(inputSlotIds, reference.inputSlotId, index);
         const resolvedSlot = newTemplateInputSlots[inputSlotIndex] ?? newTemplateInputSlots[0];
         const resolvedOption = inputSlotOption(resolvedSlot?.slotKey ?? reference.inputSlotKey);
         return {
+          branchIndex: index,
           label: reference.label,
           prompt: reference.prompt,
           inputSlotKey: resolvedOption.key,
           inputSlotIndex,
           imagePrompt: reference.imagePrompt,
           videoPrompt: reference.videoPrompt,
-          file: reference.file
-            ? {
-                filename: reference.file.name,
-                dataUrl: await fileToDataUrl(reference.file),
-              }
-            : null,
+          file: reference.file,
         };
+      });
+      const referenceAssets = preparedReferences.map((reference) => ({
+        label: reference.label,
+        prompt: reference.prompt,
+        inputSlotKey: reference.inputSlotKey,
+        inputSlotIndex: reference.inputSlotIndex,
+        imagePrompt: reference.imagePrompt,
+        videoPrompt: reference.videoPrompt,
+        file: null,
       }));
       const inputSlots = newTemplateInputSlots.map((slot) => {
         const option = inputSlotOption(slot.slotKey);
@@ -1334,6 +1344,53 @@ const TemplateCanvas = () => {
         outputCount: newTemplateReferences.length,
         referenceAssets,
       });
+      const versionId = typeof data.versionId === "string" ? data.versionId : null;
+      if (!versionId) throw new Error("Template created but the workbench did not return a version id");
+
+      const createdReferenceAssets = Array.isArray(data.referenceAssets)
+        ? data.referenceAssets as Array<Record<string, unknown>>
+        : [];
+      const uploadFailures: string[] = [];
+      for (const reference of preparedReferences) {
+        if (!reference.file) continue;
+
+        const createdReference = createdReferenceAssets.find((item) =>
+          item && typeof item === "object" && Number(item.branchIndex) === reference.branchIndex,
+        ) ?? createdReferenceAssets[reference.branchIndex];
+        const nodeId = createdReference && typeof createdReference.nodeId === "string"
+          ? createdReference.nodeId
+          : null;
+        if (!nodeId) {
+          uploadFailures.push(reference.label || `Branch ${reference.branchIndex + 1}`);
+          continue;
+        }
+
+        try {
+          const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/save-template-editor`, {
+            method: "POST",
+            headers: {
+              ...(await buildAuthHeaders()),
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              versionId,
+              nodeId,
+              displayLabel: reference.label,
+              expected: "image",
+              editorMode: "reference",
+              slotKey: `reference-${reference.branchIndex + 1}`,
+              referenceFile: {
+                filename: reference.file.name,
+                dataUrl: await fileToDataUrl(reference.file),
+              },
+            }),
+          });
+          const uploadData = await response.json().catch(() => ({}));
+          if (!response.ok) throw new Error(uploadData?.error ?? `Reference upload failed (${response.status})`);
+        } catch {
+          uploadFailures.push(reference.label || `Branch ${reference.branchIndex + 1}`);
+        }
+      }
       setNewTemplateName("");
       setNewTemplateDescription("");
       handleNewTemplateCoverFile(null);
@@ -1351,8 +1408,16 @@ const TemplateCanvas = () => {
       setJob(null);
       setJobId(null);
       setError(null);
-      await refreshAfterMutation(data.versionId);
-      toast({ title: "Template created", description: `${name} v1 is in testing. Run it once before publishing.` });
+      await refreshAfterMutation(versionId);
+      if (uploadFailures.length) {
+        toast({
+          title: "Template created; guide uploads need attention",
+          description: `${uploadFailures.length} hidden guide image${uploadFailures.length === 1 ? "" : "s"} did not attach. Re-upload them from the inspector.`,
+          variant: "destructive",
+        });
+      } else {
+        toast({ title: "Template created", description: `${name} v1 is in testing. Run it once before publishing.` });
+      }
     } catch (createError) {
       const message = createError instanceof Error ? createError.message : "Could not create template";
       toast({ title: "Create failed", description: message, variant: "destructive" });
@@ -1360,6 +1425,7 @@ const TemplateCanvas = () => {
       setMutating(null);
     }
   }, [
+    buildAuthHeaders,
     invokeWorkbench,
     handleNewTemplateCoverFile,
     newTemplateDescription,
