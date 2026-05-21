@@ -1,0 +1,86 @@
+import "jsr:@supabase/functions-js/edge-runtime.d.ts";
+
+import {
+  corsHeaders,
+  createAdminClient,
+  errorMessage,
+  json,
+  requireUser,
+} from "../_shared/supabase-admin.ts";
+
+type UploadRunInputBody = {
+  dataUrl?: string;
+  filename?: string;
+};
+
+const MAX_UPLOAD_BYTES = 12 * 1024 * 1024;
+const ALLOWED_CONTENT_TYPES = new Set([
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "image/gif",
+]);
+
+function parseDataUrl(dataUrl: string) {
+  const match = dataUrl.match(/^data:([^;]+);base64,(.+)$/);
+  if (!match) throw new Error("Invalid image payload.");
+
+  const [, contentType, base64] = match;
+  if (!ALLOWED_CONTENT_TYPES.has(contentType)) {
+    throw new Error("Unsupported image type.");
+  }
+
+  const extension = contentType.includes("png")
+    ? "png"
+    : contentType.includes("webp")
+    ? "webp"
+    : contentType.includes("gif")
+    ? "gif"
+    : "jpg";
+  const bytes = Uint8Array.from(atob(base64), (char) => char.charCodeAt(0));
+
+  if (bytes.byteLength > MAX_UPLOAD_BYTES) {
+    throw new Error("Image is too large. Use a file under 12 MB.");
+  }
+
+  return { bytes, contentType, extension };
+}
+
+function sanitizeName(filename: string | undefined) {
+  return (filename ?? "input")
+    .replace(/\.[a-z0-9]+$/i, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 48) || "input";
+}
+
+Deno.serve(async (req) => {
+  if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: corsHeaders });
+  if (req.method !== "POST") return json({ error: "Method not allowed." }, 405);
+
+  const admin = createAdminClient();
+
+  try {
+    const user = await requireUser(req, admin);
+    const body = await req.json() as UploadRunInputBody;
+    if (!body.dataUrl) throw new Error("Missing image payload.");
+
+    const { bytes, contentType, extension } = parseDataUrl(body.dataUrl);
+    const safeName = sanitizeName(body.filename);
+    const storagePath = `system/run-inputs/${user.id}/${crypto.randomUUID()}/${safeName}.${extension}`;
+
+    const { error: uploadError } = await admin.storage
+      .from("fuse-assets")
+      .upload(storagePath, bytes, {
+        upsert: false,
+        contentType,
+      });
+    if (uploadError) throw new Error(uploadError.message);
+
+    const publicUrl = `${Deno.env.get("SUPABASE_URL")}/storage/v1/object/public/fuse-assets/${storagePath}`;
+    return json({ url: publicUrl, storagePath });
+  } catch (error) {
+    return json({ error: errorMessage(error) }, 400);
+  }
+});

@@ -37,6 +37,9 @@ verify_jwt = false
 [functions.start-template-run]
 verify_jwt = false
 
+[functions.upload-run-input]
+verify_jwt = false
+
 [functions.get-job-status]
 verify_jwt = false
 

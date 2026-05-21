@@ -140,6 +140,22 @@ async function fileToDataUrl(file: File) {
   });
 }
 
+async function uploadRunInputFile(file: File) {
+  const dataUrl = await fileToDataUrl(file);
+  const { data, error } = await supabase.functions.invoke("upload-run-input", {
+    body: {
+      dataUrl,
+      filename: file.name,
+    },
+  });
+
+  if (error) throw new Error(error.message || "Could not upload image.");
+  if (data?.error) throw new Error(String(data.error));
+  if (!data?.url) throw new Error("Image upload did not return a URL.");
+
+  return String(data.url);
+}
+
 async function fetchJobStatus(jobId: string) {
   const token = await getAccessToken();
   const response = await fetch(
@@ -659,20 +675,14 @@ export default function TemplateStudioPage() {
     setResult(null);
 
     try {
-      const inputFiles = Object.fromEntries(
+      const uploadedImageInputs = Object.fromEntries(
         await Promise.all(
           inputFields
             .filter((field) => field.type === "image" && files[field.key])
             .map(async (field) => {
               const file = files[field.key]!;
-              const dataUrl = await fileToDataUrl(file);
-              return [
-                field.key,
-                {
-                  dataUrl,
-                  filename: file.name,
-                },
-              ];
+              const url = await uploadRunInputFile(file);
+              return [field.key, url];
             }),
         ),
       );
@@ -687,8 +697,10 @@ export default function TemplateStudioPage() {
       const { data, error } = await supabase.functions.invoke("start-template-run", {
         body: {
           versionId: selectedTemplate.versionId,
-          inputFiles,
-          inputs,
+          inputs: {
+            ...inputs,
+            ...uploadedImageInputs,
+          },
         },
       });
 
