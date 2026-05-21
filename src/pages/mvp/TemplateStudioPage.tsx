@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import {
   AlertTriangle,
   CheckCircle2,
@@ -398,7 +398,8 @@ function TemplateVibeMedia({
 }
 
 export default function TemplateStudioPage() {
-  const { hasAppAccess, profile } = useAuth();
+  const navigate = useNavigate();
+  const { user, hasAppAccess, profile } = useAuth();
   const [selectedTemplateId, setSelectedTemplateId] = useState(() => {
     if (typeof window === "undefined") return "";
     return window.localStorage.getItem(TEMPLATE_SELECTION_KEY) ?? "";
@@ -417,10 +418,7 @@ export default function TemplateStudioPage() {
 
   const templatesQuery = useQuery<ApiTemplate[]>({
     queryKey: ["mvp-templates"],
-    queryFn: async () => {
-      const token = await getAccessToken();
-      return fetchTemplates(token);
-    },
+    queryFn: () => fetchTemplates(""),
     placeholderData: loadCachedTemplates,
     staleTime: 60_000,
   });
@@ -451,7 +449,7 @@ export default function TemplateStudioPage() {
 
   const templateDetailQuery = useQuery<TemplateDetail | null>({
     queryKey: ["mvp-template-detail", selectedTemplateId],
-    enabled: !!selectedTemplate,
+    enabled: !!selectedTemplate && !!user,
     placeholderData: selectedTemplate ? loadCachedTemplateDetail(selectedTemplate.id) : null,
     staleTime: 60_000,
     queryFn: async () => {
@@ -466,6 +464,7 @@ export default function TemplateStudioPage() {
   const recentRunsQuery = useQuery<RecentRun[]>({
     queryKey: ["mvp-recent-runs", recentRunsLimit],
     queryFn: () => fetchRecentRuns(recentRunsLimit),
+    enabled: !!user,
     staleTime: 5_000,
     refetchInterval: (query) => {
       const runs = query.state.data ?? [];
@@ -600,7 +599,7 @@ export default function TemplateStudioPage() {
     isPrivilegedUser ||
     profile?.subscription_status === "active" ||
     profile?.subscription_status === "trialing";
-  const canRun = requiredInputsAreReady && hasActiveMembership && canAfford;
+  const canRun = !!user && requiredInputsAreReady && hasActiveMembership && canAfford;
   const adminVisualRemaining = getAdminVisualCreditsRemaining();
   const creditCycleTotal = isPrivilegedUser
     ? ADMIN_VISUAL_BUDGET_TOTAL
@@ -629,6 +628,10 @@ export default function TemplateStudioPage() {
 
   const handleRun = async () => {
     if (!selectedTemplate) return;
+    if (!user) {
+      navigate("/auth?mode=signup", { state: { redirectTo: "/app/templates" } });
+      return;
+    }
     if (!selectedTemplate.versionId) {
       toast({
         title: "Template unavailable",
@@ -724,7 +727,7 @@ export default function TemplateStudioPage() {
             label={isPrivilegedUser ? "Team Credits Remaining" : "Credits Remaining"}
             percent={creditsRemainingPercent}
             value={creditsRemainingValue}
-            showTopUp={!isPrivilegedUser && creditBalance <= 0}
+            showTopUp={!!user && !isPrivilegedUser && creditBalance <= 0}
           />
         </div>
 
@@ -950,14 +953,22 @@ export default function TemplateStudioPage() {
                       </div>
                       <Button
                         onClick={() => void handleRun()}
-                        disabled={submitting || isRunning || !canRun}
+                        disabled={submitting || isRunning || (!!user && !canRun)}
                         className="min-w-[180px] rounded-full bg-cyan-300 text-slate-950 hover:bg-cyan-200"
                       >
-                        {submitting || isRunning ? "Running..." : "Run template"}
+                        {submitting || isRunning ? "Running..." : user ? "Run template" : "Sign in to run"}
                       </Button>
                     </div>
 
-                    {!hasActiveMembership ? (
+                    {!user ? (
+                      <p className="mt-3 text-sm leading-6 text-cyan-100">
+                        Sign in or create an account before running templates or buying credits.
+                        {" "}
+                        <Link to="/auth?mode=signup" className="underline underline-offset-4">
+                          Create account
+                        </Link>
+                      </p>
+                    ) : !hasActiveMembership ? (
                       <p className="mt-3 text-sm leading-6 text-amber-100">
                         Active membership required before running templates.
                         {" "}
@@ -1076,7 +1087,9 @@ export default function TemplateStudioPage() {
                     <p className="mt-2 text-sm text-slate-300">
                       {isPrivilegedUser
                         ? "Last 4 runs for this account. Compact by default."
-                        : "Most recent run for this account."}
+                        : user
+                          ? "Most recent run for this account."
+                          : "Sign in to save and review your completed runs."}
                     </p>
                   </div>
                   <Button
@@ -1084,7 +1097,7 @@ export default function TemplateStudioPage() {
                     variant="outline"
                     size="sm"
                     onClick={() => void refetchRecentRuns()}
-                    disabled={recentRunsQuery.isFetching}
+                    disabled={!user || recentRunsQuery.isFetching}
                     className="rounded-full border-white/10 bg-white/[0.03] text-slate-200 hover:bg-white/[0.08]"
                   >
                     {recentRunsQuery.isFetching ? (

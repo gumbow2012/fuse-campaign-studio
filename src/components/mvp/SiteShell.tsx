@@ -52,11 +52,11 @@ export default function SiteShell({ children }: { children: ReactNode }) {
               <NavLink to="/contact" className={navLinkClass}>
                 Contact
               </NavLink>
+              <NavLink to="/app/templates" className={navLinkClass}>
+                Templates
+              </NavLink>
               {user ? (
                 <>
-                  <NavLink to="/app/templates" className={navLinkClass}>
-                    Templates
-                  </NavLink>
                   <NavLink to="/account" className={navLinkClass}>
                     Account
                   </NavLink>

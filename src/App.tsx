@@ -54,14 +54,7 @@ const App = () => (
               }
             />
             <Route path="/billing" element={<Navigate to="/pricing" replace />} />
-            <Route
-              path="/app/templates"
-              element={
-                <CustomerRoute>
-                  <TemplateStudioPage />
-                </CustomerRoute>
-              }
-            />
+            <Route path="/app/templates" element={<TemplateStudioPage />} />
 
             <Route path="/dashboard" element={<Navigate to="/app/templates" replace />} />
             <Route path="/templates" element={<Navigate to="/app/templates" replace />} />
