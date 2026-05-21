@@ -250,6 +250,10 @@ const TEMPLATE_INPUT_SLOT_OPTIONS: TemplateInputSlotOption[] = [
   { key: "model_reference", label: "Model Reference", targetParam: "model_reference_image", expected: "image" },
   { key: "scene_reference", label: "Scene Reference", targetParam: "scene_reference_image", expected: "image" },
   { key: "product_image", label: "Product Image", targetParam: "product_image", expected: "image" },
+  { key: "face", label: "Face", targetParam: "face_image", expected: "image" },
+  { key: "grillz", label: "Grillz", targetParam: "grillz_image", expected: "image" },
+  { key: "chain", label: "Chain", targetParam: "chain_image", expected: "image" },
+  { key: "car", label: "Car", targetParam: "car_image", expected: "image" },
 ];
 
 const DEFAULT_TEMPLATE_INPUT_SLOT_KEYS = ["top_garment", "bottom_garment", "logo"];

@@ -75,12 +75,16 @@ const TEMPLATE_SELECTION_KEY = "fuse.templateStudio.selectedTemplateId";
 const ACTIVE_RUN_STATUSES = new Set<RunnerStatus>(["queued", "running", "video_pending"]);
 
 const UPLOAD_PLACEHOLDER_ASSETS: Record<string, string> = {
-  accessory: "/template-placeholders/accessory.png?v=20260519",
-  logo: "/template-placeholders/logo.png?v=20260519",
-  model: "/template-placeholders/model.png?v=20260519",
-  pants: "/template-placeholders/pants.png?v=20260519",
-  shirt: "/template-placeholders/shirt.png?v=20260519",
-  shoe: "/template-placeholders/accessory.png?v=20260519",
+  accessory: "/template-placeholders/accessory.png?v=20260520",
+  car: "/template-placeholders/car.png?v=20260520",
+  chain: "/template-placeholders/chain.png?v=20260520",
+  face: "/template-placeholders/face.png?v=20260520",
+  grillz: "/template-placeholders/grillz.png?v=20260520",
+  logo: "/template-placeholders/logo.png?v=20260520",
+  model: "/template-placeholders/model.png?v=20260520",
+  pants: "/template-placeholders/pants.png?v=20260520",
+  shirt: "/template-placeholders/shirt.png?v=20260520",
+  shoe: "/template-placeholders/accessory.png?v=20260520",
 };
 
 function readCachedJson<T>(key: string, fallback: T) {
@@ -228,6 +232,10 @@ function formatCredits(value: number | null | undefined) {
 
 function getUploadIllustrationKind(label: string) {
   const normalized = label.toLowerCase();
+  if (/(face|headshot|portrait|artist)/.test(normalized)) return "face";
+  if (/(grill|grillz|teeth|tooth|dental)/.test(normalized)) return "grillz";
+  if (/(chain|necklace|pendant)/.test(normalized)) return "chain";
+  if (/(car|vehicle|auto|automotive)/.test(normalized)) return "car";
   if (/(logo|brand|mark)/.test(normalized)) return "logo";
   if (/(bottom|pant|trouser|short|jean)/.test(normalized)) return "pants";
   if (/(hat|cap|head|accessory|accessories|watch|bag|jewel)/.test(normalized)) return "accessory";

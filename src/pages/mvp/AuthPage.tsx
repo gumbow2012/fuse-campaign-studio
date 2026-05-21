@@ -111,6 +111,30 @@ export default function AuthPage() {
     }
   };
 
+  const handleGoogleSignIn = async () => {
+    setSubmitting(true);
+
+    try {
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: "google",
+        options: {
+          redirectTo: getAbsoluteSiteUrl("/auth"),
+          queryParams: {
+            prompt: "select_account",
+          },
+        },
+      });
+      if (error) throw error;
+    } catch (error) {
+      toast({
+        title: "Google sign-in failed",
+        description: error instanceof Error ? error.message : "Could not start Google sign-in.",
+        variant: "destructive",
+      });
+      setSubmitting(false);
+    }
+  };
+
   return (
     <SiteShell>
       <section className="container flex min-h-[calc(100vh-90px)] items-center py-12">
@@ -172,7 +196,28 @@ export default function AuthPage() {
                 </div>
               </div>
             ) : (
-              <form onSubmit={handleSubmit} className="mt-6 space-y-5">
+              <div className="mt-6 space-y-5">
+                {step === "request" ? (
+                  <>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      disabled={submitting}
+                      onClick={() => void handleGoogleSignIn()}
+                      className="w-full rounded-full border-white/15 bg-white/[0.04] text-white hover:bg-white/10"
+                    >
+                      Continue with Google
+                    </Button>
+
+                    <div className="flex items-center gap-3 text-xs uppercase tracking-[0.24em] text-slate-500">
+                      <span className="h-px flex-1 bg-white/10" />
+                      <span>Email code</span>
+                      <span className="h-px flex-1 bg-white/10" />
+                    </div>
+                  </>
+                ) : null}
+
+                <form onSubmit={handleSubmit} className="space-y-5">
                 {mode === "signup" && step === "request" ? (
                   <div className="space-y-2">
                     <Label htmlFor="auth-name" className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
@@ -272,7 +317,8 @@ export default function AuthPage() {
                     </>
                   )}
                 </div>
-              </form>
+                </form>
+              </div>
             )}
           </div>
         </div>
