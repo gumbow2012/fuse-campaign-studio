@@ -42,4 +42,15 @@ describe("template canvas editor contract", () => {
     expect(canvasSource).toContain("targetParam = edgeDraft.targetParam.trim()");
     expect(canvasSource).toContain("Leave blank to auto-map this connection");
   });
+
+  it("keeps raw edge target params off the canvas surface", () => {
+    const canvasSource = source();
+
+    expect(canvasSource).toContain("MAX_VISIBLE_CANVAS_EDGES");
+    expect(canvasSource).toContain("canvasEdgeVisibility");
+    expect(canvasSource).toContain("Edge target params stay out of the canvas");
+    expect(canvasSource).not.toContain("<text");
+    expect(canvasSource).not.toContain("{incoming.targetParam}");
+    expect(canvasSource).not.toContain("edge.sourceName} -> ${edge.targetParam");
+  });
 });

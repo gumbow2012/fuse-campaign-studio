@@ -216,6 +216,7 @@ const LANE_GAP = 430;
 const ROW_GAP = 258;
 const LANE_WIDTH = 340;
 const LANE_HEADER_HEIGHT = 62;
+const MAX_VISIBLE_CANVAS_EDGES = 24;
 const LAYOUT_PREFIX = "fuse-template-canvas-layout-v1";
 const LANE_KEYS = ["uploads", "references", "images", "videos", "other"] as const;
 const LANE_LABELS: Record<(typeof LANE_KEYS)[number], string> = {
@@ -312,9 +313,7 @@ function nodeKindLabel(node: TemplateDetailNode) {
 function sourcePreview(node: TemplateDetailNode) {
   if (!node.incoming.length) return "No upstream source";
   return compactText(
-    node.incoming
-      .map((edge) => edge.targetParam ? `${edge.sourceName} -> ${edge.targetParam}` : edge.sourceName)
-      .join(", "),
+    [...new Set(node.incoming.map((edge) => edge.sourceName))].join(", "),
     96,
   );
 }
@@ -885,6 +884,31 @@ const TemplateCanvas = () => {
   }, [detail, positions, showInternalNodes]);
 
   const nodeMap = useMemo(() => new Map(graphNodes.map((node) => [node.id, node])), [graphNodes]);
+
+  const canvasEdgeVisibility = useMemo(() => {
+    const focusedNodeId = selectedNodeId ?? selectedNode?.id ?? null;
+    const canvasEdges = graphNodes.flatMap((target) =>
+      target.incoming.flatMap((incoming, index) => {
+        const source = nodeMap.get(incoming.sourceNodeId);
+        if (!source) return [];
+        return [{
+          key: incoming.edgeId ?? `${incoming.sourceNodeId}-${target.id}-${incoming.targetParam ?? index}`,
+          source,
+          target,
+          isFocused: focusedNodeId ? source.id === focusedNodeId || target.id === focusedNodeId : false,
+        }];
+      }),
+    );
+    const focusedEdges = focusedNodeId ? canvasEdges.filter((edge) => edge.isFocused) : [];
+    const primaryEdges = focusedEdges.length ? focusedEdges : canvasEdges;
+    const visibleEdges = primaryEdges.slice(0, MAX_VISIBLE_CANVAS_EDGES);
+
+    return {
+      edges: visibleEdges,
+      hiddenCount: Math.max(0, canvasEdges.length - visibleEdges.length),
+      total: canvasEdges.length,
+    };
+  }, [graphNodes, nodeMap, selectedNode?.id, selectedNodeId]);
 
   const laneStats = useMemo(() => {
     const stats = new Map<(typeof LANE_KEYS)[number], number>();
@@ -2727,28 +2751,27 @@ const TemplateCanvas = () => {
                 );
               })}
 
-              <svg className="pointer-events-none absolute inset-0 h-full w-full" width={canvasSize.width} height={canvasSize.height}>
-                {graphNodes.map((node) =>
-                  node.incoming.map((incoming) => {
-                    const source = nodeMap.get(incoming.sourceNodeId);
-                    if (!source) return null;
+              {canvasEdgeVisibility.hiddenCount > 0 ? (
+                <div className="pointer-events-none absolute right-6 top-6 z-20 rounded-full border border-white/10 bg-background/80 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground shadow-lg backdrop-blur">
+                  {canvasEdgeVisibility.edges.length}/{canvasEdgeVisibility.total} links visible
+                </div>
+              ) : null}
+
+              {/* Edge target params stay out of the canvas; exact mappings live in the inspector. */}
+              <svg className="pointer-events-none absolute inset-0 h-full w-full" width={canvasSize.width} height={canvasSize.height} aria-hidden="true">
+                {canvasEdgeVisibility.edges.map(({ key, source, target, isFocused }) => {
                     const from = { x: source.position.x + NODE_WIDTH, y: source.position.y + NODE_HEIGHT / 2 };
-                    const to = { x: node.position.x, y: node.position.y + NODE_HEIGHT / 2 };
-                    const midX = (from.x + to.x) / 2;
-                    const midY = (from.y + to.y) / 2;
+                    const to = { x: target.position.x, y: target.position.y + NODE_HEIGHT / 2 };
+                    const path = curve(from, to);
+                    const haloStroke = isFocused ? "rgba(34,211,238,0.22)" : "rgba(34,211,238,0.07)";
+                    const lineStroke = isFocused ? "rgba(125,211,252,0.74)" : "rgba(125,211,252,0.22)";
                     return (
-                      <g key={`${incoming.sourceNodeId}-${node.id}-${incoming.targetParam ?? "flow"}`}>
-                        <path d={curve(from, to)} fill="none" stroke="rgba(34,211,238,0.18)" strokeWidth="8" strokeLinecap="round" />
-                        <path d={curve(from, to)} fill="none" stroke="rgba(125,211,252,0.62)" strokeWidth="2.5" strokeLinecap="round" />
-                        {incoming.targetParam ? (
-                          <text x={midX} y={midY - 8} fill="rgba(226,232,240,0.95)" fontSize="11" textAnchor="middle">
-                            {incoming.targetParam}
-                          </text>
-                        ) : null}
+                      <g key={key}>
+                        <path d={path} fill="none" stroke={haloStroke} strokeWidth={isFocused ? "7" : "5"} strokeLinecap="round" />
+                        <path d={path} fill="none" stroke={lineStroke} strokeWidth={isFocused ? "2.25" : "1.5"} strokeLinecap="round" />
                       </g>
                     );
-                  }),
-                )}
+                  })}
               </svg>
 
               {graphNodes.map((node) => (
