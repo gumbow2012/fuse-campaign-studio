@@ -78,7 +78,7 @@ function extractSubscriptionPeriod(subscription: StripeObject) {
 }
 
 function billingReturnUrl(origin: string, mode: StripeBillingMode, outcome: "success" | "canceled") {
-  const url = new URL("/billing", origin);
+  const url = new URL("/pricing", origin);
   url.searchParams.set(outcome, "true");
   if (mode === "test") {
     url.searchParams.set("billing_mode", "test");

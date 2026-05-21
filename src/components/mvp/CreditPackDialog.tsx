@@ -57,7 +57,7 @@ export default function CreditPackDialog({ trigger }: CreditPackDialogProps) {
         <DialogHeader>
           <DialogTitle className="font-display text-3xl tracking-[-0.04em]">Get credits</DialogTitle>
           <DialogDescription>
-            Quick buy one-time credit packs. Credits post automatically after payment clears.
+            Quick buy one-time credit packs. Credits post automatically after payment clears. Promo codes can be entered in Stripe Checkout.
           </DialogDescription>
         </DialogHeader>
 

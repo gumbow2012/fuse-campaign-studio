@@ -215,6 +215,7 @@ export default function BillingPage() {
             <h1 className="mt-4 font-display text-5xl font-bold tracking-[-0.05em] text-white">Membership controls, credits, and billing state.</h1>
             <p className="mt-4 max-w-3xl text-base leading-7 text-slate-300">
               Stripe handles checkout and subscription management. Supabase stores the member state, credit balance, billing events, and entitlement gates used by the runner.
+              Discount codes can be entered directly in Stripe Checkout.
             </p>
           </div>
           {user ? (
@@ -344,6 +345,9 @@ export default function BillingPage() {
                     <span className="ml-1 text-sm font-normal text-slate-400">/mo</span>
                   </p>
                   <p className="mt-2 text-sm text-slate-300">{tier.monthlyCredits.toLocaleString()} credits each cycle</p>
+                  <p className="mt-3 rounded-xl border border-cyan-300/15 bg-cyan-300/[0.06] px-3 py-2 text-xs leading-5 text-cyan-50">
+                    Have a discount code? Enter it in Stripe Checkout.
+                  </p>
 
                   <ul className="mt-5 space-y-3 text-sm text-slate-200">
                     {tierMeta.features.map((feature) => (
@@ -380,7 +384,7 @@ export default function BillingPage() {
                 Top up without changing your plan.
               </h2>
               <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-300">
-                One-time Stripe checkout. Credits post automatically after payment clears.
+                One-time Stripe checkout. Credits post automatically after payment clears. Promo codes work here too.
               </p>
             </div>
           </div>
