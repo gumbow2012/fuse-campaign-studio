@@ -82,7 +82,7 @@ export default function AccountPage() {
             variant="outline"
             className="rounded-full border-white/15 bg-white/5 text-foreground hover:bg-white/10"
           >
-            <Link to="/billing">Manage membership</Link>
+            <Link to="/pricing">Manage membership</Link>
           </Button>
         </div>
 

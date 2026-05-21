@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import SiteShell from "@/components/mvp/SiteShell";
 import RunFeedbackCard from "@/components/mvp/RunFeedbackCard";
+import CreditPackDialog from "@/components/mvp/CreditPackDialog";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -290,10 +291,12 @@ function CreditRemainingMeter({
   label,
   percent,
   value,
+  showTopUp,
 }: {
   label: string;
   percent: number;
   value: string;
+  showTopUp?: boolean;
 }) {
   return (
     <div className="min-w-[230px] rounded-[1.5rem] border border-white/10 bg-slate-950/75 p-4 shadow-[0_18px_60px_rgba(0,0,0,0.32)] backdrop-blur-xl">
@@ -304,6 +307,15 @@ function CreditRemainingMeter({
         </div>
         <p className="pb-1 text-sm font-medium text-cyan-100">{value}</p>
       </div>
+      {showTopUp ? (
+        <CreditPackDialog
+          trigger={
+            <Button className="mt-4 w-full rounded-full bg-cyan-300 text-slate-950 hover:bg-cyan-200">
+              Get credits
+            </Button>
+          }
+        />
+      ) : null}
       <div className="mt-4 h-1.5 overflow-hidden rounded-full bg-white/10">
         <div
           className="h-full rounded-full bg-cyan-300 shadow-[0_0_18px_rgba(103,232,249,0.65)]"
@@ -724,6 +736,7 @@ export default function TemplateStudioPage() {
             label={isPrivilegedUser ? "Team Credits Remaining" : "Credits Remaining"}
             percent={creditsRemainingPercent}
             value={creditsRemainingValue}
+            showTopUp={!isPrivilegedUser && creditBalance <= 0}
           />
         </div>
 
@@ -960,8 +973,8 @@ export default function TemplateStudioPage() {
                       <p className="mt-3 text-sm leading-6 text-amber-100">
                         Active membership required before running templates.
                         {" "}
-                        <Link to="/billing" className="underline underline-offset-4">
-                          Open billing
+                        <Link to="/pricing" className="underline underline-offset-4">
+                          Open membership
                         </Link>
                       </p>
                     ) : null}

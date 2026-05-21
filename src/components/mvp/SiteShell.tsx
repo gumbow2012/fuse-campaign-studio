@@ -3,6 +3,7 @@ import { Link, NavLink, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
+import CreditPackDialog from "./CreditPackDialog";
 
 const navLinkClass = ({ isActive }: { isActive: boolean }) =>
   cn(
@@ -17,6 +18,7 @@ export default function SiteShell({ children }: { children: ReactNode }) {
   const navigate = useNavigate();
   const { user, profile, isAdmin, hasAppAccess, signOut } = useAuth();
   const creditDisplay = isAdmin ? "Admin access" : `${profile?.credits_balance ?? 0} credits`;
+  const shouldShowCreditTopUp = !!user && !isAdmin && (profile?.credits_balance ?? 0) <= 0;
 
   const handleSignOut = async () => {
     await signOut();
@@ -58,9 +60,6 @@ export default function SiteShell({ children }: { children: ReactNode }) {
                   <NavLink to="/account" className={navLinkClass}>
                     Account
                   </NavLink>
-                  <NavLink to="/billing" className={navLinkClass}>
-                    Billing
-                  </NavLink>
                   {hasAppAccess ? (
                     <>
                       <NavLink to="/app/lab/canvas" className={navLinkClass}>
@@ -84,6 +83,15 @@ export default function SiteShell({ children }: { children: ReactNode }) {
                   <div className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-xs uppercase tracking-[0.22em] text-muted-foreground">
                     {creditDisplay}
                   </div>
+                  {shouldShowCreditTopUp ? (
+                    <CreditPackDialog
+                      trigger={
+                        <Button className="rounded-full bg-cyan-300 px-4 text-slate-950 hover:bg-cyan-200">
+                          Get credits
+                        </Button>
+                      }
+                    />
+                  ) : null}
                   <Button
                     variant="outline"
                     onClick={() => void handleSignOut()}

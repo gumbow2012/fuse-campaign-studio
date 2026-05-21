@@ -45,8 +45,8 @@ const Pricing = () => {
       });
       if (error) throw error;
       if (data?.url) window.open(data.url, "_blank");
-    } catch (err: any) {
-      toast({ title: "Error", description: err.message, variant: "destructive" });
+    } catch (err) {
+      toast({ title: "Error", description: err instanceof Error ? err.message : "Could not start checkout.", variant: "destructive" });
     } finally {
       setLoading(null);
     }
@@ -75,13 +75,13 @@ const Pricing = () => {
             <span className="gradient-text">Credit Tier.</span>
           </h1>
           <p className="text-lg text-muted-foreground max-w-2xl mx-auto mb-8">
-            The MVP uses subscription billing only. Each tier includes recurring credits for template generation. No top-ups, no metering.
+            The MVP uses membership billing only. Each tier includes recurring credits for template generation. No top-ups, no metering.
           </p>
           <Button
             className="h-12 px-8 rounded-lg gradient-primary text-primary-foreground font-bold text-sm tracking-wide glow-blue border-0"
-            onClick={() => navigate(user ? "/billing" : "/auth")}
+            onClick={() => navigate(user ? "/pricing" : "/auth")}
           >
-            {user ? "Go to Billing" : "Create Account"}
+            {user ? "Go to Membership" : "Create Account"}
             <ArrowRight size={16} className="ml-2" />
           </Button>
         </div>

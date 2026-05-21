@@ -72,7 +72,7 @@ const Dashboard = () => {
               <span className="text-[10px] font-bold uppercase tracking-[0.15em] text-muted-foreground">Plan</span>
             </div>
             <p className="font-display text-xl font-black text-foreground capitalize">{profile?.plan ?? "Free"}</p>
-            <Link to="/billing" className="text-xs text-primary hover:text-primary/80 transition-colors">Manage →</Link>
+            <Link to="/pricing" className="text-xs text-primary hover:text-primary/80 transition-colors">Manage →</Link>
           </div>
         </div>
 
@@ -88,9 +88,9 @@ const Dashboard = () => {
               <FolderOpen size={14} className="mr-2" /> Recent Runs
             </Button>
           </Link>
-          <Link to="/billing">
+          <Link to="/pricing">
             <Button variant="outline" className="border-border/50 text-foreground bg-secondary hover:bg-secondary/80">
-              <CreditCard size={14} className="mr-2" /> Billing
+              <CreditCard size={14} className="mr-2" /> Membership
             </Button>
           </Link>
         </div>

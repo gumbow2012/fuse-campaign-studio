@@ -30,6 +30,10 @@ import { drops } from "@/components/templates/dropData";
 /* ─── Constants ─── */
 const CREDIT_DOLLAR_VALUE = 0.07;
 
+type TemplateWithAssetRequirements = ApiTemplate & {
+  asset_requirements?: string | null;
+};
+
 /* ─── Category icons/colors ─── */
 const categoryConfig: Record<string, { color: string; icon: string }> = {
   Street: { color: "text-orange-400", icon: "🔥" },
@@ -272,7 +276,7 @@ const TemplateRun = () => {
 
   // asset_requirements: prefer templateDetail, fall back to ApiTemplate field
   const assetRequirements: string | null =
-    templateDetail?.asset_requirements || (template as any)?.asset_requirements || null;
+    templateDetail?.asset_requirements || (template as TemplateWithAssetRequirements | undefined)?.asset_requirements || null;
 
   const imageFields = inputFields.filter((i) => i.type === "image");
   const textFields = inputFields.filter((i) => i.type === "text" || i.type === "prompt");
@@ -373,8 +377,8 @@ const TemplateRun = () => {
 
       setProjectId(jobId);
       setResult({ status: "queued", progress: 0, logs: [], attempts: 0, maxAttempts: 3, outputs: [] });
-    } catch (err: any) {
-      toast({ title: "Error", description: err.message, variant: "destructive" });
+    } catch (err) {
+      toast({ title: "Error", description: err instanceof Error ? err.message : "Could not start the template run.", variant: "destructive" });
     } finally {
       setLoading(false);
     }
@@ -674,7 +678,7 @@ const TemplateRun = () => {
                   )}
                   {!canAfford && !hasResult && (
                     <button
-                      onClick={() => navigate("/billing")}
+                      onClick={() => navigate("/pricing")}
                       className="w-full text-center text-[10px] text-primary/70 hover:text-primary font-medium mt-2 transition-colors"
                     >
                       Manage subscription →
