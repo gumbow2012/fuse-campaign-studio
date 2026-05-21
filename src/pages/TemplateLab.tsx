@@ -11,6 +11,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
+import { uploadRunInputFile } from "@/services/runInputUpload";
 
 type Phase = "idle" | "running" | "complete" | "error";
 type RunnerMode = "single" | "bulk";
@@ -333,7 +334,7 @@ function buildBulkInputFilesForTemplate(
 ) {
   const missing: string[] = [];
   const usedSlots = new Set<string>();
-  const resolved: Array<{ inputName: string; file: File }> = [];
+  const resolved: Array<{ inputId: string; inputName: string; file: File }> = [];
 
   for (const input of template.inputs) {
     const candidates = getSharedInputCandidates(input.name);
@@ -346,7 +347,7 @@ function buildBulkInputFilesForTemplate(
     }
 
     usedSlots.add(matchedKey!);
-    resolved.push({ inputName: input.name, file });
+    resolved.push({ inputId: input.id, inputName: input.name, file });
   }
 
   return { missing, usedSlots: [...usedSlots], resolved };
@@ -1011,7 +1012,7 @@ const TemplateLab = () => {
     }, 2500);
   }, [fetchJobStatus]);
 
-  const startTemplateRun = useCallback(async (template: TemplateOption, inputFiles: Record<string, { dataUrl: string; filename?: string }>) => {
+  const startTemplateRun = useCallback(async (template: TemplateOption, inputs: Record<string, string>) => {
     const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/start-template-run`, {
       method: "POST",
       headers: {
@@ -1020,7 +1021,7 @@ const TemplateLab = () => {
       },
       body: JSON.stringify({
         versionId: template.versionId,
-        inputFiles,
+        inputs,
       }),
     });
 
@@ -1173,20 +1174,13 @@ const TemplateLab = () => {
     setStartingRun(true);
 
     try {
-      const inputFiles = Object.fromEntries(
+      const uploadedInputs = Object.fromEntries(
         await Promise.all(
           selectedTemplate.inputs
             .filter((input) => files[input.id])
             .map(async (input) => {
               const file = files[input.id]!;
-              const dataUrl = await fileToDataUrl(file);
-              return [
-                input.name,
-                {
-                  dataUrl,
-                  filename: file.name,
-                },
-              ];
+              return [input.id, await uploadRunInputFile(file)];
             }),
         ),
       );
@@ -1199,7 +1193,7 @@ const TemplateLab = () => {
         },
         body: JSON.stringify({
           versionId: selectedTemplate.versionId,
-          inputFiles,
+          inputs: uploadedInputs,
         }),
       });
 
@@ -1388,19 +1382,13 @@ const TemplateLab = () => {
         );
 
         try {
-          const inputFiles = Object.fromEntries(
+          const uploadedInputs = Object.fromEntries(
             await Promise.all(
-              resolved.map(async ({ inputName, file }) => [
-                inputName,
-                {
-                  dataUrl: await fileToDataUrl(file),
-                  filename: file.name,
-                },
-              ]),
+              resolved.map(async ({ inputId, file }) => [inputId, await uploadRunInputFile(file)]),
             ),
           );
 
-          const data = await startTemplateRun(template, inputFiles);
+          const data = await startTemplateRun(template, uploadedInputs);
 
           setBulkRows((current) =>
             current.map((row) =>

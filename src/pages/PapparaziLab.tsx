@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "@/hooks/use-toast";
+import { uploadRunInputFileWithRunnerCode } from "@/services/runInputUpload";
 
 type Phase = "idle" | "running" | "complete" | "error";
 
@@ -227,7 +228,7 @@ const PapparaziLab = () => {
     setPhase("running");
 
     try {
-      const dataUrl = await fileToDataUrl(file);
+      const uploadedInputUrl = await uploadRunInputFileWithRunnerCode(file, accessCode.trim());
       const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/start-template-run`, {
         method: "POST",
         headers: {
@@ -237,11 +238,8 @@ const PapparaziLab = () => {
         },
         body: JSON.stringify({
           versionId: PAPARAZZI_VERSION_ID,
-          inputFiles: {
-            "Input: Clothing Item": {
-              dataUrl,
-              filename: file.name,
-            },
+          inputs: {
+            "Input: Clothing Item": uploadedInputUrl,
           },
         }),
       });

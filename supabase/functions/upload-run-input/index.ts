@@ -4,6 +4,8 @@ import {
   corsHeaders,
   createAdminClient,
   errorMessage,
+  getOptionalUser,
+  hasValidRunnerCode,
   json,
   requireUser,
 } from "../_shared/supabase-admin.ts";
@@ -62,13 +64,16 @@ Deno.serve(async (req) => {
   const admin = createAdminClient();
 
   try {
-    const user = await requireUser(req, admin);
+    const runnerAccess = hasValidRunnerCode(req);
+    const user = runnerAccess ? await getOptionalUser(req, admin) : await requireUser(req, admin);
+    if (!user && !runnerAccess) throw new Error("Authentication required.");
     const body = await req.json() as UploadRunInputBody;
     if (!body.dataUrl) throw new Error("Missing image payload.");
 
     const { bytes, contentType, extension } = parseDataUrl(body.dataUrl);
     const safeName = sanitizeName(body.filename);
-    const storagePath = `system/run-inputs/${user.id}/${crypto.randomUUID()}/${safeName}.${extension}`;
+    const ownerKey = user?.id ?? "runner-code";
+    const storagePath = `system/run-inputs/${ownerKey}/${crypto.randomUUID()}/${safeName}.${extension}`;
 
     const { error: uploadError } = await admin.storage
       .from("fuse-assets")

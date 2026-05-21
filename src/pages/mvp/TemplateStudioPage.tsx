@@ -30,6 +30,7 @@ import { SUPABASE_PUBLISHABLE_KEY, SUPABASE_URL, supabase } from "@/integrations
 import { ADMIN_VISUAL_BUDGET_TOTAL, getAdminVisualCreditsRemaining, getAdminVisualCreditsSpent, recordAdminVisualCreditUsage } from "@/lib/adminBudget";
 import { sortTemplatesForStudio } from "@/lib/templateOrdering";
 import { fetchTemplateDetail, fetchTemplates, type ApiTemplate, type RunFeedbackRecord, type TemplateDetail } from "@/services/fuseApi";
+import { uploadRunInputFile } from "@/services/runInputUpload";
 import { getStaticInputs } from "@/services/templateInputMap";
 
 type RunnerStatus = "queued" | "running" | "video_pending" | "complete" | "failed";
@@ -129,31 +130,6 @@ async function getAccessToken() {
   }
 
   return session.access_token;
-}
-
-async function fileToDataUrl(file: File) {
-  return await new Promise<string>((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result ?? ""));
-    reader.onerror = () => reject(reader.error ?? new Error("Could not read file"));
-    reader.readAsDataURL(file);
-  });
-}
-
-async function uploadRunInputFile(file: File) {
-  const dataUrl = await fileToDataUrl(file);
-  const { data, error } = await supabase.functions.invoke("upload-run-input", {
-    body: {
-      dataUrl,
-      filename: file.name,
-    },
-  });
-
-  if (error) throw new Error(error.message || "Could not upload image.");
-  if (data?.error) throw new Error(String(data.error));
-  if (!data?.url) throw new Error("Image upload did not return a URL.");
-
-  return String(data.url);
 }
 
 async function fetchJobStatus(jobId: string) {

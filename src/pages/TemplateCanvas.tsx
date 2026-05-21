@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
+import { uploadRunInputFile } from "@/services/runInputUpload";
 import {
   MAX_TEMPLATE_BRANCHES,
   MAX_TEMPLATE_INPUTS,
@@ -1247,19 +1248,13 @@ const TemplateCanvas = () => {
     setError(null);
 
     try {
-      const inputFiles = Object.fromEntries(
+      const uploadedInputs = Object.fromEntries(
         await Promise.all(
           runInputs
             .filter((input) => files[input.id])
             .map(async (input) => {
               const file = files[input.id]!;
-              return [
-                input.name,
-                {
-                  filename: file.name,
-                  dataUrl: await fileToDataUrl(file),
-                },
-              ];
+              return [input.id, await uploadRunInputFile(file)];
             }),
         ),
       );
@@ -1272,7 +1267,7 @@ const TemplateCanvas = () => {
         },
         body: JSON.stringify({
           versionId: detail.versionId,
-          inputFiles,
+          inputs: uploadedInputs,
         }),
       });
       const data = await response.json();
