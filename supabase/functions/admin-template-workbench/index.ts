@@ -47,6 +47,7 @@ type TemplatePreviewFile = {
 type PublishGateResult = {
   publishable: boolean;
   reasons: string[];
+  structuralIssueCount: number;
   completedRunCount: number;
   approvedAuditCount: number;
   blockingOutputReportCount: number;
@@ -308,11 +309,79 @@ function isBlockingOutputReport(row: any) {
   return row.status === "open" || row.verdict !== "good" || row.severity === "blocking";
 }
 
+async function getVersionStructuralIssues(
+  admin: ReturnType<typeof createAdminClient>,
+  versionId: string,
+) {
+  const { data: nodes, error: nodeError } = await admin
+    .from("nodes")
+    .select("id, name, node_type")
+    .eq("version_id", versionId);
+  if (nodeError) throw new Error(nodeError.message);
+
+  const { data: edges, error: edgeError } = await admin
+    .from("edges")
+    .select("source_node_id, target_node_id")
+    .eq("version_id", versionId);
+  if (edgeError) throw new Error(edgeError.message);
+
+  const nodesById = new Map((nodes ?? []).map((node: any) => [node.id, node]));
+  const incomingByTarget = new Map<string, string[]>();
+  for (const edge of edges ?? []) {
+    const sources = incomingByTarget.get(edge.target_node_id) ?? [];
+    sources.push(edge.source_node_id);
+    incomingByTarget.set(edge.target_node_id, sources);
+  }
+
+  const reachesUserInput = new Map<string, boolean>();
+  const canReachUserInput = (nodeId: string, visiting = new Set<string>()): boolean => {
+    if (reachesUserInput.has(nodeId)) return reachesUserInput.get(nodeId) ?? false;
+    const node = nodesById.get(nodeId);
+    if (!node) return false;
+    if ((node as any).node_type === "user_input") {
+      reachesUserInput.set(nodeId, true);
+      return true;
+    }
+    if (visiting.has(nodeId)) return false;
+    visiting.add(nodeId);
+    const result = (incomingByTarget.get(nodeId) ?? []).some((sourceNodeId) =>
+      canReachUserInput(sourceNodeId, visiting)
+    );
+    visiting.delete(nodeId);
+    reachesUserInput.set(nodeId, result);
+    return result;
+  };
+
+  return (nodes ?? [])
+    .filter((node: any) => node.node_type === "image_gen" || node.node_type === "video_gen")
+    .map((node: any) => {
+      const incomingCount = incomingByTarget.get(node.id)?.length ?? 0;
+      const reachable = canReachUserInput(node.id);
+      return {
+        nodeId: node.id,
+        name: node.name,
+        nodeType: node.node_type,
+        incomingCount,
+        reachable,
+      };
+    })
+    .filter((node) => node.incomingCount === 0 || !node.reachable);
+}
+
 async function getVersionPublishGate(
   admin: ReturnType<typeof createAdminClient>,
   versionId: string,
 ): Promise<PublishGateResult> {
   const reasons: string[] = [];
+
+  const structuralIssues = await getVersionStructuralIssues(admin, versionId);
+  if (structuralIssues.length) {
+    const preview = structuralIssues
+      .slice(0, 3)
+      .map((issue) => `${issue.name} (${issue.nodeType})`)
+      .join(", ");
+    reasons.push(`Fix ${structuralIssues.length} disconnected execution node${structuralIssues.length === 1 ? "" : "s"} before publishing: ${preview}.`);
+  }
 
   const { data: version, error: versionError } = await admin
     .from("template_versions")
@@ -387,6 +456,7 @@ async function getVersionPublishGate(
   return {
     publishable: reasons.length === 0 && !!selectedApproval,
     reasons,
+    structuralIssueCount: structuralIssues.length,
     completedRunCount: jobsWithOutputs.length,
     approvedAuditCount: approvedAudits?.length ?? 0,
     blockingOutputReportCount,
