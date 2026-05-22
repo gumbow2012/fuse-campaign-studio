@@ -50,8 +50,9 @@ export default function RunFeedbackCard({
   const trimmedFeedback = feedbackText.trim();
   const savedVote = savedFeedback?.vote ?? null;
   const savedText = savedFeedback?.feedback ?? "";
-  const dirty = vote !== savedVote || trimmedFeedback !== savedText;
-  const canSubmit = !saving && dirty && (vote !== null || trimmedFeedback.length > 0);
+  const hasFeedbackDraft = trimmedFeedback.length > 0;
+  const dirty = vote !== savedVote || (hasFeedbackDraft && trimmedFeedback !== savedText);
+  const canSubmit = !saving && dirty && (vote !== null || hasFeedbackDraft);
 
   const handleSave = async () => {
     if (!canSubmit) return;
@@ -65,7 +66,7 @@ export default function RunFeedbackCard({
       });
       setSavedFeedback(nextFeedback);
       setVote(nextFeedback.vote);
-      setFeedbackText(nextFeedback.feedback ?? "");
+      setFeedbackText("");
       onSaved?.(nextFeedback);
       toast({
         title: "Feedback saved",

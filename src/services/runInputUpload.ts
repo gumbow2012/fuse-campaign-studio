@@ -11,14 +11,24 @@ async function fileToDataUrl(file: File) {
 
 export async function uploadRunInputFile(file: File) {
   const dataUrl = await fileToDataUrl(file);
-  const { data, error } = await supabase.functions.invoke("upload-run-input", {
-    body: {
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+  const response = await fetch(`${SUPABASE_URL}/functions/v1/upload-run-input`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      apikey: SUPABASE_PUBLISHABLE_KEY,
+      Authorization: `Bearer ${session?.access_token ?? SUPABASE_PUBLISHABLE_KEY}`,
+    },
+    body: JSON.stringify({
       dataUrl,
       filename: file.name,
-    },
+    }),
   });
+  const data = await response.json().catch(() => null);
 
-  if (error) throw new Error(error.message || "Could not upload image.");
+  if (!response.ok) throw new Error(data?.error ?? `Could not upload image (${response.status}).`);
   if (data?.error) throw new Error(String(data.error));
   if (!data?.url) throw new Error("Image upload did not return a URL.");
 

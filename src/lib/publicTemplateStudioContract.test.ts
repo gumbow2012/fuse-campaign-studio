@@ -19,7 +19,8 @@ describe("public template studio access", () => {
     const billingSource = await readFile(resolve(process.cwd(), "src/pages/mvp/BillingPage.tsx"), "utf8");
 
     expect(studioSource).toContain('navigate("/auth?mode=signup", { state: { redirectTo: "/app/templates" } })');
-    expect(studioSource).toContain('{submitting || isRunning ? "Running..." : user ? "Run template" : "Sign in to run"}');
+    expect(studioSource).toContain('"Checking credits..."');
+    expect(studioSource).toContain('submitting || isRunning ? "Running..." : user ? "Run template" : "Sign in to run"');
     expect(studioSource).toContain("enabled: !!user");
     expect(billingSource).toContain('navigate("/auth?mode=signup")');
   });

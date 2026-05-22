@@ -307,8 +307,12 @@ export async function fetchTemplateDetail(
           hint: typeof node.summary === "string" ? node.summary : undefined,
         })),
       };
-    } catch {
-      // Fall back to worker detail below.
+    } catch (error) {
+      throw new Error(
+        error instanceof Error
+          ? error.message
+          : "Could not load live template detail.",
+      );
     }
   }
 

@@ -259,19 +259,6 @@ function pickPassthroughValue(entries: Array<[string, ResolvedOutput]>) {
     .at(-1)?.[1] ?? null;
 }
 
-function toVideoSafeImageUrl(url: string) {
-  const match = url.match(/^(https:\/\/[^/]+)\/storage\/v1\/object\/public\/([^/]+)\/(.+)$/);
-  if (!match) return url;
-
-  const [, origin, bucket, path] = match;
-  const transformed = new URL(`${origin}/storage/v1/render/image/public/${bucket}/${path}`);
-  transformed.searchParams.set("width", "1080");
-  transformed.searchParams.set("height", "1920");
-  transformed.searchParams.set("resize", "contain");
-  transformed.searchParams.set("quality", "75");
-  return transformed.toString();
-}
-
 function isoDiffMs(start?: string | null, end?: string | null) {
   if (!start || !end) return null;
   return Math.max(0, new Date(end).getTime() - new Date(start).getTime());
@@ -1112,8 +1099,8 @@ export async function runGraphJob(admin: AdminClient, jobId: string) {
 
           const requestId = await submitVideoJob({
             prompt,
-            initImageUrl: toVideoSafeImageUrl(initImageUrl),
-            endFrameUrl: endFrameUrl ? toVideoSafeImageUrl(endFrameUrl) : undefined,
+            initImageUrl,
+            endFrameUrl,
             duration: videoDuration(node.prompt_config?.duration),
             aspectRatio: VERTICAL_VIDEO_ASPECT_RATIO,
             webhookUrl: `${Deno.env.get("SUPABASE_URL")}/functions/v1/fal-webhook?jobId=${encodeURIComponent(job.id)}&stepId=${encodeURIComponent(step.id)}`,

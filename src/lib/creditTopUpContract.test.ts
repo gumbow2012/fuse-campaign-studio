@@ -10,7 +10,7 @@ describe("credit top-up surface", () => {
 
     expect(shellSource).toContain("shouldShowCreditTopUp");
     expect(shellSource).toContain("<CreditPackDialog");
-    expect(studioSource).toContain("showTopUp={!!user && !isPrivilegedUser && creditBalance <= 0}");
+    expect(studioSource).toContain("showTopUp={!!user && !!profile && !isPrivilegedUser && displayedCreditBalance <= 0}");
     expect(dialogSource).toContain('supabase.functions.invoke("create-credit-checkout"');
     expect(dialogSource).toContain("Quick buy one-time credit packs");
   });

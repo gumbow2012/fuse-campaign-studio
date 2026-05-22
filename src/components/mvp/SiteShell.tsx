@@ -1,5 +1,6 @@
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { Link, NavLink, useNavigate } from "react-router-dom";
+import { RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
@@ -16,13 +17,28 @@ const FUSE_WORDMARK_SRC = "/fuse-wordmark.png?v=20260519";
 
 export default function SiteShell({ children }: { children: ReactNode }) {
   const navigate = useNavigate();
-  const { user, profile, isAdmin, hasAppAccess, signOut } = useAuth();
-  const creditDisplay = isAdmin ? "Admin access" : `${profile?.credits_balance ?? 0} credits`;
-  const shouldShowCreditTopUp = !!user && !isAdmin && (profile?.credits_balance ?? 0) <= 0;
+  const { user, profile, isAdmin, hasAppAccess, signOut, refreshProfile } = useAuth();
+  const [refreshingCredits, setRefreshingCredits] = useState(false);
+  const creditDisplay = isAdmin
+    ? "Admin access"
+    : profile
+      ? `${profile.credits_balance.toLocaleString()} credits`
+      : "Checking credits";
+  const shouldShowCreditTopUp = !!user && !!profile && !isAdmin && profile.credits_balance <= 0;
 
   const handleSignOut = async () => {
     await signOut();
     navigate("/", { replace: true });
+  };
+
+  const handleRefreshCredits = async () => {
+    if (!user || isAdmin || refreshingCredits) return;
+    setRefreshingCredits(true);
+    try {
+      await refreshProfile();
+    } finally {
+      setRefreshingCredits(false);
+    }
   };
 
   return (
@@ -83,6 +99,20 @@ export default function SiteShell({ children }: { children: ReactNode }) {
                   <div className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-xs uppercase tracking-[0.22em] text-muted-foreground">
                     {creditDisplay}
                   </div>
+                  {!isAdmin ? (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      title="Refresh credits"
+                      aria-label="Refresh credits"
+                      onClick={() => void handleRefreshCredits()}
+                      disabled={refreshingCredits}
+                      className="h-9 w-9 rounded-full border-white/15 bg-white/5 text-foreground hover:bg-white/10"
+                    >
+                      <RefreshCw className={`h-4 w-4 ${refreshingCredits ? "animate-spin" : ""}`} />
+                    </Button>
+                  ) : null}
                   {shouldShowCreditTopUp ? (
                     <CreditPackDialog
                       trigger={

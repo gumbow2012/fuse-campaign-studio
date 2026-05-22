@@ -73,9 +73,13 @@ const EMPTY_TEMPLATES: ApiTemplate[] = [];
 const EMPTY_RECENT_RUNS: RecentRun[] = [];
 
 const TEMPLATE_CACHE_KEY = "fuse.templateStudio.templates.v4";
-const TEMPLATE_DETAIL_CACHE_KEY = "fuse.templateStudio.templateDetails.v3";
+const TEMPLATE_DETAIL_CACHE_KEY = "fuse.templateStudio.templateDetails.v4";
 const TEMPLATE_SELECTION_KEY = "fuse.templateStudio.selectedTemplateId";
 const ACTIVE_RUN_STATUSES = new Set<RunnerStatus>(["queued", "running", "video_pending"]);
+
+function formatPublicOutputLabel(index: number) {
+  return `Output ${index + 1}`;
+}
 
 const UPLOAD_PLACEHOLDER_ASSETS: Record<string, string> = {
   accessory: "/template-placeholders/accessory.png?v=20260520",
@@ -107,16 +111,20 @@ function loadCachedTemplates() {
   return Array.isArray(parsed) ? (parsed as ApiTemplate[]) : [];
 }
 
-function loadCachedTemplateDetail(templateId: string) {
+function getTemplateDetailCacheId(template: Pick<ApiTemplate, "id" | "versionId">) {
+  return template.versionId ?? template.id;
+}
+
+function loadCachedTemplateDetail(cacheId: string) {
   const cached = readCachedJson<Record<string, TemplateDetail | null>>(TEMPLATE_DETAIL_CACHE_KEY, {});
-  const detail = cached[templateId];
+  const detail = cached[cacheId];
   return detail ?? null;
 }
 
-function storeCachedTemplateDetail(templateId: string, detail: TemplateDetail | null) {
+function storeCachedTemplateDetail(cacheId: string, detail: TemplateDetail | null) {
   if (typeof window === "undefined") return;
   const cached = readCachedJson<Record<string, TemplateDetail | null>>(TEMPLATE_DETAIL_CACHE_KEY, {});
-  cached[templateId] = detail;
+  cached[cacheId] = detail;
   window.localStorage.setItem(TEMPLATE_DETAIL_CACHE_KEY, JSON.stringify(cached));
 }
 
@@ -175,6 +183,26 @@ async function fetchRecentRuns(limit: number) {
   }
 
   return Array.isArray(data?.jobs) ? (data.jobs as RecentRun[]) : [];
+}
+
+async function startTemplateRun(versionId: string, inputs: Record<string, string>) {
+  const token = await getAccessToken();
+  const response = await fetch(`${SUPABASE_URL}/functions/v1/start-template-run`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+      apikey: SUPABASE_PUBLISHABLE_KEY,
+    },
+    body: JSON.stringify({ versionId, inputs }),
+  });
+
+  const data = await response.json().catch(() => null);
+  if (!response.ok) {
+    throw new Error(data?.error ?? `Could not start the template run (${response.status}).`);
+  }
+
+  return data as { jobId?: string; error?: string };
 }
 
 function formatRunTimestamp(value: string | null | undefined) {
@@ -399,7 +427,7 @@ function TemplateVibeMedia({
 
 export default function TemplateStudioPage() {
   const navigate = useNavigate();
-  const { user, hasAppAccess, profile } = useAuth();
+  const { user, hasAppAccess, profile, refreshProfile } = useAuth();
   const [selectedTemplateId, setSelectedTemplateId] = useState(() => {
     if (typeof window === "undefined") return "";
     return window.localStorage.getItem(TEMPLATE_SELECTION_KEY) ?? "";
@@ -409,6 +437,7 @@ export default function TemplateStudioPage() {
   const [jobId, setJobId] = useState<string | null>(null);
   const [result, setResult] = useState<RunnerResult | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [checkingCredits, setCheckingCredits] = useState(false);
   const [adminVisualSpent, setAdminVisualSpent] = useState(() => getAdminVisualCreditsSpent());
   const [expandedRuns, setExpandedRuns] = useState<Record<string, boolean>>({});
   const [feedbackOverrides, setFeedbackOverrides] = useState<Record<string, RunFeedbackRecord | null>>({});
@@ -446,17 +475,22 @@ export default function TemplateStudioPage() {
   }, [selectedTemplateId]);
 
   const selectedTemplate = templates.find((template) => template.id === selectedTemplateId) ?? null;
+  const selectedTemplateDetailCacheId = selectedTemplate
+    ? getTemplateDetailCacheId(selectedTemplate)
+    : null;
 
   const templateDetailQuery = useQuery<TemplateDetail | null>({
-    queryKey: ["mvp-template-detail", selectedTemplateId],
+    queryKey: ["mvp-template-detail", selectedTemplateDetailCacheId],
     enabled: !!selectedTemplate && !!user,
-    placeholderData: selectedTemplate ? loadCachedTemplateDetail(selectedTemplate.id) : null,
+    placeholderData: selectedTemplateDetailCacheId
+      ? loadCachedTemplateDetail(selectedTemplateDetailCacheId)
+      : null,
     staleTime: 60_000,
     queryFn: async () => {
-      if (!selectedTemplate) return null;
+      if (!selectedTemplate || !selectedTemplateDetailCacheId) return null;
       const token = await getAccessToken();
       const detail = await fetchTemplateDetail(token, selectedTemplate);
-      storeCachedTemplateDetail(selectedTemplate.id, detail);
+      storeCachedTemplateDetail(selectedTemplateDetailCacheId, detail);
       return detail;
     },
   });
@@ -593,24 +627,29 @@ export default function TemplateStudioPage() {
 
   const creditsRequired = selectedTemplate?.estimated_credits_per_run ?? 0;
   const selectedTemplateOutputCount = getTemplateOutputCount(selectedTemplate);
-  const creditBalance = profile?.credits_balance ?? 0;
-  const canAfford = isPrivilegedUser || creditBalance >= creditsRequired;
+  const creditBalance = profile?.credits_balance ?? null;
+  const displayedCreditBalance = creditBalance ?? 0;
+  const profileIsResolving = !!user && !isPrivilegedUser && !profile;
+  const canAfford = isPrivilegedUser || (!!profile && displayedCreditBalance >= creditsRequired);
   const hasActiveMembership =
     isPrivilegedUser ||
     profile?.subscription_status === "active" ||
     profile?.subscription_status === "trialing";
-  const canRun = !!user && requiredInputsAreReady && hasActiveMembership && canAfford;
   const adminVisualRemaining = getAdminVisualCreditsRemaining();
   const creditCycleTotal = isPrivilegedUser
     ? ADMIN_VISUAL_BUDGET_TOTAL
-    : Math.max(profile?.subscription_cycle_credits ?? 0, creditBalance);
-  const creditsRemaining = isPrivilegedUser ? adminVisualRemaining : creditBalance;
+    : Math.max(profile?.subscription_cycle_credits ?? 0, displayedCreditBalance);
+  const creditsRemaining = isPrivilegedUser ? adminVisualRemaining : displayedCreditBalance;
   const creditsRemainingPercent = creditCycleTotal > 0
     ? clampPercent((creditsRemaining / creditCycleTotal) * 100)
     : 0;
   const creditsRemainingValue = isPrivilegedUser
     ? `${formatCredits(adminVisualRemaining)} / ${formatCredits(ADMIN_VISUAL_BUDGET_TOTAL)}`
-    : `${formatCredits(creditBalance)} cr`;
+    : !user
+      ? "Sign in"
+    : profileIsResolving
+      ? "Checking"
+      : `${formatCredits(displayedCreditBalance)} cr`;
   const costDisplay = isPrivilegedUser ? "Bypassed for team access" : `${creditsRequired} credits`;
 
   const handleTemplateSelect = (templateId: string) => {
@@ -650,10 +689,39 @@ export default function TemplateStudioPage() {
     }
 
     setSubmitting(true);
+    setCheckingCredits(true);
     setJobId(null);
     setResult(null);
 
     try {
+      if (!isPrivilegedUser) {
+        const freshProfile = await refreshProfile();
+        const latestProfile = freshProfile ?? profile;
+        const latestStatus = latestProfile?.subscription_status;
+        const latestBalance = latestProfile?.credits_balance ?? 0;
+        const latestHasActiveMembership = latestStatus === "active" || latestStatus === "trialing";
+
+        if (!latestHasActiveMembership) {
+          toast({
+            title: "Membership required",
+            description: "Your billing state is not active yet.",
+            variant: "destructive",
+          });
+          return;
+        }
+
+        if (latestBalance < creditsRequired) {
+          toast({
+            title: "Credits not available",
+            description: `This run costs ${creditsRequired} credits and your current balance is ${latestBalance}.`,
+            variant: "destructive",
+          });
+          return;
+        }
+      }
+
+      setCheckingCredits(false);
+
       const uploadedImageInputs = Object.fromEntries(
         await Promise.all(
           inputFields
@@ -673,17 +741,11 @@ export default function TemplateStudioPage() {
           .filter(([, value]) => value.length > 0),
       );
 
-      const { data, error } = await supabase.functions.invoke("start-template-run", {
-        body: {
-          versionId: selectedTemplate.versionId,
-          inputs: {
-            ...inputs,
-            ...uploadedImageInputs,
-          },
-        },
+      const data = await startTemplateRun(selectedTemplate.versionId, {
+        ...inputs,
+        ...uploadedImageInputs,
       });
 
-      if (error) throw new Error(error.message || "Could not start the template run.");
       if (data?.error) throw new Error(String(data.error));
       if (!data?.jobId) throw new Error("Template run did not return a job id.");
 
@@ -699,6 +761,7 @@ export default function TemplateStudioPage() {
         outputs: [],
       });
       void refetchRecentRuns();
+      void refreshProfile();
       toast({ title: "Run queued", description: "The template is now executing." });
     } catch (error) {
       toast({
@@ -707,6 +770,7 @@ export default function TemplateStudioPage() {
         variant: "destructive",
       });
     } finally {
+      setCheckingCredits(false);
       setSubmitting(false);
     }
   };
@@ -727,7 +791,7 @@ export default function TemplateStudioPage() {
             label={isPrivilegedUser ? "Team Credits Remaining" : "Credits Remaining"}
             percent={creditsRemainingPercent}
             value={creditsRemainingValue}
-            showTopUp={!!user && !isPrivilegedUser && creditBalance <= 0}
+            showTopUp={!!user && !!profile && !isPrivilegedUser && displayedCreditBalance <= 0}
           />
         </div>
 
@@ -953,10 +1017,10 @@ export default function TemplateStudioPage() {
                       </div>
                       <Button
                         onClick={() => void handleRun()}
-                        disabled={submitting || isRunning || (!!user && !canRun)}
+                        disabled={submitting || isRunning || (!!user && !requiredInputsAreReady)}
                         className="min-w-[180px] rounded-full bg-cyan-300 text-slate-950 hover:bg-cyan-200"
                       >
-                        {submitting || isRunning ? "Running..." : user ? "Run template" : "Sign in to run"}
+                        {checkingCredits ? "Checking credits..." : submitting || isRunning ? "Running..." : user ? "Run template" : "Sign in to run"}
                       </Button>
                     </div>
 
@@ -967,6 +1031,10 @@ export default function TemplateStudioPage() {
                         <Link to="/auth?mode=signup" className="underline underline-offset-4">
                           Create account
                         </Link>
+                      </p>
+                    ) : profileIsResolving ? (
+                      <p className="mt-3 text-sm leading-6 text-cyan-100">
+                        Checking your membership and credit balance.
                       </p>
                     ) : !hasActiveMembership ? (
                       <p className="mt-3 text-sm leading-6 text-amber-100">
@@ -980,7 +1048,7 @@ export default function TemplateStudioPage() {
 
                     {!isPrivilegedUser && hasActiveMembership && !canAfford ? (
                       <p className="mt-3 text-sm leading-6 text-rose-100">
-                        This run costs {creditsRequired} credits and your balance is {creditBalance}.
+                        This run costs {creditsRequired} credits and your balance is {displayedCreditBalance}.
                       </p>
                     ) : null}
                   </div>
@@ -1057,12 +1125,12 @@ export default function TemplateStudioPage() {
                         {output.type === "video" ? (
                           <video src={output.url} controls className="aspect-[9/16] w-full bg-black object-cover" />
                         ) : (
-                          <img src={output.url} alt={output.label || `Output ${index + 1}`} className="aspect-[9/16] w-full object-cover" />
+                          <img src={output.url} alt={formatPublicOutputLabel(index)} className="aspect-[9/16] w-full object-cover" />
                         )}
                         <div className="flex items-center justify-between gap-3 p-4">
                           <div className="flex items-center gap-2 text-sm text-slate-300">
                             {output.type === "video" ? <Film className="h-4 w-4" /> : <ImageIcon className="h-4 w-4" />}
-                            <span>{output.label || `Output ${index + 1}`}</span>
+                            <span>{formatPublicOutputLabel(index)}</span>
                           </div>
                           <a
                             href={output.url}
@@ -1182,7 +1250,7 @@ export default function TemplateStudioPage() {
                                   {output.type === "video" ? (
                                     <video src={output.url} className="h-28 w-24 object-cover" muted playsInline />
                                   ) : (
-                                    <img src={output.url} alt={output.label || `Run output ${index + 1}`} className="h-28 w-24 object-cover" />
+                                    <img src={output.url} alt={formatPublicOutputLabel(index)} className="h-28 w-24 object-cover" />
                                   )}
                                 </a>
                               ))}

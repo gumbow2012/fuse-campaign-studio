@@ -28,8 +28,8 @@ interface AuthContextType {
   hasAppAccess: boolean;
   signOut: () => Promise<void>;
   refreshAccess: () => Promise<void>;
-  refreshProfile: () => Promise<void>;
-  refreshSubscription: () => Promise<void>;
+  refreshProfile: () => Promise<Profile | null>;
+  refreshSubscription: () => Promise<Profile | null>;
 }
 
 const AuthContext = createContext<AuthContextType>({
@@ -42,8 +42,8 @@ const AuthContext = createContext<AuthContextType>({
   hasAppAccess: false,
   signOut: async () => {},
   refreshAccess: async () => {},
-  refreshProfile: async () => {},
-  refreshSubscription: async () => {},
+  refreshProfile: async () => null,
+  refreshSubscription: async () => null,
 });
 
 export const useAuth = () => useContext(AuthContext);
@@ -64,21 +64,23 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     setHasAppAccess(false);
   }, []);
 
-  const fetchProfile = useCallback(async (userId: string) => {
+  const fetchProfile = useCallback(async (_userId: string) => {
     const { data, error } = await supabase.rpc("get_my_profile");
     if (error) {
       console.error("Failed to load profile:", error);
       setProfile(null);
-      return;
+      return null;
     }
 
     const row = Array.isArray(data) ? data[0] : data;
     if (row) {
-      setProfile(row as Profile);
-      return;
+      const nextProfile = row as Profile;
+      setProfile(nextProfile);
+      return nextProfile;
     }
 
     setProfile(null);
+    return null;
   }, []);
 
   const fetchRoles = useCallback(async (userId: string) => {
@@ -91,14 +93,15 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       return;
     }
 
-    const nextRoles = (data ?? []).map((row: any) => String(row.role));
+    const nextRoles = ((data ?? []) as Array<{ role: string }>).map((row) => String(row.role));
     setRoles(nextRoles);
     setIsAdmin(nextRoles.includes("admin"));
     setHasAppAccess(nextRoles.includes("admin") || nextRoles.includes("dev"));
   }, []);
 
   const refreshProfile = useCallback(async () => {
-    if (user) await fetchProfile(user.id);
+    if (!user) return null;
+    return await fetchProfile(user.id);
   }, [user, fetchProfile]);
 
   const refreshAccess = useCallback(async () => {
@@ -116,11 +119,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   }, [user, fetchProfile, fetchRoles]);
 
   const refreshSubscription = useCallback(async () => {
-    if (!session) return;
+    if (!session) return null;
     try {
-      await refreshProfile();
+      return await refreshProfile();
     } catch (e) {
       console.error("Failed to check subscription:", e);
+      return null;
     }
   }, [session, refreshProfile]);
 
@@ -197,6 +201,27 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     if (!session) return;
     refreshSubscription();
   }, [session, refreshSubscription]);
+
+  useEffect(() => {
+    if (!user) return;
+
+    let lastRefreshAt = 0;
+    const refreshVisibleProfile = () => {
+      if (document.visibilityState === "hidden") return;
+      const now = Date.now();
+      if (now - lastRefreshAt < 15_000) return;
+      lastRefreshAt = now;
+      void fetchProfile(user.id);
+    };
+
+    window.addEventListener("focus", refreshVisibleProfile);
+    document.addEventListener("visibilitychange", refreshVisibleProfile);
+
+    return () => {
+      window.removeEventListener("focus", refreshVisibleProfile);
+      document.removeEventListener("visibilitychange", refreshVisibleProfile);
+    };
+  }, [fetchProfile, user]);
 
   return (
     <AuthContext.Provider value={{ user, session, profile, loading, roles, isAdmin, hasAppAccess, signOut, refreshAccess, refreshProfile, refreshSubscription }}>
