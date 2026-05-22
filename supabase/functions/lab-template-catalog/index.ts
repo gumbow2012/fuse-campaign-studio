@@ -79,6 +79,14 @@ Deno.serve(async (req) => {
       : { data: [], error: null };
     if (nodeError) throw new Error(nodeError.message);
 
+    const { data: edges, error: edgeError } = versionIds.length
+      ? await admin
+          .from("edges")
+          .select("version_id, target_node_id")
+          .in("version_id", versionIds)
+      : { data: [], error: null };
+    if (edgeError) throw new Error(edgeError.message);
+
     const { data: recentJobs, error: recentJobsError } = versionIds.length
       ? await admin
           .from("execution_jobs")
@@ -103,6 +111,12 @@ Deno.serve(async (req) => {
 
     const templateMap = new Map((templates ?? []).map((template: any) => [template.id, template]));
     const nodeById = new Map((nodes ?? []).map((node: any) => [node.id, node]));
+    const connectedExecutionNodeIdsByVersion = new Map<string, Set<string>>();
+    for (const edge of edges ?? []) {
+      const list = connectedExecutionNodeIdsByVersion.get(edge.version_id) ?? new Set<string>();
+      list.add(edge.target_node_id);
+      connectedExecutionNodeIdsByVersion.set(edge.version_id, list);
+    }
     const jobsByVersionId = new Map<string, any[]>();
     for (const job of recentJobs ?? []) {
       const list = jobsByVersionId.get(job.version_id) ?? [];
@@ -185,8 +199,13 @@ Deno.serve(async (req) => {
         const versionNodes = (nodes ?? []).filter((node: any) => node.version_id === version.id);
         const inputNodes = versionNodes.filter((node: any) => node.node_type === "user_input");
         const inputPlan = buildTemplateInputPlan(template?.name ?? "", inputNodes);
-        const imageNodes = versionNodes.filter((node: any) => node.node_type === "image_gen");
-        const videoNodes = versionNodes.filter((node: any) => node.node_type === "video_gen");
+        const connectedExecutionNodeIds = connectedExecutionNodeIdsByVersion.get(version.id) ?? new Set<string>();
+        const imageNodes = versionNodes.filter((node: any) =>
+          node.node_type === "image_gen" && connectedExecutionNodeIds.has(node.id)
+        );
+        const videoNodes = versionNodes.filter((node: any) =>
+          node.node_type === "video_gen" && connectedExecutionNodeIds.has(node.id)
+        );
         const imageFlags = imageNodes.map((node: any) => parseOutputExposed(node.prompt_config?.output_exposed));
         const videoFlags = videoNodes.map((node: any) => parseOutputExposed(node.prompt_config?.output_exposed));
         const hasExplicitImageFlags = imageFlags.some((flag) => flag !== null);

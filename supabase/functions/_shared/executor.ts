@@ -250,7 +250,7 @@ export async function loadOutputExposureByNodeId(
 }
 
 function isStepReady(step: StepRow, incomingEdges: EdgeRow[], resolved: Map<string, ResolvedOutput>) {
-  return incomingEdges.every((edge) => resolved.has(edge.source_node_id));
+  return incomingEdges.length > 0 && incomingEdges.every((edge) => resolved.has(edge.source_node_id));
 }
 
 function pickPassthroughValue(entries: Array<[string, ResolvedOutput]>) {
@@ -561,6 +561,43 @@ async function completeBlankPromptStep(
   } satisfies ResolvedOutput;
 }
 
+async function completeOrphanExecutionStep(
+  admin: AdminClient,
+  step: StepRow,
+  node: NodeRow,
+) {
+  const completedAt = new Date().toISOString();
+
+  await admin
+    .from("execution_steps")
+    .update({
+      status: "complete",
+      completed_at: completedAt,
+      execution_time_ms: 0,
+      error_log: null,
+      output_payload: {
+        ...(step.output_payload ?? {}),
+        status: "skipped",
+        rawPayload: {
+          detail: "Skipped orphan execution node with no incoming edges",
+        },
+      },
+    })
+    .eq("id", step.id);
+
+  await logAuditEvent({
+    eventType: "template.run.skipped_orphan_node",
+    message: `Skipped orphan execution node ${node.name}.`,
+    source: "template-runner",
+    jobId: step.job_id ?? null,
+    metadata: {
+      node_id: node.id,
+      node_name: node.name,
+      node_type: node.node_type,
+    },
+  }, admin);
+}
+
 export async function completeAsyncStep(
   admin: AdminClient,
   step: StepRow,
@@ -807,7 +844,7 @@ export async function runGraphJob(admin: AdminClient, jobId: string) {
 
   const { data: steps, error: stepError } = await admin
     .from("execution_steps")
-    .select("id, node_id, status, provider_request_id, output_asset_id, assets!execution_steps_output_asset_id_fkey(supabase_storage_url)")
+    .select("id, job_id, node_id, status, provider_request_id, output_asset_id, assets!execution_steps_output_asset_id_fkey(supabase_storage_url)")
     .eq("job_id", job.id);
   if (stepError || !steps) throw new Error(stepError?.message ?? "Failed to load steps");
 
@@ -887,6 +924,21 @@ export async function runGraphJob(admin: AdminClient, jobId: string) {
   while (true) {
     const pendingSteps = mutableSteps.filter((step) => step.status === "pending");
     if (!pendingSteps.length) break;
+
+    const orphanSteps = pendingSteps.filter((step) => {
+      const node = nodeMap.get(step.node_id);
+      return node?.node_type !== "user_input" && !(incomingByTarget.get(step.node_id)?.length);
+    });
+    if (orphanSteps.length) {
+      for (const step of orphanSteps) {
+        const node = nodeMap.get(step.node_id);
+        if (!node) continue;
+        await completeOrphanExecutionStep(admin, step, node);
+        step.status = "complete";
+      }
+      await refreshJobProgress(admin, job.id);
+      continue;
+    }
 
     const readySteps = pendingSteps.filter((step) =>
       isStepReady(step, incomingByTarget.get(step.node_id) ?? [], resolved)

@@ -101,6 +101,37 @@ describe("admin template workbench contract", () => {
     expect(source).toContain("getTemplateCreditCost(templateName, deliverableCounts)");
   });
 
+  it("does not execute orphan graph nodes during live template runs", () => {
+    const startSource = readFileSync(
+      resolve(process.cwd(), "supabase/functions/start-template-run/index.ts"),
+      "utf8",
+    );
+    const executorSource = readFileSync(
+      resolve(process.cwd(), "supabase/functions/_shared/executor.ts"),
+      "utf8",
+    );
+
+    expect(startSource).toContain('from("edges")');
+    expect(startSource).toContain("targetNodeIds");
+    expect(startSource).toContain("skipped_orphan_execution_node_ids");
+    expect(startSource).toContain("Template version has no connected execution nodes");
+    expect(executorSource).toContain("incomingEdges.length > 0");
+    expect(executorSource).toContain("completeOrphanExecutionStep");
+    expect(executorSource).toContain("Skipped orphan execution node with no incoming edges");
+  });
+
+  it("keeps template catalog prices and output counts limited to connected execution nodes", () => {
+    const catalogSource = readFileSync(
+      resolve(process.cwd(), "supabase/functions/lab-template-catalog/index.ts"),
+      "utf8",
+    );
+
+    expect(catalogSource).toContain('.from("edges")');
+    expect(catalogSource).toContain("connectedExecutionNodeIdsByVersion");
+    expect(catalogSource).toContain('node.node_type === "image_gen" && connectedExecutionNodeIds.has(node.id)');
+    expect(catalogSource).toContain('node.node_type === "video_gen" && connectedExecutionNodeIds.has(node.id)');
+  });
+
   it("splits draft creation from hidden guide image uploads", () => {
     const workbenchSource = readFileSync(
       resolve(process.cwd(), "supabase/functions/admin-template-workbench/index.ts"),

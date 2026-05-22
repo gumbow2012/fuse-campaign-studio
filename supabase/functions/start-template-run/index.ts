@@ -34,6 +34,11 @@ type VersionNode = {
   default_asset_id?: string | null;
 };
 
+type VersionEdge = {
+  source_node_id: string;
+  target_node_id: string;
+};
+
 function getVersionTemplateName(version: { fuse_templates?: unknown }) {
   const relation = version.fuse_templates;
   const template = Array.isArray(relation) ? relation[0] : relation;
@@ -181,8 +186,23 @@ Deno.serve(async (req) => {
 
     const allVersionNodes = (versionNodes ?? []) as VersionNode[];
     const inputNodes = allVersionNodes.filter((node) => node.node_type === "user_input");
-    const executionNodes = allVersionNodes.filter((node) => node.node_type !== "user_input");
-    const deliverableCounts = countTemplateDeliverables(allVersionNodes);
+
+    const { data: versionEdges, error: versionEdgesError } = await admin
+      .from("edges")
+      .select("source_node_id, target_node_id")
+      .eq("version_id", version.id);
+    if (versionEdgesError) throw new Error(versionEdgesError.message);
+
+    const targetNodeIds = new Set(
+      ((versionEdges ?? []) as VersionEdge[]).map((edge) => edge.target_node_id).filter(Boolean),
+    );
+    const orphanExecutionNodes = allVersionNodes.filter((node) =>
+      node.node_type !== "user_input" && !targetNodeIds.has(node.id)
+    );
+    const executionNodes = allVersionNodes.filter((node) =>
+      node.node_type !== "user_input" && targetNodeIds.has(node.id)
+    );
+    const deliverableCounts = countTemplateDeliverables(executionNodes);
 
     const userRoles = user ? await getUserRoles(user.id, admin) : [];
     const bypassCredits = runnerAccess || userRoles.some((role) => role === "admin" || role === "dev");
@@ -255,7 +275,7 @@ Deno.serve(async (req) => {
       chargedCredits = creditCost;
     }
 
-    if (!executionNodes.length) throw new Error("Template version has no execution nodes");
+    if (!executionNodes.length) throw new Error("Template version has no connected execution nodes");
 
     const { error: stepsError } = await admin
       .from("execution_steps")
@@ -304,6 +324,7 @@ Deno.serve(async (req) => {
         bypass_credits: bypassCredits,
         credit_cost: creditCost,
         runner_access: runnerAccess,
+        skipped_orphan_execution_node_ids: orphanExecutionNodes.map((node) => node.id),
       },
     }, admin);
 
