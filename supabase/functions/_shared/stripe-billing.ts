@@ -29,6 +29,11 @@ import {
 
 type StripeObject = Record<string, any>;
 
+const SUBSCRIPTION_CREDIT_GRANT_EVENTS = new Set([
+  "invoice.paid",
+  "invoice.payment_succeeded",
+]);
+
 function stripeSource(base: string, mode: StripeBillingMode) {
   return mode === "test" ? `${base}-test` : base;
 }
@@ -907,7 +912,7 @@ export function createStripeWebhookHandler(mode: StripeBillingMode) {
         return json({ received: true }, 200);
       }
 
-      if (event.type === "invoice.paid") {
+      if (SUBSCRIPTION_CREDIT_GRANT_EVENTS.has(event.type)) {
         const invoice = object;
         const subscriptionId = typeof invoice.subscription === "string" ? invoice.subscription : stripeSubscriptionId;
         if (!subscriptionId) return json({ received: true }, 200);
@@ -917,7 +922,25 @@ export function createStripeWebhookHandler(mode: StripeBillingMode) {
         const billingPeriod = extractSubscriptionPeriod(subscription);
         const plan = planFromPriceId(item?.price?.id ?? null, mode)
           ?? planFromProductId(item?.price?.product ?? null, mode);
-        if (!plan) return json({ received: true, skipped: "unmapped plan" }, 200);
+        if (!plan) {
+          await logAuditEvent({
+            eventType: "stripe.subscription_invoice.unmapped_plan",
+            message: "Subscription invoice paid but no matching Stripe plan was configured.",
+            severity: "warning",
+            source: stripeSource("stripe-webhook", mode),
+            requestId,
+            metadata: {
+              billing_mode: mode,
+              stripe_event_id: event.id,
+              stripe_event_type: event.type,
+              stripe_subscription_id: subscription.id,
+              stripe_invoice_id: typeof invoice.id === "string" ? invoice.id : null,
+              stripe_price_id: item?.price?.id ?? null,
+              stripe_product_id: item?.price?.product ?? null,
+            },
+          }, admin);
+          return json({ received: true, skipped: "unmapped plan" }, 200);
+        }
 
         const customerId = typeof invoice.customer === "string" ? invoice.customer : stripeCustomerId;
         const profile = await resolveProfileForBillingEvent({

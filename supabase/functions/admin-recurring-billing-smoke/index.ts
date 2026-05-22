@@ -55,6 +55,16 @@ function pickLatestEvent(
   return matches.at(-1) ?? null;
 }
 
+function isSubscriptionCreditGrantEvent(event: { event_type: string }) {
+  return event.event_type === "invoice.paid" || event.event_type === "invoice.payment_succeeded";
+}
+
+function pickLatestSubscriptionCreditGrantEvent(
+  events: Array<{ event_type: string; stripe_event_id: string; stripe_invoice_id: string | null; created_at: string }>,
+) {
+  return events.filter(isSubscriptionCreditGrantEvent).at(-1) ?? null;
+}
+
 async function waitForCondition<T>(
   label: string,
   fn: () => Promise<T | null>,
@@ -207,7 +217,7 @@ async function getSubscriptionSnapshot(args: {
   ]);
 
   const interestingEventIds = billingEvents
-    .filter((event) => ["customer.subscription.created", "customer.subscription.updated", "customer.subscription.deleted", "invoice.paid", "invoice.payment_failed"].includes(event.event_type))
+    .filter((event) => ["customer.subscription.created", "customer.subscription.updated", "customer.subscription.deleted", "invoice.paid", "invoice.payment_succeeded", "invoice.payment_failed"].includes(event.event_type))
     .map((event) => event.stripe_event_id);
   const auditRows = await getWebhookAuditRows(args.admin, interestingEventIds);
 
@@ -337,7 +347,7 @@ serve(async (req) => {
     });
     stripeSubscriptionId = subscription.id;
 
-    const initial = await waitForCondition("initial invoice.paid + credit grant", async () => {
+    const initial = await waitForCondition("initial successful subscription invoice + credit grant", async () => {
       if (!smokeUserId || !stripeSubscriptionId) return null;
       const snapshot = await getSubscriptionSnapshot({
         admin,
@@ -345,7 +355,7 @@ serve(async (req) => {
         stripeSubscriptionId,
         checkSubscriptionHeaders,
       });
-      const invoicePaid = pickLatestEvent(snapshot.billingEvents, "invoice.paid");
+      const invoicePaid = pickLatestSubscriptionCreditGrantEvent(snapshot.billingEvents);
       if (!invoicePaid) return null;
       if (snapshot.grants.length < 1) return null;
       if (snapshot.profile?.subscription_status !== "active") return null;
@@ -361,7 +371,7 @@ serve(async (req) => {
     });
     await waitForClockReady(stripe, testClock.id);
 
-    const renewal = await waitForCondition("renewal invoice.paid + second credit grant", async () => {
+    const renewal = await waitForCondition("renewal successful subscription invoice + second credit grant", async () => {
       if (!smokeUserId || !stripeSubscriptionId) return null;
       const snapshot = await getSubscriptionSnapshot({
         admin,
@@ -369,7 +379,7 @@ serve(async (req) => {
         stripeSubscriptionId,
         checkSubscriptionHeaders,
       });
-      const invoicePaidEvents = snapshot.billingEvents.filter((event) => event.event_type === "invoice.paid");
+      const invoicePaidEvents = snapshot.billingEvents.filter(isSubscriptionCreditGrantEvent);
       if (invoicePaidEvents.length < 2) return null;
       if (snapshot.grants.length < 2) return null;
       if ((snapshot.profile?.credits_balance ?? 0) < plan.monthlyCredits * 2) return null;

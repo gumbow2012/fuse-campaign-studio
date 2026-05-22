@@ -40,25 +40,24 @@ Set these project secrets in Supabase before testing live billing:
    - `customer.subscription.updated`
    - `customer.subscription.deleted`
    - `invoice.paid`
+   - `invoice.payment_succeeded`
    - `invoice.payment_failed`
 
 ## Current price mapping in code
 
 - Starter
-  - Product: `prod_U3o88Rn0fn4P2w`
-  - Price: `price_1T5gW5AWgNdlZ1x0Qkr6636B`
-  - Live Stripe amount found during QA: `$49/month`
-  - Required amount: `$25/month`
-  - Status: blocked for new Starter checkout until `STRIPE_STARTER_PRICE_ID_LIVE` points at a real `$25/month` recurring price.
-  - Monthly credits: `500`
+  - Product: `prod_UYjVr3kvletbWn`
+  - Price: `price_1TZc2hAWgNdlZ1x0yUZUWLE7`
+  - Amount: `$25/month`
+  - Monthly credits: `3000`
 - Pro
   - Product: `prod_U3o9Beo3BdMnId`
   - Price: `price_1T5gXSAWgNdlZ1x0ME7M4q3N`
-  - Monthly credits: `2000`
+  - Monthly credits: `18000`
 - Studio
   - Product: `prod_U3oAl1dM2orh9D`
   - Price: `price_1T5gXmAWgNdlZ1x05tVYQLqb`
-  - Monthly credits: `6000`
+  - Monthly credits: `55000`
 
 ## Expected billing data flow
 
@@ -73,7 +72,7 @@ Set these project secrets in Supabase before testing live billing:
    - `plan`
    - `subscription_status`
    - billing period timestamps
-6. `invoice.paid` calls `grant_subscription_credits(...)`.
+6. `invoice.paid` or `invoice.payment_succeeded` calls `grant_subscription_credits(...)`.
 7. Credits are written into:
    - `public.subscription_period_grants`
    - `public.credit_ledger`

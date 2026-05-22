@@ -50,7 +50,7 @@ Run the recurring billing smoke after test-mode Stripe secrets and test price/pr
 The recurring smoke verifies:
 
 - initial subscription charge
-- `invoice.paid` webhook delivery
+- `invoice.paid` or `invoice.payment_succeeded` webhook delivery
 - profile activation
 - subscription credit grant row creation
 - credit ledger row creation
