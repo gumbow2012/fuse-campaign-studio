@@ -762,7 +762,10 @@ export default function TemplateStudioPage() {
       });
       void refetchRecentRuns();
       void refreshProfile();
-      toast({ title: "Run queued", description: "The template is now executing." });
+      toast({
+        title: `${selectedTemplate.name} queued`,
+        description: `${selectedTemplate.name} is running.`,
+      });
     } catch (error) {
       toast({
         title: "Run failed",

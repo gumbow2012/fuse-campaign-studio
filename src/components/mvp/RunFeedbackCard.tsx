@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Loader2, ThumbsDown, ThumbsUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -40,11 +40,17 @@ export default function RunFeedbackCard({
   const [feedbackText, setFeedbackText] = useState(initialFeedback?.feedback ?? "");
   const [savedFeedback, setSavedFeedback] = useState<RunFeedbackRecord | null>(initialFeedback);
   const [saving, setSaving] = useState(false);
+  const submittedAtRef = useRef<string | null>(null);
 
   useEffect(() => {
     setVote(initialFeedback?.vote ?? null);
-    setFeedbackText(initialFeedback?.feedback ?? "");
     setSavedFeedback(initialFeedback);
+
+    if (initialFeedback?.updatedAt && initialFeedback.updatedAt === submittedAtRef.current) {
+      return;
+    }
+
+    setFeedbackText(initialFeedback?.feedback ?? "");
   }, [initialFeedback, jobId]);
 
   const trimmedFeedback = feedbackText.trim();
@@ -64,12 +70,13 @@ export default function RunFeedbackCard({
         vote,
         feedback: trimmedFeedback,
       });
+      submittedAtRef.current = nextFeedback.updatedAt;
       setSavedFeedback(nextFeedback);
       setVote(nextFeedback.vote);
       setFeedbackText("");
       onSaved?.(nextFeedback);
       toast({
-        title: "Feedback saved",
+        title: "Feedback submitted",
         description: "Run feedback recorded for this template output.",
       });
     } catch (error) {
@@ -157,7 +164,7 @@ export default function RunFeedbackCard({
           className="rounded-full bg-cyan-300 text-slate-950 hover:bg-cyan-200 disabled:bg-white/10 disabled:text-slate-500"
         >
           {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-          Save feedback
+          Submit feedback
         </Button>
       </div>
     </section>
