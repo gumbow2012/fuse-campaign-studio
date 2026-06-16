@@ -1,12 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { Link, useNavigate } from "react-router-dom";
+import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import {
   AlertTriangle,
+  ArrowRight,
   CheckCircle2,
   ChevronDown,
   ChevronRight,
   Download,
+  Eye,
   Film,
   GitBranch,
   Image as ImageIcon,
@@ -28,6 +30,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/hooks/use-toast";
 import { SUPABASE_PUBLISHABLE_KEY, SUPABASE_URL, supabase } from "@/integrations/supabase/client";
 import { ADMIN_VISUAL_BUDGET_TOTAL, getAdminVisualCreditsRemaining, getAdminVisualCreditsSpent, recordAdminVisualCreditUsage } from "@/lib/adminBudget";
+import { cn } from "@/lib/utils";
 import { sortTemplatesForStudio } from "@/lib/templateOrdering";
 import { fetchTemplateDetail, fetchTemplates, type ApiTemplate, type RunFeedbackRecord, type TemplateDetail } from "@/services/fuseApi";
 import { uploadRunInputFile } from "@/services/runInputUpload";
@@ -69,6 +72,12 @@ interface RecentRun {
   feedback: RunFeedbackRecord | null;
 }
 
+type RecentRunsPage = {
+  jobs: RecentRun[];
+  hasMore: boolean;
+  nextOffset: number | null;
+};
+
 const EMPTY_TEMPLATES: ApiTemplate[] = [];
 const EMPTY_RECENT_RUNS: RecentRun[] = [];
 
@@ -76,9 +85,17 @@ const TEMPLATE_CACHE_KEY = "fuse.templateStudio.templates.v4";
 const TEMPLATE_DETAIL_CACHE_KEY = "fuse.templateStudio.templateDetails.v4";
 const TEMPLATE_SELECTION_KEY = "fuse.templateStudio.selectedTemplateId";
 const ACTIVE_RUN_STATUSES = new Set<RunnerStatus>(["queued", "running", "video_pending"]);
+const RUN_CATALOG_PAGE_SIZE = 8;
+const RECENT_RUNS_REFRESH_COOLDOWN_SECONDS = 10;
 
 function formatPublicOutputLabel(index: number) {
   return `Output ${index + 1}`;
+}
+
+function getOutputDownloadName(templateName: string, index: number, output: RunnerOutput) {
+  const safeTemplateName = templateName.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "") || "fuse-run";
+  const extension = output.type === "video" ? "mp4" : "jpg";
+  return `${safeTemplateName}-output-${index + 1}.${extension}`;
 }
 
 const UPLOAD_PLACEHOLDER_ASSETS: Record<string, string> = {
@@ -165,10 +182,10 @@ async function fetchJobStatus(jobId: string) {
   };
 }
 
-async function fetchRecentRuns(limit: number) {
+async function fetchRecentRuns(limit: number, offset: number): Promise<RecentRunsPage> {
   const token = await getAccessToken();
   const response = await fetch(
-    `${SUPABASE_URL}/functions/v1/list-recent-runs?limit=${limit}`,
+    `${SUPABASE_URL}/functions/v1/list-recent-runs?limit=${limit}&offset=${offset}`,
     {
       headers: {
         Authorization: `Bearer ${token}`,
@@ -182,7 +199,11 @@ async function fetchRecentRuns(limit: number) {
     throw new Error(data?.error ?? "Could not load recent runs.");
   }
 
-  return Array.isArray(data?.jobs) ? (data.jobs as RecentRun[]) : [];
+  return {
+    jobs: Array.isArray(data?.jobs) ? (data.jobs as RecentRun[]) : [],
+    hasMore: Boolean(data?.hasMore),
+    nextOffset: typeof data?.nextOffset === "number" ? data.nextOffset : null,
+  };
 }
 
 async function startTemplateRun(versionId: string, inputs: Record<string, string>) {
@@ -241,6 +262,16 @@ function getTemplateOutputCount(template: Pick<ApiTemplate, "counts" | "output_t
 
 function formatCount(count: number, singular: string, plural: string) {
   return `${count} ${count === 1 ? singular : plural}`;
+}
+
+function buildTemplateCheckoutPath(template: ApiTemplate) {
+  const params = new URLSearchParams({
+    template: template.id,
+    templateName: template.name,
+    credits: String(template.estimated_credits_per_run ?? 0),
+    outputs: String(getTemplateOutputCount(template)),
+  });
+  return `/pricing?${params.toString()}`;
 }
 
 function clampPercent(value: number) {
@@ -427,6 +458,7 @@ function TemplateVibeMedia({
 
 export default function TemplateStudioPage() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { user, hasAppAccess, profile, refreshProfile } = useAuth();
   const [selectedTemplateId, setSelectedTemplateId] = useState(() => {
     if (typeof window === "undefined") return "";
@@ -441,9 +473,9 @@ export default function TemplateStudioPage() {
   const [adminVisualSpent, setAdminVisualSpent] = useState(() => getAdminVisualCreditsSpent());
   const [expandedRuns, setExpandedRuns] = useState<Record<string, boolean>>({});
   const [feedbackOverrides, setFeedbackOverrides] = useState<Record<string, RunFeedbackRecord | null>>({});
+  const [recentRefreshCooldown, setRecentRefreshCooldown] = useState(0);
   const runnerSectionRef = useRef<HTMLElement | null>(null);
   const isPrivilegedUser = hasAppAccess;
-  const recentRunsLimit = isPrivilegedUser ? 4 : 1;
 
   const templatesQuery = useQuery<ApiTemplate[]>({
     queryKey: ["mvp-templates"],
@@ -456,6 +488,20 @@ export default function TemplateStudioPage() {
     () => sortTemplatesForStudio((templatesQuery.data ?? EMPTY_TEMPLATES).filter((template) => template.is_active)),
     [templatesQuery.data],
   );
+
+  useEffect(() => {
+    const requestedTemplate = searchParams.get("template");
+    if (!requestedTemplate || !templates.length) return;
+    const normalizedRequest = requestedTemplate.toLowerCase();
+    const match = templates.find((template) =>
+      template.id.toLowerCase() === normalizedRequest ||
+      template.name.toLowerCase() === normalizedRequest ||
+      template.versionId?.toLowerCase() === normalizedRequest,
+    );
+    if (match && match.id !== selectedTemplateId) {
+      setSelectedTemplateId(match.id);
+    }
+  }, [searchParams, selectedTemplateId, templates]);
 
   useEffect(() => {
     if (!templates.length) return;
@@ -495,19 +541,26 @@ export default function TemplateStudioPage() {
     },
   });
 
-  const recentRunsQuery = useQuery<RecentRun[]>({
-    queryKey: ["mvp-recent-runs", recentRunsLimit],
-    queryFn: () => fetchRecentRuns(recentRunsLimit),
+  const recentRunsQuery = useInfiniteQuery<RecentRunsPage>({
+    queryKey: ["mvp-run-catalog"],
+    queryFn: ({ pageParam }) => fetchRecentRuns(RUN_CATALOG_PAGE_SIZE, Number(pageParam ?? 0)),
+    initialPageParam: 0,
+    getNextPageParam: (lastPage) => lastPage.nextOffset ?? undefined,
     enabled: !!user,
     staleTime: 5_000,
     refetchInterval: (query) => {
-      const runs = query.state.data ?? [];
+      const runs = query.state.data?.pages.flatMap((page) => page.jobs) ?? [];
       return jobId || runs.some((run) => ACTIVE_RUN_STATUSES.has(run.status)) ? 5_000 : false;
     },
   });
 
-  const recentRuns = recentRunsQuery.data ?? EMPTY_RECENT_RUNS;
+  const recentRuns = useMemo(
+    () => recentRunsQuery.data?.pages.flatMap((page) => page.jobs) ?? EMPTY_RECENT_RUNS,
+    [recentRunsQuery.data],
+  );
   const refetchRecentRuns = recentRunsQuery.refetch;
+  const hasExpandedRecentRun = recentRuns.some((run) => expandedRuns[run.id]);
+  const canLoadMoreRuns = !!recentRunsQuery.hasNextPage;
   const currentResultFeedback = jobId
     ? feedbackOverrides[jobId]
       ?? recentRuns.find((run) => run.id === jobId)?.feedback
@@ -524,6 +577,41 @@ export default function TemplateStudioPage() {
     }));
   };
 
+  const handleRefreshRecentRuns = () => {
+    if (!user || recentRunsQuery.isFetching || recentRefreshCooldown > 0) return;
+    setRecentRefreshCooldown(RECENT_RUNS_REFRESH_COOLDOWN_SECONDS);
+    void refetchRecentRuns();
+  };
+
+  const handleLoadMoreRuns = () => {
+    void recentRunsQuery.fetchNextPage();
+  };
+
+  const handleDownloadRunOutputs = (run: RecentRun) => {
+    if (!run.outputs.length) return;
+
+    run.outputs.forEach((output, index) => {
+      const link = document.createElement("a");
+      link.href = output.url;
+      link.download = getOutputDownloadName(run.templateName, index, output);
+      link.target = "_blank";
+      link.rel = "noreferrer";
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+    });
+  };
+
+  useEffect(() => {
+    if (recentRefreshCooldown <= 0) return;
+
+    const timer = window.setTimeout(() => {
+      setRecentRefreshCooldown((current) => Math.max(current - 1, 0));
+    }, 1000);
+
+    return () => window.clearTimeout(timer);
+  }, [recentRefreshCooldown]);
+
   useEffect(() => {
     if (!recentRuns.length) {
       setExpandedRuns((current) => (Object.keys(current).length ? {} : current));
@@ -537,7 +625,7 @@ export default function TemplateStudioPage() {
           next[run.id] = current[run.id];
           continue;
         }
-        next[run.id] = !isPrivilegedUser;
+        next[run.id] = !isPrivilegedUser && recentRuns[0]?.id === run.id;
       }
       const currentKeys = Object.keys(current);
       const nextKeys = Object.keys(next);
@@ -651,6 +739,8 @@ export default function TemplateStudioPage() {
       ? "Checking"
       : `${formatCredits(displayedCreditBalance)} cr`;
   const costDisplay = isPrivilegedUser ? "Bypassed for team access" : `${creditsRequired} credits`;
+  const isPublicTemplateBrowser = !user;
+  const selectedTemplateCheckoutPath = selectedTemplate ? buildTemplateCheckoutPath(selectedTemplate) : "/pricing";
 
   const handleTemplateSelect = (templateId: string) => {
     setSelectedTemplateId(templateId);
@@ -785,17 +875,32 @@ export default function TemplateStudioPage() {
       <section className="container py-12 md:py-16">
         <div className="flex flex-wrap items-end justify-between gap-6">
           <div>
-            <p className="text-[11px] font-semibold uppercase tracking-[0.3em] text-cyan-100">Template Studio</p>
-            <h1 className="mt-4 font-display text-5xl font-bold tracking-[-0.05em] text-white">
-              Run production workflows without leaving the page.
+            <p className="text-[11px] font-semibold uppercase tracking-[0.3em] text-cyan-100">
+              {isPublicTemplateBrowser ? "Template Page" : "Post-Purchase Studio"}
+            </p>
+            <h1 className="mt-3 font-display text-2xl font-bold leading-tight text-white sm:text-4xl">
+              {isPublicTemplateBrowser
+                ? "Choose a campaign template."
+                : "Your template is ready. Upload your assets."}
             </h1>
+            <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-300 md:text-base">
+              {isPublicTemplateBrowser
+                ? "Each template turns your brand assets into ready-to-use vertical videos. Browse before checkout."
+                : "The selected workflow is loaded. Add the required assets, confirm the run cost, and generate campaign videos."}
+            </p>
           </div>
-          <CreditRemainingMeter
-            label={isPrivilegedUser ? "Team Credits Remaining" : "Credits Remaining"}
-            percent={creditsRemainingPercent}
-            value={creditsRemainingValue}
-            showTopUp={!!user && !!profile && !isPrivilegedUser && displayedCreditBalance <= 0}
-          />
+          {isPublicTemplateBrowser ? (
+            <div className="rounded-[1.5rem] border border-emerald-300/20 bg-emerald-300/[0.08] px-5 py-4 text-sm leading-6 text-emerald-50">
+              Browse first. Unlock only after you choose a template.
+            </div>
+          ) : (
+            <CreditRemainingMeter
+              label={isPrivilegedUser ? "Team Credits Remaining" : "Credits Remaining"}
+              percent={creditsRemainingPercent}
+              value={creditsRemainingValue}
+              showTopUp={!!user && !!profile && !isPrivilegedUser && hasActiveMembership && displayedCreditBalance <= 0}
+            />
+          )}
         </div>
 
         {isPrivilegedUser ? (
@@ -833,7 +938,14 @@ export default function TemplateStudioPage() {
           </section>
         ) : null}
 
-        <div className="mt-8 grid gap-6 xl:grid-cols-[minmax(0,1fr)_440px] 2xl:grid-cols-[minmax(0,1fr)_480px]">
+        <div
+          className={cn(
+            "mt-8 grid gap-6 transition-[grid-template-columns] duration-300",
+            hasExpandedRecentRun
+              ? "xl:grid-cols-[minmax(260px,0.58fr)_minmax(0,1.42fr)] 2xl:grid-cols-[minmax(300px,0.56fr)_minmax(0,1.44fr)]"
+              : "xl:grid-cols-[minmax(0,1fr)_440px] 2xl:grid-cols-[minmax(0,1fr)_480px]",
+          )}
+        >
           <section className="rounded-[2rem] border border-white/10 bg-white/[0.03] p-5">
             <div className="flex items-center justify-between gap-3">
               <p className="text-[11px] uppercase tracking-[0.24em] text-muted-foreground">Templates</p>
@@ -852,7 +964,7 @@ export default function TemplateStudioPage() {
               </div>
             ) : null}
 
-            <div className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <div className={cn("mt-5 grid gap-4 sm:grid-cols-2", hasExpandedRecentRun ? "2xl:grid-cols-2" : "lg:grid-cols-3")}>
               {templates.map((template) => {
                 const selected = template.id === selectedTemplateId;
                 const credits = template.estimated_credits_per_run || 0;
@@ -886,7 +998,7 @@ export default function TemplateStudioPage() {
                         <div className="min-w-0">
                           <p className="truncate text-base font-semibold text-white">{template.name}</p>
                           <p className="mt-1 text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
-                            {template.category || "General"}
+                            {template.category || "Campaign drop template"}
                           </p>
                         </div>
                         <div className="shrink-0 rounded-full border border-white/10 px-3 py-1 text-[10px] uppercase tracking-[0.18em] text-slate-300">
@@ -894,10 +1006,29 @@ export default function TemplateStudioPage() {
                         </div>
                       </div>
 
+                      {template.description ? (
+                        <p className="line-clamp-2 text-sm leading-6 text-slate-300">
+                          {template.description}
+                        </p>
+                      ) : (
+                        <p className="text-sm leading-6 text-slate-300">
+                          Campaign drop template for ready-to-use vertical videos.
+                        </p>
+                      )}
+
                       <div className="flex items-center justify-between gap-2 text-[10px] uppercase tracking-[0.18em] text-slate-400">
-                        <span>{formatCount(inputCount, "INPUT", "INPUTS")}</span>
-                        <span>{formatCount(outputCount, "OUTPUT", "OUTPUTS")}</span>
+                        <span>{formatCount(inputCount, "upload", "uploads")}</span>
+                        <span>{formatCount(outputCount, "output", "outputs")}</span>
                       </div>
+
+                      <span className={cn(
+                        "inline-flex w-full items-center justify-center rounded-full px-4 py-2 text-sm font-semibold transition-colors",
+                        selected
+                          ? "bg-cyan-300 text-slate-950"
+                          : "border border-white/10 bg-white/[0.04] text-white group-hover:bg-white/[0.08]",
+                      )}>
+                        {selected ? "Selected" : "Use this template"}
+                      </span>
                     </div>
                   </button>
                 );
@@ -939,6 +1070,56 @@ export default function TemplateStudioPage() {
                     </div>
                   </div>
 
+                  {isPublicTemplateBrowser ? (
+                    <div className="space-y-5">
+                      <div className="rounded-[1.5rem] border border-emerald-300/20 bg-emerald-300/[0.07] p-5">
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-emerald-100">
+                          Confirm before checkout
+                        </p>
+                        <div className="mt-4 grid gap-3 text-sm text-slate-200 sm:grid-cols-2">
+                          <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
+                            <p className="text-[10px] uppercase tracking-[0.2em] text-slate-500">Required uploads</p>
+                            <p className="mt-2 text-2xl font-semibold text-white">
+                              {formatCount(inputFields.length, "upload", "uploads")}
+                            </p>
+                          </div>
+                          <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
+                            <p className="text-[10px] uppercase tracking-[0.2em] text-slate-500">Expected output</p>
+                            <p className="mt-2 text-2xl font-semibold text-white">
+                              {formatCount(selectedTemplateOutputCount, "video", "videos")}
+                            </p>
+                          </div>
+                          <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
+                            <p className="text-[10px] uppercase tracking-[0.2em] text-slate-500">Run cost</p>
+                            <p className="mt-2 text-2xl font-semibold text-white">{creditsRequired} credits</p>
+                          </div>
+                          <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
+                            <p className="text-[10px] uppercase tracking-[0.2em] text-slate-500">Use case</p>
+                            <p className="mt-2 text-base font-semibold text-white">Campaign drop template</p>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="rounded-[1.5rem] border border-white/8 bg-black/20 p-5">
+                        <p className="text-[11px] uppercase tracking-[0.24em] text-muted-foreground">Upload slots</p>
+                        <div className="mt-4 flex flex-wrap gap-2">
+                          {inputFields.map((field) => (
+                            <span key={field.key} className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs text-slate-200">
+                              {field.label}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+
+                      <Button asChild className="w-full rounded-full bg-cyan-300 text-slate-950 hover:bg-cyan-200">
+                        <Link to={selectedTemplateCheckoutPath}>
+                          Use this template
+                          <ArrowRight className="h-4 w-4" />
+                        </Link>
+                      </Button>
+                    </div>
+                  ) : (
+                    <>
                   <div className="grid gap-4 md:grid-cols-2">
                     {inputFields.map((field) => (
                       <div key={field.key} className="rounded-[1.5rem] border border-white/8 bg-black/20 p-4">
@@ -1055,6 +1236,8 @@ export default function TemplateStudioPage() {
                       </p>
                     ) : null}
                   </div>
+                    </>
+                  )}
                 </div>
               )}
             </section>
@@ -1155,20 +1338,20 @@ export default function TemplateStudioPage() {
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
                     <p className="text-[11px] uppercase tracking-[0.24em] text-muted-foreground">Recent runs</p>
-                    <p className="mt-2 text-sm text-slate-300">
-                      {isPrivilegedUser
-                        ? "Last 4 runs for this account. Compact by default."
-                        : user
-                          ? "Most recent run for this account."
-                          : "Sign in to save and review your completed runs."}
-                    </p>
+                  <p className="mt-2 text-sm text-slate-300">
+                    {isPrivilegedUser
+                      ? "Run memory bank for this account. Expand a run to inspect every deliverable."
+                      : user
+                        ? "Run memory bank for this account. Load more to reach older generations."
+                        : "Sign in to save and review your completed runs."}
+                  </p>
                   </div>
                   <Button
                     type="button"
                     variant="outline"
                     size="sm"
-                    onClick={() => void refetchRecentRuns()}
-                    disabled={!user || recentRunsQuery.isFetching}
+                    onClick={handleRefreshRecentRuns}
+                    disabled={!user || recentRunsQuery.isFetching || recentRefreshCooldown > 0}
                     className="rounded-full border-white/10 bg-white/[0.03] text-slate-200 hover:bg-white/[0.08]"
                   >
                     {recentRunsQuery.isFetching ? (
@@ -1176,7 +1359,7 @@ export default function TemplateStudioPage() {
                     ) : (
                       <RefreshCw className="mr-2 h-4 w-4" />
                     )}
-                    Refresh
+                    {recentRefreshCooldown > 0 ? `Refresh in ${recentRefreshCooldown}s` : "Refresh"}
                   </Button>
                 </div>
 
@@ -1192,23 +1375,31 @@ export default function TemplateStudioPage() {
                   </div>
                 ) : null}
 
-                <div className="mt-4 space-y-3">
-                  {recentRuns.map((run) => (
+                <div className="mt-4 space-y-4">
+                  {recentRuns.map((run) => {
+                    const isExpanded = !!expandedRuns[run.id];
+
+                    return (
                     <Collapsible
-                      key={run.id}
-                      open={!!expandedRuns[run.id]}
-                      onOpenChange={(open) =>
-                        setExpandedRuns((current) => ({
-                          ...current,
-                          [run.id]: open,
-                        }))
-                      }
-                    >
-                      <div className="overflow-hidden rounded-[1.5rem] border border-white/8 bg-black/20">
+                        key={run.id}
+                        open={isExpanded}
+                        onOpenChange={(open) =>
+                          setExpandedRuns((current) => ({
+                            ...current,
+                            [run.id]: open,
+                          }))
+                        }
+                      >
+                        <div
+                          className={cn(
+                            "overflow-hidden rounded-[1.5rem] border bg-black/20 transition-colors",
+                            isExpanded ? "border-cyan-300/35 bg-cyan-300/[0.04]" : "border-white/8",
+                          )}
+                        >
                         <CollapsibleTrigger asChild>
                           <button type="button" className="flex w-full items-start justify-between gap-3 p-4 text-left">
                             <div className="min-w-0">
-                              <p className="truncate text-sm font-semibold text-white">{run.templateName}</p>
+                              <p className={cn("truncate font-semibold text-white", isExpanded ? "text-base" : "text-sm")}>{run.templateName}</p>
                               <p className="mt-1 text-xs text-slate-400">
                                 {formatRunTimestamp(run.startedAt)} · {formatRunDuration(run.startedAt, run.completedAt)}
                               </p>
@@ -1239,22 +1430,30 @@ export default function TemplateStudioPage() {
                           </button>
                         </CollapsibleTrigger>
 
-                        <CollapsibleContent className="border-t border-white/8 px-4 pb-4 pt-4">
+                        <CollapsibleContent className="border-t border-white/8 px-4 pb-5 pt-4">
                           {run.outputs.length ? (
-                            <div className="flex gap-3 overflow-x-auto pb-1">
+                            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 2xl:grid-cols-4">
                               {run.outputs.map((output, index) => (
                                 <a
                                   key={`${run.id}-${output.url}-${index}`}
                                   href={output.url}
                                   target="_blank"
                                   rel="noreferrer"
-                                  className="shrink-0 overflow-hidden rounded-[1.25rem] border border-white/8 bg-black/30"
+                                  className="group overflow-hidden rounded-[1.25rem] border border-white/8 bg-black/30 transition-colors hover:border-cyan-200/35"
                                 >
-                                  {output.type === "video" ? (
-                                    <video src={output.url} className="h-28 w-24 object-cover" muted playsInline />
-                                  ) : (
-                                    <img src={output.url} alt={formatPublicOutputLabel(index)} className="h-28 w-24 object-cover" />
-                                  )}
+                                  <div className="relative aspect-[9/16] overflow-hidden">
+                                    {output.type === "video" ? (
+                                      <video src={output.url} className="h-full w-full bg-black object-cover transition-transform duration-500 group-hover:scale-[1.03]" muted playsInline />
+                                    ) : (
+                                      <img src={output.url} alt={formatPublicOutputLabel(index)} className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.03]" />
+                                    )}
+                                    <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/85 via-black/40 to-transparent p-3 pt-10">
+                                      <div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-white">
+                                        {output.type === "video" ? <Film className="h-3.5 w-3.5" /> : <ImageIcon className="h-3.5 w-3.5" />}
+                                        {formatPublicOutputLabel(index)}
+                                      </div>
+                                    </div>
+                                  </div>
                                 </a>
                               ))}
                             </div>
@@ -1270,9 +1469,19 @@ export default function TemplateStudioPage() {
                                 rel="noreferrer"
                                 className="inline-flex items-center gap-2 rounded-full border border-white/10 px-3 py-1.5 text-xs uppercase tracking-[0.2em] text-slate-300 hover:bg-white/[0.06]"
                               >
-                                <Download className="h-3.5 w-3.5" />
-                                Open first
+                                <Eye className="h-3.5 w-3.5" />
+                                View first
                               </a>
+                            ) : null}
+                            {run.outputs.length ? (
+                              <button
+                                type="button"
+                                onClick={() => handleDownloadRunOutputs(run)}
+                                className="inline-flex items-center gap-2 rounded-full border border-cyan-200/20 bg-cyan-300/10 px-3 py-1.5 text-xs uppercase tracking-[0.2em] text-cyan-100 hover:bg-cyan-300/15"
+                              >
+                                <Download className="h-3.5 w-3.5" />
+                                Download all
+                              </button>
                             ) : null}
                           </div>
 
@@ -1288,10 +1497,26 @@ export default function TemplateStudioPage() {
 
                           {run.error ? <p className="mt-3 text-sm text-rose-200">{run.error}</p> : null}
                         </CollapsibleContent>
-                      </div>
-                    </Collapsible>
-                  ))}
+                        </div>
+                      </Collapsible>
+                    );
+                  })}
                 </div>
+
+                {canLoadMoreRuns ? (
+                  <div className="mt-4 flex justify-center">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={handleLoadMoreRuns}
+                      disabled={recentRunsQuery.isFetchingNextPage}
+                      className="rounded-full border-white/10 bg-white/[0.03] text-slate-200 hover:bg-white/[0.08]"
+                    >
+                      {recentRunsQuery.isFetchingNextPage ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                      Load more runs
+                    </Button>
+                  </div>
+                ) : null}
               </div>
             </section>
           </aside>

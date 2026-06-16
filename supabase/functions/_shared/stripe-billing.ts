@@ -5,6 +5,7 @@ import {
   hasValidBillingSmokeSecret,
   json,
   logAuditEvent,
+  getOptionalUser,
   requireTesterUser,
   requireUser,
 } from "./supabase-admin.ts";
@@ -34,8 +35,45 @@ const SUBSCRIPTION_CREDIT_GRANT_EVENTS = new Set([
   "invoice.payment_succeeded",
 ]);
 
+const DEFAULT_ZERO_DOLLAR_PLAN_GRANT_ALLOWLIST = new Set(["starter"]);
+
+function allowedZeroDollarPlanGrants() {
+  const raw = Deno.env.get("STRIPE_ZERO_DOLLAR_PLAN_GRANT_ALLOWLIST")?.trim();
+  if (!raw) return DEFAULT_ZERO_DOLLAR_PLAN_GRANT_ALLOWLIST;
+  if (raw.toLowerCase() === "none") return new Set<string>();
+  return new Set(
+    raw
+      .split(",")
+      .map((value) => value.trim().toLowerCase())
+      .filter(Boolean),
+  );
+}
+
+function integerCents(value: unknown) {
+  if (typeof value === "number" && Number.isFinite(value)) return Math.trunc(value);
+  if (typeof value === "string" && value.trim() !== "") {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? Math.trunc(parsed) : null;
+  }
+  return null;
+}
+
+function isZeroDollarSubscriptionInvoice(invoice: StripeObject) {
+  const paid = integerCents(invoice.amount_paid);
+  const due = integerCents(invoice.amount_due);
+  const total = integerCents(invoice.total);
+
+  return paid === 0 && (due === 0 || due === null) && (total === 0 || total === null);
+}
+
 function stripeSource(base: string, mode: StripeBillingMode) {
   return mode === "test" ? `${base}-test` : base;
+}
+
+function hasActivePaidMembership(profile: { plan?: string | null; subscription_status?: string | null } | null | undefined) {
+  return !!profile &&
+    profile.plan !== "free" &&
+    (profile.subscription_status === "active" || profile.subscription_status === "trialing");
 }
 
 function firstString(...values: unknown[]) {
@@ -82,13 +120,34 @@ function extractSubscriptionPeriod(subscription: StripeObject) {
   };
 }
 
-function billingReturnUrl(origin: string, mode: StripeBillingMode, outcome: "success" | "canceled") {
-  const url = new URL("/pricing", origin);
+function billingReturnUrl(
+  origin: string,
+  mode: StripeBillingMode,
+  outcome: "success" | "canceled",
+  intent?: { templateId?: string | null; templateName?: string | null },
+) {
+  const url = new URL(outcome === "success" ? "/auth" : "/pricing", origin);
   url.searchParams.set(outcome, "true");
+  if (outcome === "success") {
+    url.searchParams.set("paid", "true");
+  }
+  if (intent?.templateId) {
+    url.searchParams.set("template", intent.templateId);
+  }
+  if (intent?.templateName) {
+    url.searchParams.set("templateName", intent.templateName);
+  }
   if (mode === "test") {
     url.searchParams.set("billing_mode", "test");
   }
   return url.toString();
+}
+
+function normalizeCheckoutEmail(value: unknown) {
+  if (typeof value !== "string") return null;
+  const email = value.trim().toLowerCase();
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return null;
+  return email;
 }
 
 async function requireBillingUser(
@@ -152,6 +211,64 @@ async function findProfileByUserId(
   if (error) throw new Error(error.message);
 
   return data;
+}
+
+async function resolveCheckoutIdentity(args: {
+  req: Request;
+  admin: ReturnType<typeof createAdminClient>;
+  mode: StripeBillingMode;
+  email?: string | null;
+  brandName?: string | null;
+}) {
+  const optionalUser = await getOptionalUser(args.req, args.admin);
+  if (optionalUser?.email) {
+    return { id: optionalUser.id, email: optionalUser.email.toLowerCase(), createdFromCheckout: false };
+  }
+
+  if (!args.email) {
+    const user = await requireBillingUser(args.req, args.admin, args.mode);
+    if (!user.email) throw new Error("User not authenticated");
+    return { id: user.id, email: user.email.toLowerCase(), createdFromCheckout: false };
+  }
+
+  const existingProfile = await findProfileByStripeContext(args.admin, null, args.email);
+  if (existingProfile?.user_id && existingProfile.email) {
+    return {
+      id: existingProfile.user_id,
+      email: existingProfile.email.toLowerCase(),
+      createdFromCheckout: false,
+    };
+  }
+
+  const { data, error } = await args.admin.auth.admin.createUser({
+    email: args.email,
+    email_confirm: true,
+    user_metadata: {
+      full_name: args.brandName ?? undefined,
+      onboarding_source: "template_checkout",
+    },
+  });
+
+  if (error || !data.user?.id) {
+    throw new Error(error?.message ?? "Could not prepare studio access for this email.");
+  }
+
+  await args.admin
+    .from("profiles")
+    .upsert({
+      user_id: data.user.id,
+      email: args.email,
+      name: args.brandName ?? null,
+    }, { onConflict: "user_id" });
+
+  await args.admin
+    .from("user_roles")
+    .upsert({
+      user_id: data.user.id,
+      role: "user",
+    }, { onConflict: "user_id,role" });
+
+  return { id: data.user.id, email: args.email, createdFromCheckout: true };
 }
 
 function extractEventUserId(eventType: string, object: StripeObject) {
@@ -362,15 +479,37 @@ export function createCheckoutHandler(mode: StripeBillingMode) {
     let userEmail: string | null = null;
 
     try {
-      const user = await requireBillingUser(req, admin, mode);
-      userId = user.id;
-      userEmail = user.email ?? null;
-      if (!user.email) throw new Error("User not authenticated");
-
       const body = await req.json().catch(() => ({})) as {
         planKey?: string;
         priceId?: string;
+        email?: string;
+        brandName?: string;
+        templateId?: string;
+        templateName?: string;
       };
+
+      const checkoutEmail = normalizeCheckoutEmail(body.email);
+      if (typeof body.email === "string" && body.email.trim() && !checkoutEmail) {
+        throw new Error("Enter a valid checkout email.");
+      }
+      const brandName = typeof body.brandName === "string" && body.brandName.trim()
+        ? body.brandName.trim()
+        : null;
+      const templateId = typeof body.templateId === "string" && body.templateId.trim()
+        ? body.templateId.trim()
+        : null;
+      const templateName = typeof body.templateName === "string" && body.templateName.trim()
+        ? body.templateName.trim()
+        : null;
+      const checkoutIdentity = await resolveCheckoutIdentity({
+        req,
+        admin,
+        mode,
+        email: checkoutEmail,
+        brandName,
+      });
+      userId = checkoutIdentity.id;
+      userEmail = checkoutIdentity.email;
 
       const requestedPlanKey = typeof body.planKey === "string" ? body.planKey : null;
       const requestedPriceId = typeof body.priceId === "string" ? body.priceId : null;
@@ -387,10 +526,13 @@ export function createCheckoutHandler(mode: StripeBillingMode) {
         requestId,
         metadata: {
           billing_mode: mode,
-          user_id: user.id,
-          email: user.email,
+          user_id: checkoutIdentity.id,
+          email: checkoutIdentity.email,
+          created_from_checkout: checkoutIdentity.createdFromCheckout,
           requested_plan_key: requestedPlanKey,
           requested_price_id: requestedPriceId,
+          template_id: templateId,
+          template_name: templateName,
           price_id: plan.priceId,
           plan_key: plan.key,
           origin: req.headers.get("origin"),
@@ -401,47 +543,51 @@ export function createCheckoutHandler(mode: StripeBillingMode) {
       const { data: profile } = await admin
         .from("profiles")
         .select("stripe_customer_id")
-        .eq("user_id", user.id)
+        .eq("user_id", checkoutIdentity.id)
         .maybeSingle();
 
       const customerId = await findStripeCustomerId({
         stripe,
         storedCustomerId: profile?.stripe_customer_id ?? null,
-        email: user.email,
+        email: checkoutIdentity.email,
       });
 
       if (customerId && customerId !== profile?.stripe_customer_id) {
         await admin
           .from("profiles")
           .update({ stripe_customer_id: customerId })
-          .eq("user_id", user.id);
+          .eq("user_id", checkoutIdentity.id);
       }
 
       const origin = req.headers.get("origin") || "https://example.com";
       const session = await stripe.checkout.sessions.create({
         customer: customerId ?? undefined,
-        customer_email: customerId ? undefined : user.email,
-        client_reference_id: user.id,
+        customer_email: customerId ? undefined : checkoutIdentity.email,
+        client_reference_id: checkoutIdentity.id,
         line_items: [{ price: plan.priceId, quantity: 1 }],
         mode: "subscription",
         allow_promotion_codes: true,
         metadata: {
-          user_id: user.id,
+          user_id: checkoutIdentity.id,
           plan_key: plan.key,
           price_id: plan.priceId,
           billing_mode: mode,
+          template_id: templateId ?? "",
+          template_name: templateName ?? "",
         },
         subscription_data: {
           metadata: {
-            user_id: user.id,
+            user_id: checkoutIdentity.id,
             plan_key: plan.key,
             price_id: plan.priceId,
             monthly_credits: String(plan.monthlyCredits),
             billing_mode: mode,
+            template_id: templateId ?? "",
+            template_name: templateName ?? "",
           },
         },
-        success_url: billingReturnUrl(origin, mode, "success"),
-        cancel_url: billingReturnUrl(origin, mode, "canceled"),
+        success_url: billingReturnUrl(origin, mode, "success", { templateId, templateName }),
+        cancel_url: billingReturnUrl(origin, mode, "canceled", { templateId, templateName }),
       });
 
       await logAuditEvent({
@@ -451,10 +597,13 @@ export function createCheckoutHandler(mode: StripeBillingMode) {
         requestId,
         metadata: {
           billing_mode: mode,
-          user_id: user.id,
-          email: user.email,
+          user_id: checkoutIdentity.id,
+          email: checkoutIdentity.email,
+          created_from_checkout: checkoutIdentity.createdFromCheckout,
           plan_key: plan.key,
           price_id: plan.priceId,
+          template_id: templateId,
+          template_name: templateName,
           stripe_customer_id: customerId ?? null,
           stripe_checkout_session_id: session.id,
         },
@@ -506,9 +655,13 @@ export function createCreditCheckoutHandler(mode: StripeBillingMode) {
       const stripe = createStripeClient(getStripeSecretKey(mode));
       const { data: profile } = await admin
         .from("profiles")
-        .select("stripe_customer_id")
+        .select("plan, subscription_status, stripe_customer_id")
         .eq("user_id", user.id)
         .maybeSingle();
+
+      if (!hasActivePaidMembership(profile)) {
+        throw new Error("Credit packs are only available after an active membership is set up. Choose a membership first.");
+      }
 
       const customerId = await findStripeCustomerId({
         stripe,
@@ -952,6 +1105,44 @@ export function createStripeWebhookHandler(mode: StripeBillingMode) {
           customerEmail,
         });
         if (!profile) throw new Error("Profile not found for subscription invoice");
+
+        if (isZeroDollarSubscriptionInvoice(invoice) && !allowedZeroDollarPlanGrants().has(plan.key)) {
+          await upsertBillingState(admin, profile, {
+            stripe_customer_id: customerId ?? profile.stripe_customer_id,
+            stripe_subscription_id: subscription.id,
+            stripe_price_id: plan.priceId,
+            subscription_period_start: asUnixTimestamp(billingPeriod.start),
+            subscription_period_end: asUnixTimestamp(billingPeriod.end),
+            subscription_cycle_credits: 0,
+            plan: "free",
+            subscription_status: "inactive",
+          });
+
+          await logAuditEvent({
+            eventType: "stripe.subscription_invoice.zero_dollar_blocked",
+            message: "Zero-dollar subscription invoice did not grant paid-plan credits.",
+            severity: "warning",
+            source: stripeSource("stripe-webhook", mode),
+            requestId,
+            metadata: {
+              billing_mode: mode,
+              stripe_event_id: event.id,
+              stripe_event_type: event.type,
+              stripe_customer_id: customerId,
+              stripe_subscription_id: subscription.id,
+              stripe_invoice_id: typeof invoice.id === "string" ? invoice.id : null,
+              stripe_price_id: plan.priceId,
+              plan: plan.key,
+              amount_paid: integerCents(invoice.amount_paid),
+              amount_due: integerCents(invoice.amount_due),
+              total: integerCents(invoice.total),
+              subtotal: integerCents(invoice.subtotal),
+              allowed_zero_dollar_plans: Array.from(allowedZeroDollarPlanGrants()),
+            },
+          }, admin);
+
+          return json({ received: true, skipped: "zero dollar invoice blocked" }, 200);
+        }
 
         await upsertBillingState(admin, profile, {
           stripe_customer_id: customerId ?? profile.stripe_customer_id,

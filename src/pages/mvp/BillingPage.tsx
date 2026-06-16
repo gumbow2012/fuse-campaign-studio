@@ -3,6 +3,8 @@ import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { ArrowRight, Check, Crown, Loader2, Rocket, Settings, ShieldCheck, Zap } from "lucide-react";
 import SiteShell from "@/components/mvp/SiteShell";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { toast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
@@ -64,6 +66,14 @@ export default function BillingPage() {
   const { isAdmin, user, profile, refreshSubscription } = useAuth();
   const [loading, setLoading] = useState<string | null>(null);
   const [creditPackSmoke, setCreditPackSmoke] = useState<CreditPackSmokeResult | null>(null);
+  const [checkoutEmail, setCheckoutEmail] = useState("");
+  const [brandName, setBrandName] = useState("");
+
+  const selectedTemplateId = searchParams.get("template") ?? "";
+  const selectedTemplateName = searchParams.get("templateName") ?? selectedTemplateId;
+  const selectedTemplateCredits = Number(searchParams.get("credits") ?? 0);
+  const selectedTemplateOutputs = Number(searchParams.get("outputs") ?? 0);
+  const isTemplateCheckout = Boolean(selectedTemplateId || selectedTemplateName);
 
   useEffect(() => {
     const success = searchParams.get("success");
@@ -101,8 +111,14 @@ export default function BillingPage() {
   }, [refreshSubscription, searchParams, setSearchParams]);
 
   const handleCheckout = async (tierKey: keyof typeof STRIPE_TIERS) => {
-    if (!user) {
-      navigate("/auth?mode=signup");
+    const normalizedEmail = checkoutEmail.trim().toLowerCase();
+
+    if (!user && !normalizedEmail) {
+      toast({
+        title: "Email required",
+        description: "Enter where we should send your studio access.",
+        variant: "destructive",
+      });
       return;
     }
     if (isAdmin) return;
@@ -110,10 +126,22 @@ export default function BillingPage() {
     setLoading(tierKey);
     try {
       const { data, error } = await supabase.functions.invoke("create-checkout", {
-        body: { planKey: tierKey },
+        body: {
+          planKey: tierKey,
+          email: user ? undefined : normalizedEmail,
+          brandName: brandName.trim() || undefined,
+          templateId: selectedTemplateId || undefined,
+          templateName: selectedTemplateName || undefined,
+        },
       });
       if (error) throw error;
       if (!data?.url) throw new Error("Stripe checkout URL not returned.");
+      if (!user && typeof window !== "undefined") {
+        window.localStorage.setItem("fuse.checkoutAccessEmail", normalizedEmail);
+        if (selectedTemplateId) {
+          window.localStorage.setItem("fuse.checkoutTemplate", selectedTemplateId);
+        }
+      }
       window.location.assign(data.url);
     } catch (error) {
       toast({
@@ -205,17 +233,25 @@ export default function BillingPage() {
   const creditValue = isAdmin ? "∞" : String(profile?.credits_balance ?? 0);
   const currentPlanLabel = isAdmin ? "admin" : currentPlan;
   const subscriptionLabel = isAdmin ? "bypass enabled" : profile?.subscription_status ?? "inactive";
+  const hasActivePaidMembership =
+    currentPlan !== "free" &&
+    (profile?.subscription_status === "active" || profile?.subscription_status === "trialing");
 
   return (
     <SiteShell>
       <section className="container py-12 md:py-16">
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
-            <p className="text-[11px] font-semibold uppercase tracking-[0.3em] text-cyan-100">Memberships</p>
-            <h1 className="mt-4 font-display text-5xl font-bold tracking-[-0.05em] text-white">Membership controls, credits, and billing state.</h1>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.3em] text-cyan-100">
+              {isTemplateCheckout ? "Checkout" : "Template access"}
+            </p>
+            <h1 className="mt-3 font-display text-2xl font-bold leading-tight text-white sm:text-4xl">
+              {isTemplateCheckout ? "Unlock this template." : "Unlock Fuse templates."}
+            </h1>
             <p className="mt-4 max-w-3xl text-base leading-7 text-slate-300">
-              Stripe handles checkout and subscription management. Supabase stores the member state, credit balance, billing events, and entitlement gates used by the runner.
-              Discount codes can be entered directly in Stripe Checkout.
+              {isTemplateCheckout
+                ? "Enter where we should send your studio access, choose the credit plan that covers the selected workflow, and continue to payment."
+                : "Choose a plan, continue to payment, then verify access with an email code before opening the studio."}
             </p>
           </div>
           {user ? (
@@ -228,14 +264,64 @@ export default function BillingPage() {
             </Button>
           ) : (
             <Button asChild className="rounded-full bg-cyan-300 text-slate-950 hover:bg-cyan-200">
-              <Link to="/auth?mode=signup">Create account</Link>
+              <Link to="/app/templates">Browse templates</Link>
             </Button>
           )}
         </div>
 
         <div className="mt-8 grid gap-6 lg:grid-cols-[0.9fr_1.1fr]">
           <section className="rounded-[2rem] border border-white/10 bg-white/[0.03] p-6">
-            <p className="text-[11px] uppercase tracking-[0.24em] text-muted-foreground">Current state</p>
+            <p className="text-[11px] uppercase tracking-[0.24em] text-muted-foreground">
+              {isTemplateCheckout ? "Order summary" : "Current state"}
+            </p>
+            {isTemplateCheckout ? (
+              <div className="mt-5 rounded-[1.5rem] border border-cyan-300/20 bg-cyan-300/[0.08] p-4">
+                <p className="text-sm text-cyan-50">Template</p>
+                <p className="mt-2 font-display text-3xl font-semibold tracking-[-0.04em] text-white">
+                  {selectedTemplateName || "Selected template"}
+                </p>
+                <div className="mt-4 grid gap-3 text-sm text-slate-200 sm:grid-cols-2">
+                  <div className="rounded-2xl border border-white/10 bg-black/20 p-3">
+                    Output: {selectedTemplateOutputs ? `${selectedTemplateOutputs} vertical videos` : "Included with template"}
+                  </div>
+                  <div className="rounded-2xl border border-white/10 bg-black/20 p-3">
+                    Required: {selectedTemplateCredits ? `${selectedTemplateCredits} credits` : "Plan credits"}
+                  </div>
+                </div>
+              </div>
+            ) : null}
+
+            {!user ? (
+              <div className="mt-5 space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="checkout-email" className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
+                    Where should we send your studio access?
+                  </Label>
+                  <Input
+                    id="checkout-email"
+                    type="email"
+                    value={checkoutEmail}
+                    onChange={(event) => setCheckoutEmail(event.target.value)}
+                    required
+                    placeholder="you@brand.com"
+                    className="h-12 rounded-2xl border-white/10 bg-white/[0.03] text-white"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="brand-name" className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
+                    Brand name optional
+                  </Label>
+                  <Input
+                    id="brand-name"
+                    value={brandName}
+                    onChange={(event) => setBrandName(event.target.value)}
+                    placeholder="Brand"
+                    className="h-12 rounded-2xl border-white/10 bg-white/[0.03] text-white"
+                  />
+                </div>
+              </div>
+            ) : null}
+
             <div className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-1">
               <div className="rounded-[1.5rem] border border-white/8 bg-black/20 p-4">
                 <p className="text-[11px] uppercase tracking-[0.24em] text-muted-foreground">Plan</p>
@@ -320,11 +406,11 @@ export default function BillingPage() {
               const isCurrent = currentPlan === tierKey;
               const ctaLabel = isAdmin
                 ? "Admin access"
-                : isCurrent
-                  ? "Current plan"
-                  : loading === tierKey
-                    ? "Loading..."
-                    : `Choose ${tier.name}`;
+                  : isCurrent
+                    ? "Current plan"
+                    : loading === tierKey
+                      ? "Loading..."
+                    : "Continue to payment";
 
               return (
                 <article
@@ -376,6 +462,7 @@ export default function BillingPage() {
           </section>
         </div>
 
+        {hasActivePaidMembership || isAdmin ? (
         <section className="mt-8 rounded-[2rem] border border-white/10 bg-white/[0.03] p-6">
           <div className="flex flex-wrap items-end justify-between gap-4">
             <div>
@@ -384,7 +471,7 @@ export default function BillingPage() {
                 Top up without changing your plan.
               </h2>
               <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-300">
-                One-time Stripe checkout. Credits post automatically after payment clears. Promo codes work here too.
+                Active members can buy one-time top-ups. Credits post automatically after payment clears. Promo codes work here too.
               </p>
             </div>
           </div>
@@ -413,6 +500,17 @@ export default function BillingPage() {
             })}
           </div>
         </section>
+        ) : (
+          <section className="mt-8 rounded-[2rem] border border-amber-300/20 bg-amber-300/[0.06] p-6">
+            <p className="text-[11px] uppercase tracking-[0.24em] text-amber-100">Membership first</p>
+            <h2 className="mt-2 font-display text-3xl font-semibold tracking-[-0.04em] text-white">
+              Choose a membership to start running templates.
+            </h2>
+            <p className="mt-3 max-w-2xl text-sm leading-6 text-amber-50/90">
+              One-time credit packs are only available after an active membership is set up, because credits alone do not unlock the runner.
+            </p>
+          </section>
+        )}
       </section>
     </SiteShell>
   );
