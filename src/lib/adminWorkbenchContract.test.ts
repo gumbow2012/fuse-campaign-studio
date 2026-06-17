@@ -36,6 +36,16 @@ describe("admin template workbench contract", () => {
     expect(source).toContain("aspect_ratio: VERTICAL_VIDEO_ASPECT_RATIO");
   });
 
+  it("defaults admin-created video outputs to five seconds", () => {
+    const source = readFileSync(
+      resolve(process.cwd(), "supabase/functions/admin-template-workbench/index.ts"),
+      "utf8",
+    );
+
+    expect(source).toContain("DEFAULT_VIDEO_DURATION_SECONDS = 5");
+    expect(source).not.toContain("duration: 10");
+  });
+
   it("deletes canvas nodes without destroying historical execution steps", () => {
     const workbenchSource = readFileSync(
       resolve(process.cwd(), "supabase/functions/admin-template-workbench/index.ts"),

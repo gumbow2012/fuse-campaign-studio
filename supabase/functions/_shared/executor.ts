@@ -7,6 +7,7 @@ import {
   IMAGE_MODEL,
   VIDEO_MODEL,
   VERTICAL_VIDEO_ASPECT_RATIO,
+  normalizeVideoDuration,
   submitImageJob,
   submitVideoJob,
 } from "./fal.ts";
@@ -285,14 +286,13 @@ function estimateBillingQuantity(args: {
     return Number(args.promptConfig?.num_images ?? 1);
   }
   if (unit.includes("second")) {
-    return Number(args.promptConfig?.duration ?? 10);
+    return normalizeVideoDuration(args.promptConfig?.duration);
   }
   return 1;
 }
 
 function videoDuration(value: unknown) {
-  const duration = Number(value ?? 10);
-  return Number.isFinite(duration) && duration > 0 ? duration : 10;
+  return normalizeVideoDuration(value);
 }
 
 async function getStepCostEstimate(endpointId: string, promptConfig?: Record<string, unknown> | null) {

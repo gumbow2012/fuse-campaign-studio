@@ -65,6 +65,7 @@ type InputSlotDraft = {
 const MAX_INPUT_SLOTS = 5;
 const MAX_OUTPUT_BRANCHES = 8;
 const VERTICAL_VIDEO_ASPECT_RATIO = "9:16";
+const DEFAULT_VIDEO_DURATION_SECONDS = 5;
 
 const DEFAULT_INPUT_SLOTS: InputSlotDraft[] = [
   { key: "top_garment", label: "Top Garment", expected: "image", targetParam: "top_garment_image" },
@@ -711,7 +712,7 @@ async function starterNodes(args: {
         model_id: null,
         prompt_config: {
           prompt: group.videoPrompt,
-          duration: 10,
+          duration: DEFAULT_VIDEO_DURATION_SECONDS,
           aspect_ratio: VERTICAL_VIDEO_ASPECT_RATIO,
           output_exposed: true,
         },
@@ -1066,7 +1067,7 @@ Deno.serve(async (req) => {
         : nodeType === "video_gen"
         ? {
             prompt: cleanText(body.prompt, ""),
-            duration: 10,
+            duration: DEFAULT_VIDEO_DURATION_SECONDS,
             aspect_ratio: VERTICAL_VIDEO_ASPECT_RATIO,
             output_exposed: body.outputExposed === true,
           }

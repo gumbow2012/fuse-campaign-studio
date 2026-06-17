@@ -10,6 +10,7 @@ import {
 import { uploadTemplateReferenceAsset } from "../_shared/template-assets.ts";
 
 const VERTICAL_VIDEO_ASPECT_RATIO = "9:16";
+const MAX_VIDEO_DURATION_SECONDS = 5;
 
 type Body = {
   versionId?: string;
@@ -35,8 +36,10 @@ function normalizeNullable(value: string | null | undefined) {
 }
 
 function normalizeDuration(value: unknown) {
-  const next = Number(value ?? 10);
-  return Number.isFinite(next) && next > 0 ? next : 10;
+  const next = Number(value ?? MAX_VIDEO_DURATION_SECONDS);
+  return Number.isFinite(next) && next > 0
+    ? Math.min(next, MAX_VIDEO_DURATION_SECONDS)
+    : MAX_VIDEO_DURATION_SECONDS;
 }
 
 async function markVersionNeedsReview(

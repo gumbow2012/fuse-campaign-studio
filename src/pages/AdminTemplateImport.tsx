@@ -25,6 +25,11 @@ async function getToken(): Promise<string> {
   return session.access_token;
 }
 
+function videoDuration(value: unknown) {
+  const duration = Number(value ?? 5);
+  return String(Number.isFinite(duration) && duration > 0 ? Math.min(duration, 5) : 5);
+}
+
 async function uploadTemplateToWorker(token: string, name: string, template: object) {
   const steps = Array.isArray((template as any).steps) ? (template as any).steps : [];
   const imageStep = steps.find((step: any) => {
@@ -152,7 +157,7 @@ function convertRecipeToV6(recipe: WeavyRecipe, overrideName?: string): object {
           "cinematic product video, smooth camera movement",
         image_source: "previous_step",
         model: data.model || "kling-v1-6",
-        duration: data.duration || "10",
+        duration: videoDuration(data.duration),
         aspect_ratio: data.aspect_ratio || "9:16",
       });
     }
@@ -174,7 +179,7 @@ function convertRecipeToV6(recipe: WeavyRecipe, overrideName?: string): object {
         prompt: "cinematic product campaign video, smooth camera movement",
         image_source: "previous_step",
         model: "kling-v1-6",
-        duration: "10",
+        duration: "5",
         aspect_ratio: "9:16",
       }
     );
@@ -220,7 +225,7 @@ const BLANK_TEMPLATE = {
       prompt: "your video motion prompt here",
       image_source: "previous_step",
       model: "kling-v1-6",
-      duration: "10",
+      duration: "5",
       aspect_ratio: "9:16",
     },
   ],
