@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { ArrowRight, CheckCircle2, ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import SiteShell from "@/components/mvp/SiteShell";
+import PageMeta from "@/components/mvp/PageMeta";
 
 type ShowcaseTemplate = {
   name: string;
