@@ -84,15 +84,16 @@ export default function HomePage() {
         <div className="mx-auto flex max-w-6xl flex-col items-center gap-5 md:gap-6">
           <div className="max-w-3xl text-center">
             <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-emerald-100">
-              No account needed to browse
+              AI drop campaigns
             </p>
             <h1 className="mt-3 font-display text-3xl font-bold leading-tight text-white sm:text-5xl">
-              Create clothing videos without wasting time, money, or credits.
+              Your drop deserves a full campaign. Now it gets one.
             </h1>
             <p className="mx-auto mt-4 max-w-2xl text-base leading-7 text-slate-300">
-              Pick a template, upload your product, model, logo, or reference assets, and Fuse generates campaign-ready vertical videos without expensive shoots, slow editors, or rebuilt prompts.
+              Upload your design. Pick a vibe. Get a complete drop campaign — lookbook imagery, social content, video — in minutes. No photographer. No studio. No agency invoice.
             </p>
           </div>
+
 
           <div className="w-full">
             <div
