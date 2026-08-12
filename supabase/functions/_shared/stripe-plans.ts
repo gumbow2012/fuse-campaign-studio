@@ -97,8 +97,13 @@ export function getStripePlans(mode: StripeBillingMode = "live") {
 
 export type StripePlan = StripePlanDefinition;
 
+const LEGACY_STARTER_PRICE_IDS = new Set([
+  "price_1T5gW5AWgNdlZ1x0Qkr6636B",
+  "price_1TZc2hAWgNdlZ1x0yUZUWLE7",
+]);
+
 export function isLegacyStarterFallbackPrice(plan: StripePlanDefinition, mode: StripeBillingMode) {
-  return mode === "live" && plan.key === "starter" && plan.priceId === FALLBACK_PRICE_IDS.starter;
+  return mode === "live" && plan.key === "starter" && LEGACY_STARTER_PRICE_IDS.has(plan.priceId);
 }
 
 export function planFromKey(
