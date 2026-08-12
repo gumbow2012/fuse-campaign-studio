@@ -537,6 +537,76 @@ export default function BillingPage() {
             </p>
           </section>
         )}
+
+        <section className="mt-8 rounded-[2rem] border border-white/10 bg-white/[0.03] p-6 md:p-8">
+          <p className="text-[11px] uppercase tracking-[0.24em] text-muted-foreground">Cost comparison</p>
+          <h2 className="mt-2 font-display text-3xl font-semibold tracking-[-0.04em] text-white">
+            What a Traditional Campaign Costs
+          </h2>
+          <div className="mt-6 grid gap-3 md:grid-cols-2">
+            <div className="rounded-[1.5rem] border border-white/10 bg-slate-950/75 p-5">
+              <p className="text-sm font-semibold text-white">Traditional shoot</p>
+              <ul className="mt-4 space-y-2 text-sm leading-6 text-slate-300">
+                <li className="flex justify-between gap-4"><span>Photographer (day rate)</span><span className="text-white">$800–$2,500</span></li>
+                <li className="flex justify-between gap-4"><span>Model</span><span className="text-white">$300–$1,000</span></li>
+                <li className="flex justify-between gap-4"><span>Studio or location</span><span className="text-white">$200–$800</span></li>
+                <li className="flex justify-between gap-4"><span>Retouching and editing</span><span className="text-white">$300–$700</span></li>
+                <li className="flex justify-between gap-4 border-t border-white/10 pt-3 font-semibold text-white"><span>Total per campaign</span><span>$1,600–$5,000</span></li>
+                <li className="flex justify-between gap-4"><span>Turnaround</span><span className="text-white">2–4 weeks</span></li>
+              </ul>
+            </div>
+            <div className="rounded-[1.5rem] border border-cyan-300/25 bg-cyan-300/[0.08] p-5">
+              <p className="text-sm font-semibold text-white">With Fuse</p>
+              <ul className="mt-4 space-y-2 text-sm leading-6 text-cyan-50">
+                <li className="flex justify-between gap-4"><span>Starting at</span><span className="font-semibold text-white">$25/mo</span></li>
+                <li className="flex justify-between gap-4"><span>Lookbook imagery</span><span className="text-white">Included</span></li>
+                <li className="flex justify-between gap-4"><span>Social content</span><span className="text-white">Included</span></li>
+                <li className="flex justify-between gap-4"><span>Video clips</span><span className="text-white">Included</span></li>
+                <li className="flex justify-between gap-4 border-t border-cyan-100/20 pt-3 font-semibold text-white"><span>Turnaround</span><span>About 5 minutes</span></li>
+              </ul>
+            </div>
+          </div>
+        </section>
+
+        <section className="mt-8 rounded-[2rem] border border-white/10 bg-white/[0.03] p-6 md:p-8">
+          <p className="text-[11px] uppercase tracking-[0.24em] text-muted-foreground">FAQ</p>
+          <h2 className="mt-2 font-display text-3xl font-semibold tracking-[-0.04em] text-white">
+            Questions, answered.
+          </h2>
+          <dl className="mt-6 grid gap-4 md:grid-cols-2">
+            {[
+              {
+                q: "What counts as a campaign?",
+                a: "A campaign is one full run of a template — a set of lookbook images, social assets, and video generated from your uploaded design. Lighter runs that produce fewer assets use fewer credits.",
+              },
+              {
+                q: "Do unused credits roll over?",
+                a: "Credits refresh with each billing cycle. You can buy one-time top-up packs any time if you need more before your next renewal.",
+              },
+              {
+                q: "Can I use the output commercially?",
+                a: "Yes. Everything you generate is yours to use for your brand, your product pages, your ads, and your socials.",
+              },
+              {
+                q: "What kind of product images work best?",
+                a: "Clean, well-lit shots of your garment or accessory on a plain background give the strongest results. Flat lays and mockups both work.",
+              },
+              {
+                q: "Can I cancel any time?",
+                a: "Yes. Manage or cancel your plan from your account at any time — you keep access until the end of the current cycle.",
+              },
+              {
+                q: "Do you offer anything for agencies?",
+                a: "Studio is built for multi-brand and client work. If you need higher volume than Studio covers, get in touch.",
+              },
+            ].map((item) => (
+              <div key={item.q} className="rounded-[1.5rem] border border-white/10 bg-slate-950/75 p-5">
+                <dt className="text-sm font-semibold text-white">{item.q}</dt>
+                <dd className="mt-2 text-sm leading-6 text-slate-300">{item.a}</dd>
+              </div>
+            ))}
+          </dl>
+        </section>
       </section>
     </SiteShell>
   );
