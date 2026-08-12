@@ -187,13 +187,13 @@ export async function fetchTemplates(token: string): Promise<ApiTemplate[]> {
           videoOutputs: Number(template?.counts?.videoOutputs ?? 0),
         },
         id: String(template.templateName),
-        templateId: template.templateId ?? null,
-        versionId: template.versionId ?? null,
+        templateId: template.templateId ? String(template.templateId) : null,
+        versionId: template.versionId ? String(template.versionId) : null,
         name: String(template.templateName),
         description: template.description ?? null,
         category: "General",
         output_type:
-          (template?.counts?.videoOutputs ?? 0) > 0 ? "video" : "image",
+          Number(template?.counts?.videoOutputs ?? 0) > 0 ? "video" : "image",
         estimated_credits_per_run: Number(
           template?.estimatedCreditsPerRun ?? 0,
         ),

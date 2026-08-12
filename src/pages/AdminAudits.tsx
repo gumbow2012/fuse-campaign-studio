@@ -1054,7 +1054,7 @@ const AdminAudits = () => {
     output: AdminAuditDetailResponse["job"]["outputs"][number],
     verdict: OutputReportDraft["verdict"],
   ) => {
-    const preset = verdict === "good"
+    const preset: OutputReportDraft = verdict === "good"
       ? {
         verdict,
         issueTags: [],
@@ -1066,12 +1066,16 @@ const AdminAudits = () => {
       : verdict === "bad"
       ? {
         verdict,
+        issueTags: [],
+        recommendedFix: "",
         severity: "high" as const,
         status: "open" as const,
         note: outputReportDrafts[output.outputNumber]?.note || "Bad output: needs prompt, model, reference, or node mapping repair.",
       }
       : {
         verdict,
+        issueTags: [],
+        recommendedFix: "",
         severity: "medium" as const,
         status: "open" as const,
         note: outputReportDrafts[output.outputNumber]?.note || "Iffy output: usable direction, but needs admin review before approval.",

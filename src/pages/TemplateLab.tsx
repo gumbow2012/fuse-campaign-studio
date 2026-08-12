@@ -117,6 +117,7 @@ type NumberedOutput = TemplateOutput & {
 };
 
 type JobStatus = {
+  id?: string;
   status: string;
   progress: number;
   error: string | null;

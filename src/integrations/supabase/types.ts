@@ -757,6 +757,30 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      get_my_profile: {
+        Args: never
+        Returns: {
+          credits_balance: number
+          email: string
+          id: string
+          name: string
+          plan: string
+          stripe_customer_id: string
+          stripe_price_id: string
+          stripe_subscription_id: string
+          subscription_cycle_credits: number
+          subscription_period_end: string
+          subscription_period_start: string
+          subscription_status: string
+          user_id: string
+        }[]
+      }
+      get_my_roles: {
+        Args: never
+        Returns: {
+          role: Database["public"]["Enums"]["app_role"]
+        }[]
+      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
