@@ -164,30 +164,114 @@ export default function HomePage() {
             </div>
           </div>
 
-          <Button asChild size="lg" className="rounded-full bg-cyan-300 px-8 text-slate-950 hover:bg-cyan-200">
-            <Link to="/app/templates">
-              Try these templates
-              <ArrowRight className="h-4 w-4" />
-            </Link>
-          </Button>
+          <div className="flex flex-wrap items-center justify-center gap-3">
+            <Button asChild size="lg" className="rounded-full bg-cyan-300 px-8 text-slate-950 hover:bg-cyan-200">
+              <Link to="/auth?mode=signup">
+                Start Your First Campaign
+                <ArrowRight className="h-4 w-4" />
+              </Link>
+            </Button>
+            <Button
+              asChild
+              size="lg"
+              variant="outline"
+              className="rounded-full border-white/15 bg-white/5 px-8 text-foreground hover:bg-white/10"
+            >
+              <Link to="/app/templates">See Examples</Link>
+            </Button>
+          </div>
 
-          <section className="grid w-full max-w-5xl gap-3 border-t border-white/10 pt-7 sm:grid-cols-3 md:pt-10">
-            {[
-              "Browse templates before buying",
-              "Unlock the selected template at checkout",
-              "Open a preloaded studio after payment",
-            ].map((item) => (
-              <div key={item} className="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3 text-sm text-slate-200">
-                <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-200" />
-                <span>{item}</span>
-              </div>
-            ))}
+          <section className="w-full max-w-5xl border-t border-white/10 pt-10">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-cyan-100">What you get</p>
+            <h2 className="mt-3 font-display text-3xl font-semibold tracking-[-0.04em] text-white sm:text-4xl">
+              Everything Your Drop Needs to Launch
+            </h2>
+            <div className="mt-6 grid gap-3 sm:grid-cols-2">
+              {[
+                {
+                  title: "Lookbook Imagery",
+                  copy: "Campaign-quality model shots with the right lighting, environment, and energy for your brand.",
+                },
+                {
+                  title: "Social Launch Content",
+                  copy: "Posts, stories, and carousel assets sized and styled for every platform. Ready to schedule.",
+                },
+                {
+                  title: "Video Clips",
+                  copy: "Short-form video content for Reels, TikTok, and launch teasers.",
+                },
+                {
+                  title: "Campaign Templates",
+                  copy: "Night shoot. Studio editorial. Urban flash. Rooftop golden hour. Pick the vibe that matches your brand.",
+                },
+              ].map((item) => (
+                <div key={item.title} className="flex gap-3 rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-4">
+                  <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-200" />
+                  <div>
+                    <p className="text-sm font-semibold text-white">{item.title}</p>
+                    <p className="mt-1 text-sm leading-6 text-slate-300">{item.copy}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
+
+          <section className="w-full max-w-5xl border-t border-white/10 pt-10">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-cyan-100">How it works</p>
+            <div className="mt-6 grid gap-3 sm:grid-cols-3">
+              {[
+                {
+                  step: "1",
+                  title: "Upload Your Design",
+                  copy: "Drop in your product image. Tees, hoodies, hats, accessories.",
+                },
+                {
+                  step: "2",
+                  title: "Set the Vibe",
+                  copy: "Choose a campaign template built for streetwear aesthetics.",
+                },
+                {
+                  step: "3",
+                  title: "Get Your Campaign",
+                  copy: "Download lookbook images, social assets, and video. Post. Drop.",
+                },
+              ].map((item) => (
+                <div key={item.step} className="rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-5">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-cyan-100">Step {item.step}</p>
+                  <p className="mt-3 font-display text-xl font-semibold text-white">{item.title}</p>
+                  <p className="mt-2 text-sm leading-6 text-slate-300">{item.copy}</p>
+                </div>
+              ))}
+            </div>
+          </section>
+
+          <section className="w-full max-w-5xl rounded-[2rem] border border-white/10 bg-white/[0.03] p-6 md:p-8">
+            <h2 className="font-display text-3xl font-semibold tracking-[-0.04em] text-white sm:text-4xl">
+              This Isn't Midjourney for Merch.
+            </h2>
+            <p className="mt-4 max-w-3xl text-base leading-7 text-slate-300">
+              Generic AI tools don't understand how streetwear campaigns look. They don't know the difference between a lookbook and a product photo. They don't know that a night shoot needs flash, not soft light. Fuse is built on the visual language of streetwear — the environments, the lighting, the angles, the energy. That's why the output doesn't look like AI. It looks like your brand finally got the campaign it deserved.
+            </p>
+          </section>
+
+          <section className="w-full max-w-5xl rounded-[2rem] border border-cyan-300/20 bg-cyan-300/[0.08] p-6 text-center md:p-8">
+            <h2 className="font-display text-2xl font-semibold tracking-[-0.03em] text-white sm:text-3xl">
+              Stop launching drops with iPhone photos.
+            </h2>
+            <p className="mt-2 text-base text-cyan-50">Start your first campaign free.</p>
+            <Button asChild size="lg" className="mt-6 rounded-full bg-cyan-300 px-8 text-slate-950 hover:bg-cyan-200">
+              <Link to="/auth?mode=signup">
+                Start Your First Campaign
+                <ArrowRight className="h-4 w-4" />
+              </Link>
+            </Button>
           </section>
         </div>
       </section>
     </SiteShell>
   );
 }
+
 
 function CarouselCard({
   template,
