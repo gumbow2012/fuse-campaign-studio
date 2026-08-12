@@ -1539,7 +1539,7 @@ const TemplateCanvas = () => {
         makeActive: false,
       });
       setCloneTemplateName("");
-      await refreshAfterMutation(data.versionId);
+      await refreshAfterMutation(String(data.versionId));
       toast({
         title: asNewTemplate ? "Template copied as draft" : "Draft version cloned",
         description: `Now editing v${data.versionNumber}. Publish it after validation.`,
