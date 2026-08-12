@@ -177,29 +177,41 @@ export default function AuthPage() {
 
   return (
     <SiteShell>
+      <PageMeta
+        title={mode === "signup" ? "Start Your First Campaign — FUSE" : "Sign In — FUSE"}
+        description={
+          mode === "signup"
+            ? "Create your free Fuse account and launch your first streetwear drop campaign in minutes."
+            : "Sign in to your Fuse account. No password needed — just your email."
+        }
+        path="/auth"
+      />
       <section className="container flex min-h-[calc(100vh-90px)] items-center py-12">
         <div className="mx-auto grid w-full max-w-5xl gap-6 lg:grid-cols-[0.85fr_1.15fr]">
           <div className="rounded-[2rem] border border-white/10 bg-white/[0.03] p-7">
             <p className="text-[11px] font-semibold uppercase tracking-[0.3em] text-cyan-100">Access</p>
             <h1 className="mt-4 font-display text-4xl font-bold tracking-[-0.05em] text-white md:text-5xl">
-              {paidAccess ? "Check your email to open your Fuse studio." : "Open Fuse with your email code."}
+              {paidAccess
+                ? "Check your email to open your Fuse studio."
+                : mode === "signup"
+                  ? "Start your first campaign."
+                  : "Welcome back."}
             </h1>
             <p className="mt-4 text-base leading-7 text-slate-300">
               {paidAccess
                 ? "We sent a secure access code to your email. Enter the code below to open your selected template and start uploading assets."
-                : "Enter your email, get a 6-digit code, and continue into Fuse."}
+                : mode === "signup"
+                  ? "Free to start. No password needed. Your first drop campaign is minutes away."
+                  : "Enter your email. We'll send a code. You're in. No passwords."}
             </p>
 
-            <div className="mt-8 rounded-[1.5rem] border border-cyan-300/15 bg-cyan-300/10 p-5">
-              <p className="text-[11px] uppercase tracking-[0.24em] text-cyan-100">Access flow</p>
-              <ul className="mt-4 space-y-3 text-sm leading-6 text-slate-200">
-                <li>Payment unlocks the selected template</li>
-                <li>Fuse sends a secure email code</li>
-                <li>Enter the code to open Studio</li>
-                <li>Your selected template stays loaded</li>
-              </ul>
-            </div>
+            <p className="mt-8 text-sm leading-6 text-slate-400">
+              {mode === "signup"
+                ? "Built for brands that take their visuals as seriously as their designs."
+                : "No password needed. We'll email you a one-time code."}
+            </p>
           </div>
+
 
           <div className="rounded-[2rem] border border-white/10 bg-slate-950/75 p-7 shadow-[0_24px_80px_rgba(0,0,0,0.35)] backdrop-blur-xl">
             <div className="inline-flex rounded-full border border-white/10 bg-white/[0.04] p-1">
