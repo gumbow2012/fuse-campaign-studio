@@ -15,7 +15,7 @@ type RunResult = {
 };
 
 const PapparaziRun = () => {
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const navigate = useNavigate();
 
   const [file, setFile] = useState<File | null>(null);
