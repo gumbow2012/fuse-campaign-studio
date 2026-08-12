@@ -12,15 +12,15 @@ export type StripePlanDefinition = {
 };
 
 const FALLBACK_PRICE_IDS = {
-  starter: "price_1T5gW5AWgNdlZ1x0Qkr6636B",
-  pro: "price_1T5gXSAWgNdlZ1x0ME7M4q3N",
-  studio: "price_1T5gXmAWgNdlZ1x05tVYQLqb",
+  starter: "price_1U3fblLgUcIQNya0QNqAaM4O",
+  pro: "price_1U3fcgLgUcIQNya0jii3NYvr",
+  studio: "price_1U3fdeLgUcIQNya0us0j50pk",
 } as const satisfies Record<StripePlanKey, string>;
 
 const FALLBACK_PRODUCT_IDS = {
-  starter: "prod_U3o88Rn0fn4P2w",
-  pro: "prod_U3o9Beo3BdMnId",
-  studio: "prod_U3oAl1dM2orh9D",
+  starter: "prod_V3nCZzYSlyFsQq",
+  pro: "prod_V3nDd2Ho0lRG1l",
+  studio: "prod_V3nEl9AGpirSeN",
 } as const satisfies Record<StripePlanKey, string>;
 
 const PLAN_META = {
@@ -97,8 +97,13 @@ export function getStripePlans(mode: StripeBillingMode = "live") {
 
 export type StripePlan = StripePlanDefinition;
 
+const LEGACY_STARTER_PRICE_IDS = new Set([
+  "price_1T5gW5AWgNdlZ1x0Qkr6636B",
+  "price_1TZc2hAWgNdlZ1x0yUZUWLE7",
+]);
+
 export function isLegacyStarterFallbackPrice(plan: StripePlanDefinition, mode: StripeBillingMode) {
-  return mode === "live" && plan.key === "starter" && plan.priceId === FALLBACK_PRICE_IDS.starter;
+  return mode === "live" && plan.key === "starter" && LEGACY_STARTER_PRICE_IDS.has(plan.priceId);
 }
 
 export function planFromKey(
