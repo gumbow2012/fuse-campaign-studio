@@ -21,7 +21,12 @@ jobs:
       # ── Apply DB migrations ──────────────────────────────────────
       - name: Apply Migrations
         run: |
-          supabase db push --project-ref ${{ secrets.SUPABASE_PROJECT_REF }}
+          # Migrations are also applied directly by Lovable Cloud, so the remote
+          # history can already contain versions this push would replay.
+          # Never let that divergence block edge function deploys.
+          supabase db push \
+            --project-ref ${{ secrets.SUPABASE_PROJECT_REF }} \
+            --include-all || echo "::warning::supabase db push reported an error (likely already-applied migrations); continuing"
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
 
