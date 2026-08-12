@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { ArrowRight, Check, Crown, Loader2, Rocket, Settings, ShieldCheck, Zap } from "lucide-react";
 import SiteShell from "@/components/mvp/SiteShell";
+import PageMeta from "@/components/mvp/PageMeta";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -13,18 +14,36 @@ import { CREDIT_PACKS, STRIPE_TIERS } from "@/lib/stripe-config";
 const tierCopy = {
   starter: {
     icon: Zap,
-    description: "For streetwear brands testing their first AI campaign drops.",
-    features: ["3,000 monthly credits", "About 3 eight-output runs", "About 7 three-output runs"],
+    description:
+      "For brands getting started. Full template library, standard processing, and everything you need to launch your first drops with real campaign visuals.",
+    features: [
+      "About 3 full campaigns per month",
+      "About 7 lighter drop runs per month",
+      "Full campaign template library",
+      "Standard processing",
+    ],
   },
   pro: {
     icon: Rocket,
-    description: "For brands running weekly content across multiple templates.",
-    features: ["18,000 monthly credits", "About 19 eight-output runs", "About 42 three-output runs"],
+    description:
+      "For brands that drop regularly. Priority processing, faster turnaround, and the full creative toolkit for a real drop calendar.",
+    features: [
+      "About 19 full campaigns per month",
+      "About 42 lighter drop runs per month",
+      "Priority processing",
+      "Faster iteration on every vibe",
+    ],
   },
   studio: {
     icon: Crown,
-    description: "For agencies and teams managing multiple brands at scale.",
-    features: ["55,000 monthly credits", "About 58 eight-output runs", "About 130 three-output runs"],
+    description:
+      "For teams and agencies. Fastest processing and the largest volume, built for brands running multiple lines or managing client drops.",
+    features: [
+      "About 58 full campaigns per month",
+      "About 130 lighter drop runs per month",
+      "Fastest processing",
+      "Built for multi-brand and client work",
+    ],
   },
 } as const;
 
@@ -239,19 +258,24 @@ export default function BillingPage() {
 
   return (
     <SiteShell>
+      <PageMeta
+        title="FUSE Pricing — Streetwear Drop Campaigns Starting at $25/mo"
+        description="Campaign-grade creative for streetwear drops starting at $25/mo. Lookbook imagery, social content, and video — in minutes. A fraction of what a photoshoot costs."
+        path="/pricing"
+      />
       <section className="container py-12 md:py-16">
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
             <p className="text-[11px] font-semibold uppercase tracking-[0.3em] text-cyan-100">
-              {isTemplateCheckout ? "Checkout" : "Template access"}
+              {isTemplateCheckout ? "Checkout" : "Membership"}
             </p>
             <h1 className="mt-3 font-display text-2xl font-bold leading-tight text-white sm:text-4xl">
-              {isTemplateCheckout ? "Unlock this template." : "Unlock Fuse templates."}
+              {isTemplateCheckout ? "Unlock this template." : "Campaign-Grade Creative. Fraction of the Cost."}
             </h1>
             <p className="mt-4 max-w-3xl text-base leading-7 text-slate-300">
               {isTemplateCheckout
-                ? "Enter where we should send your studio access, choose the credit plan that covers the selected workflow, and continue to payment."
-                : "Choose a plan, continue to payment, then verify access with an email code before opening the studio."}
+                ? "Tell us where to send your studio access, choose the plan that covers this campaign, and continue to payment."
+                : "A single lookbook shoot runs $2,000–$5,000. A Fuse campaign takes 5 minutes."}
             </p>
           </div>
           {user ? (
@@ -404,13 +428,15 @@ export default function BillingPage() {
               const tierMeta = tierCopy[tierKey];
               const Icon = tierMeta.icon;
               const isCurrent = currentPlan === tierKey;
+              const tierCtaLabel =
+                tierKey === "starter" ? "Start Creating" : tierKey === "pro" ? "Launch Your Drops" : "Contact Us";
               const ctaLabel = isAdmin
                 ? "Admin access"
                   : isCurrent
                     ? "Current plan"
                     : loading === tierKey
                       ? "Loading..."
-                    : "Continue to payment";
+                    : tierCtaLabel;
 
               return (
                 <article
