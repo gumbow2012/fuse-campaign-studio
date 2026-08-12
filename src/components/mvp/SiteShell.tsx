@@ -107,7 +107,7 @@ export default function SiteShell({ children }: { children: ReactNode }) {
             <img src={FUSE_ICON_SRC} alt="" className="h-8 w-8 rounded-xl object-contain sm:h-9 sm:w-9 md:h-10 md:w-10 lg:h-11 lg:w-11" />
             <div>
               <img src={FUSE_WORDMARK_SRC} alt="FUSE" className="h-4 w-auto object-contain sm:h-5" />
-              <p className="text-[9px] uppercase tracking-[0.22em] text-muted-foreground sm:text-[10px] sm:tracking-[0.28em]">Campaign Studio</p>
+              <p className="text-[9px] uppercase tracking-[0.22em] text-muted-foreground sm:text-[10px] sm:tracking-[0.28em]">AI Campaign Engine for Streetwear</p>
             </div>
           </Link>
 
@@ -242,6 +242,23 @@ export default function SiteShell({ children }: { children: ReactNode }) {
       ) : null}
 
       <main className="relative">{children}</main>
+
+      <footer className="relative border-t border-white/10 py-8">
+        <div className="container flex flex-col items-center gap-2 text-center text-xs text-muted-foreground sm:flex-row sm:justify-between sm:text-left">
+          <p>© {new Date().getFullYear()} FUSE</p>
+          <p>
+            Built by{" "}
+            <a
+              href="https://maddenmedia.ai"
+              target="_blank"
+              rel="noreferrer"
+              className="text-foreground underline underline-offset-4 hover:text-cyan-100"
+            >
+              Madden Media
+            </a>
+          </p>
+        </div>
+      </footer>
     </div>
   );
 }
