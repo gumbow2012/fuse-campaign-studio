@@ -80,7 +80,13 @@ export default function HomePage() {
 
   return (
     <SiteShell>
+      <PageMeta
+        title="FUSE — AI Campaign Engine for Streetwear Drops"
+        description="Generate full drop campaigns — lookbook imagery, social content, and video — in minutes. Built for streetwear. No photographer, no studio, no agency."
+        path="/"
+      />
       <section className="container py-6 md:py-10">
+
         <div className="mx-auto flex max-w-6xl flex-col items-center gap-5 md:gap-6">
           <div className="max-w-3xl text-center">
             <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-emerald-100">
