@@ -129,6 +129,11 @@ type TemplateDetailNode = {
     label: string | null;
     expected: string | null;
     outputExposed?: boolean | null;
+    videoModel?: string | null;
+    duration?: number | null;
+    resolution?: string | null;
+    aspectRatio?: string | null;
+    generateAudio?: boolean | null;
     sampleUrl?: string | null;
     isUserFacingInput?: boolean;
     isReferenceInput?: boolean;
