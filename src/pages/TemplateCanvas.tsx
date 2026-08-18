@@ -3107,7 +3107,7 @@ const TemplateCanvas = () => {
             </button>
             {versionOptions.length > 1 ? (
               <div className="grid gap-2">
-                <Label className="text-xs text-muted-foreground">Version</Label>
+                <Label className="text-xs text-foreground/80">Version</Label>
                 <select
                   value={selectedVersionId}
                   onChange={(event) => setSelectedVersionId(event.target.value)}
