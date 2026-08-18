@@ -1362,6 +1362,15 @@ const TemplateCanvas = () => {
           slotKey: selectedNode.nodeType === "user_input" ? draft.slotKey : null,
           sampleUrl: selectedNode.nodeType === "user_input" ? draft.sampleUrl : null,
           outputExposed: selectedNode.nodeType === "image_gen" || selectedNode.nodeType === "video_gen" ? draft.outputExposed : null,
+          ...(selectedNode.nodeType === "video_gen"
+            ? {
+              videoModel: draft.videoModel,
+              duration: draft.duration,
+              resolution: draft.resolution,
+              aspectRatio: draft.aspectRatio,
+              generateAudio: draft.generateAudio,
+            }
+            : {}),
         }),
       });
       const data = await response.json();
