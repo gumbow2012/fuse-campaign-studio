@@ -899,6 +899,11 @@ const TemplateCanvas = () => {
       slotKey: selectedNode.editor?.slotKey ?? "",
       sampleUrl: selectedNode.editor?.sampleUrl ?? selectedNode.defaultAssetUrl ?? "",
       outputExposed: typeof selectedNode.editor?.outputExposed === "boolean" ? selectedNode.editor.outputExposed : null,
+      videoModel: resolveVideoModelOption(selectedNode.editor?.videoModel).key,
+      duration: Number(selectedNode.editor?.duration ?? 5) || 5,
+      resolution: selectedNode.editor?.resolution ?? "720p",
+      aspectRatio: selectedNode.editor?.aspectRatio ?? "9:16",
+      generateAudio: selectedNode.editor?.generateAudio !== false,
     });
   }, [selectedNode]);
 
