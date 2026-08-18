@@ -518,10 +518,36 @@ const TemplateCanvas = () => {
   const [paletteVideoModel, setPaletteVideoModel] = useState<VideoModelKey>("kling-3.0-pro");
   const [paletteSearch, setPaletteSearch] = useState("");
   const [showSettingsPanel, setShowSettingsPanel] = useState(false);
-  const [imagePortCounts, setImagePortCounts] = useState<Record<string, number>>({});
-  const handleAddImagePort = useCallback((nodeId: string) => {
-    setImagePortCounts((current) => ({ ...current, [nodeId]: Math.min(8, (current[nodeId] ?? 2) + 1) }));
-  }, []);
+  const [extraPorts, setExtraPorts] = useState<Record<string, string[]>>({});
+  const handleAddPort = useCallback((nodeId: string, type: PortType) => {
+    setExtraPorts((current) => {
+      const existing = current[nodeId] ?? [];
+      const graphNode = detail?.nodes.find((node) => node.id === nodeId);
+      const used = new Set<string>([
+        ...existing,
+        ...(graphNode?.incoming ?? []).map((incoming) => (incoming.targetParam ?? "").toLowerCase()),
+        ...(graphNode?.nodeType === "video_gen" ? ["prompt", "start_frame_image"] : ["prompt", "image_1"]),
+      ]);
+      let nextId = "";
+      if (type === "prompt") {
+        nextId = used.has("negative_prompt") ? "" : "negative_prompt";
+      } else if (type === "image") {
+        if (graphNode?.nodeType === "video_gen" && !used.has("end_frame_image")) {
+          nextId = "end_frame_image";
+        } else {
+          for (let index = 1; index <= 12; index += 1) {
+            if (!used.has(`image_${index}`)) { nextId = `image_${index}`; break; }
+          }
+        }
+      } else {
+        for (let index = 1; index <= 12; index += 1) {
+          if (!used.has(`video_${index}`)) { nextId = `video_${index}`; break; }
+        }
+      }
+      if (!nextId) return current;
+      return { ...current, [nodeId]: [...existing, nextId] };
+    });
+  }, [detail]);
   const [draggingEdgeIndex, setDraggingEdgeIndex] = useState<number | null>(null);
   const [edgeDraft, setEdgeDraft] = useState({ sourceNodeId: "", targetNodeId: "", targetParam: "" });
   const [referenceUploadFile, setReferenceUploadFile] = useState<File | null>(null);
