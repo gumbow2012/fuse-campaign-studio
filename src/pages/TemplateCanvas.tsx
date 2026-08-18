@@ -2190,17 +2190,8 @@ const TemplateCanvas = () => {
                 </div>
               </div>
 
-              <Button
-                type="button"
-                variant="outline"
-                className="w-full border-destructive/40 text-destructive hover:bg-destructive/10 hover:text-destructive"
-                onClick={() => void deleteSelectedNode()}
-                disabled={!!mutating}
-              >
-                <Trash2 className="mr-2 h-4 w-4" />
-                Delete Node and Connections
-              </Button>
-
+              <div className="space-y-3 rounded-2xl border border-border/50 bg-background/40 p-4">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-primary/80">Identity</p>
               <div className="space-y-2">
                 <Label>Display Label</Label>
                 <Input value={draft.displayLabel} onChange={(event) => setDraft((current) => current ? { ...current, displayLabel: event.target.value } : current)} />
@@ -2276,10 +2267,11 @@ const TemplateCanvas = () => {
                 <Label>Expected Media / Notes</Label>
                 <Input value={draft.expected} onChange={(event) => setDraft((current) => current ? { ...current, expected: event.target.value } : current)} />
               </div>
+              </div>
 
               {selectedNode.nodeType !== "user_input" ? (
-                <div className="space-y-2">
-                  <Label>Prompt</Label>
+                <div className="space-y-2 rounded-2xl border border-border/50 bg-background/40 p-4">
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-primary/80">Prompt</p>
                   <Textarea
                     value={draft.prompt}
                     onChange={(event) => setDraft((current) => current ? { ...current, prompt: event.target.value } : current)}
@@ -2289,7 +2281,8 @@ const TemplateCanvas = () => {
               ) : null}
 
               {selectedNode.nodeType === "video_gen" ? (
-                <div className="space-y-3 rounded-2xl border border-border/50 bg-background/50 p-4">
+                <div className="space-y-3 rounded-2xl border border-border/50 bg-background/40 p-4">
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-primary/80">Model</p>
                   <div className="space-y-2">
                     <Label>Video model</Label>
                     <select
@@ -2407,14 +2400,17 @@ const TemplateCanvas = () => {
 
 
               {(selectedNode.nodeType === "image_gen" || selectedNode.nodeType === "video_gen") ? (
-                <label className="flex items-center gap-3 rounded-2xl border border-border/50 bg-background/50 px-4 py-3 text-sm">
-                  <input
-                    type="checkbox"
-                    checked={draft.outputExposed === true}
-                    onChange={(event) => setDraft((current) => current ? { ...current, outputExposed: event.target.checked } : current)}
-                  />
-                  Expose as final deliverable
-                </label>
+                <div className="space-y-2 rounded-2xl border border-border/50 bg-background/40 p-4">
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-primary/80">Output</p>
+                  <label className="flex items-center gap-3 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={draft.outputExposed === true}
+                      onChange={(event) => setDraft((current) => current ? { ...current, outputExposed: event.target.checked } : current)}
+                    />
+                    Expose as final deliverable
+                  </label>
+                </div>
               ) : null}
 
               {selectedNode.defaultAssetUrl ? (
@@ -2430,10 +2426,11 @@ const TemplateCanvas = () => {
               ) : null}
 
               {selectedNode.incoming.length ? (
-                <div className="space-y-2">
+                <div className="space-y-2 rounded-2xl border border-border/50 bg-background/40 p-4">
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-primary/80">Inputs</p>
                   <div className="flex items-center justify-between gap-3">
-                    <Label>Incoming Priority</Label>
-                    <span className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground">Drag to reorder · Ref 1 runs first</span>
+                    <Label>Connection order</Label>
+                    <span className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground">Drag to reorder · Ref 1 first</span>
                   </div>
                   <div className="space-y-2">
                     {selectedNode.incoming.map((edge, index) => (
@@ -2501,8 +2498,13 @@ const TemplateCanvas = () => {
               ) : null}
 
               {detail?.nodes.length ? (
-                <div className="space-y-2">
-                  <Label>Add Incoming Edge</Label>
+                <details className="space-y-2 rounded-2xl border border-border/50 bg-background/40 p-4">
+                  <summary className="cursor-pointer text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">
+                    Add connection manually
+                  </summary>
+                  <p className="mt-2 text-[11px] text-muted-foreground">
+                    Drag from a step's output handle to an input handle on the canvas — this is the fallback.
+                  </p>
                   <select
                     value={edgeDraft.sourceNodeId}
                     onChange={(event) => setEdgeDraft((current) => ({ ...current, sourceNodeId: event.target.value }))}
@@ -2535,13 +2537,31 @@ const TemplateCanvas = () => {
                     <Plus className="mr-2 h-4 w-4" />
                     Connect to This Node
                   </Button>
-                </div>
+                </details>
               ) : null}
 
-              <Button type="button" className="w-full" onClick={() => void saveNode()} disabled={savingNode}>
-                {savingNode ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
-                Save Node
-              </Button>
+              <div className="space-y-2 rounded-2xl border border-border/50 bg-background/40 p-4">
+                {(selectedNode.nodeType === "image_gen" || selectedNode.nodeType === "video_gen") ? (
+                  <Button type="button" variant="outline" className="w-full" disabled title="coming soon">
+                    <Play className="mr-2 h-4 w-4" />
+                    Run step (coming soon)
+                  </Button>
+                ) : null}
+                <Button type="button" className="w-full" onClick={() => void saveNode()} disabled={savingNode}>
+                  {savingNode ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+                  Save Step
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full border-destructive/40 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                  onClick={() => void deleteSelectedNode()}
+                  disabled={!!mutating}
+                >
+                  <Trash2 className="mr-2 h-4 w-4" />
+                  Delete step and connections
+                </Button>
+              </div>
 
               {job ? (
                 <div className="rounded-2xl border border-border/50 bg-background/60 p-4">
