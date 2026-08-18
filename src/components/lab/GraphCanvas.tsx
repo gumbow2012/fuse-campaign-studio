@@ -554,9 +554,11 @@ const GraphCanvasInner = ({
     });
   }, [onViewportApiReady, screenToFlowPosition]);
 
+  const focusedRef = useRef<string | null>(null);
   useEffect(() => {
-    if (!focusNodeId) return;
+    if (!focusNodeId || focusedRef.current === focusNodeId) return;
     if (!nodes.some((node) => node.id === focusNodeId)) return;
+    focusedRef.current = focusNodeId;
     const timer = window.setTimeout(() => {
       void fitView({ nodes: [{ id: focusNodeId }], duration: 500, padding: 0.6, maxZoom: 1.1, minZoom: 0.4 });
     }, 60);
