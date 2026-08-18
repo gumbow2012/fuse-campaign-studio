@@ -28,7 +28,7 @@ describe("template canvas editor contract", () => {
   it("exposes a node palette with selectable video models", () => {
     const canvasSource = source();
 
-    expect(canvasSource).toContain(">Palette<");
+    expect(canvasSource).toContain("Search nodes");
     expect(canvasSource).toContain("paletteVideoModel");
     expect(canvasSource).toContain('addNode("video_gen", paletteVideoModel)');
   });
