@@ -326,9 +326,20 @@ const GraphCanvasInner = ({
   const handleConnect = useCallback(
     (connection: Connection) => {
       if (!connection.source || !connection.target || connection.source === connection.target) return;
+      setFlowEdges((current) => [
+        ...current,
+        {
+          id: `pending-${connection.source}-${connection.target}-${connection.targetHandle ?? "auto"}`,
+          source: connection.source,
+          target: connection.target,
+          targetHandle: connection.targetHandle,
+          sourceHandle: connection.sourceHandle,
+          style: { stroke: PORT_COLOR[portTypeForId(connection.targetHandle ?? "image")], strokeWidth: 1.8, opacity: 0.6 },
+        } as Edge,
+      ]);
       onConnectNodes(connection.source, connection.target, connection.targetHandle);
     },
-    [onConnectNodes],
+    [onConnectNodes, setFlowEdges],
   );
 
   const defaultEdgeOptions = useMemo(
