@@ -2096,6 +2096,25 @@ const TemplateCanvas = () => {
 
   return (
     <SiteShell>
+      <TemplateGallery
+        open={showGallery}
+        templates={primaryTemplateOptions}
+        loading={loadingTemplates}
+        activeVersionId={selectedVersionId}
+        creating={mutating === "create-template"}
+        onClose={() => setShowGallery(false)}
+        onRefresh={() => void loadTemplates()}
+        onOpenTemplate={(versionId) => {
+          setSelectedNodeId(null);
+          setSelectedVersionId(versionId);
+          setShowGallery(false);
+        }}
+        onCreateTemplate={(name) => {
+          setNewTemplateName(name);
+          setShowGallery(false);
+          window.setTimeout(() => void createTemplate(), 0);
+        }}
+      />
       <div className="mx-auto flex w-full min-w-0 max-w-[2100px] flex-col gap-3 overflow-x-hidden px-3 py-3 sm:px-4">
         <div className="flex min-w-0 flex-wrap items-center justify-between gap-3 rounded-2xl border border-border/50 bg-card/70 px-4 py-2.5 shadow-sm">
           <div className="flex min-w-0 items-center gap-3">
@@ -2116,6 +2135,10 @@ const TemplateCanvas = () => {
             </span>
           </div>
           <div className="flex flex-wrap items-center gap-2">
+            <Button type="button" variant="outline" size="sm" className="rounded-full" onClick={() => setShowGallery(true)}>
+              <Layers className="mr-1.5 h-3.5 w-3.5" />
+              Templates
+            </Button>
             <Button type="button" variant="ghost" size="sm" className="rounded-full" disabled={!detail} onClick={resetLayout}>
               <GitBranch className="mr-1.5 h-3.5 w-3.5" />
               Auto-layout
@@ -2891,18 +2914,19 @@ const TemplateCanvas = () => {
               <p className="text-xs font-semibold uppercase tracking-[0.15em] text-muted-foreground">Manage Existing Template</p>
               <div className="mt-3 space-y-3">
             <Label>Template</Label>
-            <select
-              value={selectedTemplate?.templateId ?? ""}
-              onChange={(event) => handlePrimaryTemplateSelect(event.target.value)}
-              className="h-11 w-full max-w-full truncate rounded-xl border border-border bg-background px-4 text-sm"
-              disabled={loadingTemplates || !primaryTemplateOptions.length}
+            <button
+              type="button"
+              onClick={() => setShowGallery(true)}
+              className="flex h-11 w-full items-center justify-between gap-3 rounded-xl border border-border bg-background px-4 text-left text-sm transition hover:border-primary/50"
             >
-              {primaryTemplateOptions.map((template) => (
-                <option key={template.templateId} value={template.templateId}>
-                  {template.templateName} · v{template.versionNumber}{template.isActive ? " live" : " draft"} · {template.counts.inputs} in · {template.counts.imageOutputs + template.counts.videoOutputs} outputs
-                </option>
-              ))}
-            </select>
+              <span className="truncate">
+                {selectedTemplate ? `${selectedTemplate.templateName} · v${selectedTemplate.versionNumber}` : "Browse templates"}
+              </span>
+              <span className="flex shrink-0 items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-primary">
+                <Layers className="h-3.5 w-3.5" />
+                Gallery
+              </span>
+            </button>
             {versionOptions.length > 1 ? (
               <div className="grid gap-2">
                 <Label className="text-xs text-muted-foreground">Version</Label>
