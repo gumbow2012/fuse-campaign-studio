@@ -3142,6 +3142,35 @@ const TemplateCanvas = () => {
                         Generate audio
                       </label>
                     </div>
+                  ) : resolveVideoModelOption(draft.videoModel).family === "kling3" ? (
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <div className="space-y-2">
+                        <Label>Duration (seconds)</Label>
+                        <Input
+                          type="number"
+                          min={3}
+                          max={15}
+                          value={draft.duration}
+                          onChange={(event) =>
+                            setDraft((current) =>
+                              current
+                                ? { ...current, duration: Math.min(15, Math.max(3, Number(event.target.value) || 5)) }
+                                : current,
+                            )
+                          }
+                        />
+                      </div>
+                      <label className="flex items-center gap-3 self-end rounded-xl border border-border/50 bg-background/50 px-4 py-3 text-sm">
+                        <input
+                          type="checkbox"
+                          checked={draft.generateAudio}
+                          onChange={(event) =>
+                            setDraft((current) => current ? { ...current, generateAudio: event.target.checked } : current)
+                          }
+                        />
+                        Generate audio
+                      </label>
+                    </div>
                   ) : (
                     <p className="text-xs text-muted-foreground">Locked to vertical 9:16 at 5 seconds.</p>
                   )}
