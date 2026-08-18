@@ -1876,11 +1876,11 @@ const TemplateCanvas = () => {
         assetUrl: node.defaultAssetUrl,
         expected: node.editor?.expected ?? node.expected ?? null,
         deliverable: typeof node.editor?.outputExposed === "boolean" ? node.editor.outputExposed : null,
-        imagePortCount: Math.max(2, imagePortCounts[node.id] ?? 2, node.incoming.length),
-        onAddImagePort: handleAddImagePort,
+        portIds: portIdsForNode(node.id, kind, node.incoming.map((incoming) => incoming.targetParam), extraPorts[node.id] ?? []),
+        onAddPort: handleAddPort,
       },
     };
-  }), [graphNodes, imagePortCounts, handleAddImagePort]);
+  }), [graphNodes, extraPorts, handleAddPort]);
 
   const flowEdges = useMemo(() => graphNodes.flatMap((target) =>
     target.incoming.flatMap((incoming, index) => {
