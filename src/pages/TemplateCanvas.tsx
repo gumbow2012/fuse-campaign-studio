@@ -3088,10 +3088,10 @@ const TemplateCanvas = () => {
               </div>
             </div>
             <div className="mt-4 grid gap-4 xl:grid-cols-12">
-            <div className="rounded-2xl border border-border/50 bg-card/70 p-4 shadow-sm xl:col-span-5">
-              <p className="text-xs font-semibold uppercase tracking-[0.15em] text-muted-foreground">Manage Existing Template</p>
+            <div className="rounded-2xl border border-primary/25 bg-primary/[0.05] p-4 shadow-sm xl:col-span-6">
+              <p className="text-xs font-semibold uppercase tracking-[0.15em] text-foreground/80">Manage Existing Template</p>
               <div className="mt-3 space-y-3">
-            <Label>Template</Label>
+            <Label className="text-foreground/80">Template</Label>
             <button
               type="button"
               onClick={() => setShowGallery(true)}
