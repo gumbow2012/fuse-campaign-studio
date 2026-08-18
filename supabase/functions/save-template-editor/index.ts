@@ -159,8 +159,23 @@ Deno.serve(async (req) => {
 
       const modelKey = normalizeVideoModel(nextPromptConfig.video_model);
       const isSeedance = modelKey.startsWith("seedance");
+      const isKling3 = modelKey.startsWith("kling-3.0");
 
-      if (isSeedance) {
+      if (isKling3) {
+        nextPromptConfig.video_model = modelKey;
+        nextPromptConfig.duration = "duration" in body
+          ? clampKling3Duration(body.duration)
+          : clampKling3Duration(nextPromptConfig.duration);
+
+        if ("generateAudio" in body) {
+          nextPromptConfig.generate_audio = body.generateAudio !== false;
+        } else if (typeof nextPromptConfig.generate_audio !== "boolean") {
+          nextPromptConfig.generate_audio = true;
+        }
+
+        delete nextPromptConfig.resolution;
+        delete nextPromptConfig.aspect_ratio;
+      } else if (isSeedance) {
         nextPromptConfig.video_model = modelKey;
 
         if ("duration" in body) {
