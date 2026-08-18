@@ -1758,16 +1758,17 @@ const TemplateCanvas = () => {
     }
   }, [invokeWorkbench, refreshAfterMutation, selectedTemplate]);
 
-  const addNode = useCallback(async () => {
+  const addNode = useCallback(async (kindOverride?: NewNodeKind) => {
     if (!detail) return;
-    const isInput = addNodeType === "upload" || addNodeType === "reference";
+    const kind = kindOverride ?? addNodeType;
+    const isInput = kind === "upload" || kind === "reference";
     setMutating("add-node");
     try {
       await invokeWorkbench({
         action: "add_node",
         versionId: detail.versionId,
-        nodeType: isInput ? "user_input" : addNodeType,
-        editorMode: isInput ? addNodeType : undefined,
+        nodeType: isInput ? "user_input" : kind,
+        editorMode: isInput ? kind : undefined,
         name: addNodeName || undefined,
         expected: addNodeExpected,
         prompt: addNodePrompt,
