@@ -1837,11 +1837,12 @@ const TemplateCanvas = () => {
     }
   }, [detail, invokeWorkbench, refreshAfterMutation]);
 
-  const connectNodesOnCanvas = useCallback(async (sourceNodeId: string, targetNodeId: string) => {
+  const connectNodesOnCanvas = useCallback(async (sourceNodeId: string, targetNodeId: string, targetHandleId?: string | null) => {
     if (!detail) return;
     const sourceNode = detail.nodes.find((node) => node.id === sourceNodeId);
     const targetNode = detail.nodes.find((node) => node.id === targetNodeId);
-    const targetParam = inferEdgeTargetParam(sourceNode, targetNode, targetNode?.incoming.length ?? 0);
+    const handleParam = (targetHandleId ?? "").trim().toLowerCase();
+    const targetParam = handleParam || inferEdgeTargetParam(sourceNode, targetNode, targetNode?.incoming.length ?? 0);
     setMutating("add-edge");
     try {
       await invokeWorkbench({
@@ -2139,7 +2140,7 @@ const TemplateCanvas = () => {
               selectedNodeId={selectedNode?.id ?? null}
               onSelectNode={setSelectedNodeId}
               onNodeMoved={handleCanvasNodeMoved}
-              onConnectNodes={(source, target) => void connectNodesOnCanvas(source, target)}
+              onConnectNodes={(source, target, targetHandle) => void connectNodesOnCanvas(source, target, targetHandle)}
               onDeleteEdge={(edgeId) => void deleteEdge(edgeId)}
               className="h-[calc(100vh-9.5rem)] min-h-[520px]"
             />
