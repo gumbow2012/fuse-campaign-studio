@@ -32,10 +32,12 @@ export type GraphCanvasNodeData = {
   promptPreview: string;
   incomingCount: number;
   sourceSummary: string;
+  refLabels: string[];
   assetUrl: string | null;
   expected: string | null;
   deliverable: boolean | null;
 };
+
 
 export type GraphCanvasNode = Node<GraphCanvasNodeData>;
 
