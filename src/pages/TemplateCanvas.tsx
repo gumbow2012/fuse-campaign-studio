@@ -514,7 +514,7 @@ const TemplateCanvas = () => {
   const [selectedActivationGate, setSelectedActivationGate] = useState<ActivationGate | null>(null);
   const [loadingActivationGate, setLoadingActivationGate] = useState(false);
   const [cloneTemplateName, setCloneTemplateName] = useState("");
-  const [addNodeType, setAddNodeType] = useState<NewNodeKind>("upload");
+  
   const [paletteVideoModel, setPaletteVideoModel] = useState<VideoModelKey>("kling-3.0-pro");
   const [paletteSearch, setPaletteSearch] = useState("");
   const [showSettingsPanel, setShowSettingsPanel] = useState(false);
@@ -523,9 +523,6 @@ const TemplateCanvas = () => {
     setImagePortCounts((current) => ({ ...current, [nodeId]: Math.min(8, (current[nodeId] ?? 2) + 1) }));
   }, []);
   const [draggingEdgeIndex, setDraggingEdgeIndex] = useState<number | null>(null);
-  const [addNodeName, setAddNodeName] = useState("");
-  const [addNodeExpected, setAddNodeExpected] = useState("image");
-  const [addNodePrompt, setAddNodePrompt] = useState("");
   const [edgeDraft, setEdgeDraft] = useState({ sourceNodeId: "", targetNodeId: "", targetParam: "" });
   const [referenceUploadFile, setReferenceUploadFile] = useState<File | null>(null);
   const [referenceUploadPreview, setReferenceUploadPreview] = useState<string | null>(null);
@@ -1661,9 +1658,8 @@ const TemplateCanvas = () => {
     }
   }, [invokeWorkbench, refreshAfterMutation, selectedTemplate]);
 
-  const addNode = useCallback(async (kindOverride?: NewNodeKind, videoModelOverride?: VideoModelKey) => {
+  const addNode = useCallback(async (kind: NewNodeKind, videoModelOverride?: VideoModelKey) => {
     if (!detail) return;
-    const kind = kindOverride ?? addNodeType;
     const isInput = kind === "upload" || kind === "reference";
     setMutating("add-node");
     try {
@@ -1672,9 +1668,8 @@ const TemplateCanvas = () => {
         versionId: detail.versionId,
         nodeType: isInput ? "user_input" : kind,
         editorMode: isInput ? kind : undefined,
-        name: kindOverride ? undefined : (addNodeName || undefined),
-        expected: kindOverride ? (kind === "video_gen" ? "video" : "image") : addNodeExpected,
-        prompt: kindOverride ? "" : addNodePrompt,
+        expected: kind === "video_gen" ? "video" : "image",
+        prompt: "",
         outputExposed: kind === "image_gen" || kind === "video_gen",
       });
       const createdNodeId = typeof created.nodeId === "string" ? created.nodeId : null;
@@ -1690,18 +1685,16 @@ const TemplateCanvas = () => {
         }).catch(() => undefined);
       }
 
-      setAddNodeName("");
-      setAddNodeExpected("image");
-      setAddNodePrompt("");
       await refreshAfterMutation(detail.versionId);
-      toast({ title: "Node added" });
+      if (createdNodeId) setSelectedNodeId(createdNodeId);
+      toast({ title: "Step added", description: "Rename it and set the prompt in the inspector." });
     } catch (addError) {
       const message = addError instanceof Error ? addError.message : "Could not add node";
-      toast({ title: "Add node failed", description: message, variant: "destructive" });
+      toast({ title: "Add step failed", description: message, variant: "destructive" });
     } finally {
       setMutating(null);
     }
-  }, [addNodeExpected, addNodeName, addNodePrompt, addNodeType, buildAuthHeaders, detail, invokeWorkbench, refreshAfterMutation]);
+  }, [buildAuthHeaders, detail, invokeWorkbench, refreshAfterMutation]);
 
   const deleteSelectedNode = useCallback(async () => {
     if (!selectedNode || !detail) return;
@@ -2057,7 +2050,7 @@ const TemplateCanvas = () => {
           </div>
         </div>
 
-        <div className="grid min-w-0 grid-cols-1 gap-3 xl:grid-cols-[76px_minmax(0,1fr)_380px]">
+        <div className={`grid min-w-0 grid-cols-1 gap-3 ${selectedNode ? "xl:grid-cols-[76px_minmax(0,1fr)_380px]" : "xl:grid-cols-[76px_minmax(0,1fr)]"}`}>
           <aside className="flex min-w-0 flex-row gap-2 overflow-x-auto rounded-2xl border border-border/50 bg-card/70 p-2 shadow-sm xl:flex-col xl:overflow-visible">
             <Input
               value={paletteSearch}
@@ -2112,6 +2105,7 @@ const TemplateCanvas = () => {
           </section>
 
 
+        {selectedNode ? (
         <aside className="w-full min-w-0 self-start rounded-3xl border border-border/50 bg-card/70 p-5 shadow-sm xl:sticky xl:top-4 xl:max-h-[calc(100vh-2rem)] xl:overflow-y-auto">
           <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">Inspector</p>
           {selectedNode && draft ? (
@@ -2520,6 +2514,7 @@ const TemplateCanvas = () => {
             </div>
           )}
         </aside>
+        ) : null}
         </div>
         {showSettingsPanel ? (
         <section className="w-full">
@@ -2842,36 +2837,6 @@ const TemplateCanvas = () => {
             </div>
           </div>
 
-          <div className="rounded-2xl border border-border/50 bg-card/70 p-4 shadow-sm xl:col-span-4">
-            <p className="text-xs font-semibold uppercase tracking-[0.15em] text-muted-foreground">Add Node</p>
-            <div className="mt-3 grid gap-2">
-              <select
-                value={addNodeType}
-                onChange={(event) => setAddNodeType(event.target.value as NewNodeKind)}
-                className="h-10 w-full rounded-xl border border-border bg-background px-3 text-sm"
-              >
-                <option value="upload">User Upload</option>
-                <option value="reference">Hidden Reference</option>
-                <option value="image_gen">Image Step</option>
-                <option value="video_gen">Video Step</option>
-              </select>
-              <div className="flex gap-2">
-                <Input value={addNodeName} onChange={(event) => setAddNodeName(event.target.value)} placeholder="Node name" />
-                <Button type="button" variant="outline" onClick={() => void addNode()} disabled={!detail || !!mutating}>
-                  <Plus className="h-4 w-4" />
-                </Button>
-              </div>
-              <Input value={addNodeExpected} onChange={(event) => setAddNodeExpected(event.target.value)} placeholder="Expected media / notes" />
-              {(addNodeType === "image_gen" || addNodeType === "video_gen") ? (
-                <Textarea
-                  value={addNodePrompt}
-                  onChange={(event) => setAddNodePrompt(event.target.value)}
-                  placeholder="Plain English prompt for this generation step"
-                  className="min-h-[86px]"
-                />
-              ) : null}
-            </div>
-          </div>
 
           <div className="rounded-2xl border border-border/50 bg-card/70 p-4 text-sm shadow-sm xl:col-span-4">
             <div className="flex items-center justify-between gap-3">
