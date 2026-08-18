@@ -2861,10 +2861,20 @@ const TemplateCanvas = () => {
             </div>
           </div>
 
-          <div className="mt-5 rounded-3xl border border-border/50 bg-card/70 p-4 shadow-sm">
-            <div className="flex flex-col gap-3 lg:flex-row lg:items-end">
+          <div className="mt-5 rounded-3xl border border-primary/25 bg-card/80 p-5 shadow-[0_18px_50px_-30px_hsl(var(--primary)/0.55)] backdrop-blur-xl">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-primary">Start here</p>
+                <p className="mt-1 text-base font-semibold text-foreground">Create a new canvas or open an existing template</p>
+              </div>
+              <Button type="button" variant="outline" className="h-10 rounded-2xl border-primary/40 bg-primary/10 font-semibold text-foreground hover:bg-primary/20" onClick={() => setShowGallery(true)}>
+                <Layers className="mr-2 h-4 w-4 text-primary" />
+                Browse Gallery
+              </Button>
+            </div>
+            <div className="mt-4 flex flex-col gap-3 lg:flex-row lg:items-end">
               <div className="min-w-0 flex-1 space-y-1.5">
-                <Label className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">New canvas name</Label>
+                <Label className="text-[11px] uppercase tracking-[0.16em] text-foreground/75">New canvas name</Label>
                 <Input
                   value={newTemplateName}
                   onChange={(event) => setNewTemplateName(event.target.value)}
@@ -2873,7 +2883,7 @@ const TemplateCanvas = () => {
                 />
               </div>
               <div className="min-w-0 flex-1 space-y-1.5">
-                <Label className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">Description</Label>
+                <Label className="text-[11px] uppercase tracking-[0.16em] text-foreground/75">Description</Label>
                 <Input
                   value={newTemplateDescription}
                   onChange={(event) => setNewTemplateDescription(event.target.value)}
@@ -2883,7 +2893,7 @@ const TemplateCanvas = () => {
               </div>
               <Button
                 type="button"
-                className="h-11 rounded-2xl lg:w-auto"
+                className="h-11 rounded-2xl font-semibold lg:w-auto"
                 onClick={() => void createTemplate()}
                 disabled={!!mutating || !hasTemplateName}
               >
@@ -2891,7 +2901,7 @@ const TemplateCanvas = () => {
                 Blank canvas
               </Button>
             </div>
-            <p className="mt-2 text-xs text-muted-foreground">
+            <p className="mt-2 text-xs text-foreground/65">
               Starts an empty graph. Build it by adding steps from the palette and dragging connections.
             </p>
           </div>
