@@ -3317,10 +3317,11 @@ const TemplateCanvas = () => {
             </div>
           ) : (
             <div className="mt-4 rounded-2xl border border-border/50 bg-background/60 p-4 text-sm text-muted-foreground">
-              Pick a node to inspect and edit it.
+              Pick a step on the canvas to edit it.
             </div>
           )}
         </aside>
+        </div>
       </div>
     </SiteShell>
   );
