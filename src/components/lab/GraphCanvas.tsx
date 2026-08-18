@@ -181,7 +181,7 @@ const TemplateFlowNode = ({ id, data, selected }: NodeProps<GraphCanvasNode>) =>
         </div>
       ) : null}
 
-      {inputPorts.length ? (
+      {isModelNode ? (
         <div className="mt-3 space-y-1.5">
           {inputPorts.map((port) => (
             <div key={port.id} className="relative flex items-center gap-2">
@@ -190,25 +190,33 @@ const TemplateFlowNode = ({ id, data, selected }: NodeProps<GraphCanvasNode>) =>
                 id={port.id}
                 position={Position.Left}
                 className={handleBase}
-                style={{ background: PORT_COLOR[port.type], left: -22, top: "50%" }}
+                style={{ background: PORT_COLOR[port.type], left: -24, top: "50%" }}
               />
               <PortDot type={port.type} />
               <span className="text-[11px] font-medium text-muted-foreground">{port.label}</span>
             </div>
           ))}
-          {data.kind === "image" ? (
-            <button
-              type="button"
-              className="nodrag mt-1 inline-flex items-center gap-1 rounded-full border border-border/60 bg-background/60 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.1em] text-muted-foreground transition hover:border-primary/50 hover:text-foreground"
-              onClick={(event) => {
-                event.stopPropagation();
-                data.onAddImagePort?.(id);
-              }}
-            >
-              <Plus className="h-3 w-3" />
-              Add image input
-            </button>
-          ) : null}
+          <div className="mt-1.5 flex flex-wrap gap-1.5">
+            {([
+              { type: "image" as PortType, label: "Image" },
+              { type: "video" as PortType, label: "Video" },
+              { type: "prompt" as PortType, label: "Prompt" },
+            ]).map((option) => (
+              <button
+                key={option.type}
+                type="button"
+                title={`Add ${option.label.toLowerCase()} input`}
+                className="nodrag inline-flex items-center gap-1 rounded-full border border-border/60 bg-background/60 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.1em] text-muted-foreground transition hover:border-primary/50 hover:text-foreground"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  data.onAddPort?.(id, option.type);
+                }}
+              >
+                <Plus className="h-3 w-3" />
+                {option.label}
+              </button>
+            ))}
+          </div>
         </div>
       ) : null}
 
