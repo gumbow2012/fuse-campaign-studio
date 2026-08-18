@@ -18,7 +18,10 @@ import {
   type EdgeChange,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import { Film, Image as ImageIcon, Upload } from "lucide-react";
+import { Film, Image as ImageIcon, Play, Plus, Upload } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+
+export type PortType = "prompt" | "image" | "video";
 
 export type GraphCanvasNodeData = {
   title: string;
@@ -36,8 +39,9 @@ export type GraphCanvasNodeData = {
   assetUrl: string | null;
   expected: string | null;
   deliverable: boolean | null;
+  imagePortCount: number;
+  onAddImagePort?: (nodeId: string) => void;
 };
-
 
 export type GraphCanvasNode = Node<GraphCanvasNodeData>;
 
@@ -55,21 +59,80 @@ const KIND_ACCENT: Record<GraphCanvasNodeData["kind"], string> = {
   other: "border-border/60 text-muted-foreground",
 };
 
-const handleClass =
-  "!h-3 !w-3 !rounded-full !border-2 !border-background !bg-primary !shadow-[0_0_0_3px_hsl(var(--primary)/0.22)]";
+export const PORT_COLOR: Record<PortType, string> = {
+  prompt: "hsl(280 90% 68%)",
+  image: "hsl(165 80% 55%)",
+  video: "hsl(205 95% 62%)",
+};
 
-const TemplateFlowNode = ({ data, selected }: NodeProps<GraphCanvasNode>) => {
+type Port = { id: string; label: string; type: PortType };
+
+function inputPortsFor(data: GraphCanvasNodeData): Port[] {
+  if (data.kind === "video") {
+    return [
+      { id: "prompt", label: "Prompt", type: "prompt" },
+      { id: "start_frame_image", label: "First Frame", type: "image" },
+      { id: "end_frame_image", label: "Last Frame", type: "image" },
+      { id: "negative_prompt", label: "Negative Prompt", type: "prompt" },
+    ];
+  }
+  if (data.kind === "image") {
+    const count = Math.max(2, data.imagePortCount || 2);
+    return [
+      { id: "prompt", label: "Prompt", type: "prompt" },
+      ...Array.from({ length: count }, (_, index) => ({
+        id: `image_${index + 1}`,
+        label: `Image ${index + 1}`,
+        type: "image" as PortType,
+      })),
+    ];
+  }
+  return [];
+}
+
+function outputPortFor(data: GraphCanvasNodeData): Port {
+  if (data.kind === "video") return { id: "video", label: "Video", type: "video" };
+  return { id: "image", label: "Image", type: "image" };
+}
+
+const PortDot = ({ type }: { type: PortType }) => (
+  <span
+    className="h-2.5 w-2.5 shrink-0 rounded-full"
+    style={{ background: PORT_COLOR[type], boxShadow: `0 0 0 3px ${PORT_COLOR[type]}33` }}
+  />
+);
+
+const handleBase = "!h-3 !w-3 !rounded-full !border-2 !border-background";
+
+const TemplateFlowNode = ({ id, data, selected }: NodeProps<GraphCanvasNode>) => {
   const Icon = KIND_ICON[data.kind];
+  const inputPorts = inputPortsFor(data);
+  const outputPort = outputPortFor(data);
+  const isModelNode = data.kind === "image" || data.kind === "video";
+
   return (
     <div
-      className={`w-[272px] rounded-2xl border bg-card/80 p-4 backdrop-blur-xl transition-all ${
+      className={`relative w-[300px] rounded-2xl border bg-card/80 p-4 backdrop-blur-xl transition-all ${
         selected
           ? "border-primary/70 shadow-[0_0_0_1px_hsl(var(--primary)/0.5),0_18px_50px_-12px_hsl(var(--primary)/0.55)]"
           : "border-border/60 shadow-[0_14px_40px_-24px_rgba(0,0,0,0.85)] hover:border-primary/40"
       }`}
     >
-      <Handle type="target" position={Position.Left} className={handleClass} />
-      <Handle type="source" position={Position.Right} className={handleClass} />
+      {!inputPorts.length ? (
+        <Handle
+          type="target"
+          position={Position.Left}
+          className={handleBase}
+          style={{ background: PORT_COLOR.image, top: 28 }}
+        />
+      ) : null}
+      <Handle
+        type="source"
+        position={Position.Right}
+        id={outputPort.id}
+        className={handleBase}
+        style={{ background: PORT_COLOR[outputPort.type], top: 28 }}
+      />
 
       <div className="flex items-start justify-between gap-2">
         <div className="flex min-w-0 items-center gap-2">
@@ -81,11 +144,17 @@ const TemplateFlowNode = ({ data, selected }: NodeProps<GraphCanvasNode>) => {
             {data.kindLabel}
           </span>
         </div>
-        {data.outputNumber ? (
-          <span className="rounded-md border border-emerald-400/40 bg-emerald-400/10 px-1.5 py-0.5 text-[10px] font-bold uppercase text-emerald-200">
-            Out {data.outputNumber}
+        <div className="flex items-center gap-1.5">
+          {data.outputNumber ? (
+            <span className="rounded-md border border-emerald-400/40 bg-emerald-400/10 px-1.5 py-0.5 text-[10px] font-bold uppercase text-emerald-200">
+              Out {data.outputNumber}
+            </span>
+          ) : null}
+          <span className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">
+            <PortDot type={outputPort.type} />
+            {outputPort.label}
           </span>
-        ) : null}
+        </div>
       </div>
 
       <p className="mt-2 line-clamp-2 text-sm font-semibold leading-tight text-foreground">{data.title}</p>
@@ -106,6 +175,37 @@ const TemplateFlowNode = ({ data, selected }: NodeProps<GraphCanvasNode>) => {
         </div>
       ) : null}
 
+      {inputPorts.length ? (
+        <div className="mt-3 space-y-1.5">
+          {inputPorts.map((port) => (
+            <div key={port.id} className="relative flex items-center gap-2">
+              <Handle
+                type="target"
+                id={port.id}
+                position={Position.Left}
+                className={handleBase}
+                style={{ background: PORT_COLOR[port.type], left: -22, top: "50%" }}
+              />
+              <PortDot type={port.type} />
+              <span className="text-[11px] font-medium text-muted-foreground">{port.label}</span>
+            </div>
+          ))}
+          {data.kind === "image" ? (
+            <button
+              type="button"
+              className="nodrag mt-1 inline-flex items-center gap-1 rounded-full border border-border/60 bg-background/60 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.1em] text-muted-foreground transition hover:border-primary/50 hover:text-foreground"
+              onClick={(event) => {
+                event.stopPropagation();
+                data.onAddImagePort?.(id);
+              }}
+            >
+              <Plus className="h-3 w-3" />
+              Add image input
+            </button>
+          ) : null}
+        </div>
+      ) : null}
+
       {data.detailLine ? (
         <p className="mt-2 text-[11px] text-muted-foreground">{data.detailLine}</p>
       ) : null}
@@ -122,26 +222,36 @@ const TemplateFlowNode = ({ data, selected }: NodeProps<GraphCanvasNode>) => {
 
       {data.refLabels.length ? (
         <div className="mt-2 space-y-1">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Reference order</p>
           {data.refLabels.map((label, index) => (
-            <div
-              key={`${label}-${index}`}
-              className="flex items-center gap-2 rounded-lg border border-primary/25 bg-primary/[0.07] px-2 py-1 text-[10px] text-foreground/85"
-            >
-              <span className="flex h-4 w-4 items-center justify-center rounded-full border border-primary/40 text-[9px] font-bold text-primary">
-                {index + 1}
-              </span>
-              <span className="truncate">{label}</span>
-            </div>
+            <p key={`${label}-${index}`} className="line-clamp-1 text-[10px] text-muted-foreground">
+              <span className="font-semibold text-foreground/80">Ref {index + 1}</span> · {label}
+            </p>
           ))}
         </div>
       ) : (
         <p className="mt-2 line-clamp-1 text-[10px] text-muted-foreground">From: {data.sourceSummary}</p>
       )}
+
+      {isModelNode ? (
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                disabled
+                className="nodrag mt-3 inline-flex w-full cursor-not-allowed items-center justify-center gap-1.5 rounded-xl border border-border/60 bg-background/50 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground opacity-70"
+              >
+                <Play className="h-3 w-3" />
+                Run step
+              </button>
+            </TooltipTrigger>
+            <TooltipContent>coming soon</TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+      ) : null}
     </div>
   );
 };
-
 
 const nodeTypes = { templateNode: TemplateFlowNode };
 
@@ -153,6 +263,7 @@ type GraphCanvasProps = {
   onNodeMoved: (nodeId: string, position: { x: number; y: number }) => void;
   onConnectNodes: (sourceNodeId: string, targetNodeId: string) => void;
   onDeleteEdge: (edgeId: string) => void;
+  className?: string;
 };
 
 const GraphCanvasInner = ({
@@ -163,6 +274,7 @@ const GraphCanvasInner = ({
   onNodeMoved,
   onConnectNodes,
   onDeleteEdge,
+  className,
 }: GraphCanvasProps) => {
   const [flowNodes, setFlowNodes, onNodesChange] = useNodesState<GraphCanvasNode>(nodes);
   const [flowEdges, setFlowEdges, onEdgesChange] = useEdgesState<Edge>(edges);
@@ -209,19 +321,13 @@ const GraphCanvasInner = ({
     () => ({
       type: "smoothstep" as const,
       animated: true,
-      style: { stroke: "hsl(var(--primary))", strokeWidth: 1.8, opacity: 0.75 },
-      labelShowBg: true,
-      labelBgPadding: [6, 3] as [number, number],
-      labelBgBorderRadius: 8,
-      labelBgStyle: { fill: "hsl(var(--card))", fillOpacity: 0.9 },
-      labelStyle: { fill: "hsl(var(--primary))", fontSize: 10, fontWeight: 700 },
+      style: { stroke: PORT_COLOR.image, strokeWidth: 1.8, opacity: 0.8 },
     }),
     [],
   );
 
-
   return (
-    <div className="h-[min(72vh,720px)] min-h-[460px] w-full min-w-0 overflow-hidden rounded-3xl border border-border/50 bg-background/70">
+    <div className={`w-full min-w-0 overflow-hidden rounded-3xl border border-border/50 bg-background/70 ${className ?? "h-[min(72vh,720px)] min-h-[460px]"}`}>
       <ReactFlow
         nodes={flowNodes}
         edges={flowEdges}
