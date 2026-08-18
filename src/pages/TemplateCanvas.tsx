@@ -264,6 +264,17 @@ function estimateVideoCredits(draft: {
   return Math.ceil((option.usdPerSecond * multiplier * seconds) / USD_PER_CREDIT);
 }
 
+type RunNodeResult = {
+  runId: string;
+  nodeId: string;
+  status: "queued" | "running" | "complete" | "failed";
+  outputUrl?: string | null;
+  outputType?: string | null;
+  error?: string | null;
+  estimatedCredits?: number | null;
+  startedAt?: string | null;
+};
+
 type NewNodeKind = NodeDraft["editorMode"] | "image_gen" | "video_gen";
 type TemplateWizardStep = "setup" | "branches";
 type EdgeMoveDirection = -1 | 1;
@@ -2059,6 +2070,8 @@ const TemplateCanvas = () => {
       },
     };
   }), [graphNodes, extraPorts, handleAddPort, nodeRuns, referenceUploadNodeId, runSingleNode, savePromptInline, uploadReferenceForNode]);
+
+  const selectedNodeRun = selectedNodeId ? nodeRuns[selectedNodeId] ?? null : null;
 
   const flowEdges = useMemo(() => graphNodes.flatMap((target) =>
     target.incoming.flatMap((incoming, index) => {
