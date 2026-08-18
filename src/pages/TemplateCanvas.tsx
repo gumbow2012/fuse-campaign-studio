@@ -2842,36 +2842,6 @@ const TemplateCanvas = () => {
             </div>
           </div>
 
-          <div className="rounded-2xl border border-border/50 bg-card/70 p-4 shadow-sm xl:col-span-4">
-            <p className="text-xs font-semibold uppercase tracking-[0.15em] text-muted-foreground">Add Node</p>
-            <div className="mt-3 grid gap-2">
-              <select
-                value={addNodeType}
-                onChange={(event) => setAddNodeType(event.target.value as NewNodeKind)}
-                className="h-10 w-full rounded-xl border border-border bg-background px-3 text-sm"
-              >
-                <option value="upload">User Upload</option>
-                <option value="reference">Hidden Reference</option>
-                <option value="image_gen">Image Step</option>
-                <option value="video_gen">Video Step</option>
-              </select>
-              <div className="flex gap-2">
-                <Input value={addNodeName} onChange={(event) => setAddNodeName(event.target.value)} placeholder="Node name" />
-                <Button type="button" variant="outline" onClick={() => void addNode()} disabled={!detail || !!mutating}>
-                  <Plus className="h-4 w-4" />
-                </Button>
-              </div>
-              <Input value={addNodeExpected} onChange={(event) => setAddNodeExpected(event.target.value)} placeholder="Expected media / notes" />
-              {(addNodeType === "image_gen" || addNodeType === "video_gen") ? (
-                <Textarea
-                  value={addNodePrompt}
-                  onChange={(event) => setAddNodePrompt(event.target.value)}
-                  placeholder="Plain English prompt for this generation step"
-                  className="min-h-[86px]"
-                />
-              ) : null}
-            </div>
-          </div>
 
           <div className="rounded-2xl border border-border/50 bg-card/70 p-4 text-sm shadow-sm xl:col-span-4">
             <div className="flex items-center justify-between gap-3">
