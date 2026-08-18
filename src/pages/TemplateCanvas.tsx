@@ -2851,20 +2851,34 @@ const TemplateCanvas = () => {
                 <div className="space-y-2">
                   <div className="flex items-center justify-between gap-3">
                     <Label>Incoming Priority</Label>
-                    <span className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground">Top runs first</span>
+                    <span className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground">Drag to reorder · Ref 1 runs first</span>
                   </div>
                   <div className="space-y-2">
                     {selectedNode.incoming.map((edge, index) => (
                       <div
-                        key={`${edge.edgeId ?? edge.sourceNodeId}-${edge.targetParam ?? "image"}-${edge.sortOrder ?? index}`}
-                        className="grid gap-3 rounded-2xl border border-border/50 bg-background/50 px-4 py-3 text-sm sm:grid-cols-[minmax(0,1fr)_auto]"
+                        key={`${edge.edgeId ?? edge.sourceNodeId}-${edge.sortOrder ?? index}`}
+                        draggable={!!edge.edgeId && !mutating}
+                        onDragStart={() => setDraggingEdgeIndex(index)}
+                        onDragOver={(event) => event.preventDefault()}
+                        onDrop={() => {
+                          if (draggingEdgeIndex === null) return;
+                          const from = draggingEdgeIndex;
+                          setDraggingEdgeIndex(null);
+                          void moveIncomingEdgeToIndex(from, index);
+                        }}
+                        onDragEnd={() => setDraggingEdgeIndex(null)}
+                        className={`grid gap-3 rounded-2xl border bg-background/50 px-4 py-3 text-sm sm:grid-cols-[minmax(0,1fr)_auto] ${
+                          draggingEdgeIndex === index ? "border-primary/60 opacity-70" : "border-border/50"
+                        }`}
                       >
-                        <div className="min-w-0">
-                          <p className="truncate font-medium">{index + 1}. {edge.sourceName}</p>
-                          <p className="mt-1 truncate font-mono text-[11px] text-muted-foreground">
-                            {edge.targetParam ? `maps to ${edge.targetParam}` : "target param will be normalized on save"}
-                          </p>
+                        <div className="flex min-w-0 items-center gap-2">
+                          <Move className="h-4 w-4 shrink-0 cursor-grab text-muted-foreground" />
+                          <div className="min-w-0">
+                            <p className="truncate font-medium">Ref {index + 1} · {edge.sourceName}</p>
+                            <p className="mt-1 truncate text-[11px] text-muted-foreground">Reference position {index + 1}</p>
+                          </div>
                         </div>
+
                         <div className="flex flex-wrap items-center gap-2">
                           <Button
                             type="button"
