@@ -3,7 +3,7 @@ import { CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Copy, 
 import { Link, useSearchParams } from "react-router-dom";
 import SiteShell from "@/components/mvp/SiteShell";
 import TemplateGallery from "@/components/lab/TemplateGallery";
-import GraphCanvas, { PORT_COLOR, type GraphCanvasNode, type GraphCanvasNodeData, type PortType } from "@/components/lab/GraphCanvas";
+import GraphCanvas, { PORT_COLOR, type GraphCanvasNode, type GraphCanvasNodeData, type NodeRunState, type PortType } from "@/components/lab/GraphCanvas";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -539,6 +539,7 @@ const TemplateCanvas = () => {
   const [extraPorts, setExtraPorts] = useState<Record<string, string[]>>({});
   const [showGallery, setShowGallery] = useState(false);
   const [referenceUploadNodeId, setReferenceUploadNodeId] = useState<string | null>(null);
+  const [nodeRuns, setNodeRuns] = useState<Record<string, NodeRunState & { runId: string }>>({});
   const handleAddPort = useCallback((nodeId: string, type: PortType) => {
     setExtraPorts((current) => {
       const existing = current[nodeId] ?? [];
@@ -1927,6 +1928,78 @@ const TemplateCanvas = () => {
     });
   }, [detail?.versionId]);
 
+  const invokeRunNode = useCallback(async (body: Record<string, unknown>) => {
+    const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/run-node`, {
+      method: "POST",
+      headers: { ...(await buildAuthHeaders()), "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data?.error ?? "Could not run this step");
+    return data as { run?: RunNodeResult; runs?: RunNodeResult[] };
+  }, [buildAuthHeaders]);
+
+  const applyNodeRun = useCallback((run: RunNodeResult) => {
+    setNodeRuns((current) => ({
+      ...current,
+      [run.nodeId]: {
+        runId: run.runId,
+        status: run.status,
+        outputUrl: run.outputUrl ?? null,
+        outputType: run.outputType ?? null,
+        error: run.error ?? null,
+        estimatedCredits: run.estimatedCredits ?? null,
+        startedAt: run.startedAt ? new Date(run.startedAt).getTime() : Date.now(),
+      },
+    }));
+  }, []);
+
+  const runSingleNode = useCallback(async (nodeId: string) => {
+    if (!detail) return;
+    setNodeRuns((current) => ({
+      ...current,
+      [nodeId]: {
+        ...(current[nodeId] ?? { runId: "" }),
+        status: "queued",
+        error: null,
+        outputUrl: null,
+        outputType: null,
+        startedAt: Date.now(),
+      },
+    }));
+    try {
+      const data = await invokeRunNode({ action: "start", versionId: detail.versionId, nodeId });
+      if (data.run) applyNodeRun(data.run);
+      toast({ title: "Step generating", description: "This can take 10–60 seconds." });
+    } catch (runError) {
+      const message = runError instanceof Error ? runError.message : "Could not run this step";
+      setNodeRuns((current) => ({
+        ...current,
+        [nodeId]: { ...(current[nodeId] ?? { runId: "" }), status: "failed", error: message, startedAt: null },
+      }));
+      toast({ title: "Run failed", description: message, variant: "destructive" });
+    }
+  }, [applyNodeRun, detail, invokeRunNode]);
+
+  useEffect(() => {
+    const pending = Object.values(nodeRuns).filter((run) => run.runId && (run.status === "queued" || run.status === "running"));
+    if (!pending.length || !detail) return;
+    let cancelled = false;
+    const timer = window.setInterval(async () => {
+      try {
+        const data = await invokeRunNode({ action: "status", versionId: detail.versionId });
+        if (cancelled) return;
+        for (const run of data.runs ?? []) applyNodeRun(run);
+      } catch {
+        // keep polling; transient failures are expected while a job is queued
+      }
+    }, 4000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [applyNodeRun, detail, invokeRunNode, nodeRuns]);
+
   const flowNodes = useMemo<GraphCanvasNode[]>(() => graphNodes.map((node) => {
     const kind: GraphCanvasNodeData["kind"] = node.nodeType === "user_input"
       ? "input"
@@ -1979,9 +2052,13 @@ const TemplateCanvas = () => {
         onAddPort: handleAddPort,
         onPromptCommit: (nodeId: string, prompt: string) => void savePromptInline(nodeId, prompt),
         onUploadReference: (nodeId: string, file: File) => void uploadReferenceForNode(nodeId, file),
+        run: nodeRuns[node.id] ?? null,
+        onRunNode: kind === "image" || kind === "video"
+          ? (nodeId: string) => void runSingleNode(nodeId)
+          : undefined,
       },
     };
-  }), [graphNodes, extraPorts, handleAddPort, referenceUploadNodeId, savePromptInline, uploadReferenceForNode]);
+  }), [graphNodes, extraPorts, handleAddPort, nodeRuns, referenceUploadNodeId, runSingleNode, savePromptInline, uploadReferenceForNode]);
 
   const flowEdges = useMemo(() => graphNodes.flatMap((target) =>
     target.incoming.flatMap((incoming, index) => {
@@ -2625,9 +2702,22 @@ const TemplateCanvas = () => {
 
               <div className="space-y-2 rounded-2xl border border-border/50 bg-background/40 p-4">
                 {(selectedNode.nodeType === "image_gen" || selectedNode.nodeType === "video_gen") ? (
-                  <Button type="button" variant="outline" className="w-full" disabled title="coming soon">
-                    <Play className="mr-2 h-4 w-4" />
-                    Run step (coming soon)
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="w-full"
+                    onClick={() => void runSingleNode(selectedNode.id)}
+                    disabled={selectedNodeRun?.status === "queued" || selectedNodeRun?.status === "running"}
+                  >
+                    {selectedNodeRun?.status === "queued" || selectedNodeRun?.status === "running" ? (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    ) : (
+                      <Play className="mr-2 h-4 w-4" />
+                    )}
+                    {selectedNodeRun?.status === "queued" || selectedNodeRun?.status === "running"
+                      ? "Generating this step…"
+                      : "Run this step"}
+                    {selectedNodeRun?.estimatedCredits ? ` · ≈ ${selectedNodeRun.estimatedCredits} credits` : ""}
                   </Button>
                 ) : null}
                 <Button type="button" className="w-full" onClick={() => void saveNode()} disabled={savingNode}>
