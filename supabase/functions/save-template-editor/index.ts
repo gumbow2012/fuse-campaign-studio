@@ -11,7 +11,14 @@ import { uploadTemplateReferenceAsset } from "../_shared/template-assets.ts";
 
 const VERTICAL_VIDEO_ASPECT_RATIO = "9:16";
 const MAX_VIDEO_DURATION_SECONDS = 5;
-const VIDEO_MODEL_KEYS = ["kling-2.5", "seedance-2.0", "seedance-2.0-fast"] as const;
+const VIDEO_MODEL_KEYS = [
+  "kling-3.0-pro",
+  "kling-3.0-standard",
+  "kling-2.5",
+  "seedance-2.0",
+  "seedance-2.0-fast",
+] as const;
+const DEFAULT_VIDEO_MODEL_KEY = "kling-3.0-pro";
 const SEEDANCE_RESOLUTIONS = ["480p", "720p", "1080p", "4k"];
 const SEEDANCE_ASPECT_RATIOS = ["9:16", "16:9", "1:1", "4:3", "3:4", "21:9"];
 
