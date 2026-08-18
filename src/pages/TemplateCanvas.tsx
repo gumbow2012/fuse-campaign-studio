@@ -2844,197 +2844,87 @@ const TemplateCanvas = () => {
           </div>
         </section>
 
+        <div className="grid min-w-0 grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1fr)_400px]">
         <section className="min-w-0 rounded-3xl border border-border/50 bg-card/70 p-4 shadow-sm">
-          <div className="flex flex-wrap items-center justify-between gap-4 px-2 pb-4">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">Canvas</p>
-              <h2 className="mt-2 text-2xl font-bold">{detail?.templateName ?? "Loading..."}</h2>
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
-              {[
-                ["Nodes", graphSummary.nodes],
-                ["Edges", graphSummary.edges],
-                ["Inputs", graphSummary.uploads],
-                ["Refs", graphSummary.references],
-                ["Outputs", graphSummary.outputs],
-              ].map(([label, value]) => (
-                <span key={label} className="rounded-full border border-border/60 bg-background/70 px-3 py-1 text-xs text-muted-foreground">
-                  <span className="font-semibold text-foreground">{value}</span> {label}
-                </span>
-              ))}
-              <div className="flex items-center rounded-full border border-border/60 bg-background/70 p-1">
-                <Button type="button" variant="ghost" size="icon" className="h-7 w-7 rounded-full" onClick={() => zoomCanvas(-0.1)} title="Zoom out">
-                  <Minus className="h-3.5 w-3.5" />
-                </Button>
-                <Button type="button" variant="ghost" size="sm" className="h-7 rounded-full px-2 text-xs" onClick={resetZoom} title="Reset zoom">
-                  {Math.round(canvasZoom * 100)}%
-                </Button>
-                <Button type="button" variant="ghost" size="icon" className="h-7 w-7 rounded-full" onClick={() => zoomCanvas(0.1)} title="Zoom in">
-                  <Plus className="h-3.5 w-3.5" />
-                </Button>
-                <Button type="button" variant="ghost" size="icon" className="h-7 w-7 rounded-full" onClick={fitCanvas} title="Fit view">
-                  <Maximize2 className="h-3.5 w-3.5" />
-                </Button>
+          <div className="flex flex-col gap-3 px-1 pb-4">
+            <div className="flex flex-wrap items-end justify-between gap-3">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">Canvas</p>
+                <h2 className="mt-1 text-2xl font-bold">{detail?.templateName ?? "Loading..."}</h2>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Drag steps to arrange them. Drag from a dot on the right of a card to a dot on the left of another to connect them.
+                </p>
               </div>
+              <div className="flex flex-wrap items-center gap-2">
+                {[
+                  ["Steps", graphSummary.nodes],
+                  ["Links", graphSummary.edges],
+                  ["Inputs", graphSummary.uploads],
+                  ["Results", graphSummary.outputs],
+                ].map(([label, value]) => (
+                  <span key={label} className="rounded-full border border-border/60 bg-background/70 px-3 py-1 text-xs text-muted-foreground">
+                    <span className="font-semibold text-foreground">{value}</span> {label}
+                  </span>
+                ))}
+                {loadingDetail ? <Loader2 className="h-5 w-5 animate-spin text-primary" /> : null}
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Add step</span>
+              <Button type="button" variant="outline" size="sm" className="rounded-full" disabled={!detail || !!mutating} onClick={() => void addNode("upload")}>
+                <Upload className="mr-1.5 h-3.5 w-3.5" />
+                Input
+              </Button>
+              <Button type="button" variant="outline" size="sm" className="rounded-full" disabled={!detail || !!mutating} onClick={() => void addNode("image_gen")}>
+                <ImageIcon className="mr-1.5 h-3.5 w-3.5" />
+                Image
+              </Button>
+              <Button type="button" variant="outline" size="sm" className="rounded-full" disabled={!detail || !!mutating} onClick={() => void addNode("video_gen")}>
+                <Film className="mr-1.5 h-3.5 w-3.5" />
+                Video
+              </Button>
+              <span className="mx-1 hidden h-5 w-px bg-border/60 sm:block" />
+              <Button type="button" variant="ghost" size="sm" className="rounded-full" disabled={!detail} onClick={resetLayout}>
+                <GitBranch className="mr-1.5 h-3.5 w-3.5" />
+                Auto-layout
+              </Button>
+              <Button type="button" variant="ghost" size="sm" className="rounded-full" disabled={!detail} onClick={saveLayout}>
+                <Save className="mr-1.5 h-3.5 w-3.5" />
+                Save layout
+              </Button>
               <Button
                 type="button"
-                variant={showInternalNodes ? "default" : "outline"}
+                variant={showInternalNodes ? "default" : "ghost"}
                 size="sm"
                 className="rounded-full"
                 onClick={() => setShowInternalNodes((current) => !current)}
               >
-                {showInternalNodes ? "Hide Internals" : "Show Internals"}
+                <EyeOff className="mr-1.5 h-3.5 w-3.5" />
+                {showInternalNodes ? "Hide guides" : "Show guides"}
               </Button>
-              {loadingDetail ? <Loader2 className="h-5 w-5 animate-spin text-primary" /> : null}
-            </div>
-          </div>
-          <div
-            ref={scrollRef}
-            className={`h-[min(72vh,760px)] min-h-[520px] overflow-auto rounded-3xl border border-border/50 bg-background/60 ${isPanning ? "cursor-grabbing" : "cursor-default"}`}
-            onPointerDown={startCanvasPan}
-            onPointerMove={moveCanvasPan}
-            onPointerUp={endCanvasPan}
-            onPointerCancel={endCanvasPan}
-            onPointerLeave={endCanvasPan}
-          >
-            <div className="relative" style={{ width: canvasSize.width * canvasZoom, height: canvasSize.height * canvasZoom }}>
-              <div
-                className="absolute left-0 top-0"
-                style={{
-                  width: canvasSize.width,
-                  height: canvasSize.height,
-                  transform: `scale(${canvasZoom})`,
-                  transformOrigin: "top left",
-                }}
+              <Button
+                type="button"
+                size="sm"
+                className="rounded-full"
+                disabled={!detail || startingRun}
+                onClick={() => { setShowRunnerPanel(true); void handleRun(); }}
               >
-              <div
-                className="pointer-events-none absolute inset-0 opacity-70"
-                style={{
-                  backgroundImage:
-                    "linear-gradient(rgba(255,255,255,0.035) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.035) 1px, transparent 1px)",
-                  backgroundSize: "32px 32px",
-                }}
-              />
-
-              {(showInternalNodes ? LANE_KEYS : LANE_KEYS.filter((lane) => lane !== "references")).map((lane, laneIndex) => {
-                const left = CANVAS_PADDING_X + laneIndex * LANE_GAP - 28;
-                return (
-                  <div
-                    key={lane}
-                    className={`pointer-events-none absolute top-6 rounded-3xl border ${LANE_STYLES[lane]}`}
-                    style={{
-                      left,
-                      width: LANE_WIDTH,
-                      height: canvasSize.height - 56,
-                    }}
-                  >
-                    <div className="sticky top-0 z-10 rounded-t-3xl border-b border-white/10 bg-background/85 px-4 py-3 backdrop-blur">
-                      <div className="flex items-center justify-between gap-3">
-                        <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-foreground">
-                          {LANE_LABELS[lane]}
-                        </p>
-                        <span className="rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[10px] text-muted-foreground">
-                          {laneStats.get(lane) ?? 0}
-                        </span>
-                      </div>
-                      <p className="mt-1 text-[11px] text-muted-foreground">{LANE_DESCRIPTIONS[lane]}</p>
-                    </div>
-                  </div>
-                );
-              })}
-
-              {canvasEdgeVisibility.hiddenCount > 0 ? (
-                <div className="pointer-events-none absolute right-6 top-6 z-20 rounded-full border border-white/10 bg-background/80 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground shadow-lg backdrop-blur">
-                  {canvasEdgeVisibility.edges.length}/{canvasEdgeVisibility.total} links visible
-                </div>
-              ) : null}
-
-              {/* Edge target params stay out of the canvas; exact mappings live in the inspector. */}
-              <svg className="pointer-events-none absolute inset-0 h-full w-full" width={canvasSize.width} height={canvasSize.height} aria-hidden="true">
-                {canvasEdgeVisibility.edges.map(({ key, source, target, isFocused }) => {
-                    const from = { x: source.position.x + NODE_WIDTH, y: source.position.y + NODE_HEIGHT / 2 };
-                    const to = { x: target.position.x, y: target.position.y + NODE_HEIGHT / 2 };
-                    const path = curve(from, to);
-                    const haloStroke = isFocused ? "rgba(34,211,238,0.22)" : "rgba(34,211,238,0.07)";
-                    const lineStroke = isFocused ? "rgba(125,211,252,0.74)" : "rgba(125,211,252,0.22)";
-                    return (
-                      <g key={key}>
-                        <path d={path} fill="none" stroke={haloStroke} strokeWidth={isFocused ? "7" : "5"} strokeLinecap="round" />
-                        <path d={path} fill="none" stroke={lineStroke} strokeWidth={isFocused ? "2.25" : "1.5"} strokeLinecap="round" />
-                      </g>
-                    );
-                  })}
-              </svg>
-
-              {graphNodes.map((node) => (
-                <div
-                  data-node-card
-                  key={node.id}
-                  className={`absolute rounded-2xl border p-4 shadow-xl transition ${
-                    selectedNode?.id === node.id
-                      ? "border-cyan-300/70 bg-cyan-300/[0.12] shadow-cyan-950/30"
-                      : "border-border/60 bg-card/95 shadow-black/20"
-                  } ${draggingId === node.id ? "scale-[1.01] shadow-primary/30" : ""}`}
-                  style={{
-                    left: node.position.x,
-                    top: node.position.y,
-                    width: NODE_WIDTH,
-                    minHeight: NODE_HEIGHT,
-                  }}
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <button type="button" className="min-w-0 flex-1 text-left" onClick={() => setSelectedNodeId(node.id)}>
-                      <div className="flex items-center gap-2">
-                        <span className="flex h-6 min-w-6 items-center justify-center rounded-md border border-primary/40 bg-primary/10 px-1.5 text-xs font-bold text-primary">
-                          {node.nodeNumber ?? "?"}
-                        </span>
-                        {node.outputNumber ? (
-                          <span className="rounded-md border border-emerald-400/40 bg-emerald-400/10 px-1.5 py-0.5 text-[10px] font-bold uppercase text-emerald-200">
-                            Out {node.outputNumber}
-                          </span>
-                        ) : null}
-                      </div>
-                      <p className="mt-2 line-clamp-2 font-semibold leading-tight">{node.name}</p>
-                      <p className="mt-1 text-[11px] uppercase tracking-[0.15em] text-muted-foreground">{LANE_LABELS[laneForNode(node)]}</p>
-                    </button>
-                    <button
-                      type="button"
-                      onPointerDown={(event) => startDrag(node.id, event)}
-                      className="cursor-grab rounded-full border border-border/40 p-2 text-muted-foreground transition hover:border-primary/50 hover:text-foreground active:cursor-grabbing"
-                      aria-label={`Move ${node.name}`}
-                    >
-                      <Move className="h-3.5 w-3.5" />
-                    </button>
-                  </div>
-
-                  {node.defaultAssetUrl ? (
-                    <img src={node.defaultAssetUrl} alt={node.name} className="mt-3 h-24 w-full rounded-2xl border border-border/50 bg-background object-contain" />
-                  ) : null}
-
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    <span className="rounded-full border border-border/50 px-2 py-1 text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
-                      {nodeKindLabel(node)}
-                    </span>
-                    {typeof node.editor?.outputExposed === "boolean" ? (
-                      <span className={`rounded-full border px-2 py-1 text-[10px] uppercase tracking-[0.12em] ${node.editor.outputExposed ? "border-primary/40 text-primary" : "border-border/50 text-muted-foreground"}`}>
-                        {node.editor.outputExposed ? "Deliverable" : "Internal"}
-                      </span>
-                    ) : null}
-                  </div>
-
-                  <div className="mt-3 rounded-xl border border-border/50 bg-background/65 p-3">
-                    <div className="flex items-center justify-between gap-2">
-                      <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Prompt</p>
-                      <span className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground">{node.incoming.length} in</span>
-                    </div>
-                    <p className="mt-1 line-clamp-3 text-xs leading-relaxed text-foreground/85">{promptPreview(node)}</p>
-                  </div>
-                  <p className="mt-2 line-clamp-1 text-[11px] text-muted-foreground">Source: {sourcePreview(node)}</p>
-                </div>
-              ))}
-              </div>
+                {startingRun ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="mr-1.5 h-3.5 w-3.5" />}
+                Test run
+              </Button>
             </div>
           </div>
+
+          <GraphCanvas
+            nodes={flowNodes}
+            edges={flowEdges}
+            selectedNodeId={selectedNode?.id ?? null}
+            onSelectNode={setSelectedNodeId}
+            onNodeMoved={handleCanvasNodeMoved}
+            onConnectNodes={(source, target) => void connectNodesOnCanvas(source, target)}
+            onDeleteEdge={(edgeId) => void deleteEdge(edgeId)}
+          />
         </section>
 
         <aside className="w-full rounded-3xl border border-border/50 bg-card/70 p-5 shadow-sm">
