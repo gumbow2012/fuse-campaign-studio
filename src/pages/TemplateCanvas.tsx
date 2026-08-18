@@ -1476,130 +1476,27 @@ const TemplateCanvas = () => {
     }
     setMutating("create-template");
     try {
-      const inputSlotIds = newTemplateInputSlots.map((slot) => slot.id);
-      const preparedReferences = newTemplateReferences.map((reference, index) => {
-        const inputSlotIndex = resolveTemplateBranchInputIndex(inputSlotIds, reference.inputSlotId, index);
-        const resolvedSlot = newTemplateInputSlots[inputSlotIndex] ?? newTemplateInputSlots[0];
-        const resolvedOption = inputSlotOption(resolvedSlot?.slotKey ?? reference.inputSlotKey);
-        return {
-          branchIndex: index,
-          label: reference.label,
-          prompt: reference.prompt,
-          inputSlotKey: resolvedOption.key,
-          inputSlotIndex,
-          imagePrompt: reference.imagePrompt,
-          videoPrompt: reference.videoPrompt,
-          file: reference.file,
-        };
-      });
-      const referenceAssets = preparedReferences.map((reference) => ({
-        label: reference.label,
-        prompt: reference.prompt,
-        inputSlotKey: reference.inputSlotKey,
-        inputSlotIndex: reference.inputSlotIndex,
-        imagePrompt: reference.imagePrompt,
-        videoPrompt: reference.videoPrompt,
-        file: null,
-      }));
-      const inputSlots = newTemplateInputSlots.map((slot) => {
-        const option = inputSlotOption(slot.slotKey);
-        return {
-          key: option.key,
-          label: option.label,
-          expected: option.expected,
-          targetParam: option.targetParam,
-        };
-      });
       const data = await invokeWorkbench({
         action: "create_template",
         name,
         description: newTemplateDescription,
-        previewFile: newTemplateCoverFile
-          ? {
-              filename: newTemplateCoverFile.name,
-              dataUrl: await fileToDataUrl(newTemplateCoverFile),
-            }
-          : null,
-        withStarterGraph: true,
-        starterPreset: "reference",
-        inputSlots,
-        outputCount: newTemplateReferences.length,
-        referenceAssets,
+        previewFile: null,
+        withStarterGraph: false,
       });
       const versionId = typeof data.versionId === "string" ? data.versionId : null;
       if (!versionId) throw new Error("Template created but the workbench did not return a version id");
 
-      const createdReferenceAssets = Array.isArray(data.referenceAssets)
-        ? data.referenceAssets as Array<Record<string, unknown>>
-        : [];
-      const uploadFailures: string[] = [];
-      for (const reference of preparedReferences) {
-        if (!reference.file) continue;
-
-        const createdReference = createdReferenceAssets.find((item) =>
-          item && typeof item === "object" && Number(item.branchIndex) === reference.branchIndex,
-        ) ?? createdReferenceAssets[reference.branchIndex];
-        const nodeId = createdReference && typeof createdReference.nodeId === "string"
-          ? createdReference.nodeId
-          : null;
-        if (!nodeId) {
-          uploadFailures.push(reference.label || `Step ${reference.branchIndex + 1}`);
-          continue;
-        }
-
-        try {
-          const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/save-template-editor`, {
-            method: "POST",
-            headers: {
-              ...(await buildAuthHeaders()),
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              versionId,
-              nodeId,
-              displayLabel: reference.label,
-              expected: "image",
-              editorMode: "reference",
-              slotKey: `reference-${reference.branchIndex + 1}`,
-              referenceFile: {
-                filename: reference.file.name,
-                dataUrl: await fileToDataUrl(reference.file),
-              },
-            }),
-          });
-          const uploadData = await response.json().catch(() => ({}));
-          if (!response.ok) throw new Error(uploadData?.error ?? `Reference upload failed (${response.status})`);
-        } catch {
-          uploadFailures.push(reference.label || `Step ${reference.branchIndex + 1}`);
-        }
-      }
       setNewTemplateName("");
       setNewTemplateDescription("");
       handleNewTemplateCoverFile(null);
-      setTemplateWizardStep("setup");
-      const resetSlots = createDefaultTemplateInputSlots();
-      setNewTemplateInputSlots(resetSlots);
-      setNewTemplateReferences((current) => {
-        current.forEach((reference) => {
-          if (reference.previewUrl?.startsWith("blob:")) URL.revokeObjectURL(reference.previewUrl);
-        });
-        return resetSlots.map((slot, index) => createTemplateReferenceDraft(index, slot));
-      });
+      setSelectedNodeId(null);
       setShowRunnerPanel(true);
       setPhase("idle");
       setJob(null);
       setJobId(null);
       setError(null);
       await refreshAfterMutation(versionId);
-      if (uploadFailures.length) {
-        toast({
-          title: "Template created; guide uploads need attention",
-          description: `${uploadFailures.length} hidden guide image${uploadFailures.length === 1 ? "" : "s"} did not attach. Re-upload them from the inspector.`,
-          variant: "destructive",
-        });
-      } else {
-        toast({ title: "Template created", description: `${name} v1 is in testing. Run it once before publishing.` });
-      }
+      toast({ title: "Blank canvas created", description: `${name} v1 is empty. Add steps from the palette.` });
     } catch (createError) {
       const message = createError instanceof Error ? createError.message : "Could not create template";
       toast({ title: "Create failed", description: message, variant: "destructive" });
@@ -1607,16 +1504,14 @@ const TemplateCanvas = () => {
       setMutating(null);
     }
   }, [
-    buildAuthHeaders,
     invokeWorkbench,
     handleNewTemplateCoverFile,
     newTemplateDescription,
-    newTemplateCoverFile,
-    newTemplateInputSlots,
     newTemplateName,
-    newTemplateReferences,
     refreshAfterMutation,
   ]);
+
+
 
   const cloneCurrentVersion = useCallback(async (asNewTemplate: boolean) => {
     if (!detail) return;
