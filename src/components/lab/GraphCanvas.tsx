@@ -23,7 +23,7 @@ import {
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 
-import { Film, Image as ImageIcon, Loader2, Play, Plus, Upload } from "lucide-react";
+import { Film, Image as ImageIcon, Loader2, Play, Plus, Upload, X } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 export type PortType = "prompt" | "image" | "video";
