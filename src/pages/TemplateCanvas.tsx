@@ -3189,9 +3189,9 @@ const TemplateCanvas = () => {
           </div>
 
 
-          <div className="rounded-2xl border border-border/50 bg-card/70 p-4 text-sm shadow-sm xl:col-span-4">
+          <div className="rounded-2xl border border-border/60 bg-card/80 p-4 text-sm shadow-sm xl:col-span-6">
             <div className="flex items-center justify-between gap-3">
-              <p className="text-xs font-semibold uppercase tracking-[0.15em] text-muted-foreground">Readiness</p>
+              <p className="text-xs font-semibold uppercase tracking-[0.15em] text-foreground/80">Readiness</p>
               <span className={`rounded-full border px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] ${graphValidation.ready ? "border-emerald-400/40 text-emerald-200" : "border-amber-400/40 text-amber-200"}`}>
                 {graphValidation.ready ? "Ready" : `${graphValidation.issues.length} issue${graphValidation.issues.length === 1 ? "" : "s"}`}
               </span>
