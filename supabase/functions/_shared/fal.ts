@@ -375,3 +375,13 @@ export function buildVideoModelInput(
   };
 }
 
+
+export function videoFallbackUsdPerSecond(
+  model: VideoModelDefinition,
+  generateAudio?: boolean | null,
+) {
+  if (model.family === "kling3") {
+    return generateAudio === false ? KLING3_USD_PER_SECOND : KLING3_USD_PER_SECOND_AUDIO;
+  }
+  return model.fallbackUsdPerSecond;
+}
