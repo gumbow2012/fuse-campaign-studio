@@ -1997,101 +1997,120 @@ const TemplateCanvas = () => {
 
   return (
     <SiteShell>
-      <div className="mx-auto flex w-full min-w-0 max-w-[1900px] flex-col gap-5 overflow-x-hidden px-4 py-6 sm:px-5 xl:px-8">
-
-        <div className="grid min-w-0 grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1fr)_400px]">
-        <section className="min-w-0 rounded-3xl border border-border/50 bg-card/70 p-4 shadow-sm">
-          <div className="flex flex-col gap-3 px-1 pb-4">
-            <div className="flex flex-wrap items-end justify-between gap-3">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">Canvas</p>
-                <h2 className="mt-1 text-2xl font-bold">{detail?.templateName ?? "Loading..."}</h2>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  Drag steps to arrange them. Drag from a dot on the right of a card to a dot on the left of another to connect them.
-                </p>
-              </div>
-              <div className="flex flex-wrap items-center gap-2">
-                {[
-                  ["Steps", graphSummary.nodes],
-                  ["Links", graphSummary.edges],
-                  ["Inputs", graphSummary.uploads],
-                  ["Results", graphSummary.outputs],
-                ].map(([label, value]) => (
-                  <span key={label} className="rounded-full border border-border/60 bg-background/70 px-3 py-1 text-xs text-muted-foreground">
-                    <span className="font-semibold text-foreground">{value}</span> {label}
-                  </span>
-                ))}
-                {loadingDetail ? <Loader2 className="h-5 w-5 animate-spin text-primary" /> : null}
-              </div>
-            </div>
-
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Palette</span>
-              <Button type="button" variant="outline" size="sm" className="rounded-full" disabled={!detail || !!mutating} onClick={() => void addNode("upload")}>
-                <Upload className="mr-1.5 h-3.5 w-3.5" />
-                Input
-              </Button>
-              <Button type="button" variant="outline" size="sm" className="rounded-full" disabled={!detail || !!mutating} onClick={() => void addNode("image_gen")}>
-                <ImageIcon className="mr-1.5 h-3.5 w-3.5" />
-                Image
-              </Button>
-              <Button type="button" variant="outline" size="sm" className="rounded-full" disabled={!detail || !!mutating} onClick={() => void addNode("video_gen", paletteVideoModel)}>
-                <Film className="mr-1.5 h-3.5 w-3.5" />
-                Video
-              </Button>
-              <select
-                value={paletteVideoModel}
-                onChange={(event) => setPaletteVideoModel(event.target.value as VideoModelKey)}
-                className="h-8 rounded-full border border-border bg-background px-3 text-xs"
-                aria-label="Video model for new video steps"
-              >
-                {VIDEO_MODEL_OPTIONS.map((option) => (
-                  <option key={option.key} value={option.key}>{option.label}</option>
-                ))}
-              </select>
-
-              <span className="mx-1 hidden h-5 w-px bg-border/60 sm:block" />
-              <Button type="button" variant="ghost" size="sm" className="rounded-full" disabled={!detail} onClick={resetLayout}>
-                <GitBranch className="mr-1.5 h-3.5 w-3.5" />
-                Auto-layout
-              </Button>
-              <Button type="button" variant="ghost" size="sm" className="rounded-full" disabled={!detail} onClick={saveLayout}>
-                <Save className="mr-1.5 h-3.5 w-3.5" />
-                Save layout
-              </Button>
-              <Button
-                type="button"
-                variant={showInternalNodes ? "default" : "ghost"}
-                size="sm"
-                className="rounded-full"
-                onClick={() => setShowInternalNodes((current) => !current)}
-              >
-                <EyeOff className="mr-1.5 h-3.5 w-3.5" />
-                {showInternalNodes ? "Hide guides" : "Show guides"}
-              </Button>
-              <Button
-                type="button"
-                size="sm"
-                className="rounded-full"
-                disabled={!detail || startingRun}
-                onClick={() => { setShowRunnerPanel(true); void handleRun(); }}
-              >
-                {startingRun ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="mr-1.5 h-3.5 w-3.5" />}
-                Test run
-              </Button>
-            </div>
+      <div className="mx-auto flex w-full min-w-0 max-w-[2100px] flex-col gap-3 overflow-x-hidden px-3 py-3 sm:px-4">
+        <div className="flex min-w-0 flex-wrap items-center justify-between gap-3 rounded-2xl border border-border/50 bg-card/70 px-4 py-2.5 shadow-sm">
+          <div className="flex min-w-0 items-center gap-3">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">Canvas</p>
+            <h1 className="truncate text-lg font-bold">{detail?.templateName ?? "Loading..."}</h1>
+            {loadingDetail ? <Loader2 className="h-4 w-4 animate-spin text-primary" /> : null}
+            <span className="hidden items-center gap-2 md:flex">
+              {[
+                ["Steps", graphSummary.nodes],
+                ["Links", graphSummary.edges],
+                ["Inputs", graphSummary.uploads],
+                ["Results", graphSummary.outputs],
+              ].map(([label, value]) => (
+                <span key={label} className="rounded-full border border-border/60 bg-background/70 px-2.5 py-0.5 text-[11px] text-muted-foreground">
+                  <span className="font-semibold text-foreground">{value}</span> {label}
+                </span>
+              ))}
+            </span>
           </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button type="button" variant="ghost" size="sm" className="rounded-full" disabled={!detail} onClick={resetLayout}>
+              <GitBranch className="mr-1.5 h-3.5 w-3.5" />
+              Auto-layout
+            </Button>
+            <Button type="button" variant="ghost" size="sm" className="rounded-full" disabled={!detail} onClick={saveLayout}>
+              <Save className="mr-1.5 h-3.5 w-3.5" />
+              Save
+            </Button>
+            <Button
+              type="button"
+              variant={showInternalNodes ? "default" : "ghost"}
+              size="sm"
+              className="rounded-full"
+              onClick={() => setShowInternalNodes((current) => !current)}
+            >
+              <EyeOff className="mr-1.5 h-3.5 w-3.5" />
+              {showInternalNodes ? "Hide guides" : "Show guides"}
+            </Button>
+            <Button
+              type="button"
+              variant={showSettingsPanel ? "default" : "ghost"}
+              size="sm"
+              className="rounded-full"
+              onClick={() => setShowSettingsPanel((current) => !current)}
+            >
+              {showSettingsPanel ? "Hide settings" : "Settings"}
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              className="rounded-full"
+              disabled={!detail || startingRun}
+              onClick={() => { setShowSettingsPanel(true); setShowRunnerPanel(true); void handleRun(); }}
+            >
+              {startingRun ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="mr-1.5 h-3.5 w-3.5" />}
+              Test run
+            </Button>
+          </div>
+        </div>
 
-          <GraphCanvas
-            nodes={flowNodes}
-            edges={flowEdges}
-            selectedNodeId={selectedNode?.id ?? null}
-            onSelectNode={setSelectedNodeId}
-            onNodeMoved={handleCanvasNodeMoved}
-            onConnectNodes={(source, target) => void connectNodesOnCanvas(source, target)}
-            onDeleteEdge={(edgeId) => void deleteEdge(edgeId)}
-          />
-        </section>
+        <div className="grid min-w-0 grid-cols-1 gap-3 xl:grid-cols-[76px_minmax(0,1fr)_380px]">
+          <aside className="flex min-w-0 flex-row gap-2 overflow-x-auto rounded-2xl border border-border/50 bg-card/70 p-2 shadow-sm xl:flex-col xl:overflow-visible">
+            <Input
+              value={paletteSearch}
+              onChange={(event) => setPaletteSearch(event.target.value)}
+              placeholder="Search"
+              className="h-8 w-28 rounded-xl text-xs xl:w-full"
+              aria-label="Search nodes"
+            />
+            {[
+              { key: "input", label: "Input", icon: Upload, onClick: () => void addNode("upload"), disabled: !detail || !!mutating, hint: "Add an upload input" },
+              { key: "image", label: "Image", icon: ImageIcon, onClick: () => void addNode("image_gen"), disabled: !detail || !!mutating, hint: "Add a nano-banana-pro image step" },
+              { key: "video", label: "Video", icon: Film, onClick: () => void addNode("video_gen", paletteVideoModel), disabled: !detail || !!mutating, hint: `Add a ${resolveVideoModelOption(paletteVideoModel).label} step` },
+              { key: "prompt", label: "Prompt", icon: Type, onClick: () => {}, disabled: true, hint: "coming soon" },
+            ]
+              .filter((item) => item.label.toLowerCase().includes(paletteSearch.trim().toLowerCase()))
+              .map((item) => (
+                <button
+                  key={item.key}
+                  type="button"
+                  title={item.hint}
+                  disabled={item.disabled}
+                  onClick={item.onClick}
+                  className="flex min-w-[60px] flex-col items-center gap-1 rounded-xl border border-border/60 bg-background/60 px-2 py-2 text-[10px] font-semibold uppercase tracking-[0.1em] text-muted-foreground transition hover:border-primary/50 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <item.icon className="h-4 w-4" />
+                  {item.label}
+                </button>
+              ))}
+            <select
+              value={paletteVideoModel}
+              onChange={(event) => setPaletteVideoModel(event.target.value as VideoModelKey)}
+              className="h-8 w-28 rounded-xl border border-border bg-background px-2 text-[10px] xl:w-full"
+              aria-label="Video model for new video steps"
+            >
+              {VIDEO_MODEL_OPTIONS.map((option) => (
+                <option key={option.key} value={option.key}>{option.label}</option>
+              ))}
+            </select>
+          </aside>
+
+          <section className="min-w-0">
+            <GraphCanvas
+              nodes={flowNodes}
+              edges={flowEdges}
+              selectedNodeId={selectedNode?.id ?? null}
+              onSelectNode={setSelectedNodeId}
+              onNodeMoved={handleCanvasNodeMoved}
+              onConnectNodes={(source, target) => void connectNodesOnCanvas(source, target)}
+              onDeleteEdge={(edgeId) => void deleteEdge(edgeId)}
+              className="h-[calc(100vh-9.5rem)] min-h-[520px]"
+            />
+          </section>
+
 
         <aside className="w-full min-w-0 self-start rounded-3xl border border-border/50 bg-card/70 p-5 shadow-sm xl:sticky xl:top-4 xl:max-h-[calc(100vh-2rem)] xl:overflow-y-auto">
           <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">Inspector</p>
