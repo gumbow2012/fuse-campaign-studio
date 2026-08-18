@@ -36,7 +36,7 @@ describe("template canvas editor contract", () => {
   it("exposes incoming edge delete, drag reorder, and priority controls in the inspector", () => {
     const canvasSource = source();
 
-    expect(canvasSource).toContain("Incoming Priority");
+    expect(canvasSource).toContain("Connection order");
     expect(canvasSource).toContain("Move incoming earlier");
     expect(canvasSource).toContain("Move incoming later");
     expect(canvasSource).toContain("Delete incoming connection");

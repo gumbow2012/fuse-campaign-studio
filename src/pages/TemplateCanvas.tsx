@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Copy, EyeOff, Film, GitBranch, Image as ImageIcon, Loader2, Maximize2, Minus, Move, Plus, RefreshCw, Save, Trash2, Type, Upload } from "lucide-react";
+import { CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Copy, EyeOff, Film, GitBranch, Image as ImageIcon, Loader2, Maximize2, Minus, Move, Play, Plus, RefreshCw, Save, Search, Trash2, Type, Upload, X } from "lucide-react";
 import { Link, useSearchParams } from "react-router-dom";
 import SiteShell from "@/components/mvp/SiteShell";
 import GraphCanvas, { PORT_COLOR, type GraphCanvasNode, type GraphCanvasNodeData, type PortType } from "@/components/lab/GraphCanvas";
@@ -303,6 +303,21 @@ const LANE_HEADER_HEIGHT = 62;
 const MAX_VISIBLE_CANVAS_EDGES = 24;
 const LAYOUT_PREFIX = "fuse-template-canvas-layout-v1";
 const LANE_KEYS = ["uploads", "references", "images", "videos", "other"] as const;
+function portIdsForNode(
+  nodeId: string,
+  kind: GraphCanvasNodeData["kind"],
+  incomingParams: Array<string | null | undefined>,
+  extras: string[],
+): string[] {
+  if (kind !== "image" && kind !== "video") return [];
+  const base = kind === "video" ? ["prompt", "start_frame_image"] : ["prompt", "image_1"];
+  const ordered: string[] = [];
+  for (const id of [...base, ...incomingParams.map((param) => (param ?? "").trim().toLowerCase()).filter(Boolean), ...extras]) {
+    if (!ordered.includes(id)) ordered.push(id);
+  }
+  return ordered;
+}
+
 const LANE_LABELS: Record<(typeof LANE_KEYS)[number], string> = {
   uploads: "User Uploads",
   references: "Hidden References",
@@ -518,10 +533,36 @@ const TemplateCanvas = () => {
   const [paletteVideoModel, setPaletteVideoModel] = useState<VideoModelKey>("kling-3.0-pro");
   const [paletteSearch, setPaletteSearch] = useState("");
   const [showSettingsPanel, setShowSettingsPanel] = useState(false);
-  const [imagePortCounts, setImagePortCounts] = useState<Record<string, number>>({});
-  const handleAddImagePort = useCallback((nodeId: string) => {
-    setImagePortCounts((current) => ({ ...current, [nodeId]: Math.min(8, (current[nodeId] ?? 2) + 1) }));
-  }, []);
+  const [extraPorts, setExtraPorts] = useState<Record<string, string[]>>({});
+  const handleAddPort = useCallback((nodeId: string, type: PortType) => {
+    setExtraPorts((current) => {
+      const existing = current[nodeId] ?? [];
+      const graphNode = detail?.nodes.find((node) => node.id === nodeId);
+      const used = new Set<string>([
+        ...existing,
+        ...(graphNode?.incoming ?? []).map((incoming) => (incoming.targetParam ?? "").toLowerCase()),
+        ...(graphNode?.nodeType === "video_gen" ? ["prompt", "start_frame_image"] : ["prompt", "image_1"]),
+      ]);
+      let nextId = "";
+      if (type === "prompt") {
+        nextId = used.has("negative_prompt") ? "" : "negative_prompt";
+      } else if (type === "image") {
+        if (graphNode?.nodeType === "video_gen" && !used.has("end_frame_image")) {
+          nextId = "end_frame_image";
+        } else {
+          for (let index = 1; index <= 12; index += 1) {
+            if (!used.has(`image_${index}`)) { nextId = `image_${index}`; break; }
+          }
+        }
+      } else {
+        for (let index = 1; index <= 12; index += 1) {
+          if (!used.has(`video_${index}`)) { nextId = `video_${index}`; break; }
+        }
+      }
+      if (!nextId) return current;
+      return { ...current, [nodeId]: [...existing, nextId] };
+    });
+  }, [detail]);
   const [draggingEdgeIndex, setDraggingEdgeIndex] = useState<number | null>(null);
   const [edgeDraft, setEdgeDraft] = useState({ sourceNodeId: "", targetNodeId: "", targetParam: "" });
   const [referenceUploadFile, setReferenceUploadFile] = useState<File | null>(null);
@@ -1796,11 +1837,12 @@ const TemplateCanvas = () => {
     }
   }, [detail, invokeWorkbench, refreshAfterMutation]);
 
-  const connectNodesOnCanvas = useCallback(async (sourceNodeId: string, targetNodeId: string) => {
+  const connectNodesOnCanvas = useCallback(async (sourceNodeId: string, targetNodeId: string, targetHandleId?: string | null) => {
     if (!detail) return;
     const sourceNode = detail.nodes.find((node) => node.id === sourceNodeId);
     const targetNode = detail.nodes.find((node) => node.id === targetNodeId);
-    const targetParam = inferEdgeTargetParam(sourceNode, targetNode, targetNode?.incoming.length ?? 0);
+    const handleParam = (targetHandleId ?? "").trim().toLowerCase();
+    const targetParam = handleParam || inferEdgeTargetParam(sourceNode, targetNode, targetNode?.incoming.length ?? 0);
     setMutating("add-edge");
     try {
       await invokeWorkbench({
@@ -1876,11 +1918,11 @@ const TemplateCanvas = () => {
         assetUrl: node.defaultAssetUrl,
         expected: node.editor?.expected ?? node.expected ?? null,
         deliverable: typeof node.editor?.outputExposed === "boolean" ? node.editor.outputExposed : null,
-        imagePortCount: Math.max(2, imagePortCounts[node.id] ?? 2, node.incoming.length),
-        onAddImagePort: handleAddImagePort,
+        portIds: portIdsForNode(node.id, kind, node.incoming.map((incoming) => incoming.targetParam), extraPorts[node.id] ?? []),
+        onAddPort: handleAddPort,
       },
     };
-  }), [graphNodes, imagePortCounts, handleAddImagePort]);
+  }), [graphNodes, extraPorts, handleAddPort]);
 
   const flowEdges = useMemo(() => graphNodes.flatMap((target) =>
     target.incoming.flatMap((incoming, index) => {
@@ -2050,45 +2092,61 @@ const TemplateCanvas = () => {
           </div>
         </div>
 
-        <div className={`grid min-w-0 grid-cols-1 gap-3 ${selectedNode ? "xl:grid-cols-[76px_minmax(0,1fr)_380px]" : "xl:grid-cols-[76px_minmax(0,1fr)]"}`}>
-          <aside className="flex min-w-0 flex-row gap-2 overflow-x-auto rounded-2xl border border-border/50 bg-card/70 p-2 shadow-sm xl:flex-col xl:overflow-visible">
-            <Input
-              value={paletteSearch}
-              onChange={(event) => setPaletteSearch(event.target.value)}
-              placeholder="Search"
-              className="h-8 w-28 rounded-xl text-xs xl:w-full"
-              aria-label="Search nodes"
-            />
-            {[
-              { key: "input", label: "Input", icon: Upload, onClick: () => void addNode("upload"), disabled: !detail || !!mutating, hint: "Add an upload input" },
-              { key: "image", label: "Image", icon: ImageIcon, onClick: () => void addNode("image_gen"), disabled: !detail || !!mutating, hint: "Add a nano-banana-pro image step" },
-              { key: "video", label: "Video", icon: Film, onClick: () => void addNode("video_gen", paletteVideoModel), disabled: !detail || !!mutating, hint: `Add a ${resolveVideoModelOption(paletteVideoModel).label} step` },
-              { key: "prompt", label: "Prompt", icon: Type, onClick: () => {}, disabled: true, hint: "coming soon" },
-            ]
-              .filter((item) => item.label.toLowerCase().includes(paletteSearch.trim().toLowerCase()))
-              .map((item) => (
-                <button
-                  key={item.key}
-                  type="button"
-                  title={item.hint}
-                  disabled={item.disabled}
-                  onClick={item.onClick}
-                  className="flex min-w-[60px] flex-col items-center gap-1 rounded-xl border border-border/60 bg-background/60 px-2 py-2 text-[10px] font-semibold uppercase tracking-[0.1em] text-muted-foreground transition hover:border-primary/50 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  <item.icon className="h-4 w-4" />
-                  {item.label}
-                </button>
-              ))}
-            <select
-              value={paletteVideoModel}
-              onChange={(event) => setPaletteVideoModel(event.target.value as VideoModelKey)}
-              className="h-8 w-28 rounded-xl border border-border bg-background px-2 text-[10px] xl:w-full"
-              aria-label="Video model for new video steps"
-            >
-              {VIDEO_MODEL_OPTIONS.map((option) => (
-                <option key={option.key} value={option.key}>{option.label}</option>
-              ))}
-            </select>
+        <div className={`grid min-w-0 grid-cols-1 gap-3 ${selectedNode ? "xl:grid-cols-[184px_minmax(0,1fr)_390px]" : "xl:grid-cols-[184px_minmax(0,1fr)]"}`}>
+          <aside className="flex min-w-0 flex-col gap-3 rounded-3xl border border-border/50 bg-card/70 p-3 shadow-sm xl:self-start">
+            <div className="space-y-2">
+              <p className="px-1 text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">Add step</p>
+              <div className="relative">
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  value={paletteSearch}
+                  onChange={(event) => setPaletteSearch(event.target.value)}
+                  placeholder="Search"
+                  className="h-9 rounded-xl pl-8 text-xs"
+                  aria-label="Search nodes"
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-2 xl:grid-cols-1">
+              {[
+                { key: "input", label: "Input", icon: Upload, onClick: () => void addNode("upload"), disabled: !detail || !!mutating, hint: "Uploaded or reference image" },
+                { key: "image", label: "Image", icon: ImageIcon, onClick: () => void addNode("image_gen"), disabled: !detail || !!mutating, hint: "nano-banana-pro image step" },
+                { key: "video", label: "Video", icon: Film, onClick: () => void addNode("video_gen", paletteVideoModel), disabled: !detail || !!mutating, hint: `${resolveVideoModelOption(paletteVideoModel).label} step` },
+                { key: "prompt", label: "Prompt", icon: Type, onClick: () => {}, disabled: true, hint: "coming soon" },
+              ]
+                .filter((item) => item.label.toLowerCase().includes(paletteSearch.trim().toLowerCase()))
+                .map((item) => (
+                  <button
+                    key={item.key}
+                    type="button"
+                    title={item.hint}
+                    disabled={item.disabled}
+                    onClick={item.onClick}
+                    className="group flex min-w-0 items-center gap-2.5 rounded-2xl border border-border/60 bg-background/60 px-3 py-2.5 text-left transition hover:border-primary/60 hover:bg-primary/[0.06] disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-border/60 bg-card/70 text-muted-foreground transition group-hover:border-primary/50 group-hover:text-primary">
+                      <item.icon className="h-4 w-4" />
+                    </span>
+                    <span className="min-w-0">
+                      <span className="block truncate text-xs font-semibold text-foreground">{item.label}</span>
+                      <span className="block truncate text-[10px] text-muted-foreground">{item.hint}</span>
+                    </span>
+                  </button>
+                ))}
+            </div>
+            <div className="space-y-1.5 border-t border-border/50 pt-3">
+              <p className="px-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">New video model</p>
+              <select
+                value={paletteVideoModel}
+                onChange={(event) => setPaletteVideoModel(event.target.value as VideoModelKey)}
+                className="h-9 w-full truncate rounded-xl border border-border bg-background px-2 text-[11px]"
+                aria-label="Video model for new video steps"
+              >
+                {VIDEO_MODEL_OPTIONS.map((option) => (
+                  <option key={option.key} value={option.key}>{option.label}</option>
+                ))}
+              </select>
+            </div>
           </aside>
 
           <section className="min-w-0">
@@ -2098,7 +2156,7 @@ const TemplateCanvas = () => {
               selectedNodeId={selectedNode?.id ?? null}
               onSelectNode={setSelectedNodeId}
               onNodeMoved={handleCanvasNodeMoved}
-              onConnectNodes={(source, target) => void connectNodesOnCanvas(source, target)}
+              onConnectNodes={(source, target, targetHandle) => void connectNodesOnCanvas(source, target, targetHandle)}
               onDeleteEdge={(edgeId) => void deleteEdge(edgeId)}
               className="h-[calc(100vh-9.5rem)] min-h-[520px]"
             />
@@ -2132,17 +2190,8 @@ const TemplateCanvas = () => {
                 </div>
               </div>
 
-              <Button
-                type="button"
-                variant="outline"
-                className="w-full border-destructive/40 text-destructive hover:bg-destructive/10 hover:text-destructive"
-                onClick={() => void deleteSelectedNode()}
-                disabled={!!mutating}
-              >
-                <Trash2 className="mr-2 h-4 w-4" />
-                Delete Node and Connections
-              </Button>
-
+              <div className="space-y-3 rounded-2xl border border-border/50 bg-background/40 p-4">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-primary/80">Identity</p>
               <div className="space-y-2">
                 <Label>Display Label</Label>
                 <Input value={draft.displayLabel} onChange={(event) => setDraft((current) => current ? { ...current, displayLabel: event.target.value } : current)} />
@@ -2218,10 +2267,11 @@ const TemplateCanvas = () => {
                 <Label>Expected Media / Notes</Label>
                 <Input value={draft.expected} onChange={(event) => setDraft((current) => current ? { ...current, expected: event.target.value } : current)} />
               </div>
+              </div>
 
               {selectedNode.nodeType !== "user_input" ? (
-                <div className="space-y-2">
-                  <Label>Prompt</Label>
+                <div className="space-y-2 rounded-2xl border border-border/50 bg-background/40 p-4">
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-primary/80">Prompt</p>
                   <Textarea
                     value={draft.prompt}
                     onChange={(event) => setDraft((current) => current ? { ...current, prompt: event.target.value } : current)}
@@ -2231,7 +2281,8 @@ const TemplateCanvas = () => {
               ) : null}
 
               {selectedNode.nodeType === "video_gen" ? (
-                <div className="space-y-3 rounded-2xl border border-border/50 bg-background/50 p-4">
+                <div className="space-y-3 rounded-2xl border border-border/50 bg-background/40 p-4">
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-primary/80">Model</p>
                   <div className="space-y-2">
                     <Label>Video model</Label>
                     <select
@@ -2349,14 +2400,17 @@ const TemplateCanvas = () => {
 
 
               {(selectedNode.nodeType === "image_gen" || selectedNode.nodeType === "video_gen") ? (
-                <label className="flex items-center gap-3 rounded-2xl border border-border/50 bg-background/50 px-4 py-3 text-sm">
-                  <input
-                    type="checkbox"
-                    checked={draft.outputExposed === true}
-                    onChange={(event) => setDraft((current) => current ? { ...current, outputExposed: event.target.checked } : current)}
-                  />
-                  Expose as final deliverable
-                </label>
+                <div className="space-y-2 rounded-2xl border border-border/50 bg-background/40 p-4">
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-primary/80">Output</p>
+                  <label className="flex items-center gap-3 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={draft.outputExposed === true}
+                      onChange={(event) => setDraft((current) => current ? { ...current, outputExposed: event.target.checked } : current)}
+                    />
+                    Expose as final deliverable
+                  </label>
+                </div>
               ) : null}
 
               {selectedNode.defaultAssetUrl ? (
@@ -2372,10 +2426,11 @@ const TemplateCanvas = () => {
               ) : null}
 
               {selectedNode.incoming.length ? (
-                <div className="space-y-2">
+                <div className="space-y-2 rounded-2xl border border-border/50 bg-background/40 p-4">
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-primary/80">Inputs</p>
                   <div className="flex items-center justify-between gap-3">
-                    <Label>Incoming Priority</Label>
-                    <span className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground">Drag to reorder · Ref 1 runs first</span>
+                    <Label>Connection order</Label>
+                    <span className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground">Drag to reorder · Ref 1 first</span>
                   </div>
                   <div className="space-y-2">
                     {selectedNode.incoming.map((edge, index) => (
@@ -2443,8 +2498,13 @@ const TemplateCanvas = () => {
               ) : null}
 
               {detail?.nodes.length ? (
-                <div className="space-y-2">
-                  <Label>Add Incoming Edge</Label>
+                <details className="space-y-2 rounded-2xl border border-border/50 bg-background/40 p-4">
+                  <summary className="cursor-pointer text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">
+                    Add connection manually
+                  </summary>
+                  <p className="mt-2 text-[11px] text-muted-foreground">
+                    Drag from a step's output handle to an input handle on the canvas — this is the fallback.
+                  </p>
                   <select
                     value={edgeDraft.sourceNodeId}
                     onChange={(event) => setEdgeDraft((current) => ({ ...current, sourceNodeId: event.target.value }))}
@@ -2477,13 +2537,31 @@ const TemplateCanvas = () => {
                     <Plus className="mr-2 h-4 w-4" />
                     Connect to This Node
                   </Button>
-                </div>
+                </details>
               ) : null}
 
-              <Button type="button" className="w-full" onClick={() => void saveNode()} disabled={savingNode}>
-                {savingNode ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
-                Save Node
-              </Button>
+              <div className="space-y-2 rounded-2xl border border-border/50 bg-background/40 p-4">
+                {(selectedNode.nodeType === "image_gen" || selectedNode.nodeType === "video_gen") ? (
+                  <Button type="button" variant="outline" className="w-full" disabled title="coming soon">
+                    <Play className="mr-2 h-4 w-4" />
+                    Run step (coming soon)
+                  </Button>
+                ) : null}
+                <Button type="button" className="w-full" onClick={() => void saveNode()} disabled={savingNode}>
+                  {savingNode ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+                  Save Step
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full border-destructive/40 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                  onClick={() => void deleteSelectedNode()}
+                  disabled={!!mutating}
+                >
+                  <Trash2 className="mr-2 h-4 w-4" />
+                  Delete step and connections
+                </Button>
+              </div>
 
               {job ? (
                 <div className="rounded-2xl border border-border/50 bg-background/60 p-4">

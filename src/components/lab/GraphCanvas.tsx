@@ -39,8 +39,8 @@ export type GraphCanvasNodeData = {
   assetUrl: string | null;
   expected: string | null;
   deliverable: boolean | null;
-  imagePortCount: number;
-  onAddImagePort?: (nodeId: string) => void;
+  portIds: string[];
+  onAddPort?: (nodeId: string, type: PortType) => void;
 };
 
 export type GraphCanvasNode = Node<GraphCanvasNodeData>;
@@ -67,27 +67,33 @@ export const PORT_COLOR: Record<PortType, string> = {
 
 type Port = { id: string; label: string; type: PortType };
 
+export function portTypeForId(portId: string): PortType {
+  const id = portId.toLowerCase();
+  if (id.includes("prompt")) return "prompt";
+  if (id.includes("video")) return "video";
+  return "image";
+}
+
+export function portLabelForId(portId: string): string {
+  const known: Record<string, string> = {
+    prompt: "Prompt",
+    negative_prompt: "Negative Prompt",
+    start_frame_image: "First Frame",
+    end_frame_image: "Last Frame",
+    image: "Image",
+    video: "Video",
+  };
+  if (known[portId]) return known[portId];
+  const match = /^(image|video|ref)_(\d+)$/.exec(portId);
+  if (match) {
+    const base = match[1] === "ref" ? "Ref" : match[1] === "video" ? "Video" : "Image";
+    return `${base} ${match[2]}`;
+  }
+  return portId.replace(/_/g, " ").replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
 function inputPortsFor(data: GraphCanvasNodeData): Port[] {
-  if (data.kind === "video") {
-    return [
-      { id: "prompt", label: "Prompt", type: "prompt" },
-      { id: "start_frame_image", label: "First Frame", type: "image" },
-      { id: "end_frame_image", label: "Last Frame", type: "image" },
-      { id: "negative_prompt", label: "Negative Prompt", type: "prompt" },
-    ];
-  }
-  if (data.kind === "image") {
-    const count = Math.max(2, data.imagePortCount || 2);
-    return [
-      { id: "prompt", label: "Prompt", type: "prompt" },
-      ...Array.from({ length: count }, (_, index) => ({
-        id: `image_${index + 1}`,
-        label: `Image ${index + 1}`,
-        type: "image" as PortType,
-      })),
-    ];
-  }
-  return [];
+  return data.portIds.map((id) => ({ id, label: portLabelForId(id), type: portTypeForId(id) }));
 }
 
 function outputPortFor(data: GraphCanvasNodeData): Port {
@@ -102,7 +108,7 @@ const PortDot = ({ type }: { type: PortType }) => (
   />
 );
 
-const handleBase = "!h-3 !w-3 !rounded-full !border-2 !border-background";
+const handleBase = "!h-4 !w-4 !rounded-full !border-2 !border-background !opacity-100 transition-transform hover:!scale-125";
 
 const TemplateFlowNode = ({ id, data, selected }: NodeProps<GraphCanvasNode>) => {
   const Icon = KIND_ICON[data.kind];
@@ -175,7 +181,7 @@ const TemplateFlowNode = ({ id, data, selected }: NodeProps<GraphCanvasNode>) =>
         </div>
       ) : null}
 
-      {inputPorts.length ? (
+      {isModelNode ? (
         <div className="mt-3 space-y-1.5">
           {inputPorts.map((port) => (
             <div key={port.id} className="relative flex items-center gap-2">
@@ -184,25 +190,33 @@ const TemplateFlowNode = ({ id, data, selected }: NodeProps<GraphCanvasNode>) =>
                 id={port.id}
                 position={Position.Left}
                 className={handleBase}
-                style={{ background: PORT_COLOR[port.type], left: -22, top: "50%" }}
+                style={{ background: PORT_COLOR[port.type], left: -24, top: "50%" }}
               />
               <PortDot type={port.type} />
               <span className="text-[11px] font-medium text-muted-foreground">{port.label}</span>
             </div>
           ))}
-          {data.kind === "image" ? (
-            <button
-              type="button"
-              className="nodrag mt-1 inline-flex items-center gap-1 rounded-full border border-border/60 bg-background/60 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.1em] text-muted-foreground transition hover:border-primary/50 hover:text-foreground"
-              onClick={(event) => {
-                event.stopPropagation();
-                data.onAddImagePort?.(id);
-              }}
-            >
-              <Plus className="h-3 w-3" />
-              Add image input
-            </button>
-          ) : null}
+          <div className="mt-1.5 flex flex-wrap gap-1.5">
+            {([
+              { type: "image" as PortType, label: "Image" },
+              { type: "video" as PortType, label: "Video" },
+              { type: "prompt" as PortType, label: "Prompt" },
+            ]).map((option) => (
+              <button
+                key={option.type}
+                type="button"
+                title={`Add ${option.label.toLowerCase()} input`}
+                className="nodrag inline-flex items-center gap-1 rounded-full border border-border/60 bg-background/60 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.1em] text-muted-foreground transition hover:border-primary/50 hover:text-foreground"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  data.onAddPort?.(id, option.type);
+                }}
+              >
+                <Plus className="h-3 w-3" />
+                {option.label}
+              </button>
+            ))}
+          </div>
         </div>
       ) : null}
 
@@ -261,7 +275,7 @@ type GraphCanvasProps = {
   selectedNodeId: string | null;
   onSelectNode: (nodeId: string) => void;
   onNodeMoved: (nodeId: string, position: { x: number; y: number }) => void;
-  onConnectNodes: (sourceNodeId: string, targetNodeId: string) => void;
+  onConnectNodes: (sourceNodeId: string, targetNodeId: string, targetHandleId?: string | null) => void;
   onDeleteEdge: (edgeId: string) => void;
   className?: string;
 };
@@ -312,9 +326,20 @@ const GraphCanvasInner = ({
   const handleConnect = useCallback(
     (connection: Connection) => {
       if (!connection.source || !connection.target || connection.source === connection.target) return;
-      onConnectNodes(connection.source, connection.target);
+      setFlowEdges((current) => [
+        ...current,
+        {
+          id: `pending-${connection.source}-${connection.target}-${connection.targetHandle ?? "auto"}`,
+          source: connection.source,
+          target: connection.target,
+          targetHandle: connection.targetHandle,
+          sourceHandle: connection.sourceHandle,
+          style: { stroke: PORT_COLOR[portTypeForId(connection.targetHandle ?? "image")], strokeWidth: 1.8, opacity: 0.6 },
+        } as Edge,
+      ]);
+      onConnectNodes(connection.source, connection.target, connection.targetHandle);
     },
-    [onConnectNodes],
+    [onConnectNodes, setFlowEdges],
   );
 
   const defaultEdgeOptions = useMemo(
@@ -336,6 +361,8 @@ const GraphCanvasInner = ({
         onEdgesChange={handleEdgesChange}
         onConnect={handleConnect}
         onNodeClick={(_, node) => onSelectNode(node.id)}
+        connectionRadius={34}
+        connectOnClick
         defaultEdgeOptions={defaultEdgeOptions}
         fitView
         minZoom={0.2}
