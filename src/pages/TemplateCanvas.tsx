@@ -1760,6 +1760,28 @@ const TemplateCanvas = () => {
     }
   }, [detail, invokeWorkbench, refreshAfterMutation]);
 
+  const moveIncomingEdgeToIndex = useCallback(async (fromIndex: number, toIndex: number) => {
+    if (!detail || !selectedNode || fromIndex === toIndex) return;
+    const edgeId = selectedNode.incoming[fromIndex]?.edgeId;
+    if (!edgeId) return;
+    const direction: EdgeMoveDirection = toIndex > fromIndex ? 1 : -1;
+    const steps = Math.abs(toIndex - fromIndex);
+    setMutating(`reorder-edge:${edgeId}:${direction}`);
+    try {
+      for (let step = 0; step < steps; step += 1) {
+        await invokeWorkbench({ action: "reorder_edge", edgeId, direction });
+      }
+      await refreshAfterMutation(detail.versionId);
+      toast({ title: "Reference order updated" });
+    } catch (edgeError) {
+      const message = edgeError instanceof Error ? edgeError.message : "Could not reorder references";
+      toast({ title: "Reorder failed", description: message, variant: "destructive" });
+    } finally {
+      setMutating(null);
+    }
+  }, [detail, invokeWorkbench, refreshAfterMutation, selectedNode]);
+
+
   const deleteEdge = useCallback(async (edgeId: string | undefined) => {
     if (!edgeId || !detail) return;
     setMutating(`delete-edge:${edgeId}`);
