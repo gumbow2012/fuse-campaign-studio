@@ -3150,8 +3150,13 @@ const TemplateCanvas = () => {
               </div>
             </div>
 
-          <div className="rounded-2xl border border-border/50 bg-card/70 p-4 shadow-sm xl:col-span-3">
-            <p className="text-xs font-semibold uppercase tracking-[0.15em] text-muted-foreground">Version Control</p>
+          <div className="rounded-2xl border border-border/60 bg-card/80 p-4 shadow-sm xl:col-span-6">
+            <details className="group">
+              <summary className="flex cursor-pointer list-none items-center justify-between gap-3">
+                <span className="text-xs font-semibold uppercase tracking-[0.15em] text-foreground/80">Version Control</span>
+                <span className="rounded-full border border-border/70 bg-background/60 px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-foreground/70 group-open:hidden">Show</span>
+                <span className="hidden rounded-full border border-border/70 bg-background/60 px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-foreground/70 group-open:inline">Hide</span>
+              </summary>
             <div className="mt-3 grid gap-2">
               <Button type="button" variant="outline" size="sm" onClick={() => void cloneCurrentVersion(false)} disabled={!detail || !!mutating}>
                 <GitBranch className="mr-2 h-4 w-4" />
