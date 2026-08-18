@@ -517,6 +517,8 @@ type GraphCanvasProps = {
   onConnectNodes: (sourceNodeId: string, targetNodeId: string, targetHandleId?: string | null) => void;
   onDeleteEdge: (edgeId: string) => void;
   className?: string;
+  focusNodeId?: string | null;
+  onViewportApiReady?: (api: { getCenter: () => { x: number; y: number } }) => void;
 };
 
 const GraphCanvasInner = ({
@@ -528,9 +530,46 @@ const GraphCanvasInner = ({
   onConnectNodes,
   onDeleteEdge,
   className,
+  focusNodeId,
+  onViewportApiReady,
 }: GraphCanvasProps) => {
   const [flowNodes, setFlowNodes, onNodesChange] = useNodesState<GraphCanvasNode>(nodes);
   const [flowEdges, setFlowEdges, onEdgesChange] = useEdgesState<Edge>(edges);
+  const wrapperRef = useRef<HTMLDivElement | null>(null);
+  const { fitView, screenToFlowPosition } = useReactFlow();
+
+  const recenter = useCallback(() => {
+    void fitView({ duration: 450, padding: 0.22 });
+  }, [fitView]);
+
+  useEffect(() => {
+    onViewportApiReady?.({
+      getCenter: () => {
+        const rect = wrapperRef.current?.getBoundingClientRect();
+        if (!rect) return { x: 240, y: 200 };
+        return screenToFlowPosition({ x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 });
+      },
+    });
+  }, [onViewportApiReady, screenToFlowPosition]);
+
+  useEffect(() => {
+    if (!focusNodeId) return;
+    if (!nodes.some((node) => node.id === focusNodeId)) return;
+    const timer = window.setTimeout(() => {
+      void fitView({ nodes: [{ id: focusNodeId }], duration: 500, padding: 0.6, maxZoom: 1.1, minZoom: 0.4 });
+    }, 60);
+    return () => window.clearTimeout(timer);
+  }, [fitView, focusNodeId, nodes]);
+
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (target && (target.isContentEditable || /^(input|textarea|select)$/i.test(target.tagName))) return;
+      if (event.key === "f" || event.key === "F") recenter();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [recenter]);
 
   useEffect(() => {
     setFlowNodes(nodes.map((node) => ({ ...node, selected: node.id === selectedNodeId })));
