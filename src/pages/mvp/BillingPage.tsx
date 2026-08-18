@@ -559,6 +559,9 @@ export default function BillingPage() {
               </ul>
             </div>
           </div>
+          <p className="mt-6 max-w-3xl text-sm leading-7 text-slate-300">
+            One professional photoshoot with a photographer, studio rental, and model costs $2,000–$5,000 and takes 2–4 weeks to schedule. One Fuse campaign takes 5 minutes and is included in your plan.
+          </p>
         </section>
 
         <section className="mt-8 rounded-[2rem] border border-white/10 bg-white/[0.03] p-6 md:p-8">
@@ -569,30 +572,43 @@ export default function BillingPage() {
           <dl className="mt-6 grid gap-4 md:grid-cols-2">
             {[
               {
-                q: "What counts as a campaign?",
-                a: "A campaign is one full run of a template — a set of lookbook images, social assets, and video generated from your uploaded design. Lighter runs that produce fewer assets use fewer credits.",
+                q: "Will the images actually look real?",
+                a: "Yes — see examples in our gallery.",
+                to: "/app/templates",
               },
               {
-                q: "Do unused credits roll over?",
-                a: "Credits refresh with each billing cycle. You can buy one-time top-up packs any time if you need more before your next renewal.",
+                q: "What does a credit get me?",
+                a: "Credits are consumed per generation. Your plan's monthly credits cover a full run of campaign assets; heavier templates use more.",
               },
               {
-                q: "Can I use the output commercially?",
-                a: "Yes. Everything you generate is yours to use for your brand, your product pages, your ads, and your socials.",
+                q: "Can I use these commercially?",
+                a: "Yes — full commercial rights, no watermarks, no attribution required.",
               },
               {
-                q: "What kind of product images work best?",
-                a: "Clean, well-lit shots of your garment or accessory on a plain background give the strongest results. Flat lays and mockups both work.",
+                q: "How is this different from Midjourney or other AI tools?",
+                a: "Those generate single images from prompts. Fuse generates complete drop campaigns from your product.",
               },
               {
-                q: "Can I cancel any time?",
-                a: "Yes. Manage or cancel your plan from your account at any time — you keep access until the end of the current cycle.",
-              },
-              {
-                q: "Do you offer anything for agencies?",
-                a: "Studio is built for multi-brand and client work. If you need higher volume than Studio covers, get in touch.",
+                q: "What if I don't like the output?",
+                a: "Regenerate with a different vibe. You're not locked in.",
               },
             ].map((item) => (
+              <div key={item.q} className="rounded-[1.5rem] border border-white/10 bg-slate-950/75 p-5">
+                <dt className="text-sm font-semibold text-white">{item.q}</dt>
+                <dd className="mt-2 text-sm leading-6 text-slate-300">
+                  {item.a}
+                  {item.to ? (
+                    <>
+                      {" "}
+                      <Link to={item.to} className="text-cyan-200 underline underline-offset-4">
+                        Browse examples
+                      </Link>
+                    </>
+                  ) : null}
+                </dd>
+              </div>
+            ))}
+
               <div key={item.q} className="rounded-[1.5rem] border border-white/10 bg-slate-950/75 p-5">
                 <dt className="text-sm font-semibold text-white">{item.q}</dt>
                 <dd className="mt-2 text-sm leading-6 text-slate-300">{item.a}</dd>
