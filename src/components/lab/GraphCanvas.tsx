@@ -39,8 +39,8 @@ export type GraphCanvasNodeData = {
   assetUrl: string | null;
   expected: string | null;
   deliverable: boolean | null;
-  imagePortCount: number;
-  onAddImagePort?: (nodeId: string) => void;
+  portIds: string[];
+  onAddPort?: (nodeId: string, type: PortType) => void;
 };
 
 export type GraphCanvasNode = Node<GraphCanvasNodeData>;
@@ -67,27 +67,33 @@ export const PORT_COLOR: Record<PortType, string> = {
 
 type Port = { id: string; label: string; type: PortType };
 
+export function portTypeForId(portId: string): PortType {
+  const id = portId.toLowerCase();
+  if (id.includes("prompt")) return "prompt";
+  if (id.includes("video")) return "video";
+  return "image";
+}
+
+export function portLabelForId(portId: string): string {
+  const known: Record<string, string> = {
+    prompt: "Prompt",
+    negative_prompt: "Negative Prompt",
+    start_frame_image: "First Frame",
+    end_frame_image: "Last Frame",
+    image: "Image",
+    video: "Video",
+  };
+  if (known[portId]) return known[portId];
+  const match = /^(image|video|ref)_(\d+)$/.exec(portId);
+  if (match) {
+    const base = match[1] === "ref" ? "Ref" : match[1] === "video" ? "Video" : "Image";
+    return `${base} ${match[2]}`;
+  }
+  return portId.replace(/_/g, " ").replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
 function inputPortsFor(data: GraphCanvasNodeData): Port[] {
-  if (data.kind === "video") {
-    return [
-      { id: "prompt", label: "Prompt", type: "prompt" },
-      { id: "start_frame_image", label: "First Frame", type: "image" },
-      { id: "end_frame_image", label: "Last Frame", type: "image" },
-      { id: "negative_prompt", label: "Negative Prompt", type: "prompt" },
-    ];
-  }
-  if (data.kind === "image") {
-    const count = Math.max(2, data.imagePortCount || 2);
-    return [
-      { id: "prompt", label: "Prompt", type: "prompt" },
-      ...Array.from({ length: count }, (_, index) => ({
-        id: `image_${index + 1}`,
-        label: `Image ${index + 1}`,
-        type: "image" as PortType,
-      })),
-    ];
-  }
-  return [];
+  return data.portIds.map((id) => ({ id, label: portLabelForId(id), type: portTypeForId(id) }));
 }
 
 function outputPortFor(data: GraphCanvasNodeData): Port {
@@ -102,7 +108,7 @@ const PortDot = ({ type }: { type: PortType }) => (
   />
 );
 
-const handleBase = "!h-3 !w-3 !rounded-full !border-2 !border-background";
+const handleBase = "!h-4 !w-4 !rounded-full !border-2 !border-background !opacity-100 transition-transform hover:!scale-125";
 
 const TemplateFlowNode = ({ id, data, selected }: NodeProps<GraphCanvasNode>) => {
   const Icon = KIND_ICON[data.kind];
