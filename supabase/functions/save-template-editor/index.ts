@@ -52,13 +52,19 @@ function normalizeNullable(value: string | null | undefined) {
 
 function normalizeVideoModel(value: unknown) {
   const key = typeof value === "string" ? value.trim() : "";
-  return (VIDEO_MODEL_KEYS as readonly string[]).includes(key) ? key : "kling-2.5";
+  return (VIDEO_MODEL_KEYS as readonly string[]).includes(key) ? key : DEFAULT_VIDEO_MODEL_KEY;
 }
 
 function clampSeedanceDuration(value: unknown) {
   const next = Number(value ?? 4);
   if (!Number.isFinite(next)) return 4;
   return Math.min(15, Math.max(4, Math.round(next)));
+}
+
+function clampKling3Duration(value: unknown) {
+  const next = Number(value ?? 5);
+  if (!Number.isFinite(next)) return 5;
+  return Math.min(15, Math.max(3, Math.round(next)));
 }
 
 function normalizeDuration(value: unknown) {
