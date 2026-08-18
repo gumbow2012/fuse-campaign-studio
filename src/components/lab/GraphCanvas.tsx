@@ -2,7 +2,10 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Background,
   BackgroundVariant,
+  BaseEdge,
   Controls,
+  EdgeLabelRenderer,
+  getSmoothStepPath,
   Handle,
   MiniMap,
   Position,
@@ -12,13 +15,15 @@ import {
   useNodesState,
   type Connection,
   type Edge,
+  type EdgeProps,
   type Node,
   type NodeProps,
   type NodeChange,
   type EdgeChange,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import { Film, Image as ImageIcon, Loader2, Play, Plus, Upload } from "lucide-react";
+
+import { Film, Image as ImageIcon, Loader2, Play, Plus, Upload, X } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 export type PortType = "prompt" | "image" | "video";
@@ -427,6 +432,82 @@ const TemplateFlowNode = ({ id, data, selected }: NodeProps<GraphCanvasNode>) =>
 
 const nodeTypes = { templateNode: TemplateFlowNode };
 
+type DeletableEdgeData = { onDelete?: (edgeId: string) => void; refLabel?: string };
+
+const DeletableEdge = ({
+  id,
+  sourceX,
+  sourceY,
+  targetX,
+  targetY,
+  sourcePosition,
+  targetPosition,
+  style,
+  selected,
+  data,
+}: EdgeProps<Edge<DeletableEdgeData>>) => {
+  const [path, labelX, labelY] = getSmoothStepPath({
+    sourceX,
+    sourceY,
+    targetX,
+    targetY,
+    sourcePosition,
+    targetPosition,
+  });
+  const [hovered, setHovered] = useState(false);
+  const stroke = (style as { stroke?: string } | undefined)?.stroke ?? PORT_COLOR.image;
+
+  return (
+    <>
+      <BaseEdge
+        id={id}
+        path={path}
+        interactionWidth={26}
+        style={{
+          ...style,
+          stroke,
+          strokeWidth: selected ? 3.2 : (style as { strokeWidth?: number } | undefined)?.strokeWidth ?? 1.8,
+          opacity: selected ? 1 : (style as { opacity?: number } | undefined)?.opacity ?? 0.85,
+          filter: selected ? `drop-shadow(0 0 6px ${stroke})` : undefined,
+        }}
+      />
+      <EdgeLabelRenderer>
+        <div
+          className="nodrag nopan pointer-events-auto absolute flex items-center gap-1"
+          style={{ transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)` }}
+          onMouseEnter={() => setHovered(true)}
+          onMouseLeave={() => setHovered(false)}
+        >
+          {data?.refLabel ? (
+            <span
+              className="rounded-full border bg-card/90 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-[0.12em] backdrop-blur"
+              style={{ borderColor: `${stroke}66`, color: stroke }}
+            >
+              {data.refLabel}
+            </span>
+          ) : null}
+          {hovered || selected ? (
+            <button
+              type="button"
+              aria-label="Remove connection"
+              onClick={(event) => {
+                event.stopPropagation();
+                data?.onDelete?.(id);
+              }}
+              className="flex h-5 w-5 items-center justify-center rounded-full border border-destructive/60 bg-background/95 text-destructive shadow-lg transition hover:bg-destructive hover:text-destructive-foreground"
+            >
+              <X className="h-3 w-3" />
+            </button>
+          ) : null}
+        </div>
+      </EdgeLabelRenderer>
+    </>
+  );
+};
+
+const edgeTypes = { deletable: DeletableEdge };
+
+
 type GraphCanvasProps = {
   nodes: GraphCanvasNode[];
   edges: Edge[];
@@ -456,8 +537,23 @@ const GraphCanvasInner = ({
   }, [nodes, selectedNodeId, setFlowNodes]);
 
   useEffect(() => {
-    setFlowEdges(edges);
-  }, [edges, setFlowEdges]);
+    setFlowEdges(
+      edges.map((edge) => {
+        const { label, labelStyle, ...rest } = edge as Edge & { labelStyle?: unknown };
+        return {
+          ...rest,
+          type: "deletable",
+          selectable: true,
+          focusable: true,
+          data: {
+            ...(edge.data ?? {}),
+            refLabel: typeof label === "string" ? label : undefined,
+            onDelete: onDeleteEdge,
+          },
+        } as Edge;
+      }),
+    );
+  }, [edges, onDeleteEdge, setFlowEdges]);
 
   const handleNodesChange = useCallback(
     (changes: NodeChange<GraphCanvasNode>[]) => {
@@ -474,12 +570,11 @@ const GraphCanvasInner = ({
   const handleEdgesChange = useCallback(
     (changes: EdgeChange<Edge>[]) => {
       onEdgesChange(changes);
-      for (const change of changes) {
-        if (change.type === "remove") onDeleteEdge(change.id);
-      }
     },
-    [onDeleteEdge, onEdgesChange],
+    [onEdgesChange],
   );
+
+
 
   const handleConnect = useCallback(
     (connection: Connection) => {
@@ -502,8 +597,11 @@ const GraphCanvasInner = ({
 
   const defaultEdgeOptions = useMemo(
     () => ({
-      type: "smoothstep" as const,
+      type: "deletable" as const,
       animated: true,
+      selectable: true,
+      focusable: true,
+      interactionWidth: 26,
       style: { stroke: PORT_COLOR.image, strokeWidth: 1.8, opacity: 0.8 },
     }),
     [],
@@ -515,13 +613,27 @@ const GraphCanvasInner = ({
         nodes={flowNodes}
         edges={flowEdges}
         nodeTypes={nodeTypes}
+        edgeTypes={edgeTypes}
         onNodesChange={handleNodesChange}
         onEdgesChange={handleEdgesChange}
         onConnect={handleConnect}
         onNodeClick={(_, node) => onSelectNode(node.id)}
+        onEdgeClick={(event, edge) => {
+          event.stopPropagation();
+          setFlowEdges((current) => current.map((item) => ({ ...item, selected: item.id === edge.id })));
+        }}
+        onEdgesDelete={(deleted) => {
+          for (const edge of deleted) {
+            if (!edge.id.startsWith("pending-")) onDeleteEdge(edge.id);
+          }
+        }}
+        elementsSelectable
+        edgesFocusable
+        deleteKeyCode={["Delete", "Backspace"]}
         connectionRadius={34}
         connectOnClick
         defaultEdgeOptions={defaultEdgeOptions}
+
         fitView
         minZoom={0.2}
         maxZoom={1.6}
