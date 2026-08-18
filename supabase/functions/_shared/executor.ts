@@ -289,6 +289,10 @@ function estimateBillingQuantity(args: {
     return Number(args.promptConfig?.num_images ?? 1);
   }
   if (unit.includes("second")) {
+    if (args.endpointId.includes("seedance")) {
+      const seconds = Number(args.promptConfig?.duration ?? 5);
+      return Number.isFinite(seconds) && seconds > 0 ? seconds : 5;
+    }
     return normalizeVideoDuration(args.promptConfig?.duration);
   }
   return 1;
