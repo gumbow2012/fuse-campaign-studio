@@ -1098,14 +1098,42 @@ export async function runGraphJob(admin: AdminClient, jobId: string) {
 
           if (!initImageUrl) throw new Error(`Missing init image for ${node.name}`);
 
-          const costEstimate = await getStepCostEstimate(VIDEO_MODEL, node.prompt_config);
+          const videoModel = getVideoModel(node.prompt_config?.video_model);
+          const isKlingModel = videoModel.family === "kling";
+          const effectiveDuration = isKlingModel
+            ? videoDuration(node.prompt_config?.duration)
+            : clampSeedanceDuration(node.prompt_config?.duration, videoModel);
+          const effectiveAspect = isKlingModel
+            ? VERTICAL_VIDEO_ASPECT_RATIO
+            : (videoModel.aspectRatios?.includes(String(node.prompt_config?.aspect_ratio ?? ""))
+              ? String(node.prompt_config?.aspect_ratio)
+              : VERTICAL_VIDEO_ASPECT_RATIO);
+          const effectiveResolution = isKlingModel
+            ? null
+            : (videoModel.resolutions?.includes(String(node.prompt_config?.resolution ?? ""))
+              ? String(node.prompt_config?.resolution)
+              : "720p");
+          const effectiveGenerateAudio = isKlingModel
+            ? null
+            : node.prompt_config?.generate_audio !== false;
+
+          const costEstimate = await getStepCostEstimate(
+            videoModel.endpointId,
+            isKlingModel ? node.prompt_config : { ...(node.prompt_config ?? {}), duration: effectiveDuration },
+            isKlingModel
+              ? undefined
+              : { fallbackUsdPerSecond: videoModel.fallbackUsdPerSecond, seconds: effectiveDuration },
+          );
 
           const requestId = await submitVideoJob({
             prompt,
             initImageUrl,
             endFrameUrl,
-            duration: videoDuration(node.prompt_config?.duration),
-            aspectRatio: VERTICAL_VIDEO_ASPECT_RATIO,
+            modelKey: videoModel.key,
+            duration: effectiveDuration,
+            aspectRatio: effectiveAspect,
+            ...(effectiveResolution ? { resolution: effectiveResolution } : {}),
+            ...(effectiveGenerateAudio === null ? {} : { generateAudio: effectiveGenerateAudio }),
             webhookUrl: `${Deno.env.get("SUPABASE_URL")}/functions/v1/fal-webhook?jobId=${encodeURIComponent(job.id)}&stepId=${encodeURIComponent(step.id)}`,
           });
 
@@ -1117,9 +1145,17 @@ export async function runGraphJob(admin: AdminClient, jobId: string) {
                 ...(step.input_payload ?? {}),
                 init_image: initImageUrl,
                 ...(endFrameUrl ? { end_frame_image: endFrameUrl } : {}),
-                aspect_ratio: VERTICAL_VIDEO_ASPECT_RATIO,
-                duration: videoDuration(node.prompt_config?.duration),
+                aspect_ratio: effectiveAspect,
+                duration: effectiveDuration,
+                ...(isKlingModel
+                  ? {}
+                  : {
+                    video_model: videoModel.key,
+                    resolution: effectiveResolution,
+                    generate_audio: effectiveGenerateAudio,
+                  }),
               },
+
               output_payload: {
                 requestId,
                 status: "queued",
