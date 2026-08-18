@@ -2623,7 +2623,7 @@ const TemplateCanvas = () => {
                   <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-primary/80">Inputs</p>
                   <div className="flex items-center justify-between gap-3">
                     <Label>Connection order</Label>
-                    <span className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground">Drag to reorder · Ref 1 first</span>
+                    <span className="text-[10px] uppercase tracking-[0.16em] text-foreground/70">Drag to reorder · Ref 1 first</span>
                   </div>
                   <div className="space-y-2">
                     {selectedNode.incoming.map((edge, index) => (
