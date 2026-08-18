@@ -2092,45 +2092,61 @@ const TemplateCanvas = () => {
           </div>
         </div>
 
-        <div className={`grid min-w-0 grid-cols-1 gap-3 ${selectedNode ? "xl:grid-cols-[76px_minmax(0,1fr)_380px]" : "xl:grid-cols-[76px_minmax(0,1fr)]"}`}>
-          <aside className="flex min-w-0 flex-row gap-2 overflow-x-auto rounded-2xl border border-border/50 bg-card/70 p-2 shadow-sm xl:flex-col xl:overflow-visible">
-            <Input
-              value={paletteSearch}
-              onChange={(event) => setPaletteSearch(event.target.value)}
-              placeholder="Search"
-              className="h-8 w-28 rounded-xl text-xs xl:w-full"
-              aria-label="Search nodes"
-            />
-            {[
-              { key: "input", label: "Input", icon: Upload, onClick: () => void addNode("upload"), disabled: !detail || !!mutating, hint: "Add an upload input" },
-              { key: "image", label: "Image", icon: ImageIcon, onClick: () => void addNode("image_gen"), disabled: !detail || !!mutating, hint: "Add a nano-banana-pro image step" },
-              { key: "video", label: "Video", icon: Film, onClick: () => void addNode("video_gen", paletteVideoModel), disabled: !detail || !!mutating, hint: `Add a ${resolveVideoModelOption(paletteVideoModel).label} step` },
-              { key: "prompt", label: "Prompt", icon: Type, onClick: () => {}, disabled: true, hint: "coming soon" },
-            ]
-              .filter((item) => item.label.toLowerCase().includes(paletteSearch.trim().toLowerCase()))
-              .map((item) => (
-                <button
-                  key={item.key}
-                  type="button"
-                  title={item.hint}
-                  disabled={item.disabled}
-                  onClick={item.onClick}
-                  className="flex min-w-[60px] flex-col items-center gap-1 rounded-xl border border-border/60 bg-background/60 px-2 py-2 text-[10px] font-semibold uppercase tracking-[0.1em] text-muted-foreground transition hover:border-primary/50 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  <item.icon className="h-4 w-4" />
-                  {item.label}
-                </button>
-              ))}
-            <select
-              value={paletteVideoModel}
-              onChange={(event) => setPaletteVideoModel(event.target.value as VideoModelKey)}
-              className="h-8 w-28 rounded-xl border border-border bg-background px-2 text-[10px] xl:w-full"
-              aria-label="Video model for new video steps"
-            >
-              {VIDEO_MODEL_OPTIONS.map((option) => (
-                <option key={option.key} value={option.key}>{option.label}</option>
-              ))}
-            </select>
+        <div className={`grid min-w-0 grid-cols-1 gap-3 ${selectedNode ? "xl:grid-cols-[184px_minmax(0,1fr)_390px]" : "xl:grid-cols-[184px_minmax(0,1fr)]"}`}>
+          <aside className="flex min-w-0 flex-col gap-3 rounded-3xl border border-border/50 bg-card/70 p-3 shadow-sm xl:self-start">
+            <div className="space-y-2">
+              <p className="px-1 text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">Add step</p>
+              <div className="relative">
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  value={paletteSearch}
+                  onChange={(event) => setPaletteSearch(event.target.value)}
+                  placeholder="Search"
+                  className="h-9 rounded-xl pl-8 text-xs"
+                  aria-label="Search nodes"
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-2 xl:grid-cols-1">
+              {[
+                { key: "input", label: "Input", icon: Upload, onClick: () => void addNode("upload"), disabled: !detail || !!mutating, hint: "Uploaded or reference image" },
+                { key: "image", label: "Image", icon: ImageIcon, onClick: () => void addNode("image_gen"), disabled: !detail || !!mutating, hint: "nano-banana-pro image step" },
+                { key: "video", label: "Video", icon: Film, onClick: () => void addNode("video_gen", paletteVideoModel), disabled: !detail || !!mutating, hint: `${resolveVideoModelOption(paletteVideoModel).label} step` },
+                { key: "prompt", label: "Prompt", icon: Type, onClick: () => {}, disabled: true, hint: "coming soon" },
+              ]
+                .filter((item) => item.label.toLowerCase().includes(paletteSearch.trim().toLowerCase()))
+                .map((item) => (
+                  <button
+                    key={item.key}
+                    type="button"
+                    title={item.hint}
+                    disabled={item.disabled}
+                    onClick={item.onClick}
+                    className="group flex min-w-0 items-center gap-2.5 rounded-2xl border border-border/60 bg-background/60 px-3 py-2.5 text-left transition hover:border-primary/60 hover:bg-primary/[0.06] disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-border/60 bg-card/70 text-muted-foreground transition group-hover:border-primary/50 group-hover:text-primary">
+                      <item.icon className="h-4 w-4" />
+                    </span>
+                    <span className="min-w-0">
+                      <span className="block truncate text-xs font-semibold text-foreground">{item.label}</span>
+                      <span className="block truncate text-[10px] text-muted-foreground">{item.hint}</span>
+                    </span>
+                  </button>
+                ))}
+            </div>
+            <div className="space-y-1.5 border-t border-border/50 pt-3">
+              <p className="px-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">New video model</p>
+              <select
+                value={paletteVideoModel}
+                onChange={(event) => setPaletteVideoModel(event.target.value as VideoModelKey)}
+                className="h-9 w-full truncate rounded-xl border border-border bg-background px-2 text-[11px]"
+                aria-label="Video model for new video steps"
+              >
+                {VIDEO_MODEL_OPTIONS.map((option) => (
+                  <option key={option.key} value={option.key}>{option.label}</option>
+                ))}
+              </select>
+            </div>
           </aside>
 
           <section className="min-w-0">
