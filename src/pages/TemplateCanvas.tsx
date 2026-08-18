@@ -1695,7 +1695,7 @@ const TemplateCanvas = () => {
     } finally {
       setMutating(null);
     }
-  }, [addNodeExpected, addNodeName, addNodePrompt, addNodeType, detail, invokeWorkbench, refreshAfterMutation]);
+  }, [addNodeExpected, addNodeName, addNodePrompt, addNodeType, buildAuthHeaders, detail, invokeWorkbench, refreshAfterMutation]);
 
   const deleteSelectedNode = useCallback(async () => {
     if (!selectedNode || !detail) return;
