@@ -303,6 +303,21 @@ const LANE_HEADER_HEIGHT = 62;
 const MAX_VISIBLE_CANVAS_EDGES = 24;
 const LAYOUT_PREFIX = "fuse-template-canvas-layout-v1";
 const LANE_KEYS = ["uploads", "references", "images", "videos", "other"] as const;
+function portIdsForNode(
+  nodeId: string,
+  kind: GraphCanvasNodeData["kind"],
+  incomingParams: Array<string | null | undefined>,
+  extras: string[],
+): string[] {
+  if (kind !== "image" && kind !== "video") return [];
+  const base = kind === "video" ? ["prompt", "start_frame_image"] : ["prompt", "image_1"];
+  const ordered: string[] = [];
+  for (const id of [...base, ...incomingParams.map((param) => (param ?? "").trim().toLowerCase()).filter(Boolean), ...extras]) {
+    if (!ordered.includes(id)) ordered.push(id);
+  }
+  return ordered;
+}
+
 const LANE_LABELS: Record<(typeof LANE_KEYS)[number], string> = {
   uploads: "User Uploads",
   references: "Hidden References",
