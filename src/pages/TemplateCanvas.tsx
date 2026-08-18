@@ -419,6 +419,13 @@ function compactText(value: string | null | undefined, maxLength = 150) {
   return `${normalized.slice(0, maxLength).trim()}...`;
 }
 
+function nodeKind(node: { nodeType: string }): GraphCanvasNodeData["kind"] {
+  if (node.nodeType === "user_input") return "input";
+  if (node.nodeType === "image_gen") return "image";
+  if (node.nodeType === "video_gen") return "video";
+  return "other";
+}
+
 function nodeKindLabel(node: TemplateDetailNode) {
   if (node.nodeType === "video_gen") return "Video model";
   if (node.nodeType === "image_gen") return "Image model";
