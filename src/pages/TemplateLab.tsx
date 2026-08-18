@@ -1454,10 +1454,10 @@ const TemplateLab = () => {
 
   return (
     <SiteShell>
-      <div className="mx-auto flex w-full max-w-[1600px] flex-col gap-8 px-4 pb-16 pt-10 sm:px-6">
-        <div className="grid gap-6 xl:grid-cols-[minmax(0,1.05fr)_minmax(520px,0.95fr)]">
-          <section className="rounded-3xl border border-border/50 bg-card/70 p-6 shadow-sm xl:p-7">
-            <div className="mb-6 flex items-start justify-between gap-4">
+      <div className="mx-auto flex w-full min-w-0 max-w-[1600px] flex-col gap-8 overflow-x-hidden px-4 pb-16 pt-10 sm:px-6">
+        <div className="grid gap-6 xl:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)]">
+          <section className="min-w-0 rounded-3xl border border-border/50 bg-card/70 p-4 shadow-sm sm:p-6 xl:p-7">
+            <div className="mb-6 flex flex-col items-start justify-between gap-4 sm:flex-row">
               <div>
                 <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">
                   {isAdminSurface ? "Admin Lab" : hasSessionRunner ? "Customer Runner" : "Public Lab"}
@@ -1465,17 +1465,17 @@ const TemplateLab = () => {
                 <h1 className="mt-2 font-display text-4xl font-black tracking-tight">Template Runner</h1>
                 <p className="mt-3 max-w-xl text-sm text-muted-foreground">
                   {canManageTemplates
-                    ? "Pick any active template, upload the required inputs, and run the graph against the live Supabase backend."
-                    : "Pick a template, upload the required inputs, and run it against the live Supabase backend."}
+                    ? "Pick any active template, upload the required inputs, and generate."
+                    : "Pick a template, upload the required inputs, and generate."}
                 </p>
               </div>
             </div>
 
-            <div className="grid gap-4 md:grid-cols-[1fr,auto] md:items-end">
+            <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
               {hasSessionRunner ? (
                 <div className="rounded-2xl border border-border/40 bg-background/60 px-4 py-3 text-sm text-muted-foreground">
                   {canManageTemplates
-                    ? "Signed in with admin/dev access. The runner is using your Supabase session."
+                    ? "Signed in with admin access. Runs, history, and results are tied to your account."
                     : "Signed in with your customer account. Runs, history, and results are tied to your session."}
                 </div>
               ) : (
@@ -1495,7 +1495,7 @@ const TemplateLab = () => {
                   />
                 </div>
               )}
-              <Button type="button" onClick={() => void loadTemplates()} disabled={loadingTemplates}>
+              <Button type="button" className="w-full whitespace-nowrap md:w-auto" onClick={() => void loadTemplates()} disabled={loadingTemplates}>
                 {loadingTemplates ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
                 Refresh Templates
               </Button>
@@ -1529,7 +1529,7 @@ const TemplateLab = () => {
                   setError(null);
                 }}
                 disabled={loadingTemplates || templates.length === 0}
-                className="flex h-11 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                className="flex h-11 w-full max-w-full truncate rounded-md border border-input bg-background px-3 py-2 text-sm"
               >
                 {templates.length === 0 ? (
                   <option value="" disabled>
@@ -1622,7 +1622,7 @@ const TemplateLab = () => {
                         );
                       })}
 
-                      <Button type="button" onClick={() => void handleRun()} disabled={!canRun || startingRun || isSelectedTemplateJobRunning}>
+                      <Button type="button" className="w-full whitespace-nowrap sm:w-auto" onClick={() => void handleRun()} disabled={!canRun || startingRun || isSelectedTemplateJobRunning}>
                         {startingRun || isSelectedTemplateJobRunning ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Film className="mr-2 h-4 w-4" />}
                         Run Template
                       </Button>
@@ -1878,7 +1878,7 @@ const TemplateLab = () => {
                   );
                 })}
 
-                <Button type="button" onClick={() => void handleRun()} disabled={!canRun || startingRun || isSelectedTemplateJobRunning}>
+                <Button type="button" className="w-full whitespace-nowrap sm:w-auto" onClick={() => void handleRun()} disabled={!canRun || startingRun || isSelectedTemplateJobRunning}>
                   {startingRun || isSelectedTemplateJobRunning ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Film className="mr-2 h-4 w-4" />}
                   Run Template
                 </Button>
@@ -1967,7 +1967,7 @@ const TemplateLab = () => {
                   <TabsContent value="map" className="mt-4">
                     {visibleFlowLanes.length ? (
                       <div className="overflow-x-auto pb-2">
-                        <div className="grid min-w-[980px] gap-4 xl:grid-cols-4">
+                        <div className="grid min-w-0 gap-4 md:min-w-[720px] xl:min-w-0 xl:grid-cols-4">
                           {visibleFlowLanes.map((lane) => (
                             <div key={lane.key} className="rounded-2xl border border-border/30 bg-background/70 p-4">
                               <div className="flex items-center justify-between gap-3">
@@ -2207,7 +2207,7 @@ const TemplateLab = () => {
                                           ? { ...current, editorMode: event.target.value as EditorDraft["editorMode"] }
                                           : current
                                       )}
-                                    className="flex h-11 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                                    className="flex h-11 w-full max-w-full truncate rounded-md border border-input bg-background px-3 py-2 text-sm"
                                   >
                                     <option value="upload">User Upload</option>
                                     <option value="reference">Hidden Reference</option>
