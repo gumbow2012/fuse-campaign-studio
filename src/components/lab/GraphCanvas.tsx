@@ -210,9 +210,15 @@ const GraphCanvasInner = ({
       type: "smoothstep" as const,
       animated: true,
       style: { stroke: "hsl(var(--primary))", strokeWidth: 1.8, opacity: 0.75 },
+      labelShowBg: true,
+      labelBgPadding: [6, 3] as [number, number],
+      labelBgBorderRadius: 8,
+      labelBgStyle: { fill: "hsl(var(--card))", fillOpacity: 0.9 },
+      labelStyle: { fill: "hsl(var(--primary))", fontSize: 10, fontWeight: 700 },
     }),
     [],
   );
+
 
   return (
     <div className="h-[min(72vh,720px)] min-h-[460px] w-full min-w-0 overflow-hidden rounded-3xl border border-border/50 bg-background/70">
