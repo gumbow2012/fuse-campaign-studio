@@ -2979,8 +2979,22 @@ const TemplateCanvas = () => {
             </div>
           ) : null}
 
-          <div className="mt-5 rounded-3xl border border-border/50 bg-card/70 p-5 shadow-sm">
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Manage Templates</p>
+          <div className="mt-5 rounded-3xl border border-border/60 bg-card/80 p-5 shadow-sm backdrop-blur-xl">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-foreground/80">Manage Templates</p>
+                <p className="mt-1 truncate text-sm text-foreground/65">
+                  {selectedTemplate ? `${selectedTemplate.templateName} · v${selectedTemplate.versionNumber}` : "No template selected yet"}
+                </p>
+              </div>
+              <span className={`rounded-full border px-3 py-1 text-[11px] font-bold uppercase tracking-[0.14em] ${
+                selectedTemplateHasLiveVersion
+                  ? "border-emerald-400/50 bg-emerald-400/15 text-emerald-100"
+                  : "border-amber-300/50 bg-amber-300/15 text-amber-100"
+              }`}>
+                {selectedTemplateHasLiveVersion ? "Live on site" : "Draft"}
+              </span>
+            </div>
             <div className="mt-4 grid gap-4 rounded-2xl border border-border/50 bg-background/45 p-4 lg:grid-cols-[190px_minmax(0,1fr)_auto]">
               <div className="overflow-hidden rounded-2xl border border-border/50 bg-card/70">
                 <div className="aspect-[9/16] bg-background">
