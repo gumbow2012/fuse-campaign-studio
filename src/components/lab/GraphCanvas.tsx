@@ -570,12 +570,10 @@ const GraphCanvasInner = ({
   const handleEdgesChange = useCallback(
     (changes: EdgeChange<Edge>[]) => {
       onEdgesChange(changes);
-      for (const change of changes) {
-        if (change.type === "remove" && !change.id.startsWith("pending-")) onDeleteEdge(change.id);
-      }
     },
-    [onDeleteEdge, onEdgesChange],
+    [onEdgesChange],
   );
+
 
 
   const handleConnect = useCallback(
