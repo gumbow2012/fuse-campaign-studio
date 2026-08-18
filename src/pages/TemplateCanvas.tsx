@@ -593,6 +593,8 @@ const TemplateCanvas = () => {
   const [canvasZoom, setCanvasZoom] = useState(DEFAULT_CANVAS_ZOOM);
   const [isPanning, setIsPanning] = useState(false);
   const [showInternalNodes, setShowInternalNodes] = useState(false);
+  const [focusNodeId, setFocusNodeId] = useState<string | null>(null);
+  const viewportApiRef = useRef<{ getCenter: () => Point } | null>(null);
   const [showRunnerPanel, setShowRunnerPanel] = useState(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -1792,8 +1794,22 @@ const TemplateCanvas = () => {
         }).catch(() => undefined);
       }
 
+      if (kind === "reference") setShowInternalNodes(true);
+
+      if (createdNodeId) {
+        const center = viewportApiRef.current?.getCenter() ?? { x: 320, y: 240 };
+        const spawn = {
+          x: Math.round(center.x - NODE_WIDTH / 2 + (Math.random() * 60 - 30)),
+          y: Math.round(center.y - 90 + (Math.random() * 60 - 30)),
+        };
+        setPositions((current) => ({ ...current, [createdNodeId]: spawn }));
+      }
+
       await refreshAfterMutation(detail.versionId);
-      if (createdNodeId) setSelectedNodeId(createdNodeId);
+      if (createdNodeId) {
+        setSelectedNodeId(createdNodeId);
+        setFocusNodeId(createdNodeId);
+      }
       toast({ title: "Step added", description: "Rename it and set the prompt in the inspector." });
     } catch (addError) {
       const message = addError instanceof Error ? addError.message : "Could not add node";
@@ -2331,6 +2347,10 @@ const TemplateCanvas = () => {
               onNodeMoved={handleCanvasNodeMoved}
               onConnectNodes={(source, target, targetHandle) => void connectNodesOnCanvas(source, target, targetHandle)}
               onDeleteEdge={(edgeId) => void deleteEdge(edgeId)}
+              focusNodeId={focusNodeId}
+              onViewportApiReady={(api) => {
+                viewportApiRef.current = api;
+              }}
               className="h-[calc(100vh-9.5rem)] min-h-[520px]"
             />
           </section>
