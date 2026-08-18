@@ -15,37 +15,23 @@ const tierCopy = {
   starter: {
     icon: Zap,
     description:
-      "For brands getting started. Full template library, standard processing, and everything you need to launch your first drops with real campaign visuals.",
-    features: [
-      "About 3 full campaigns per month",
-      "About 7 lighter drop runs per month",
-      "Full campaign template library",
-      "Standard processing",
-    ],
+      "For brands getting started. Full template library. Standard processing. Everything you need to launch your first drops with real campaign visuals.",
+    features: ["Full campaign template library", "Standard processing", "Commercial rights on every asset"],
   },
   pro: {
     icon: Rocket,
     description:
-      "For brands that drop regularly. Priority processing, faster turnaround, and the full creative toolkit for a real drop calendar.",
-    features: [
-      "About 19 full campaigns per month",
-      "About 42 lighter drop runs per month",
-      "Priority processing",
-      "Faster iteration on every vibe",
-    ],
+      "For brands that drop regularly. Priority processing. Faster turnaround. The full creative toolkit for brands running a real drop calendar.",
+    features: ["Priority processing", "Faster turnaround on every vibe", "Full campaign template library"],
   },
   studio: {
     icon: Crown,
     description:
-      "For teams and agencies. Fastest processing and the largest volume, built for brands running multiple lines or managing client drops.",
-    features: [
-      "About 58 full campaigns per month",
-      "About 130 lighter drop runs per month",
-      "Fastest processing",
-      "Built for multi-brand and client work",
-    ],
+      "For teams and agencies. Fastest processing. Largest volume. Built for brands running multiple lines or managing client drops.",
+    features: ["Fastest processing", "Largest monthly volume", "Built for multi-brand and client work"],
   },
 } as const;
+
 
 type CreditPackSmokeResult = {
   ok?: boolean;
