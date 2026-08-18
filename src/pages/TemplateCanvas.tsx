@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Copy, EyeOff, Film, GitBranch, Image as ImageIcon, Loader2, Maximize2, Minus, Move, Play, Plus, RefreshCw, Save, Search, Trash2, Type, Upload, X } from "lucide-react";
+import { CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Copy, EyeOff, Film, GitBranch, Image as ImageIcon, Loader2, Maximize2, Minus, ImageDown, Layers, Move, Play, Plus, RefreshCw, Save, Search, Trash2, Type, Upload, X } from "lucide-react";
 import { Link, useSearchParams } from "react-router-dom";
 import SiteShell from "@/components/mvp/SiteShell";
+import TemplateGallery from "@/components/lab/TemplateGallery";
 import GraphCanvas, { PORT_COLOR, type GraphCanvasNode, type GraphCanvasNodeData, type PortType } from "@/components/lab/GraphCanvas";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -47,6 +48,7 @@ type TemplateOption = {
   versionNumber: number;
   reviewStatus: string;
   isActive: boolean;
+  updatedAt: string | null;
   counts: {
     inputs: number;
     imageOutputs: number;
@@ -79,6 +81,7 @@ type WorkbenchCatalogTemplate = {
   description?: string | null;
   preview_url?: string | null;
   preview_asset_type?: "image" | "video" | null;
+  updated_at?: string | null;
   versions?: WorkbenchCatalogVersion[];
 };
 
@@ -672,6 +675,7 @@ const TemplateCanvas = () => {
           versionNumber: version.version_number,
           reviewStatus: version.review_status ?? "Unreviewed",
           isActive: version.is_active === true,
+          updatedAt: template.updated_at ?? null,
           counts: {
             inputs: Number(version.counts?.inputs ?? 0),
             imageOutputs: Number(version.counts?.images ?? 0),
@@ -2110,6 +2114,7 @@ const TemplateCanvas = () => {
             <div className="grid grid-cols-2 gap-2 xl:grid-cols-1">
               {[
                 { key: "input", label: "Input", icon: Upload, onClick: () => void addNode("upload"), disabled: !detail || !!mutating, hint: "Uploaded or reference image" },
+                { key: "reference", label: "Image Reference", icon: ImageDown, onClick: () => void addNode("reference"), disabled: !detail || !!mutating, hint: "Fixed image you upload now" },
                 { key: "image", label: "Image", icon: ImageIcon, onClick: () => void addNode("image_gen"), disabled: !detail || !!mutating, hint: "nano-banana-pro image step" },
                 { key: "video", label: "Video", icon: Film, onClick: () => void addNode("video_gen", paletteVideoModel), disabled: !detail || !!mutating, hint: `${resolveVideoModelOption(paletteVideoModel).label} step` },
                 { key: "prompt", label: "Prompt", icon: Type, onClick: () => {}, disabled: true, hint: "coming soon" },
