@@ -219,13 +219,20 @@ export function normalizeVideoDuration(value: unknown) {
 
 /* ============================ Video model registry ============================ */
 
-export type VideoModelKey = "kling-2.5" | "seedance-2.0" | "seedance-2.0-fast";
+export type VideoModelKey =
+  | "kling-3.0-pro"
+  | "kling-3.0-standard"
+  | "kling-2.5"
+  | "seedance-2.0"
+  | "seedance-2.0-fast";
 
 export type VideoModelDefinition = {
   key: VideoModelKey;
   endpointId: string;
   label: string;
-  family: "kling" | "seedance";
+  family: "kling" | "kling3" | "seedance";
+  /** Fallback price per second in USD when audio is enabled (kling3). */
+  fallbackUsdPerSecondAudio?: number;
   supportsAudio: boolean;
   fixedAspect?: string;
   maxDurationSec?: number;
