@@ -1661,9 +1661,8 @@ const TemplateCanvas = () => {
     }
   }, [invokeWorkbench, refreshAfterMutation, selectedTemplate]);
 
-  const addNode = useCallback(async (kindOverride?: NewNodeKind, videoModelOverride?: VideoModelKey) => {
+  const addNode = useCallback(async (kind: NewNodeKind, videoModelOverride?: VideoModelKey) => {
     if (!detail) return;
-    const kind = kindOverride ?? addNodeType;
     const isInput = kind === "upload" || kind === "reference";
     setMutating("add-node");
     try {
@@ -1672,9 +1671,8 @@ const TemplateCanvas = () => {
         versionId: detail.versionId,
         nodeType: isInput ? "user_input" : kind,
         editorMode: isInput ? kind : undefined,
-        name: kindOverride ? undefined : (addNodeName || undefined),
-        expected: kindOverride ? (kind === "video_gen" ? "video" : "image") : addNodeExpected,
-        prompt: kindOverride ? "" : addNodePrompt,
+        expected: kind === "video_gen" ? "video" : "image",
+        prompt: "",
         outputExposed: kind === "image_gen" || kind === "video_gen",
       });
       const createdNodeId = typeof created.nodeId === "string" ? created.nodeId : null;
@@ -1690,18 +1688,16 @@ const TemplateCanvas = () => {
         }).catch(() => undefined);
       }
 
-      setAddNodeName("");
-      setAddNodeExpected("image");
-      setAddNodePrompt("");
       await refreshAfterMutation(detail.versionId);
-      toast({ title: "Node added" });
+      if (createdNodeId) setSelectedNodeId(createdNodeId);
+      toast({ title: "Step added", description: "Rename it and set the prompt in the inspector." });
     } catch (addError) {
       const message = addError instanceof Error ? addError.message : "Could not add node";
-      toast({ title: "Add node failed", description: message, variant: "destructive" });
+      toast({ title: "Add step failed", description: message, variant: "destructive" });
     } finally {
       setMutating(null);
     }
-  }, [addNodeExpected, addNodeName, addNodePrompt, addNodeType, buildAuthHeaders, detail, invokeWorkbench, refreshAfterMutation]);
+  }, [buildAuthHeaders, detail, invokeWorkbench, refreshAfterMutation]);
 
   const deleteSelectedNode = useCallback(async () => {
     if (!selectedNode || !detail) return;
