@@ -17,21 +17,30 @@ describe("template canvas editor contract", () => {
     expect(canvasSource).not.toContain("dragRef.current!.origin");
   });
 
-  it("uses explicit branch priority controls instead of card dragging", () => {
+  it("starts new templates as a blank graph instead of a wizard", () => {
     const canvasSource = source();
 
-    expect(canvasSource).toContain("const moveTemplateBranch = useCallback");
-    expect(canvasSource).toContain("Move branch earlier");
-    expect(canvasSource).toContain("Move branch later");
+    expect(canvasSource).toContain("withStarterGraph: false");
+    expect(canvasSource).toContain("Blank canvas");
+    expect(canvasSource).not.toContain("templateWizardStep === \"setup\"");
   });
 
-  it("exposes incoming edge delete and priority controls in the inspector", () => {
+  it("exposes a node palette with selectable video models", () => {
+    const canvasSource = source();
+
+    expect(canvasSource).toContain(">Palette<");
+    expect(canvasSource).toContain("paletteVideoModel");
+    expect(canvasSource).toContain('addNode("video_gen", paletteVideoModel)');
+  });
+
+  it("exposes incoming edge delete, drag reorder, and priority controls in the inspector", () => {
     const canvasSource = source();
 
     expect(canvasSource).toContain("Incoming Priority");
     expect(canvasSource).toContain("Move incoming earlier");
     expect(canvasSource).toContain("Move incoming later");
     expect(canvasSource).toContain("Delete incoming connection");
+    expect(canvasSource).toContain("const moveIncomingEdgeToIndex = useCallback");
     expect(canvasSource).toContain('action: "reorder_edge"');
   });
 
@@ -48,9 +57,10 @@ describe("template canvas editor contract", () => {
 
     expect(canvasSource).toContain("MAX_VISIBLE_CANVAS_EDGES");
     expect(canvasSource).toContain("canvasEdgeVisibility");
-    expect(canvasSource).toContain("Edge target params stay out of the canvas");
+    expect(canvasSource).toContain("label: `Ref ${index + 1}`");
     expect(canvasSource).not.toContain("<text");
     expect(canvasSource).not.toContain("{incoming.targetParam}");
     expect(canvasSource).not.toContain("edge.sourceName} -> ${edge.targetParam");
   });
 });
+

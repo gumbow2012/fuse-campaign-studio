@@ -32,10 +32,12 @@ export type GraphCanvasNodeData = {
   promptPreview: string;
   incomingCount: number;
   sourceSummary: string;
+  refLabels: string[];
   assetUrl: string | null;
   expected: string | null;
   deliverable: boolean | null;
 };
+
 
 export type GraphCanvasNode = Node<GraphCanvasNodeData>;
 
@@ -118,10 +120,28 @@ const TemplateFlowNode = ({ data, selected }: NodeProps<GraphCanvasNode>) => {
         <p className="mt-1 line-clamp-3 text-[11px] leading-relaxed text-foreground/85">{data.promptPreview}</p>
       </div>
 
-      <p className="mt-2 line-clamp-1 text-[10px] text-muted-foreground">From: {data.sourceSummary}</p>
+      {data.refLabels.length ? (
+        <div className="mt-2 space-y-1">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Reference order</p>
+          {data.refLabels.map((label, index) => (
+            <div
+              key={`${label}-${index}`}
+              className="flex items-center gap-2 rounded-lg border border-primary/25 bg-primary/[0.07] px-2 py-1 text-[10px] text-foreground/85"
+            >
+              <span className="flex h-4 w-4 items-center justify-center rounded-full border border-primary/40 text-[9px] font-bold text-primary">
+                {index + 1}
+              </span>
+              <span className="truncate">{label}</span>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <p className="mt-2 line-clamp-1 text-[10px] text-muted-foreground">From: {data.sourceSummary}</p>
+      )}
     </div>
   );
 };
+
 
 const nodeTypes = { templateNode: TemplateFlowNode };
 
@@ -190,9 +210,15 @@ const GraphCanvasInner = ({
       type: "smoothstep" as const,
       animated: true,
       style: { stroke: "hsl(var(--primary))", strokeWidth: 1.8, opacity: 0.75 },
+      labelShowBg: true,
+      labelBgPadding: [6, 3] as [number, number],
+      labelBgBorderRadius: 8,
+      labelBgStyle: { fill: "hsl(var(--card))", fillOpacity: 0.9 },
+      labelStyle: { fill: "hsl(var(--primary))", fontSize: 10, fontWeight: 700 },
     }),
     [],
   );
+
 
   return (
     <div className="h-[min(72vh,720px)] min-h-[460px] w-full min-w-0 overflow-hidden rounded-3xl border border-border/50 bg-background/70">
