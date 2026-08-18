@@ -1877,21 +1877,34 @@ const TemplateCanvas = () => {
         assetUrl: node.defaultAssetUrl,
         expected: node.editor?.expected ?? node.expected ?? null,
         deliverable: typeof node.editor?.outputExposed === "boolean" ? node.editor.outputExposed : null,
+        imagePortCount: Math.max(2, imagePortCounts[node.id] ?? 2, node.incoming.length),
+        onAddImagePort: handleAddImagePort,
       },
     };
-  }), [graphNodes]);
+  }), [graphNodes, imagePortCounts, handleAddImagePort]);
 
   const flowEdges = useMemo(() => graphNodes.flatMap((target) =>
     target.incoming.flatMap((incoming, index) => {
       if (!nodeMap.has(incoming.sourceNodeId)) return [];
+      const sourceNode = nodeMap.get(incoming.sourceNodeId);
+      const param = (incoming.targetParam ?? "").toLowerCase();
+      const portType: PortType = param.includes("prompt")
+        ? "prompt"
+        : sourceNode?.nodeType === "video_gen"
+        ? "video"
+        : "image";
+      const stroke = PORT_COLOR[portType];
       return [{
         id: incoming.edgeId ?? `${incoming.sourceNodeId}-${target.id}-${index}`,
         source: incoming.sourceNodeId,
         target: target.id,
         label: `Ref ${index + 1}`,
+        style: { stroke, strokeWidth: 1.8, opacity: 0.85 },
+        labelStyle: { fill: stroke, fontSize: 10, fontWeight: 700 },
       }];
     }),
   ), [graphNodes, nodeMap]);
+
 
 
   const wizardSteps: Array<{ id: TemplateWizardStep; label: string }> = [
