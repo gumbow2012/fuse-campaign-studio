@@ -178,22 +178,26 @@ export async function submitVideoJob(args: {
   aspectRatio?: string;
   duration?: number;
   webhookUrl: string;
+  modelKey?: string;
+  resolution?: string;
+  generateAudio?: boolean;
 }) {
-  const duration = normalizeVideoDuration(args.duration);
-  const aspectRatio = args.aspectRatio === VERTICAL_VIDEO_ASPECT_RATIO
-    ? args.aspectRatio
-    : VERTICAL_VIDEO_ASPECT_RATIO;
+  const modelKey = resolveVideoModelKey(args.modelKey);
+  const endpointId = VIDEO_MODELS[modelKey].endpointId;
+  const input = buildVideoModelInput(modelKey, {
+    imageUrl: args.initImageUrl,
+    endFrameUrl: args.endFrameUrl,
+    prompt: args.prompt,
+    duration: args.duration,
+    resolution: args.resolution,
+    aspectRatio: args.aspectRatio,
+    generateAudio: args.generateAudio,
+  });
+
   let queued: unknown;
   try {
-    queued = await fal.queue.submit(VIDEO_MODEL, {
-      input: {
-        prompt: args.prompt,
-        image_url: args.initImageUrl,
-        ...(args.endFrameUrl ? { tail_image_url: args.endFrameUrl } : {}),
-        duration,
-        aspect_ratio: aspectRatio,
-        cfg_scale: 0.5,
-      },
+    queued = await fal.queue.submit(endpointId, {
+      input,
       webhookUrl: args.webhookUrl,
     });
   } catch (error) {
@@ -212,3 +216,121 @@ export function normalizeVideoDuration(value: unknown) {
     ? Math.min(duration, MAX_VIDEO_DURATION_SECONDS)
     : MAX_VIDEO_DURATION_SECONDS;
 }
+
+/* ============================ Video model registry ============================ */
+
+export type VideoModelKey = "kling-2.5" | "seedance-2.0" | "seedance-2.0-fast";
+
+export type VideoModelDefinition = {
+  key: VideoModelKey;
+  endpointId: string;
+  label: string;
+  family: "kling" | "seedance";
+  supportsAudio: boolean;
+  fixedAspect?: string;
+  maxDurationSec?: number;
+  durationRange?: { min: number; max: number };
+  resolutions?: string[];
+  aspectRatios?: string[];
+  /** Fallback price per second in USD when fal pricing lookup is unavailable. */
+  fallbackUsdPerSecond?: number;
+};
+
+export const DEFAULT_VIDEO_MODEL: VideoModelKey = "kling-2.5";
+
+export const VIDEO_MODELS: Record<VideoModelKey, VideoModelDefinition> = {
+  "kling-2.5": {
+    key: "kling-2.5",
+    endpointId: "fal-ai/kling-video/v2.5-turbo/pro/image-to-video",
+    label: "Kling 2.5",
+    family: "kling",
+    supportsAudio: false,
+    fixedAspect: VERTICAL_VIDEO_ASPECT_RATIO,
+    maxDurationSec: MAX_VIDEO_DURATION_SECONDS,
+  },
+  "seedance-2.0": {
+    key: "seedance-2.0",
+    endpointId: "bytedance/seedance-2.0/image-to-video",
+    label: "Seedance 2.0",
+    family: "seedance",
+    supportsAudio: true,
+    durationRange: { min: 4, max: 15 },
+    resolutions: ["480p", "720p", "1080p", "4k"],
+    aspectRatios: ["9:16", "16:9", "1:1", "4:3", "3:4", "21:9"],
+    fallbackUsdPerSecond: 0.3024,
+  },
+  "seedance-2.0-fast": {
+    key: "seedance-2.0-fast",
+    endpointId: "bytedance/seedance-2.0/fast/image-to-video",
+    label: "Seedance 2.0 Fast",
+    family: "seedance",
+    supportsAudio: true,
+    durationRange: { min: 4, max: 15 },
+    resolutions: ["480p", "720p", "1080p", "4k"],
+    aspectRatios: ["9:16", "16:9", "1:1", "4:3", "3:4", "21:9"],
+    fallbackUsdPerSecond: 0.2419,
+  },
+};
+
+export function resolveVideoModelKey(value: unknown): VideoModelKey {
+  const key = typeof value === "string" ? value.trim() : "";
+  return (key && key in VIDEO_MODELS ? key : DEFAULT_VIDEO_MODEL) as VideoModelKey;
+}
+
+export function getVideoModel(value: unknown) {
+  return VIDEO_MODELS[resolveVideoModelKey(value)];
+}
+
+export function clampSeedanceDuration(value: unknown, model: VideoModelDefinition) {
+  const range = model.durationRange ?? { min: 4, max: 15 };
+  const next = Number(value ?? range.min);
+  if (!Number.isFinite(next)) return range.min;
+  return Math.min(range.max, Math.max(range.min, Math.round(next)));
+}
+
+export function buildVideoModelInput(
+  modelKey: unknown,
+  args: {
+    imageUrl: string;
+    endFrameUrl?: string;
+    prompt: string;
+    duration?: unknown;
+    resolution?: string | null;
+    aspectRatio?: string | null;
+    generateAudio?: boolean | null;
+  },
+): Record<string, unknown> {
+  const model = getVideoModel(modelKey);
+
+  if (model.family === "kling") {
+    // Preserved byte-for-byte from the original Kling payload.
+    return {
+      prompt: args.prompt,
+      image_url: args.imageUrl,
+      ...(args.endFrameUrl ? { tail_image_url: args.endFrameUrl } : {}),
+      duration: normalizeVideoDuration(args.duration),
+      aspect_ratio: VERTICAL_VIDEO_ASPECT_RATIO,
+      cfg_scale: 0.5,
+    };
+  }
+
+  const aspectRatio = model.aspectRatios?.includes(String(args.aspectRatio ?? ""))
+    ? String(args.aspectRatio)
+    : VERTICAL_VIDEO_ASPECT_RATIO;
+  const resolution = model.resolutions?.includes(String(args.resolution ?? ""))
+    ? String(args.resolution)
+    : "720p";
+  const duration = args.duration === "auto"
+    ? "auto"
+    : String(clampSeedanceDuration(args.duration, model));
+
+  return {
+    prompt: args.prompt,
+    image_url: args.imageUrl,
+    duration,
+    resolution,
+    aspect_ratio: aspectRatio,
+    generate_audio: args.generateAudio !== false,
+  };
+}
+
