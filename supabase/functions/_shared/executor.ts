@@ -298,10 +298,26 @@ function videoDuration(value: unknown) {
   return normalizeVideoDuration(value);
 }
 
-async function getStepCostEstimate(endpointId: string, promptConfig?: Record<string, unknown> | null) {
+async function getStepCostEstimate(
+  endpointId: string,
+  promptConfig?: Record<string, unknown> | null,
+  fallback?: { fallbackUsdPerSecond?: number; seconds?: number },
+) {
   try {
     const pricing = await getFalPricing(endpointId);
-    if (!pricing) return null;
+    if (!pricing) {
+      if (fallback?.fallbackUsdPerSecond && fallback.seconds) {
+        return {
+          endpointId,
+          unit: "second",
+          unitPriceUsd: fallback.fallbackUsdPerSecond,
+          quantity: fallback.seconds,
+          estimatedCostUsd: Number((fallback.fallbackUsdPerSecond * fallback.seconds).toFixed(6)),
+          currency: "USD",
+        };
+      }
+      return null;
+    }
 
     const quantity = estimateBillingQuantity({
       endpointId,
@@ -318,9 +334,20 @@ async function getStepCostEstimate(endpointId: string, promptConfig?: Record<str
       currency: pricing.currency,
     };
   } catch {
+    if (fallback?.fallbackUsdPerSecond && fallback.seconds) {
+      return {
+        endpointId,
+        unit: "second",
+        unitPriceUsd: fallback.fallbackUsdPerSecond,
+        quantity: fallback.seconds,
+        estimatedCostUsd: Number((fallback.fallbackUsdPerSecond * fallback.seconds).toFixed(6)),
+        currency: "USD",
+      };
+    }
     return null;
   }
 }
+
 
 export async function uploadRemoteAsset(admin: AdminClient, args: {
   jobId: string;
