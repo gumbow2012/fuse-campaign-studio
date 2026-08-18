@@ -1512,7 +1512,7 @@ const TemplateCanvas = () => {
           ? createdReference.nodeId
           : null;
         if (!nodeId) {
-          uploadFailures.push(reference.label || `Branch ${reference.branchIndex + 1}`);
+          uploadFailures.push(reference.label || `Step ${reference.branchIndex + 1}`);
           continue;
         }
 
@@ -1539,7 +1539,7 @@ const TemplateCanvas = () => {
           const uploadData = await response.json().catch(() => ({}));
           if (!response.ok) throw new Error(uploadData?.error ?? `Reference upload failed (${response.status})`);
         } catch {
-          uploadFailures.push(reference.label || `Branch ${reference.branchIndex + 1}`);
+          uploadFailures.push(reference.label || `Step ${reference.branchIndex + 1}`);
         }
       }
       setNewTemplateName("");
@@ -1835,7 +1835,7 @@ const TemplateCanvas = () => {
 
   const wizardSteps: Array<{ id: TemplateWizardStep; label: string }> = [
     { id: "setup", label: "Setup" },
-    { id: "branches", label: "Branches" },
+    { id: "branches", label: "Steps" },
   ];
   const wizardStepIndex = wizardSteps.findIndex((step) => step.id === templateWizardStep);
   const wizardProgress = ((wizardStepIndex + 1) / wizardSteps.length) * 100;
@@ -1924,7 +1924,7 @@ const TemplateCanvas = () => {
               <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">Admin Canvas</p>
               <h1 className="mt-2 text-3xl font-black tracking-tight">Template Canvas</h1>
               <p className="mt-2 text-sm text-muted-foreground">
-                Internal-only graph surface for live template creation, edits, validation, and testing.
+                Create, edit, and test your campaign templates.
               </p>
             </div>
             <div className="grid grid-cols-2 gap-2 text-xs sm:flex">
@@ -1950,7 +1950,7 @@ const TemplateCanvas = () => {
               </div>
               <div className="flex flex-wrap gap-2 text-[11px] uppercase tracking-[0.16em] text-muted-foreground">
                 <span className="rounded-full border border-border/60 bg-background/60 px-3 py-1">{newTemplateInputSlots.length} inputs</span>
-                <span className="rounded-full border border-border/60 bg-background/60 px-3 py-1">{newTemplateReferences.length} branches</span>
+                <span className="rounded-full border border-border/60 bg-background/60 px-3 py-1">{newTemplateReferences.length} steps</span>
                 <span className="rounded-full border border-border/60 bg-background/60 px-3 py-1">{newTemplateReferences.filter((reference) => reference.file).length} guide images</span>
               </div>
             </div>
@@ -2063,7 +2063,7 @@ const TemplateCanvas = () => {
                       </div>
                       <div className="grid grid-cols-[1fr_auto] items-center gap-3 border-t border-border/50 pt-3 md:border-l md:border-t-0 md:pl-4 md:pt-0">
                         <div>
-                          <Label>Branches</Label>
+                          <Label>Steps</Label>
                           <p className="mt-1 text-xs uppercase tracking-[0.16em] text-muted-foreground">{newTemplateReferences.length} output path{newTemplateReferences.length === 1 ? "" : "s"}</p>
                         </div>
                         <Input
@@ -2101,9 +2101,9 @@ const TemplateCanvas = () => {
                   <div className="space-y-4">
                     <div className="flex flex-col gap-2 rounded-2xl border border-border/50 bg-card/70 p-3 md:flex-row md:items-center md:justify-between">
                       <div>
-                        <Label>Output Branches</Label>
+                        <Label>Output Steps</Label>
                         <p className="mt-1 text-xs text-muted-foreground">
-                          Branches are outputs. Pick a source upload for each branch; hidden guide images are optional.
+                          Each step is an output. Pick a source upload for each step; hidden guide images are optional.
                         </p>
                       </div>
                       <div className="flex items-center gap-2">
@@ -2117,7 +2117,7 @@ const TemplateCanvas = () => {
                           value={newTemplateReferences.length}
                           onChange={(event) => setTemplateBranchCount(Number(event.target.value))}
                           className="h-9 w-20 rounded-xl"
-                          aria-label="Branch count"
+                          aria-label="Step count"
                         />
                       </div>
                     </div>
@@ -2126,7 +2126,7 @@ const TemplateCanvas = () => {
                       <div key={reference.id} className="w-[min(86vw,540px)] shrink-0 snap-start rounded-2xl border border-border/50 bg-card/70 p-3 md:w-[520px] xl:w-[560px]">
                         <div className="flex items-start justify-between gap-3">
                           <div>
-                            <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Branch {index + 1}</p>
+                            <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Step {index + 1}</p>
                             <h3 className="mt-1 font-semibold">{inputSlotOption(reference.inputSlotKey).label}</h3>
                           </div>
                           <div className="flex shrink-0 items-center gap-2">
@@ -2138,7 +2138,7 @@ const TemplateCanvas = () => {
                                 className="h-8 w-8 rounded-lg"
                                 onClick={() => moveTemplateBranch(reference.id, -1)}
                                 disabled={index === 0 || !!mutating}
-                                title="Move branch earlier"
+                                title="Move step earlier"
                               >
                                 <ChevronLeft className="h-3.5 w-3.5" />
                               </Button>
@@ -2149,7 +2149,7 @@ const TemplateCanvas = () => {
                                 className="h-8 w-8 rounded-lg"
                                 onClick={() => moveTemplateBranch(reference.id, 1)}
                                 disabled={index === newTemplateReferences.length - 1 || !!mutating}
-                                title="Move branch later"
+                                title="Move step later"
                               >
                                 <ChevronRight className="h-3.5 w-3.5" />
                               </Button>
@@ -2219,7 +2219,7 @@ const TemplateCanvas = () => {
                                   current.map((item) => item.id === reference.id ? { ...item, prompt: event.target.value } : item),
                                 )
                               }
-                              placeholder="Hidden guide instruction for this branch"
+                              placeholder="Hidden guide instruction for this step"
                               className="min-h-[58px] rounded-xl text-xs"
                             />
                             <Textarea
@@ -2229,7 +2229,7 @@ const TemplateCanvas = () => {
                                   current.map((item) => item.id === reference.id ? { ...item, imagePrompt: event.target.value } : item),
                                 )
                               }
-                              placeholder="Image generation prompt for this input branch"
+                              placeholder="Image generation prompt for this input step"
                               className="min-h-[76px] rounded-xl text-xs"
                             />
                             <Textarea
