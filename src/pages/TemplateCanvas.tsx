@@ -1966,332 +1966,42 @@ const TemplateCanvas = () => {
             </div>
           </div>
 
-          <div className="mt-5 rounded-3xl border border-border/50 bg-card/70 p-5 shadow-sm">
-            <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Create New Template</p>
-                <h2 className="mt-2 text-2xl font-bold tracking-tight">Draft Builder</h2>
+          <div className="mt-5 rounded-3xl border border-border/50 bg-card/70 p-4 shadow-sm">
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-end">
+              <div className="min-w-0 flex-1 space-y-1.5">
+                <Label className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">New canvas name</Label>
+                <Input
+                  value={newTemplateName}
+                  onChange={(event) => setNewTemplateName(event.target.value)}
+                  placeholder="Template name"
+                  className="h-11 rounded-2xl"
+                />
               </div>
-              <div className="flex flex-wrap gap-2 text-[11px] uppercase tracking-[0.16em] text-muted-foreground">
-                <span className="rounded-full border border-border/60 bg-background/60 px-3 py-1">{newTemplateInputSlots.length} inputs</span>
-                <span className="rounded-full border border-border/60 bg-background/60 px-3 py-1">{newTemplateReferences.length} steps</span>
-                <span className="rounded-full border border-border/60 bg-background/60 px-3 py-1">{newTemplateReferences.filter((reference) => reference.file).length} guide images</span>
+              <div className="min-w-0 flex-1 space-y-1.5">
+                <Label className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">Description</Label>
+                <Input
+                  value={newTemplateDescription}
+                  onChange={(event) => setNewTemplateDescription(event.target.value)}
+                  placeholder="Optional short description"
+                  className="h-11 rounded-2xl"
+                />
               </div>
+              <Button
+                type="button"
+                className="h-11 rounded-2xl lg:w-auto"
+                onClick={() => void createTemplate()}
+                disabled={!!mutating || !hasTemplateName}
+              >
+                {mutating === "create-template" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Plus className="mr-2 h-4 w-4" />}
+                Blank canvas
+              </Button>
             </div>
-            <div className="mt-5">
-              <div className="mb-2 flex items-center justify-between gap-3 text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-                <span>Step {wizardStepIndex + 1} / {wizardSteps.length}</span>
-                <span>{wizardSteps[wizardStepIndex]?.label}</span>
-              </div>
-              <div className="h-1.5 overflow-hidden rounded-full bg-background">
-                <div className="h-full rounded-full bg-primary transition-all duration-300" style={{ width: `${wizardProgress}%` }} />
-              </div>
-              <div className="mt-3 grid grid-cols-2 gap-2">
-                {wizardSteps.map((step, index) => (
-                  <button
-                    key={step.id}
-                    type="button"
-                    onClick={() => selectWizardStep(step.id)}
-                    className={`h-10 rounded-xl border px-3 text-center text-xs font-semibold uppercase tracking-[0.12em] transition ${
-                      templateWizardStep === step.id
-                        ? "border-primary/50 bg-primary text-primary-foreground"
-                        : index < wizardStepIndex
-                        ? "border-border/60 bg-background/70 text-foreground"
-                        : "border-border/50 bg-background/40 text-muted-foreground hover:text-foreground"
-                    }`}
-                  >
-                    <span className="mr-2 text-[10px] opacity-70">{index + 1}</span>
-                    {step.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div className="mt-5">
-              <div className="min-h-[320px] rounded-3xl border border-border/50 bg-background/45 p-4">
-                {templateWizardStep === "setup" ? (
-                  <div className="space-y-4">
-                    <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(260px,0.55fr)]">
-                      <div className="space-y-2">
-                        <Label>Template Name</Label>
-                        <Input
-                          value={newTemplateName}
-                          onChange={(event) => setNewTemplateName(event.target.value)}
-                          placeholder="Template name"
-                          className="h-12 rounded-2xl"
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label>Description</Label>
-                        <Input
-                          value={newTemplateDescription}
-                          onChange={(event) => setNewTemplateDescription(event.target.value)}
-                          placeholder="Optional"
-                          className="h-12 rounded-2xl"
-                        />
-                      </div>
-                    </div>
-                    <div className="grid gap-4 rounded-2xl border border-border/50 bg-card/70 p-4 lg:grid-cols-[180px_minmax(0,1fr)]">
-                      <div className="overflow-hidden rounded-2xl border border-border/50 bg-background/70">
-                        <div className="aspect-[9/16] bg-background">
-                          {newTemplateCoverPreview ? (
-                            <img src={newTemplateCoverPreview} alt="New template cover preview" className="h-full w-full object-cover" />
-                          ) : (
-                            <div className="flex h-full w-full flex-col items-center justify-center gap-3 bg-[radial-gradient(circle_at_top,rgba(34,211,238,0.12),transparent_42%)] px-4 text-center text-muted-foreground">
-                              <ImageIcon className="h-9 w-9 text-cyan-100/55" />
-                              <span className="text-xs leading-5">9:16 template thumbnail</span>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                      <div className="flex flex-col justify-center gap-3">
-                        <div>
-                          <Label>Template Thumbnail</Label>
-                          <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                            This is what customers see on the template card. Use a vertical 9:16 image.
-                          </p>
-                        </div>
-                        <div className="flex flex-wrap gap-2">
-                          <label className="inline-flex h-10 cursor-pointer items-center justify-center gap-2 rounded-xl border border-border bg-background px-4 text-sm font-medium transition hover:border-primary/50 hover:text-foreground">
-                            <Upload className="h-4 w-4" />
-                            {newTemplateCoverFile ? "Replace thumbnail" : "Upload thumbnail"}
-                            <input
-                              type="file"
-                              accept="image/*"
-                              className="hidden"
-                              onChange={(event) => handleNewTemplateCoverFile(event.target.files?.[0] ?? null)}
-                            />
-                          </label>
-                          {newTemplateCoverFile ? (
-                            <Button type="button" variant="outline" onClick={() => handleNewTemplateCoverFile(null)}>
-                              Clear
-                            </Button>
-                          ) : null}
-                        </div>
-                      </div>
-                    </div>
-                    <div className="grid gap-3 rounded-2xl border border-border/50 bg-card/70 p-4 md:grid-cols-2">
-                      <div className="grid grid-cols-[1fr_auto] items-center gap-3">
-                        <div>
-                          <Label>Inputs</Label>
-                          <p className="mt-1 text-xs uppercase tracking-[0.16em] text-muted-foreground">{newTemplateInputSlots.length} user upload slot{newTemplateInputSlots.length === 1 ? "" : "s"}</p>
-                        </div>
-                        <Input
-                          type="number"
-                          min={1}
-                          max={MAX_TEMPLATE_INPUTS}
-                          value={newTemplateInputSlots.length}
-                          onChange={(event) => setTemplateInputCount(Number(event.target.value))}
-                          className="h-11 w-20 rounded-xl"
-                        />
-                      </div>
-                      <div className="grid grid-cols-[1fr_auto] items-center gap-3 border-t border-border/50 pt-3 md:border-l md:border-t-0 md:pl-4 md:pt-0">
-                        <div>
-                          <Label>Steps</Label>
-                          <p className="mt-1 text-xs uppercase tracking-[0.16em] text-muted-foreground">{newTemplateReferences.length} output path{newTemplateReferences.length === 1 ? "" : "s"}</p>
-                        </div>
-                        <Input
-                          type="number"
-                          min={1}
-                          max={MAX_TEMPLATE_BRANCHES}
-                          value={newTemplateReferences.length}
-                          onChange={(event) => setTemplateBranchCount(Number(event.target.value))}
-                          className="h-11 w-20 rounded-xl"
-                        />
-                      </div>
-                    </div>
-                    <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-                      {newTemplateInputSlots.map((slot, index) => (
-                        <div key={slot.id} className="rounded-2xl border border-border/50 bg-card/70 p-3">
-                          <Label className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground">Input {index + 1}</Label>
-                          <select
-                            value={slot.slotKey}
-                            onChange={(event) => setTemplateInputSlot(slot.id, event.target.value)}
-                            className="mt-2 h-11 w-full rounded-xl border border-border bg-background px-3 text-sm"
-                          >
-                            {TEMPLATE_INPUT_SLOT_OPTIONS.map((option) => (
-                              <option key={option.key} value={option.key}>
-                                {option.label}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                ) : null}
-
-                {templateWizardStep === "branches" ? (
-                  <div className="space-y-4">
-                    <div className="flex flex-col gap-2 rounded-2xl border border-border/50 bg-card/70 p-3 md:flex-row md:items-center md:justify-between">
-                      <div>
-                        <Label>Output Steps</Label>
-                        <p className="mt-1 text-xs text-muted-foreground">
-                          Each step is an output. Pick a source upload for each step; hidden guide images are optional.
-                        </p>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <span className="rounded-full border border-border/60 bg-background/60 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-                          Horizontal snap
-                        </span>
-                        <Input
-                          type="number"
-                          min={1}
-                          max={MAX_TEMPLATE_BRANCHES}
-                          value={newTemplateReferences.length}
-                          onChange={(event) => setTemplateBranchCount(Number(event.target.value))}
-                          className="h-9 w-20 rounded-xl"
-                          aria-label="Step count"
-                        />
-                      </div>
-                    </div>
-                    <div className="-mx-1 flex snap-x snap-mandatory gap-3 overflow-x-auto px-1 pb-3">
-                    {newTemplateReferences.map((reference, index) => (
-                      <div key={reference.id} className="w-[min(86vw,540px)] shrink-0 snap-start rounded-2xl border border-border/50 bg-card/70 p-3 md:w-[520px] xl:w-[560px]">
-                        <div className="flex items-start justify-between gap-3">
-                          <div>
-                            <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Step {index + 1}</p>
-                            <h3 className="mt-1 font-semibold">{inputSlotOption(reference.inputSlotKey).label}</h3>
-                          </div>
-                          <div className="flex shrink-0 items-center gap-2">
-                            <div className="flex gap-1">
-                              <Button
-                                type="button"
-                                variant="outline"
-                                size="icon"
-                                className="h-8 w-8 rounded-lg"
-                                onClick={() => moveTemplateBranch(reference.id, -1)}
-                                disabled={index === 0 || !!mutating}
-                                title="Move step earlier"
-                              >
-                                <ChevronLeft className="h-3.5 w-3.5" />
-                              </Button>
-                              <Button
-                                type="button"
-                                variant="outline"
-                                size="icon"
-                                className="h-8 w-8 rounded-lg"
-                                onClick={() => moveTemplateBranch(reference.id, 1)}
-                                disabled={index === newTemplateReferences.length - 1 || !!mutating}
-                                title="Move step later"
-                              >
-                                <ChevronRight className="h-3.5 w-3.5" />
-                              </Button>
-                            </div>
-                            <div className="hidden gap-1 text-[9px] font-semibold uppercase tracking-[0.1em] text-muted-foreground sm:flex">
-                              <span className="rounded-md border border-cyan-300/30 px-1.5 py-1">Input</span>
-                              <span className="rounded-md border border-amber-300/30 px-1.5 py-1">Guide</span>
-                              <span className="rounded-md border border-emerald-300/30 px-1.5 py-1">Image</span>
-                              <span className="rounded-md border border-rose-300/30 px-1.5 py-1">Video</span>
-                            </div>
-                          </div>
-                        </div>
-                        <div className="mt-3 grid gap-3 rounded-xl border border-border/50 bg-background/45 p-3 sm:grid-cols-[140px_minmax(0,1fr)] sm:items-center">
-                          <Label className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground">Source upload</Label>
-                          <select
-                            value={reference.inputSlotId}
-                            onChange={(event) => setTemplateBranchInput(reference.id, event.target.value)}
-                            className="h-9 w-full rounded-xl border border-border bg-background px-3 text-sm"
-                          >
-                            {newTemplateInputSlots.map((slot, slotIndex) => (
-                              <option key={slot.id} value={slot.id}>
-                                {slotIndex + 1}. {inputSlotOption(slot.slotKey).label}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-                        <div className="mt-3 grid gap-3 sm:grid-cols-[150px_minmax(0,1fr)]">
-                          <div className="min-w-0">
-                            {reference.previewUrl ? (
-                              <img src={reference.previewUrl} alt={reference.label} className="aspect-[9/16] max-h-[250px] w-full rounded-xl border border-border/50 bg-background object-contain" />
-                            ) : (
-                              <div className="flex aspect-[9/16] max-h-[250px] w-full items-center justify-center rounded-xl border border-dashed border-border/60 bg-background/50 px-3 text-center text-xs text-muted-foreground">
-                                Optional guide image
-                              </div>
-                            )}
-                            <div className="mt-2 flex gap-2">
-                              <label className="inline-flex h-9 flex-1 cursor-pointer items-center justify-center gap-2 rounded-xl border border-border bg-background px-2 text-xs font-medium transition hover:border-primary/50 hover:text-foreground">
-                                <Upload className="h-4 w-4" />
-                                {reference.file ? "Replace" : "Add guide"}
-                                <input
-                                  type="file"
-                                  accept="image/*"
-                                  className="hidden"
-                                  onChange={(event) => handleNewTemplateReferenceFile(reference.id, event.target.files?.[0] ?? null)}
-                                />
-                              </label>
-                              <Button type="button" variant="outline" size="icon" className="h-9 w-9" onClick={() => handleNewTemplateReferenceFile(reference.id, null)} title="Clear guide">
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
-                            </div>
-                          </div>
-                          <div className="grid min-w-0 gap-2">
-                            <Input
-                              value={reference.label}
-                              onChange={(event) =>
-                                setNewTemplateReferences((current) =>
-                                  current.map((item) => item.id === reference.id ? { ...item, label: event.target.value } : item),
-                                )
-                              }
-                              className="h-9 rounded-xl"
-                              placeholder={`${inputSlotOption(reference.inputSlotKey).label} guide label`}
-                            />
-                            <Textarea
-                              value={reference.prompt}
-                              onChange={(event) =>
-                                setNewTemplateReferences((current) =>
-                                  current.map((item) => item.id === reference.id ? { ...item, prompt: event.target.value } : item),
-                                )
-                              }
-                              placeholder="Hidden guide instruction for this step"
-                              className="min-h-[58px] rounded-xl text-xs"
-                            />
-                            <Textarea
-                              value={reference.imagePrompt}
-                              onChange={(event) =>
-                                setNewTemplateReferences((current) =>
-                                  current.map((item) => item.id === reference.id ? { ...item, imagePrompt: event.target.value } : item),
-                                )
-                              }
-                              placeholder="Image generation prompt for this input step"
-                              className="min-h-[76px] rounded-xl text-xs"
-                            />
-                            <Textarea
-                              value={reference.videoPrompt}
-                              onChange={(event) =>
-                                setNewTemplateReferences((current) =>
-                                  current.map((item) => item.id === reference.id ? { ...item, videoPrompt: event.target.value } : item),
-                                )
-                              }
-                              placeholder="Video generation prompt from this image output"
-                              className="min-h-[76px] rounded-xl text-xs"
-                            />
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                    </div>
-                  </div>
-                ) : null}
-
-                <div className="mt-5 flex flex-wrap gap-2">
-                  <Button type="button" variant="outline" onClick={() => goWizard(-1)} disabled={wizardStepIndex <= 0 || !!mutating}>
-                    Back
-                  </Button>
-                  {templateWizardStep === "branches" ? (
-                    <Button type="button" className="flex-1" onClick={() => void createTemplate()} disabled={!!mutating || !hasTemplateName}>
-                      {mutating === "create-template" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Plus className="mr-2 h-4 w-4" />}
-                      Create Draft
-                    </Button>
-                  ) : (
-                    <Button type="button" className="flex-1" onClick={goNextWizard} disabled={!!mutating || !hasTemplateName}>
-                      Next
-                    </Button>
-                  )}
-                </div>
-              </div>
-            </div>
+            <p className="mt-2 text-xs text-muted-foreground">
+              Starts an empty graph. Build it by adding steps from the palette and dragging connections.
+            </p>
           </div>
+
+
 
           {testingGateActive ? (
             <div className={`mt-5 rounded-3xl border p-5 shadow-sm ${
