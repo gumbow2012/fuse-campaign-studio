@@ -332,24 +332,31 @@ export default function BillingPage() {
               </div>
             ) : null}
 
-            <div className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-1">
-              <div className="rounded-[1.5rem] border border-white/8 bg-black/20 p-4">
-                <p className="text-[11px] uppercase tracking-[0.24em] text-muted-foreground">Plan</p>
-                <p className="mt-2 text-3xl font-semibold capitalize text-white">{currentPlanLabel}</p>
+            {user ? (
+              <div className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-1">
+                <div className="rounded-[1.5rem] border border-white/8 bg-black/20 p-4">
+                  <p className="text-[11px] uppercase tracking-[0.24em] text-muted-foreground">Plan</p>
+                  <p className="mt-2 text-3xl font-semibold capitalize text-white">{currentPlanLabel}</p>
+                </div>
+                <div className="rounded-[1.5rem] border border-white/8 bg-black/20 p-4">
+                  <p className="text-[11px] uppercase tracking-[0.24em] text-muted-foreground">Credits</p>
+                  <p className="mt-2 text-3xl font-semibold text-white">{creditValue}</p>
+                </div>
+                <div className="rounded-[1.5rem] border border-white/8 bg-black/20 p-4">
+                  <p className="text-[11px] uppercase tracking-[0.24em] text-muted-foreground">Subscription</p>
+                  <p className="mt-2 text-xl font-semibold capitalize text-white">{subscriptionLabel}</p>
+                </div>
+                <div className="rounded-[1.5rem] border border-white/8 bg-black/20 p-4">
+                  <p className="text-[11px] uppercase tracking-[0.24em] text-muted-foreground">Period ends</p>
+                  <p className="mt-2 text-xl font-semibold text-white">{formatBillingDate(profile?.subscription_period_end)}</p>
+                </div>
               </div>
-              <div className="rounded-[1.5rem] border border-white/8 bg-black/20 p-4">
-                <p className="text-[11px] uppercase tracking-[0.24em] text-muted-foreground">Credits</p>
-                <p className="mt-2 text-3xl font-semibold text-white">{creditValue}</p>
-              </div>
-              <div className="rounded-[1.5rem] border border-white/8 bg-black/20 p-4">
-                <p className="text-[11px] uppercase tracking-[0.24em] text-muted-foreground">Subscription</p>
-                <p className="mt-2 text-xl font-semibold capitalize text-white">{subscriptionLabel}</p>
-              </div>
-              <div className="rounded-[1.5rem] border border-white/8 bg-black/20 p-4">
-                <p className="text-[11px] uppercase tracking-[0.24em] text-muted-foreground">Period ends</p>
-                <p className="mt-2 text-xl font-semibold text-white">{formatBillingDate(profile?.subscription_period_end)}</p>
-              </div>
-            </div>
+            ) : (
+              <p className="mt-5 text-sm leading-6 text-slate-300">
+                Pick a plan on the right to start generating drop campaigns. Full commercial rights, no watermarks.
+              </p>
+            )}
+
 
             {isAdmin ? (
               <div className="mt-6 rounded-[1.5rem] border border-cyan-300/20 bg-cyan-300/10 p-4 text-sm leading-6 text-cyan-50">
