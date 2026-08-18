@@ -2,7 +2,10 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Background,
   BackgroundVariant,
+  BaseEdge,
   Controls,
+  EdgeLabelRenderer,
+  getSmoothStepPath,
   Handle,
   MiniMap,
   Position,
@@ -12,12 +15,14 @@ import {
   useNodesState,
   type Connection,
   type Edge,
+  type EdgeProps,
   type Node,
   type NodeProps,
   type NodeChange,
   type EdgeChange,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
+
 import { Film, Image as ImageIcon, Loader2, Play, Plus, Upload } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
