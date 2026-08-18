@@ -1863,6 +1863,101 @@ const TemplateCanvas = () => {
     }
   }, [detail, invokeWorkbench, refreshAfterMutation]);
 
+  const connectNodesOnCanvas = useCallback(async (sourceNodeId: string, targetNodeId: string) => {
+    if (!detail) return;
+    const sourceNode = detail.nodes.find((node) => node.id === sourceNodeId);
+    const targetNode = detail.nodes.find((node) => node.id === targetNodeId);
+    const targetParam = inferEdgeTargetParam(sourceNode, targetNode, targetNode?.incoming.length ?? 0);
+    setMutating("add-edge");
+    try {
+      await invokeWorkbench({
+        action: "add_edge",
+        versionId: detail.versionId,
+        sourceNodeId,
+        targetNodeId,
+        targetParam,
+      });
+      await refreshAfterMutation(detail.versionId);
+      toast({ title: "Steps connected", description: `Mapped to ${targetParam}.` });
+    } catch (edgeError) {
+      const message = edgeError instanceof Error ? edgeError.message : "Could not connect steps";
+      toast({ title: "Connect failed", description: message, variant: "destructive" });
+    } finally {
+      setMutating(null);
+    }
+  }, [detail, invokeWorkbench, refreshAfterMutation]);
+
+  const handleCanvasNodeMoved = useCallback((nodeId: string, position: Point) => {
+    setPositions((current) => {
+      const next = { ...current, [nodeId]: position };
+      positionsRef.current = next;
+      if (detail?.versionId) {
+        window.localStorage.setItem(layoutKey(detail.versionId), JSON.stringify(next));
+      }
+      return next;
+    });
+  }, [detail?.versionId]);
+
+  const flowNodes = useMemo<GraphCanvasNode[]>(() => graphNodes.map((node) => {
+    const kind: GraphCanvasNodeData["kind"] = node.nodeType === "user_input"
+      ? "input"
+      : node.nodeType === "image_gen"
+      ? "image"
+      : node.nodeType === "video_gen"
+      ? "video"
+      : "other";
+
+    let modelBadge: string | null = null;
+    let detailLine: string | null = null;
+    if (kind === "image") {
+      modelBadge = "nano-banana-pro";
+    } else if (kind === "video") {
+      const option = resolveVideoModelOption(node.editor?.videoModel);
+      modelBadge = option.label;
+      const seconds = Number(node.editor?.duration ?? (option.family === "kling" ? 5 : 5)) || 5;
+      const audio = node.editor?.generateAudio !== false;
+      detailLine = option.family === "kling"
+        ? "5s · 9:16 · locked"
+        : `${seconds}s · ${audio ? "audio on" : "no audio"}${option.family === "seedance" ? ` · ${node.editor?.resolution ?? "720p"}` : ""}`;
+    } else if (kind === "input") {
+      detailLine = node.editor?.mode === "reference" ? "Hidden guide asset" : "Customer upload";
+    }
+
+    return {
+      id: node.id,
+      type: "templateNode",
+      position: node.position,
+      data: {
+        title: node.editor?.label || node.name,
+        nodeNumber: node.nodeNumber ?? null,
+        outputNumber: node.outputNumber ?? null,
+        kind,
+        kindLabel: nodeKindLabel(node),
+        laneLabel: LANE_LABELS[laneForNode(node)],
+        modelBadge,
+        detailLine,
+        promptPreview: promptPreview(node),
+        incomingCount: node.incoming.length,
+        sourceSummary: sourcePreview(node),
+        assetUrl: node.defaultAssetUrl,
+        expected: node.editor?.expected ?? node.expected ?? null,
+        deliverable: typeof node.editor?.outputExposed === "boolean" ? node.editor.outputExposed : null,
+      },
+    };
+  }), [graphNodes]);
+
+  const flowEdges = useMemo(() => graphNodes.flatMap((target) =>
+    target.incoming.flatMap((incoming, index) => {
+      if (!nodeMap.has(incoming.sourceNodeId)) return [];
+      return [{
+        id: incoming.edgeId ?? `${incoming.sourceNodeId}-${target.id}-${incoming.targetParam ?? index}`,
+        source: incoming.sourceNodeId,
+        target: target.id,
+        label: incoming.targetParam ?? undefined,
+      }];
+    }),
+  ), [graphNodes, nodeMap]);
+
   const wizardSteps: Array<{ id: TemplateWizardStep; label: string }> = [
     { id: "setup", label: "Setup" },
     { id: "branches", label: "Steps" },
