@@ -1655,13 +1655,13 @@ const TemplateCanvas = () => {
     }
   }, [invokeWorkbench, refreshAfterMutation, selectedTemplate]);
 
-  const addNode = useCallback(async (kindOverride?: NewNodeKind) => {
+  const addNode = useCallback(async (kindOverride?: NewNodeKind, videoModelOverride?: VideoModelKey) => {
     if (!detail) return;
     const kind = kindOverride ?? addNodeType;
     const isInput = kind === "upload" || kind === "reference";
     setMutating("add-node");
     try {
-      await invokeWorkbench({
+      const created = await invokeWorkbench({
         action: "add_node",
         versionId: detail.versionId,
         nodeType: isInput ? "user_input" : kind,
@@ -1671,6 +1671,19 @@ const TemplateCanvas = () => {
         prompt: kindOverride ? "" : addNodePrompt,
         outputExposed: kind === "image_gen" || kind === "video_gen",
       });
+      const createdNodeId = typeof created.nodeId === "string" ? created.nodeId : null;
+      if (kind === "video_gen" && createdNodeId && videoModelOverride) {
+        await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/save-template-editor`, {
+          method: "POST",
+          headers: { ...(await buildAuthHeaders()), "Content-Type": "application/json" },
+          body: JSON.stringify({
+            versionId: detail.versionId,
+            nodeId: createdNodeId,
+            videoModel: videoModelOverride,
+          }),
+        }).catch(() => undefined);
+      }
+
       setAddNodeName("");
       setAddNodeExpected("image");
       setAddNodePrompt("");
