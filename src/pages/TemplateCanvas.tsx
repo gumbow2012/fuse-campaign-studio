@@ -181,7 +181,54 @@ type NodeDraft = {
   slotKey: string;
   sampleUrl: string;
   outputExposed: boolean | null;
+  videoModel: VideoModelKey;
+  duration: number;
+  resolution: string;
+  aspectRatio: string;
+  generateAudio: boolean;
 };
+
+type VideoModelKey = "kling-2.5" | "seedance-2.0" | "seedance-2.0-fast";
+
+const VIDEO_MODEL_OPTIONS: Array<{
+  key: VideoModelKey;
+  label: string;
+  family: "kling" | "seedance";
+  usdPerSecond: number;
+  resolutionMultiplier?: Record<string, number>;
+}> = [
+  { key: "kling-2.5", label: "Kling 2.5", family: "kling", usdPerSecond: 0.07 },
+  {
+    key: "seedance-2.0",
+    label: "Seedance 2.0",
+    family: "seedance",
+    usdPerSecond: 0.3024,
+    resolutionMultiplier: { "480p": 0.5, "720p": 1, "1080p": 1.8, "4k": 3.5 },
+  },
+  {
+    key: "seedance-2.0-fast",
+    label: "Seedance 2.0 Fast",
+    family: "seedance",
+    usdPerSecond: 0.2419,
+    resolutionMultiplier: { "480p": 0.5, "720p": 1, "1080p": 1.8, "4k": 3.5 },
+  },
+];
+
+const SEEDANCE_RESOLUTION_OPTIONS = ["480p", "720p", "1080p", "4k"];
+const SEEDANCE_ASPECT_OPTIONS = ["9:16", "16:9", "1:1", "4:3", "3:4", "21:9"];
+const USD_PER_CREDIT = 0.098;
+
+function resolveVideoModelOption(key: string | null | undefined) {
+  return VIDEO_MODEL_OPTIONS.find((option) => option.key === key) ?? VIDEO_MODEL_OPTIONS[0];
+}
+
+function estimateVideoCredits(draft: { videoModel: VideoModelKey; duration: number; resolution: string }) {
+  const option = resolveVideoModelOption(draft.videoModel);
+  if (option.family === "kling") return Math.ceil((option.usdPerSecond * 5) / USD_PER_CREDIT);
+  const multiplier = option.resolutionMultiplier?.[draft.resolution] ?? 1;
+  const seconds = Math.min(15, Math.max(4, Number(draft.duration) || 4));
+  return Math.ceil((option.usdPerSecond * multiplier * seconds) / USD_PER_CREDIT);
+}
 
 type NewNodeKind = NodeDraft["editorMode"] | "image_gen" | "video_gen";
 type TemplateWizardStep = "setup" | "branches";
