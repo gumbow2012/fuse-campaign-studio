@@ -2515,7 +2515,7 @@ const TemplateCanvas = () => {
             </div>
 
             <div className="flex flex-wrap items-center gap-2">
-              <span className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Add step</span>
+              <span className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Palette</span>
               <Button type="button" variant="outline" size="sm" className="rounded-full" disabled={!detail || !!mutating} onClick={() => void addNode("upload")}>
                 <Upload className="mr-1.5 h-3.5 w-3.5" />
                 Input
@@ -2524,10 +2524,21 @@ const TemplateCanvas = () => {
                 <ImageIcon className="mr-1.5 h-3.5 w-3.5" />
                 Image
               </Button>
-              <Button type="button" variant="outline" size="sm" className="rounded-full" disabled={!detail || !!mutating} onClick={() => void addNode("video_gen")}>
+              <Button type="button" variant="outline" size="sm" className="rounded-full" disabled={!detail || !!mutating} onClick={() => void addNode("video_gen", paletteVideoModel)}>
                 <Film className="mr-1.5 h-3.5 w-3.5" />
                 Video
               </Button>
+              <select
+                value={paletteVideoModel}
+                onChange={(event) => setPaletteVideoModel(event.target.value as VideoModelKey)}
+                className="h-8 rounded-full border border-border bg-background px-3 text-xs"
+                aria-label="Video model for new video steps"
+              >
+                {VIDEO_MODEL_OPTIONS.map((option) => (
+                  <option key={option.key} value={option.key}>{option.label}</option>
+                ))}
+              </select>
+
               <span className="mx-1 hidden h-5 w-px bg-border/60 sm:block" />
               <Button type="button" variant="ghost" size="sm" className="rounded-full" disabled={!detail} onClick={resetLayout}>
                 <GitBranch className="mr-1.5 h-3.5 w-3.5" />
