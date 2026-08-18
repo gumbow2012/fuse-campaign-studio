@@ -243,9 +243,32 @@ export type VideoModelDefinition = {
   fallbackUsdPerSecond?: number;
 };
 
-export const DEFAULT_VIDEO_MODEL: VideoModelKey = "kling-2.5";
+export const DEFAULT_VIDEO_MODEL: VideoModelKey = "kling-3.0-pro";
+
+export const KLING3_USD_PER_SECOND = 0.112;
+export const KLING3_USD_PER_SECOND_AUDIO = 0.168;
 
 export const VIDEO_MODELS: Record<VideoModelKey, VideoModelDefinition> = {
+  "kling-3.0-pro": {
+    key: "kling-3.0-pro",
+    endpointId: "fal-ai/kling-video/v3/pro/image-to-video",
+    label: "Kling 3.0 Pro",
+    family: "kling3",
+    supportsAudio: true,
+    durationRange: { min: 3, max: 15 },
+    fallbackUsdPerSecond: KLING3_USD_PER_SECOND,
+    fallbackUsdPerSecondAudio: KLING3_USD_PER_SECOND_AUDIO,
+  },
+  "kling-3.0-standard": {
+    key: "kling-3.0-standard",
+    endpointId: "fal-ai/kling-video/v3/standard/image-to-video",
+    label: "Kling 3.0 Standard",
+    family: "kling3",
+    supportsAudio: true,
+    durationRange: { min: 3, max: 15 },
+    fallbackUsdPerSecond: KLING3_USD_PER_SECOND,
+    fallbackUsdPerSecondAudio: KLING3_USD_PER_SECOND_AUDIO,
+  },
   "kling-2.5": {
     key: "kling-2.5",
     endpointId: "fal-ai/kling-video/v2.5-turbo/pro/image-to-video",
