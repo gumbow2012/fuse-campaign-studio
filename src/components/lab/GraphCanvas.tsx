@@ -432,6 +432,82 @@ const TemplateFlowNode = ({ id, data, selected }: NodeProps<GraphCanvasNode>) =>
 
 const nodeTypes = { templateNode: TemplateFlowNode };
 
+type DeletableEdgeData = { onDelete?: (edgeId: string) => void; refLabel?: string };
+
+const DeletableEdge = ({
+  id,
+  sourceX,
+  sourceY,
+  targetX,
+  targetY,
+  sourcePosition,
+  targetPosition,
+  style,
+  selected,
+  data,
+}: EdgeProps<Edge<DeletableEdgeData>>) => {
+  const [path, labelX, labelY] = getSmoothStepPath({
+    sourceX,
+    sourceY,
+    targetX,
+    targetY,
+    sourcePosition,
+    targetPosition,
+  });
+  const [hovered, setHovered] = useState(false);
+  const stroke = (style as { stroke?: string } | undefined)?.stroke ?? PORT_COLOR.image;
+
+  return (
+    <>
+      <BaseEdge
+        id={id}
+        path={path}
+        interactionWidth={26}
+        style={{
+          ...style,
+          stroke,
+          strokeWidth: selected ? 3.2 : (style as { strokeWidth?: number } | undefined)?.strokeWidth ?? 1.8,
+          opacity: selected ? 1 : (style as { opacity?: number } | undefined)?.opacity ?? 0.85,
+          filter: selected ? `drop-shadow(0 0 6px ${stroke})` : undefined,
+        }}
+      />
+      <EdgeLabelRenderer>
+        <div
+          className="nodrag nopan pointer-events-auto absolute flex items-center gap-1"
+          style={{ transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)` }}
+          onMouseEnter={() => setHovered(true)}
+          onMouseLeave={() => setHovered(false)}
+        >
+          {data?.refLabel ? (
+            <span
+              className="rounded-full border bg-card/90 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-[0.12em] backdrop-blur"
+              style={{ borderColor: `${stroke}66`, color: stroke }}
+            >
+              {data.refLabel}
+            </span>
+          ) : null}
+          {hovered || selected ? (
+            <button
+              type="button"
+              aria-label="Remove connection"
+              onClick={(event) => {
+                event.stopPropagation();
+                data?.onDelete?.(id);
+              }}
+              className="flex h-5 w-5 items-center justify-center rounded-full border border-destructive/60 bg-background/95 text-destructive shadow-lg transition hover:bg-destructive hover:text-destructive-foreground"
+            >
+              <X className="h-3 w-3" />
+            </button>
+          ) : null}
+        </div>
+      </EdgeLabelRenderer>
+    </>
+  );
+};
+
+const edgeTypes = { deletable: DeletableEdge };
+
+
 type GraphCanvasProps = {
   nodes: GraphCanvasNode[];
   edges: Edge[];
