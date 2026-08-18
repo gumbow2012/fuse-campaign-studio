@@ -184,10 +184,24 @@ Deno.serve(async (req) => {
             outputExposed: node.node_type === "image_gen" || node.node_type === "video_gen"
               ? node.prompt_config?.output_exposed ?? null
               : null,
+            videoModel: node.node_type === "video_gen"
+              ? (typeof node.prompt_config?.video_model === "string" ? node.prompt_config.video_model : "kling-2.5")
+              : null,
+            duration: node.node_type === "video_gen" ? Number(node.prompt_config?.duration ?? 5) : null,
+            resolution: node.node_type === "video_gen"
+              ? (typeof node.prompt_config?.resolution === "string" ? node.prompt_config.resolution : null)
+              : null,
+            aspectRatio: node.node_type === "video_gen"
+              ? (typeof node.prompt_config?.aspect_ratio === "string" ? node.prompt_config.aspect_ratio : "9:16")
+              : null,
+            generateAudio: node.node_type === "video_gen"
+              ? (typeof node.prompt_config?.generate_audio === "boolean" ? node.prompt_config.generate_audio : true)
+              : null,
             isUserFacingInput,
             isReferenceInput,
             sampleUrl,
           },
+
         };
       })
       .sort((a: any, b: any) => {

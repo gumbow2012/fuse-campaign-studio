@@ -129,6 +129,11 @@ type TemplateDetailNode = {
     label: string | null;
     expected: string | null;
     outputExposed?: boolean | null;
+    videoModel?: string | null;
+    duration?: number | null;
+    resolution?: string | null;
+    aspectRatio?: string | null;
+    generateAudio?: boolean | null;
     sampleUrl?: string | null;
     isUserFacingInput?: boolean;
     isReferenceInput?: boolean;
@@ -176,7 +181,54 @@ type NodeDraft = {
   slotKey: string;
   sampleUrl: string;
   outputExposed: boolean | null;
+  videoModel: VideoModelKey;
+  duration: number;
+  resolution: string;
+  aspectRatio: string;
+  generateAudio: boolean;
 };
+
+type VideoModelKey = "kling-2.5" | "seedance-2.0" | "seedance-2.0-fast";
+
+const VIDEO_MODEL_OPTIONS: Array<{
+  key: VideoModelKey;
+  label: string;
+  family: "kling" | "seedance";
+  usdPerSecond: number;
+  resolutionMultiplier?: Record<string, number>;
+}> = [
+  { key: "kling-2.5", label: "Kling 2.5", family: "kling", usdPerSecond: 0.07 },
+  {
+    key: "seedance-2.0",
+    label: "Seedance 2.0",
+    family: "seedance",
+    usdPerSecond: 0.3024,
+    resolutionMultiplier: { "480p": 0.5, "720p": 1, "1080p": 1.8, "4k": 3.5 },
+  },
+  {
+    key: "seedance-2.0-fast",
+    label: "Seedance 2.0 Fast",
+    family: "seedance",
+    usdPerSecond: 0.2419,
+    resolutionMultiplier: { "480p": 0.5, "720p": 1, "1080p": 1.8, "4k": 3.5 },
+  },
+];
+
+const SEEDANCE_RESOLUTION_OPTIONS = ["480p", "720p", "1080p", "4k"];
+const SEEDANCE_ASPECT_OPTIONS = ["9:16", "16:9", "1:1", "4:3", "3:4", "21:9"];
+const USD_PER_CREDIT = 0.098;
+
+function resolveVideoModelOption(key: string | null | undefined) {
+  return VIDEO_MODEL_OPTIONS.find((option) => option.key === key) ?? VIDEO_MODEL_OPTIONS[0];
+}
+
+function estimateVideoCredits(draft: { videoModel: VideoModelKey; duration: number; resolution: string }) {
+  const option = resolveVideoModelOption(draft.videoModel);
+  if (option.family === "kling") return Math.ceil((option.usdPerSecond * 5) / USD_PER_CREDIT);
+  const multiplier = option.resolutionMultiplier?.[draft.resolution] ?? 1;
+  const seconds = Math.min(15, Math.max(4, Number(draft.duration) || 4));
+  return Math.ceil((option.usdPerSecond * multiplier * seconds) / USD_PER_CREDIT);
+}
 
 type NewNodeKind = NodeDraft["editorMode"] | "image_gen" | "video_gen";
 type TemplateWizardStep = "setup" | "branches";
@@ -847,6 +899,11 @@ const TemplateCanvas = () => {
       slotKey: selectedNode.editor?.slotKey ?? "",
       sampleUrl: selectedNode.editor?.sampleUrl ?? selectedNode.defaultAssetUrl ?? "",
       outputExposed: typeof selectedNode.editor?.outputExposed === "boolean" ? selectedNode.editor.outputExposed : null,
+      videoModel: resolveVideoModelOption(selectedNode.editor?.videoModel).key,
+      duration: Number(selectedNode.editor?.duration ?? 5) || 5,
+      resolution: selectedNode.editor?.resolution ?? "720p",
+      aspectRatio: selectedNode.editor?.aspectRatio ?? "9:16",
+      generateAudio: selectedNode.editor?.generateAudio !== false,
     });
   }, [selectedNode]);
 
@@ -1305,6 +1362,15 @@ const TemplateCanvas = () => {
           slotKey: selectedNode.nodeType === "user_input" ? draft.slotKey : null,
           sampleUrl: selectedNode.nodeType === "user_input" ? draft.sampleUrl : null,
           outputExposed: selectedNode.nodeType === "image_gen" || selectedNode.nodeType === "video_gen" ? draft.outputExposed : null,
+          ...(selectedNode.nodeType === "video_gen"
+            ? {
+              videoModel: draft.videoModel,
+              duration: draft.duration,
+              resolution: draft.resolution,
+              aspectRatio: draft.aspectRatio,
+              generateAudio: draft.generateAudio,
+            }
+            : {}),
         }),
       });
       const data = await response.json();
@@ -1446,7 +1512,7 @@ const TemplateCanvas = () => {
           ? createdReference.nodeId
           : null;
         if (!nodeId) {
-          uploadFailures.push(reference.label || `Branch ${reference.branchIndex + 1}`);
+          uploadFailures.push(reference.label || `Step ${reference.branchIndex + 1}`);
           continue;
         }
 
@@ -1473,7 +1539,7 @@ const TemplateCanvas = () => {
           const uploadData = await response.json().catch(() => ({}));
           if (!response.ok) throw new Error(uploadData?.error ?? `Reference upload failed (${response.status})`);
         } catch {
-          uploadFailures.push(reference.label || `Branch ${reference.branchIndex + 1}`);
+          uploadFailures.push(reference.label || `Step ${reference.branchIndex + 1}`);
         }
       }
       setNewTemplateName("");
@@ -1769,7 +1835,7 @@ const TemplateCanvas = () => {
 
   const wizardSteps: Array<{ id: TemplateWizardStep; label: string }> = [
     { id: "setup", label: "Setup" },
-    { id: "branches", label: "Branches" },
+    { id: "branches", label: "Steps" },
   ];
   const wizardStepIndex = wizardSteps.findIndex((step) => step.id === templateWizardStep);
   const wizardProgress = ((wizardStepIndex + 1) / wizardSteps.length) * 100;
@@ -1851,17 +1917,17 @@ const TemplateCanvas = () => {
 
   return (
     <SiteShell>
-      <div className="mx-auto flex w-full max-w-[1900px] flex-col gap-5 px-4 py-6 sm:px-5 xl:px-8">
+      <div className="mx-auto flex w-full min-w-0 max-w-[1900px] flex-col gap-5 overflow-x-hidden px-4 py-6 sm:px-5 xl:px-8">
         <section className="w-full">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">Admin Canvas</p>
               <h1 className="mt-2 text-3xl font-black tracking-tight">Template Canvas</h1>
               <p className="mt-2 text-sm text-muted-foreground">
-                Internal-only graph surface for live template creation, edits, validation, and testing.
+                Create, edit, and test your campaign templates.
               </p>
             </div>
-            <div className="grid grid-cols-2 gap-2 text-xs sm:flex">
+            <div className="flex w-full flex-wrap gap-2 text-xs sm:w-auto">
               <Button type="button" variant="outline" size="sm" onClick={() => void loadTemplates()} disabled={loadingTemplates}>
                 <RefreshCw className={`mr-2 h-4 w-4 ${loadingTemplates ? "animate-spin" : ""}`} />
                 Refresh
@@ -1884,7 +1950,7 @@ const TemplateCanvas = () => {
               </div>
               <div className="flex flex-wrap gap-2 text-[11px] uppercase tracking-[0.16em] text-muted-foreground">
                 <span className="rounded-full border border-border/60 bg-background/60 px-3 py-1">{newTemplateInputSlots.length} inputs</span>
-                <span className="rounded-full border border-border/60 bg-background/60 px-3 py-1">{newTemplateReferences.length} branches</span>
+                <span className="rounded-full border border-border/60 bg-background/60 px-3 py-1">{newTemplateReferences.length} steps</span>
                 <span className="rounded-full border border-border/60 bg-background/60 px-3 py-1">{newTemplateReferences.filter((reference) => reference.file).length} guide images</span>
               </div>
             </div>
@@ -1997,7 +2063,7 @@ const TemplateCanvas = () => {
                       </div>
                       <div className="grid grid-cols-[1fr_auto] items-center gap-3 border-t border-border/50 pt-3 md:border-l md:border-t-0 md:pl-4 md:pt-0">
                         <div>
-                          <Label>Branches</Label>
+                          <Label>Steps</Label>
                           <p className="mt-1 text-xs uppercase tracking-[0.16em] text-muted-foreground">{newTemplateReferences.length} output path{newTemplateReferences.length === 1 ? "" : "s"}</p>
                         </div>
                         <Input
@@ -2035,9 +2101,9 @@ const TemplateCanvas = () => {
                   <div className="space-y-4">
                     <div className="flex flex-col gap-2 rounded-2xl border border-border/50 bg-card/70 p-3 md:flex-row md:items-center md:justify-between">
                       <div>
-                        <Label>Output Branches</Label>
+                        <Label>Output Steps</Label>
                         <p className="mt-1 text-xs text-muted-foreground">
-                          Branches are outputs. Pick a source upload for each branch; hidden guide images are optional.
+                          Each step is an output. Pick a source upload for each step; hidden guide images are optional.
                         </p>
                       </div>
                       <div className="flex items-center gap-2">
@@ -2051,7 +2117,7 @@ const TemplateCanvas = () => {
                           value={newTemplateReferences.length}
                           onChange={(event) => setTemplateBranchCount(Number(event.target.value))}
                           className="h-9 w-20 rounded-xl"
-                          aria-label="Branch count"
+                          aria-label="Step count"
                         />
                       </div>
                     </div>
@@ -2060,7 +2126,7 @@ const TemplateCanvas = () => {
                       <div key={reference.id} className="w-[min(86vw,540px)] shrink-0 snap-start rounded-2xl border border-border/50 bg-card/70 p-3 md:w-[520px] xl:w-[560px]">
                         <div className="flex items-start justify-between gap-3">
                           <div>
-                            <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Branch {index + 1}</p>
+                            <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Step {index + 1}</p>
                             <h3 className="mt-1 font-semibold">{inputSlotOption(reference.inputSlotKey).label}</h3>
                           </div>
                           <div className="flex shrink-0 items-center gap-2">
@@ -2072,7 +2138,7 @@ const TemplateCanvas = () => {
                                 className="h-8 w-8 rounded-lg"
                                 onClick={() => moveTemplateBranch(reference.id, -1)}
                                 disabled={index === 0 || !!mutating}
-                                title="Move branch earlier"
+                                title="Move step earlier"
                               >
                                 <ChevronLeft className="h-3.5 w-3.5" />
                               </Button>
@@ -2083,7 +2149,7 @@ const TemplateCanvas = () => {
                                 className="h-8 w-8 rounded-lg"
                                 onClick={() => moveTemplateBranch(reference.id, 1)}
                                 disabled={index === newTemplateReferences.length - 1 || !!mutating}
-                                title="Move branch later"
+                                title="Move step later"
                               >
                                 <ChevronRight className="h-3.5 w-3.5" />
                               </Button>
@@ -2153,7 +2219,7 @@ const TemplateCanvas = () => {
                                   current.map((item) => item.id === reference.id ? { ...item, prompt: event.target.value } : item),
                                 )
                               }
-                              placeholder="Hidden guide instruction for this branch"
+                              placeholder="Hidden guide instruction for this step"
                               className="min-h-[58px] rounded-xl text-xs"
                             />
                             <Textarea
@@ -2163,7 +2229,7 @@ const TemplateCanvas = () => {
                                   current.map((item) => item.id === reference.id ? { ...item, imagePrompt: event.target.value } : item),
                                 )
                               }
-                              placeholder="Image generation prompt for this input branch"
+                              placeholder="Image generation prompt for this input step"
                               className="min-h-[76px] rounded-xl text-xs"
                             />
                             <Textarea
@@ -2184,7 +2250,7 @@ const TemplateCanvas = () => {
                   </div>
                 ) : null}
 
-                <div className="mt-5 flex gap-2">
+                <div className="mt-5 flex flex-wrap gap-2">
                   <Button type="button" variant="outline" onClick={() => goWizard(-1)} disabled={wizardStepIndex <= 0 || !!mutating}>
                     Back
                   </Button>
@@ -2351,7 +2417,7 @@ const TemplateCanvas = () => {
                   ) : null}
                 </div>
               </div>
-              <div className="flex min-w-[180px] flex-col justify-between gap-3">
+              <div className="flex w-full min-w-0 flex-col justify-between gap-3 lg:w-[200px]">
                 <Button type="button" onClick={() => void saveTemplateMetadata()} disabled={!selectedTemplate || !!mutating || !templateMetaName.trim()}>
                   {mutating === "save-template-meta" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
                   Save Details
@@ -2376,7 +2442,7 @@ const TemplateCanvas = () => {
             <select
               value={selectedTemplate?.templateId ?? ""}
               onChange={(event) => handlePrimaryTemplateSelect(event.target.value)}
-              className="h-11 w-full rounded-xl border border-border bg-background px-4 text-sm"
+              className="h-11 w-full max-w-full truncate rounded-xl border border-border bg-background px-4 text-sm"
               disabled={loadingTemplates || !primaryTemplateOptions.length}
             >
               {primaryTemplateOptions.map((template) => (
@@ -2902,7 +2968,7 @@ const TemplateCanvas = () => {
                             : current,
                         )
                       }
-                      className="h-11 w-full rounded-xl border border-border bg-background px-4 text-sm"
+                      className="h-11 w-full max-w-full truncate rounded-xl border border-border bg-background px-4 text-sm"
                     >
                       <option value="upload">User Upload</option>
                       <option value="reference">Hidden Reference</option>
@@ -2967,6 +3033,95 @@ const TemplateCanvas = () => {
                   />
                 </div>
               ) : null}
+
+              {selectedNode.nodeType === "video_gen" ? (
+                <div className="space-y-3 rounded-2xl border border-border/50 bg-background/50 p-4">
+                  <div className="space-y-2">
+                    <Label>Video model</Label>
+                    <select
+                      value={draft.videoModel}
+                      onChange={(event) =>
+                        setDraft((current) =>
+                          current
+                            ? { ...current, videoModel: event.target.value as VideoModelKey }
+                            : current,
+                        )
+                      }
+                      className="h-11 w-full max-w-full truncate rounded-xl border border-border bg-background px-4 text-sm"
+                    >
+                      {VIDEO_MODEL_OPTIONS.map((option) => (
+                        <option key={option.key} value={option.key}>{option.label}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {resolveVideoModelOption(draft.videoModel).family === "seedance" ? (
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <div className="space-y-2">
+                        <Label>Duration (seconds)</Label>
+                        <Input
+                          type="number"
+                          min={4}
+                          max={15}
+                          value={draft.duration}
+                          onChange={(event) =>
+                            setDraft((current) =>
+                              current
+                                ? { ...current, duration: Math.min(15, Math.max(4, Number(event.target.value) || 4)) }
+                                : current,
+                            )
+                          }
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Resolution</Label>
+                        <select
+                          value={draft.resolution}
+                          onChange={(event) =>
+                            setDraft((current) => current ? { ...current, resolution: event.target.value } : current)
+                          }
+                          className="h-11 w-full max-w-full truncate rounded-xl border border-border bg-background px-4 text-sm"
+                        >
+                          {SEEDANCE_RESOLUTION_OPTIONS.map((value) => (
+                            <option key={value} value={value}>{value}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Aspect ratio</Label>
+                        <select
+                          value={draft.aspectRatio}
+                          onChange={(event) =>
+                            setDraft((current) => current ? { ...current, aspectRatio: event.target.value } : current)
+                          }
+                          className="h-11 w-full max-w-full truncate rounded-xl border border-border bg-background px-4 text-sm"
+                        >
+                          {SEEDANCE_ASPECT_OPTIONS.map((value) => (
+                            <option key={value} value={value}>{value}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <label className="flex items-center gap-3 self-end rounded-xl border border-border/50 bg-background/50 px-4 py-3 text-sm">
+                        <input
+                          type="checkbox"
+                          checked={draft.generateAudio}
+                          onChange={(event) =>
+                            setDraft((current) => current ? { ...current, generateAudio: event.target.checked } : current)
+                          }
+                        />
+                        Generate audio
+                      </label>
+                    </div>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">Locked to vertical 9:16 at 5 seconds.</p>
+                  )}
+
+                  <p className="text-[11px] uppercase tracking-[0.16em] text-primary">
+                    ≈ {estimateVideoCredits(draft)} credits per video
+                  </p>
+                </div>
+              ) : null}
+
 
               {(selectedNode.nodeType === "image_gen" || selectedNode.nodeType === "video_gen") ? (
                 <label className="flex items-center gap-3 rounded-2xl border border-border/50 bg-background/50 px-4 py-3 text-sm">

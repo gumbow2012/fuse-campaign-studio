@@ -6,6 +6,9 @@ import {
   getFalRequestTelemetry,
   IMAGE_MODEL,
   VIDEO_MODEL,
+  getVideoModel,
+  clampSeedanceDuration,
+  buildVideoModelInput,
   VERTICAL_VIDEO_ASPECT_RATIO,
   normalizeVideoDuration,
   submitImageJob,
@@ -286,6 +289,10 @@ function estimateBillingQuantity(args: {
     return Number(args.promptConfig?.num_images ?? 1);
   }
   if (unit.includes("second")) {
+    if (args.endpointId.includes("seedance")) {
+      const seconds = Number(args.promptConfig?.duration ?? 5);
+      return Number.isFinite(seconds) && seconds > 0 ? seconds : 5;
+    }
     return normalizeVideoDuration(args.promptConfig?.duration);
   }
   return 1;
@@ -295,10 +302,26 @@ function videoDuration(value: unknown) {
   return normalizeVideoDuration(value);
 }
 
-async function getStepCostEstimate(endpointId: string, promptConfig?: Record<string, unknown> | null) {
+async function getStepCostEstimate(
+  endpointId: string,
+  promptConfig?: Record<string, unknown> | null,
+  fallback?: { fallbackUsdPerSecond?: number; seconds?: number },
+) {
   try {
     const pricing = await getFalPricing(endpointId);
-    if (!pricing) return null;
+    if (!pricing) {
+      if (fallback?.fallbackUsdPerSecond && fallback.seconds) {
+        return {
+          endpointId,
+          unit: "second",
+          unitPriceUsd: fallback.fallbackUsdPerSecond,
+          quantity: fallback.seconds,
+          estimatedCostUsd: Number((fallback.fallbackUsdPerSecond * fallback.seconds).toFixed(6)),
+          currency: "USD",
+        };
+      }
+      return null;
+    }
 
     const quantity = estimateBillingQuantity({
       endpointId,
@@ -315,9 +338,20 @@ async function getStepCostEstimate(endpointId: string, promptConfig?: Record<str
       currency: pricing.currency,
     };
   } catch {
+    if (fallback?.fallbackUsdPerSecond && fallback.seconds) {
+      return {
+        endpointId,
+        unit: "second",
+        unitPriceUsd: fallback.fallbackUsdPerSecond,
+        quantity: fallback.seconds,
+        estimatedCostUsd: Number((fallback.fallbackUsdPerSecond * fallback.seconds).toFixed(6)),
+        currency: "USD",
+      };
+    }
     return null;
   }
 }
+
 
 export async function uploadRemoteAsset(admin: AdminClient, args: {
   jobId: string;
@@ -965,7 +999,9 @@ export async function runGraphJob(admin: AdminClient, jobId: string) {
           status: "running",
           started_at: startedAt ?? undefined,
           provider: "fal",
-          provider_model: node.node_type === "video_gen" ? VIDEO_MODEL : IMAGE_MODEL,
+          provider_model: node.node_type === "video_gen"
+            ? getVideoModel(node.prompt_config?.video_model).endpointId
+            : IMAGE_MODEL,
           input_payload: Object.fromEntries(
             orderedParamEntries.map(([key, value]) => [key, value.url]),
           ),
@@ -1095,14 +1131,42 @@ export async function runGraphJob(admin: AdminClient, jobId: string) {
 
           if (!initImageUrl) throw new Error(`Missing init image for ${node.name}`);
 
-          const costEstimate = await getStepCostEstimate(VIDEO_MODEL, node.prompt_config);
+          const videoModel = getVideoModel(node.prompt_config?.video_model);
+          const isKlingModel = videoModel.family === "kling";
+          const effectiveDuration = isKlingModel
+            ? videoDuration(node.prompt_config?.duration)
+            : clampSeedanceDuration(node.prompt_config?.duration, videoModel);
+          const effectiveAspect = isKlingModel
+            ? VERTICAL_VIDEO_ASPECT_RATIO
+            : (videoModel.aspectRatios?.includes(String(node.prompt_config?.aspect_ratio ?? ""))
+              ? String(node.prompt_config?.aspect_ratio)
+              : VERTICAL_VIDEO_ASPECT_RATIO);
+          const effectiveResolution = isKlingModel
+            ? null
+            : (videoModel.resolutions?.includes(String(node.prompt_config?.resolution ?? ""))
+              ? String(node.prompt_config?.resolution)
+              : "720p");
+          const effectiveGenerateAudio = isKlingModel
+            ? null
+            : node.prompt_config?.generate_audio !== false;
+
+          const costEstimate = await getStepCostEstimate(
+            videoModel.endpointId,
+            isKlingModel ? node.prompt_config : { ...(node.prompt_config ?? {}), duration: effectiveDuration },
+            isKlingModel
+              ? undefined
+              : { fallbackUsdPerSecond: videoModel.fallbackUsdPerSecond, seconds: effectiveDuration },
+          );
 
           const requestId = await submitVideoJob({
             prompt,
             initImageUrl,
             endFrameUrl,
-            duration: videoDuration(node.prompt_config?.duration),
-            aspectRatio: VERTICAL_VIDEO_ASPECT_RATIO,
+            modelKey: videoModel.key,
+            duration: effectiveDuration,
+            aspectRatio: effectiveAspect,
+            ...(effectiveResolution ? { resolution: effectiveResolution } : {}),
+            ...(effectiveGenerateAudio === null ? {} : { generateAudio: effectiveGenerateAudio }),
             webhookUrl: `${Deno.env.get("SUPABASE_URL")}/functions/v1/fal-webhook?jobId=${encodeURIComponent(job.id)}&stepId=${encodeURIComponent(step.id)}`,
           });
 
@@ -1114,9 +1178,17 @@ export async function runGraphJob(admin: AdminClient, jobId: string) {
                 ...(step.input_payload ?? {}),
                 init_image: initImageUrl,
                 ...(endFrameUrl ? { end_frame_image: endFrameUrl } : {}),
-                aspect_ratio: VERTICAL_VIDEO_ASPECT_RATIO,
-                duration: videoDuration(node.prompt_config?.duration),
+                aspect_ratio: effectiveAspect,
+                duration: effectiveDuration,
+                ...(isKlingModel
+                  ? {}
+                  : {
+                    video_model: videoModel.key,
+                    resolution: effectiveResolution,
+                    generate_audio: effectiveGenerateAudio,
+                  }),
               },
+
               output_payload: {
                 requestId,
                 status: "queued",
