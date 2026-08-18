@@ -129,3 +129,6 @@ verify_jwt = false
 
 [functions.resume-template-job]
 verify_jwt = false
+
+[functions.run-node]
+verify_jwt = false

@@ -46,6 +46,17 @@ export type GraphCanvasNodeData = {
   onAddPort?: (nodeId: string, type: PortType) => void;
   onPromptCommit?: (nodeId: string, prompt: string) => void;
   onUploadReference?: (nodeId: string, file: File) => void;
+  run?: NodeRunState | null;
+  onRunNode?: (nodeId: string) => void;
+};
+
+export type NodeRunState = {
+  status: "queued" | "running" | "complete" | "failed";
+  outputUrl?: string | null;
+  outputType?: string | null;
+  error?: string | null;
+  estimatedCredits?: number | null;
+  startedAt?: number | null;
 };
 
 export type GraphCanvasNode = Node<GraphCanvasNodeData>;
@@ -124,6 +135,23 @@ const TemplateFlowNode = ({ id, data, selected }: NodeProps<GraphCanvasNode>) =>
   const [editingPrompt, setEditingPrompt] = useState(false);
   const promptRaw = data.promptValue ?? data.promptPreview;
   const [promptDraft, setPromptDraft] = useState(promptRaw);
+
+  const run = data.run ?? null;
+  const running = run?.status === "queued" || run?.status === "running";
+  const [elapsed, setElapsed] = useState(0);
+
+  useEffect(() => {
+    if (!running || !run?.startedAt) {
+      setElapsed(0);
+      return;
+    }
+    const tick = () => setElapsed(Math.max(0, Math.round((Date.now() - (run.startedAt ?? Date.now())) / 1000)));
+    tick();
+    const timer = window.setInterval(tick, 1000);
+    return () => window.clearInterval(timer);
+  }, [running, run?.startedAt]);
+
+  const progressPct = running ? Math.min(94, 8 + elapsed * 2.4) : run?.status === "complete" ? 100 : 0;
 
   const commitPrompt = () => {
     setEditingPrompt(false);
@@ -313,23 +341,86 @@ const TemplateFlowNode = ({ id, data, selected }: NodeProps<GraphCanvasNode>) =>
         <p className="mt-2 line-clamp-1 text-[10px] text-muted-foreground">From: {data.sourceSummary}</p>
       )}
 
-      {isModelNode ? (
-        <TooltipProvider>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <button
-                type="button"
-                disabled
-                className="nodrag mt-3 inline-flex w-full cursor-not-allowed items-center justify-center gap-1.5 rounded-xl border border-border/60 bg-background/50 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground opacity-70"
-              >
-                <Play className="h-3 w-3" />
-                Run step
-              </button>
-            </TooltipTrigger>
-            <TooltipContent>coming soon</TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
+      {isModelNode && (running || run?.status === "complete" || run?.status === "failed") ? (
+        <div className="mt-3 rounded-xl border border-border/50 bg-background/60 p-2.5">
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+              {running ? "Generating" : run?.status === "complete" ? "Result" : "Failed"}
+            </p>
+            <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-primary">
+              {running ? `${elapsed}s` : null}
+              {run?.estimatedCredits ? `${running ? " · " : ""}≈ ${run.estimatedCredits} credits` : null}
+            </span>
+          </div>
+
+          {running ? (
+            <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-border/60">
+              <div
+                className="h-full rounded-full bg-gradient-to-r from-primary/70 to-cyan-300 transition-all duration-700"
+                style={{ width: `${progressPct}%` }}
+              />
+            </div>
+          ) : null}
+
+          {run?.status === "complete" && run.outputUrl ? (
+            run.outputType === "video" ? (
+              <video
+                src={run.outputUrl}
+                controls
+                loop
+                muted
+                playsInline
+                className="nodrag mt-2 max-h-56 w-full rounded-lg border border-border/50 bg-background/80 object-contain"
+                onClick={(event) => event.stopPropagation()}
+              />
+            ) : (
+              <img
+                src={run.outputUrl}
+                alt={`${data.title} result`}
+                className="mt-2 max-h-56 w-full rounded-lg border border-border/50 bg-background/80 object-contain"
+              />
+            )
+          ) : null}
+
+          {run?.status === "failed" && run.error ? (
+            <p className="nowheel mt-2 max-h-24 overflow-y-auto text-[10px] leading-relaxed text-destructive">{run.error}</p>
+          ) : null}
+        </div>
       ) : null}
+
+      {isModelNode ? (
+        data.onRunNode ? (
+          <button
+            type="button"
+            disabled={running}
+            onClick={(event) => {
+              event.stopPropagation();
+              data.onRunNode?.(id);
+            }}
+            className="nodrag mt-3 inline-flex w-full items-center justify-center gap-1.5 rounded-xl border border-primary/50 bg-primary/10 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-primary transition hover:bg-primary/20 disabled:cursor-wait disabled:opacity-60"
+          >
+            {running ? <Loader2 className="h-3 w-3 animate-spin" /> : <Play className="h-3 w-3" />}
+            {running ? "Generating…" : run?.status === "complete" ? "Run again" : "Run step"}
+          </button>
+        ) : (
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  disabled
+                  className="nodrag mt-3 inline-flex w-full cursor-not-allowed items-center justify-center gap-1.5 rounded-xl border border-border/60 bg-background/50 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground opacity-70"
+                >
+                  <Play className="h-3 w-3" />
+                  Run step
+                </button>
+              </TooltipTrigger>
+              <TooltipContent>Save the step first</TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        )
+      ) : null}
+
     </div>
   );
 };

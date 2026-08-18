@@ -147,6 +147,66 @@ export type Database = {
           },
         ]
       }
+      node_runs: {
+        Row: {
+          completed_at: string | null
+          created_at: string
+          error_log: string | null
+          estimated_cost_usd: number | null
+          estimated_credits: number | null
+          id: string
+          input_payload: Json
+          node_id: string
+          output_type: string | null
+          output_url: string | null
+          provider: string | null
+          provider_model: string | null
+          provider_request_id: string | null
+          status: string
+          updated_at: string
+          user_id: string
+          version_id: string
+        }
+        Insert: {
+          completed_at?: string | null
+          created_at?: string
+          error_log?: string | null
+          estimated_cost_usd?: number | null
+          estimated_credits?: number | null
+          id?: string
+          input_payload?: Json
+          node_id: string
+          output_type?: string | null
+          output_url?: string | null
+          provider?: string | null
+          provider_model?: string | null
+          provider_request_id?: string | null
+          status?: string
+          updated_at?: string
+          user_id: string
+          version_id: string
+        }
+        Update: {
+          completed_at?: string | null
+          created_at?: string
+          error_log?: string | null
+          estimated_cost_usd?: number | null
+          estimated_credits?: number | null
+          id?: string
+          input_payload?: Json
+          node_id?: string
+          output_type?: string | null
+          output_url?: string | null
+          provider?: string | null
+          provider_model?: string | null
+          provider_request_id?: string | null
+          status?: string
+          updated_at?: string
+          user_id?: string
+          version_id?: string
+        }
+        Relationships: []
+      }
       payouts: {
         Row: {
           amount_cents: number
