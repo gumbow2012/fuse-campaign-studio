@@ -599,8 +599,11 @@ const GraphCanvasInner = ({
 
   const defaultEdgeOptions = useMemo(
     () => ({
-      type: "smoothstep" as const,
+      type: "deletable" as const,
       animated: true,
+      selectable: true,
+      focusable: true,
+      interactionWidth: 26,
       style: { stroke: PORT_COLOR.image, strokeWidth: 1.8, opacity: 0.8 },
     }),
     [],
@@ -612,13 +615,27 @@ const GraphCanvasInner = ({
         nodes={flowNodes}
         edges={flowEdges}
         nodeTypes={nodeTypes}
+        edgeTypes={edgeTypes}
         onNodesChange={handleNodesChange}
         onEdgesChange={handleEdgesChange}
         onConnect={handleConnect}
         onNodeClick={(_, node) => onSelectNode(node.id)}
+        onEdgeClick={(event, edge) => {
+          event.stopPropagation();
+          setFlowEdges((current) => current.map((item) => ({ ...item, selected: item.id === edge.id })));
+        }}
+        onEdgesDelete={(deleted) => {
+          for (const edge of deleted) {
+            if (!edge.id.startsWith("pending-")) onDeleteEdge(edge.id);
+          }
+        }}
+        elementsSelectable
+        edgesFocusable
+        deleteKeyCode={["Delete", "Backspace"]}
         connectionRadius={34}
         connectOnClick
         defaultEdgeOptions={defaultEdgeOptions}
+
         fitView
         minZoom={0.2}
         maxZoom={1.6}
