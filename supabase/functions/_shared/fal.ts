@@ -344,6 +344,17 @@ export function buildVideoModelInput(
     };
   }
 
+  if (model.family === "kling3") {
+    return {
+      start_image_url: args.imageUrl,
+      prompt: args.prompt,
+      duration: String(clampSeedanceDuration(args.duration ?? 5, model)),
+      generate_audio: args.generateAudio !== false,
+      cfg_scale: 0.5,
+      ...(args.endFrameUrl ? { end_image_url: args.endFrameUrl } : {}),
+    };
+  }
+
   const aspectRatio = model.aspectRatios?.includes(String(args.aspectRatio ?? ""))
     ? String(args.aspectRatio)
     : VERTICAL_VIDEO_ASPECT_RATIO;
