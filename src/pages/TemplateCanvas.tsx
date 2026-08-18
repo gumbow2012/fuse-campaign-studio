@@ -523,9 +523,6 @@ const TemplateCanvas = () => {
     setImagePortCounts((current) => ({ ...current, [nodeId]: Math.min(8, (current[nodeId] ?? 2) + 1) }));
   }, []);
   const [draggingEdgeIndex, setDraggingEdgeIndex] = useState<number | null>(null);
-  const [addNodeName, setAddNodeName] = useState("");
-  const [addNodeExpected, setAddNodeExpected] = useState("image");
-  const [addNodePrompt, setAddNodePrompt] = useState("");
   const [edgeDraft, setEdgeDraft] = useState({ sourceNodeId: "", targetNodeId: "", targetParam: "" });
   const [referenceUploadFile, setReferenceUploadFile] = useState<File | null>(null);
   const [referenceUploadPreview, setReferenceUploadPreview] = useState<string | null>(null);
