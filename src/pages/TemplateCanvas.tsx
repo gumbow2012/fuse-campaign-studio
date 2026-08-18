@@ -925,11 +925,6 @@ const TemplateCanvas = () => {
     [selectedTemplate?.templateId, validationQueue],
   );
 
-  const handlePrimaryTemplateSelect = useCallback((templateId: string) => {
-    const primary = primaryTemplateOptions.find((template) => template.templateId === templateId);
-    if (primary) setSelectedVersionId(primary.versionId);
-  }, [primaryTemplateOptions]);
-
   const goToQueueTemplate = useCallback((direction: -1 | 1) => {
     if (!validationQueue.length) return;
     const currentIndex = queueIndex >= 0 ? queueIndex : 0;
