@@ -39,6 +39,7 @@ export type GraphCanvasNodeData = {
   assetUrl: string | null;
   expected: string | null;
   deliverable: boolean | null;
+  promptValue?: string;
   portIds: string[];
   isReference?: boolean;
   uploadingReference?: boolean;
@@ -121,12 +122,13 @@ const TemplateFlowNode = ({ id, data, selected }: NodeProps<GraphCanvasNode>) =>
   const isModelNode = data.kind === "image" || data.kind === "video";
   const promptEditable = isModelNode && typeof data.onPromptCommit === "function";
   const [editingPrompt, setEditingPrompt] = useState(false);
-  const [promptDraft, setPromptDraft] = useState(data.promptPreview);
+  const promptRaw = data.promptValue ?? data.promptPreview;
+  const [promptDraft, setPromptDraft] = useState(promptRaw);
 
   const commitPrompt = () => {
     setEditingPrompt(false);
     const next = promptDraft.trim();
-    if (next !== data.promptPreview.trim()) data.onPromptCommit?.(id, promptDraft);
+    if (next !== promptRaw.trim()) data.onPromptCommit?.(id, promptDraft);
   };
 
   return (
@@ -278,7 +280,7 @@ const TemplateFlowNode = ({ id, data, selected }: NodeProps<GraphCanvasNode>) =>
                 commitPrompt();
               }
               if (event.key === "Escape") {
-                setPromptDraft(data.promptPreview);
+                setPromptDraft(promptRaw);
                 setEditingPrompt(false);
               }
             }}
@@ -289,7 +291,7 @@ const TemplateFlowNode = ({ id, data, selected }: NodeProps<GraphCanvasNode>) =>
             title={promptEditable ? "Double-click to edit the prompt" : undefined}
             onDoubleClick={promptEditable ? (event) => {
               event.stopPropagation();
-              setPromptDraft(data.promptPreview);
+              setPromptDraft(promptRaw);
               setEditingPrompt(true);
             } : undefined}
             className={`mt-1 line-clamp-3 text-[11px] leading-relaxed text-foreground/85 ${promptEditable ? "nodrag cursor-text rounded-lg px-1 py-0.5 transition hover:bg-primary/10" : ""}`}
