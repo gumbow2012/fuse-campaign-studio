@@ -8,6 +8,7 @@ import {
   VIDEO_MODEL,
   getVideoModel,
   clampSeedanceDuration,
+  videoFallbackUsdPerSecond,
   buildVideoModelInput,
   VERTICAL_VIDEO_ASPECT_RATIO,
   normalizeVideoDuration,
