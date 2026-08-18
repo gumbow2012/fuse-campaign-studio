@@ -282,7 +282,7 @@ export default function BillingPage() {
         <div className="mt-8 grid gap-6 lg:grid-cols-[0.9fr_1.1fr]">
           <section className="rounded-[2rem] border border-white/10 bg-white/[0.03] p-6">
             <p className="text-[11px] uppercase tracking-[0.24em] text-muted-foreground">
-              {isTemplateCheckout ? "Order summary" : "Current state"}
+              {isTemplateCheckout ? "Order summary" : user ? "Current state" : "Get started"}
             </p>
             {isTemplateCheckout ? (
               <div className="mt-5 rounded-[1.5rem] border border-cyan-300/20 bg-cyan-300/[0.08] p-4">
