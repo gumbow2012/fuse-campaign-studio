@@ -3185,6 +3185,7 @@ const TemplateCanvas = () => {
                 </p>
               ) : null}
             </div>
+            </details>
           </div>
 
 
