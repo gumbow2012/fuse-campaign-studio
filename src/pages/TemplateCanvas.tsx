@@ -1769,10 +1769,10 @@ const TemplateCanvas = () => {
         versionId: detail.versionId,
         nodeType: isInput ? "user_input" : kind,
         editorMode: isInput ? kind : undefined,
-        name: addNodeName || undefined,
-        expected: addNodeExpected,
-        prompt: addNodePrompt,
-        outputExposed: addNodeType === "image_gen" || addNodeType === "video_gen",
+        name: kindOverride ? undefined : (addNodeName || undefined),
+        expected: kindOverride ? (kind === "video_gen" ? "video" : "image") : addNodeExpected,
+        prompt: kindOverride ? "" : addNodePrompt,
+        outputExposed: kind === "image_gen" || kind === "video_gen",
       });
       setAddNodeName("");
       setAddNodeExpected("image");
