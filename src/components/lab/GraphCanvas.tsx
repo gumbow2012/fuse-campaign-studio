@@ -209,7 +209,6 @@ const GraphCanvasInner = ({
         minZoom={0.2}
         maxZoom={1.6}
         proOptions={{ hideAttribution: true }}
-        className="[&_.react-flow\_\_controls-button]:!border-border/60 [&_.react-flow\_\_controls-button]:!bg-card/80 [&_.react-flow\_\_controls-button]:!fill-foreground [&_.react-flow\_\_controls]:!overflow-hidden [&_.react-flow\_\_controls]:!rounded-xl [&_.react-flow\_\_controls]:!border [&_.react-flow\_\_controls]:!border-border/60 [&_.react-flow\_\_controls]:!shadow-lg"
       >
         <Background variant={BackgroundVariant.Dots} gap={22} size={1.4} color="hsl(var(--primary) / 0.22)" />
         <Controls showInteractive={false} position="bottom-left" />

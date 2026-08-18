@@ -150,3 +150,36 @@
     backdrop-filter: blur(22px);
   }
 }
+
+/* React Flow canvas theming (admin template builder) */
+.react-flow__controls {
+  border-radius: 0.75rem;
+  overflow: hidden;
+  border: 1px solid hsl(var(--border) / 0.6);
+  box-shadow: 0 12px 32px -18px rgba(0, 0, 0, 0.9);
+}
+.react-flow__controls-button {
+  background: hsl(var(--card) / 0.9);
+  border-bottom: 1px solid hsl(var(--border) / 0.5);
+  fill: hsl(var(--foreground));
+}
+.react-flow__controls-button:hover {
+  background: hsl(var(--primary) / 0.18);
+}
+.react-flow__minimap {
+  border-radius: 0.75rem;
+  border: 1px solid hsl(var(--border) / 0.6);
+  background: hsl(var(--card) / 0.85);
+}
+.react-flow__handle {
+  transition: transform 0.15s ease;
+}
+.react-flow__handle:hover {
+  transform: scale(1.35);
+}
+.react-flow__edge-path {
+  filter: drop-shadow(0 0 4px hsl(var(--primary) / 0.45));
+}
+.react-flow__attribution {
+  display: none;
+}
