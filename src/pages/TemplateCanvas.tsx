@@ -3210,13 +3210,13 @@ const TemplateCanvas = () => {
           </div>
 
           {detail ? (
-            <div className="rounded-2xl border border-border/50 bg-card/70 p-4 shadow-sm xl:col-span-4">
-              <div className="flex items-center justify-between gap-3">
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-[0.15em] text-muted-foreground">Run Selected Template</p>
-                  <p className="mt-1 text-xs text-muted-foreground">{runInputs.length} upload input{runInputs.length === 1 ? "" : "s"} required</p>
+            <div className="rounded-2xl border border-border/60 bg-card/80 p-4 shadow-sm xl:col-span-12">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-xs font-semibold uppercase tracking-[0.15em] text-foreground/80">Run Selected Template</p>
+                  <p className="mt-1 text-xs text-foreground/65">{runInputs.length} upload input{runInputs.length === 1 ? "" : "s"} required · secondary to editing</p>
                 </div>
-                <Button type="button" variant="outline" size="sm" onClick={() => setShowRunnerPanel((current) => !current)}>
+                <Button type="button" variant="outline" size="sm" className="border-border font-semibold text-foreground hover:bg-primary/15" onClick={() => setShowRunnerPanel((current) => !current)}>
                   {showRunnerPanel ? "Hide" : "Open"}
                 </Button>
               </div>
