@@ -515,6 +515,8 @@ const TemplateCanvas = () => {
   const [loadingActivationGate, setLoadingActivationGate] = useState(false);
   const [cloneTemplateName, setCloneTemplateName] = useState("");
   const [addNodeType, setAddNodeType] = useState<NewNodeKind>("upload");
+  const [paletteVideoModel, setPaletteVideoModel] = useState<VideoModelKey>("kling-3.0-pro");
+  const [draggingEdgeIndex, setDraggingEdgeIndex] = useState<number | null>(null);
   const [addNodeName, setAddNodeName] = useState("");
   const [addNodeExpected, setAddNodeExpected] = useState("image");
   const [addNodePrompt, setAddNodePrompt] = useState("");
