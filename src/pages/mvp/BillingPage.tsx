@@ -15,37 +15,23 @@ const tierCopy = {
   starter: {
     icon: Zap,
     description:
-      "For brands getting started. Full template library, standard processing, and everything you need to launch your first drops with real campaign visuals.",
-    features: [
-      "About 3 full campaigns per month",
-      "About 7 lighter drop runs per month",
-      "Full campaign template library",
-      "Standard processing",
-    ],
+      "For brands getting started. Full template library. Standard processing. Everything you need to launch your first drops with real campaign visuals.",
+    features: ["Full campaign template library", "Standard processing", "Commercial rights on every asset"],
   },
   pro: {
     icon: Rocket,
     description:
-      "For brands that drop regularly. Priority processing, faster turnaround, and the full creative toolkit for a real drop calendar.",
-    features: [
-      "About 19 full campaigns per month",
-      "About 42 lighter drop runs per month",
-      "Priority processing",
-      "Faster iteration on every vibe",
-    ],
+      "For brands that drop regularly. Priority processing. Faster turnaround. The full creative toolkit for brands running a real drop calendar.",
+    features: ["Priority processing", "Faster turnaround on every vibe", "Full campaign template library"],
   },
   studio: {
     icon: Crown,
     description:
-      "For teams and agencies. Fastest processing and the largest volume, built for brands running multiple lines or managing client drops.",
-    features: [
-      "About 58 full campaigns per month",
-      "About 130 lighter drop runs per month",
-      "Fastest processing",
-      "Built for multi-brand and client work",
-    ],
+      "For teams and agencies. Fastest processing. Largest volume. Built for brands running multiple lines or managing client drops.",
+    features: ["Fastest processing", "Largest monthly volume", "Built for multi-brand and client work"],
   },
 } as const;
+
 
 type CreditPackSmokeResult = {
   ok?: boolean;
@@ -296,7 +282,7 @@ export default function BillingPage() {
         <div className="mt-8 grid gap-6 lg:grid-cols-[0.9fr_1.1fr]">
           <section className="rounded-[2rem] border border-white/10 bg-white/[0.03] p-6">
             <p className="text-[11px] uppercase tracking-[0.24em] text-muted-foreground">
-              {isTemplateCheckout ? "Order summary" : "Current state"}
+              {isTemplateCheckout ? "Order summary" : user ? "Current state" : "Get started"}
             </p>
             {isTemplateCheckout ? (
               <div className="mt-5 rounded-[1.5rem] border border-cyan-300/20 bg-cyan-300/[0.08] p-4">
@@ -346,24 +332,31 @@ export default function BillingPage() {
               </div>
             ) : null}
 
-            <div className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-1">
-              <div className="rounded-[1.5rem] border border-white/8 bg-black/20 p-4">
-                <p className="text-[11px] uppercase tracking-[0.24em] text-muted-foreground">Plan</p>
-                <p className="mt-2 text-3xl font-semibold capitalize text-white">{currentPlanLabel}</p>
+            {user ? (
+              <div className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-1">
+                <div className="rounded-[1.5rem] border border-white/8 bg-black/20 p-4">
+                  <p className="text-[11px] uppercase tracking-[0.24em] text-muted-foreground">Plan</p>
+                  <p className="mt-2 text-3xl font-semibold capitalize text-white">{currentPlanLabel}</p>
+                </div>
+                <div className="rounded-[1.5rem] border border-white/8 bg-black/20 p-4">
+                  <p className="text-[11px] uppercase tracking-[0.24em] text-muted-foreground">Credits</p>
+                  <p className="mt-2 text-3xl font-semibold text-white">{creditValue}</p>
+                </div>
+                <div className="rounded-[1.5rem] border border-white/8 bg-black/20 p-4">
+                  <p className="text-[11px] uppercase tracking-[0.24em] text-muted-foreground">Subscription</p>
+                  <p className="mt-2 text-xl font-semibold capitalize text-white">{subscriptionLabel}</p>
+                </div>
+                <div className="rounded-[1.5rem] border border-white/8 bg-black/20 p-4">
+                  <p className="text-[11px] uppercase tracking-[0.24em] text-muted-foreground">Period ends</p>
+                  <p className="mt-2 text-xl font-semibold text-white">{formatBillingDate(profile?.subscription_period_end)}</p>
+                </div>
               </div>
-              <div className="rounded-[1.5rem] border border-white/8 bg-black/20 p-4">
-                <p className="text-[11px] uppercase tracking-[0.24em] text-muted-foreground">Credits</p>
-                <p className="mt-2 text-3xl font-semibold text-white">{creditValue}</p>
-              </div>
-              <div className="rounded-[1.5rem] border border-white/8 bg-black/20 p-4">
-                <p className="text-[11px] uppercase tracking-[0.24em] text-muted-foreground">Subscription</p>
-                <p className="mt-2 text-xl font-semibold capitalize text-white">{subscriptionLabel}</p>
-              </div>
-              <div className="rounded-[1.5rem] border border-white/8 bg-black/20 p-4">
-                <p className="text-[11px] uppercase tracking-[0.24em] text-muted-foreground">Period ends</p>
-                <p className="mt-2 text-xl font-semibold text-white">{formatBillingDate(profile?.subscription_period_end)}</p>
-              </div>
-            </div>
+            ) : (
+              <p className="mt-5 text-sm leading-6 text-slate-300">
+                Pick a plan on the right to start generating drop campaigns. Full commercial rights, no watermarks.
+              </p>
+            )}
+
 
             {isAdmin ? (
               <div className="mt-6 rounded-[1.5rem] border border-cyan-300/20 bg-cyan-300/10 p-4 text-sm leading-6 text-cyan-50">
@@ -566,6 +559,9 @@ export default function BillingPage() {
               </ul>
             </div>
           </div>
+          <p className="mt-6 max-w-3xl text-sm leading-7 text-slate-300">
+            One professional photoshoot with a photographer, studio rental, and model costs $2,000–$5,000 and takes 2–4 weeks to schedule. One Fuse campaign takes 5 minutes and is included in your plan.
+          </p>
         </section>
 
         <section className="mt-8 rounded-[2rem] border border-white/10 bg-white/[0.03] p-6 md:p-8">
@@ -576,33 +572,40 @@ export default function BillingPage() {
           <dl className="mt-6 grid gap-4 md:grid-cols-2">
             {[
               {
-                q: "What counts as a campaign?",
-                a: "A campaign is one full run of a template — a set of lookbook images, social assets, and video generated from your uploaded design. Lighter runs that produce fewer assets use fewer credits.",
+                q: "Will the images actually look real?",
+                a: "Yes — see examples in our gallery.",
+                to: "/app/templates",
               },
               {
-                q: "Do unused credits roll over?",
-                a: "Credits refresh with each billing cycle. You can buy one-time top-up packs any time if you need more before your next renewal.",
+                q: "What does a credit get me?",
+                a: "Credits are consumed per generation. Your plan's monthly credits cover a full run of campaign assets; heavier templates use more.",
               },
               {
-                q: "Can I use the output commercially?",
-                a: "Yes. Everything you generate is yours to use for your brand, your product pages, your ads, and your socials.",
+                q: "Can I use these commercially?",
+                a: "Yes — full commercial rights, no watermarks, no attribution required.",
               },
               {
-                q: "What kind of product images work best?",
-                a: "Clean, well-lit shots of your garment or accessory on a plain background give the strongest results. Flat lays and mockups both work.",
+                q: "How is this different from Midjourney or other AI tools?",
+                a: "Those generate single images from prompts. Fuse generates complete drop campaigns from your product.",
               },
               {
-                q: "Can I cancel any time?",
-                a: "Yes. Manage or cancel your plan from your account at any time — you keep access until the end of the current cycle.",
-              },
-              {
-                q: "Do you offer anything for agencies?",
-                a: "Studio is built for multi-brand and client work. If you need higher volume than Studio covers, get in touch.",
+                q: "What if I don't like the output?",
+                a: "Regenerate with a different vibe. You're not locked in.",
               },
             ].map((item) => (
               <div key={item.q} className="rounded-[1.5rem] border border-white/10 bg-slate-950/75 p-5">
                 <dt className="text-sm font-semibold text-white">{item.q}</dt>
-                <dd className="mt-2 text-sm leading-6 text-slate-300">{item.a}</dd>
+                <dd className="mt-2 text-sm leading-6 text-slate-300">
+                  {item.a}
+                  {item.to ? (
+                    <>
+                      {" "}
+                      <Link to={item.to} className="text-cyan-200 underline underline-offset-4">
+                        Browse examples
+                      </Link>
+                    </>
+                  ) : null}
+                </dd>
               </div>
             ))}
           </dl>
