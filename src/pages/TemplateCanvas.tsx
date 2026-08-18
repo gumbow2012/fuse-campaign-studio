@@ -1917,7 +1917,7 @@ const TemplateCanvas = () => {
 
   return (
     <SiteShell>
-      <div className="mx-auto flex w-full max-w-[1900px] flex-col gap-5 px-4 py-6 sm:px-5 xl:px-8">
+      <div className="mx-auto flex w-full min-w-0 max-w-[1900px] flex-col gap-5 overflow-x-hidden px-4 py-6 sm:px-5 xl:px-8">
         <section className="w-full">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
             <div>
@@ -1927,7 +1927,7 @@ const TemplateCanvas = () => {
                 Create, edit, and test your campaign templates.
               </p>
             </div>
-            <div className="grid grid-cols-2 gap-2 text-xs sm:flex">
+            <div className="flex w-full flex-wrap gap-2 text-xs sm:w-auto">
               <Button type="button" variant="outline" size="sm" onClick={() => void loadTemplates()} disabled={loadingTemplates}>
                 <RefreshCw className={`mr-2 h-4 w-4 ${loadingTemplates ? "animate-spin" : ""}`} />
                 Refresh
@@ -2250,7 +2250,7 @@ const TemplateCanvas = () => {
                   </div>
                 ) : null}
 
-                <div className="mt-5 flex gap-2">
+                <div className="mt-5 flex flex-wrap gap-2">
                   <Button type="button" variant="outline" onClick={() => goWizard(-1)} disabled={wizardStepIndex <= 0 || !!mutating}>
                     Back
                   </Button>
@@ -2417,7 +2417,7 @@ const TemplateCanvas = () => {
                   ) : null}
                 </div>
               </div>
-              <div className="flex min-w-[180px] flex-col justify-between gap-3">
+              <div className="flex w-full min-w-0 flex-col justify-between gap-3 lg:w-[200px]">
                 <Button type="button" onClick={() => void saveTemplateMetadata()} disabled={!selectedTemplate || !!mutating || !templateMetaName.trim()}>
                   {mutating === "save-template-meta" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
                   Save Details
@@ -2442,7 +2442,7 @@ const TemplateCanvas = () => {
             <select
               value={selectedTemplate?.templateId ?? ""}
               onChange={(event) => handlePrimaryTemplateSelect(event.target.value)}
-              className="h-11 w-full rounded-xl border border-border bg-background px-4 text-sm"
+              className="h-11 w-full max-w-full truncate rounded-xl border border-border bg-background px-4 text-sm"
               disabled={loadingTemplates || !primaryTemplateOptions.length}
             >
               {primaryTemplateOptions.map((template) => (
@@ -2968,7 +2968,7 @@ const TemplateCanvas = () => {
                             : current,
                         )
                       }
-                      className="h-11 w-full rounded-xl border border-border bg-background px-4 text-sm"
+                      className="h-11 w-full max-w-full truncate rounded-xl border border-border bg-background px-4 text-sm"
                     >
                       <option value="upload">User Upload</option>
                       <option value="reference">Hidden Reference</option>
@@ -3047,7 +3047,7 @@ const TemplateCanvas = () => {
                             : current,
                         )
                       }
-                      className="h-11 w-full rounded-xl border border-border bg-background px-4 text-sm"
+                      className="h-11 w-full max-w-full truncate rounded-xl border border-border bg-background px-4 text-sm"
                     >
                       {VIDEO_MODEL_OPTIONS.map((option) => (
                         <option key={option.key} value={option.key}>{option.label}</option>
@@ -3080,7 +3080,7 @@ const TemplateCanvas = () => {
                           onChange={(event) =>
                             setDraft((current) => current ? { ...current, resolution: event.target.value } : current)
                           }
-                          className="h-11 w-full rounded-xl border border-border bg-background px-4 text-sm"
+                          className="h-11 w-full max-w-full truncate rounded-xl border border-border bg-background px-4 text-sm"
                         >
                           {SEEDANCE_RESOLUTION_OPTIONS.map((value) => (
                             <option key={value} value={value}>{value}</option>
@@ -3094,7 +3094,7 @@ const TemplateCanvas = () => {
                           onChange={(event) =>
                             setDraft((current) => current ? { ...current, aspectRatio: event.target.value } : current)
                           }
-                          className="h-11 w-full rounded-xl border border-border bg-background px-4 text-sm"
+                          className="h-11 w-full max-w-full truncate rounded-xl border border-border bg-background px-4 text-sm"
                         >
                           {SEEDANCE_ASPECT_OPTIONS.map((value) => (
                             <option key={value} value={value}>{value}</option>
