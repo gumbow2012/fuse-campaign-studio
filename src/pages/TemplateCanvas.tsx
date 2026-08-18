@@ -1941,6 +1941,7 @@ const TemplateCanvas = () => {
         promptPreview: promptPreview(node),
         incomingCount: node.incoming.length,
         sourceSummary: sourcePreview(node),
+        refLabels: node.incoming.map((incoming) => incoming.sourceName),
         assetUrl: node.defaultAssetUrl,
         expected: node.editor?.expected ?? node.expected ?? null,
         deliverable: typeof node.editor?.outputExposed === "boolean" ? node.editor.outputExposed : null,
@@ -1952,13 +1953,14 @@ const TemplateCanvas = () => {
     target.incoming.flatMap((incoming, index) => {
       if (!nodeMap.has(incoming.sourceNodeId)) return [];
       return [{
-        id: incoming.edgeId ?? `${incoming.sourceNodeId}-${target.id}-${incoming.targetParam ?? index}`,
+        id: incoming.edgeId ?? `${incoming.sourceNodeId}-${target.id}-${index}`,
         source: incoming.sourceNodeId,
         target: target.id,
-        label: incoming.targetParam ?? undefined,
+        label: `Ref ${index + 1}`,
       }];
     }),
   ), [graphNodes, nodeMap]);
+
 
   const wizardSteps: Array<{ id: TemplateWizardStep; label: string }> = [
     { id: "setup", label: "Setup" },
