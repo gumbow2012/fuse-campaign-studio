@@ -2105,6 +2105,7 @@ const TemplateCanvas = () => {
           </section>
 
 
+        {selectedNode ? (
         <aside className="w-full min-w-0 self-start rounded-3xl border border-border/50 bg-card/70 p-5 shadow-sm xl:sticky xl:top-4 xl:max-h-[calc(100vh-2rem)] xl:overflow-y-auto">
           <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">Inspector</p>
           {selectedNode && draft ? (
