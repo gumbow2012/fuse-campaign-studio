@@ -968,7 +968,9 @@ export async function runGraphJob(admin: AdminClient, jobId: string) {
           status: "running",
           started_at: startedAt ?? undefined,
           provider: "fal",
-          provider_model: node.node_type === "video_gen" ? VIDEO_MODEL : IMAGE_MODEL,
+          provider_model: node.node_type === "video_gen"
+            ? getVideoModel(node.prompt_config?.video_model).endpointId
+            : IMAGE_MODEL,
           input_payload: Object.fromEntries(
             orderedParamEntries.map(([key, value]) => [key, value.url]),
           ),
