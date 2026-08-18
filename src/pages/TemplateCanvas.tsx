@@ -3034,6 +3034,95 @@ const TemplateCanvas = () => {
                 </div>
               ) : null}
 
+              {selectedNode.nodeType === "video_gen" ? (
+                <div className="space-y-3 rounded-2xl border border-border/50 bg-background/50 p-4">
+                  <div className="space-y-2">
+                    <Label>Video model</Label>
+                    <select
+                      value={draft.videoModel}
+                      onChange={(event) =>
+                        setDraft((current) =>
+                          current
+                            ? { ...current, videoModel: event.target.value as VideoModelKey }
+                            : current,
+                        )
+                      }
+                      className="h-11 w-full rounded-xl border border-border bg-background px-4 text-sm"
+                    >
+                      {VIDEO_MODEL_OPTIONS.map((option) => (
+                        <option key={option.key} value={option.key}>{option.label}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {resolveVideoModelOption(draft.videoModel).family === "seedance" ? (
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <div className="space-y-2">
+                        <Label>Duration (seconds)</Label>
+                        <Input
+                          type="number"
+                          min={4}
+                          max={15}
+                          value={draft.duration}
+                          onChange={(event) =>
+                            setDraft((current) =>
+                              current
+                                ? { ...current, duration: Math.min(15, Math.max(4, Number(event.target.value) || 4)) }
+                                : current,
+                            )
+                          }
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Resolution</Label>
+                        <select
+                          value={draft.resolution}
+                          onChange={(event) =>
+                            setDraft((current) => current ? { ...current, resolution: event.target.value } : current)
+                          }
+                          className="h-11 w-full rounded-xl border border-border bg-background px-4 text-sm"
+                        >
+                          {SEEDANCE_RESOLUTION_OPTIONS.map((value) => (
+                            <option key={value} value={value}>{value}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Aspect ratio</Label>
+                        <select
+                          value={draft.aspectRatio}
+                          onChange={(event) =>
+                            setDraft((current) => current ? { ...current, aspectRatio: event.target.value } : current)
+                          }
+                          className="h-11 w-full rounded-xl border border-border bg-background px-4 text-sm"
+                        >
+                          {SEEDANCE_ASPECT_OPTIONS.map((value) => (
+                            <option key={value} value={value}>{value}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <label className="flex items-center gap-3 self-end rounded-xl border border-border/50 bg-background/50 px-4 py-3 text-sm">
+                        <input
+                          type="checkbox"
+                          checked={draft.generateAudio}
+                          onChange={(event) =>
+                            setDraft((current) => current ? { ...current, generateAudio: event.target.checked } : current)
+                          }
+                        />
+                        Generate audio
+                      </label>
+                    </div>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">Locked to vertical 9:16 at 5 seconds.</p>
+                  )}
+
+                  <p className="text-[11px] uppercase tracking-[0.16em] text-primary">
+                    ≈ {estimateVideoCredits(draft)} credits per video
+                  </p>
+                </div>
+              ) : null}
+
+
               {(selectedNode.nodeType === "image_gen" || selectedNode.nodeType === "video_gen") ? (
                 <label className="flex items-center gap-3 rounded-2xl border border-border/50 bg-background/50 px-4 py-3 text-sm">
                   <input
