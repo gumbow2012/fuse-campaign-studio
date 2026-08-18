@@ -2050,7 +2050,7 @@ const TemplateCanvas = () => {
           </div>
         </div>
 
-        <div className="grid min-w-0 grid-cols-1 gap-3 xl:grid-cols-[76px_minmax(0,1fr)_380px]">
+        <div className={`grid min-w-0 grid-cols-1 gap-3 ${selectedNode ? "xl:grid-cols-[76px_minmax(0,1fr)_380px]" : "xl:grid-cols-[76px_minmax(0,1fr)]"}`}>
           <aside className="flex min-w-0 flex-row gap-2 overflow-x-auto rounded-2xl border border-border/50 bg-card/70 p-2 shadow-sm xl:flex-col xl:overflow-visible">
             <Input
               value={paletteSearch}
