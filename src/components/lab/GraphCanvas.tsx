@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Background,
   BackgroundVariant,
@@ -18,7 +18,7 @@ import {
   type EdgeChange,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import { Film, Image as ImageIcon, Play, Plus, Upload } from "lucide-react";
+import { Film, Image as ImageIcon, Loader2, Play, Plus, Upload } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 export type PortType = "prompt" | "image" | "video";
@@ -40,7 +40,11 @@ export type GraphCanvasNodeData = {
   expected: string | null;
   deliverable: boolean | null;
   portIds: string[];
+  isReference?: boolean;
+  uploadingReference?: boolean;
   onAddPort?: (nodeId: string, type: PortType) => void;
+  onPromptCommit?: (nodeId: string, prompt: string) => void;
+  onUploadReference?: (nodeId: string, file: File) => void;
 };
 
 export type GraphCanvasNode = Node<GraphCanvasNodeData>;
@@ -115,6 +119,15 @@ const TemplateFlowNode = ({ id, data, selected }: NodeProps<GraphCanvasNode>) =>
   const inputPorts = inputPortsFor(data);
   const outputPort = outputPortFor(data);
   const isModelNode = data.kind === "image" || data.kind === "video";
+  const promptEditable = isModelNode && typeof data.onPromptCommit === "function";
+  const [editingPrompt, setEditingPrompt] = useState(false);
+  const [promptDraft, setPromptDraft] = useState(data.promptPreview);
+
+  const commitPrompt = () => {
+    setEditingPrompt(false);
+    const next = promptDraft.trim();
+    if (next !== data.promptPreview.trim()) data.onPromptCommit?.(id, promptDraft);
+  };
 
   return (
     <div
@@ -176,9 +189,30 @@ const TemplateFlowNode = ({ id, data, selected }: NodeProps<GraphCanvasNode>) =>
           className="mt-3 h-24 w-full rounded-xl border border-border/50 bg-background/70 object-contain"
         />
       ) : data.kind === "input" ? (
-        <div className="mt-3 flex h-20 w-full items-center justify-center rounded-xl border border-dashed border-border/60 bg-background/50 text-[11px] text-muted-foreground">
-          {data.expected ? `Expects ${data.expected}` : "Runtime upload"}
+        <div className="mt-3 flex h-20 w-full items-center justify-center rounded-xl border border-dashed border-border/60 bg-background/50 text-center text-[11px] text-muted-foreground">
+          {data.isReference
+            ? "No fixed image yet — upload one"
+            : data.expected ? `Expects ${data.expected}` : "Runtime upload"}
         </div>
+      ) : null}
+
+      {data.isReference && data.onUploadReference ? (
+        <label className="nodrag mt-3 flex cursor-pointer items-center justify-center gap-1.5 rounded-xl border border-primary/40 bg-primary/10 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-primary transition hover:bg-primary/20">
+          {data.uploadingReference ? <Loader2 className="h-3 w-3 animate-spin" /> : <Upload className="h-3 w-3" />}
+          {data.assetUrl ? "Replace image" : "Upload image"}
+          <input
+            type="file"
+            accept="image/*"
+            className="hidden"
+            disabled={data.uploadingReference}
+            onClick={(event) => event.stopPropagation()}
+            onChange={(event) => {
+              const file = event.target.files?.[0];
+              event.target.value = "";
+              if (file) data.onUploadReference?.(id, file);
+            }}
+          />
+        </label>
       ) : null}
 
       {isModelNode ? (
@@ -231,7 +265,38 @@ const TemplateFlowNode = ({ id, data, selected }: NodeProps<GraphCanvasNode>) =>
           </p>
           <span className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground">{data.incomingCount} in</span>
         </div>
-        <p className="mt-1 line-clamp-3 text-[11px] leading-relaxed text-foreground/85">{data.promptPreview}</p>
+        {editingPrompt ? (
+          <textarea
+            autoFocus
+            value={promptDraft}
+            onChange={(event) => setPromptDraft(event.target.value)}
+            onClick={(event) => event.stopPropagation()}
+            onBlur={commitPrompt}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" && !event.shiftKey) {
+                event.preventDefault();
+                commitPrompt();
+              }
+              if (event.key === "Escape") {
+                setPromptDraft(data.promptPreview);
+                setEditingPrompt(false);
+              }
+            }}
+            className="nodrag nowheel mt-1 min-h-[92px] w-full resize-y rounded-lg border border-primary/50 bg-background/90 p-2 text-[11px] leading-relaxed text-foreground outline-none"
+          />
+        ) : (
+          <p
+            title={promptEditable ? "Double-click to edit the prompt" : undefined}
+            onDoubleClick={promptEditable ? (event) => {
+              event.stopPropagation();
+              setPromptDraft(data.promptPreview);
+              setEditingPrompt(true);
+            } : undefined}
+            className={`mt-1 line-clamp-3 text-[11px] leading-relaxed text-foreground/85 ${promptEditable ? "nodrag cursor-text rounded-lg px-1 py-0.5 transition hover:bg-primary/10" : ""}`}
+          >
+            {data.promptPreview}
+          </p>
+        )}
       </div>
 
       {data.refLabels.length ? (
