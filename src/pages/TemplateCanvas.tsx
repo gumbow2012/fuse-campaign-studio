@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Copy, EyeOff, Film, GitBranch, Image as ImageIcon, Loader2, Maximize2, Minus, Move, Play, Plus, RefreshCw, Save, Search, Trash2, Type, Upload, X } from "lucide-react";
+import { CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Copy, EyeOff, Film, GitBranch, Image as ImageIcon, Loader2, Maximize2, Minus, ImageDown, Layers, Move, Play, Plus, RefreshCw, Save, Search, Trash2, Type, Upload, X } from "lucide-react";
 import { Link, useSearchParams } from "react-router-dom";
 import SiteShell from "@/components/mvp/SiteShell";
+import TemplateGallery from "@/components/lab/TemplateGallery";
 import GraphCanvas, { PORT_COLOR, type GraphCanvasNode, type GraphCanvasNodeData, type PortType } from "@/components/lab/GraphCanvas";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -47,6 +48,7 @@ type TemplateOption = {
   versionNumber: number;
   reviewStatus: string;
   isActive: boolean;
+  updatedAt: string | null;
   counts: {
     inputs: number;
     imageOutputs: number;
@@ -79,6 +81,7 @@ type WorkbenchCatalogTemplate = {
   description?: string | null;
   preview_url?: string | null;
   preview_asset_type?: "image" | "video" | null;
+  updated_at?: string | null;
   versions?: WorkbenchCatalogVersion[];
 };
 
@@ -534,6 +537,8 @@ const TemplateCanvas = () => {
   const [paletteSearch, setPaletteSearch] = useState("");
   const [showSettingsPanel, setShowSettingsPanel] = useState(false);
   const [extraPorts, setExtraPorts] = useState<Record<string, string[]>>({});
+  const [showGallery, setShowGallery] = useState(false);
+  const [referenceUploadNodeId, setReferenceUploadNodeId] = useState<string | null>(null);
   const handleAddPort = useCallback((nodeId: string, type: PortType) => {
     setExtraPorts((current) => {
       const existing = current[nodeId] ?? [];
@@ -672,6 +677,7 @@ const TemplateCanvas = () => {
           versionNumber: version.version_number,
           reviewStatus: version.review_status ?? "Unreviewed",
           isActive: version.is_active === true,
+          updatedAt: template.updated_at ?? null,
           counts: {
             inputs: Number(version.counts?.inputs ?? 0),
             imageOutputs: Number(version.counts?.images ?? 0),
@@ -918,11 +924,6 @@ const TemplateCanvas = () => {
     () => validationQueue.findIndex((template) => template.templateId === selectedTemplate?.templateId),
     [selectedTemplate?.templateId, validationQueue],
   );
-
-  const handlePrimaryTemplateSelect = useCallback((templateId: string) => {
-    const primary = primaryTemplateOptions.find((template) => template.templateId === templateId);
-    if (primary) setSelectedVersionId(primary.versionId);
-  }, [primaryTemplateOptions]);
 
   const goToQueueTemplate = useCallback((direction: -1 | 1) => {
     if (!validationQueue.length) return;
@@ -1514,6 +1515,59 @@ const TemplateCanvas = () => {
     await loadDetail(versionId ?? selectedVersionId);
   }, [loadDetail, loadTemplates, selectedVersionId]);
 
+  const savePromptInline = useCallback(async (nodeId: string, prompt: string) => {
+    if (!detail) return;
+    try {
+      const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/save-template-editor`, {
+        method: "POST",
+        headers: { ...(await buildAuthHeaders()), "Content-Type": "application/json" },
+        body: JSON.stringify({ versionId: detail.versionId, nodeId, prompt }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data?.error ?? "Could not save prompt");
+      await loadDetail(detail.versionId);
+      toast({ title: "Prompt saved" });
+    } catch (saveError) {
+      const message = saveError instanceof Error ? saveError.message : "Could not save prompt";
+      toast({ title: "Save failed", description: message, variant: "destructive" });
+    }
+  }, [buildAuthHeaders, detail, loadDetail]);
+
+  const uploadReferenceForNode = useCallback(async (nodeId: string, file: File) => {
+    if (!detail) return;
+    const node = detail.nodes.find((candidate) => candidate.id === nodeId);
+    if (!node) return;
+    setReferenceUploadNodeId(nodeId);
+    try {
+      const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/save-template-editor`, {
+        method: "POST",
+        headers: { ...(await buildAuthHeaders()), "Content-Type": "application/json" },
+        body: JSON.stringify({
+          versionId: detail.versionId,
+          nodeId,
+          displayLabel: node.editor?.label || node.name,
+          expected: node.editor?.expected ?? node.expected ?? "image",
+          editorMode: "reference",
+          slotKey: node.editor?.slotKey ?? null,
+          referenceFile: {
+            filename: file.name,
+            dataUrl: await fileToDataUrl(file),
+          },
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data?.error ?? "Could not upload reference image");
+      await loadDetail(detail.versionId);
+      await loadTemplates();
+      toast({ title: "Reference image attached", description: "This fixed image is now part of the template." });
+    } catch (uploadError) {
+      const message = uploadError instanceof Error ? uploadError.message : "Could not upload reference image";
+      toast({ title: "Upload failed", description: message, variant: "destructive" });
+    } finally {
+      setReferenceUploadNodeId(null);
+    }
+  }, [buildAuthHeaders, detail, loadDetail, loadTemplates]);
+
   const createTemplate = useCallback(async () => {
     const name = newTemplateName.trim();
     if (!name) {
@@ -1918,11 +1972,16 @@ const TemplateCanvas = () => {
         assetUrl: node.defaultAssetUrl,
         expected: node.editor?.expected ?? node.expected ?? null,
         deliverable: typeof node.editor?.outputExposed === "boolean" ? node.editor.outputExposed : null,
+        promptValue: node.prompt ?? "",
         portIds: portIdsForNode(node.id, kind, node.incoming.map((incoming) => incoming.targetParam), extraPorts[node.id] ?? []),
+        isReference: kind === "input" && node.editor?.mode === "reference",
+        uploadingReference: referenceUploadNodeId === node.id,
         onAddPort: handleAddPort,
+        onPromptCommit: (nodeId: string, prompt: string) => void savePromptInline(nodeId, prompt),
+        onUploadReference: (nodeId: string, file: File) => void uploadReferenceForNode(nodeId, file),
       },
     };
-  }), [graphNodes, extraPorts, handleAddPort]);
+  }), [graphNodes, extraPorts, handleAddPort, referenceUploadNodeId, savePromptInline, uploadReferenceForNode]);
 
   const flowEdges = useMemo(() => graphNodes.flatMap((target) =>
     target.incoming.flatMap((incoming, index) => {
@@ -2032,6 +2091,25 @@ const TemplateCanvas = () => {
 
   return (
     <SiteShell>
+      <TemplateGallery
+        open={showGallery}
+        templates={primaryTemplateOptions}
+        loading={loadingTemplates}
+        activeVersionId={selectedVersionId}
+        creating={mutating === "create-template"}
+        onClose={() => setShowGallery(false)}
+        onRefresh={() => void loadTemplates()}
+        onOpenTemplate={(versionId) => {
+          setSelectedNodeId(null);
+          setSelectedVersionId(versionId);
+          setShowGallery(false);
+        }}
+        onCreateTemplate={(name) => {
+          setNewTemplateName(name);
+          setShowGallery(false);
+          window.setTimeout(() => void createTemplate(), 0);
+        }}
+      />
       <div className="mx-auto flex w-full min-w-0 max-w-[2100px] flex-col gap-3 overflow-x-hidden px-3 py-3 sm:px-4">
         <div className="flex min-w-0 flex-wrap items-center justify-between gap-3 rounded-2xl border border-border/50 bg-card/70 px-4 py-2.5 shadow-sm">
           <div className="flex min-w-0 items-center gap-3">
@@ -2052,6 +2130,10 @@ const TemplateCanvas = () => {
             </span>
           </div>
           <div className="flex flex-wrap items-center gap-2">
+            <Button type="button" variant="outline" size="sm" className="rounded-full" onClick={() => setShowGallery(true)}>
+              <Layers className="mr-1.5 h-3.5 w-3.5" />
+              Templates
+            </Button>
             <Button type="button" variant="ghost" size="sm" className="rounded-full" disabled={!detail} onClick={resetLayout}>
               <GitBranch className="mr-1.5 h-3.5 w-3.5" />
               Auto-layout
@@ -2110,6 +2192,7 @@ const TemplateCanvas = () => {
             <div className="grid grid-cols-2 gap-2 xl:grid-cols-1">
               {[
                 { key: "input", label: "Input", icon: Upload, onClick: () => void addNode("upload"), disabled: !detail || !!mutating, hint: "Uploaded or reference image" },
+                { key: "reference", label: "Image Reference", icon: ImageDown, onClick: () => void addNode("reference"), disabled: !detail || !!mutating, hint: "Fixed image you upload now" },
                 { key: "image", label: "Image", icon: ImageIcon, onClick: () => void addNode("image_gen"), disabled: !detail || !!mutating, hint: "nano-banana-pro image step" },
                 { key: "video", label: "Video", icon: Film, onClick: () => void addNode("video_gen", paletteVideoModel), disabled: !detail || !!mutating, hint: `${resolveVideoModelOption(paletteVideoModel).label} step` },
                 { key: "prompt", label: "Prompt", icon: Type, onClick: () => {}, disabled: true, hint: "coming soon" },
@@ -2826,18 +2909,19 @@ const TemplateCanvas = () => {
               <p className="text-xs font-semibold uppercase tracking-[0.15em] text-muted-foreground">Manage Existing Template</p>
               <div className="mt-3 space-y-3">
             <Label>Template</Label>
-            <select
-              value={selectedTemplate?.templateId ?? ""}
-              onChange={(event) => handlePrimaryTemplateSelect(event.target.value)}
-              className="h-11 w-full max-w-full truncate rounded-xl border border-border bg-background px-4 text-sm"
-              disabled={loadingTemplates || !primaryTemplateOptions.length}
+            <button
+              type="button"
+              onClick={() => setShowGallery(true)}
+              className="flex h-11 w-full items-center justify-between gap-3 rounded-xl border border-border bg-background px-4 text-left text-sm transition hover:border-primary/50"
             >
-              {primaryTemplateOptions.map((template) => (
-                <option key={template.templateId} value={template.templateId}>
-                  {template.templateName} · v{template.versionNumber}{template.isActive ? " live" : " draft"} · {template.counts.inputs} in · {template.counts.imageOutputs + template.counts.videoOutputs} outputs
-                </option>
-              ))}
-            </select>
+              <span className="truncate">
+                {selectedTemplate ? `${selectedTemplate.templateName} · v${selectedTemplate.versionNumber}` : "Browse templates"}
+              </span>
+              <span className="flex shrink-0 items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-primary">
+                <Layers className="h-3.5 w-3.5" />
+                Gallery
+              </span>
+            </button>
             {versionOptions.length > 1 ? (
               <div className="grid gap-2">
                 <Label className="text-xs text-muted-foreground">Version</Label>
