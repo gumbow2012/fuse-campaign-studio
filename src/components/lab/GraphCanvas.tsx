@@ -537,8 +537,23 @@ const GraphCanvasInner = ({
   }, [nodes, selectedNodeId, setFlowNodes]);
 
   useEffect(() => {
-    setFlowEdges(edges);
-  }, [edges, setFlowEdges]);
+    setFlowEdges(
+      edges.map((edge) => {
+        const { label, labelStyle, ...rest } = edge as Edge & { labelStyle?: unknown };
+        return {
+          ...rest,
+          type: "deletable",
+          selectable: true,
+          focusable: true,
+          data: {
+            ...(edge.data ?? {}),
+            refLabel: typeof label === "string" ? label : undefined,
+            onDelete: onDeleteEdge,
+          },
+        } as Edge;
+      }),
+    );
+  }, [edges, onDeleteEdge, setFlowEdges]);
 
   const handleNodesChange = useCallback(
     (changes: NodeChange<GraphCanvasNode>[]) => {
@@ -556,11 +571,12 @@ const GraphCanvasInner = ({
     (changes: EdgeChange<Edge>[]) => {
       onEdgesChange(changes);
       for (const change of changes) {
-        if (change.type === "remove") onDeleteEdge(change.id);
+        if (change.type === "remove" && !change.id.startsWith("pending-")) onDeleteEdge(change.id);
       }
     },
     [onDeleteEdge, onEdgesChange],
   );
+
 
   const handleConnect = useCallback(
     (connection: Connection) => {
