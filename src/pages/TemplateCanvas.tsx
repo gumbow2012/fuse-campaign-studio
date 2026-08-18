@@ -1998,6 +1998,511 @@ const TemplateCanvas = () => {
   return (
     <SiteShell>
       <div className="mx-auto flex w-full min-w-0 max-w-[1900px] flex-col gap-5 overflow-x-hidden px-4 py-6 sm:px-5 xl:px-8">
+
+        <div className="grid min-w-0 grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1fr)_400px]">
+        <section className="min-w-0 rounded-3xl border border-border/50 bg-card/70 p-4 shadow-sm">
+          <div className="flex flex-col gap-3 px-1 pb-4">
+            <div className="flex flex-wrap items-end justify-between gap-3">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">Canvas</p>
+                <h2 className="mt-1 text-2xl font-bold">{detail?.templateName ?? "Loading..."}</h2>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Drag steps to arrange them. Drag from a dot on the right of a card to a dot on the left of another to connect them.
+                </p>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                {[
+                  ["Steps", graphSummary.nodes],
+                  ["Links", graphSummary.edges],
+                  ["Inputs", graphSummary.uploads],
+                  ["Results", graphSummary.outputs],
+                ].map(([label, value]) => (
+                  <span key={label} className="rounded-full border border-border/60 bg-background/70 px-3 py-1 text-xs text-muted-foreground">
+                    <span className="font-semibold text-foreground">{value}</span> {label}
+                  </span>
+                ))}
+                {loadingDetail ? <Loader2 className="h-5 w-5 animate-spin text-primary" /> : null}
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Palette</span>
+              <Button type="button" variant="outline" size="sm" className="rounded-full" disabled={!detail || !!mutating} onClick={() => void addNode("upload")}>
+                <Upload className="mr-1.5 h-3.5 w-3.5" />
+                Input
+              </Button>
+              <Button type="button" variant="outline" size="sm" className="rounded-full" disabled={!detail || !!mutating} onClick={() => void addNode("image_gen")}>
+                <ImageIcon className="mr-1.5 h-3.5 w-3.5" />
+                Image
+              </Button>
+              <Button type="button" variant="outline" size="sm" className="rounded-full" disabled={!detail || !!mutating} onClick={() => void addNode("video_gen", paletteVideoModel)}>
+                <Film className="mr-1.5 h-3.5 w-3.5" />
+                Video
+              </Button>
+              <select
+                value={paletteVideoModel}
+                onChange={(event) => setPaletteVideoModel(event.target.value as VideoModelKey)}
+                className="h-8 rounded-full border border-border bg-background px-3 text-xs"
+                aria-label="Video model for new video steps"
+              >
+                {VIDEO_MODEL_OPTIONS.map((option) => (
+                  <option key={option.key} value={option.key}>{option.label}</option>
+                ))}
+              </select>
+
+              <span className="mx-1 hidden h-5 w-px bg-border/60 sm:block" />
+              <Button type="button" variant="ghost" size="sm" className="rounded-full" disabled={!detail} onClick={resetLayout}>
+                <GitBranch className="mr-1.5 h-3.5 w-3.5" />
+                Auto-layout
+              </Button>
+              <Button type="button" variant="ghost" size="sm" className="rounded-full" disabled={!detail} onClick={saveLayout}>
+                <Save className="mr-1.5 h-3.5 w-3.5" />
+                Save layout
+              </Button>
+              <Button
+                type="button"
+                variant={showInternalNodes ? "default" : "ghost"}
+                size="sm"
+                className="rounded-full"
+                onClick={() => setShowInternalNodes((current) => !current)}
+              >
+                <EyeOff className="mr-1.5 h-3.5 w-3.5" />
+                {showInternalNodes ? "Hide guides" : "Show guides"}
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                className="rounded-full"
+                disabled={!detail || startingRun}
+                onClick={() => { setShowRunnerPanel(true); void handleRun(); }}
+              >
+                {startingRun ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="mr-1.5 h-3.5 w-3.5" />}
+                Test run
+              </Button>
+            </div>
+          </div>
+
+          <GraphCanvas
+            nodes={flowNodes}
+            edges={flowEdges}
+            selectedNodeId={selectedNode?.id ?? null}
+            onSelectNode={setSelectedNodeId}
+            onNodeMoved={handleCanvasNodeMoved}
+            onConnectNodes={(source, target) => void connectNodesOnCanvas(source, target)}
+            onDeleteEdge={(edgeId) => void deleteEdge(edgeId)}
+          />
+        </section>
+
+        <aside className="w-full min-w-0 self-start rounded-3xl border border-border/50 bg-card/70 p-5 shadow-sm xl:sticky xl:top-4 xl:max-h-[calc(100vh-2rem)] xl:overflow-y-auto">
+          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">Inspector</p>
+          {selectedNode && draft ? (
+            <div className="mt-4 space-y-4">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="rounded-md border border-primary/40 bg-primary/10 px-2 py-1 text-xs font-bold text-primary">
+                      Node {selectedNode.nodeNumber ?? "?"}
+                    </span>
+                    {selectedNode.outputNumber ? (
+                      <span className="rounded-md border border-emerald-400/40 bg-emerald-400/10 px-2 py-1 text-xs font-bold text-emerald-200">
+                        Output {selectedNode.outputNumber}
+                      </span>
+                    ) : null}
+                  </div>
+                  <h3 className="mt-2 text-xl font-bold">{selectedNode.name}</h3>
+                  <p className="mt-1 text-xs uppercase tracking-[0.15em] text-muted-foreground">{selectedNode.rawName}</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="rounded-full border border-border/60 px-3 py-1 text-xs uppercase tracking-[0.18em] text-muted-foreground">
+                    {selectedNode.nodeType.replace("_", " ")}
+                  </span>
+                </div>
+              </div>
+
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full border-destructive/40 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                onClick={() => void deleteSelectedNode()}
+                disabled={!!mutating}
+              >
+                <Trash2 className="mr-2 h-4 w-4" />
+                Delete Node and Connections
+              </Button>
+
+              <div className="space-y-2">
+                <Label>Display Label</Label>
+                <Input value={draft.displayLabel} onChange={(event) => setDraft((current) => current ? { ...current, displayLabel: event.target.value } : current)} />
+              </div>
+
+              {selectedNode.nodeType === "user_input" ? (
+                <>
+                  <div className="space-y-2">
+                    <Label>Mode</Label>
+                    <select
+                      value={draft.editorMode}
+                      onChange={(event) =>
+                        setDraft((current) =>
+                          current
+                            ? {
+                                ...current,
+                                editorMode: event.target.value as NodeDraft["editorMode"],
+                              }
+                            : current,
+                        )
+                      }
+                      className="h-11 w-full max-w-full truncate rounded-xl border border-border bg-background px-4 text-sm"
+                    >
+                      <option value="upload">User Upload</option>
+                      <option value="reference">Hidden Reference</option>
+                    </select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Slot Key</Label>
+                    <Input value={draft.slotKey} onChange={(event) => setDraft((current) => current ? { ...current, slotKey: event.target.value } : current)} />
+                  </div>
+                  {draft.editorMode === "reference" ? (
+                    <div className="space-y-3 rounded-2xl border border-border/50 bg-background/50 p-3">
+                      <div className="flex items-center justify-between gap-3">
+                        <Label>Hidden Reference Asset</Label>
+                        {selectedNode.defaultAssetId ? (
+                          <span className="font-mono text-[10px] text-muted-foreground">{selectedNode.defaultAssetId.slice(0, 8)}</span>
+                        ) : null}
+                      </div>
+                      {referenceUploadPreview ? (
+                        <img src={referenceUploadPreview} alt="Reference upload preview" className="h-32 w-full rounded-xl border border-border/50 bg-background object-contain" />
+                      ) : selectedNode.defaultAssetUrl ? (
+                        <img src={selectedNode.defaultAssetUrl} alt={selectedNode.name} className="h-32 w-full rounded-xl border border-border/50 bg-background object-contain" />
+                      ) : (
+                        <div className="flex h-32 items-center justify-center rounded-xl border border-dashed border-border/60 bg-background/50 text-xs text-muted-foreground">
+                          No hidden asset attached
+                        </div>
+                      )}
+                      <div className="flex gap-2">
+                        <Input type="file" accept="image/*" onChange={(event) => handleReferenceUploadFile(event.target.files?.[0] ?? null)} />
+                        <Button
+                          type="button"
+                          size="icon"
+                          variant="outline"
+                          onClick={() => void uploadReferenceAsset()}
+                          disabled={!referenceUploadFile || uploadingReference}
+                          title="Upload hidden reference"
+                        >
+                          {uploadingReference ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+                        </Button>
+                      </div>
+                      <Input
+                        value={draft.sampleUrl}
+                        onChange={(event) => setDraft((current) => current ? { ...current, sampleUrl: event.target.value } : current)}
+                        placeholder="Fallback URL"
+                      />
+                    </div>
+                  ) : null}
+                </>
+              ) : null}
+
+              <div className="space-y-2">
+                <Label>Expected Media / Notes</Label>
+                <Input value={draft.expected} onChange={(event) => setDraft((current) => current ? { ...current, expected: event.target.value } : current)} />
+              </div>
+
+              {selectedNode.nodeType !== "user_input" ? (
+                <div className="space-y-2">
+                  <Label>Prompt</Label>
+                  <Textarea
+                    value={draft.prompt}
+                    onChange={(event) => setDraft((current) => current ? { ...current, prompt: event.target.value } : current)}
+                    className="min-h-[180px]"
+                  />
+                </div>
+              ) : null}
+
+              {selectedNode.nodeType === "video_gen" ? (
+                <div className="space-y-3 rounded-2xl border border-border/50 bg-background/50 p-4">
+                  <div className="space-y-2">
+                    <Label>Video model</Label>
+                    <select
+                      value={draft.videoModel}
+                      onChange={(event) =>
+                        setDraft((current) =>
+                          current
+                            ? { ...current, videoModel: event.target.value as VideoModelKey }
+                            : current,
+                        )
+                      }
+                      className="h-11 w-full max-w-full truncate rounded-xl border border-border bg-background px-4 text-sm"
+                    >
+                      {VIDEO_MODEL_OPTIONS.map((option) => (
+                        <option key={option.key} value={option.key}>{option.label}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {resolveVideoModelOption(draft.videoModel).family === "seedance" ? (
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <div className="space-y-2">
+                        <Label>Duration (seconds)</Label>
+                        <Input
+                          type="number"
+                          min={4}
+                          max={15}
+                          value={draft.duration}
+                          onChange={(event) =>
+                            setDraft((current) =>
+                              current
+                                ? { ...current, duration: Math.min(15, Math.max(4, Number(event.target.value) || 4)) }
+                                : current,
+                            )
+                          }
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Resolution</Label>
+                        <select
+                          value={draft.resolution}
+                          onChange={(event) =>
+                            setDraft((current) => current ? { ...current, resolution: event.target.value } : current)
+                          }
+                          className="h-11 w-full max-w-full truncate rounded-xl border border-border bg-background px-4 text-sm"
+                        >
+                          {SEEDANCE_RESOLUTION_OPTIONS.map((value) => (
+                            <option key={value} value={value}>{value}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Aspect ratio</Label>
+                        <select
+                          value={draft.aspectRatio}
+                          onChange={(event) =>
+                            setDraft((current) => current ? { ...current, aspectRatio: event.target.value } : current)
+                          }
+                          className="h-11 w-full max-w-full truncate rounded-xl border border-border bg-background px-4 text-sm"
+                        >
+                          {SEEDANCE_ASPECT_OPTIONS.map((value) => (
+                            <option key={value} value={value}>{value}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <label className="flex items-center gap-3 self-end rounded-xl border border-border/50 bg-background/50 px-4 py-3 text-sm">
+                        <input
+                          type="checkbox"
+                          checked={draft.generateAudio}
+                          onChange={(event) =>
+                            setDraft((current) => current ? { ...current, generateAudio: event.target.checked } : current)
+                          }
+                        />
+                        Generate audio
+                      </label>
+                    </div>
+                  ) : resolveVideoModelOption(draft.videoModel).family === "kling3" ? (
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <div className="space-y-2">
+                        <Label>Duration (seconds)</Label>
+                        <Input
+                          type="number"
+                          min={3}
+                          max={15}
+                          value={draft.duration}
+                          onChange={(event) =>
+                            setDraft((current) =>
+                              current
+                                ? { ...current, duration: Math.min(15, Math.max(3, Number(event.target.value) || 5)) }
+                                : current,
+                            )
+                          }
+                        />
+                      </div>
+                      <label className="flex items-center gap-3 self-end rounded-xl border border-border/50 bg-background/50 px-4 py-3 text-sm">
+                        <input
+                          type="checkbox"
+                          checked={draft.generateAudio}
+                          onChange={(event) =>
+                            setDraft((current) => current ? { ...current, generateAudio: event.target.checked } : current)
+                          }
+                        />
+                        Generate audio
+                      </label>
+                    </div>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">Locked to vertical 9:16 at 5 seconds.</p>
+                  )}
+
+                  <p className="text-[11px] uppercase tracking-[0.16em] text-primary">
+                    ≈ {estimateVideoCredits(draft)} credits per video
+                  </p>
+                </div>
+              ) : null}
+
+
+              {(selectedNode.nodeType === "image_gen" || selectedNode.nodeType === "video_gen") ? (
+                <label className="flex items-center gap-3 rounded-2xl border border-border/50 bg-background/50 px-4 py-3 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={draft.outputExposed === true}
+                    onChange={(event) => setDraft((current) => current ? { ...current, outputExposed: event.target.checked } : current)}
+                  />
+                  Expose as final deliverable
+                </label>
+              ) : null}
+
+              {selectedNode.defaultAssetUrl ? (
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between gap-3">
+                    <Label>Built-in Asset</Label>
+                    {selectedNode.defaultAssetId ? (
+                      <span className="font-mono text-[10px] text-muted-foreground">{selectedNode.defaultAssetId}</span>
+                    ) : null}
+                  </div>
+                  <img src={selectedNode.defaultAssetUrl} alt={selectedNode.name} className="h-44 w-full rounded-2xl border border-border/50 object-cover" />
+                </div>
+              ) : null}
+
+              {selectedNode.incoming.length ? (
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between gap-3">
+                    <Label>Incoming Priority</Label>
+                    <span className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground">Drag to reorder · Ref 1 runs first</span>
+                  </div>
+                  <div className="space-y-2">
+                    {selectedNode.incoming.map((edge, index) => (
+                      <div
+                        key={`${edge.edgeId ?? edge.sourceNodeId}-${edge.sortOrder ?? index}`}
+                        draggable={!!edge.edgeId && !mutating}
+                        onDragStart={() => setDraggingEdgeIndex(index)}
+                        onDragOver={(event) => event.preventDefault()}
+                        onDrop={() => {
+                          if (draggingEdgeIndex === null) return;
+                          const from = draggingEdgeIndex;
+                          setDraggingEdgeIndex(null);
+                          void moveIncomingEdgeToIndex(from, index);
+                        }}
+                        onDragEnd={() => setDraggingEdgeIndex(null)}
+                        className={`grid gap-3 rounded-2xl border bg-background/50 px-4 py-3 text-sm sm:grid-cols-[minmax(0,1fr)_auto] ${
+                          draggingEdgeIndex === index ? "border-primary/60 opacity-70" : "border-border/50"
+                        }`}
+                      >
+                        <div className="flex min-w-0 items-center gap-2">
+                          <Move className="h-4 w-4 shrink-0 cursor-grab text-muted-foreground" />
+                          <div className="min-w-0">
+                            <p className="truncate font-medium">Ref {index + 1} · {edge.sourceName}</p>
+                            <p className="mt-1 truncate text-[11px] text-muted-foreground">Reference position {index + 1}</p>
+                          </div>
+                        </div>
+
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="icon"
+                            onClick={() => void reorderEdge(edge.edgeId, -1)}
+                            disabled={!edge.edgeId || index === 0 || !!mutating}
+                            title="Move incoming earlier"
+                          >
+                            <ChevronUp className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="icon"
+                            onClick={() => void reorderEdge(edge.edgeId, 1)}
+                            disabled={!edge.edgeId || index === selectedNode.incoming.length - 1 || !!mutating}
+                            title="Move incoming later"
+                          >
+                            <ChevronDown className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            className="border-destructive/40 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                            onClick={() => void deleteEdge(edge.edgeId)}
+                            disabled={!edge.edgeId || !!mutating}
+                            title="Delete incoming connection"
+                          >
+                            <Trash2 className="mr-2 h-4 w-4" />
+                            Remove
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+
+              {detail?.nodes.length ? (
+                <div className="space-y-2">
+                  <Label>Add Incoming Edge</Label>
+                  <select
+                    value={edgeDraft.sourceNodeId}
+                    onChange={(event) => setEdgeDraft((current) => ({ ...current, sourceNodeId: event.target.value }))}
+                    className="h-10 w-full rounded-xl border border-border bg-background px-3 text-sm"
+                  >
+                    <option value="">Source node</option>
+                    {detail.nodes
+                      .filter((node) => node.id !== selectedNode.id)
+                      .map((node) => (
+                        <option key={node.id} value={node.id}>
+                          {node.nodeNumber ?? "?"}. {node.name}
+                        </option>
+                      ))}
+                  </select>
+                  <Input
+                    value={edgeDraft.targetParam}
+                    onChange={(event) => setEdgeDraft((current) => ({ ...current, targetParam: event.target.value }))}
+                    placeholder={`auto: ${inferredIncomingTargetParam}`}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Leave blank to auto-map this connection to <span className="font-mono text-foreground/80">{inferredIncomingTargetParam}</span>.
+                  </p>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="w-full"
+                    onClick={() => void addEdge(selectedNode.id)}
+                    disabled={!edgeDraft.sourceNodeId || !!mutating}
+                  >
+                    <Plus className="mr-2 h-4 w-4" />
+                    Connect to This Node
+                  </Button>
+                </div>
+              ) : null}
+
+              <Button type="button" className="w-full" onClick={() => void saveNode()} disabled={savingNode}>
+                {savingNode ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+                Save Node
+              </Button>
+
+              {job ? (
+                <div className="rounded-2xl border border-border/50 bg-background/60 p-4">
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs font-semibold uppercase tracking-[0.15em] text-muted-foreground">Latest Outputs</p>
+                    <span className="text-sm font-medium uppercase">{job.status}</span>
+                  </div>
+                  <div className="mt-3 grid gap-3">
+                    {job.outputs.map((output) => (
+                      <div key={`${output.label}-${output.url}`} className="rounded-2xl border border-border/50 bg-background/70 p-3">
+                        <p className="text-sm font-medium">
+                          Output {output.outputNumber ?? "?"}: {output.label}
+                        </p>
+                        {output.type === "video" ? (
+                          <video src={output.url} controls className="mt-2 aspect-[9/16] w-full rounded-xl border border-border/50 bg-black object-cover" />
+                        ) : (
+                          <img src={output.url} alt={output.label} className="mt-2 aspect-[9/16] w-full rounded-xl border border-border/50 object-cover" />
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+            </div>
+          ) : (
+            <div className="mt-4 rounded-2xl border border-border/50 bg-background/60 p-4 text-sm text-muted-foreground">
+              Pick a step on the canvas to edit it.
+            </div>
+          )}
+        </aside>
+        </div>
+        {showSettingsPanel ? (
         <section className="w-full">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
             <div>
@@ -2506,510 +3011,7 @@ const TemplateCanvas = () => {
           </div>
           </div>
         </section>
-
-        <div className="grid min-w-0 grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1fr)_400px]">
-        <section className="min-w-0 rounded-3xl border border-border/50 bg-card/70 p-4 shadow-sm">
-          <div className="flex flex-col gap-3 px-1 pb-4">
-            <div className="flex flex-wrap items-end justify-between gap-3">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">Canvas</p>
-                <h2 className="mt-1 text-2xl font-bold">{detail?.templateName ?? "Loading..."}</h2>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  Drag steps to arrange them. Drag from a dot on the right of a card to a dot on the left of another to connect them.
-                </p>
-              </div>
-              <div className="flex flex-wrap items-center gap-2">
-                {[
-                  ["Steps", graphSummary.nodes],
-                  ["Links", graphSummary.edges],
-                  ["Inputs", graphSummary.uploads],
-                  ["Results", graphSummary.outputs],
-                ].map(([label, value]) => (
-                  <span key={label} className="rounded-full border border-border/60 bg-background/70 px-3 py-1 text-xs text-muted-foreground">
-                    <span className="font-semibold text-foreground">{value}</span> {label}
-                  </span>
-                ))}
-                {loadingDetail ? <Loader2 className="h-5 w-5 animate-spin text-primary" /> : null}
-              </div>
-            </div>
-
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Palette</span>
-              <Button type="button" variant="outline" size="sm" className="rounded-full" disabled={!detail || !!mutating} onClick={() => void addNode("upload")}>
-                <Upload className="mr-1.5 h-3.5 w-3.5" />
-                Input
-              </Button>
-              <Button type="button" variant="outline" size="sm" className="rounded-full" disabled={!detail || !!mutating} onClick={() => void addNode("image_gen")}>
-                <ImageIcon className="mr-1.5 h-3.5 w-3.5" />
-                Image
-              </Button>
-              <Button type="button" variant="outline" size="sm" className="rounded-full" disabled={!detail || !!mutating} onClick={() => void addNode("video_gen", paletteVideoModel)}>
-                <Film className="mr-1.5 h-3.5 w-3.5" />
-                Video
-              </Button>
-              <select
-                value={paletteVideoModel}
-                onChange={(event) => setPaletteVideoModel(event.target.value as VideoModelKey)}
-                className="h-8 rounded-full border border-border bg-background px-3 text-xs"
-                aria-label="Video model for new video steps"
-              >
-                {VIDEO_MODEL_OPTIONS.map((option) => (
-                  <option key={option.key} value={option.key}>{option.label}</option>
-                ))}
-              </select>
-
-              <span className="mx-1 hidden h-5 w-px bg-border/60 sm:block" />
-              <Button type="button" variant="ghost" size="sm" className="rounded-full" disabled={!detail} onClick={resetLayout}>
-                <GitBranch className="mr-1.5 h-3.5 w-3.5" />
-                Auto-layout
-              </Button>
-              <Button type="button" variant="ghost" size="sm" className="rounded-full" disabled={!detail} onClick={saveLayout}>
-                <Save className="mr-1.5 h-3.5 w-3.5" />
-                Save layout
-              </Button>
-              <Button
-                type="button"
-                variant={showInternalNodes ? "default" : "ghost"}
-                size="sm"
-                className="rounded-full"
-                onClick={() => setShowInternalNodes((current) => !current)}
-              >
-                <EyeOff className="mr-1.5 h-3.5 w-3.5" />
-                {showInternalNodes ? "Hide guides" : "Show guides"}
-              </Button>
-              <Button
-                type="button"
-                size="sm"
-                className="rounded-full"
-                disabled={!detail || startingRun}
-                onClick={() => { setShowRunnerPanel(true); void handleRun(); }}
-              >
-                {startingRun ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="mr-1.5 h-3.5 w-3.5" />}
-                Test run
-              </Button>
-            </div>
-          </div>
-
-          <GraphCanvas
-            nodes={flowNodes}
-            edges={flowEdges}
-            selectedNodeId={selectedNode?.id ?? null}
-            onSelectNode={setSelectedNodeId}
-            onNodeMoved={handleCanvasNodeMoved}
-            onConnectNodes={(source, target) => void connectNodesOnCanvas(source, target)}
-            onDeleteEdge={(edgeId) => void deleteEdge(edgeId)}
-          />
-        </section>
-
-        <aside className="w-full min-w-0 self-start rounded-3xl border border-border/50 bg-card/70 p-5 shadow-sm xl:sticky xl:top-4 xl:max-h-[calc(100vh-2rem)] xl:overflow-y-auto">
-          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">Inspector</p>
-          {selectedNode && draft ? (
-            <div className="mt-4 space-y-4">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="rounded-md border border-primary/40 bg-primary/10 px-2 py-1 text-xs font-bold text-primary">
-                      Node {selectedNode.nodeNumber ?? "?"}
-                    </span>
-                    {selectedNode.outputNumber ? (
-                      <span className="rounded-md border border-emerald-400/40 bg-emerald-400/10 px-2 py-1 text-xs font-bold text-emerald-200">
-                        Output {selectedNode.outputNumber}
-                      </span>
-                    ) : null}
-                  </div>
-                  <h3 className="mt-2 text-xl font-bold">{selectedNode.name}</h3>
-                  <p className="mt-1 text-xs uppercase tracking-[0.15em] text-muted-foreground">{selectedNode.rawName}</p>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="rounded-full border border-border/60 px-3 py-1 text-xs uppercase tracking-[0.18em] text-muted-foreground">
-                    {selectedNode.nodeType.replace("_", " ")}
-                  </span>
-                </div>
-              </div>
-
-              <Button
-                type="button"
-                variant="outline"
-                className="w-full border-destructive/40 text-destructive hover:bg-destructive/10 hover:text-destructive"
-                onClick={() => void deleteSelectedNode()}
-                disabled={!!mutating}
-              >
-                <Trash2 className="mr-2 h-4 w-4" />
-                Delete Node and Connections
-              </Button>
-
-              <div className="space-y-2">
-                <Label>Display Label</Label>
-                <Input value={draft.displayLabel} onChange={(event) => setDraft((current) => current ? { ...current, displayLabel: event.target.value } : current)} />
-              </div>
-
-              {selectedNode.nodeType === "user_input" ? (
-                <>
-                  <div className="space-y-2">
-                    <Label>Mode</Label>
-                    <select
-                      value={draft.editorMode}
-                      onChange={(event) =>
-                        setDraft((current) =>
-                          current
-                            ? {
-                                ...current,
-                                editorMode: event.target.value as NodeDraft["editorMode"],
-                              }
-                            : current,
-                        )
-                      }
-                      className="h-11 w-full max-w-full truncate rounded-xl border border-border bg-background px-4 text-sm"
-                    >
-                      <option value="upload">User Upload</option>
-                      <option value="reference">Hidden Reference</option>
-                    </select>
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Slot Key</Label>
-                    <Input value={draft.slotKey} onChange={(event) => setDraft((current) => current ? { ...current, slotKey: event.target.value } : current)} />
-                  </div>
-                  {draft.editorMode === "reference" ? (
-                    <div className="space-y-3 rounded-2xl border border-border/50 bg-background/50 p-3">
-                      <div className="flex items-center justify-between gap-3">
-                        <Label>Hidden Reference Asset</Label>
-                        {selectedNode.defaultAssetId ? (
-                          <span className="font-mono text-[10px] text-muted-foreground">{selectedNode.defaultAssetId.slice(0, 8)}</span>
-                        ) : null}
-                      </div>
-                      {referenceUploadPreview ? (
-                        <img src={referenceUploadPreview} alt="Reference upload preview" className="h-32 w-full rounded-xl border border-border/50 bg-background object-contain" />
-                      ) : selectedNode.defaultAssetUrl ? (
-                        <img src={selectedNode.defaultAssetUrl} alt={selectedNode.name} className="h-32 w-full rounded-xl border border-border/50 bg-background object-contain" />
-                      ) : (
-                        <div className="flex h-32 items-center justify-center rounded-xl border border-dashed border-border/60 bg-background/50 text-xs text-muted-foreground">
-                          No hidden asset attached
-                        </div>
-                      )}
-                      <div className="flex gap-2">
-                        <Input type="file" accept="image/*" onChange={(event) => handleReferenceUploadFile(event.target.files?.[0] ?? null)} />
-                        <Button
-                          type="button"
-                          size="icon"
-                          variant="outline"
-                          onClick={() => void uploadReferenceAsset()}
-                          disabled={!referenceUploadFile || uploadingReference}
-                          title="Upload hidden reference"
-                        >
-                          {uploadingReference ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
-                        </Button>
-                      </div>
-                      <Input
-                        value={draft.sampleUrl}
-                        onChange={(event) => setDraft((current) => current ? { ...current, sampleUrl: event.target.value } : current)}
-                        placeholder="Fallback URL"
-                      />
-                    </div>
-                  ) : null}
-                </>
-              ) : null}
-
-              <div className="space-y-2">
-                <Label>Expected Media / Notes</Label>
-                <Input value={draft.expected} onChange={(event) => setDraft((current) => current ? { ...current, expected: event.target.value } : current)} />
-              </div>
-
-              {selectedNode.nodeType !== "user_input" ? (
-                <div className="space-y-2">
-                  <Label>Prompt</Label>
-                  <Textarea
-                    value={draft.prompt}
-                    onChange={(event) => setDraft((current) => current ? { ...current, prompt: event.target.value } : current)}
-                    className="min-h-[180px]"
-                  />
-                </div>
-              ) : null}
-
-              {selectedNode.nodeType === "video_gen" ? (
-                <div className="space-y-3 rounded-2xl border border-border/50 bg-background/50 p-4">
-                  <div className="space-y-2">
-                    <Label>Video model</Label>
-                    <select
-                      value={draft.videoModel}
-                      onChange={(event) =>
-                        setDraft((current) =>
-                          current
-                            ? { ...current, videoModel: event.target.value as VideoModelKey }
-                            : current,
-                        )
-                      }
-                      className="h-11 w-full max-w-full truncate rounded-xl border border-border bg-background px-4 text-sm"
-                    >
-                      {VIDEO_MODEL_OPTIONS.map((option) => (
-                        <option key={option.key} value={option.key}>{option.label}</option>
-                      ))}
-                    </select>
-                  </div>
-
-                  {resolveVideoModelOption(draft.videoModel).family === "seedance" ? (
-                    <div className="grid gap-3 sm:grid-cols-2">
-                      <div className="space-y-2">
-                        <Label>Duration (seconds)</Label>
-                        <Input
-                          type="number"
-                          min={4}
-                          max={15}
-                          value={draft.duration}
-                          onChange={(event) =>
-                            setDraft((current) =>
-                              current
-                                ? { ...current, duration: Math.min(15, Math.max(4, Number(event.target.value) || 4)) }
-                                : current,
-                            )
-                          }
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label>Resolution</Label>
-                        <select
-                          value={draft.resolution}
-                          onChange={(event) =>
-                            setDraft((current) => current ? { ...current, resolution: event.target.value } : current)
-                          }
-                          className="h-11 w-full max-w-full truncate rounded-xl border border-border bg-background px-4 text-sm"
-                        >
-                          {SEEDANCE_RESOLUTION_OPTIONS.map((value) => (
-                            <option key={value} value={value}>{value}</option>
-                          ))}
-                        </select>
-                      </div>
-                      <div className="space-y-2">
-                        <Label>Aspect ratio</Label>
-                        <select
-                          value={draft.aspectRatio}
-                          onChange={(event) =>
-                            setDraft((current) => current ? { ...current, aspectRatio: event.target.value } : current)
-                          }
-                          className="h-11 w-full max-w-full truncate rounded-xl border border-border bg-background px-4 text-sm"
-                        >
-                          {SEEDANCE_ASPECT_OPTIONS.map((value) => (
-                            <option key={value} value={value}>{value}</option>
-                          ))}
-                        </select>
-                      </div>
-                      <label className="flex items-center gap-3 self-end rounded-xl border border-border/50 bg-background/50 px-4 py-3 text-sm">
-                        <input
-                          type="checkbox"
-                          checked={draft.generateAudio}
-                          onChange={(event) =>
-                            setDraft((current) => current ? { ...current, generateAudio: event.target.checked } : current)
-                          }
-                        />
-                        Generate audio
-                      </label>
-                    </div>
-                  ) : resolveVideoModelOption(draft.videoModel).family === "kling3" ? (
-                    <div className="grid gap-3 sm:grid-cols-2">
-                      <div className="space-y-2">
-                        <Label>Duration (seconds)</Label>
-                        <Input
-                          type="number"
-                          min={3}
-                          max={15}
-                          value={draft.duration}
-                          onChange={(event) =>
-                            setDraft((current) =>
-                              current
-                                ? { ...current, duration: Math.min(15, Math.max(3, Number(event.target.value) || 5)) }
-                                : current,
-                            )
-                          }
-                        />
-                      </div>
-                      <label className="flex items-center gap-3 self-end rounded-xl border border-border/50 bg-background/50 px-4 py-3 text-sm">
-                        <input
-                          type="checkbox"
-                          checked={draft.generateAudio}
-                          onChange={(event) =>
-                            setDraft((current) => current ? { ...current, generateAudio: event.target.checked } : current)
-                          }
-                        />
-                        Generate audio
-                      </label>
-                    </div>
-                  ) : (
-                    <p className="text-xs text-muted-foreground">Locked to vertical 9:16 at 5 seconds.</p>
-                  )}
-
-                  <p className="text-[11px] uppercase tracking-[0.16em] text-primary">
-                    ≈ {estimateVideoCredits(draft)} credits per video
-                  </p>
-                </div>
-              ) : null}
-
-
-              {(selectedNode.nodeType === "image_gen" || selectedNode.nodeType === "video_gen") ? (
-                <label className="flex items-center gap-3 rounded-2xl border border-border/50 bg-background/50 px-4 py-3 text-sm">
-                  <input
-                    type="checkbox"
-                    checked={draft.outputExposed === true}
-                    onChange={(event) => setDraft((current) => current ? { ...current, outputExposed: event.target.checked } : current)}
-                  />
-                  Expose as final deliverable
-                </label>
-              ) : null}
-
-              {selectedNode.defaultAssetUrl ? (
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between gap-3">
-                    <Label>Built-in Asset</Label>
-                    {selectedNode.defaultAssetId ? (
-                      <span className="font-mono text-[10px] text-muted-foreground">{selectedNode.defaultAssetId}</span>
-                    ) : null}
-                  </div>
-                  <img src={selectedNode.defaultAssetUrl} alt={selectedNode.name} className="h-44 w-full rounded-2xl border border-border/50 object-cover" />
-                </div>
-              ) : null}
-
-              {selectedNode.incoming.length ? (
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between gap-3">
-                    <Label>Incoming Priority</Label>
-                    <span className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground">Drag to reorder · Ref 1 runs first</span>
-                  </div>
-                  <div className="space-y-2">
-                    {selectedNode.incoming.map((edge, index) => (
-                      <div
-                        key={`${edge.edgeId ?? edge.sourceNodeId}-${edge.sortOrder ?? index}`}
-                        draggable={!!edge.edgeId && !mutating}
-                        onDragStart={() => setDraggingEdgeIndex(index)}
-                        onDragOver={(event) => event.preventDefault()}
-                        onDrop={() => {
-                          if (draggingEdgeIndex === null) return;
-                          const from = draggingEdgeIndex;
-                          setDraggingEdgeIndex(null);
-                          void moveIncomingEdgeToIndex(from, index);
-                        }}
-                        onDragEnd={() => setDraggingEdgeIndex(null)}
-                        className={`grid gap-3 rounded-2xl border bg-background/50 px-4 py-3 text-sm sm:grid-cols-[minmax(0,1fr)_auto] ${
-                          draggingEdgeIndex === index ? "border-primary/60 opacity-70" : "border-border/50"
-                        }`}
-                      >
-                        <div className="flex min-w-0 items-center gap-2">
-                          <Move className="h-4 w-4 shrink-0 cursor-grab text-muted-foreground" />
-                          <div className="min-w-0">
-                            <p className="truncate font-medium">Ref {index + 1} · {edge.sourceName}</p>
-                            <p className="mt-1 truncate text-[11px] text-muted-foreground">Reference position {index + 1}</p>
-                          </div>
-                        </div>
-
-                        <div className="flex flex-wrap items-center gap-2">
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="icon"
-                            onClick={() => void reorderEdge(edge.edgeId, -1)}
-                            disabled={!edge.edgeId || index === 0 || !!mutating}
-                            title="Move incoming earlier"
-                          >
-                            <ChevronUp className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="icon"
-                            onClick={() => void reorderEdge(edge.edgeId, 1)}
-                            disabled={!edge.edgeId || index === selectedNode.incoming.length - 1 || !!mutating}
-                            title="Move incoming later"
-                          >
-                            <ChevronDown className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            className="border-destructive/40 text-destructive hover:bg-destructive/10 hover:text-destructive"
-                            onClick={() => void deleteEdge(edge.edgeId)}
-                            disabled={!edge.edgeId || !!mutating}
-                            title="Delete incoming connection"
-                          >
-                            <Trash2 className="mr-2 h-4 w-4" />
-                            Remove
-                          </Button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ) : null}
-
-              {detail?.nodes.length ? (
-                <div className="space-y-2">
-                  <Label>Add Incoming Edge</Label>
-                  <select
-                    value={edgeDraft.sourceNodeId}
-                    onChange={(event) => setEdgeDraft((current) => ({ ...current, sourceNodeId: event.target.value }))}
-                    className="h-10 w-full rounded-xl border border-border bg-background px-3 text-sm"
-                  >
-                    <option value="">Source node</option>
-                    {detail.nodes
-                      .filter((node) => node.id !== selectedNode.id)
-                      .map((node) => (
-                        <option key={node.id} value={node.id}>
-                          {node.nodeNumber ?? "?"}. {node.name}
-                        </option>
-                      ))}
-                  </select>
-                  <Input
-                    value={edgeDraft.targetParam}
-                    onChange={(event) => setEdgeDraft((current) => ({ ...current, targetParam: event.target.value }))}
-                    placeholder={`auto: ${inferredIncomingTargetParam}`}
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    Leave blank to auto-map this connection to <span className="font-mono text-foreground/80">{inferredIncomingTargetParam}</span>.
-                  </p>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="w-full"
-                    onClick={() => void addEdge(selectedNode.id)}
-                    disabled={!edgeDraft.sourceNodeId || !!mutating}
-                  >
-                    <Plus className="mr-2 h-4 w-4" />
-                    Connect to This Node
-                  </Button>
-                </div>
-              ) : null}
-
-              <Button type="button" className="w-full" onClick={() => void saveNode()} disabled={savingNode}>
-                {savingNode ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
-                Save Node
-              </Button>
-
-              {job ? (
-                <div className="rounded-2xl border border-border/50 bg-background/60 p-4">
-                  <div className="flex items-center justify-between">
-                    <p className="text-xs font-semibold uppercase tracking-[0.15em] text-muted-foreground">Latest Outputs</p>
-                    <span className="text-sm font-medium uppercase">{job.status}</span>
-                  </div>
-                  <div className="mt-3 grid gap-3">
-                    {job.outputs.map((output) => (
-                      <div key={`${output.label}-${output.url}`} className="rounded-2xl border border-border/50 bg-background/70 p-3">
-                        <p className="text-sm font-medium">
-                          Output {output.outputNumber ?? "?"}: {output.label}
-                        </p>
-                        {output.type === "video" ? (
-                          <video src={output.url} controls className="mt-2 aspect-[9/16] w-full rounded-xl border border-border/50 bg-black object-cover" />
-                        ) : (
-                          <img src={output.url} alt={output.label} className="mt-2 aspect-[9/16] w-full rounded-xl border border-border/50 object-cover" />
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ) : null}
-            </div>
-          ) : (
-            <div className="mt-4 rounded-2xl border border-border/50 bg-background/60 p-4 text-sm text-muted-foreground">
-              Pick a step on the canvas to edit it.
-            </div>
-          )}
-        </aside>
-        </div>
+        ) : null}
       </div>
     </SiteShell>
   );
