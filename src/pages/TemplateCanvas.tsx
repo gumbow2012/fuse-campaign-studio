@@ -537,6 +537,8 @@ const TemplateCanvas = () => {
   const [paletteSearch, setPaletteSearch] = useState("");
   const [showSettingsPanel, setShowSettingsPanel] = useState(false);
   const [extraPorts, setExtraPorts] = useState<Record<string, string[]>>({});
+  const [showGallery, setShowGallery] = useState(false);
+  const [referenceUploadNodeId, setReferenceUploadNodeId] = useState<string | null>(null);
   const handleAddPort = useCallback((nodeId: string, type: PortType) => {
     setExtraPorts((current) => {
       const existing = current[nodeId] ?? [];
@@ -1518,6 +1520,59 @@ const TemplateCanvas = () => {
     await loadDetail(versionId ?? selectedVersionId);
   }, [loadDetail, loadTemplates, selectedVersionId]);
 
+  const savePromptInline = useCallback(async (nodeId: string, prompt: string) => {
+    if (!detail) return;
+    try {
+      const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/save-template-editor`, {
+        method: "POST",
+        headers: { ...(await buildAuthHeaders()), "Content-Type": "application/json" },
+        body: JSON.stringify({ versionId: detail.versionId, nodeId, prompt }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data?.error ?? "Could not save prompt");
+      await loadDetail(detail.versionId);
+      toast({ title: "Prompt saved" });
+    } catch (saveError) {
+      const message = saveError instanceof Error ? saveError.message : "Could not save prompt";
+      toast({ title: "Save failed", description: message, variant: "destructive" });
+    }
+  }, [buildAuthHeaders, detail, loadDetail]);
+
+  const uploadReferenceForNode = useCallback(async (nodeId: string, file: File) => {
+    if (!detail) return;
+    const node = detail.nodes.find((candidate) => candidate.id === nodeId);
+    if (!node) return;
+    setReferenceUploadNodeId(nodeId);
+    try {
+      const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/save-template-editor`, {
+        method: "POST",
+        headers: { ...(await buildAuthHeaders()), "Content-Type": "application/json" },
+        body: JSON.stringify({
+          versionId: detail.versionId,
+          nodeId,
+          displayLabel: node.editor?.label || node.name,
+          expected: node.editor?.expected ?? node.expected ?? "image",
+          editorMode: "reference",
+          slotKey: node.editor?.slotKey ?? null,
+          referenceFile: {
+            filename: file.name,
+            dataUrl: await fileToDataUrl(file),
+          },
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data?.error ?? "Could not upload reference image");
+      await loadDetail(detail.versionId);
+      await loadTemplates();
+      toast({ title: "Reference image attached", description: "This fixed image is now part of the template." });
+    } catch (uploadError) {
+      const message = uploadError instanceof Error ? uploadError.message : "Could not upload reference image";
+      toast({ title: "Upload failed", description: message, variant: "destructive" });
+    } finally {
+      setReferenceUploadNodeId(null);
+    }
+  }, [buildAuthHeaders, detail, loadDetail, loadTemplates]);
+
   const createTemplate = useCallback(async () => {
     const name = newTemplateName.trim();
     if (!name) {
@@ -1922,11 +1977,16 @@ const TemplateCanvas = () => {
         assetUrl: node.defaultAssetUrl,
         expected: node.editor?.expected ?? node.expected ?? null,
         deliverable: typeof node.editor?.outputExposed === "boolean" ? node.editor.outputExposed : null,
+        promptValue: node.prompt ?? "",
         portIds: portIdsForNode(node.id, kind, node.incoming.map((incoming) => incoming.targetParam), extraPorts[node.id] ?? []),
+        isReference: kind === "input" && node.editor?.mode === "reference",
+        uploadingReference: referenceUploadNodeId === node.id,
         onAddPort: handleAddPort,
+        onPromptCommit: (nodeId: string, prompt: string) => void savePromptInline(nodeId, prompt),
+        onUploadReference: (nodeId: string, file: File) => void uploadReferenceForNode(nodeId, file),
       },
     };
-  }), [graphNodes, extraPorts, handleAddPort]);
+  }), [graphNodes, extraPorts, handleAddPort, referenceUploadNodeId, savePromptInline, uploadReferenceForNode]);
 
   const flowEdges = useMemo(() => graphNodes.flatMap((target) =>
     target.incoming.flatMap((incoming, index) => {
