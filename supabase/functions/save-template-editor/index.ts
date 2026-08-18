@@ -120,8 +120,51 @@ Deno.serve(async (req) => {
     }
 
     if (node.node_type === "video_gen") {
-      nextPromptConfig.aspect_ratio = VERTICAL_VIDEO_ASPECT_RATIO;
-      nextPromptConfig.duration = normalizeDuration(nextPromptConfig.duration);
+      if ("videoModel" in body) {
+        nextPromptConfig.video_model = normalizeVideoModel(body.videoModel);
+      }
+
+      const modelKey = normalizeVideoModel(nextPromptConfig.video_model);
+      const isSeedance = modelKey.startsWith("seedance");
+
+      if (isSeedance) {
+        nextPromptConfig.video_model = modelKey;
+
+        if ("duration" in body) {
+          nextPromptConfig.duration = clampSeedanceDuration(body.duration);
+        } else {
+          nextPromptConfig.duration = clampSeedanceDuration(nextPromptConfig.duration);
+        }
+
+        if ("resolution" in body) {
+          nextPromptConfig.resolution = SEEDANCE_RESOLUTIONS.includes(String(body.resolution))
+            ? String(body.resolution)
+            : "720p";
+        } else if (!SEEDANCE_RESOLUTIONS.includes(String(nextPromptConfig.resolution))) {
+          nextPromptConfig.resolution = "720p";
+        }
+
+        if ("aspectRatio" in body) {
+          nextPromptConfig.aspect_ratio = SEEDANCE_ASPECT_RATIOS.includes(String(body.aspectRatio))
+            ? String(body.aspectRatio)
+            : VERTICAL_VIDEO_ASPECT_RATIO;
+        } else if (!SEEDANCE_ASPECT_RATIOS.includes(String(nextPromptConfig.aspect_ratio))) {
+          nextPromptConfig.aspect_ratio = VERTICAL_VIDEO_ASPECT_RATIO;
+        }
+
+        if ("generateAudio" in body) {
+          nextPromptConfig.generate_audio = body.generateAudio !== false;
+        } else if (typeof nextPromptConfig.generate_audio !== "boolean") {
+          nextPromptConfig.generate_audio = true;
+        }
+      } else {
+        // Kling (default): keep the locked vertical 5s behaviour exactly as before.
+        nextPromptConfig.video_model = "kling-2.5";
+        nextPromptConfig.aspect_ratio = VERTICAL_VIDEO_ASPECT_RATIO;
+        nextPromptConfig.duration = normalizeDuration(nextPromptConfig.duration);
+        delete nextPromptConfig.resolution;
+        delete nextPromptConfig.generate_audio;
+      }
     }
 
     let nextDefaultAssetId = node.default_asset_id;
