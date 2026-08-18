@@ -2623,7 +2623,7 @@ const TemplateCanvas = () => {
                   <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-primary/80">Inputs</p>
                   <div className="flex items-center justify-between gap-3">
                     <Label>Connection order</Label>
-                    <span className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground">Drag to reorder · Ref 1 first</span>
+                    <span className="text-[10px] uppercase tracking-[0.16em] text-foreground/70">Drag to reorder · Ref 1 first</span>
                   </div>
                   <div className="space-y-2">
                     {selectedNode.incoming.map((edge, index) => (
@@ -2639,15 +2639,18 @@ const TemplateCanvas = () => {
                           void moveIncomingEdgeToIndex(from, index);
                         }}
                         onDragEnd={() => setDraggingEdgeIndex(null)}
-                        className={`grid gap-3 rounded-2xl border bg-background/50 px-4 py-3 text-sm sm:grid-cols-[minmax(0,1fr)_auto] ${
-                          draggingEdgeIndex === index ? "border-primary/60 opacity-70" : "border-border/50"
+                        className={`flex flex-col gap-3 rounded-2xl border bg-background/60 px-4 py-3 text-sm ${
+                          draggingEdgeIndex === index ? "border-primary/60 opacity-70" : "border-border/60"
                         }`}
                       >
-                        <div className="flex min-w-0 items-center gap-2">
-                          <Move className="h-4 w-4 shrink-0 cursor-grab text-muted-foreground" />
-                          <div className="min-w-0">
-                            <p className="truncate font-medium">Ref {index + 1} · {edge.sourceName}</p>
-                            <p className="mt-1 truncate text-[11px] text-muted-foreground">Reference position {index + 1}</p>
+                        <div className="flex items-start gap-2">
+                          <Move className="mt-0.5 h-4 w-4 shrink-0 cursor-grab text-primary/80" />
+                          <div className="min-w-0 flex-1">
+                            <span className="mr-2 inline-flex items-center rounded-md border border-primary/40 bg-primary/10 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-[0.12em] text-primary">
+                              Ref {index + 1}
+                            </span>
+                            <span className="break-words font-semibold text-foreground">{edge.sourceName}</span>
+                            <p className="mt-1 text-[11px] text-foreground/60">Reference position {index + 1}</p>
                           </div>
                         </div>
 
@@ -2656,6 +2659,7 @@ const TemplateCanvas = () => {
                             type="button"
                             variant="outline"
                             size="icon"
+                            className="border-border text-foreground hover:bg-primary/15 hover:text-primary"
                             onClick={() => void reorderEdge(edge.edgeId, -1)}
                             disabled={!edge.edgeId || index === 0 || !!mutating}
                             title="Move incoming earlier"
@@ -2666,6 +2670,7 @@ const TemplateCanvas = () => {
                             type="button"
                             variant="outline"
                             size="icon"
+                            className="border-border text-foreground hover:bg-primary/15 hover:text-primary"
                             onClick={() => void reorderEdge(edge.edgeId, 1)}
                             disabled={!edge.edgeId || index === selectedNode.incoming.length - 1 || !!mutating}
                             title="Move incoming later"
@@ -2675,7 +2680,7 @@ const TemplateCanvas = () => {
                           <Button
                             type="button"
                             variant="outline"
-                            className="border-destructive/40 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                            className="ml-auto border-destructive/60 bg-destructive/10 font-semibold text-destructive-foreground hover:bg-destructive/25 hover:text-destructive-foreground"
                             onClick={() => void deleteEdge(edge.edgeId)}
                             disabled={!edge.edgeId || !!mutating}
                             title="Delete incoming connection"
