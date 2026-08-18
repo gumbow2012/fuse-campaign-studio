@@ -1133,15 +1133,19 @@ export async function runGraphJob(admin: AdminClient, jobId: string) {
 
           const videoModel = getVideoModel(node.prompt_config?.video_model);
           const isKlingModel = videoModel.family === "kling";
+          const isKling3Model = videoModel.family === "kling3";
           const effectiveDuration = isKlingModel
             ? videoDuration(node.prompt_config?.duration)
-            : clampSeedanceDuration(node.prompt_config?.duration, videoModel);
-          const effectiveAspect = isKlingModel
+            : clampSeedanceDuration(
+              node.prompt_config?.duration ?? (isKling3Model ? 5 : undefined),
+              videoModel,
+            );
+          const effectiveAspect = isKlingModel || isKling3Model
             ? VERTICAL_VIDEO_ASPECT_RATIO
             : (videoModel.aspectRatios?.includes(String(node.prompt_config?.aspect_ratio ?? ""))
               ? String(node.prompt_config?.aspect_ratio)
               : VERTICAL_VIDEO_ASPECT_RATIO);
-          const effectiveResolution = isKlingModel
+          const effectiveResolution = isKlingModel || isKling3Model
             ? null
             : (videoModel.resolutions?.includes(String(node.prompt_config?.resolution ?? ""))
               ? String(node.prompt_config?.resolution)
@@ -1155,7 +1159,10 @@ export async function runGraphJob(admin: AdminClient, jobId: string) {
             isKlingModel ? node.prompt_config : { ...(node.prompt_config ?? {}), duration: effectiveDuration },
             isKlingModel
               ? undefined
-              : { fallbackUsdPerSecond: videoModel.fallbackUsdPerSecond, seconds: effectiveDuration },
+              : {
+                fallbackUsdPerSecond: videoFallbackUsdPerSecond(videoModel, effectiveGenerateAudio),
+                seconds: effectiveDuration,
+              },
           );
 
           const requestId = await submitVideoJob({
