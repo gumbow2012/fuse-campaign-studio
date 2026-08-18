@@ -3005,7 +3005,7 @@ const TemplateCanvas = () => {
                       <img src={templateCoverPreviewUrl} alt="Template thumbnail preview" className="h-full w-full object-cover" />
                     )
                   ) : (
-                    <div className="flex h-full w-full flex-col items-center justify-center gap-3 bg-[radial-gradient(circle_at_top,rgba(34,211,238,0.1),transparent_42%)] px-4 text-center text-muted-foreground">
+                    <div className="flex h-full w-full flex-col items-center justify-center gap-3 bg-[radial-gradient(circle_at_top,rgba(34,211,238,0.1),transparent_42%)] px-4 text-center text-foreground/70">
                       <ImageIcon className="h-9 w-9 text-cyan-100/55" />
                       <span className="text-xs leading-5">No thumbnail set</span>
                     </div>
@@ -3125,7 +3125,7 @@ const TemplateCanvas = () => {
               <div className="rounded-2xl border border-border/50 bg-background/60 p-3">
                 <div className="flex items-center justify-between gap-3">
                   <div>
-                    <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Validation Queue</p>
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-foreground/70">Validation Queue</p>
                     <p className="mt-1 text-sm font-medium">
                       {queueIndex >= 0 ? `${queueIndex + 1} of ${validationQueue.length}` : `${validationQueue.length} templates`}
                     </p>
@@ -3140,7 +3140,7 @@ const TemplateCanvas = () => {
                   </div>
                 </div>
                 <div className="mt-3 flex items-center justify-between rounded-xl border border-border/40 bg-card/60 px-3 py-2 text-xs">
-                  <span className="text-muted-foreground">Selected version</span>
+                  <span className="text-foreground/70">Selected version</span>
                   <span className="font-semibold">
                     v{detail?.versionNumber ?? selectedTemplate?.versionNumber ?? "?"}{detail?.isActive || selectedTemplate?.isActive ? " live" : " draft"}
                   </span>
@@ -3226,14 +3226,14 @@ const TemplateCanvas = () => {
                   <div key={input.id} className="space-y-2">
                     <div className="flex items-center justify-between gap-3">
                       <Label>{input.name}</Label>
-                      <span className="text-[11px] uppercase tracking-[0.15em] text-muted-foreground">{input.expected}</span>
+                      <span className="text-[11px] uppercase tracking-[0.15em] text-foreground/70">{input.expected}</span>
                     </div>
                     {previews[input.id] ? (
                       <img src={previews[input.id]} alt={input.name} className="h-28 w-full rounded-2xl border border-border/50 bg-background object-contain" />
                     ) : input.defaultAssetUrl ? (
                       <img src={input.defaultAssetUrl} alt={`${input.name} default`} className="h-28 w-full rounded-2xl border border-border/50 bg-background object-contain" />
                     ) : (
-                      <div className="flex h-28 items-center justify-center rounded-2xl border border-dashed border-border/50 bg-background/50 text-sm text-muted-foreground">
+                      <div className="flex h-28 items-center justify-center rounded-2xl border border-dashed border-border/50 bg-background/50 text-sm text-foreground/70">
                         Upload image
                       </div>
                     )}
@@ -3253,7 +3253,7 @@ const TemplateCanvas = () => {
                   </div>
                 ))}
                 {!runInputs.length ? (
-                  <div className="rounded-xl border border-border/50 bg-background/60 p-3 text-sm text-muted-foreground">
+                  <div className="rounded-xl border border-border/50 bg-background/60 p-3 text-sm text-foreground/70">
                     This version has no user upload nodes.
                   </div>
                 ) : null}
@@ -3263,21 +3263,21 @@ const TemplateCanvas = () => {
                 </Button>
               </div>
               ) : (
-                <div className="mt-4 rounded-xl border border-border/50 bg-background/60 px-3 py-2 text-xs text-muted-foreground">
+                <div className="mt-4 rounded-xl border border-border/50 bg-background/60 px-3 py-2 text-xs text-foreground/70">
                   Keep this closed while editing the graph. Open it only when testing a live template run.
                 </div>
               )}
               <div className="mt-3 grid grid-cols-3 gap-2 text-xs">
                 <div className="rounded-xl border border-border/40 bg-background/50 px-3 py-2">
-                  <p className="text-muted-foreground">Status</p>
+                  <p className="text-foreground/70">Status</p>
                   <p className="mt-1 font-semibold uppercase text-foreground">{phase}</p>
                 </div>
                 <div className="rounded-xl border border-border/40 bg-background/50 px-3 py-2">
-                  <p className="text-muted-foreground">Job</p>
+                  <p className="text-foreground/70">Job</p>
                   <p className="mt-1 font-mono text-foreground">{jobId ? jobId.slice(0, 8) : "none"}</p>
                 </div>
                 <div className="rounded-xl border border-border/40 bg-background/50 px-3 py-2">
-                  <p className="text-muted-foreground">Outputs</p>
+                  <p className="text-foreground/70">Outputs</p>
                   <p className="mt-1 font-semibold text-foreground">{job?.outputs.length ?? 0}</p>
                 </div>
               </div>
@@ -3285,8 +3285,8 @@ const TemplateCanvas = () => {
               <div className="mt-4 rounded-2xl border border-border/50 bg-background/60 p-3">
                 <div className="flex items-center justify-between gap-3">
                   <div>
-                    <p className="text-xs font-semibold uppercase tracking-[0.15em] text-muted-foreground">Latest Job Outputs</p>
-                    <p className="mt-1 text-xs text-muted-foreground">
+                    <p className="text-xs font-semibold uppercase tracking-[0.15em] text-foreground/70">Latest Job Outputs</p>
+                    <p className="mt-1 text-xs text-foreground/70">
                       {jobId ? `Job ${jobId.slice(0, 8)}` : "No job loaded"}
                     </p>
                   </div>
@@ -3327,7 +3327,7 @@ const TemplateCanvas = () => {
                           )}
                         </div>
                         <div className="p-3">
-                          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-foreground/70">
                             {output.type} {output.outputNumber ? `#${output.outputNumber}` : ""}
                           </p>
                           <p className="mt-1 text-sm font-medium text-foreground">{output.label}</p>
@@ -3336,7 +3336,7 @@ const TemplateCanvas = () => {
                     ))}
                   </div>
                 ) : (
-                  <div className="mt-3 rounded-xl border border-border/40 bg-background/50 p-3 text-xs text-muted-foreground">
+                  <div className="mt-3 rounded-xl border border-border/40 bg-background/50 p-3 text-xs text-foreground/70">
                     No outputs loaded for this version yet. Click refresh after a run completes.
                   </div>
                 )}
