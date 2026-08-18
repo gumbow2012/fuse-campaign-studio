@@ -275,7 +275,7 @@ type GraphCanvasProps = {
   selectedNodeId: string | null;
   onSelectNode: (nodeId: string) => void;
   onNodeMoved: (nodeId: string, position: { x: number; y: number }) => void;
-  onConnectNodes: (sourceNodeId: string, targetNodeId: string) => void;
+  onConnectNodes: (sourceNodeId: string, targetNodeId: string, targetHandleId?: string | null) => void;
   onDeleteEdge: (edgeId: string) => void;
   className?: string;
 };
@@ -326,7 +326,7 @@ const GraphCanvasInner = ({
   const handleConnect = useCallback(
     (connection: Connection) => {
       if (!connection.source || !connection.target || connection.source === connection.target) return;
-      onConnectNodes(connection.source, connection.target);
+      onConnectNodes(connection.source, connection.target, connection.targetHandle);
     },
     [onConnectNodes],
   );
@@ -350,6 +350,8 @@ const GraphCanvasInner = ({
         onEdgesChange={handleEdgesChange}
         onConnect={handleConnect}
         onNodeClick={(_, node) => onSelectNode(node.id)}
+        connectionRadius={34}
+        connectOnClick
         defaultEdgeOptions={defaultEdgeOptions}
         fitView
         minZoom={0.2}
