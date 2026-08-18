@@ -2514,6 +2514,7 @@ const TemplateCanvas = () => {
             </div>
           )}
         </aside>
+        ) : null}
         </div>
         {showSettingsPanel ? (
         <section className="w-full">
