@@ -516,6 +516,12 @@ const TemplateCanvas = () => {
   const [cloneTemplateName, setCloneTemplateName] = useState("");
   const [addNodeType, setAddNodeType] = useState<NewNodeKind>("upload");
   const [paletteVideoModel, setPaletteVideoModel] = useState<VideoModelKey>("kling-3.0-pro");
+  const [paletteSearch, setPaletteSearch] = useState("");
+  const [showSettingsPanel, setShowSettingsPanel] = useState(false);
+  const [imagePortCounts, setImagePortCounts] = useState<Record<string, number>>({});
+  const handleAddImagePort = useCallback((nodeId: string) => {
+    setImagePortCounts((current) => ({ ...current, [nodeId]: Math.min(8, (current[nodeId] ?? 2) + 1) }));
+  }, []);
   const [draggingEdgeIndex, setDraggingEdgeIndex] = useState<number | null>(null);
   const [addNodeName, setAddNodeName] = useState("");
   const [addNodeExpected, setAddNodeExpected] = useState("image");
