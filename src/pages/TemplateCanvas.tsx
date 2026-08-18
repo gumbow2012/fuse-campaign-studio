@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Copy, EyeOff, Film, GitBranch, Image as ImageIcon, Loader2, Maximize2, Minus, Move, Plus, RefreshCw, Save, Trash2, Upload } from "lucide-react";
 import { Link, useSearchParams } from "react-router-dom";
 import SiteShell from "@/components/mvp/SiteShell";
-import GraphCanvas, { type GraphCanvasNode, type GraphCanvasNodeData } from "@/components/lab/GraphCanvas";
+import GraphCanvas, { PORT_COLOR, type GraphCanvasNode, type GraphCanvasNodeData, type PortType } from "@/components/lab/GraphCanvas";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
