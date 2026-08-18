@@ -188,15 +188,35 @@ type NodeDraft = {
   generateAudio: boolean;
 };
 
-type VideoModelKey = "kling-2.5" | "seedance-2.0" | "seedance-2.0-fast";
+type VideoModelKey =
+  | "kling-3.0-pro"
+  | "kling-3.0-standard"
+  | "kling-2.5"
+  | "seedance-2.0"
+  | "seedance-2.0-fast";
 
 const VIDEO_MODEL_OPTIONS: Array<{
   key: VideoModelKey;
   label: string;
-  family: "kling" | "seedance";
+  family: "kling" | "kling3" | "seedance";
   usdPerSecond: number;
+  usdPerSecondAudio?: number;
   resolutionMultiplier?: Record<string, number>;
 }> = [
+  {
+    key: "kling-3.0-pro",
+    label: "Kling 3.0 Pro",
+    family: "kling3",
+    usdPerSecond: 0.112,
+    usdPerSecondAudio: 0.168,
+  },
+  {
+    key: "kling-3.0-standard",
+    label: "Kling 3.0 Standard",
+    family: "kling3",
+    usdPerSecond: 0.112,
+    usdPerSecondAudio: 0.168,
+  },
   { key: "kling-2.5", label: "Kling 2.5", family: "kling", usdPerSecond: 0.07 },
   {
     key: "seedance-2.0",
@@ -222,9 +242,19 @@ function resolveVideoModelOption(key: string | null | undefined) {
   return VIDEO_MODEL_OPTIONS.find((option) => option.key === key) ?? VIDEO_MODEL_OPTIONS[0];
 }
 
-function estimateVideoCredits(draft: { videoModel: VideoModelKey; duration: number; resolution: string }) {
+function estimateVideoCredits(draft: {
+  videoModel: VideoModelKey;
+  duration: number;
+  resolution: string;
+  generateAudio: boolean;
+}) {
   const option = resolveVideoModelOption(draft.videoModel);
   if (option.family === "kling") return Math.ceil((option.usdPerSecond * 5) / USD_PER_CREDIT);
+  if (option.family === "kling3") {
+    const perSecond = draft.generateAudio ? (option.usdPerSecondAudio ?? option.usdPerSecond) : option.usdPerSecond;
+    const seconds = Math.min(15, Math.max(3, Number(draft.duration) || 5));
+    return Math.ceil((perSecond * seconds) / USD_PER_CREDIT);
+  }
   const multiplier = option.resolutionMultiplier?.[draft.resolution] ?? 1;
   const seconds = Math.min(15, Math.max(4, Number(draft.duration) || 4));
   return Math.ceil((option.usdPerSecond * multiplier * seconds) / USD_PER_CREDIT);
