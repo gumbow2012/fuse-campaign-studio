@@ -608,12 +608,6 @@ export default function BillingPage() {
                 </dd>
               </div>
             ))}
-
-              <div key={item.q} className="rounded-[1.5rem] border border-white/10 bg-slate-950/75 p-5">
-                <dt className="text-sm font-semibold text-white">{item.q}</dt>
-                <dd className="mt-2 text-sm leading-6 text-slate-300">{item.a}</dd>
-              </div>
-            ))}
           </dl>
         </section>
       </section>
