@@ -11,7 +11,14 @@ import { uploadTemplateReferenceAsset } from "../_shared/template-assets.ts";
 
 const VERTICAL_VIDEO_ASPECT_RATIO = "9:16";
 const MAX_VIDEO_DURATION_SECONDS = 5;
-const VIDEO_MODEL_KEYS = ["kling-2.5", "seedance-2.0", "seedance-2.0-fast"] as const;
+const VIDEO_MODEL_KEYS = [
+  "kling-3.0-pro",
+  "kling-3.0-standard",
+  "kling-2.5",
+  "seedance-2.0",
+  "seedance-2.0-fast",
+] as const;
+const DEFAULT_VIDEO_MODEL_KEY = "kling-3.0-pro";
 const SEEDANCE_RESOLUTIONS = ["480p", "720p", "1080p", "4k"];
 const SEEDANCE_ASPECT_RATIOS = ["9:16", "16:9", "1:1", "4:3", "3:4", "21:9"];
 
@@ -45,13 +52,19 @@ function normalizeNullable(value: string | null | undefined) {
 
 function normalizeVideoModel(value: unknown) {
   const key = typeof value === "string" ? value.trim() : "";
-  return (VIDEO_MODEL_KEYS as readonly string[]).includes(key) ? key : "kling-2.5";
+  return (VIDEO_MODEL_KEYS as readonly string[]).includes(key) ? key : DEFAULT_VIDEO_MODEL_KEY;
 }
 
 function clampSeedanceDuration(value: unknown) {
   const next = Number(value ?? 4);
   if (!Number.isFinite(next)) return 4;
   return Math.min(15, Math.max(4, Math.round(next)));
+}
+
+function clampKling3Duration(value: unknown) {
+  const next = Number(value ?? 5);
+  if (!Number.isFinite(next)) return 5;
+  return Math.min(15, Math.max(3, Math.round(next)));
 }
 
 function normalizeDuration(value: unknown) {
@@ -146,8 +159,23 @@ Deno.serve(async (req) => {
 
       const modelKey = normalizeVideoModel(nextPromptConfig.video_model);
       const isSeedance = modelKey.startsWith("seedance");
+      const isKling3 = modelKey.startsWith("kling-3.0");
 
-      if (isSeedance) {
+      if (isKling3) {
+        nextPromptConfig.video_model = modelKey;
+        nextPromptConfig.duration = "duration" in body
+          ? clampKling3Duration(body.duration)
+          : clampKling3Duration(nextPromptConfig.duration);
+
+        if ("generateAudio" in body) {
+          nextPromptConfig.generate_audio = body.generateAudio !== false;
+        } else if (typeof nextPromptConfig.generate_audio !== "boolean") {
+          nextPromptConfig.generate_audio = true;
+        }
+
+        delete nextPromptConfig.resolution;
+        delete nextPromptConfig.aspect_ratio;
+      } else if (isSeedance) {
         nextPromptConfig.video_model = modelKey;
 
         if ("duration" in body) {

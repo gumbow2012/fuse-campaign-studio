@@ -219,13 +219,20 @@ export function normalizeVideoDuration(value: unknown) {
 
 /* ============================ Video model registry ============================ */
 
-export type VideoModelKey = "kling-2.5" | "seedance-2.0" | "seedance-2.0-fast";
+export type VideoModelKey =
+  | "kling-3.0-pro"
+  | "kling-3.0-standard"
+  | "kling-2.5"
+  | "seedance-2.0"
+  | "seedance-2.0-fast";
 
 export type VideoModelDefinition = {
   key: VideoModelKey;
   endpointId: string;
   label: string;
-  family: "kling" | "seedance";
+  family: "kling" | "kling3" | "seedance";
+  /** Fallback price per second in USD when audio is enabled (kling3). */
+  fallbackUsdPerSecondAudio?: number;
   supportsAudio: boolean;
   fixedAspect?: string;
   maxDurationSec?: number;
@@ -236,9 +243,32 @@ export type VideoModelDefinition = {
   fallbackUsdPerSecond?: number;
 };
 
-export const DEFAULT_VIDEO_MODEL: VideoModelKey = "kling-2.5";
+export const DEFAULT_VIDEO_MODEL: VideoModelKey = "kling-3.0-pro";
+
+export const KLING3_USD_PER_SECOND = 0.112;
+export const KLING3_USD_PER_SECOND_AUDIO = 0.168;
 
 export const VIDEO_MODELS: Record<VideoModelKey, VideoModelDefinition> = {
+  "kling-3.0-pro": {
+    key: "kling-3.0-pro",
+    endpointId: "fal-ai/kling-video/v3/pro/image-to-video",
+    label: "Kling 3.0 Pro",
+    family: "kling3",
+    supportsAudio: true,
+    durationRange: { min: 3, max: 15 },
+    fallbackUsdPerSecond: KLING3_USD_PER_SECOND,
+    fallbackUsdPerSecondAudio: KLING3_USD_PER_SECOND_AUDIO,
+  },
+  "kling-3.0-standard": {
+    key: "kling-3.0-standard",
+    endpointId: "fal-ai/kling-video/v3/standard/image-to-video",
+    label: "Kling 3.0 Standard",
+    family: "kling3",
+    supportsAudio: true,
+    durationRange: { min: 3, max: 15 },
+    fallbackUsdPerSecond: KLING3_USD_PER_SECOND,
+    fallbackUsdPerSecondAudio: KLING3_USD_PER_SECOND_AUDIO,
+  },
   "kling-2.5": {
     key: "kling-2.5",
     endpointId: "fal-ai/kling-video/v2.5-turbo/pro/image-to-video",
@@ -314,6 +344,17 @@ export function buildVideoModelInput(
     };
   }
 
+  if (model.family === "kling3") {
+    return {
+      start_image_url: args.imageUrl,
+      prompt: args.prompt,
+      duration: String(clampSeedanceDuration(args.duration ?? 5, model)),
+      generate_audio: args.generateAudio !== false,
+      cfg_scale: 0.5,
+      ...(args.endFrameUrl ? { end_image_url: args.endFrameUrl } : {}),
+    };
+  }
+
   const aspectRatio = model.aspectRatios?.includes(String(args.aspectRatio ?? ""))
     ? String(args.aspectRatio)
     : VERTICAL_VIDEO_ASPECT_RATIO;
@@ -334,3 +375,13 @@ export function buildVideoModelInput(
   };
 }
 
+
+export function videoFallbackUsdPerSecond(
+  model: VideoModelDefinition,
+  generateAudio?: boolean | null,
+) {
+  if (model.family === "kling3") {
+    return generateAudio === false ? KLING3_USD_PER_SECOND : KLING3_USD_PER_SECOND_AUDIO;
+  }
+  return model.fallbackUsdPerSecond;
+}
