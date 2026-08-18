@@ -2089,27 +2089,51 @@ const TemplateCanvas = () => {
 
   const selectedNodeRun = selectedNodeId ? nodeRuns[selectedNodeId] ?? null : null;
 
-  const flowEdges = useMemo(() => graphNodes.flatMap((target) =>
-    target.incoming.flatMap((incoming, index) => {
+  const flowEdges = useMemo(() => graphNodes.flatMap((target) => {
+    const targetKind = nodeKind(target);
+    const targetPorts = portIdsForNode(
+      target.id,
+      targetKind,
+      target.incoming.map((incoming) => incoming.targetParam),
+      extraPorts[target.id] ?? [],
+    );
+    const spareImagePorts = targetPorts.filter((port) => !port.includes("prompt"));
+    let spareCursor = 0;
+
+    return target.incoming.flatMap((incoming, index) => {
       if (!nodeMap.has(incoming.sourceNodeId)) return [];
       const sourceNode = nodeMap.get(incoming.sourceNodeId);
-      const param = (incoming.targetParam ?? "").toLowerCase();
+      const param = (incoming.targetParam ?? "").trim().toLowerCase();
       const portType: PortType = param.includes("prompt")
         ? "prompt"
         : sourceNode?.nodeType === "video_gen"
         ? "video"
         : "image";
       const stroke = PORT_COLOR[portType];
+      let targetHandle: string | undefined;
+      if (targetPorts.length) {
+        if (param && targetPorts.includes(param)) targetHandle = param;
+        else if (portType !== "prompt") {
+          targetHandle = spareImagePorts[spareCursor] ?? spareImagePorts[spareImagePorts.length - 1];
+          spareCursor += 1;
+        } else {
+          targetHandle = targetPorts.find((port) => port.includes("prompt")) ?? targetPorts[0];
+        }
+      }
+      const sourceHandle = sourceNode?.nodeType === "video_gen" ? "video" : "image";
       return [{
-        id: incoming.edgeId ?? `${incoming.sourceNodeId}-${target.id}-${index}`,
+        id: `${incoming.edgeId ?? `${incoming.sourceNodeId}-${target.id}`}-${index}`,
         source: incoming.sourceNodeId,
         target: target.id,
+        sourceHandle,
+        targetHandle,
         label: `Ref ${index + 1}`,
         style: { stroke, strokeWidth: 1.8, opacity: 0.85 },
         labelStyle: { fill: stroke, fontSize: 10, fontWeight: 700 },
+        data: { edgeId: incoming.edgeId ?? null },
       }];
-    }),
-  ), [graphNodes, nodeMap]);
+    });
+  }), [graphNodes, nodeMap, extraPorts]);
 
 
 
