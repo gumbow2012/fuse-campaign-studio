@@ -16,6 +16,7 @@ import {
   submitVideoJob,
 } from "./fal.ts";
 import { sortEdgesByExecutionOrder, targetParamOrder } from "./edge-order.ts";
+import { isPromptNode, resolveNodePrompt } from "./prompt-nodes.ts";
 
 type NodeRow = {
   id: string;
