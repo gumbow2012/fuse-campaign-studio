@@ -2978,6 +2978,23 @@ const TemplateCanvas = () => {
                       Publish Live
                     </Button>
                   ) : null}
+                  {!canPublishTemplates && detail ? (
+                    detail.reviewStatus === "Submitted" ? (
+                      <span className="inline-flex items-center gap-2 rounded-full border border-amber-300/30 bg-amber-300/[0.08] px-3 py-1.5 text-xs font-semibold text-amber-100">
+                        <Clock3 className="h-3.5 w-3.5" />
+                        Submitted — pending review
+                      </span>
+                    ) : (
+                      <Button type="button" size="sm" onClick={() => void submitForReview()} disabled={!!mutating}>
+                        {mutating === "submit-for-review" ? (
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        ) : (
+                          <CheckCircle2 className="mr-2 h-4 w-4" />
+                        )}
+                        Submit for review
+                      </Button>
+                    )
+                  ) : null}
                 </div>
               </div>
               <div className="mt-4 grid gap-3 lg:grid-cols-4">
