@@ -164,6 +164,10 @@ function inferEdgeTargetParam(args: {
 }) {
   const { sourceNode, targetNode, incomingCount } = args;
 
+  if (sourceNode?.node_type === "prompt") {
+    return "prompt";
+  }
+
   if (targetNode?.node_type === "video_gen") {
     return "start_frame_image";
   }
