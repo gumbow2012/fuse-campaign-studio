@@ -188,6 +188,10 @@ export default function SiteShell({ children }: { children: ReactNode }) {
                   <Shirt className="h-3.5 w-3.5" />
                   Outfit Swap
                 </NavLink>
+                <NavLink to="/app/lab/jewelry-swap" className={adminNavLinkClass}>
+                  <Gem className="h-3.5 w-3.5" />
+                  Jewelry Swap
+                </NavLink>
                 <NavLink to="/admin/audits" className={adminNavLinkClass}>
                   <ClipboardCheck className="h-3.5 w-3.5" />
                   Output Audit
