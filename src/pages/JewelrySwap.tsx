@@ -376,7 +376,7 @@ export default function JewelrySwap() {
   const [resolution, setResolution] = useState("1080p");
   // Every Jewelry Swap video the user has started — newest first. Jobs live
   // server-side, so refreshing simply re-attaches to the running ones.
-  const [videos, setVideos] = useState<SwapGeneration[]>([]);
+  const [videos, setVideos] = useState<JewelryGeneration[]>([]);
   const [libraryLoading, setLibraryLoading] = useState(true);
   const [reconstructing, setReconstructing] = useState(false);
   const [cancelTarget, setCancelTarget] = useState<string | null>(null);
