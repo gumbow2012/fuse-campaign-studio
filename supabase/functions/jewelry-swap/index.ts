@@ -1370,7 +1370,45 @@ Deno.serve(async (req) => {
       return json({ generations });
     }
 
+    // Read-only asset library: the caller's completed generations, newest first.
+    if (action === "list_assets") {
+      const typeFilter = String(body.type ?? "all");
+      const limit = Math.min(60, Math.max(1, Number(body.limit ?? 60)));
+
+      let query = admin
+        .from("studio_generations")
+        .select("*")
+        .eq("user_id", user.id)
+        .eq("status", "complete")
+        .not("output_url", "is", null)
+        .order("created_at", { ascending: false })
+        .limit(limit);
+
+      if (typeFilter === "image" || typeFilter === "video") {
+        query = query.eq("output_type", typeFilter);
+      }
+
+      const { data: rows, error } = await query;
+      if (error) throw new Error(error.message);
+
+      const assets = (rows ?? []).map((row: any) => {
+        const payload = (row.input_payload ?? {}) as Record<string, unknown>;
+        return {
+          id: row.id,
+          outputUrl: row.output_url,
+          outputType: row.output_type === "video" ? "video" : "image",
+          kind: row.kind ?? null,
+          prompt: typeof payload.prompt === "string" ? payload.prompt.slice(0, 240) : null,
+          feature: typeof payload.feature === "string" ? payload.feature : (row.kind ?? "studio"),
+          createdAt: row.created_at,
+        };
+      });
+
+      return json({ assets });
+    }
+
     if (action === "status") {
+
       const ids = (Array.isArray(body.generationIds) ? body.generationIds : [body.generationId])
         .map((id: unknown) => String(id ?? "").trim())
         .filter(Boolean);

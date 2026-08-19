@@ -52,13 +52,16 @@ import {
   animateJewelryFrame,
   callJewelrySwap,
   createTemplateFromJewelrySwap,
+  listAssets,
   persistTemplateLayout,
   CAMERA_DIRECTIONS,
   type JewelryGeneration,
   type JewelryImageModel,
   type JewelrySwapTemplateResult,
+  type LibraryAsset,
   type SwapGeneration,
 } from "@/services/jewelrySwap";
+
 import { extractFrames, frameTimestamps, loadVideo, readMeta, type VideoMeta } from "@/lib/videoFrames";
 import { compressImageFile } from "@/lib/imageCompress";
 
@@ -462,6 +465,204 @@ export default function JewelrySwap() {
       setExtracting(false);
     }
   }, []);
+
+  /* ------------------- Library picker (already-made assets) ----------------- */
+
+  type PickerTarget =
+    | { kind: "source" }
+    | { kind: "piece" }
+    | { kind: "angle"; index: number };
+
+  const [pickerTarget, setPickerTarget] = useState<PickerTarget | null>(null);
+  const [assets, setAssets] = useState<LibraryAsset[]>([]);
+  const [assetsLoading, setAssetsLoading] = useState(false);
+  const [assetsError, setAssetsError] = useState<string | null>(null);
+  const [assetSearch, setAssetSearch] = useState("");
+  const [assetTypeFilter, setAssetTypeFilter] = useState<"all" | "image" | "video">("all");
+  const [sourceNotice, setSourceNotice] = useState<string | null>(null);
+
+  const loadAssets = useCallback(async (type: "all" | "image" | "video") => {
+    setAssetsLoading(true);
+    setAssetsError(null);
+    try {
+      const rows = await listAssets(type);
+      setAssets(rows);
+    } catch (error) {
+      setAssets([]);
+      setAssetsError(error instanceof Error ? error.message : "Could not load your library");
+    } finally {
+      setAssetsLoading(false);
+    }
+  }, []);
+
+  const openPicker = useCallback(
+    (target: PickerTarget) => {
+      const type = target.kind === "source" ? "all" : "image";
+      setPickerTarget(target);
+      setAssetSearch("");
+      setAssetTypeFilter(type);
+      void loadAssets(type);
+    },
+    [loadAssets],
+  );
+
+  const resetSourceState = useCallback(() => {
+    setFrames([]);
+    setSwaps({});
+    setAltSwaps({});
+    setChosenModel({});
+    setFramePreferredRole({});
+    setFrameReason({});
+    setNeedsReview(new Set());
+    setApproved(new Set());
+    setSelectedFrames(new Set());
+    setSourceNotice(null);
+  }, []);
+
+  /** Use a completed library asset as the source (image = single frame, video = extract). */
+  const useLibrarySource = useCallback(
+    async (asset: LibraryAsset) => {
+      resetSourceState();
+
+      if (asset.outputType === "image") {
+        setVideoPreview(null);
+        setVideoUrl(null);
+        setMeta(null);
+        setFrames([{ time: 0, url: asset.outputUrl }]);
+        setSelectedFrames(new Set([0]));
+        toast.success("Library image loaded as the source frame");
+        return;
+      }
+
+      setVideoPreview(asset.outputUrl);
+      setVideoUrl(asset.outputUrl);
+
+      let objectUrl: string | null = null;
+      try {
+        // Never draw a remote video straight to canvas — fetch the bytes first.
+        setUploadingVideo(true);
+        const response = await fetch(asset.outputUrl);
+        if (!response.ok) throw new Error(`Fetch failed (${response.status})`);
+        const blob = await response.blob();
+        objectUrl = URL.createObjectURL(blob);
+      } catch {
+        setUploadingVideo(false);
+        setSourceNotice(
+          "Couldn't load that video for frame extraction — try uploading the file instead.",
+        );
+        return;
+      }
+
+      try {
+        const element = await loadVideo(objectUrl);
+        const nextMeta = readMeta(element);
+        setMeta(nextMeta);
+
+        const folder = await createOutfitSwapFolder();
+        setUploadingVideo(false);
+        setExtracting(true);
+        setExtractProgress(0);
+
+        const times = frameTimestamps(nextMeta.duration);
+        const captured = await extractFrames(element, times, (done, total) =>
+          setExtractProgress(Math.round((done / total) * 50)),
+        );
+
+        const uploaded = await uploadWithConcurrency(
+          captured,
+          3,
+          async (frame) => {
+            const stored = await uploadToStorage(folder, frame.file, frame.file.name);
+            return { time: frame.time, url: stored.url } as Frame;
+          },
+          (done, total) => setExtractProgress(50 + Math.round((done / total) * 50)),
+        );
+        setFrames(uploaded);
+        const spread = uploaded
+          .map((_, index) => index)
+          .filter((index) => index % Math.max(1, Math.ceil(uploaded.length / 4)) === 0);
+        setSelectedFrames(new Set(spread));
+        toast.success(`${uploaded.length} source frames extracted`);
+      } catch {
+        setSourceNotice(
+          "Couldn't load that video for frame extraction — try uploading the file instead.",
+        );
+      } finally {
+        setUploadingVideo(false);
+        setExtracting(false);
+      }
+    },
+    [resetSourceState],
+  );
+
+  /** A library image becomes a new piece card. */
+  const addPieceFromLibrary = useCallback((url: string) => {
+    setPieces((prev) =>
+      [
+        ...prev,
+        {
+          urls: [url],
+          roles: [""],
+          name: "Library asset",
+          type: JEWELRY_TYPES[0],
+          metal: AUTO_METAL,
+          stone: AUTO_STONE,
+          quality: "",
+          width: "",
+          height: "",
+          depth: "",
+          weight: "",
+          cad: false,
+          person: DEFAULT_APPLY_TO,
+          notes: "",
+        } as Piece,
+      ].slice(0, 8),
+    );
+  }, []);
+
+  /** A library image becomes another angle of an existing piece. */
+  const addAngleFromLibrary = useCallback((index: number, url: string) => {
+    setPieces((prev) =>
+      prev.map((item, itemIndex) =>
+        itemIndex === index
+          ? {
+              ...item,
+              urls: [...item.urls, url].slice(0, 6),
+              roles: [...item.roles, ""].slice(0, 6),
+            }
+          : item,
+      ),
+    );
+  }, []);
+
+  const handlePick = useCallback(
+    (asset: LibraryAsset) => {
+      const target = pickerTarget;
+      setPickerTarget(null);
+      if (!target) return;
+      if (target.kind === "source") {
+        void useLibrarySource(asset);
+        return;
+      }
+      if (target.kind === "piece") {
+        addPieceFromLibrary(asset.outputUrl);
+        return;
+      }
+      addAngleFromLibrary(target.index, asset.outputUrl);
+    },
+    [addAngleFromLibrary, addPieceFromLibrary, pickerTarget, useLibrarySource],
+  );
+
+  const visibleAssets = useMemo(() => {
+    const query = assetSearch.trim().toLowerCase();
+    return assets.filter((asset) => {
+      if (assetTypeFilter !== "all" && asset.outputType !== assetTypeFilter) return false;
+      if (!query) return true;
+      return `${asset.feature ?? ""} ${asset.prompt ?? ""}`.toLowerCase().includes(query);
+    });
+  }, [assetSearch, assetTypeFilter, assets]);
+
+
 
   /* -------------------------- 3. Piece references ------------------------- */
 
@@ -1146,30 +1347,55 @@ export default function JewelrySwap() {
                       ))}
                     </dl>
                   ) : null}
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => videoInputRef.current?.click()}
+                      className="w-full rounded-xl border-white/15 bg-transparent text-xs"
+                    >
+                      <RefreshCw size={13} /> Replace video
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => openPicker({ kind: "source" })}
+                      className="w-full rounded-xl border-white/15 bg-transparent text-xs"
+                    >
+                      <ImageIcon size={13} /> Choose from library
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <button
+                    type="button"
+                    onClick={() => videoInputRef.current?.click()}
+                    className="flex w-full flex-col items-center gap-2 rounded-2xl border border-dashed border-white/15 bg-black/25 px-4 py-10 text-center transition-colors hover:border-cyan-200/50"
+                  >
+                    {uploadingVideo ? (
+                      <Loader2 size={18} className="animate-spin text-cyan-200" />
+                    ) : (
+                      <Upload size={18} className="text-cyan-200" />
+                    )}
+                    <span className="text-sm font-medium text-foreground">Upload a clip</span>
+                    <span className="text-xs text-muted-foreground">.mp4 or .mov</span>
+                  </button>
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => videoInputRef.current?.click()}
+                    onClick={() => openPicker({ kind: "source" })}
                     className="w-full rounded-xl border-white/15 bg-transparent text-xs"
                   >
-                    <RefreshCw size={13} /> Replace video
+                    <ImageIcon size={13} /> Choose from library
                   </Button>
                 </div>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => videoInputRef.current?.click()}
-                  className="flex w-full flex-col items-center gap-2 rounded-2xl border border-dashed border-white/15 bg-black/25 px-4 py-10 text-center transition-colors hover:border-cyan-200/50"
-                >
-                  {uploadingVideo ? (
-                    <Loader2 size={18} className="animate-spin text-cyan-200" />
-                  ) : (
-                    <Upload size={18} className="text-cyan-200" />
-                  )}
-                  <span className="text-sm font-medium text-foreground">Upload a clip</span>
-                  <span className="text-xs text-muted-foreground">.mp4 or .mov</span>
-                </button>
               )}
+              {sourceNotice ? (
+                <p className="mt-3 rounded-xl border border-amber-300/25 bg-amber-300/10 px-3 py-2 text-[11px] text-amber-100">
+                  {sourceNotice}
+                </p>
+              ) : null}
               {extracting ? (
                 <div className="mt-3 space-y-1.5">
                   <p className="text-[11px] uppercase tracking-[0.14em] text-cyan-200/70">
@@ -1178,6 +1404,7 @@ export default function JewelrySwap() {
                   <Progress value={extractProgress} className="h-1.5" />
                 </div>
               ) : null}
+
             </SectionCard>
 
             <SectionCard
@@ -1307,6 +1534,15 @@ export default function JewelrySwap() {
                         <Plus size={12} className="text-cyan-200" />
                         Angle
                       </button>
+                      <button
+                        type="button"
+                        onClick={() => openPicker({ kind: "angle", index })}
+                        className="flex h-16 w-20 flex-col items-center justify-center gap-1 rounded-lg border border-white/12 bg-black/25 text-[9px] text-foreground/75 transition-colors hover:border-cyan-200/50"
+                      >
+                        <ImageIcon size={12} className="text-cyan-200" />
+                        Library
+                      </button>
+
                     </div>
 
 
@@ -1502,6 +1738,15 @@ export default function JewelrySwap() {
                   )}
                   Add jewelry piece
                 </button>
+                <button
+                  type="button"
+                  onClick={() => openPicker({ kind: "piece" })}
+                  className="flex w-full items-center justify-center gap-2 rounded-2xl border border-white/12 bg-black/25 py-3 text-xs text-foreground/80 transition-colors hover:border-cyan-200/50"
+                >
+                  <ImageIcon size={13} className="text-cyan-200" />
+                  Choose from library
+                </button>
+
               </div>
 
               {/* Config summary — real settings only, never a fake accuracy score. */}
@@ -2724,6 +2969,96 @@ export default function JewelrySwap() {
         </DialogContent>
       </Dialog>
 
+      {/* Library picker — reuse an already-generated asset as an input. */}
+      <Dialog open={pickerTarget !== null} onOpenChange={(open) => !open && setPickerTarget(null)}>
+        <DialogContent className="max-w-4xl border-white/10 bg-[#05070f]/95 backdrop-blur-xl">
+          <DialogHeader>
+            <DialogTitle className="font-heading text-base text-foreground">
+              {pickerTarget?.kind === "source" ? "Choose a source from your library" : "Choose a reference from your library"}
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <input
+              value={assetSearch}
+              onChange={(event) => setAssetSearch(event.target.value)}
+              placeholder="Search by prompt or feature"
+              className="min-w-[200px] flex-1 rounded-xl border border-white/12 bg-black/40 px-3 py-2 text-xs text-foreground outline-none transition-colors focus:border-cyan-200/60"
+            />
+            {pickerTarget?.kind === "source" ? (
+              <div className="flex gap-1 rounded-xl border border-white/12 bg-black/40 p-1">
+                {(["all", "image", "video"] as const).map((option) => (
+                  <button
+                    key={option}
+                    type="button"
+                    onClick={() => setAssetTypeFilter(option)}
+                    className={cn(
+                      "rounded-lg px-2.5 py-1 text-[10px] uppercase tracking-[0.12em] transition-colors",
+                      assetTypeFilter === option
+                        ? "bg-cyan-300/20 text-cyan-100"
+                        : "text-muted-foreground hover:text-foreground",
+                    )}
+                  >
+                    {option}
+                  </button>
+                ))}
+              </div>
+            ) : null}
+          </div>
+
+          {assetsLoading ? (
+            <div className="flex items-center justify-center py-12 text-xs text-muted-foreground">
+              <Loader2 size={16} className="mr-2 animate-spin text-cyan-200" /> Loading your library…
+            </div>
+          ) : assetsError ? (
+            <p className="py-10 text-center text-xs text-amber-100">{assetsError}</p>
+          ) : !visibleAssets.length ? (
+            <p className="py-10 text-center text-xs text-muted-foreground">
+              Nothing here yet — generate something first, or upload a file instead.
+            </p>
+          ) : (
+            <div className="grid max-h-[60vh] gap-2 overflow-y-auto sm:grid-cols-3 md:grid-cols-4">
+              {visibleAssets.map((asset) => (
+                <button
+                  key={asset.id}
+                  type="button"
+                  onClick={() => handlePick(asset)}
+                  className="group overflow-hidden rounded-xl border border-white/10 bg-black/40 text-left transition-colors hover:border-cyan-200/60"
+                >
+                  {asset.outputType === "video" ? (
+                    <video
+                      src={asset.outputUrl}
+                      muted
+                      loop
+                      playsInline
+                      preload="metadata"
+                      className="aspect-square w-full object-cover"
+                      onMouseEnter={(event) => void event.currentTarget.play().catch(() => {})}
+                      onMouseLeave={(event) => event.currentTarget.pause()}
+                    />
+                  ) : (
+                    <img
+                      src={asset.outputUrl}
+                      alt={asset.prompt ?? "Library asset"}
+                      loading="lazy"
+                      className="aspect-square w-full object-cover"
+                    />
+                  )}
+                  <div className="px-2 py-1.5">
+                    <p className="truncate text-[10px] uppercase tracking-[0.12em] text-cyan-200/70">
+                      {asset.feature ?? "studio"} · {asset.outputType}
+                    </p>
+                    <p className="text-[10px] text-muted-foreground">
+                      {new Date(asset.createdAt).toLocaleDateString()}
+                    </p>
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </SiteShell>
+
   );
 }
