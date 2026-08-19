@@ -119,11 +119,12 @@ async function resolveNodeInputs(admin: AdminClient, args: {
   edges: EdgeRow[];
   nodes: NodeRow[];
 }) {
+  const nodeMap = new Map(args.nodes.map((node) => [node.id, node]));
+
   const incoming = args.edges
     .filter((edge) => edge.target_node_id === args.node.id)
+    .filter((edge) => !isPromptNode(nodeMap.get(edge.source_node_id)))
     .sort((a, b) => edgeOrder(a) - edgeOrder(b));
-
-  const nodeMap = new Map(args.nodes.map((node) => [node.id, node]));
   const sourceIds = incoming.map((edge) => edge.source_node_id);
 
   const assetIds = [
