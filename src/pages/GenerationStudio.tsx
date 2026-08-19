@@ -458,6 +458,54 @@ export default function GenerationStudio() {
     });
   }, []);
 
+  const lightbox = useMemo(
+    () => generations.find((entry) => entry.id === lightboxId) ?? null,
+    [generations, lightboxId],
+  );
+
+  const useAsReference = useCallback(
+    (url: string) => {
+      addReference(url);
+      setLightboxId(null);
+      toast.success("Added to references");
+    },
+    [addReference],
+  );
+
+  const copyPrompt = useCallback(async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      toast.success("Prompt copied");
+    } catch {
+      toast.error("Could not copy the prompt");
+    }
+  }, []);
+
+  /** Restore prompt + reference stack (REF order preserved) from a past generation. */
+  const recreate = useCallback((generation: Generation) => {
+    const recipe = generationRecipe(generation);
+    setPrompt(recipe.prompt);
+    setReferences(recipe.urls.slice(0, MAX_REFERENCES).map((url) => ({ url, label: "" })));
+    if (recipe.aspect) setAspectRatio(recipe.aspect);
+    setLightboxId(null);
+    toast.success("Loaded into the composer");
+  }, []);
+
+  const deleteGeneration = useCallback(async (generation: Generation) => {
+    try {
+      await callStudio({ action: "delete", generationIds: [generation.id] });
+      setGenerations((prev) => prev.filter((entry) => entry.id !== generation.id));
+      setSelected((prev) => prev.filter((id) => id !== generation.id));
+      setLightboxId((prev) => (prev === generation.id ? null : prev));
+      setConfirmSingle(null);
+      toast.success("Generation deleted");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not delete the generation");
+    }
+  }, []);
+
+
+
   const addFiles = useCallback(
     async (files: File[]) => {
       const images = files.filter((file) => file.type.startsWith("image/"));
