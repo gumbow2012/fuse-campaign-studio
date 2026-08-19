@@ -118,9 +118,14 @@ type JewelryDimensions = {
   weight?: number | string | null;
 };
 
+/** A single labeled reference image of a piece. */
+type JewelryReference = { url: string; role?: string | null; cad?: boolean };
+
 type JewelryPiece = {
   urls?: unknown;
   url?: string;
+  /** Preferred: labeled references ({url, role, cad}). `urls` stays supported. */
+  references?: unknown;
   type?: string;
   metal?: string;
   stone?: string;
@@ -131,9 +136,30 @@ type JewelryPiece = {
   notes?: string;
 };
 
-function pieceUrls(piece: JewelryPiece) {
+/** Normalized labeled references for a piece, in supplied order. */
+function pieceReferences(piece: JewelryPiece): JewelryReference[] {
+  const refs: JewelryReference[] = [];
+  const raw = Array.isArray(piece.references) ? piece.references : [];
+  for (const entry of raw) {
+    const url = String((entry as any)?.url ?? "").trim();
+    if (!url) continue;
+    refs.push({
+      url,
+      role: String((entry as any)?.role ?? "").trim() || null,
+      cad: (entry as any)?.cad === true || piece.cad === true,
+    });
+  }
+  if (refs.length) return refs;
+
   const list = Array.isArray(piece.urls) ? piece.urls : piece.url ? [piece.url] : [];
-  return list.map((entry) => String(entry ?? "").trim()).filter(Boolean);
+  return list
+    .map((entry) => String(entry ?? "").trim())
+    .filter(Boolean)
+    .map((url) => ({ url, role: null, cad: piece.cad === true }));
+}
+
+function pieceUrls(piece: JewelryPiece) {
+  return pieceReferences(piece).map((ref) => ref.url);
 }
 
 function isAuto(value: unknown) {
@@ -147,22 +173,67 @@ function refListPhrase(numbers: number[]) {
 }
 
 const CAD_AUTHORITY_TEXT =
-  "CAD AUTHORITY ACTIVE for the CAD-flagged reference(s). Treat the CAD as the ABSOLUTE authority for geometry: silhouette, dimensions, depth, thickness, stone count, stone layout, setting geometry, bail structure, borders, open/negative spaces and relief. Do not reinterpret the shape. Convert the CAD into a physically manufactured, manufacturable real-world piece, preserving every structural feature. If a real jewelry photo is also supplied for that piece, use it only as the material/finish/scintillation authority — geometry still comes from the CAD.";
+  "CAD AUTHORITY ACTIVE. The CAD-flagged reference(s) are the HIGHEST-PRIORITY GEOMETRY AUTHORITY and outrank every photographic reference for geometry: silhouette, dimensions, proportions, depth, thickness, bail and connector/hinge geometry, relative scale, cutouts, negative space, borders, raised and recessed surfaces, front/back/side structure, stone-seat locations, stone count and stone layout. Geometry must NEVER be reinvented, softened or averaged from photos when a CAD reference exists. Photographic references then control ONLY materials: metal color and alloy, polish, surface finish, diamond/stone appearance and scintillation, reflections and micro-texture. Render the CAD as a physically manufactured real-world piece, preserving every structural feature exactly.";
+
+/** Targeted corrective lines appended when the user regenerates with a reason. */
+const FAILURE_CORRECTIONS: Record<string, string> = {
+  "wrong angle":
+    "CORRECTION: the previous attempt used the wrong viewing angle. Re-derive the camera angle, yaw/pitch/roll and viewing direction strictly from SOURCE_FRAME, and reproduce the corresponding region of the replacement piece as seen from that exact angle.",
+  "wrong crop":
+    "CORRECTION: the previous attempt reframed the shot. Match SOURCE_FRAME's crop, zoom and framing exactly — same visible portion of the piece, same partiality, no zoom-out to reveal the whole piece.",
+  "wrong bail":
+    "CORRECTION: the previous attempt produced an inaccurate bail; strictly follow the uploaded bail/CAD references and preserve the exact replacement bail geometry — do not substitute or redesign it.",
+  "wrong stones/details":
+    "CORRECTION: the previous attempt got the stones wrong. Reproduce the reference's exact stone layout, cuts, sizes, density and setting geometry — no invented, added, removed or resized stones.",
+  "wrong lettering/logo":
+    "CORRECTION: the previous attempt got the lettering/logo wrong. Reproduce the reference's exact letterforms, symbols, spacing and relief, at SOURCE_FRAME's rotation — never rotate lettering upright for legibility.",
+  "wrong size":
+    "CORRECTION: the previous attempt mis-scaled the piece. Keep the replacement's real physical proportions from the references, occupying approximately the same region of the frame the original jewelry occupied.",
+  "hallucinated geometry":
+    "CORRECTION: the previous attempt invented structure. Do not add stones, prongs, hinges, engraving, lettering or decorative elements that no reference shows; infer minimally and only where unavoidable.",
+  "wrong chain interaction":
+    "CORRECTION: the previous attempt broke the chain interaction. Preserve SOURCE_FRAME's chain placement, path, tension, contact and occlusion exactly, and attach the replacement at its own reference attachment point.",
+  other:
+    "CORRECTION: the previous attempt was inaccurate. Re-read SOURCE_FRAME for the shot and the references for the object's construction, and follow both strictly.",
+};
+
+function failureCorrection(reason: unknown) {
+  const key = String(reason ?? "").trim().toLowerCase();
+  if (!key) return null;
+  return FAILURE_CORRECTIONS[key] ?? `${FAILURE_CORRECTIONS.other} Reported issue: "${String(reason).trim()}".`;
+}
 
 /**
- * Precision jewelry replacement prompt. Image 1 is always the source frame;
- * reference images 2..N are the jewelry references in supplied order (one
- * physical piece may span several images).
+ * Precision jewelry replacement prompt. Image 1 is always the SOURCE_FRAME and
+ * is the absolute authority for the photograph; reference images 2..N are the
+ * JEWELRY_REFERENCES and are the absolute authority only for the replacement
+ * object's identity and construction.
  */
-function buildJewelryPrompt(args: { pieces: JewelryPiece[]; extra?: string }) {
+function buildJewelryPrompt(args: {
+  pieces: JewelryPiece[];
+  extra?: string;
+  preferredRole?: string | null;
+  failureReason?: string | null;
+}) {
   let cursor = 2; // image 1 is the source frame
   const lines: string[] = [];
+  const refLabels: string[] = [];
+  const cadRefNums: number[] = [];
   let cadActive = false;
 
   for (const piece of args.pieces) {
-    const urls = pieceUrls(piece);
-    if (!urls.length) continue;
-    const refNums = urls.map(() => cursor++);
+    const refs = pieceReferences(piece);
+    if (!refs.length) continue;
+    const refNums: number[] = [];
+    for (const ref of refs) {
+      const num = cursor++;
+      refNums.push(num);
+      refLabels.push(`reference image ${num} = ${ref.role ? ref.role : "Unlabeled view"}`);
+      if (ref.cad) {
+        cadActive = true;
+        cadRefNums.push(num);
+      }
+    }
     const type = String(piece.type ?? "jewelry piece").trim() || "jewelry piece";
     const applyTo = String(piece.person ?? "Main subject").trim() || "Main subject";
     const notes = String(piece.notes ?? "").trim();
@@ -197,24 +268,56 @@ function buildJewelryPrompt(args: { pieces: JewelryPiece[]; extra?: string }) {
     lines.push(line);
   }
 
+  const preferred = String(args.preferredRole ?? "").trim();
+  const correction = failureCorrection(args.failureReason);
+
   const prompt = [
-    "Use SOURCE_FRAME (image 1) as the exact identity, pose, camera, lighting, body, skin, hair, clothing and environment reference. This is a precision jewelry replacement, not a redesign or reinterpretation.",
+    "Use SOURCE_FRAME (image 1) as the ABSOLUTE authority for the photograph. This is a precise jewelry replacement, not a redesign or a product shot. Do NOT reframe or recreate the photograph.",
     "",
-    "Modify ONLY the jewelry pieces explicitly listed below. Every unrelated detail from SOURCE_FRAME must be preserved exactly.",
+    "Preserve EXACTLY from SOURCE_FRAME: camera position, camera angle, perspective, crop, zoom level, composition, depth of field, focus plane, lighting, background, chain placement, and the jewelry's position, orientation, rotation, tilt, visible percentage, occlusion and scale.",
     "",
-    "For each listed piece, the supplied jewelry reference images are the STRICT visual authority for that piece's design. Preserve exactly: silhouette, proportions, dimensions, thickness, metal and metal color, surface finish, gemstone count, gemstone placement, gemstone size relationships, gemstone cuts, setting types, borders, prongs, bezels, channels, bail, attachment points, chain structure, engravings, lettering, logos, raised and recessed relief, and structural layers.",
+    "Replace ONLY the original jewelry piece with the piece defined by the JEWELRY_REFERENCES. The references are the ABSOLUTE authority for the replacement object's identity and construction: silhouette, lettering, symbols/logos, stone locations, stone cuts, stone sizes, stone density, metal geometry, bail, bail opening, hinges, connectors, bezels, prongs, edges, thickness, front, side and back construction, raised and recessed surfaces, and structural proportions.",
+    "",
+    "CRITICAL — do NOT make a product shot. Render ONLY the portion of the replacement jewelry that the exact source camera would physically see:",
+    "- If SOURCE_FRAME is an extreme macro of only the bail, output an extreme macro of ONLY the replacement bail.",
+    "- If SOURCE_FRAME shows only an edge, show only the corresponding replacement edge.",
+    "- If SOURCE_FRAME shows a partial pendant, keep the replacement equally partial.",
+    "- If the piece is rotated ~25°, keep the replacement rotated ~25°. Composition beats logo readability — never rotate lettering upright for legibility.",
+    "- Preserve the same focus/DOF, and any foreground occlusion.",
+    "The final image should align closely if overlaid on SOURCE_FRAME. Only the jewelry identity changes — never the shot.",
+    "",
+    "BOUNDING-BOX / SCALE LOCK: the replacement occupies approximately the same region of the frame the original jewelry occupied; for partial shots, the same partial region. Never enlarge the piece to showcase detail.",
+    "",
+    "BAIL / CONNECTOR LOCK: treat MAIN BODY / BAIL / CONNECTOR-HINGE / CHAIN as distinct components. The replacement's bail is the SAME physical bail in every frame, using the reference's own bail geometry (outer silhouette, inner opening, width, height, thickness, stone coverage, edge thickness, attachment point, hinge). Position and rotate it to fit the source — but NEVER morph the replacement bail toward the original piece's bail, and never resize it to match the original's bail. Geometry comes from the REFERENCE; the SOURCE controls only camera + placement. (If the original bail is 30mm and the replacement is 20mm, keep the replacement's real 20mm geometry, just placed and rotated correctly.)",
+    "",
+    "DO NOT HALLUCINATE: if the visible source region needs a part of the piece that no reference shows, infer minimally. Never invent extra stones, prongs, hinges, engraving, lettering or decorative structures. If the source region is too abstract to identify confidently, reproduce the closest corresponding macro region rather than inventing a full front-facing pendant.",
+    "",
+    "GEOMETRY FIDELITY: STRICT. Source composition dominates, geometry cannot drift, and there is no beautification, reframing, added visibility or invented detail.",
     "",
     `PIECES: ${lines.join(" ")}`,
+    refLabels.length ? "" : null,
+    refLabels.length ? `REFERENCE VIEWS: ${refLabels.join("; ")}.` : null,
+    refLabels.length
+      ? "Identify which region of the piece SOURCE_FRAME actually shows, then reproduce that region using the best-matching labeled reference above. Use the other labeled references only to stay consistent with the same physical object."
+      : null,
+    preferred ? "" : null,
+    preferred
+      ? `PREFERRED ANGLE REFERENCE: prioritize the reference labeled "${preferred}" as the primary geometry match for this frame, while still obeying SOURCE_FRAME for camera, crop and placement.`
+      : null,
     "",
     "Do NOT redesign or simplify the jewelry. Do NOT invent, add, remove, or resize stones. Do NOT change stone shapes or randomize stone placement. Do NOT modify any jewelry that was not listed. Round stones stay round and individually seated; baguettes keep their long rectangular orientation; marquise keep pointed ends; princess stay square; emerald cuts keep the stepped rectangular form. Preserve mosaic / reverse-mosaic setting patterns — never flatten them into generic pavé.",
     "",
     "If a piece is a pendant only, replace only the pendant and keep the existing chain. If a chain only, replace only the chain and keep the existing pendant. If \"Pendant + Chain\", replace both.",
     "",
-    "Integrate each piece naturally onto the subject with physically correct scale, perspective, gravity, contact, contact shadows, reflections, occlusion and skin/clothing interaction. Respect layering: hands, hair, sleeves and clothing that were in front stay in front. Match the source lighting.",
-    "",
-    "The final result must look like the EXACT original photograph, except the subject was genuinely wearing the supplied jewelry during the original shoot — a real manufactured piece, not an AI approximation. No fake glow, no random glitter, no melted or warped metal, no floating jewelry.",
+    "Every unrelated detail from SOURCE_FRAME — subject identity, skin, hair, clothing, hands, environment — must be preserved exactly. Respect layering: whatever was in front stays in front. Match the source lighting, contact shadows and reflections.",
     cadActive ? "" : null,
-    cadActive ? CAD_AUTHORITY_TEXT : null,
+    cadActive
+      ? (cadRefNums.length
+        ? `${CAD_AUTHORITY_TEXT} CAD reference image(s): ${refListPhrase(cadRefNums)}.`
+        : CAD_AUTHORITY_TEXT)
+      : null,
+    correction ? "" : null,
+    correction,
     String(args.extra ?? "").trim() ? "" : null,
     String(args.extra ?? "").trim() || null,
   ]
@@ -223,6 +326,7 @@ function buildJewelryPrompt(args: { pieces: JewelryPiece[]; extra?: string }) {
 
   return prompt;
 }
+
 
 /** Reconstruction prompt for the Seedance reference-to-video pass. */
 function buildJewelryReconstructionPrompt(args: { extra?: string }) {
