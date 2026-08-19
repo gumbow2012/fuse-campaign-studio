@@ -1367,13 +1367,18 @@ export default function GenerationStudio() {
                       {lightbox.outputUrl ? (
                         <Button
                           variant="outline"
-                          asChild
+                          onClick={() =>
+                            void downloadAsset(
+                              lightbox.outputUrl as string,
+                              lightbox.id,
+                              lightbox.outputType,
+                            )
+                          }
                           className="w-full border-white/15 bg-white/[0.04]"
                         >
-                          <a href={lightbox.outputUrl} download target="_blank" rel="noreferrer">
-                            <Download size={15} className="mr-2" /> Download
-                          </a>
+                          <Download size={15} className="mr-2" /> Download
                         </Button>
+
                       ) : null}
                       <Button
                         variant="outline"
