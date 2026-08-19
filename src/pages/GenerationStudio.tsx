@@ -1257,6 +1257,30 @@ export default function GenerationStudio() {
               </div>
 
               <TabsContent value="gallery" className="mt-4">
+                {recentFailure ? (
+                  <div className="mb-4 rounded-xl border border-red-400/30 bg-red-500/10 px-4 py-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="text-xs font-medium text-red-200">Generation failed</p>
+                      <button
+                        type="button"
+                        onClick={() => setRecentFailure(null)}
+                        className="text-[11px] text-red-200/70 hover:text-red-100"
+                      >
+                        Dismiss
+                      </button>
+                    </div>
+                    {recentFailure.error ? (
+                      <details className="mt-2">
+                        <summary className="cursor-pointer text-[11px] text-red-200/70 hover:text-red-100">
+                          Technical details
+                        </summary>
+                        <pre className="mt-2 max-h-40 overflow-auto whitespace-pre-wrap break-words rounded-lg bg-black/40 p-3 text-[10px] leading-relaxed text-red-100/80">
+                          {recentFailure.error}
+                        </pre>
+                      </details>
+                    ) : null}
+                  </div>
+                ) : null}
                 {visibleGenerations.length ? (
                   <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-4">
                     {visibleGenerations.map((generation) => (
