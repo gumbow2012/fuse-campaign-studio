@@ -1,0 +1,390 @@
+import "jsr:@supabase/functions-js/edge-runtime.d.ts";
+
+import {
+  corsHeaders,
+  createAdminClient,
+  errorMessage,
+  json,
+  requireBuilderUser,
+} from "../_shared/supabase-admin.ts";
+import {
+  clampSeedanceDuration,
+  getFalPricing,
+  getFalQueueResult,
+  getFalQueueStatus,
+  getVideoModel,
+  IMAGE_MODEL,
+  submitImageJob,
+  submitVideoJob,
+  VERTICAL_VIDEO_ASPECT_RATIO,
+  videoFallbackUsdPerSecond,
+} from "../_shared/fal.ts";
+
+/**
+ * Generation Studio: standalone prompt-to-image / prompt-to-video generations.
+ * Fully additive — never touches execution_jobs, execution_steps, node_runs,
+ * the shared executor or the paid runner. Results live in `studio_generations`.
+ */
+
+const USD_PER_CREDIT = 0.098;
+const IMAGE_FALLBACK_USD = 0.15;
+
+type AdminClient = ReturnType<typeof createAdminClient>;
+
+function creditsFromUsd(usd: number | null | undefined) {
+  if (!usd || !Number.isFinite(usd) || usd <= 0) return null;
+  return Math.max(1, Math.ceil(usd / USD_PER_CREDIT));
+}
+
+async function estimateUsd(args: {
+  endpointId: string;
+  seconds?: number | null;
+  fallbackUsdPerSecond?: number | null;
+  fallbackFlatUsd?: number | null;
+}) {
+  try {
+    const pricing = await getFalPricing(args.endpointId);
+    if (pricing) {
+      const unit = String(pricing.unit ?? "").toLowerCase();
+      const quantity = unit.includes("second") ? Math.max(1, Number(args.seconds ?? 5)) : 1;
+      return Number((pricing.unit_price * quantity).toFixed(6));
+    }
+  } catch (_error) {
+    // fall through to static fallbacks below
+  }
+
+  if (args.fallbackUsdPerSecond && args.seconds) {
+    return Number((args.fallbackUsdPerSecond * args.seconds).toFixed(6));
+  }
+  return args.fallbackFlatUsd ?? null;
+}
+
+function extractOutput(payload: unknown): { url: string; type: "image" | "video" } | null {
+  const data = (payload as any)?.data ?? payload;
+  if (!data) return null;
+
+  const videoUrl = data?.video?.url ?? data?.videos?.[0]?.url ??
+    (typeof data?.video === "string" ? data.video : null);
+  if (videoUrl) return { url: String(videoUrl), type: "video" };
+
+  const imageUrl = data?.images?.[0]?.url ?? data?.image?.url ?? data?.output?.url;
+  if (imageUrl) return { url: String(imageUrl), type: "image" };
+
+  return null;
+}
+
+function serializeGeneration(row: any) {
+  return {
+    id: row.id,
+    status: row.status as "queued" | "running" | "complete" | "failed",
+    kind: row.kind ?? null,
+    prompt: row.prompt ?? null,
+    outputUrl: row.output_url ?? null,
+    outputType: row.output_type ?? null,
+    error: row.error_log ?? null,
+    estimatedCredits: row.estimated_credits ?? null,
+    estimatedCostUsd: row.estimated_cost_usd ? Number(row.estimated_cost_usd) : null,
+    providerModel: row.provider_model ?? null,
+    requestId: row.provider_request_id ?? null,
+    inputPayload: row.input_payload ?? null,
+    createdAt: row.created_at ?? null,
+    completedAt: row.completed_at ?? null,
+  };
+}
+
+type StartInput = {
+  kind?: string;
+  model?: string;
+  prompt?: string;
+  startImageUrl?: string;
+  endImageUrl?: string;
+  duration?: number | string;
+  resolution?: string;
+  generateAudio?: boolean;
+  aspectRatio?: string;
+};
+
+async function startGeneration(admin: AdminClient, args: { input: StartInput; userId: string }) {
+  const input = args.input;
+  const kind = input.kind === "video" ? "video" : "image";
+  const prompt = String(input.prompt ?? "").trim();
+  const startImageUrl = String(input.startImageUrl ?? "").trim();
+
+  if (!prompt) throw new Error("Add a prompt before generating");
+  if (!startImageUrl) throw new Error("Upload a start frame before generating");
+
+  const webhookBase =
+    `${Deno.env.get("SUPABASE_URL")}/functions/v1/generate-studio?callback=1&generationId=`;
+
+  const { data: inserted, error: insertError } = await admin
+    .from("studio_generations")
+    .insert({
+      user_id: args.userId,
+      status: "queued",
+      kind,
+      provider: "fal",
+      prompt,
+    })
+    .select("*")
+    .single();
+  if (insertError || !inserted) {
+    throw new Error(insertError?.message ?? "Could not start the generation");
+  }
+
+  const webhookUrl = `${webhookBase}${encodeURIComponent(inserted.id)}`;
+
+  try {
+    if (kind === "image") {
+      const estimatedCostUsd = await estimateUsd({
+        endpointId: IMAGE_MODEL,
+        fallbackFlatUsd: IMAGE_FALLBACK_USD,
+      });
+
+      const imageUrls = [startImageUrl, ...(input.endImageUrl ? [String(input.endImageUrl)] : [])];
+      const requestId = await submitImageJob({
+        prompt,
+        imageUrls,
+        aspectRatio: String(input.aspectRatio ?? VERTICAL_VIDEO_ASPECT_RATIO),
+        webhookUrl,
+      });
+
+      const { data: updated } = await admin
+        .from("studio_generations")
+        .update({
+          status: "running",
+          provider_model: IMAGE_MODEL,
+          provider_request_id: requestId,
+          estimated_cost_usd: estimatedCostUsd,
+          estimated_credits: creditsFromUsd(estimatedCostUsd),
+          input_payload: { prompt, image_urls: imageUrls },
+        })
+        .eq("id", inserted.id)
+        .select("*")
+        .single();
+
+      return serializeGeneration(updated ?? inserted);
+    }
+
+    const videoModel = getVideoModel(input.model);
+    const isKling3 = videoModel.family === "kling3";
+    const duration = clampSeedanceDuration(input.duration ?? (isKling3 ? 5 : undefined), videoModel);
+    const generateAudio = videoModel.supportsAudio ? input.generateAudio !== false : null;
+    const resolution = videoModel.resolutions?.includes(String(input.resolution ?? ""))
+      ? String(input.resolution)
+      : (videoModel.resolutions?.length ? "720p" : null);
+    const aspectRatio = videoModel.aspectRatios?.includes(String(input.aspectRatio ?? ""))
+      ? String(input.aspectRatio)
+      : VERTICAL_VIDEO_ASPECT_RATIO;
+    const endFrameUrl = input.endImageUrl ? String(input.endImageUrl).trim() : undefined;
+
+    const estimatedCostUsd = await estimateUsd({
+      endpointId: videoModel.endpointId,
+      seconds: duration,
+      fallbackUsdPerSecond: videoFallbackUsdPerSecond(videoModel, generateAudio) ?? null,
+    });
+
+    const requestId = await submitVideoJob({
+      prompt,
+      initImageUrl: startImageUrl,
+      ...(endFrameUrl ? { endFrameUrl } : {}),
+      modelKey: videoModel.key,
+      duration,
+      aspectRatio,
+      ...(resolution ? { resolution } : {}),
+      ...(generateAudio === null ? {} : { generateAudio }),
+      webhookUrl,
+    });
+
+    const { data: updated } = await admin
+      .from("studio_generations")
+      .update({
+        status: "running",
+        provider_model: videoModel.endpointId,
+        provider_request_id: requestId,
+        estimated_cost_usd: estimatedCostUsd,
+        estimated_credits: creditsFromUsd(estimatedCostUsd),
+        input_payload: {
+          prompt,
+          init_image: startImageUrl,
+          ...(endFrameUrl ? { end_frame_image: endFrameUrl } : {}),
+          video_model: videoModel.key,
+          duration,
+          ...(resolution ? { resolution } : {}),
+          ...(generateAudio === null ? {} : { generate_audio: generateAudio }),
+        },
+      })
+      .eq("id", inserted.id)
+      .select("*")
+      .single();
+
+    return serializeGeneration(updated ?? inserted);
+  } catch (error) {
+    const message = errorMessage(error);
+    await admin
+      .from("studio_generations")
+      .update({
+        status: "failed",
+        error_log: message.slice(0, 10000),
+        completed_at: new Date().toISOString(),
+      })
+      .eq("id", inserted.id);
+    throw error;
+  }
+}
+
+/** Poll fal for a generation still in flight and persist any terminal result. */
+async function syncGeneration(admin: AdminClient, row: any) {
+  if (row.status !== "running" && row.status !== "queued") return serializeGeneration(row);
+  if (!row.provider_request_id || !row.provider_model) return serializeGeneration(row);
+
+  try {
+    const status = await getFalQueueStatus(row.provider_model, row.provider_request_id);
+    const normalized = String(status ?? "").toUpperCase();
+    if (normalized !== "COMPLETED" && normalized !== "OK") return serializeGeneration(row);
+
+    const result = await getFalQueueResult(row.provider_model, row.provider_request_id);
+    const output = extractOutput(result);
+    if (!output) throw new Error("The provider finished without returning a file");
+
+    const { data: updated } = await admin
+      .from("studio_generations")
+      .update({
+        status: "complete",
+        output_url: output.url,
+        output_type: output.type,
+        completed_at: new Date().toISOString(),
+      })
+      .eq("id", row.id)
+      .select("*")
+      .single();
+
+    return serializeGeneration(updated ?? row);
+  } catch (error) {
+    const message = errorMessage(error);
+    const isTransient = /queue status lookup failed|fetch|network/i.test(message);
+    if (isTransient) return serializeGeneration(row);
+
+    const { data: updated } = await admin
+      .from("studio_generations")
+      .update({
+        status: "failed",
+        error_log: message.slice(0, 10000),
+        completed_at: new Date().toISOString(),
+      })
+      .eq("id", row.id)
+      .select("*")
+      .single();
+
+    return serializeGeneration(updated ?? row);
+  }
+}
+
+Deno.serve(async (req) => {
+  if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: corsHeaders });
+
+  const admin = createAdminClient();
+  const url = new URL(req.url);
+
+  // fal webhook callback (no auth; the generation id is the shared secret).
+  if (url.searchParams.get("callback") === "1") {
+    const generationId = url.searchParams.get("generationId");
+    if (!generationId) return json({ error: "Missing generationId" }, 400);
+
+    try {
+      const body = await req.json().catch(() => ({})) as {
+        request_id?: string;
+        status?: string;
+        payload?: unknown;
+        error?: string;
+      };
+
+      const { data: row } = await admin
+        .from("studio_generations")
+        .select("*")
+        .eq("id", generationId)
+        .maybeSingle();
+      if (!row) return json({ error: "Generation not found" }, 404);
+      if (body.request_id && row.provider_request_id && body.request_id !== row.provider_request_id) {
+        return json({ error: "Request mismatch" }, 400);
+      }
+      if (row.status === "complete" || row.status === "failed") return json({ ok: true });
+
+      const output = extractOutput(body.payload);
+      const failed = String(body.status ?? "").toUpperCase() === "ERROR" || (!output && !!body.error);
+
+      if (failed || !output) {
+        // Let the poller reconcile if the payload was simply unusable.
+        if (!body.error && !failed) return json({ ok: true });
+        await admin
+          .from("studio_generations")
+          .update({
+            status: "failed",
+            error_log: String(body.error ?? "Generation failed").slice(0, 10000),
+            completed_at: new Date().toISOString(),
+          })
+          .eq("id", row.id);
+        return json({ ok: true });
+      }
+
+      await admin
+        .from("studio_generations")
+        .update({
+          status: "complete",
+          output_url: output.url,
+          output_type: output.type,
+          completed_at: new Date().toISOString(),
+        })
+        .eq("id", row.id);
+
+      return json({ ok: true });
+    } catch (error) {
+      console.error("generate-studio callback failed:", errorMessage(error));
+      return json({ error: errorMessage(error) }, 500);
+    }
+  }
+
+  try {
+    const access = await requireBuilderUser(req, admin);
+    const user = access.user;
+    const body = await req.json().catch(() => ({})) as StartInput & {
+      action?: string;
+      generationId?: string;
+      limit?: number;
+    };
+    const action = body.action ?? (body.generationId ? "status" : "start");
+
+    if (action === "status") {
+      if (!body.generationId) throw new Error("generationId is required");
+      const { data: row, error } = await admin
+        .from("studio_generations")
+        .select("*")
+        .eq("id", body.generationId)
+        .eq("user_id", user.id)
+        .maybeSingle();
+      if (error) throw new Error(error.message);
+      if (!row) return json({ error: "Generation not found" }, 404);
+      return json({ generation: await syncGeneration(admin, row) });
+    }
+
+    if (action === "list") {
+      const limit = Math.min(50, Math.max(1, Number(body.limit ?? 20)));
+      const { data: rows, error } = await admin
+        .from("studio_generations")
+        .select("*")
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: false })
+        .limit(limit);
+      if (error) throw new Error(error.message);
+      return json({ generations: (rows ?? []).map(serializeGeneration) });
+    }
+
+    if (action !== "start") throw new Error(`Unsupported action: ${action}`);
+
+    const generation = await startGeneration(admin, { input: body, userId: user.id });
+    return json({ generation });
+  } catch (error) {
+    const message = errorMessage(error);
+    const status = /access required|authorization|Authentication|bearer/i.test(message) ? 401 : 400;
+    return json({ error: message }, status);
+  }
+});

@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { Link, NavLink, useNavigate } from "react-router-dom";
-import { ClipboardCheck, Home, Info, Layers3, Mail, RefreshCw, Star, UserRound, UsersRound } from "lucide-react";
+import { ClipboardCheck, Home, Info, Layers3, Mail, RefreshCw, Sparkles, Star, UserRound, UsersRound } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
@@ -179,6 +179,10 @@ export default function SiteShell({ children }: { children: ReactNode }) {
                 <NavLink to="/admin/templates" className={adminNavLinkClass}>
                   <Layers3 className="h-3.5 w-3.5" />
                   Admin Templates
+                </NavLink>
+                <NavLink to="/app/lab/studio" className={adminNavLinkClass}>
+                  <Sparkles className="h-3.5 w-3.5" />
+                  Generation Studio
                 </NavLink>
                 <NavLink to="/admin/audits" className={adminNavLinkClass}>
                   <ClipboardCheck className="h-3.5 w-3.5" />

@@ -623,6 +623,66 @@ export type Database = {
           },
         ]
       }
+      studio_generations: {
+        Row: {
+          completed_at: string | null
+          created_at: string
+          error_log: string | null
+          estimated_cost_usd: number | null
+          estimated_credits: number | null
+          id: string
+          input_payload: Json
+          kind: string
+          output_type: string | null
+          output_url: string | null
+          prompt: string | null
+          provider: string | null
+          provider_model: string | null
+          provider_request_id: string | null
+          status: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          completed_at?: string | null
+          created_at?: string
+          error_log?: string | null
+          estimated_cost_usd?: number | null
+          estimated_credits?: number | null
+          id?: string
+          input_payload?: Json
+          kind?: string
+          output_type?: string | null
+          output_url?: string | null
+          prompt?: string | null
+          provider?: string | null
+          provider_model?: string | null
+          provider_request_id?: string | null
+          status?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          completed_at?: string | null
+          created_at?: string
+          error_log?: string | null
+          estimated_cost_usd?: number | null
+          estimated_credits?: number | null
+          id?: string
+          input_payload?: Json
+          kind?: string
+          output_type?: string | null
+          output_url?: string | null
+          prompt?: string | null
+          provider?: string | null
+          provider_model?: string | null
+          provider_request_id?: string | null
+          status?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       templates: {
         Row: {
           ai_prompt: string | null

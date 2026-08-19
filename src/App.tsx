@@ -15,6 +15,7 @@ import AdminTemplateImport from "@/pages/AdminTemplateImport";
 import AdminTemplates from "@/pages/AdminTemplates";
 import FlowEmbed from "@/pages/FlowEmbed";
 import FlowTest from "@/pages/FlowTest";
+import GenerationStudio from "@/pages/GenerationStudio";
 import NanoRun from "@/pages/NanoRun";
 import TemplateCanvas from "@/pages/TemplateCanvas";
 import TemplateLab from "@/pages/TemplateLab";
@@ -90,6 +91,14 @@ const App = () => (
               element={
                 <BuilderRoute>
                   <TemplateCanvas />
+                </BuilderRoute>
+              }
+            />
+            <Route
+              path="/app/lab/studio"
+              element={
+                <BuilderRoute>
+                  <GenerationStudio />
                 </BuilderRoute>
               }
             />
