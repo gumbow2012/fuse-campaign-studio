@@ -290,6 +290,7 @@ export const VIDEO_MODELS: Record<VideoModelKey, VideoModelDefinition> = {
     resolutions: ["480p", "720p", "1080p", "4k"],
     aspectRatios: ["9:16", "16:9", "1:1", "4:3", "3:4", "21:9"],
     fallbackUsdPerSecond: 0.3024,
+    supportsMultiReference: true,
   },
   "seedance-2.0-fast": {
     key: "seedance-2.0-fast",
@@ -301,6 +302,7 @@ export const VIDEO_MODELS: Record<VideoModelKey, VideoModelDefinition> = {
     resolutions: ["480p", "720p", "1080p", "4k"],
     aspectRatios: ["9:16", "16:9", "1:1", "4:3", "3:4", "21:9"],
     fallbackUsdPerSecond: 0.2419,
+    supportsMultiReference: true,
   },
 };
 
@@ -427,4 +429,53 @@ export function referenceToVideoEndpoint(modelKey: unknown) {
   return key === "seedance-2.0-fast"
     ? SEEDANCE_FAST_REFERENCE_TO_VIDEO
     : SEEDANCE_REFERENCE_TO_VIDEO;
+}
+
+/**
+ * Seedance reference-to-video submit. Payload/endpoint mirror the known-good
+ * Outfit Swap reconstruction call; Outfit Swap itself is unchanged.
+ */
+export async function submitSeedanceReferenceVideoJob(args: {
+  modelKey: unknown;
+  prompt: string;
+  imageUrls: string[];
+  duration?: unknown;
+  resolution?: string | null;
+  aspectRatio?: string | null;
+  generateAudio?: boolean | null;
+  webhookUrl: string;
+}) {
+  const model = getVideoModel(args.modelKey);
+  if (model.family !== "seedance" || !model.supportsMultiReference) {
+    throw new Error(`${model.label} does not support multi-reference video`);
+  }
+
+  const urls: string[] = [];
+  for (const entry of args.imageUrls ?? []) {
+    const url = String(entry ?? "").trim();
+    if (url && !urls.includes(url)) urls.push(url);
+  }
+  if (urls.length < 2) throw new Error("Multi-reference video requires at least two images");
+
+  const endpointId = referenceToVideoEndpoint(model.key);
+  const duration = String(clampSeedanceDuration(args.duration ?? 5, model));
+  const resolution = model.resolutions?.includes(String(args.resolution ?? "").toLowerCase())
+    ? String(args.resolution).toLowerCase()
+    : "1080p";
+  const aspectRatio = model.aspectRatios?.includes(String(args.aspectRatio ?? ""))
+    ? String(args.aspectRatio)
+    : VERTICAL_VIDEO_ASPECT_RATIO;
+
+  const input: Record<string, unknown> = {
+    prompt: args.prompt,
+    reference_image_urls: urls,
+    image_urls: urls,
+    duration,
+    resolution,
+    aspect_ratio: aspectRatio,
+    generate_audio: args.generateAudio !== false,
+  };
+
+  const requestId = await submitFalJob(endpointId, input, args.webhookUrl);
+  return { requestId, endpointId, input };
 }
