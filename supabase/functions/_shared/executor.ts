@@ -1023,7 +1023,7 @@ export async function runGraphJob(admin: AdminClient, jobId: string) {
 
       if (node.node_type === "image_gen") {
         try {
-          const prompt = String(node.prompt_config?.prompt ?? "").trim();
+          const prompt = resolveNodePrompt(node, promptEdgesByTarget.get(node.id) ?? [], nodeMap);
           const referenceAsset = getNodeReferenceAsset(node, assetMap);
           const orderedInputs = orderedParamEntries
             .map(([, value]) => value.url)
@@ -1116,7 +1116,7 @@ export async function runGraphJob(admin: AdminClient, jobId: string) {
         }
       } else if (node.node_type === "video_gen") {
         try {
-          const prompt = String(node.prompt_config?.prompt ?? "").trim();
+          const prompt = resolveNodePrompt(node, promptEdgesByTarget.get(node.id) ?? [], nodeMap);
           const initImageUrl = params.get("init_image")?.url ??
             params.get("start_frame_image")?.url ??
             [...params.values()][0]?.url;
