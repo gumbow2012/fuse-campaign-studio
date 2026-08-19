@@ -1050,6 +1050,131 @@ export default function OutfitSwap() {
           </div>
         </div>
       </div>
+
+      {/* Full-size original ↔ swapped comparison */}
+      <Dialog
+        open={lightboxIndex !== null}
+        onOpenChange={(open) => !open && setLightboxIndex(null)}
+      >
+        <DialogContent className="max-w-6xl border-white/10 bg-[#05070f]/95 backdrop-blur-xl">
+          {(() => {
+            if (lightboxIndex === null) return null;
+            const index = lightboxIndex;
+            const swap = swaps[index];
+            const frame = frames[index];
+            if (!swap) return null;
+            const isApproved = approved.has(index);
+            return (
+              <>
+                <DialogHeader>
+                  <DialogTitle className="font-heading text-base text-foreground">
+                    {frame ? `Frame at ${frame.time.toFixed(2)}s` : `Frame ${index + 1}`}
+                  </DialogTitle>
+                </DialogHeader>
+                <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_260px]">
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <figure className="overflow-hidden rounded-2xl border border-white/10 bg-black/50">
+                      {frame ? (
+                        <img src={frame.url} alt="Original frame" className="max-h-[62vh] w-full object-contain" />
+                      ) : null}
+                      <figcaption className="px-3 py-2 text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
+                        Original
+                      </figcaption>
+                    </figure>
+                    <figure className="overflow-hidden rounded-2xl border border-cyan-200/30 bg-black/50">
+                      {swap.status === "complete" && swap.outputUrl ? (
+                        <img src={swap.outputUrl} alt="Swapped frame" className="max-h-[62vh] w-full object-contain" />
+                      ) : swap.status === "failed" || swap.status === "canceled" ? (
+                        <p className="p-3 text-xs text-red-300">{swap.error ?? "Generation failed"}</p>
+                      ) : (
+                        <div className="flex h-48 items-center justify-center">
+                          <Loader2 size={18} className="animate-spin text-cyan-200" />
+                        </div>
+                      )}
+                      <figcaption className="px-3 py-2 text-[10px] uppercase tracking-[0.14em] text-cyan-200/70">
+                        Swapped
+                      </figcaption>
+                    </figure>
+                  </div>
+
+                  <aside className="space-y-3">
+                    <div className="flex items-center justify-between gap-2 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2">
+                      <StatusPill generation={swap} />
+                      <span className="text-[11px] text-cyan-200/70">
+                        {costPreview(swap.estimatedCredits, swap.estimatedCostUsd)}
+                      </span>
+                    </div>
+                    <Button
+                      disabled={swap.status !== "complete"}
+                      onClick={() => toggleApproved(index)}
+                      className={cn(
+                        "w-full rounded-xl text-xs font-semibold",
+                        isApproved
+                          ? "bg-cyan-400/20 text-cyan-100 hover:bg-cyan-400/30"
+                          : "bg-[hsl(var(--primary))] text-primary-foreground hover:bg-[hsl(var(--primary))]/90",
+                      )}
+                    >
+                      <Check size={13} /> {isApproved ? "Approved" : "Approve"}
+                    </Button>
+                    <Button
+                      variant="outline"
+                      onClick={() => void swapFrame(index)}
+                      className="w-full rounded-xl border-white/15 bg-transparent text-xs"
+                    >
+                      <RefreshCw size={13} /> Regenerate
+                    </Button>
+                    {swap.outputUrl ? (
+                      <a
+                        href={swap.outputUrl}
+                        download
+                        target="_blank"
+                        rel="noreferrer"
+                        className="flex items-center justify-center gap-2 rounded-xl border border-white/15 bg-black/40 py-2 text-xs text-foreground/85 transition-colors hover:border-cyan-200/50 hover:text-cyan-100"
+                      >
+                        <Download size={13} /> Download
+                      </a>
+                    ) : null}
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        setLightboxIndex(null);
+                        void removeSwap(index);
+                      }}
+                      className="w-full rounded-xl border-white/15 bg-transparent text-xs hover:border-red-400/60 hover:text-red-300"
+                    >
+                      <Trash2 size={13} /> Remove
+                    </Button>
+                  </aside>
+                </div>
+              </>
+            );
+          })()}
+        </DialogContent>
+      </Dialog>
+
+      <AlertDialog open={cancelOpen} onOpenChange={setCancelOpen}>
+        <AlertDialogContent className="border-border bg-card">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="font-heading">Cancel this video?</AlertDialogTitle>
+            <AlertDialogDescription>
+              We'll stop tracking this generation and free up the studio. Credits already spent on the
+              job may not be refunded.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="border-border bg-secondary text-foreground">
+              Keep generating
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => void cancelReconstruction()}
+              className="bg-red-500/80 text-white hover:bg-red-500"
+            >
+              Cancel generation
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogFooter>
+      </AlertDialog>
+
     </SiteShell>
   );
 }
