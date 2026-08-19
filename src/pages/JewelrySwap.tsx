@@ -56,24 +56,71 @@ import {
 import { extractFrames, frameTimestamps, loadVideo, readMeta, type VideoMeta } from "@/lib/videoFrames";
 import { compressImageFile } from "@/lib/imageCompress";
 
-const GARMENT_TYPES = [
-  "Shirt / Top",
-  "Hoodie / Jacket",
-  "Pants",
-  "Shorts",
-  "Shoes",
-  "Hat",
-  "Sunglasses / Glasses",
-  "Accessory",
-  "Jewelry",
+const JEWELRY_TYPES = [
+  "Pendant",
+  "Chain",
+  "Pendant + Chain",
+  "Ring",
+  "Bracelet",
+  "Cuban Bracelet",
+  "Tennis Bracelet",
+  "Watch",
+  "Earrings",
+  "Stud Earrings",
+  "Hoop Earrings",
+  "Grillz",
+  "Necklace",
+  "Choker",
+  "Anklet",
+  "Brooch",
+  "Custom Piece",
   "Other",
 ];
 
+const AUTO_METAL = "Auto from reference";
+const METAL_OPTIONS = [
+  AUTO_METAL,
+  "10K Gold",
+  "14K Gold",
+  "18K Gold",
+  "22K Gold",
+  "White Gold",
+  "Yellow Gold",
+  "Rose Gold",
+  "Platinum",
+  "Sterling Silver",
+  "Stainless Steel",
+  "Titanium",
+  "Black Rhodium",
+  "Two-Tone",
+  "Three-Tone",
+  "Other",
+];
+
+const AUTO_STONE = "Auto from reference";
+const STONE_OPTIONS = [
+  AUTO_STONE,
+  "Natural Diamond",
+  "Lab Diamond",
+  "Moissanite",
+  "CZ",
+  "Emerald",
+  "Ruby",
+  "Sapphire",
+  "Onyx",
+  "Black Diamond",
+  "Colored Diamond",
+  "Gemstone",
+  "No Stones",
+];
+
+const QUALITY_OPTIONS = ["", "D–F", "G–H", "VS", "VVS", "SI", "Custom/Notes"];
+
 /**
  * V1 has no real subject detection, so we never fabricate "Person 1/2/3".
- * Each product carries its own target — room for real per-person thumbnails later.
+ * Each piece carries its own target — room for real per-person thumbnails later.
  */
-const APPLY_TO_OPTIONS = ["Main Subject", "Everyone"];
+const APPLY_TO_OPTIONS = ["Main subject", "Everyone"];
 const DEFAULT_APPLY_TO = APPLY_TO_OPTIONS[0];
 
 const VIDEO_MODELS = [
@@ -82,7 +129,37 @@ const VIDEO_MODELS = [
 ];
 
 type Frame = { time: number; url: string };
-type Piece = { url: string; name: string; type: string; label: string; person: string };
+/** One card = ONE physical piece, described by one or more reference angles. */
+type Piece = {
+  urls: string[];
+  name: string;
+  type: string;
+  metal: string;
+  stone: string;
+  quality: string;
+  width: string;
+  height: string;
+  depth: string;
+  weight: string;
+  cad: boolean;
+  person: string;
+  notes: string;
+};
+
+/** Compact, factual config line — never a fabricated accuracy score. */
+function pieceSummary(piece: Piece, frameCount: number) {
+  const parts = [
+    `${piece.type.toUpperCase()} REPLACEMENT`,
+    `CAD Authority: ${piece.cad ? "ON" : "OFF"}`,
+    `Metal: ${piece.metal === AUTO_METAL ? "Auto" : piece.metal}`,
+    `Stone: ${piece.stone === AUTO_STONE ? "Auto" : piece.stone}`,
+  ];
+  if (piece.quality) parts.push(`Quality: ${piece.quality}`);
+  parts.push(`References: ${piece.urls.length}`);
+  parts.push(`Source Frames: ${frameCount}`);
+  parts.push(piece.urls.length && frameCount ? "Ready to generate" : "Waiting on inputs");
+  return parts.join(" · ");
+}
 
 const SELECT_CLASS =
   "w-full rounded-lg border border-white/12 bg-black/40 px-2.5 py-1.5 text-xs text-foreground outline-none transition-colors hover:border-cyan-200/40 focus:border-cyan-200/60";
