@@ -6,11 +6,71 @@ export type { SwapGeneration };
 /** Which image model produced a swapped frame. */
 export type JewelryImageModel = "pro" | "nb2";
 
+/** A stored animation direction summary for a Kling clip. */
+export type AnimationDirectionSummary = {
+  shot?: string;
+  camera?: string;
+  focus?: string;
+  light?: string;
+  end?: string;
+};
+
 /** Jewelry Swap adds the image-model + preferred-angle metadata to each record. */
 export type JewelryGeneration = SwapGeneration & {
   imageModel?: JewelryImageModel | null;
   preferredRole?: string | null;
+  /** Animate stage: the chosen shot + its direction summary and full prompt. */
+  shotKey?: string | null;
+  shotLabel?: string | null;
+  cameraDirection?: string | null;
+  directionSummary?: AnimationDirectionSummary | null;
+  animationPrompt?: string | null;
 };
+
+/** Animate-stage camera direction options exposed in the UI. */
+export const CAMERA_DIRECTIONS = [
+  { value: "auto", label: "Auto — Jewelry Cinematic" },
+  { value: "hero_push", label: "Hero Push" },
+  { value: "extreme_macro", label: "Extreme Macro" },
+  { value: "surface_scan", label: "Surface Scan" },
+  { value: "edge_glide", label: "Edge Glide" },
+  { value: "micro_orbit", label: "Micro Orbit" },
+  { value: "rack_focus", label: "Rack Focus" },
+  { value: "overhead_descent", label: "Overhead Descent" },
+  { value: "chain_track", label: "Chain / Link Track" },
+  { value: "light_sweep", label: "Light Sweep" },
+  { value: "whip_transition", label: "Whip Transition" },
+  { value: "kaleidoscope", label: "Kaleidoscope Transition" },
+  { value: "custom", label: "Custom" },
+] as const;
+
+export type CameraDirection = (typeof CAMERA_DIRECTIONS)[number]["value"];
+
+/** Animate one approved frame with a camera direction (and optional custom text). */
+export async function animateJewelryFrame(args: {
+  imageUrl: string;
+  frameIndex: number;
+  frameTime: number;
+  cameraDirection: string;
+  customPrompt?: string | null;
+  setIndex: number;
+  setSize: number;
+  pieceTypes: string[];
+}) {
+  const data = await callJewelrySwap<{ generation: JewelryGeneration }>({
+    action: "animate_frame",
+    imageUrl: args.imageUrl,
+    frameIndex: args.frameIndex,
+    frameTime: args.frameTime,
+    cameraDirection: args.cameraDirection,
+    customPrompt: args.customPrompt ?? null,
+    setIndex: args.setIndex,
+    setSize: args.setSize,
+    pieceTypes: args.pieceTypes,
+  });
+  return data.generation;
+}
+
 
 
 /** Call the jewelry-swap edge function with a just-in-time session token. */
