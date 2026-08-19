@@ -75,6 +75,35 @@ function extractOutput(payload: unknown): { url: string; type: "image" | "video"
   return null;
 }
 
+/**
+ * Failure paths only: ask fal for the terminal result so validation errors
+ * (e.g. a 422 with a `detail` array naming the rejected field) end up in error_log
+ * instead of a bare "Unexpected status code: 422".
+ */
+async function providerFailureDetail(row: any): Promise<string | null> {
+  if (!row?.provider_model || !row?.provider_request_id) return null;
+  try {
+    const result = await getFalQueueResult(row.provider_model, row.provider_request_id);
+    if (!result) return null;
+    const detail = (result as any)?.detail ?? (result as any)?.error ?? result;
+    try {
+      return typeof detail === "string" ? detail : JSON.stringify(detail);
+    } catch {
+      return String(detail);
+    }
+  } catch (error) {
+    // describeFalError already embeds the fal status + response body here.
+    return errorMessage(error);
+  }
+}
+
+/** Bare provider codes carry no diagnostic value on their own; enrich them. */
+function combineFailureMessage(base: string, detail: string | null) {
+  const trimmed = (detail ?? "").trim();
+  if (!trimmed || base.includes(trimmed)) return base.slice(0, 10000);
+  return `${base}\n\nProvider detail: ${trimmed}`.slice(0, 10000);
+}
+
 function serializeGeneration(row: any) {
   return {
     id: row.id,
@@ -330,11 +359,13 @@ async function syncGeneration(admin: AdminClient, row: any) {
     const isTransient = /queue status lookup failed|fetch|network/i.test(message);
     if (isTransient) return serializeGeneration(row);
 
+    const detail = await providerFailureDetail(row);
+
     const { data: updated } = await admin
       .from("studio_generations")
       .update({
         status: "failed",
-        error_log: message.slice(0, 10000),
+        error_log: combineFailureMessage(message, detail),
         completed_at: new Date().toISOString(),
       })
       .eq("id", row.id)
@@ -381,11 +412,15 @@ Deno.serve(async (req) => {
       if (failed || !output) {
         // Let the poller reconcile if the payload was simply unusable.
         if (!body.error && !failed) return json({ ok: true });
+        const detail = await providerFailureDetail(row);
         await admin
           .from("studio_generations")
           .update({
             status: "failed",
-            error_log: String(body.error ?? "Generation failed").slice(0, 10000),
+            error_log: combineFailureMessage(
+              String(body.error ?? "Generation failed"),
+              detail,
+            ),
             completed_at: new Date().toISOString(),
           })
           .eq("id", row.id);

@@ -589,6 +589,38 @@ export default function GenerationStudio() {
     }
   }, [generations, loadQueue]);
 
+  /**
+   * Failed tiles are hidden from the gallery, so surface the reason once —
+   * compact headline, provider detail tucked behind an expander.
+   */
+  const [recentFailure, setRecentFailure] = useState<{ id: string; error: string | null } | null>(
+    null,
+  );
+  const seenStatusRef = useRef<Map<string, string>>(new Map());
+
+  useEffect(() => {
+    const seen = seenStatusRef.current;
+    let latest: Generation | null = null;
+    for (const entry of generations) {
+      const previous = seen.get(entry.id);
+      seen.set(entry.id, entry.status);
+      if (entry.status === "failed" && previous && previous !== "failed") latest = entry;
+    }
+    if (!latest) return;
+    setRecentFailure({ id: latest.id, error: latest.error ?? null });
+    toast.error("Generation failed", {
+      description: "See “Technical details” above the gallery for the provider reason.",
+    });
+  }, [generations]);
+
+  useEffect(() => {
+    if (recentFailure && !generations.some((entry) => entry.id === recentFailure.id)) {
+      setRecentFailure(null);
+    }
+  }, [generations, recentFailure]);
+
+
+
 
 
   const addFiles = useCallback(
@@ -1225,6 +1257,30 @@ export default function GenerationStudio() {
               </div>
 
               <TabsContent value="gallery" className="mt-4">
+                {recentFailure ? (
+                  <div className="mb-4 rounded-xl border border-red-400/30 bg-red-500/10 px-4 py-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="text-xs font-medium text-red-200">Generation failed</p>
+                      <button
+                        type="button"
+                        onClick={() => setRecentFailure(null)}
+                        className="text-[11px] text-red-200/70 hover:text-red-100"
+                      >
+                        Dismiss
+                      </button>
+                    </div>
+                    {recentFailure.error ? (
+                      <details className="mt-2">
+                        <summary className="cursor-pointer text-[11px] text-red-200/70 hover:text-red-100">
+                          Technical details
+                        </summary>
+                        <pre className="mt-2 max-h-40 overflow-auto whitespace-pre-wrap break-words rounded-lg bg-black/40 p-3 text-[10px] leading-relaxed text-red-100/80">
+                          {recentFailure.error}
+                        </pre>
+                      </details>
+                    ) : null}
+                  </div>
+                ) : null}
                 {visibleGenerations.length ? (
                   <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-4">
                     {visibleGenerations.map((generation) => (
