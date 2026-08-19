@@ -628,15 +628,37 @@ export default function GenerationStudio() {
         url: entry.outputUrl as string,
         type: entry.outputType === "video" ? "video" : "image",
         generationId: entry.id,
+        createdAt: entry.createdAt,
       }));
-    const uploads = library.map((url) => ({
+    const uploads = library.map((url, index) => ({
       id: `upload:${url}`,
       url,
       type: "image" as const,
       generationId: null as string | null,
+      // Uploads have no timestamp — the store is newest-first, so use its order.
+      createdAt: null as string | null,
+      order: index,
     }));
     return { outputs, uploads };
   }, [generations, library]);
+
+  /** Client-side type filter + created-at sort shared by both library grids. */
+  const arrangeAssets = useCallback(
+    <T extends { type: string; createdAt: string | null; order?: number }>(items: T[]) => {
+      const filtered =
+        assetTypeFilter === "all" ? items : items.filter((item) => item.type === assetTypeFilter);
+      const sorted = [...filtered].sort((a, b) => {
+        const left = a.createdAt ? Date.parse(a.createdAt) : -(a.order ?? 0);
+        const right = b.createdAt ? Date.parse(b.createdAt) : -(b.order ?? 0);
+        return assetSort === "newest" ? right - left : left - right;
+      });
+      return sorted;
+    },
+    [assetSort, assetTypeFilter],
+  );
+
+  const visibleOutputs = useMemo(() => arrangeAssets(assets.outputs), [arrangeAssets, assets.outputs]);
+  const visibleUploads = useMemo(() => arrangeAssets(assets.uploads), [arrangeAssets, assets.uploads]);
 
   const toggleSelect = (id: string, ids: string[], shiftKey: boolean) => {
     setSelected((prev) => {
@@ -660,19 +682,33 @@ export default function GenerationStudio() {
   const bulkDownload = () => {
     if (!selectedAssets.length) return;
     selectedAssets.forEach((asset, index) => {
-      setTimeout(() => {
-        const link = document.createElement("a");
-        link.href = asset.url;
-        link.download = "";
-        link.target = "_blank";
-        link.rel = "noreferrer";
-        document.body.appendChild(link);
-        link.click();
-        link.remove();
-      }, index * 350);
+      setTimeout(() => void downloadAsset(asset.url, asset.generationId ?? `ref-${index + 1}`, asset.type), index * 350);
     });
     toast.success(`Downloading ${selectedAssets.length} asset${selectedAssets.length > 1 ? "s" : ""}`);
   };
+
+  /** Images only — videos can't be reference frames. Respects the 15-max. */
+  const addSelectedToReferences = () => {
+    const urls = selectedAssets.filter((asset) => asset.type === "image").map((asset) => asset.url);
+    if (!urls.length) {
+      toast.message("Select at least one image to use as a reference");
+      return;
+    }
+    let added = 0;
+    setReferences((prev) => {
+      const next = [...prev];
+      for (const url of urls) {
+        if (next.length >= MAX_REFERENCES) break;
+        if (next.some((entry) => entry.url === url)) continue;
+        next.push({ url, label: "" });
+        added += 1;
+      }
+      return next;
+    });
+    if (added) toast.success(`${added} added to references`);
+    else toast.message(`Up to ${MAX_REFERENCES} reference images`);
+  };
+
 
   const deleteSelected = async () => {
     const generationIds = selectedAssets
