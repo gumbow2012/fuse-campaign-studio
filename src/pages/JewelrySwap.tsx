@@ -1729,6 +1729,15 @@ export default function JewelrySwap() {
                   )}
                   Add jewelry piece
                 </button>
+                <button
+                  type="button"
+                  onClick={() => openPicker({ kind: "piece" })}
+                  className="flex w-full items-center justify-center gap-2 rounded-2xl border border-white/12 bg-black/25 py-3 text-xs text-foreground/80 transition-colors hover:border-cyan-200/50"
+                >
+                  <ImageIcon size={13} className="text-cyan-200" />
+                  Choose from library
+                </button>
+
               </div>
 
               {/* Config summary — real settings only, never a fake accuracy score. */}
