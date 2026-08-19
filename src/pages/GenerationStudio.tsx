@@ -1342,18 +1342,25 @@ export default function GenerationStudio() {
                         </span>
                         <div className="flex flex-wrap gap-2">
                           {recipe.urls.map((url, index) => (
-                            <div
+                            <button
+                              type="button"
                               key={`${url}-${index}`}
-                              className="relative h-14 w-14 overflow-hidden rounded-lg border border-white/12"
+                              onClick={() => addSourceReference(url)}
+                              title="Add this reference to the stack"
+                              className="group/ref relative h-14 w-14 overflow-hidden rounded-lg border border-white/12 transition-colors hover:border-cyan-200/60"
                             >
                               <img src={url} alt={`Reference ${index + 1}`} className="h-full w-full object-cover" />
-                              <span className="absolute inset-x-0 bottom-0 bg-black/75 text-center text-[9px] font-semibold uppercase text-cyan-100">
+                              <span className="absolute inset-0 hidden items-center justify-center bg-black/70 text-[10px] font-semibold text-cyan-100 group-hover/ref:flex">
+                                + Add
+                              </span>
+                              <span className="absolute inset-x-0 bottom-0 bg-black/75 text-center text-[9px] font-semibold uppercase text-cyan-100 group-hover/ref:hidden">
                                 Ref {index + 1}
                               </span>
-                            </div>
+                            </button>
                           ))}
                         </div>
                       </div>
+
                     ) : null}
 
                     <div className="mt-auto space-y-2 border-t border-white/10 pt-4">
