@@ -22,6 +22,7 @@ import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
+import { IMAGE_FLAT_USD, costPreview, creditsFromUsd, resolutionMultiplier } from "@/lib/costEstimate";
 import { uploadRunInputFile } from "@/services/runInputUpload";
 import { callOutfitSwap, type SwapGeneration } from "@/services/outfitSwap";
 import { extractFrames, frameTimestamps, loadVideo, readMeta, type VideoMeta } from "@/lib/videoFrames";
@@ -39,15 +40,20 @@ const GARMENT_TYPES = [
   "Other",
 ];
 
-const PERSON_OPTIONS = ["Person 1", "Person 2", "Person 3", "Everyone"];
+/**
+ * V1 has no real subject detection, so we never fabricate "Person 1/2/3".
+ * Each product carries its own target — room for real per-person thumbnails later.
+ */
+const APPLY_TO_OPTIONS = ["Main Subject", "Everyone"];
+const DEFAULT_APPLY_TO = APPLY_TO_OPTIONS[0];
 
 const VIDEO_MODELS = [
-  { key: "seedance-2.0", label: "Seedance 2.0" },
-  { key: "seedance-2.0-fast", label: "Seedance 2.0 Fast" },
+  { key: "seedance-2.0", label: "Seedance 2.0", usdPerSecond: 0.3024 },
+  { key: "seedance-2.0-fast", label: "Seedance 2.0 Fast", usdPerSecond: 0.2419 },
 ];
 
 type Frame = { time: number; url: string };
-type Garment = { url: string; type: string; label: string };
+type Garment = { url: string; name: string; type: string; label: string; person: string };
 
 const SELECT_CLASS =
   "w-full rounded-lg border border-white/12 bg-black/40 px-2.5 py-1.5 text-xs text-foreground outline-none transition-colors hover:border-cyan-200/40 focus:border-cyan-200/60";
@@ -117,7 +123,6 @@ export default function OutfitSwap() {
 
   const [garments, setGarments] = useState<Garment[]>([]);
   const [uploadingGarment, setUploadingGarment] = useState(false);
-  const [person, setPerson] = useState("Person 1");
   const [extraPrompt, setExtraPrompt] = useState("");
 
   const [swaps, setSwaps] = useState<Record<number, SwapGeneration>>({});
@@ -125,7 +130,7 @@ export default function OutfitSwap() {
   const [swapping, setSwapping] = useState(false);
 
   const [videoModel, setVideoModel] = useState("seedance-2.0");
-  const [generateAudio, setGenerateAudio] = useState(true);
+  const [preserveAudio, setPreserveAudio] = useState(true);
   const [resolution, setResolution] = useState("1080p");
   const [reconstruction, setReconstruction] = useState<SwapGeneration | null>(null);
   const [reconstructing, setReconstructing] = useState(false);
@@ -188,7 +193,13 @@ export default function OutfitSwap() {
     try {
       const uploaded: Garment[] = [];
       for (const file of files) {
-        uploaded.push({ url: await uploadRunInputFile(file), type: GARMENT_TYPES[0], label: "" });
+        uploaded.push({
+          url: await uploadRunInputFile(file),
+          name: file.name,
+          type: GARMENT_TYPES[0],
+          label: "",
+          person: DEFAULT_APPLY_TO,
+        });
       }
       setGarments((prev) => [...prev, ...uploaded].slice(0, 14));
     } catch (error) {
@@ -249,7 +260,8 @@ export default function OutfitSwap() {
         action: "swap_frame",
         sourceFrameUrl: frame.url,
         garments,
-        person,
+        // Per-product targets travel with each garment; this is only a fallback.
+        person: garments[0]?.person ?? DEFAULT_APPLY_TO,
         frameIndex,
         frameTime: frame.time,
         aspectRatio: meta?.aspectRatio,
@@ -263,7 +275,7 @@ export default function OutfitSwap() {
         return next;
       });
     },
-    [frames, garments, person, meta, extraPrompt],
+    [frames, garments, meta, extraPrompt],
   );
 
   const runSelectedSwaps = useCallback(async () => {
@@ -315,6 +327,23 @@ export default function OutfitSwap() {
     [approved, swaps],
   );
 
+  const videoDuration = useMemo(
+    () => Math.min(15, Math.max(4, Math.round(meta?.duration ?? 5))),
+    [meta],
+  );
+
+  /* ------------------------- Live dollar/credit preview --------------------- */
+
+  const swapCostUsd = useMemo(
+    () => IMAGE_FLAT_USD * resolutionMultiplier("2K") * Math.max(0, selectedFrames.size),
+    [selectedFrames],
+  );
+
+  const videoCostUsd = useMemo(() => {
+    const perSecond = VIDEO_MODELS.find((entry) => entry.key === videoModel)?.usdPerSecond ?? 0;
+    return perSecond * videoDuration * resolutionMultiplier(resolution);
+  }, [videoModel, videoDuration, resolution]);
+
   const reconstruct = useCallback(async () => {
     if (!approvedUrls.length) {
       toast.error("Approve at least one swapped frame first");
@@ -322,26 +351,27 @@ export default function OutfitSwap() {
     }
     setReconstructing(true);
     try {
-      const duration = Math.min(15, Math.max(4, Math.round(meta?.duration ?? 5)));
       const data = await callOutfitSwap<{ generation: SwapGeneration }>({
         action: "reconstruct",
         frameUrls: approvedUrls,
         garments,
         model: videoModel,
-        duration,
+        duration: videoDuration,
         resolution,
         aspectRatio: meta?.aspectRatio,
-        generateAudio,
+        // Keeps the uploaded clip's own audio on the rebuilt video.
+        preserveAudio,
+        generateAudio: preserveAudio,
         extraPrompt,
       });
       setReconstruction(data.generation);
-      toast.success("Reconstruction queued");
+      toast.success("Video generation queued");
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Could not start the reconstruction");
+      toast.error(error instanceof Error ? error.message : "Could not start the video");
     } finally {
       setReconstructing(false);
     }
-  }, [approvedUrls, garments, videoModel, resolution, generateAudio, meta, extraPrompt]);
+  }, [approvedUrls, garments, videoModel, resolution, preserveAudio, meta, extraPrompt, videoDuration]);
 
   const swapEntries = useMemo(
     () =>
@@ -461,49 +491,83 @@ export default function OutfitSwap() {
                 {garments.map((garment, index) => (
                   <div
                     key={`${garment.url}-${index}`}
-                    className="flex gap-3 rounded-2xl border border-white/10 bg-black/25 p-2.5"
+                    className="rounded-2xl border border-white/10 bg-black/25 p-2.5"
                   >
-                    <div className="relative h-20 w-16 shrink-0 overflow-hidden rounded-xl border border-white/10 bg-black/50">
-                      <img src={garment.url} alt={`Reference ${index + 1}`} className="h-full w-full object-cover" />
-                      <span className="absolute left-1 top-1 rounded bg-black/80 px-1 text-[9px] font-semibold text-cyan-100">
-                        REF {index + 2}
-                      </span>
-                    </div>
-                    <div className="min-w-0 flex-1 space-y-2">
-                      <select
-                        value={garment.type}
-                        onChange={(event) =>
-                          setGarments((prev) =>
-                            prev.map((item, i) => (i === index ? { ...item, type: event.target.value } : item)),
-                          )
-                        }
-                        className={SELECT_CLASS}
+                    <div className="flex gap-3">
+                      <div className="relative h-20 w-16 shrink-0 overflow-hidden rounded-xl border border-white/10 bg-black/50">
+                        <img
+                          src={garment.url}
+                          alt={garment.name || `Reference ${index + 1}`}
+                          className="h-full w-full object-cover"
+                        />
+                        <span className="absolute left-1 top-1 rounded bg-black/80 px-1 text-[9px] font-semibold text-cyan-100">
+                          REF {index + 2}
+                        </span>
+                      </div>
+                      <div className="min-w-0 flex-1 space-y-2">
+                        <p className="truncate text-[11px] font-medium text-foreground" title={garment.name}>
+                          {garment.name || `Product ${index + 1}`}
+                        </p>
+                        <div>
+                          <label className="mb-1 block text-[10px] uppercase tracking-[0.14em] text-cyan-200/70">
+                            Type
+                          </label>
+                          <select
+                            value={garment.type}
+                            onChange={(event) =>
+                              setGarments((prev) =>
+                                prev.map((item, i) => (i === index ? { ...item, type: event.target.value } : item)),
+                              )
+                            }
+                            className={SELECT_CLASS}
+                          >
+                            {GARMENT_TYPES.map((type) => (
+                              <option key={type} value={type}>
+                                {type}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        <div>
+                          <label className="mb-1 block text-[10px] uppercase tracking-[0.14em] text-cyan-200/70">
+                            Apply to
+                          </label>
+                          <select
+                            value={garment.person}
+                            onChange={(event) =>
+                              setGarments((prev) =>
+                                prev.map((item, i) => (i === index ? { ...item, person: event.target.value } : item)),
+                              )
+                            }
+                            className={SELECT_CLASS}
+                          >
+                            {APPLY_TO_OPTIONS.map((option) => (
+                              <option key={option} value={option}>
+                                {option}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        <Input
+                          value={garment.label}
+                          onChange={(event) =>
+                            setGarments((prev) =>
+                              prev.map((item, i) => (i === index ? { ...item, label: event.target.value } : item)),
+                            )
+                          }
+                          placeholder="Optional label"
+                          className="h-8 rounded-lg border-white/12 bg-black/40 text-xs"
+                        />
+                      </div>
+                      <button
+                        type="button"
+                        aria-label="Remove product"
+                        onClick={() => setGarments((prev) => prev.filter((_, i) => i !== index))}
+                        className="self-start rounded-lg border border-white/15 bg-black/50 p-1.5 text-foreground/70 transition-colors hover:border-red-400/60 hover:text-red-300"
                       >
-                        {GARMENT_TYPES.map((type) => (
-                          <option key={type} value={type}>
-                            {type}
-                          </option>
-                        ))}
-                      </select>
-                      <Input
-                        value={garment.label}
-                        onChange={(event) =>
-                          setGarments((prev) =>
-                            prev.map((item, i) => (i === index ? { ...item, label: event.target.value } : item)),
-                          )
-                        }
-                        placeholder="Optional label"
-                        className="h-8 rounded-lg border-white/12 bg-black/40 text-xs"
-                      />
+                        <X size={12} />
+                      </button>
                     </div>
-                    <button
-                      type="button"
-                      aria-label="Remove reference"
-                      onClick={() => setGarments((prev) => prev.filter((_, i) => i !== index))}
-                      className="self-start rounded-lg border border-white/15 bg-black/50 p-1.5 text-foreground/70 transition-colors hover:border-red-400/60 hover:text-red-300"
-                    >
-                      <X size={12} />
-                    </button>
                   </div>
                 ))}
                 <button
@@ -520,17 +584,7 @@ export default function OutfitSwap() {
                 </button>
               </div>
 
-              <div className="mt-4 space-y-2">
-                <label className="text-[11px] font-semibold uppercase tracking-[0.14em] text-cyan-200/70">
-                  Apply to
-                </label>
-                <select value={person} onChange={(event) => setPerson(event.target.value)} className={SELECT_CLASS}>
-                  {PERSON_OPTIONS.map((option) => (
-                    <option key={option} value={option}>
-                      {option}
-                    </option>
-                  ))}
-                </select>
+              <div className="mt-4">
                 <Textarea
                   value={extraPrompt}
                   onChange={(event) => setExtraPrompt(event.target.value)}
@@ -540,11 +594,7 @@ export default function OutfitSwap() {
               </div>
             </SectionCard>
 
-            <SectionCard
-              step={5}
-              title="Video reconstruction"
-              hint="Runs once, using the approved frames as references."
-            >
+            <SectionCard step={5} title="Video generation" hint="Your clip, rebuilt in the new wardrobe.">
               <div className="space-y-3">
                 <div className="grid grid-cols-2 gap-2">
                   <div>
@@ -580,31 +630,69 @@ export default function OutfitSwap() {
                     </select>
                   </div>
                 </div>
+
                 <button
                   type="button"
-                  aria-pressed={generateAudio}
-                  onClick={() => setGenerateAudio((prev) => !prev)}
+                  role="switch"
+                  aria-checked={preserveAudio}
+                  onClick={() => setPreserveAudio((prev) => !prev)}
                   className={cn(
-                    "w-full rounded-xl border px-4 py-2 text-xs font-medium transition-colors",
-                    generateAudio
+                    "flex w-full items-center justify-between gap-3 rounded-xl border px-4 py-2.5 text-xs font-medium transition-colors",
+                    preserveAudio
                       ? "border-cyan-200/60 bg-cyan-400/15 text-cyan-100"
                       : "border-white/12 bg-white/[0.03] text-foreground/70 hover:border-cyan-200/40",
                   )}
                 >
-                  {generateAudio ? "Sound on" : "Sound off"}
+                  <span>Preserve original audio</span>
+                  <span
+                    className={cn(
+                      "relative h-4 w-8 shrink-0 rounded-full transition-colors",
+                      preserveAudio ? "bg-cyan-300/80" : "bg-white/15",
+                    )}
+                  >
+                    <span
+                      className={cn(
+                        "absolute top-0.5 h-3 w-3 rounded-full bg-black transition-all",
+                        preserveAudio ? "left-[18px]" : "left-0.5",
+                      )}
+                    />
+                  </span>
                 </button>
-                <p className="text-[11px] text-muted-foreground">
-                  Inherits the source aspect ratio ({meta?.aspectRatio ?? "—"}) and duration (
-                  {meta ? `${Math.min(15, Math.max(4, Math.round(meta.duration)))}s` : "—"}).
+
+                <dl className="grid grid-cols-3 gap-2 text-center text-[10px]">
+                  {[
+                    ["Aspect", meta?.aspectRatio ?? "—"],
+                    ["Duration", meta ? `${videoDuration}s` : "—"],
+                    ["Approved", `${approvedUrls.length}`],
+                  ].map(([label, value]) => (
+                    <div key={label} className="rounded-xl border border-white/10 bg-black/30 px-2 py-1.5">
+                      <dt className="uppercase tracking-[0.14em] text-muted-foreground">{label}</dt>
+                      <dd className="mt-0.5 text-xs font-medium text-foreground">{value}</dd>
+                    </div>
+                  ))}
+                </dl>
+
+                <p className="text-[11px] font-medium text-cyan-100">
+                  {costPreview(creditsFromUsd(videoCostUsd), videoCostUsd)}
                 </p>
+
                 <Button
                   onClick={reconstruct}
                   disabled={reconstructing || !approvedUrls.length}
                   className="w-full rounded-xl bg-[hsl(var(--primary))] py-5 font-semibold text-primary-foreground hover:bg-[hsl(var(--primary))]/90"
                 >
                   {reconstructing ? <Loader2 size={15} className="animate-spin" /> : <Film size={15} />}
-                  Rebuild video ({approvedUrls.length} approved)
+                  {approvedUrls.length
+                    ? `Generate video · ${approvedUrls.length} approved frame${
+                        approvedUrls.length === 1 ? "" : "s"
+                      }`
+                    : "Generate video"}
                 </Button>
+                {approvedUrls.length ? null : (
+                  <p className="text-[11px] text-muted-foreground">
+                    Approve at least one swapped frame to continue.
+                  </p>
+                )}
               </div>
             </SectionCard>
           </div>
@@ -683,6 +771,11 @@ export default function OutfitSwap() {
                   </div>
                   <p className="mt-2 text-[11px] text-muted-foreground">
                     Only the frames you pick become generations — extraction itself is free.
+                    {selectedFrames.size ? (
+                      <span className="ml-1 font-medium text-cyan-100">
+                        {costPreview(creditsFromUsd(swapCostUsd), swapCostUsd)}
+                      </span>
+                    ) : null}
                   </p>
                 </>
               ) : (
@@ -711,7 +804,12 @@ export default function OutfitSwap() {
                           <span className="text-[11px] text-muted-foreground">
                             {frame ? `${frame.time.toFixed(2)}s` : `Frame ${index + 1}`}
                           </span>
-                          <StatusPill generation={swap} />
+                          <span className="flex items-center gap-2">
+                            <span className="text-[10px] text-cyan-200/70">
+                              {costPreview(swap.estimatedCredits, swap.estimatedCostUsd)}
+                            </span>
+                            <StatusPill generation={swap} />
+                          </span>
                         </div>
                         <div className="grid grid-cols-2 gap-2">
                           <div className="overflow-hidden rounded-xl border border-white/10 bg-black/40">
@@ -794,7 +892,7 @@ export default function OutfitSwap() {
                   <div className="flex items-center justify-between gap-2">
                     <StatusPill generation={reconstruction} />
                     <span className="text-[11px] text-cyan-200/70">
-                      {reconstruction.estimatedCredits ? `~${reconstruction.estimatedCredits} credits` : "—"}
+                      {costPreview(reconstruction.estimatedCredits, reconstruction.estimatedCostUsd)}
                     </span>
                   </div>
                   {reconstruction.status === "complete" && reconstruction.outputUrl ? (

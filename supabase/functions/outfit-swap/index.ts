@@ -108,7 +108,7 @@ function cleanUrls(value: unknown) {
   return urls;
 }
 
-type GarmentReference = { url?: string; type?: string; label?: string };
+type GarmentReference = { url?: string; type?: string; label?: string; person?: string };
 
 /**
  * Wardrobe edit prompt: the source frame is authoritative, only the supplied
@@ -119,20 +119,31 @@ function buildSwapPrompt(args: {
   person: string;
   extra?: string;
 }) {
-  const target = args.person && args.person.toLowerCase() !== "everyone"
-    ? `Apply the wardrobe change to ${args.person} only; leave all other people untouched.`
-    : "Apply the wardrobe change to every person in the frame.";
+  const targetPhrase = (value: string) =>
+    value.toLowerCase() === "everyone"
+      ? "on every person in the frame"
+      : "on the main subject only, leaving all other people untouched";
 
+  const fallbackTarget = String(args.person ?? "Main Subject").trim() || "Main Subject";
+
+  // Each product carries its own target; there is no global subject selection.
   const instructions = args.garments
     .map((garment, index) => {
       const refNumber = index + 2; // image 1 is the source frame
       const type = String(garment.type ?? "garment").trim() || "garment";
       const label = String(garment.label ?? "").trim();
+      const person = String(garment.person ?? "").trim() || fallbackTarget;
       return `Replace the ${type.toLowerCase()} with the product shown in reference image ${refNumber}${
         label ? ` (${label})` : ""
-      }.`;
+      } ${targetPhrase(person)}.`;
     })
     .join(" ");
+
+  const target = args.garments.some(
+    (garment) => String(garment.person ?? fallbackTarget).toLowerCase() === "everyone",
+  )
+    ? "Leave every person and garment not named above exactly as in image 1."
+    : "Leave every other person in the frame exactly as in image 1.";
 
   const categories = args.garments
     .map((garment) => String(garment.type ?? "").trim().toLowerCase())

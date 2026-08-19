@@ -9,6 +9,7 @@ export type SwapGeneration = {
   outputType: string | null;
   error: string | null;
   estimatedCredits: number | null;
+  estimatedCostUsd: number | null;
   providerModel: string | null;
   frameIndex: number | null;
   frameTime: number | null;

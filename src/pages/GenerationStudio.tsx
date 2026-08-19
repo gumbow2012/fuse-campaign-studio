@@ -48,8 +48,12 @@ import { supabase } from "@/integrations/supabase/client";
 import { uploadRunInputFile } from "@/services/runInputUpload";
 import { cn } from "@/lib/utils";
 
-const USD_PER_CREDIT = 0.098;
-const IMAGE_FALLBACK_USD = 0.15;
+import {
+  IMAGE_FLAT_USD as IMAGE_FALLBACK_USD,
+  costPreview,
+  creditsFromUsd,
+} from "@/lib/costEstimate";
+
 const MAX_REFERENCES = 15;
 const REFERENCE_STORE_KEY = "fuse-studio-reference-library";
 
@@ -189,10 +193,6 @@ function generationRecipe(generation: Generation) {
 
 type Reference = { url: string; label: string };
 
-function creditsFromUsd(usd: number) {
-  if (!Number.isFinite(usd) || usd <= 0) return 0;
-  return Math.max(1, Math.ceil(usd / USD_PER_CREDIT));
-}
 
 async function callStudio(body: Record<string, unknown>) {
   const { data, error } = await supabase.functions.invoke("generate-studio", { body });
@@ -361,7 +361,7 @@ function GenerationCard({
       <div className="flex items-center justify-between gap-2 px-3 py-2.5">
         <p className="line-clamp-1 flex-1 text-xs text-muted-foreground">{generation.prompt ?? "—"}</p>
         <span className="shrink-0 text-[11px] text-cyan-200/70">
-          {generation.estimatedCredits ? `${generation.estimatedCredits} cr` : "—"}
+          {costPreview(generation.estimatedCredits, generation.estimatedCostUsd)}
         </span>
       </div>
     </article>
@@ -398,14 +398,17 @@ export default function GenerationStudio() {
   );
   const isVideo = model.kind === "video";
 
-  const estimatedCredits = useMemo(() => {
+  /** Live dollar + credit estimate; updates with model, duration and quality. */
+  const estimatedCostUsd = useMemo(() => {
     const multiplier = RESOLUTION_MULTIPLIER[quality] ?? 1;
-    if (!isVideo) return creditsFromUsd(IMAGE_FALLBACK_USD * multiplier);
+    if (!isVideo) return IMAGE_FALLBACK_USD * multiplier;
     const perSecond = model.supportsAudio && generateAudio && model.usdPerSecondAudio
       ? model.usdPerSecondAudio
       : model.usdPerSecond ?? 0;
-    return creditsFromUsd(perSecond * duration * multiplier);
+    return perSecond * duration * multiplier;
   }, [isVideo, model, generateAudio, quality, duration]);
+
+  const estimatedCredits = useMemo(() => creditsFromUsd(estimatedCostUsd), [estimatedCostUsd]);
 
   useEffect(() => {
     if (model.durationRange) {
@@ -1044,7 +1047,9 @@ export default function GenerationStudio() {
             {/* Generate */}
             <div className="space-y-2 border-t border-white/10 pt-4">
               <div className="flex items-center justify-between text-[11px] text-cyan-200/70">
-                <span>~{estimatedCredits} credits</span>
+                <span className="font-medium text-cyan-100">
+                  {costPreview(estimatedCredits, estimatedCostUsd)}
+                </span>
                 <span>{references.length ? `${references.length} reference(s)` : "No references"}</span>
               </div>
               <Button
@@ -1229,7 +1234,7 @@ export default function GenerationStudio() {
                         ) : null}
                         {lightbox.estimatedCredits ? (
                           <span className="rounded-full border border-white/12 bg-white/[0.04] px-2 py-0.5 text-[11px] text-cyan-200/80">
-                            {lightbox.estimatedCredits} credits
+                            {costPreview(lightbox.estimatedCredits, lightbox.estimatedCostUsd)}
                           </span>
                         ) : null}
                       </div>
