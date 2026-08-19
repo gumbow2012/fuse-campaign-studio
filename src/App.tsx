@@ -112,6 +112,14 @@ const App = () => (
               }
             />
             <Route
+              path="/app/lab/jewelry-swap"
+              element={
+                <BuilderRoute>
+                  <JewelrySwap />
+                </BuilderRoute>
+              }
+            />
+            <Route
               path="/app/nano"
               element={
                 <AdminRoute>
