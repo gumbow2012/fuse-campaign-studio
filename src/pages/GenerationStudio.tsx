@@ -382,7 +382,10 @@ export default function GenerationStudio() {
   const [generations, setGenerations] = useState<Generation[]>([]);
   const [library, setLibrary] = useState<string[]>(() => readReferenceLibrary());
   const [selected, setSelected] = useState<string[]>([]);
+  const [lightboxId, setLightboxId] = useState<string | null>(null);
+  const [confirmSingle, setConfirmSingle] = useState<Generation | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
+
   const [deleting, setDeleting] = useState(false);
   const lastSelectedRef = useRef<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
