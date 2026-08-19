@@ -1136,6 +1136,172 @@ export default function GenerationStudio() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <AlertDialog open={!!confirmSingle} onOpenChange={(open) => !open && setConfirmSingle(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete this generation?</AlertDialogTitle>
+            <AlertDialogDescription>
+              It will be removed from your gallery permanently. This can't be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(event) => {
+                event.preventDefault();
+                if (confirmSingle) void deleteGeneration(confirmSingle);
+              }}
+              className="bg-red-500/90 text-white hover:bg-red-500"
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Lightbox: big result on the left, recipe + actions on the right */}
+      <Dialog open={!!lightbox} onOpenChange={(open) => !open && setLightboxId(null)}>
+        <DialogContent className="max-w-[1200px] gap-0 overflow-hidden border-white/12 bg-background/95 p-0 backdrop-blur-xl">
+          {lightbox ? (
+            (() => {
+              const recipe = generationRecipe(lightbox);
+              const isImage = lightbox.outputType !== "video";
+              return (
+                <div className="grid max-h-[85vh] grid-cols-1 lg:grid-cols-[minmax(0,1fr)_360px]">
+                  <div className="flex max-h-[50vh] items-center justify-center bg-black/60 p-3 lg:max-h-[85vh]">
+                    {lightbox.outputUrl ? (
+                      isImage ? (
+                        <img
+                          src={lightbox.outputUrl}
+                          alt={recipe.prompt || "Generated result"}
+                          className="max-h-full w-auto max-w-full rounded-xl object-contain"
+                        />
+                      ) : (
+                        <video
+                          src={lightbox.outputUrl}
+                          controls
+                          loop
+                          autoPlay
+                          className="max-h-full w-auto max-w-full rounded-xl"
+                        />
+                      )
+                    ) : (
+                      <p className="text-xs text-muted-foreground">No output</p>
+                    )}
+                  </div>
+
+                  <aside className="flex max-h-[85vh] flex-col gap-4 overflow-y-auto border-t border-white/10 p-5 lg:border-l lg:border-t-0">
+                    <div className="space-y-1">
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-cyan-200/70">
+                        Result
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {lightbox.providerModel ?? "—"}
+                      </p>
+                      <div className="flex flex-wrap gap-1.5 pt-1">
+                        {recipe.aspect ? (
+                          <span className="rounded-full border border-white/12 bg-white/[0.04] px-2 py-0.5 text-[11px] text-foreground/80">
+                            {recipe.aspect}
+                          </span>
+                        ) : null}
+                        {recipe.resolution ? (
+                          <span className="rounded-full border border-white/12 bg-white/[0.04] px-2 py-0.5 text-[11px] text-foreground/80">
+                            {recipe.resolution}
+                          </span>
+                        ) : null}
+                        {lightbox.estimatedCredits ? (
+                          <span className="rounded-full border border-white/12 bg-white/[0.04] px-2 py-0.5 text-[11px] text-cyan-200/80">
+                            {lightbox.estimatedCredits} credits
+                          </span>
+                        ) : null}
+                      </div>
+                    </div>
+
+                    {isImage && lightbox.outputUrl ? (
+                      <Button
+                        onClick={() => useAsReference(lightbox.outputUrl as string)}
+                        className="w-full rounded-xl bg-[hsl(var(--primary))] text-primary-foreground hover:bg-[hsl(var(--primary))]/90"
+                      >
+                        <Wand2 size={15} className="mr-2" /> Use as reference
+                      </Button>
+                    ) : null}
+
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-[11px] font-semibold uppercase tracking-[0.2em] text-cyan-200/70">
+                          Prompt
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => void copyPrompt(recipe.prompt)}
+                          disabled={!recipe.prompt}
+                          className="flex items-center gap-1 rounded-lg border border-white/15 px-2 py-1 text-[11px] text-foreground/85 transition-colors hover:border-cyan-200/50 hover:text-cyan-100 disabled:opacity-40"
+                        >
+                          <Copy size={12} /> Copy
+                        </button>
+                      </div>
+                      <p className="max-h-48 overflow-y-auto whitespace-pre-wrap rounded-xl border border-white/10 bg-black/30 p-3 text-xs leading-relaxed text-foreground/90">
+                        {recipe.prompt || "No prompt stored for this generation."}
+                      </p>
+                    </div>
+
+                    {recipe.urls.length ? (
+                      <div className="space-y-2">
+                        <span className="text-[11px] font-semibold uppercase tracking-[0.2em] text-cyan-200/70">
+                          References used
+                        </span>
+                        <div className="flex flex-wrap gap-2">
+                          {recipe.urls.map((url, index) => (
+                            <div
+                              key={`${url}-${index}`}
+                              className="relative h-14 w-14 overflow-hidden rounded-lg border border-white/12"
+                            >
+                              <img src={url} alt={`Reference ${index + 1}`} className="h-full w-full object-cover" />
+                              <span className="absolute inset-x-0 bottom-0 bg-black/75 text-center text-[9px] font-semibold uppercase text-cyan-100">
+                                Ref {index + 1}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ) : null}
+
+                    <div className="mt-auto space-y-2 border-t border-white/10 pt-4">
+                      <Button
+                        variant="outline"
+                        onClick={() => recreate(lightbox)}
+                        className="w-full border-white/15 bg-white/[0.04]"
+                      >
+                        <RefreshCw size={15} className="mr-2" /> Recreate
+                      </Button>
+                      {lightbox.outputUrl ? (
+                        <Button
+                          variant="outline"
+                          asChild
+                          className="w-full border-white/15 bg-white/[0.04]"
+                        >
+                          <a href={lightbox.outputUrl} download target="_blank" rel="noreferrer">
+                            <Download size={15} className="mr-2" /> Download
+                          </a>
+                        </Button>
+                      ) : null}
+                      <Button
+                        variant="outline"
+                        onClick={() => setConfirmSingle(lightbox)}
+                        className="w-full border-red-400/40 bg-red-500/10 text-red-200 hover:bg-red-500/20 hover:text-red-100"
+                      >
+                        <Trash2 size={15} className="mr-2" /> Delete
+                      </Button>
+                    </div>
+                  </aside>
+                </div>
+              );
+            })()
+          ) : null}
+        </DialogContent>
+      </Dialog>
     </SiteShell>
+
   );
 }
