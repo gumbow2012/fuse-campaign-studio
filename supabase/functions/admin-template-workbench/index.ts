@@ -1090,6 +1090,8 @@ Deno.serve(async (req) => {
       const name = cleanText(body.name, nodeType === "user_input" ? "New Input" : nodeType === "video_gen" ? "New Video Step" : "New Image Step");
       if (!versionId) throw new Error("versionId is required");
       if (!["user_input", "image_gen", "video_gen"].includes(nodeType)) throw new Error("Invalid nodeType");
+      await assertVersionAccess(admin, access, versionId);
+
 
       const promptConfig = nodeType === "user_input"
         ? {
