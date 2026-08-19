@@ -1,14 +1,19 @@
-import { forwardRef, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  ArrowLeft,
+  ArrowRight,
+  CheckSquare,
   ChevronDown,
   Download,
   ImageIcon,
   Images,
   Loader2,
   Plus,
-  Search,
   Sparkles,
+  Square,
+  Trash2,
   Video,
+  Wand2,
   X,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -19,11 +24,20 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Progress } from "@/components/ui/progress";
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { supabase } from "@/integrations/supabase/client";
 import { uploadRunInputFile } from "@/services/runInputUpload";
 import { cn } from "@/lib/utils";
@@ -45,28 +59,30 @@ type StudioModel = {
   label: string;
   kind: "image" | "video";
   blurb: string;
+  recommended?: boolean;
   usdPerSecond?: number;
   usdPerSecondAudio?: number;
   durationRange?: { min: number; max: number };
-  resolutions?: string[];
+  resolutions: string[];
   supportsAudio?: boolean;
   supportsEndFrame?: boolean;
-  aspectRatios?: string[];
 };
 
-const ASPECT_RATIOS = [
-  "auto",
-  "1:1",
-  "3:4",
-  "4:3",
-  "2:3",
-  "3:2",
-  "9:16",
-  "16:9",
-  "5:4",
-  "4:5",
-  "21:9",
-] as const;
+const DEFAULT_RESOLUTIONS = ["2K", "4K"];
+const SEEDANCE_RESOLUTIONS = ["480p", "720p", "1080p", "4K"];
+
+const ASPECT_OPTIONS: { value: string; note: string }[] = [
+  { value: "auto", note: "Let the model decide" },
+  { value: "9:16", note: "TikTok / Reels / Stories" },
+  { value: "1:1", note: "Instagram / product / marketplace" },
+  { value: "4:5", note: "IG feed / editorial" },
+  { value: "3:4", note: "Fashion / editorial" },
+  { value: "16:9", note: "YouTube / cinematic / banners" },
+  { value: "4:3", note: "Editorial" },
+  { value: "2:3", note: "Print / poster" },
+  { value: "3:2", note: "Classic photo" },
+  { value: "21:9", note: "Ultra-wide cinematic" },
+];
 
 const STUDIO_MODELS: StudioModel[] = [
   {
@@ -74,16 +90,19 @@ const STUDIO_MODELS: StudioModel[] = [
     label: "Nano Banana Pro",
     kind: "image",
     blurb: "Google's flagship image model — reference-driven edits",
-    aspectRatios: [...ASPECT_RATIOS],
+    recommended: true,
+    resolutions: DEFAULT_RESOLUTIONS,
   },
   {
     key: "kling-3.0-pro",
     label: "Kling 3.0 Pro",
     kind: "video",
     blurb: "Highest-fidelity motion with native audio",
+    recommended: true,
     usdPerSecond: 0.112,
     usdPerSecondAudio: 0.168,
     durationRange: { min: 3, max: 15 },
+    resolutions: DEFAULT_RESOLUTIONS,
     supportsAudio: true,
     supportsEndFrame: true,
   },
@@ -95,6 +114,7 @@ const STUDIO_MODELS: StudioModel[] = [
     usdPerSecond: 0.112,
     usdPerSecondAudio: 0.168,
     durationRange: { min: 3, max: 15 },
+    resolutions: DEFAULT_RESOLUTIONS,
     supportsAudio: true,
     supportsEndFrame: true,
   },
@@ -105,9 +125,8 @@ const STUDIO_MODELS: StudioModel[] = [
     blurb: "Cinematic motion with resolution control",
     usdPerSecond: 0.3024,
     durationRange: { min: 4, max: 15 },
-    resolutions: ["480p", "720p", "1080p", "4k"],
+    resolutions: SEEDANCE_RESOLUTIONS,
     supportsAudio: true,
-    aspectRatios: ["auto", "9:16", "16:9", "1:1", "4:3", "3:4", "21:9"],
   },
   {
     key: "seedance-2.0-fast",
@@ -116,9 +135,8 @@ const STUDIO_MODELS: StudioModel[] = [
     blurb: "Faster, lower-cost Seedance pass",
     usdPerSecond: 0.2419,
     durationRange: { min: 4, max: 15 },
-    resolutions: ["480p", "720p", "1080p", "4k"],
+    resolutions: SEEDANCE_RESOLUTIONS,
     supportsAudio: true,
-    aspectRatios: ["auto", "9:16", "16:9", "1:1", "4:3", "3:4", "21:9"],
   },
 ];
 
@@ -126,7 +144,8 @@ const RESOLUTION_MULTIPLIER: Record<string, number> = {
   "480p": 0.5,
   "720p": 1,
   "1080p": 1.8,
-  "4k": 3.5,
+  "2K": 1.8,
+  "4K": 3.5,
 };
 
 type Generation = {
@@ -143,6 +162,8 @@ type Generation = {
   createdAt: string | null;
   completedAt: string | null;
 };
+
+type Reference = { url: string; label: string };
 
 function creditsFromUsd(usd: number) {
   if (!Number.isFinite(usd) || usd <= 0) return 0;
@@ -177,34 +198,33 @@ function readReferenceLibrary(): string[] {
 function AspectGlyph({ ratio }: { ratio: string }) {
   if (ratio === "auto") return <Sparkles size={12} className="text-cyan-200/80" />;
   const [w, h] = ratio.split(":").map(Number);
-  const max = 14;
-  const scale = max / Math.max(w, h);
+  const scale = 14 / Math.max(w, h);
   return (
     <span
-      className="inline-block rounded-[3px] border border-cyan-200/60"
+      className="inline-block shrink-0 rounded-[3px] border border-cyan-200/60"
       style={{ width: Math.max(5, w * scale), height: Math.max(5, h * scale) }}
     />
   );
 }
 
-const Chip = forwardRef<HTMLButtonElement, React.ButtonHTMLAttributes<HTMLButtonElement>>(
-  ({ children, className, ...props }, ref) => (
-    <button
-      ref={ref}
-      type="button"
-      className={cn(
-        "flex items-center gap-1.5 rounded-full border border-white/12 bg-white/[0.04] px-3 py-1.5 text-xs font-medium text-foreground/90 transition-colors hover:border-cyan-200/40 hover:bg-cyan-400/10",
-        className,
-      )}
-      {...props}
-    >
-      {children}
-    </button>
-  ),
-);
-Chip.displayName = "Chip";
+function SectionLabel({ children, hint }: { children: React.ReactNode; hint?: string }) {
+  return (
+    <div className="mb-2 flex items-baseline justify-between gap-3">
+      <span className="text-[11px] font-semibold uppercase tracking-[0.2em] text-cyan-200/70">
+        {children}
+      </span>
+      {hint ? <span className="text-[11px] text-muted-foreground">{hint}</span> : null}
+    </div>
+  );
+}
 
-function GenerationCard({ generation }: { generation: Generation }) {
+function GenerationCard({
+  generation,
+  onUseAsReference,
+}: {
+  generation: Generation;
+  onUseAsReference: (url: string) => void;
+}) {
   const inFlight = generation.status === "queued" || generation.status === "running";
   const [progress, setProgress] = useState(generation.status === "running" ? 25 : 8);
 
@@ -214,21 +234,25 @@ function GenerationCard({ generation }: { generation: Generation }) {
     return () => clearInterval(timer);
   }, [inFlight]);
 
+  const isImage = generation.outputType !== "video";
+
   return (
     <article className="overflow-hidden rounded-2xl border border-white/10 bg-white/[0.03] backdrop-blur-xl">
       <div className="relative flex aspect-[3/4] items-center justify-center bg-black/50">
         {generation.status === "complete" && generation.outputUrl ? (
-          generation.outputType === "video" ? (
-            <video src={generation.outputUrl} controls loop className="h-full w-full object-cover" />
-          ) : (
+          isImage ? (
             <img
               src={generation.outputUrl}
               alt={generation.prompt ?? "Generated result"}
               className="h-full w-full object-cover"
             />
+          ) : (
+            <video src={generation.outputUrl} controls loop className="h-full w-full object-cover" />
           )
         ) : generation.status === "failed" ? (
-          <p className="px-5 text-center text-xs text-red-300">{generation.error ?? "Generation failed"}</p>
+          <p className="max-h-full overflow-y-auto px-5 py-4 text-center text-xs text-red-300">
+            {generation.error ?? "Generation failed"}
+          </p>
         ) : (
           <div className="w-full space-y-3 px-6 text-center">
             <Loader2 size={20} className="mx-auto animate-spin text-cyan-200" />
@@ -242,20 +266,31 @@ function GenerationCard({ generation }: { generation: Generation }) {
 
       <div className="space-y-2 p-3">
         <p className="line-clamp-2 text-xs text-muted-foreground">{generation.prompt ?? "—"}</p>
-        <div className="flex items-center justify-between gap-2">
+        <div className="flex flex-wrap items-center justify-between gap-2">
           <span className="text-[11px] text-cyan-200/70">
             {generation.estimatedCredits ? `${generation.estimatedCredits} credits` : "—"}
           </span>
           {generation.status === "complete" && generation.outputUrl ? (
-            <a
-              href={generation.outputUrl}
-              download
-              target="_blank"
-              rel="noreferrer"
-              className="flex items-center gap-1 rounded-full border border-white/15 px-2.5 py-1 text-[11px] text-foreground/90 hover:border-cyan-200/40 hover:text-cyan-100"
-            >
-              <Download size={12} /> Download
-            </a>
+            <div className="flex items-center gap-1.5">
+              {isImage ? (
+                <button
+                  type="button"
+                  onClick={() => onUseAsReference(generation.outputUrl as string)}
+                  className="flex items-center gap-1 rounded-full border border-white/15 px-2.5 py-1 text-[11px] text-foreground/90 transition-colors hover:border-cyan-200/50 hover:text-cyan-100"
+                >
+                  <Wand2 size={12} /> Use as reference
+                </button>
+              ) : null}
+              <a
+                href={generation.outputUrl}
+                download
+                target="_blank"
+                rel="noreferrer"
+                className="flex items-center gap-1 rounded-full border border-white/15 px-2.5 py-1 text-[11px] text-foreground/90 transition-colors hover:border-cyan-200/50 hover:text-cyan-100"
+              >
+                <Download size={12} /> Download
+              </a>
+            </div>
           ) : null}
         </div>
       </div>
@@ -265,40 +300,38 @@ function GenerationCard({ generation }: { generation: Generation }) {
 
 export default function GenerationStudio() {
   const [modelKey, setModelKey] = useState<StudioModelKey>("nano-banana-pro");
-  const [modelSearch, setModelSearch] = useState("");
   const [modelOpen, setModelOpen] = useState(false);
   const [prompt, setPrompt] = useState("");
-  const [references, setReferences] = useState<string[]>([]);
+  const [references, setReferences] = useState<Reference[]>([]);
   const [uploading, setUploading] = useState(false);
   const [dragActive, setDragActive] = useState(false);
   const [aspectRatio, setAspectRatio] = useState<string>("auto");
-  const [quality, setQuality] = useState("720p");
+  const [aspectOpen, setAspectOpen] = useState(false);
+  const [quality, setQuality] = useState("2K");
   const [duration, setDuration] = useState(5);
   const [generateAudio, setGenerateAudio] = useState(true);
-  const [submitting, setSubmitting] = useState(false);
   const [generations, setGenerations] = useState<Generation[]>([]);
   const [library, setLibrary] = useState<string[]>(() => readReferenceLibrary());
+  const [selected, setSelected] = useState<string[]>([]);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const lastSelectedRef = useRef<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const [aspectOpen, setAspectOpen] = useState(false);
-  const [qualityOpen, setQualityOpen] = useState(false);
-  const [motionOpen, setMotionOpen] = useState(false);
 
   const model = useMemo(
     () => STUDIO_MODELS.find((entry) => entry.key === modelKey) ?? STUDIO_MODELS[0],
     [modelKey],
   );
   const isVideo = model.kind === "video";
-  const aspectOptions = model.aspectRatios ?? [];
-  const qualityOptions = model.resolutions ?? [];
 
   const estimatedCredits = useMemo(() => {
-    if (!isVideo) return creditsFromUsd(IMAGE_FALLBACK_USD);
+    const multiplier = RESOLUTION_MULTIPLIER[quality] ?? 1;
+    if (!isVideo) return creditsFromUsd(IMAGE_FALLBACK_USD * multiplier);
     const perSecond = model.supportsAudio && generateAudio && model.usdPerSecondAudio
       ? model.usdPerSecondAudio
       : model.usdPerSecond ?? 0;
-    const multiplier = qualityOptions.length ? RESOLUTION_MULTIPLIER[quality] ?? 1 : 1;
     return creditsFromUsd(perSecond * duration * multiplier);
-  }, [isVideo, model, generateAudio, quality, duration, qualityOptions.length]);
+  }, [isVideo, model, generateAudio, quality, duration]);
 
   useEffect(() => {
     if (model.durationRange) {
@@ -306,8 +339,7 @@ export default function GenerationStudio() {
         Math.min(model.durationRange!.max, Math.max(model.durationRange!.min, prev))
       );
     }
-    if (aspectOptions.length && !aspectOptions.includes(aspectRatio)) setAspectRatio(aspectOptions[0]);
-    if (qualityOptions.length && !qualityOptions.includes(quality)) setQuality(qualityOptions[1] ?? qualityOptions[0]);
+    setQuality((prev) => (model.resolutions.includes(prev) ? prev : model.resolutions[0]));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [modelKey]);
 
@@ -325,7 +357,7 @@ export default function GenerationStudio() {
 
   const loadQueue = useCallback(async (silent = true) => {
     try {
-      const data = await callStudio({ action: "queue", limit: 24 });
+      const data = await callStudio({ action: "queue", limit: 36 });
       setGenerations((data?.generations ?? []) as Generation[]);
     } catch (error) {
       if (!silent) toast.error(error instanceof Error ? error.message : "Could not load generations");
@@ -343,6 +375,17 @@ export default function GenerationStudio() {
     return () => clearInterval(timer);
   }, [hasInFlight, loadQueue]);
 
+  const addReference = useCallback((url: string) => {
+    setReferences((prev) => {
+      if (prev.some((entry) => entry.url === url)) return prev;
+      if (prev.length >= MAX_REFERENCES) {
+        toast.message(`Up to ${MAX_REFERENCES} reference images`);
+        return prev;
+      }
+      return [...prev, { url, label: "" }];
+    });
+  }, []);
+
   const addFiles = useCallback(
     async (files: File[]) => {
       const images = files.filter((file) => file.type.startsWith("image/"));
@@ -358,7 +401,9 @@ export default function GenerationStudio() {
           uploaded.push(await uploadRunInputFile(file));
         }
         if (uploaded.length) {
-          setReferences((prev) => [...prev, ...uploaded].slice(0, MAX_REFERENCES));
+          setReferences((prev) =>
+            [...prev, ...uploaded.map((url) => ({ url, label: "" }))].slice(0, MAX_REFERENCES)
+          );
           rememberReferences(uploaded);
         }
       } catch (error) {
@@ -370,56 +415,190 @@ export default function GenerationStudio() {
     [references.length, rememberReferences],
   );
 
-  const addLibraryItem = (url: string) => {
-    setReferences((prev) => (prev.includes(url) ? prev : [...prev, url].slice(0, MAX_REFERENCES)));
+  const moveReference = (index: number, delta: number) => {
+    setReferences((prev) => {
+      const target = index + delta;
+      if (target < 0 || target >= prev.length) return prev;
+      const next = [...prev];
+      [next[index], next[target]] = [next[target], next[index]];
+      return next;
+    });
   };
 
-  const handleGenerate = async () => {
-    if (!prompt.trim()) {
+  const handleGenerate = () => {
+    const text = prompt.trim();
+    if (!text) {
       toast.error("Describe the scene you imagine first");
       return;
     }
-    if (isVideo && !references.length) {
-      toast.error("Add a start frame first");
-      return;
-    }
-    if (!isVideo && !references.length) {
-      toast.error("Add at least one reference image");
-      return;
-    }
 
-    setSubmitting(true);
+    const urls = references.map((entry) => entry.url);
+    const payload: Record<string, unknown> = {
+      action: "start",
+      kind: model.kind,
+      model: model.key,
+      prompt: text,
+      resolution: quality,
+      aspectRatio,
+      ...(urls.length ? { imageUrls: urls, startImageUrl: urls[0] } : {}),
+      ...(isVideo
+        ? {
+          duration,
+          generateAudio,
+          ...(model.supportsEndFrame && urls[1] ? { endImageUrl: urls[1] } : {}),
+        }
+        : {}),
+    };
+
+    // Non-blocking: fire and let the queue poll pick it up.
+    void (async () => {
+      try {
+        const data = await callStudio(payload);
+        const generation = data?.generation as Generation | undefined;
+        if (generation) {
+          setGenerations((prev) => [generation, ...prev.filter((e) => e.id !== generation.id)]);
+        }
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : "Could not start the generation");
+      }
+    })();
+
+    toast.success("Added to the queue");
+  };
+
+  const assets = useMemo(() => {
+    const outputs = generations
+      .filter((entry) => entry.status === "complete" && entry.outputUrl)
+      .map((entry) => ({
+        id: entry.id,
+        url: entry.outputUrl as string,
+        type: entry.outputType === "video" ? "video" : "image",
+        generationId: entry.id,
+      }));
+    const uploads = library.map((url) => ({
+      id: `upload:${url}`,
+      url,
+      type: "image" as const,
+      generationId: null as string | null,
+    }));
+    return { outputs, uploads };
+  }, [generations, library]);
+
+  const toggleSelect = (id: string, ids: string[], shiftKey: boolean) => {
+    setSelected((prev) => {
+      if (shiftKey && lastSelectedRef.current) {
+        const from = ids.indexOf(lastSelectedRef.current);
+        const to = ids.indexOf(id);
+        if (from !== -1 && to !== -1) {
+          const range = ids.slice(Math.min(from, to), Math.max(from, to) + 1);
+          return Array.from(new Set([...prev, ...range]));
+        }
+      }
+      lastSelectedRef.current = id;
+      return prev.includes(id) ? prev.filter((entry) => entry !== id) : [...prev, id];
+    });
+  };
+
+  const selectedAssets = [...assets.outputs, ...assets.uploads].filter((asset) =>
+    selected.includes(asset.id)
+  );
+
+  const bulkDownload = () => {
+    if (!selectedAssets.length) return;
+    selectedAssets.forEach((asset, index) => {
+      setTimeout(() => {
+        const link = document.createElement("a");
+        link.href = asset.url;
+        link.download = "";
+        link.target = "_blank";
+        link.rel = "noreferrer";
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+      }, index * 350);
+    });
+    toast.success(`Downloading ${selectedAssets.length} asset${selectedAssets.length > 1 ? "s" : ""}`);
+  };
+
+  const deleteSelected = async () => {
+    const generationIds = selectedAssets
+      .map((asset) => asset.generationId)
+      .filter((id): id is string => Boolean(id));
+    const uploadUrls = selectedAssets.filter((asset) => !asset.generationId).map((a) => a.url);
+
+    setDeleting(true);
     try {
-      const data = await callStudio({
-        action: "start",
-        kind: model.kind,
-        model: model.key,
-        prompt: prompt.trim(),
-        startImageUrl: references[0],
-        ...(isVideo
-          ? {
-            ...(model.supportsEndFrame && references[1] ? { endImageUrl: references[1] } : {}),
-            duration,
-            ...(model.supportsAudio ? { generateAudio } : {}),
-            ...(qualityOptions.length ? { resolution: quality } : {}),
+      if (generationIds.length) {
+        await callStudio({ action: "delete", generationIds });
+        setGenerations((prev) => prev.filter((entry) => !generationIds.includes(entry.id)));
+      }
+      if (uploadUrls.length) {
+        setLibrary((prev) => {
+          const next = prev.filter((url) => !uploadUrls.includes(url));
+          try {
+            localStorage.setItem(REFERENCE_STORE_KEY, JSON.stringify(next));
+          } catch {
+            // convenience only
           }
-          : { imageUrls: references }),
-        ...(aspectOptions.length && aspectRatio !== "auto" ? { aspectRatio } : {}),
-      });
-
-      const generation = data?.generation as Generation | undefined;
-      if (generation) setGenerations((prev) => [generation, ...prev]);
-      toast.success("Added to the queue");
+          return next;
+        });
+      }
+      setSelected([]);
+      setConfirmDelete(false);
+      toast.success("Assets deleted");
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Could not start the generation");
+      toast.error(error instanceof Error ? error.message : "Could not delete the assets");
     } finally {
-      setSubmitting(false);
+      setDeleting(false);
     }
   };
 
-  const outputAssets = generations
-    .filter((entry) => entry.status === "complete" && entry.outputUrl)
-    .map((entry) => ({ url: entry.outputUrl as string, type: entry.outputType ?? "image" }));
+  const assetGrid = (
+    items: { id: string; url: string; type: string; generationId: string | null }[],
+    empty: string,
+  ) => {
+    const ids = items.map((item) => item.id);
+    if (!items.length) return <p className="text-xs text-muted-foreground">{empty}</p>;
+    return (
+      <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
+        {items.map((item) => {
+          const isSelected = selected.includes(item.id);
+          return (
+            <div
+              key={item.id}
+              className={cn(
+                "group relative overflow-hidden rounded-xl border bg-black/40",
+                isSelected ? "border-cyan-300/70 ring-1 ring-cyan-300/40" : "border-white/10",
+              )}
+            >
+              {item.type === "video" ? (
+                <video src={item.url} className="aspect-square w-full object-cover" muted />
+              ) : (
+                <img src={item.url} alt="Asset" className="aspect-square w-full object-cover" />
+              )}
+              <button
+                type="button"
+                aria-label={isSelected ? "Deselect asset" : "Select asset"}
+                onClick={(event) => toggleSelect(item.id, ids, event.shiftKey)}
+                className="absolute left-1 top-1 rounded-md bg-black/70 p-1 text-cyan-100"
+              >
+                {isSelected ? <CheckSquare size={13} /> : <Square size={13} />}
+              </button>
+              {item.type === "image" ? (
+                <button
+                  type="button"
+                  onClick={() => addReference(item.url)}
+                  className="absolute inset-x-1 bottom-1 rounded-md bg-black/75 py-1 text-[10px] uppercase tracking-wide text-cyan-100 opacity-0 transition-opacity group-hover:opacity-100"
+                >
+                  Use as ref
+                </button>
+              ) : null}
+            </div>
+          );
+        })}
+      </div>
+    );
+  };
 
   return (
     <SiteShell>
@@ -429,336 +608,411 @@ export default function GenerationStudio() {
         path="/app/lab/studio"
       />
 
-      <div className="mx-auto w-full max-w-7xl px-4 pb-64 pt-8 sm:px-6">
-        <header className="mb-6 flex flex-wrap items-end justify-between gap-4">
-          <div className="space-y-1">
-            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-cyan-200/70">FUSE Lab</p>
-            <h1 className="font-heading text-2xl font-semibold text-foreground sm:text-3xl">
-              Generation Studio
-            </h1>
-            <p className="max-w-xl text-sm text-muted-foreground">
-              Describe a scene, drop in references, and queue as many generations as you want.
-            </p>
-          </div>
-
-          <Sheet>
-            <SheetTrigger asChild>
-              <Button variant="outline" className="border-white/15 bg-white/[0.04]">
-                <Images size={16} className="mr-2" /> Asset library
-              </Button>
-            </SheetTrigger>
-            <SheetContent className="w-full max-w-md border-white/10 bg-background/95 backdrop-blur-xl sm:max-w-md">
-              <SheetHeader>
-                <SheetTitle>Asset library</SheetTitle>
-              </SheetHeader>
-              <Tabs defaultValue="outputs" className="mt-4">
-                <TabsList className="w-full">
-                  <TabsTrigger value="outputs" className="flex-1">Generated</TabsTrigger>
-                  <TabsTrigger value="references" className="flex-1">Uploads</TabsTrigger>
-                </TabsList>
-                <TabsContent value="outputs" className="mt-4">
-                  <div className="grid max-h-[70vh] grid-cols-3 gap-2 overflow-y-auto">
-                    {outputAssets.length ? (
-                      outputAssets.map((asset) => (
-                        <button
-                          key={asset.url}
-                          type="button"
-                          draggable
-                          onDragStart={(event) => event.dataTransfer.setData("text/uri-list", asset.url)}
-                          onClick={() => asset.type === "video" ? toast.message("Videos can't be used as references") : addLibraryItem(asset.url)}
-                          className="overflow-hidden rounded-lg border border-white/10 bg-black/40 hover:border-cyan-200/40"
-                        >
-                          {asset.type === "video" ? (
-                            <video src={asset.url} className="aspect-square w-full object-cover" muted />
-                          ) : (
-                            <img src={asset.url} alt="Generated asset" className="aspect-square w-full object-cover" />
-                          )}
-                        </button>
-                      ))
-                    ) : (
-                      <p className="col-span-3 text-xs text-muted-foreground">No generated assets yet.</p>
-                    )}
-                  </div>
-                </TabsContent>
-                <TabsContent value="references" className="mt-4">
-                  <div className="grid max-h-[70vh] grid-cols-3 gap-2 overflow-y-auto">
-                    {library.length ? (
-                      library.map((url) => (
-                        <button
-                          key={url}
-                          type="button"
-                          draggable
-                          onDragStart={(event) => event.dataTransfer.setData("text/uri-list", url)}
-                          onClick={() => addLibraryItem(url)}
-                          className="overflow-hidden rounded-lg border border-white/10 bg-black/40 hover:border-cyan-200/40"
-                        >
-                          <img src={url} alt="Reference" className="aspect-square w-full object-cover" />
-                        </button>
-                      ))
-                    ) : (
-                      <p className="col-span-3 text-xs text-muted-foreground">Uploaded references appear here.</p>
-                    )}
-                  </div>
-                </TabsContent>
-              </Tabs>
-            </SheetContent>
-          </Sheet>
+      <div className="mx-auto w-full max-w-[1600px] px-4 py-8 sm:px-6">
+        <header className="mb-6 space-y-1">
+          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-cyan-200/70">FUSE Lab</p>
+          <h1 className="font-heading text-2xl font-semibold text-foreground sm:text-3xl">
+            Generation Studio
+          </h1>
+          <p className="max-w-xl text-sm text-muted-foreground">
+            Set your model, stack references in order, and queue as many generations as you want.
+          </p>
         </header>
 
-        {generations.length ? (
-          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
-            {generations.map((generation) => (
-              <GenerationCard key={generation.id} generation={generation} />
-            ))}
-          </div>
-        ) : (
-          <div className="rounded-2xl border border-dashed border-white/12 bg-white/[0.02] p-14 text-center">
-            <Sparkles className="mx-auto mb-3 text-cyan-200/70" size={22} />
-            <p className="text-sm text-muted-foreground">
-              Your generations will appear here. Start with a prompt below.
-            </p>
-          </div>
-        )}
-      </div>
-
-      {/* Floating generation bar */}
-      <div className="pointer-events-none fixed inset-x-0 bottom-0 z-40 flex justify-center px-3 pb-4 sm:px-6">
-        <div
-          className={cn(
-            "pointer-events-auto w-full max-w-4xl rounded-3xl border bg-background/80 p-3 shadow-[0_20px_60px_-20px_rgba(0,0,0,0.9)] backdrop-blur-2xl transition-colors",
-            dragActive ? "border-cyan-300/60 bg-cyan-400/5" : "border-white/12",
-          )}
-          onDragOver={(event) => {
-            event.preventDefault();
-            setDragActive(true);
-          }}
-          onDragLeave={() => setDragActive(false)}
-          onDrop={(event) => {
-            event.preventDefault();
-            setDragActive(false);
-            const files = Array.from(event.dataTransfer.files ?? []);
-            if (files.length) {
-              void addFiles(files);
-              return;
-            }
-            const url = event.dataTransfer.getData("text/uri-list") || event.dataTransfer.getData("text/plain");
-            if (url) addLibraryItem(url);
-          }}
-        >
-          {references.length ? (
-            <div className="mb-2 flex flex-wrap gap-2">
-              {references.map((url, index) => (
-                <div key={`${url}-${index}`} className="relative h-16 w-16 overflow-hidden rounded-lg border border-white/12">
-                  <img src={url} alt={`Reference ${index + 1}`} className="h-full w-full object-cover" />
-                  {isVideo ? (
-                    <span className="absolute inset-x-0 bottom-0 bg-black/70 text-center text-[9px] uppercase tracking-wide text-cyan-100">
-                      {index === 0 ? "Start" : index === 1 ? "End" : "Extra"}
-                    </span>
-                  ) : null}
+        <div className="grid gap-6 lg:grid-cols-[400px_minmax(0,1fr)] xl:grid-cols-[440px_minmax(0,1fr)]">
+          {/* LEFT: control panel */}
+          <aside className="space-y-4 rounded-3xl border border-white/10 bg-white/[0.03] p-4 backdrop-blur-xl lg:sticky lg:top-6 lg:max-h-[calc(100vh-3rem)] lg:overflow-y-auto sm:p-5">
+            {/* Model */}
+            <section>
+              <SectionLabel>Model</SectionLabel>
+              <Popover open={modelOpen} onOpenChange={setModelOpen}>
+                <PopoverTrigger asChild>
                   <button
                     type="button"
-                    aria-label="Remove reference"
-                    onClick={() => setReferences((prev) => prev.filter((_, i) => i !== index))}
-                    className="absolute right-0.5 top-0.5 rounded-full bg-black/75 p-0.5 text-foreground hover:text-red-300"
+                    className="flex w-full items-center gap-3 rounded-xl border border-white/12 bg-black/30 px-3 py-2.5 text-left transition-colors hover:border-cyan-200/40"
                   >
-                    <X size={11} />
+                    <span className="rounded-lg border border-white/12 bg-black/40 p-1.5 text-cyan-200">
+                      {isVideo ? <Video size={15} /> : <ImageIcon size={15} />}
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-sm font-medium text-foreground">
+                        {model.label}
+                      </span>
+                      <span className="block truncate text-[11px] text-muted-foreground">
+                        {model.blurb}
+                      </span>
+                    </span>
+                    <ChevronDown size={14} className="shrink-0 opacity-60" />
                   </button>
-                </div>
-              ))}
-            </div>
-          ) : null}
+                </PopoverTrigger>
+                <PopoverContent
+                  align="start"
+                  className="w-[--radix-popover-trigger-width] border-white/12 bg-background/95 p-2 backdrop-blur-xl"
+                >
+                  <p className="px-2 pb-2 text-xs font-semibold text-foreground">
+                    {isVideo ? "Choose Video Model" : "Choose Image Model"}
+                  </p>
+                  <p className="px-2 pb-1 text-[10px] uppercase tracking-[0.18em] text-cyan-200/60">
+                    Recommended
+                  </p>
+                  <div className="max-h-80 space-y-1 overflow-y-auto">
+                    {[...STUDIO_MODELS].sort((a, b) => Number(!!b.recommended) - Number(!!a.recommended)).map((entry, index, sorted) => (
+                      <div key={entry.key}>
+                        {index > 0 && sorted[index - 1].recommended && !entry.recommended ? (
+                          <p className="px-2 pb-1 pt-2 text-[10px] uppercase tracking-[0.18em] text-cyan-200/60">
+                            All models
+                          </p>
+                        ) : null}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setModelKey(entry.key);
+                            setModelOpen(false);
+                          }}
+                          className={cn(
+                            "flex w-full items-start gap-3 rounded-xl border px-3 py-2 text-left transition-colors",
+                            entry.key === modelKey
+                              ? "border-cyan-200/40 bg-cyan-400/10"
+                              : "border-transparent hover:border-white/15 hover:bg-white/[0.04]",
+                          )}
+                        >
+                          <span className="mt-0.5 rounded-lg border border-white/12 bg-black/40 p-1.5 text-cyan-200">
+                            {entry.kind === "image" ? <ImageIcon size={14} /> : <Video size={14} />}
+                          </span>
+                          <span className="min-w-0">
+                            <span className="block text-sm font-medium text-foreground">{entry.label}</span>
+                            <span className="block text-[11px] text-muted-foreground">{entry.blurb}</span>
+                          </span>
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </PopoverContent>
+              </Popover>
+            </section>
 
-          <Textarea
-            value={prompt}
-            onChange={(event) => setPrompt(event.target.value)}
-            placeholder="Describe the scene you imagine"
-            rows={2}
-            className="resize-none border-0 bg-transparent px-2 text-sm shadow-none focus-visible:ring-0"
-          />
-
-          <div className="mt-2 flex flex-wrap items-center gap-2">
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/*"
-              multiple
-              className="hidden"
-              onChange={(event) => {
-                const files = Array.from(event.target.files ?? []);
-                event.target.value = "";
-                void addFiles(files);
+            {/* References */}
+            <section
+              onDragOver={(event) => {
+                event.preventDefault();
+                setDragActive(true);
               }}
-            />
+              onDragLeave={() => setDragActive(false)}
+              onDrop={(event) => {
+                event.preventDefault();
+                setDragActive(false);
+                const files = Array.from(event.dataTransfer.files ?? []);
+                if (files.length) {
+                  void addFiles(files);
+                  return;
+                }
+                const url = event.dataTransfer.getData("text/uri-list") ||
+                  event.dataTransfer.getData("text/plain");
+                if (url) addReference(url);
+              }}
+              className={cn(
+                "rounded-2xl border p-3 transition-colors",
+                dragActive ? "border-cyan-300/60 bg-cyan-400/5" : "border-white/10 bg-black/20",
+              )}
+            >
+              <SectionLabel hint={`Optional · ${references.length}/${MAX_REFERENCES}`}>
+                References
+              </SectionLabel>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                multiple
+                className="hidden"
+                onChange={(event) => {
+                  const files = Array.from(event.target.files ?? []);
+                  event.target.value = "";
+                  void addFiles(files);
+                }}
+              />
+              <div className="space-y-2">
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-white/20 bg-white/[0.02] py-3 text-xs text-foreground/85 transition-colors hover:border-cyan-200/50 hover:text-cyan-100"
+                >
+                  {uploading ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
+                  Add image
+                </button>
 
-            {/* Model picker */}
-            <Popover open={modelOpen} onOpenChange={setModelOpen}>
-              <PopoverTrigger asChild>
-                <Chip>
-                  {isVideo ? <Video size={14} /> : <ImageIcon size={14} />}
-                  {model.label}
-                  <ChevronDown size={12} className="opacity-60" />
-                </Chip>
-              </PopoverTrigger>
-              <PopoverContent align="start" className="w-80 border-white/12 bg-background/95 p-2 backdrop-blur-xl">
-                <div className="mb-2 flex items-center gap-2 rounded-lg border border-white/10 bg-black/30 px-2">
-                  <Search size={14} className="text-muted-foreground" />
-                  <Input
-                    value={modelSearch}
-                    onChange={(event) => setModelSearch(event.target.value)}
-                    placeholder="Search models"
-                    className="border-0 bg-transparent px-0 text-sm shadow-none focus-visible:ring-0"
-                  />
-                </div>
-                <p className="px-2 pb-1 text-[10px] uppercase tracking-[0.18em] text-cyan-200/60">
-                  Featured models
-                </p>
-                <div className="max-h-72 space-y-1 overflow-y-auto">
-                  {STUDIO_MODELS.filter((entry) =>
-                    entry.label.toLowerCase().includes(modelSearch.trim().toLowerCase())
-                  ).map((entry) => (
-                    <button
-                      key={entry.key}
-                      type="button"
-                      onClick={() => {
-                        setModelKey(entry.key);
-                        setModelOpen(false);
-                      }}
-                      className={cn(
-                        "flex w-full items-start gap-3 rounded-xl border px-3 py-2 text-left transition-colors",
-                        entry.key === modelKey
-                          ? "border-cyan-200/40 bg-cyan-400/10"
-                          : "border-transparent hover:border-white/15 hover:bg-white/[0.04]",
-                      )}
-                    >
-                      <span className="mt-0.5 rounded-lg border border-white/12 bg-black/40 p-1.5 text-cyan-200">
-                        {entry.kind === "image" ? <ImageIcon size={14} /> : <Video size={14} />}
+                {references.map((reference, index) => (
+                  <div
+                    key={`${reference.url}-${index}`}
+                    className="flex items-center gap-2 rounded-xl border border-white/10 bg-black/30 p-2"
+                  >
+                    <div className="relative h-14 w-14 shrink-0 overflow-hidden rounded-lg border border-white/12">
+                      <img src={reference.url} alt={`Reference ${index + 1}`} className="h-full w-full object-cover" />
+                      <span className="absolute inset-x-0 bottom-0 bg-black/75 text-center text-[9px] font-semibold uppercase tracking-wide text-cyan-100">
+                        Ref {index + 1}
                       </span>
-                      <span>
-                        <span className="block text-sm font-medium text-foreground">{entry.label}</span>
-                        <span className="block text-[11px] text-muted-foreground">{entry.blurb}</span>
-                      </span>
-                    </button>
-                  ))}
-                </div>
-              </PopoverContent>
-            </Popover>
+                    </div>
+                    <Input
+                      value={reference.label}
+                      onChange={(event) =>
+                        setReferences((prev) =>
+                          prev.map((entry, i) =>
+                            i === index ? { ...entry, label: event.target.value } : entry
+                          )
+                        )}
+                      placeholder="Label (optional)"
+                      className="h-8 border-white/12 bg-black/30 text-xs"
+                    />
+                    <div className="flex shrink-0 items-center gap-0.5">
+                      <button
+                        type="button"
+                        aria-label="Move earlier"
+                        disabled={index === 0}
+                        onClick={() => moveReference(index, -1)}
+                        className="rounded-md p-1 text-foreground/70 transition-colors hover:text-cyan-100 disabled:opacity-30"
+                      >
+                        <ArrowLeft size={13} />
+                      </button>
+                      <button
+                        type="button"
+                        aria-label="Move later"
+                        disabled={index === references.length - 1}
+                        onClick={() => moveReference(index, 1)}
+                        className="rounded-md p-1 text-foreground/70 transition-colors hover:text-cyan-100 disabled:opacity-30"
+                      >
+                        <ArrowRight size={13} />
+                      </button>
+                      <button
+                        type="button"
+                        aria-label="Remove reference"
+                        onClick={() => setReferences((prev) => prev.filter((_, i) => i !== index))}
+                        className="rounded-md p-1 text-foreground/70 transition-colors hover:text-red-300"
+                      >
+                        <X size={13} />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </section>
 
-            {/* Reference images */}
-            <Chip onClick={() => fileInputRef.current?.click()} aria-label="Add reference images">
-              {uploading ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
-              <span className="hidden sm:inline">Reference</span>
-            </Chip>
+            {/* Prompt */}
+            <section>
+              <SectionLabel hint="Sent verbatim">Prompt</SectionLabel>
+              <Textarea
+                value={prompt}
+                onChange={(event) => setPrompt(event.target.value)}
+                placeholder="Describe the scene you imagine"
+                rows={8}
+                className="min-h-[170px] resize-y border-white/12 bg-black/30 text-sm leading-relaxed"
+              />
+            </section>
 
             {/* Aspect ratio */}
-            {aspectOptions.length ? (
+            <section>
+              <SectionLabel>Aspect ratio</SectionLabel>
               <Popover open={aspectOpen} onOpenChange={setAspectOpen}>
                 <PopoverTrigger asChild>
-                  <Chip>
+                  <button
+                    type="button"
+                    className="flex w-full items-center gap-3 rounded-xl border border-white/12 bg-black/30 px-3 py-2.5 text-left transition-colors hover:border-cyan-200/40"
+                  >
                     <AspectGlyph ratio={aspectRatio} />
-                    {aspectRatio === "auto" ? "Auto" : aspectRatio}
-                    <ChevronDown size={12} className="opacity-60" />
-                  </Chip>
+                    <span className="min-w-0 flex-1">
+                      <span className="block text-sm text-foreground">
+                        {aspectRatio === "auto" ? "Auto" : aspectRatio}
+                      </span>
+                      <span className="block truncate text-[11px] text-muted-foreground">
+                        {ASPECT_OPTIONS.find((entry) => entry.value === aspectRatio)?.note}
+                      </span>
+                    </span>
+                    <ChevronDown size={14} className="shrink-0 opacity-60" />
+                  </button>
                 </PopoverTrigger>
-                <PopoverContent align="start" className="w-56 border-white/12 bg-background/95 p-2 backdrop-blur-xl">
-                  <div className="grid grid-cols-2 gap-1">
-                    {aspectOptions.map((ratio) => (
-                      <button
-                        key={ratio}
-                        type="button"
-                        onClick={() => { setAspectRatio(ratio); setAspectOpen(false); }}
-                        className={cn(
-                          "flex items-center gap-2 rounded-lg px-2 py-1.5 text-xs transition-colors",
-                          ratio === aspectRatio
-                            ? "bg-cyan-400/15 text-cyan-100"
-                            : "text-foreground/80 hover:bg-white/[0.06]",
-                        )}
-                      >
-                        <AspectGlyph ratio={ratio} />
-                        {ratio === "auto" ? "Auto" : ratio}
-                      </button>
-                    ))}
-                  </div>
+                <PopoverContent
+                  align="start"
+                  className="max-h-80 w-[--radix-popover-trigger-width] overflow-y-auto border-white/12 bg-background/95 p-2 backdrop-blur-xl"
+                >
+                  {ASPECT_OPTIONS.map((option) => (
+                    <button
+                      key={option.value}
+                      type="button"
+                      onClick={() => {
+                        setAspectRatio(option.value);
+                        setAspectOpen(false);
+                      }}
+                      className={cn(
+                        "flex w-full items-center gap-3 rounded-lg px-2 py-2 text-left text-xs transition-colors",
+                        option.value === aspectRatio
+                          ? "bg-cyan-400/15 text-cyan-100"
+                          : "text-foreground/85 hover:bg-white/[0.06]",
+                      )}
+                    >
+                      <AspectGlyph ratio={option.value} />
+                      <span className="font-medium">{option.value === "auto" ? "Auto" : option.value}</span>
+                      <span className="ml-auto truncate text-[11px] text-muted-foreground">{option.note}</span>
+                    </button>
+                  ))}
                 </PopoverContent>
               </Popover>
-            ) : null}
+            </section>
 
-            {/* Quality */}
-            {qualityOptions.length ? (
-              <Popover open={qualityOpen} onOpenChange={setQualityOpen}>
-                <PopoverTrigger asChild>
-                  <Chip>
-                    {quality.toUpperCase()}
-                    <ChevronDown size={12} className="opacity-60" />
-                  </Chip>
-                </PopoverTrigger>
-                <PopoverContent align="start" className="w-40 border-white/12 bg-background/95 p-2 backdrop-blur-xl">
-                  <div className="space-y-1">
-                    {qualityOptions.map((option) => (
-                      <button
-                        key={option}
-                        type="button"
-                        onClick={() => { setQuality(option); setQualityOpen(false); }}
-                        className={cn(
-                          "block w-full rounded-lg px-2 py-1.5 text-left text-xs transition-colors",
-                          option === quality
-                            ? "bg-cyan-400/15 text-cyan-100"
-                            : "text-foreground/80 hover:bg-white/[0.06]",
-                        )}
-                      >
-                        {option.toUpperCase()}
-                      </button>
-                    ))}
-                  </div>
-                </PopoverContent>
-              </Popover>
-            ) : null}
+            {/* Resolution */}
+            <section>
+              <SectionLabel>Resolution</SectionLabel>
+              <div className="flex flex-wrap gap-2">
+                {model.resolutions.map((option) => (
+                  <button
+                    key={option}
+                    type="button"
+                    onClick={() => setQuality(option)}
+                    className={cn(
+                      "rounded-full border px-3.5 py-1.5 text-xs font-medium transition-colors",
+                      option === quality
+                        ? "border-cyan-200/60 bg-cyan-400/15 text-cyan-100"
+                        : "border-white/12 bg-white/[0.03] text-foreground/85 hover:border-cyan-200/40",
+                    )}
+                  >
+                    {option}
+                  </button>
+                ))}
+              </div>
+            </section>
 
-            {/* Motion settings */}
+            {/* Motion */}
             {isVideo ? (
-              <Popover open={motionOpen} onOpenChange={setMotionOpen}>
-                <PopoverTrigger asChild>
-                  <Chip>
-                    {duration}s{model.supportsAudio ? (generateAudio ? " · audio" : " · silent") : ""}
-                    <ChevronDown size={12} className="opacity-60" />
-                  </Chip>
-                </PopoverTrigger>
-                <PopoverContent align="start" className="w-64 space-y-4 border-white/12 bg-background/95 p-4 backdrop-blur-xl">
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between text-xs">
-                      <Label className="text-cyan-100/70">Duration</Label>
-                      <span className="font-medium text-foreground">{duration}s</span>
-                    </div>
-                    <Slider
-                      value={[duration]}
-                      min={model.durationRange?.min ?? 3}
-                      max={model.durationRange?.max ?? 15}
-                      step={1}
-                      onValueChange={([value]) => setDuration(value)}
-                    />
+              <section className="space-y-3 rounded-2xl border border-white/10 bg-black/20 p-3">
+                <SectionLabel>Motion</SectionLabel>
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between text-xs">
+                    <Label className="text-cyan-100/70">Duration</Label>
+                    <span className="font-medium text-foreground">{duration}s</span>
                   </div>
-                  {model.supportsAudio ? (
-                    <label className="flex items-center justify-between text-xs text-foreground/90">
-                      Generate audio
-                      <Switch checked={generateAudio} onCheckedChange={setGenerateAudio} />
-                    </label>
-                  ) : null}
-                </PopoverContent>
-              </Popover>
+                  <Slider
+                    value={[duration]}
+                    min={model.durationRange?.min ?? 3}
+                    max={model.durationRange?.max ?? 15}
+                    step={1}
+                    onValueChange={([value]) => setDuration(value)}
+                  />
+                </div>
+                {model.supportsAudio ? (
+                  <label className="flex items-center justify-between text-xs text-foreground/90">
+                    Generate audio
+                    <Switch checked={generateAudio} onCheckedChange={setGenerateAudio} />
+                  </label>
+                ) : null}
+              </section>
             ) : null}
 
-            <span className="ml-auto text-[11px] text-cyan-200/70">~{estimatedCredits} credits</span>
+            {/* Generate */}
+            <div className="space-y-2 border-t border-white/10 pt-4">
+              <div className="flex items-center justify-between text-[11px] text-cyan-200/70">
+                <span>~{estimatedCredits} credits</span>
+                <span>{references.length ? `${references.length} reference(s)` : "No references"}</span>
+              </div>
+              <Button
+                onClick={handleGenerate}
+                className="w-full rounded-xl bg-[hsl(var(--primary))] py-6 text-base font-semibold text-primary-foreground hover:bg-[hsl(var(--primary))]/90"
+              >
+                <Sparkles size={17} className="mr-2" /> Generate
+              </Button>
+            </div>
+          </aside>
 
-            <Button
-              onClick={() => void handleGenerate()}
-              disabled={submitting}
-              className="rounded-full bg-[hsl(var(--primary))] px-6 font-semibold text-primary-foreground hover:bg-[hsl(var(--primary))]/90"
-            >
-              {submitting ? <Loader2 size={16} className="mr-2 animate-spin" /> : <Sparkles size={16} className="mr-2" />}
-              Generate
-            </Button>
+          {/* RIGHT: output canvas */}
+          <div className="space-y-4">
+            <Tabs defaultValue="gallery">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <TabsList>
+                  <TabsTrigger value="gallery">Gallery</TabsTrigger>
+                  <TabsTrigger value="library">
+                    <Images size={14} className="mr-1.5" /> Asset library
+                  </TabsTrigger>
+                </TabsList>
+                {selected.length ? (
+                  <div className="flex items-center gap-2">
+                    <span className="text-[11px] text-cyan-200/70">{selected.length} selected</span>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={bulkDownload}
+                      className="border-white/15 bg-white/[0.04]"
+                    >
+                      <Download size={14} className="mr-1.5" /> Download
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setConfirmDelete(true)}
+                      className="border-red-400/40 bg-red-500/10 text-red-200 hover:bg-red-500/20 hover:text-red-100"
+                    >
+                      <Trash2 size={14} className="mr-1.5" /> Delete
+                    </Button>
+                    <Button size="sm" variant="ghost" onClick={() => setSelected([])}>
+                      Clear
+                    </Button>
+                  </div>
+                ) : null}
+              </div>
+
+              <TabsContent value="gallery" className="mt-4">
+                {generations.length ? (
+                  <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-4">
+                    {generations.map((generation) => (
+                      <GenerationCard
+                        key={generation.id}
+                        generation={generation}
+                        onUseAsReference={addReference}
+                      />
+                    ))}
+                  </div>
+                ) : (
+                  <div className="rounded-2xl border border-dashed border-white/12 bg-white/[0.02] p-14 text-center">
+                    <Sparkles className="mx-auto mb-3 text-cyan-200/70" size={22} />
+                    <p className="text-sm text-muted-foreground">
+                      Your generations will appear here. Start with a prompt on the left.
+                    </p>
+                  </div>
+                )}
+              </TabsContent>
+
+              <TabsContent value="library" className="mt-4 space-y-6">
+                <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+                  <SectionLabel hint="Shift-click to select a range">Generated outputs</SectionLabel>
+                  {assetGrid(assets.outputs, "No generated assets yet.")}
+                </div>
+                <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+                  <SectionLabel>Uploaded references</SectionLabel>
+                  {assetGrid(assets.uploads, "Uploaded references appear here.")}
+                </div>
+              </TabsContent>
+            </Tabs>
           </div>
         </div>
       </div>
+
+      <AlertDialog open={confirmDelete} onOpenChange={setConfirmDelete}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete {selected.length} asset(s)?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This removes the selected generations from your history permanently. This can't be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(event) => {
+                event.preventDefault();
+                void deleteSelected();
+              }}
+              className="bg-red-500/90 text-white hover:bg-red-500"
+            >
+              {deleting ? <Loader2 size={15} className="mr-2 animate-spin" /> : null} Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </SiteShell>
   );
 }
