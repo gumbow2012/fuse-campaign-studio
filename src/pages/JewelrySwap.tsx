@@ -704,9 +704,8 @@ export default function JewelrySwap() {
     setSwapping(true);
     try {
       for (const index of indices) {
+        // Initial generation is always Nano Banana Pro only — never two models.
         await swapFrame(index, { imageModel: "pro" });
-        // Comparison runs are opt-in only — never automatic.
-        if (generateBoth) await swapFrame(index, { imageModel: "nb2" });
       }
       toast.success(`${indices.length} frame swap(s) queued`);
     } catch (error) {
@@ -714,7 +713,8 @@ export default function JewelrySwap() {
     } finally {
       setSwapping(false);
     }
-  }, [selectedFrames, pieces, swapFrame, generateBoth]);
+  }, [selectedFrames, pieces, swapFrame]);
+
 
   const removeSwap = useCallback(async (frameIndex: number) => {
     const ids = [swaps[frameIndex]?.id, altSwaps[frameIndex]?.id].filter(Boolean) as string[];
