@@ -987,10 +987,22 @@ export default function JewelrySwap() {
   );
 
 
-  const videoDuration = useMemo(
-    () => Math.min(15, Math.max(4, Math.round(meta?.duration ?? 5))),
-    [meta],
-  );
+  /** Seedance 2.0 supported clip lengths (model range 4–15s). */
+  const DURATION_OPTIONS = [4, 6, 8, 10, 12, 15];
+
+  const [videoDuration, setVideoDuration] = useState(15);
+  const [durationTouched, setDurationTouched] = useState(false);
+
+  // Default to the source clip length, snapped into the model's supported set.
+  useEffect(() => {
+    if (durationTouched || !meta?.duration) return;
+    const clamped = Math.min(15, Math.max(4, meta.duration));
+    const nearest = DURATION_OPTIONS.reduce((best, option) =>
+      Math.abs(option - clamped) < Math.abs(best - clamped) ? option : best,
+    );
+    setVideoDuration(nearest);
+  }, [meta, durationTouched]);
+
 
   /* ------------------------- Live dollar/credit preview --------------------- */
 
