@@ -607,45 +607,79 @@ export default function JewelrySwap() {
     };
   }, [inFlightIds.join(",")]);
 
+  /** Labeled references for the function: {url, role, cad} per angle. */
+  const piecePayload = useCallback(
+    () =>
+      pieces.map((piece) => ({
+        urls: piece.urls,
+        references: piece.urls.map((url, angleIndex) => ({
+          url,
+          role: piece.roles[angleIndex] || null,
+          cad: piece.cad && /^CAD/i.test(piece.roles[angleIndex] ?? "")
+            ? true
+            : piece.cad && !piece.roles.some((role) => /^CAD/i.test(role ?? ""))
+            ? true
+            : /^CAD/i.test(piece.roles[angleIndex] ?? ""),
+        })),
+        type: piece.type,
+        metal: piece.metal === AUTO_METAL ? null : piece.metal,
+        stone: piece.stone === AUTO_STONE ? null : piece.stone,
+        quality: piece.quality || null,
+        dimensions: {
+          width: piece.width || null,
+          height: piece.height || null,
+          depth: piece.depth || null,
+          weight: piece.weight || null,
+        },
+        cad: piece.cad,
+        person: piece.person,
+        notes: piece.notes || null,
+      })),
+    [pieces],
+  );
+
   const swapFrame = useCallback(
-    async (frameIndex: number) => {
+    async (
+      frameIndex: number,
+      options?: {
+        imageModel?: JewelryImageModel;
+        preferredRole?: string | null;
+        failureReason?: string | null;
+      },
+    ) => {
       const frame = frames[frameIndex];
       if (!frame) return;
-      const data = await callJewelrySwap<{ generation: SwapGeneration }>({
+      const imageModel: JewelryImageModel = options?.imageModel ?? "pro";
+      const data = await callJewelrySwap<{ generation: JewelryGeneration }>({
         action: "swap_frame",
         sourceFrameUrl: frame.url,
         // Reference order is preserved: the source frame is image 1, then each
         // piece's angles in card order.
-        pieces: pieces.map((piece) => ({
-          urls: piece.urls,
-          type: piece.type,
-          metal: piece.metal === AUTO_METAL ? null : piece.metal,
-          stone: piece.stone === AUTO_STONE ? null : piece.stone,
-          quality: piece.quality || null,
-          dimensions: {
-            width: piece.width || null,
-            height: piece.height || null,
-            depth: piece.depth || null,
-            weight: piece.weight || null,
-          },
-          cad: piece.cad,
-          person: piece.person,
-          notes: piece.notes || null,
-        })),
+        pieces: piecePayload(),
         frameIndex,
         frameTime: frame.time,
         aspectRatio: meta?.aspectRatio,
         extraPrompt,
         resolution: "2K",
+        imageModel,
+        preferredRole:
+          options?.preferredRole !== undefined
+            ? options.preferredRole
+            : framePreferredRole[frameIndex] || null,
+        failureReason: options?.failureReason ?? null,
       });
-      setSwaps((prev) => ({ ...prev, [frameIndex]: data.generation }));
-      setApproved((prev) => {
-        const next = new Set(prev);
-        next.delete(frameIndex);
-        return next;
-      });
+      if (imageModel === "nb2") {
+        setAltSwaps((prev) => ({ ...prev, [frameIndex]: data.generation }));
+      } else {
+        setSwaps((prev) => ({ ...prev, [frameIndex]: data.generation }));
+        setApproved((prev) => {
+          const next = new Set(prev);
+          next.delete(frameIndex);
+          return next;
+        });
+      }
     },
-    [frames, pieces, meta, extraPrompt],
+    [frames, piecePayload, meta, extraPrompt, framePreferredRole],
   );
 
   const runSelectedSwaps = useCallback(async () => {
@@ -660,18 +694,27 @@ export default function JewelrySwap() {
     }
     setSwapping(true);
     try {
-      for (const index of indices) await swapFrame(index);
+      for (const index of indices) {
+        await swapFrame(index, { imageModel: "pro" });
+        // Comparison runs are opt-in only — never automatic.
+        if (generateBoth) await swapFrame(index, { imageModel: "nb2" });
+      }
       toast.success(`${indices.length} frame swap(s) queued`);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Could not queue the swaps");
     } finally {
       setSwapping(false);
     }
-  }, [selectedFrames, pieces, swapFrame]);
+  }, [selectedFrames, pieces, swapFrame, generateBoth]);
 
   const removeSwap = useCallback(async (frameIndex: number) => {
-    const swap = swaps[frameIndex];
+    const ids = [swaps[frameIndex]?.id, altSwaps[frameIndex]?.id].filter(Boolean) as string[];
     setSwaps((prev) => {
+      const next = { ...prev };
+      delete next[frameIndex];
+      return next;
+    });
+    setAltSwaps((prev) => {
       const next = { ...prev };
       delete next[frameIndex];
       return next;
@@ -681,10 +724,17 @@ export default function JewelrySwap() {
       next.delete(frameIndex);
       return next;
     });
-    if (swap) {
-      await callJewelrySwap({ action: "delete", generationIds: [swap.id] }).catch(() => null);
+    if (ids.length) {
+      await callJewelrySwap({ action: "delete", generationIds: ids }).catch(() => null);
     }
-  }, [swaps]);
+  }, [swaps, altSwaps]);
+
+  /** The result the user picked (defaults to Nano Banana Pro). */
+  const selectedSwap = useCallback(
+    (index: number) =>
+      (chosenModel[index] === "nb2" ? altSwaps[index] : swaps[index]) ?? swaps[index] ?? null,
+    [chosenModel, swaps, altSwaps],
+  );
 
   /* ---------------------------- 5. Reconstruction --------------------------- */
 
@@ -692,10 +742,11 @@ export default function JewelrySwap() {
     () =>
       [...approved]
         .sort((a, b) => a - b)
-        .map((index) => swaps[index]?.outputUrl)
+        .map((index) => selectedSwap(index)?.outputUrl)
         .filter((url): url is string => !!url),
-    [approved, swaps],
+    [approved, selectedSwap],
   );
+
 
   const videoDuration = useMemo(
     () => Math.min(15, Math.max(4, Math.round(meta?.duration ?? 5))),
