@@ -90,8 +90,9 @@ async function captureFrame(video: HTMLVideoElement, time: number, maxEdge = 128
   context.drawImage(video, 0, 0, canvas.width, canvas.height);
 
   const blob = await new Promise<Blob | null>((resolve) =>
-    canvas.toBlob((result) => resolve(result), "image/jpeg", 0.92)
+    canvas.toBlob((result) => resolve(result), "image/jpeg", 0.85)
   );
+
   if (!blob) throw new Error("Could not export that frame");
   return new File([blob], `frame-${time.toFixed(2).replace(".", "-")}.jpg`, { type: "image/jpeg" });
 }
