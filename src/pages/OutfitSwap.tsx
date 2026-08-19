@@ -96,6 +96,8 @@ function StatusPill({ generation }: { generation?: SwapGeneration }) {
     ? "Ready"
     : generation.status === "failed"
     ? "Failed"
+    : generation.status === "canceled"
+    ? "Canceled"
     : generation.status === "running"
     ? "Generating"
     : "Queued";
@@ -114,6 +116,62 @@ function StatusPill({ generation }: { generation?: SwapGeneration }) {
     </span>
   );
 }
+
+const PHASE_MESSAGES = [
+  "Preparing your references…",
+  "Reconstructing the motion…",
+  "Rendering the new wardrobe…",
+  "Matching lighting & fabric folds…",
+  "Stabilizing frames…",
+  "Finalizing the clip…",
+];
+
+/**
+ * The provider does not report granular progress, so we ease a simulated meter
+ * toward ~95% and only snap to 100% when the job actually finishes.
+ */
+function VideoProgress({ generationId, onCancel }: { generationId: string; onCancel: () => void }) {
+  const [elapsed, setElapsed] = useState(0);
+
+  useEffect(() => {
+    setElapsed(0);
+    const started = Date.now();
+    const timer = setInterval(() => setElapsed((Date.now() - started) / 1000), 500);
+    return () => clearInterval(timer);
+  }, [generationId]);
+
+  // Exponential ease: fast early, asymptotic toward 95%.
+  const percent = Math.min(95, Math.round(95 * (1 - Math.exp(-elapsed / 55))));
+  const phase = PHASE_MESSAGES[Math.min(PHASE_MESSAGES.length - 1, Math.floor(elapsed / 6))];
+  const minutes = Math.floor(elapsed / 60);
+  const seconds = Math.floor(elapsed % 60);
+
+  return (
+    <div className="space-y-3 rounded-2xl border border-white/10 bg-black/30 p-4">
+      <div className="flex items-center justify-between gap-3">
+        <span className="flex items-center gap-2 text-[11px] uppercase tracking-[0.16em] text-cyan-200/70">
+          <Video size={14} /> {phase}
+        </span>
+        <span className="font-heading text-sm font-semibold text-cyan-100">{percent}%</span>
+      </div>
+      <Progress value={percent} className="h-1.5" />
+      <div className="flex items-center justify-between gap-3">
+        <span className="text-[11px] text-muted-foreground">
+          Elapsed {minutes}:{String(seconds).padStart(2, "0")}
+        </span>
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={onCancel}
+          className="rounded-lg border-white/15 bg-transparent text-[11px] hover:border-red-400/60 hover:text-red-300"
+        >
+          <X size={12} /> Cancel generation
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 
 export default function OutfitSwap() {
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
