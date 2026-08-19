@@ -240,12 +240,19 @@ function SectionLabel({ children, hint }: { children: React.ReactNode; hint?: st
   );
 }
 
+const ICON_ACTION_CLASS =
+  "flex h-7 w-7 items-center justify-center rounded-lg border border-white/15 bg-black/60 text-foreground/80 backdrop-blur-md transition-colors hover:border-cyan-200/60 hover:text-cyan-100";
+
 function GenerationCard({
   generation,
   onUseAsReference,
+  onExpand,
+  onDelete,
 }: {
   generation: Generation;
   onUseAsReference: (url: string) => void;
+  onExpand: (generation: Generation) => void;
+  onDelete: (generation: Generation) => void;
 }) {
   const inFlight = generation.status === "queued" || generation.status === "running";
   const [progress, setProgress] = useState(generation.status === "running" ? 25 : 8);
@@ -257,24 +264,87 @@ function GenerationCard({
   }, [inFlight]);
 
   const isImage = generation.outputType !== "video";
+  const done = generation.status === "complete" && !!generation.outputUrl;
 
   return (
-    <article className="overflow-hidden rounded-2xl border border-white/10 bg-white/[0.03] backdrop-blur-xl">
+    <article className="group overflow-hidden rounded-2xl border border-white/10 bg-white/[0.03] backdrop-blur-xl transition-colors hover:border-cyan-200/30">
       <div className="relative flex aspect-[3/4] items-center justify-center bg-black/50">
-        {generation.status === "complete" && generation.outputUrl ? (
-          isImage ? (
-            <img
-              src={generation.outputUrl}
-              alt={generation.prompt ?? "Generated result"}
-              className="h-full w-full object-cover"
-            />
-          ) : (
-            <video src={generation.outputUrl} controls loop className="h-full w-full object-cover" />
-          )
+        {done ? (
+          <>
+            <button
+              type="button"
+              onClick={() => onExpand(generation)}
+              aria-label="Expand result"
+              className="block h-full w-full"
+            >
+              {isImage ? (
+                <img
+                  src={generation.outputUrl as string}
+                  alt={generation.prompt ?? "Generated result"}
+                  className="h-full w-full object-cover"
+                />
+              ) : (
+                <video
+                  src={generation.outputUrl as string}
+                  muted
+                  loop
+                  playsInline
+                  className="h-full w-full object-cover"
+                />
+              )}
+            </button>
+            <div className="pointer-events-none absolute inset-x-0 top-0 flex justify-end gap-1.5 p-2 opacity-0 transition-opacity group-hover:pointer-events-auto group-hover:opacity-100 focus-within:pointer-events-auto focus-within:opacity-100">
+              {isImage ? (
+                <button
+                  type="button"
+                  aria-label="Use as reference"
+                  title="Use as reference"
+                  onClick={() => onUseAsReference(generation.outputUrl as string)}
+                  className={ICON_ACTION_CLASS}
+                >
+                  <Wand2 size={13} />
+                </button>
+              ) : null}
+              <a
+                href={generation.outputUrl as string}
+                download
+                target="_blank"
+                rel="noreferrer"
+                aria-label="Download"
+                title="Download"
+                className={ICON_ACTION_CLASS}
+              >
+                <Download size={13} />
+              </a>
+              <button
+                type="button"
+                aria-label="Delete"
+                title="Delete"
+                onClick={() => onDelete(generation)}
+                className={cn(ICON_ACTION_CLASS, "hover:border-red-400/60 hover:text-red-300")}
+              >
+                <Trash2 size={13} />
+              </button>
+            </div>
+          </>
         ) : generation.status === "failed" ? (
-          <p className="max-h-full overflow-y-auto px-5 py-4 text-center text-xs text-red-300">
-            {generation.error ?? "Generation failed"}
-          </p>
+          <>
+            <p className="max-h-full overflow-y-auto px-5 py-4 text-center text-xs text-red-300">
+              {generation.error ?? "Generation failed"}
+            </p>
+            <button
+              type="button"
+              aria-label="Delete"
+              title="Delete"
+              onClick={() => onDelete(generation)}
+              className={cn(
+                ICON_ACTION_CLASS,
+                "absolute right-2 top-2 opacity-0 transition-opacity group-hover:opacity-100 hover:border-red-400/60 hover:text-red-300",
+              )}
+            >
+              <Trash2 size={13} />
+            </button>
+          </>
         ) : (
           <div className="w-full space-y-3 px-6 text-center">
             <Loader2 size={20} className="mx-auto animate-spin text-cyan-200" />
@@ -286,38 +356,15 @@ function GenerationCard({
         )}
       </div>
 
-      <div className="space-y-2 p-3">
-        <p className="line-clamp-2 text-xs text-muted-foreground">{generation.prompt ?? "—"}</p>
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <span className="text-[11px] text-cyan-200/70">
-            {generation.estimatedCredits ? `${generation.estimatedCredits} credits` : "—"}
-          </span>
-          {generation.status === "complete" && generation.outputUrl ? (
-            <div className="flex items-center gap-1.5">
-              {isImage ? (
-                <button
-                  type="button"
-                  onClick={() => onUseAsReference(generation.outputUrl as string)}
-                  className="flex items-center gap-1 rounded-full border border-white/15 px-2.5 py-1 text-[11px] text-foreground/90 transition-colors hover:border-cyan-200/50 hover:text-cyan-100"
-                >
-                  <Wand2 size={12} /> Use as reference
-                </button>
-              ) : null}
-              <a
-                href={generation.outputUrl}
-                download
-                target="_blank"
-                rel="noreferrer"
-                className="flex items-center gap-1 rounded-full border border-white/15 px-2.5 py-1 text-[11px] text-foreground/90 transition-colors hover:border-cyan-200/50 hover:text-cyan-100"
-              >
-                <Download size={12} /> Download
-              </a>
-            </div>
-          ) : null}
-        </div>
+      <div className="flex items-center justify-between gap-2 px-3 py-2.5">
+        <p className="line-clamp-1 flex-1 text-xs text-muted-foreground">{generation.prompt ?? "—"}</p>
+        <span className="shrink-0 text-[11px] text-cyan-200/70">
+          {generation.estimatedCredits ? `${generation.estimatedCredits} cr` : "—"}
+        </span>
       </div>
     </article>
   );
+
 }
 
 export default function GenerationStudio() {
