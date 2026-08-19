@@ -5,8 +5,9 @@ import {
   createAdminClient,
   errorMessage,
   json,
-  requireTesterUser,
+  requireBuilderUser,
 } from "../_shared/supabase-admin.ts";
+import { assertCanPublish, FORBIDDEN_PUBLISH_MESSAGE } from "../_shared/template-scope.ts";
 
 type Body = {
   versionId?: string;
@@ -28,7 +29,9 @@ Deno.serve(async (req) => {
   const admin = createAdminClient();
 
   try {
-    const user = await requireTesterUser(req, admin);
+    const access = await requireBuilderUser(req, admin);
+    assertCanPublish(access);
+    const user = access.user;
     const body = await req.json() as Body;
     const versionId = typeof body.versionId === "string" ? body.versionId.trim() : "";
     const reviewStatus = typeof body.reviewStatus === "string" ? body.reviewStatus.trim() : "";
@@ -66,7 +69,8 @@ Deno.serve(async (req) => {
       reviewedBy: nextReviewedBy,
     });
   } catch (error) {
-    return json({ error: errorMessage(error) }, 400);
+    const message = errorMessage(error);
+    return json({ error: message }, message === FORBIDDEN_PUBLISH_MESSAGE ? 403 : 400);
   }
 });
 

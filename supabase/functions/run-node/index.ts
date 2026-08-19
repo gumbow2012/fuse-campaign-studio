@@ -5,8 +5,9 @@ import {
   createAdminClient,
   errorMessage,
   json,
-  requireTesterUser,
+  requireBuilderUser,
 } from "../_shared/supabase-admin.ts";
+import { assertVersionAccess, FORBIDDEN_TEMPLATE_MESSAGE } from "../_shared/template-scope.ts";
 import {
   clampSeedanceDuration,
   getFalPricing,
@@ -459,7 +460,8 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const user = await requireTesterUser(req, admin);
+    const access = await requireBuilderUser(req, admin);
+    const user = access.user;
     const body = await req.json().catch(() => ({})) as {
       action?: string;
       versionId?: string;
@@ -483,6 +485,7 @@ Deno.serve(async (req) => {
       }
 
       if (!body.versionId) throw new Error("versionId is required");
+      await assertVersionAccess(admin, access, body.versionId);
       const { data: runs, error } = await admin
         .from("node_runs")
         .select("*")
@@ -502,6 +505,7 @@ Deno.serve(async (req) => {
 
     if (action !== "start") throw new Error(`Unsupported action: ${action}`);
     if (!body.versionId || !body.nodeId) throw new Error("versionId and nodeId are required");
+    await assertVersionAccess(admin, access, body.versionId);
 
     const run = await startRun(admin, {
       versionId: body.versionId,
@@ -512,7 +516,11 @@ Deno.serve(async (req) => {
     return json({ run });
   } catch (error) {
     const message = errorMessage(error);
-    const status = /access required|authorization|Authentication|bearer/i.test(message) ? 401 : 400;
+    const status = message === FORBIDDEN_TEMPLATE_MESSAGE
+      ? 403
+      : /access required|authorization|Authentication|bearer/i.test(message)
+      ? 401
+      : 400;
     return json({ error: message }, status);
   }
 });
