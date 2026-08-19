@@ -632,6 +632,22 @@ async function startSwapFrame(admin: AdminClient, args: {
   }
 }
 
+/** Hard provider limit for bytedance/seedance-2.0 reference-to-video. */
+const SEEDANCE_MAX_REFERENCES = 9;
+
+/** Evenly-spaced subset of `items`, always keeping the first and last entry. */
+function pickEvenlySpaced<T>(items: T[], max: number): T[] {
+  if (items.length <= max) return items;
+  if (max <= 1) return items.slice(0, Math.max(0, max));
+  const picked: T[] = [];
+  for (let i = 0; i < max; i += 1) {
+    const index = Math.round((i * (items.length - 1)) / (max - 1));
+    const value = items[index];
+    if (!picked.includes(value)) picked.push(value);
+  }
+  return picked;
+}
+
 async function startReconstruction(admin: AdminClient, args: {
   userId: string;
   frameUrls: string[];
@@ -643,8 +659,11 @@ async function startReconstruction(admin: AdminClient, args: {
   extraPrompt?: string;
   webhookBase: string;
 }) {
-  const referenceUrls = cleanUrls(args.frameUrls);
-  if (!referenceUrls.length) throw new Error("Approve at least one swapped frame first");
+  const availableUrls = cleanUrls(args.frameUrls);
+  if (!availableUrls.length) throw new Error("Approve at least one swapped frame first");
+  // Seedance reference-to-video accepts at most 9 reference images — sample
+  // evenly (keeping the first and last) so the rebuild still spans the clip.
+  const referenceUrls = pickEvenlySpaced(availableUrls, SEEDANCE_MAX_REFERENCES);
 
   const videoModel = getVideoModel(
     args.model === "seedance-2.0-fast" ? "seedance-2.0-fast" : "seedance-2.0",
@@ -708,6 +727,8 @@ async function startReconstruction(admin: AdminClient, args: {
           feature: "jewelry-swap",
           stage: "reconstruction",
           video_model: videoModel.key,
+          references_used: referenceUrls.length,
+          references_available: availableUrls.length,
         },
       })
       .eq("id", inserted.id)

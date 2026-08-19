@@ -1983,6 +1983,14 @@ export default function JewelrySwap() {
                   {costPreview(creditsFromUsd(videoCostUsd), videoCostUsd)}
                 </p>
 
+                {/* Provider caps reference-to-video at 9 images — inform, never block. */}
+                {approvedUrls.length > 9 ? (
+                  <p className="rounded-xl border border-amber-300/30 bg-amber-400/10 px-3 py-2 text-[10px] text-amber-100">
+                    Seedance uses up to 9 reference frames — 9 evenly-spaced approved frames will be
+                    used.
+                  </p>
+                ) : null}
+
                 <Button
                   onClick={reconstruct}
                   disabled={reconstructing || !approvedUrls.length}
@@ -2678,11 +2686,25 @@ export default function JewelrySwap() {
                           />
                         ) : (
                           <div className="space-y-2">
-                            <p className="rounded-xl border border-red-400/30 bg-red-500/10 p-2.5 text-[11px] text-red-300">
-                              {video.status === "canceled"
-                                ? "Canceled — start a new video whenever you're ready."
-                                : video.error ?? "Reconstruction failed"}
-                            </p>
+                            <div className="rounded-xl border border-red-400/30 bg-red-500/10 p-2.5 text-[11px] text-red-300">
+                              {video.status === "canceled" ? (
+                                "Canceled — start a new video whenever you're ready."
+                              ) : (
+                                <>
+                                  <p>Rebuild failed — try generating again.</p>
+                                  {video.error ? (
+                                    <details className="mt-1">
+                                      <summary className="cursor-pointer text-[10px] text-red-200/70">
+                                        Technical details
+                                      </summary>
+                                      <p className="mt-1 break-words text-[10px] text-red-200/70">
+                                        {video.error}
+                                      </p>
+                                    </details>
+                                  ) : null}
+                                </>
+                              )}
+                            </div>
                             <Button
                               size="sm"
                               variant="outline"
