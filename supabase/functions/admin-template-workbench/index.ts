@@ -38,7 +38,7 @@ type Action =
   | "reorder_edge"
   | "delete_edge";
 
-type NodeType = "user_input" | "image_gen" | "video_gen";
+type NodeType = "user_input" | "image_gen" | "video_gen" | "prompt";
 type StarterPreset = "campaign" | "reference" | "blank";
 type ReferenceAssetDraft = {
   label?: string | null;
