@@ -15,6 +15,8 @@ import {
   Square,
   Trash2,
   Video,
+  Volume2,
+  VolumeX,
   Wand2,
   X,
 } from "lucide-react";
@@ -28,7 +30,6 @@ import { Label } from "@/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Progress } from "@/components/ui/progress";
 import { Slider } from "@/components/ui/slider";
-import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -73,7 +74,8 @@ type StudioModel = {
   supportsEndFrame?: boolean;
 };
 
-const DEFAULT_RESOLUTIONS = ["2K", "4K"];
+const IMAGE_RESOLUTIONS = ["1K", "2K", "4K"];
+const KLING_RESOLUTIONS = ["720p", "1080p", "4K"];
 const SEEDANCE_RESOLUTIONS = ["480p", "720p", "1080p", "4K"];
 
 const ASPECT_OPTIONS: { value: string; note: string }[] = [
@@ -96,7 +98,7 @@ const STUDIO_MODELS: StudioModel[] = [
     kind: "image",
     blurb: "Google's flagship image model — reference-driven edits",
     recommended: true,
-    resolutions: DEFAULT_RESOLUTIONS,
+    resolutions: IMAGE_RESOLUTIONS,
   },
   {
     key: "kling-3.0-pro",
@@ -107,7 +109,7 @@ const STUDIO_MODELS: StudioModel[] = [
     usdPerSecond: 0.112,
     usdPerSecondAudio: 0.168,
     durationRange: { min: 3, max: 15 },
-    resolutions: DEFAULT_RESOLUTIONS,
+    resolutions: KLING_RESOLUTIONS,
     supportsAudio: true,
     supportsEndFrame: true,
   },
@@ -119,7 +121,7 @@ const STUDIO_MODELS: StudioModel[] = [
     usdPerSecond: 0.112,
     usdPerSecondAudio: 0.168,
     durationRange: { min: 3, max: 15 },
-    resolutions: DEFAULT_RESOLUTIONS,
+    resolutions: KLING_RESOLUTIONS,
     supportsAudio: true,
     supportsEndFrame: true,
   },
@@ -998,6 +1000,27 @@ export default function GenerationStudio() {
               </div>
             </section>
 
+            {/* Sound */}
+            {isVideo && model.supportsAudio ? (
+              <section>
+                <SectionLabel>Sound</SectionLabel>
+                <button
+                  type="button"
+                  aria-pressed={generateAudio}
+                  onClick={() => setGenerateAudio((prev) => !prev)}
+                  className={cn(
+                    "flex w-full items-center justify-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-medium transition-colors",
+                    generateAudio
+                      ? "border-cyan-200/60 bg-cyan-400/15 text-cyan-100"
+                      : "border-white/12 bg-white/[0.03] text-foreground/70 hover:border-cyan-200/40",
+                  )}
+                >
+                  {generateAudio ? <Volume2 size={15} /> : <VolumeX size={15} />}
+                  {generateAudio ? "Sound on" : "Sound off"}
+                </button>
+              </section>
+            ) : null}
+
             {/* Motion */}
             {isVideo ? (
               <section className="space-y-3 rounded-2xl border border-white/10 bg-black/20 p-3">
@@ -1015,12 +1038,6 @@ export default function GenerationStudio() {
                     onValueChange={([value]) => setDuration(value)}
                   />
                 </div>
-                {model.supportsAudio ? (
-                  <label className="flex items-center justify-between text-xs text-foreground/90">
-                    Generate audio
-                    <Switch checked={generateAudio} onCheckedChange={setGenerateAudio} />
-                  </label>
-                ) : null}
               </section>
             ) : null}
 
