@@ -900,12 +900,13 @@ export default function JewelrySwap() {
         imageModel?: JewelryImageModel;
         preferredRole?: string | null;
         failureReason?: string | null;
-        macro?: boolean;
+        mode?: ReplacementMode;
       },
     ) => {
       const frame = frames[frameIndex];
       if (!frame) return;
       const imageModel: JewelryImageModel = options?.imageModel ?? "pro";
+      const mode: ReplacementMode = options?.mode ?? frameMode[frameIndex] ?? "auto";
       const data = await callJewelrySwap<{ generation: JewelryGeneration }>({
         action: "swap_frame",
         sourceFrameUrl: frame.url,
@@ -923,7 +924,9 @@ export default function JewelrySwap() {
             ? options.preferredRole
             : framePreferredRole[frameIndex] || null,
         failureReason: options?.failureReason ?? null,
-        macro: options?.macro ?? frameMacro[frameIndex] === true,
+        mode,
+        // Back-compat with the previous per-frame Macro toggle.
+        macro: mode === "macro",
       });
       if (imageModel === "nb2") {
         setAltSwaps((prev) => ({ ...prev, [frameIndex]: data.generation }));
@@ -936,7 +939,8 @@ export default function JewelrySwap() {
         });
       }
     },
-    [frames, piecePayload, meta, extraPrompt, framePreferredRole, frameMacro],
+    [frames, piecePayload, meta, extraPrompt, framePreferredRole, frameMode],
+
   );
 
   /**
