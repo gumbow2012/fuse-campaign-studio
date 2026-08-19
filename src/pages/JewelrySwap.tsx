@@ -1993,7 +1993,11 @@ export default function JewelrySwap() {
                     ["Model", "Kling 3.0"],
                     ["Resolution", "1080p"],
                     ["Duration", "3 sec"],
-                    ["Motion", "Dolly in"],
+                    [
+                      "Motion",
+                      CAMERA_DIRECTIONS.find((option) => option.value === cameraDirection)?.label ??
+                        "Auto — Jewelry Cinematic",
+                    ],
                   ].map(([label, value]) => (
                     <div
                       key={label}
@@ -2006,6 +2010,37 @@ export default function JewelrySwap() {
                     </div>
                   ))}
                 </dl>
+
+                <div>
+                  <label className="mb-1 block text-[10px] uppercase tracking-[0.14em] text-cyan-200/70">
+                    Camera direction
+                  </label>
+                  <select
+                    value={cameraDirection}
+                    onChange={(event) => setCameraDirection(event.target.value)}
+                    className={SELECT_CLASS}
+                  >
+                    {CAMERA_DIRECTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="mt-1 text-[10px] text-muted-foreground">
+                    Auto plans the whole approved set as one varied shot pack — the jewelry stays
+                    locked, only the camera, focus and lights move.
+                  </p>
+                </div>
+
+                {cameraDirection === "custom" ? (
+                  <Textarea
+                    value={customCameraPrompt}
+                    onChange={(event) => setCustomCameraPrompt(event.target.value)}
+                    placeholder="Describe the camera move, focus and lighting (the jewelry always stays locked)."
+                    className="min-h-[70px] rounded-xl border-white/12 bg-black/40 text-xs"
+                  />
+                ) : null}
+
 
                 <Button
                   disabled={animating || !approvedFrames.length}
