@@ -861,8 +861,8 @@ export default function JewelrySwap() {
 
             <SectionCard
               step={3}
-              title="Clothing references"
-              hint="Set the type for each product. No auto-detection."
+              title="Jewelry references"
+              hint="One card per physical piece. Add extra angles (front / back / side / CAD / macro) to the same card."
             >
               <input
                 ref={pieceInputRef}
@@ -876,87 +876,267 @@ export default function JewelrySwap() {
                   void addPieces(files);
                 }}
               />
+              <input
+                ref={angleInputRef}
+                type="file"
+                accept="image/*"
+                multiple
+                className="hidden"
+                onChange={(event) => {
+                  const files = Array.from(event.target.files ?? []);
+                  event.target.value = "";
+                  void addAngles(files);
+                }}
+              />
               <div className="space-y-2.5">
                 {pieces.map((piece, index) => (
                   <div
-                    key={`${piece.url}-${index}`}
-                    className="rounded-2xl border border-white/10 bg-black/25 p-2.5"
+                    key={`${piece.urls[0] ?? index}-${index}`}
+                    className={cn(
+                      "rounded-2xl border bg-black/25 p-2.5",
+                      piece.cad ? "border-cyan-200/50" : "border-white/10",
+                    )}
                   >
-                    <div className="flex gap-3">
-                      <div className="relative h-20 w-16 shrink-0 overflow-hidden rounded-xl border border-white/10 bg-black/50">
-                        <img
-                          src={piece.url}
-                          alt={piece.name || `Reference ${index + 1}`}
-                          className="h-full w-full object-cover"
-                        />
-                        <span className="absolute left-1 top-1 rounded bg-black/80 px-1 text-[9px] font-semibold text-cyan-100">
-                          REF {index + 2}
-                        </span>
-                      </div>
-                      <div className="min-w-0 flex-1 space-y-2">
-                        <p className="truncate text-[11px] font-medium text-foreground" title={piece.name}>
-                          {piece.name || `Product ${index + 1}`}
-                        </p>
-                        <div>
-                          <label className="mb-1 block text-[10px] uppercase tracking-[0.14em] text-cyan-200/70">
-                            Type
-                          </label>
-                          <select
-                            value={piece.type}
-                            onChange={(event) =>
-                              setPieces((prev) =>
-                                prev.map((item, i) => (i === index ? { ...item, type: event.target.value } : item)),
-                              )
-                            }
-                            className={SELECT_CLASS}
-                          >
-                            {GARMENT_TYPES.map((type) => (
-                              <option key={type} value={type}>
-                                {type}
-                              </option>
-                            ))}
-                          </select>
+                    <div className="flex items-start justify-between gap-2">
+                      <p className="truncate text-[11px] font-medium text-foreground" title={piece.name}>
+                        {piece.name || `Piece ${index + 1}`}
+                      </p>
+                      <span className="flex shrink-0 items-center gap-1.5">
+                        {piece.cad ? (
+                          <span className="rounded-full border border-cyan-200/60 bg-cyan-400/15 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.14em] text-cyan-100">
+                            CAD authority
+                          </span>
+                        ) : null}
+                        <button
+                          type="button"
+                          aria-label="Remove piece"
+                          onClick={() => setPieces((prev) => prev.filter((_, i) => i !== index))}
+                          className="rounded-lg border border-white/15 bg-black/50 p-1.5 text-foreground/70 transition-colors hover:border-red-400/60 hover:text-red-300"
+                        >
+                          <X size={12} />
+                        </button>
+                      </span>
+                    </div>
+
+                    {/* Every image on this card describes the SAME physical piece. */}
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      {piece.urls.map((url, angleIndex) => (
+                        <div
+                          key={`${url}-${angleIndex}`}
+                          className="relative h-16 w-14 overflow-hidden rounded-lg border border-white/10 bg-black/50"
+                        >
+                          <img src={url} alt={`Angle ${angleIndex + 1}`} className="h-full w-full object-cover" />
+                          {piece.urls.length > 1 ? (
+                            <button
+                              type="button"
+                              aria-label="Remove angle"
+                              onClick={() =>
+                                setPieces((prev) =>
+                                  prev.map((item, i) =>
+                                    i === index
+                                      ? { ...item, urls: item.urls.filter((_, a) => a !== angleIndex) }
+                                      : item,
+                                  ),
+                                )
+                              }
+                              className="absolute right-0.5 top-0.5 rounded bg-black/80 p-0.5 text-foreground/80 hover:text-red-300"
+                            >
+                              <X size={9} />
+                            </button>
+                          ) : null}
                         </div>
-                        <div>
-                          <label className="mb-1 block text-[10px] uppercase tracking-[0.14em] text-cyan-200/70">
-                            Apply to
-                          </label>
-                          <select
-                            value={piece.person}
-                            onChange={(event) =>
-                              setPieces((prev) =>
-                                prev.map((item, i) => (i === index ? { ...item, person: event.target.value } : item)),
-                              )
-                            }
-                            className={SELECT_CLASS}
-                          >
-                            {APPLY_TO_OPTIONS.map((option) => (
-                              <option key={option} value={option}>
-                                {option}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-                        <Input
-                          value={piece.label}
+                      ))}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setAngleTarget(index);
+                          angleInputRef.current?.click();
+                        }}
+                        className="flex h-16 w-14 flex-col items-center justify-center gap-1 rounded-lg border border-dashed border-white/15 bg-black/25 text-[9px] text-foreground/75 transition-colors hover:border-cyan-200/50"
+                      >
+                        <Plus size={12} className="text-cyan-200" />
+                        Angle
+                      </button>
+                    </div>
+
+                    <div className="mt-2.5 grid gap-2 sm:grid-cols-2">
+                      <div>
+                        <label className="mb-1 block text-[10px] uppercase tracking-[0.14em] text-cyan-200/70">
+                          Type
+                        </label>
+                        <select
+                          value={piece.type}
                           onChange={(event) =>
                             setPieces((prev) =>
-                              prev.map((item, i) => (i === index ? { ...item, label: event.target.value } : item)),
+                              prev.map((item, i) => (i === index ? { ...item, type: event.target.value } : item)),
                             )
                           }
-                          placeholder="Optional label"
+                          className={SELECT_CLASS}
+                        >
+                          {JEWELRY_TYPES.map((type) => (
+                            <option key={type} value={type}>
+                              {type}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="mb-1 block text-[10px] uppercase tracking-[0.14em] text-cyan-200/70">
+                          Metal
+                        </label>
+                        <select
+                          value={piece.metal}
+                          onChange={(event) =>
+                            setPieces((prev) =>
+                              prev.map((item, i) => (i === index ? { ...item, metal: event.target.value } : item)),
+                            )
+                          }
+                          className={SELECT_CLASS}
+                        >
+                          {METAL_OPTIONS.map((option) => (
+                            <option key={option} value={option}>
+                              {option}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="mb-1 block text-[10px] uppercase tracking-[0.14em] text-cyan-200/70">
+                          Stone
+                        </label>
+                        <select
+                          value={piece.stone}
+                          onChange={(event) =>
+                            setPieces((prev) =>
+                              prev.map((item, i) => (i === index ? { ...item, stone: event.target.value } : item)),
+                            )
+                          }
+                          className={SELECT_CLASS}
+                        >
+                          {STONE_OPTIONS.map((option) => (
+                            <option key={option} value={option}>
+                              {option}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="mb-1 block text-[10px] uppercase tracking-[0.14em] text-cyan-200/70">
+                          Stone quality
+                        </label>
+                        <select
+                          value={piece.quality}
+                          onChange={(event) =>
+                            setPieces((prev) =>
+                              prev.map((item, i) => (i === index ? { ...item, quality: event.target.value } : item)),
+                            )
+                          }
+                          className={SELECT_CLASS}
+                        >
+                          {QUALITY_OPTIONS.map((option) => (
+                            <option key={option} value={option}>
+                              {option || "Optional"}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+
+                    <div className="mt-2 grid grid-cols-4 gap-1.5">
+                      {(
+                        [
+                          ["width", "W mm"],
+                          ["height", "H mm"],
+                          ["depth", "D mm"],
+                          ["weight", "g"],
+                        ] as const
+                      ).map(([field, label]) => (
+                        <Input
+                          key={field}
+                          value={piece[field]}
+                          inputMode="decimal"
+                          onChange={(event) =>
+                            setPieces((prev) =>
+                              prev.map((item, i) =>
+                                i === index ? { ...item, [field]: event.target.value } : item,
+                              ),
+                            )
+                          }
+                          placeholder={label}
+                          className="h-8 rounded-lg border-white/12 bg-black/40 text-center text-[11px]"
+                        />
+                      ))}
+                    </div>
+
+                    <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                      <div>
+                        <label className="mb-1 block text-[10px] uppercase tracking-[0.14em] text-cyan-200/70">
+                          Apply to
+                        </label>
+                        <select
+                          value={piece.person}
+                          onChange={(event) =>
+                            setPieces((prev) =>
+                              prev.map((item, i) => (i === index ? { ...item, person: event.target.value } : item)),
+                            )
+                          }
+                          className={SELECT_CLASS}
+                        >
+                          {APPLY_TO_OPTIONS.map((option) => (
+                            <option key={option} value={option}>
+                              {option}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="mb-1 block text-[10px] uppercase tracking-[0.14em] text-cyan-200/70">
+                          Notes
+                        </label>
+                        <Input
+                          value={piece.notes}
+                          onChange={(event) =>
+                            setPieces((prev) =>
+                              prev.map((item, i) => (i === index ? { ...item, notes: event.target.value } : item)),
+                            )
+                          }
+                          placeholder="Optional"
                           className="h-8 rounded-lg border-white/12 bg-black/40 text-xs"
                         />
                       </div>
-                      <button
-                        type="button"
-                        aria-label="Remove product"
-                        onClick={() => setPieces((prev) => prev.filter((_, i) => i !== index))}
-                        className="self-start rounded-lg border border-white/15 bg-black/50 p-1.5 text-foreground/70 transition-colors hover:border-red-400/60 hover:text-red-300"
-                      >
-                        <X size={12} />
-                      </button>
                     </div>
+
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={piece.cad}
+                      onClick={() =>
+                        setPieces((prev) =>
+                          prev.map((item, i) => (i === index ? { ...item, cad: !item.cad } : item)),
+                        )
+                      }
+                      className={cn(
+                        "mt-2 flex w-full items-center justify-between gap-3 rounded-xl border px-3 py-2 text-[11px] font-medium transition-colors",
+                        piece.cad
+                          ? "border-cyan-200/60 bg-cyan-400/15 text-cyan-100"
+                          : "border-white/12 bg-white/[0.03] text-foreground/70 hover:border-cyan-200/40",
+                      )}
+                    >
+                      <span className="text-left">This is a CAD / design-authority reference</span>
+                      <span
+                        className={cn(
+                          "relative h-4 w-8 shrink-0 rounded-full transition-colors",
+                          piece.cad ? "bg-cyan-300/80" : "bg-white/15",
+                        )}
+                      >
+                        <span
+                          className={cn(
+                            "absolute top-0.5 h-3 w-3 rounded-full bg-black transition-all",
+                            piece.cad ? "left-[18px]" : "left-0.5",
+                          )}
+                        />
+                      </span>
+                    </button>
                   </div>
                 ))}
                 <button
@@ -969,18 +1149,33 @@ export default function JewelrySwap() {
                   ) : (
                     <Plus size={14} className="text-cyan-200" />
                   )}
-                  Add product image
+                  Add jewelry piece
                 </button>
               </div>
+
+              {/* Config summary — real settings only, never a fake accuracy score. */}
+              {pieces.length ? (
+                <ul className="mt-3 space-y-1.5">
+                  {pieces.map((piece, index) => (
+                    <li
+                      key={`summary-${index}`}
+                      className="rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-[10px] uppercase tracking-[0.12em] text-foreground/80"
+                    >
+                      {pieceSummary(piece, frames.length)}
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
 
               <div className="mt-4">
                 <Textarea
                   value={extraPrompt}
                   onChange={(event) => setExtraPrompt(event.target.value)}
-                  placeholder="Optional extra direction (styling notes, fit, how the piece sits)"
+                  placeholder="Optional extra direction (how the piece sits, layering, styling notes)"
                   className="min-h-[70px] rounded-xl border-white/12 bg-black/40 text-xs"
                 />
               </div>
+
             </SectionCard>
 
             <SectionCard step={5} title="Video generation" hint="Your clip, rebuilt with the new jewelry.">
