@@ -1,3 +1,5 @@
+import { compressVideoFrame } from "@/lib/imageCompress";
+
 /**
  * Client-side frame extraction — no ffmpeg, no server work.
  * Samples roughly one frame per second plus the final frame, so a 10.6s clip
