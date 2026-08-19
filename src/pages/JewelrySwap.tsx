@@ -693,6 +693,23 @@ export default function JewelrySwap() {
     [frames, piecePayload, meta, extraPrompt, framePreferredRole],
   );
 
+  /**
+   * Opt-in only: runs the alternate image model WITHOUT touching the Pro result,
+   * then opens the comparison modal so one of them can be approved.
+   */
+  const tryAlternateModel = useCallback(
+    async (frameIndex: number) => {
+      try {
+        await swapFrame(frameIndex, { imageModel: "nb2" });
+        setCompareIndex(frameIndex);
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : "Could not start the alternate model");
+      }
+    },
+    [swapFrame],
+  );
+
+
   const runSelectedSwaps = useCallback(async () => {
     if (!pieces.length) {
       toast.error("Add at least one jewelry reference");
