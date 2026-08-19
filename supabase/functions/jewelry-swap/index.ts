@@ -1480,6 +1480,7 @@ Deno.serve(async (req) => {
         imageModel: body.imageModel,
         preferredRole: body.preferredRole ?? null,
         failureReason: body.failureReason ?? null,
+        mode: typeof body.mode === "string" ? body.mode : null,
         macro: body.macro === true,
         webhookBase,
       });
