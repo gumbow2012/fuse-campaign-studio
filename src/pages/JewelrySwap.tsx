@@ -2351,6 +2351,46 @@ export default function JewelrySwap() {
                             ? "Flagged: source region ambiguous"
                             : "Flag — source region ambiguous"}
                         </button>
+
+                        {/* Manual review flags — user-set only, no auto-detection. */}
+                        <div className="grid grid-cols-2 gap-1.5">
+                          {[
+                            {
+                              label: "Possible incomplete replacement",
+                              short: "Incomplete?",
+                              on: flagIncomplete.has(index),
+                              set: setFlagIncomplete,
+                            },
+                            {
+                              label: "Possible hybrid replacement",
+                              short: "Hybrid?",
+                              on: flagHybrid.has(index),
+                              set: setFlagHybrid,
+                            },
+                          ].map((flag) => (
+                            <button
+                              key={flag.short}
+                              type="button"
+                              title={flag.label}
+                              onClick={() =>
+                                flag.set((prev) => {
+                                  const next = new Set(prev);
+                                  if (next.has(index)) next.delete(index);
+                                  else next.add(index);
+                                  return next;
+                                })
+                              }
+                              className={cn(
+                                "rounded-lg border px-2 py-1.5 text-[10px] transition-colors",
+                                flag.on
+                                  ? "border-amber-300/60 bg-amber-300/10 text-amber-100"
+                                  : "border-white/12 bg-transparent text-muted-foreground hover:border-amber-300/40",
+                              )}
+                            >
+                              {flag.on ? `Flagged: ${flag.short}` : flag.short}
+                            </button>
+                          ))}
+                        </div>
                       </article>
                     );
                   })}
