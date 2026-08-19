@@ -291,6 +291,20 @@ const FAILURE_CORRECTIONS: Record<string, string> = {
     "CORRECTION: The previous attempt invented or incorrectly translated the replacement jewelry's microscopic design. Prioritize the uploaded Macro Detail / CAD / closest product references and reproduce the replacement's actual stone cuts, settings, metal construction and surface geometry.",
   "macrodetaildoesn’tmatchreference":
     "CORRECTION: The previous attempt invented or incorrectly translated the replacement jewelry's microscopic design. Prioritize the uploaded Macro Detail / CAD / closest product references and reproduce the replacement's actual stone cuts, settings, metal construction and surface geometry.",
+  "macromismatch":
+    "CORRECTION: The previous attempt invented or incorrectly translated the replacement jewelry's microscopic design, or matched the wrong kind of detail. Identify what detail the source is photographing and reproduce the REPLACEMENT's corresponding detail at the same macro scale, prioritizing the uploaded Macro Detail / CAD / closest product references.",
+  "incompletereplacement":
+    "CORRECTION: Previous result left recognizable original jewelry in the target region. Remove ALL original identity and rebuild the entire jewelry region from the references.",
+  "hybridofold+new":
+    "CORRECTION: Previous generation created a hybrid object containing recognizable elements from the original jewelry. Completely remove all source-jewelry identity from the target region. Reconstruct one coherent replacement object exclusively from the uploaded jewelry references.",
+  "hybridofoldandnew":
+    "CORRECTION: Previous generation created a hybrid object containing recognizable elements from the original jewelry. Completely remove all source-jewelry identity from the target region. Reconstruct one coherent replacement object exclusively from the uploaded jewelry references.",
+  "wrongreplacementsection":
+    "CORRECTION: The previous attempt reproduced the wrong region of the replacement object. Re-identify which part of the piece SOURCE_FRAME is showing, then render the REPLACEMENT's corresponding part — same component, same approximate scale, same viewing side.",
+  "wrongfront/back/side":
+    "CORRECTION: Match the source's viewing side and prioritize the correspondingly-labeled reference (Back/Side/CAD); do not switch to a front hero view.",
+  "wrongfrontbackside":
+    "CORRECTION: Match the source's viewing side and prioritize the correspondingly-labeled reference (Back/Side/CAD); do not switch to a front hero view.",
   other:
 
     "CORRECTION: the previous attempt was inaccurate. Re-read SOURCE_FRAME for the shot and the references for the object's construction, and follow both strictly.",
