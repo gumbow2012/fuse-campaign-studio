@@ -775,7 +775,7 @@ export default function JewelrySwap() {
       const data = await callJewelrySwap<{ generation: SwapGeneration }>({
         action: "reconstruct",
         frameUrls: approvedUrls,
-        pieces,
+        pieces: piecePayload(),
         model: videoModel,
         duration: videoDuration,
         resolution,
@@ -793,7 +793,7 @@ export default function JewelrySwap() {
     } finally {
       setReconstructing(false);
     }
-  }, [approvedUrls, pieces, videoModel, resolution, preserveAudio, meta, extraPrompt, videoDuration]);
+  }, [approvedUrls, piecePayload, videoModel, resolution, preserveAudio, meta, extraPrompt, videoDuration]);
 
   /** Stops tracking and frees the UI, even if the provider job keeps running. */
   const cancelVideo = useCallback(async () => {
@@ -1458,6 +1458,48 @@ export default function JewelrySwap() {
                   ))}
                 </ul>
               ) : null}
+
+              <div className="mt-3 flex items-center justify-between gap-2 rounded-xl border border-cyan-200/30 bg-cyan-400/10 px-3 py-2">
+                <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-cyan-100">
+                  Geometry fidelity: Strict
+                </span>
+                <span className="text-[10px] text-cyan-100/70">
+                  Source composition dominates · no reframing or invented detail
+                </span>
+              </div>
+
+              <button
+                type="button"
+                role="switch"
+                aria-checked={generateBoth}
+                onClick={() => setGenerateBoth((prev) => !prev)}
+                className={cn(
+                  "mt-2 flex w-full items-center justify-between gap-3 rounded-xl border px-3 py-2 text-[11px] font-medium transition-colors",
+                  generateBoth
+                    ? "border-cyan-200/60 bg-cyan-400/15 text-cyan-100"
+                    : "border-white/12 bg-white/[0.03] text-foreground/70 hover:border-cyan-200/40",
+                )}
+              >
+                <span className="text-left">
+                  Advanced: generate both models for comparison
+                  <span className="block text-[10px] font-normal text-muted-foreground">
+                    Off by default — doubles the image cost per frame.
+                  </span>
+                </span>
+                <span
+                  className={cn(
+                    "relative h-4 w-8 shrink-0 rounded-full transition-colors",
+                    generateBoth ? "bg-cyan-300/80" : "bg-white/15",
+                  )}
+                >
+                  <span
+                    className={cn(
+                      "absolute top-0.5 h-3 w-3 rounded-full bg-black transition-all",
+                      generateBoth ? "left-[18px]" : "left-0.5",
+                    )}
+                  />
+                </span>
+              </button>
 
               <div className="mt-4">
                 <Textarea
