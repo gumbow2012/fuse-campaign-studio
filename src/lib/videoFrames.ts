@@ -81,20 +81,12 @@ async function seekTo(video: HTMLVideoElement, time: number) {
 
 /** Draw the current video frame to a JPEG file, downscaled to a sane long edge. */
 async function captureFrame(video: HTMLVideoElement, time: number, maxEdge = 1280) {
-  const scale = Math.min(1, maxEdge / Math.max(video.videoWidth, video.videoHeight));
-  const canvas = document.createElement("canvas");
-  canvas.width = Math.round(video.videoWidth * scale);
-  canvas.height = Math.round(video.videoHeight * scale);
-  const context = canvas.getContext("2d");
-  if (!context) throw new Error("Canvas is unavailable in this browser");
-  context.drawImage(video, 0, 0, canvas.width, canvas.height);
-
-  const blob = await new Promise<Blob | null>((resolve) =>
-    canvas.toBlob((result) => resolve(result), "image/jpeg", 0.85)
+  return await compressVideoFrame(
+    video,
+    `frame-${time.toFixed(2).replace(".", "-")}.jpg`,
+    maxEdge,
+    0.85,
   );
-
-  if (!blob) throw new Error("Could not export that frame");
-  return new File([blob], `frame-${time.toFixed(2).replace(".", "-")}.jpg`, { type: "image/jpeg" });
 }
 
 /** Extract one file per timestamp, reporting progress as it goes. */
