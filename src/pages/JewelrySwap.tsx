@@ -479,6 +479,7 @@ export default function JewelrySwap() {
   const [assetsError, setAssetsError] = useState<string | null>(null);
   const [assetSearch, setAssetSearch] = useState("");
   const [assetTypeFilter, setAssetTypeFilter] = useState<"all" | "image" | "video">("all");
+  const [pickerLimit, setPickerLimit] = useState(24);
   const [sourceNotice, setSourceNotice] = useState<string | null>(null);
 
   const loadAssets = useCallback(async (type: "all" | "image" | "video") => {
