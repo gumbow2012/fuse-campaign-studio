@@ -1520,7 +1520,7 @@ export default function JewelrySwap() {
                     key={`${piece.urls[0] ?? index}-${index}`}
                     className={cn(
                       "rounded-2xl border bg-black/25 p-2.5",
-                      piece.cad ? "border-cyan-200/50" : "border-white/10",
+                      authorityCount(piece) > 0 ? "border-cyan-200/50" : "border-white/10",
                     )}
                   >
                     <div className="flex items-start justify-between gap-2">
@@ -1528,11 +1528,12 @@ export default function JewelrySwap() {
                         {piece.name || `Piece ${index + 1}`}
                       </p>
                       <span className="flex shrink-0 items-center gap-1.5">
-                        {piece.cad ? (
-                          <span className="rounded-full border border-cyan-200/60 bg-cyan-400/15 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.14em] text-cyan-100">
-                            CAD authority
-                          </span>
-                        ) : null}
+                        <span className="rounded-full border border-white/12 bg-black/40 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.14em] text-foreground/70">
+                          Design authority:{" "}
+                          {authorityCount(piece)
+                            ? `${authorityCount(piece)} reference${authorityCount(piece) === 1 ? "" : "s"}`
+                            : "none"}
+                        </span>
                         <button
                           type="button"
                           aria-label="Remove piece"
@@ -1562,6 +1563,9 @@ export default function JewelrySwap() {
                                             ...item,
                                             urls: item.urls.filter((_, a) => a !== angleIndex),
                                             roles: item.roles.filter((_, a) => a !== angleIndex),
+                                            cads: item.urls
+                                              .map((_, a) => item.cads?.[a] ?? null)
+                                              .filter((_, a) => a !== angleIndex),
                                           }
                                         : item,
                                     ),
@@ -1599,6 +1603,34 @@ export default function JewelrySwap() {
                               </option>
                             ))}
                           </select>
+                          {/* Geometry authority is per reference image — auto-on for CAD labels. */}
+                          <label
+                            className="flex items-center gap-1 text-[9px] text-muted-foreground"
+                            title="Use this image as the geometry / design authority"
+                          >
+                            <input
+                              type="checkbox"
+                              checked={isGeometryAuthority(piece, angleIndex)}
+                              onChange={(event) =>
+                                setPieces((prev) =>
+                                  prev.map((item, i) =>
+                                    i === index
+                                      ? {
+                                          ...item,
+                                          cads: item.urls.map((_, a) =>
+                                            a === angleIndex
+                                              ? event.target.checked
+                                              : item.cads?.[a] ?? null,
+                                          ),
+                                        }
+                                      : item,
+                                  ),
+                                )
+                              }
+                              className="h-2.5 w-2.5 accent-cyan-300"
+                            />
+                            Authority
+                          </label>
                         </div>
                       ))}
                       <button
@@ -1792,37 +1824,6 @@ export default function JewelrySwap() {
                     </div>
 
 
-                    <button
-                      type="button"
-                      role="switch"
-                      aria-checked={piece.cad}
-                      onClick={() =>
-                        setPieces((prev) =>
-                          prev.map((item, i) => (i === index ? { ...item, cad: !item.cad } : item)),
-                        )
-                      }
-                      className={cn(
-                        "mt-2 flex w-full items-center justify-between gap-3 rounded-xl border px-3 py-2 text-[11px] font-medium transition-colors",
-                        piece.cad
-                          ? "border-cyan-200/60 bg-cyan-400/15 text-cyan-100"
-                          : "border-white/12 bg-white/[0.03] text-foreground/70 hover:border-cyan-200/40",
-                      )}
-                    >
-                      <span className="text-left">This is a CAD / design-authority reference</span>
-                      <span
-                        className={cn(
-                          "relative h-4 w-8 shrink-0 rounded-full transition-colors",
-                          piece.cad ? "bg-cyan-300/80" : "bg-white/15",
-                        )}
-                      >
-                        <span
-                          className={cn(
-                            "absolute top-0.5 h-3 w-3 rounded-full bg-black transition-all",
-                            piece.cad ? "left-[18px]" : "left-0.5",
-                          )}
-                        />
-                      </span>
-                    </button>
                   </div>
                 ))}
                 <button
