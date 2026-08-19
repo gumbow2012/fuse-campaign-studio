@@ -516,8 +516,9 @@ export default function OutfitSwap() {
         generateAudio: preserveAudio,
         extraPrompt,
       });
-      setReconstruction(data.generation);
-      toast.success("Video generation queued");
+      // Non-blocking: each click is its own record, so several can run at once.
+      setVideos((prev) => [data.generation, ...prev]);
+      toast.success("Video queued — you can start another while this runs");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Could not start the video");
     } finally {
@@ -525,19 +526,28 @@ export default function OutfitSwap() {
     }
   }, [approvedUrls, garments, videoModel, resolution, preserveAudio, meta, extraPrompt, videoDuration]);
 
-  /** Stops polling and frees the UI, even if the provider job keeps running. */
-  const cancelReconstruction = useCallback(async () => {
-    const current = reconstruction;
-    setCancelOpen(false);
-    if (!current) return;
-    setReconstruction({ ...current, status: "canceled" });
+  /** Stops tracking and frees the UI, even if the provider job keeps running. */
+  const cancelVideo = useCallback(async () => {
+    const id = cancelTarget;
+    setCancelTarget(null);
+    if (!id) return;
+    setVideos((prev) =>
+      prev.map((entry) => (entry.id === id ? { ...entry, status: "canceled" } : entry)),
+    );
     try {
-      await callOutfitSwap({ action: "cancel", generationIds: [current.id] });
+      await callOutfitSwap({ action: "cancel", generationIds: [id] });
     } catch {
       // The record may already be terminal; the UI is free either way.
     }
     toast.success("Video generation canceled");
-  }, [reconstruction]);
+  }, [cancelTarget]);
+
+  const deleteVideo = useCallback(async (id: string) => {
+    setVideos((prev) => prev.filter((entry) => entry.id !== id));
+    setVideoLightboxId((current) => (current === id ? null : current));
+    await callOutfitSwap({ action: "delete", generationIds: [id] }).catch(() => null);
+  }, []);
+
 
   const toggleApproved = useCallback((index: number) => {
     setApproved((prev) => {
