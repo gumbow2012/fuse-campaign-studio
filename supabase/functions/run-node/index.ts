@@ -199,14 +199,18 @@ async function startRun(admin: AdminClient, args: { versionId: string; nodeId: s
     throw new Error("Only image and video steps can be generated on their own");
   }
 
-  const prompt = String(node.prompt_config?.prompt ?? "").trim();
-  if (!prompt) throw new Error("Add a prompt to this step before generating it");
-
   const { data: edges, error: edgesError } = await admin
     .from("edges")
     .select("id, source_node_id, target_node_id, mapping_logic")
     .eq("version_id", args.versionId);
   if (edgesError) throw new Error(edgesError.message);
+
+  const nodeById = new Map(((nodes ?? []) as NodeRow[]).map((candidate) => [candidate.id, candidate]));
+  const promptEdges = ((edges ?? []) as EdgeRow[]).filter((edge) =>
+    edge.target_node_id === node.id && isPromptNode(nodeById.get(edge.source_node_id))
+  );
+  const prompt = resolveNodePrompt(node, promptEdges, nodeById);
+  if (!prompt) throw new Error("Add a prompt to this step before generating it");
 
   const resolved = await resolveNodeInputs(admin, {
     versionId: args.versionId,
