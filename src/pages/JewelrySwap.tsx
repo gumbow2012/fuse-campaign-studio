@@ -2994,11 +2994,24 @@ export default function JewelrySwap() {
 
       {/* Library picker — reuse an already-generated asset as an input. */}
       <Dialog open={pickerTarget !== null} onOpenChange={(open) => !open && setPickerTarget(null)}>
-        <DialogContent className="max-w-4xl border-white/10 bg-[#05070f]/95 backdrop-blur-xl">
-          <DialogHeader>
+        <DialogContent
+          className="max-w-4xl border-white/10 bg-[#05070f]/95 backdrop-blur-xl"
+          onEscapeKeyDown={() => setPickerTarget(null)}
+          onPointerDownOutside={() => setPickerTarget(null)}
+          onInteractOutside={() => setPickerTarget(null)}
+        >
+          <DialogHeader className="sticky top-0 z-20 -mx-6 -mt-6 flex-row items-center justify-between gap-3 border-b border-white/10 bg-[#05070f]/95 px-6 py-4 backdrop-blur-xl">
             <DialogTitle className="font-heading text-base text-foreground">
               {pickerTarget?.kind === "source" ? "Choose a source from your library" : "Choose a reference from your library"}
             </DialogTitle>
+            <button
+              type="button"
+              aria-label="Close"
+              onClick={() => setPickerTarget(null)}
+              className="rounded-lg border border-white/12 bg-black/40 p-1.5 text-muted-foreground transition-colors hover:border-cyan-200/60 hover:text-foreground"
+            >
+              <X size={15} />
+            </button>
           </DialogHeader>
 
           <div className="flex flex-wrap items-center gap-2">
