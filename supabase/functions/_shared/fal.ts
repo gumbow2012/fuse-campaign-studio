@@ -412,3 +412,17 @@ export async function submitFalJob(
   if (!requestId) throw new Error(`fal submit to ${endpointId} completed without request_id`);
   return requestId as string;
 }
+
+/* ==================== Outfit Swap helpers (additive) ==================== */
+
+/** Seedance reference-to-video endpoints (multi-reference reconstruction). */
+export const SEEDANCE_REFERENCE_TO_VIDEO = "bytedance/seedance-2.0/reference-to-video";
+export const SEEDANCE_FAST_REFERENCE_TO_VIDEO = "bytedance/seedance-2.0/fast/reference-to-video";
+
+/** Map a Seedance model key to its reference-to-video endpoint. */
+export function referenceToVideoEndpoint(modelKey: unknown) {
+  const key = typeof modelKey === "string" ? modelKey.trim() : "";
+  return key === "seedance-2.0-fast"
+    ? SEEDANCE_FAST_REFERENCE_TO_VIDEO
+    : SEEDANCE_REFERENCE_TO_VIDEO;
+}
