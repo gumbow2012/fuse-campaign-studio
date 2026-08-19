@@ -132,3 +132,9 @@ verify_jwt = false
 
 [functions.run-node]
 verify_jwt = false
+
+[functions.generate-studio]
+verify_jwt = false
+
+[functions.outfit-swap]
+verify_jwt = false

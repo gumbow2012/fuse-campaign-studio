@@ -16,11 +16,15 @@ type UploadRunInputBody = {
 };
 
 const MAX_UPLOAD_BYTES = 12 * 1024 * 1024;
+/** Source videos (Outfit Swap) are allowed a larger budget than reference images. */
+const MAX_VIDEO_UPLOAD_BYTES = 60 * 1024 * 1024;
 const ALLOWED_CONTENT_TYPES = new Set([
   "image/jpeg",
   "image/png",
   "image/webp",
   "image/gif",
+  "video/mp4",
+  "video/quicktime",
 ]);
 
 function parseDataUrl(dataUrl: string) {
@@ -29,10 +33,15 @@ function parseDataUrl(dataUrl: string) {
 
   const [, contentType, base64] = match;
   if (!ALLOWED_CONTENT_TYPES.has(contentType)) {
-    throw new Error("Unsupported image type.");
+    throw new Error("Unsupported file type.");
   }
 
-  const extension = contentType.includes("png")
+  const isVideo = contentType.startsWith("video/");
+  const extension = contentType.includes("quicktime")
+    ? "mov"
+    : contentType.includes("mp4")
+    ? "mp4"
+    : contentType.includes("png")
     ? "png"
     : contentType.includes("webp")
     ? "webp"
@@ -41,8 +50,11 @@ function parseDataUrl(dataUrl: string) {
     : "jpg";
   const bytes = Uint8Array.from(atob(base64), (char) => char.charCodeAt(0));
 
-  if (bytes.byteLength > MAX_UPLOAD_BYTES) {
-    throw new Error("Image is too large. Use a file under 12 MB.");
+  const limit = isVideo ? MAX_VIDEO_UPLOAD_BYTES : MAX_UPLOAD_BYTES;
+  if (bytes.byteLength > limit) {
+    throw new Error(
+      isVideo ? "Video is too large. Use a file under 60 MB." : "Image is too large. Use a file under 12 MB.",
+    );
   }
 
   return { bytes, contentType, extension };
