@@ -2128,7 +2128,7 @@ export default function JewelrySwap() {
                       <article
                         key={swap.id}
                         className={cn(
-                          "space-y-2 rounded-2xl border bg-black/25 p-2.5",
+                          "group/card space-y-2 rounded-2xl border bg-black/25 p-2.5",
                           isApproved ? "border-cyan-200/50" : "border-white/10",
                         )}
                       >
@@ -2141,6 +2141,16 @@ export default function JewelrySwap() {
                               {costPreview(swap.estimatedCredits, swap.estimatedCostUsd)}
                             </span>
                             <StatusPill generation={active ?? swap} />
+                            {/* Remove is hover-only — it isn't part of the normal flow. */}
+                            <button
+                              type="button"
+                              title="Remove frame"
+                              aria-label="Remove frame"
+                              onClick={() => void removeSwap(index)}
+                              className="rounded-md border border-white/10 p-1 text-foreground/60 opacity-0 transition-opacity hover:border-red-400/60 hover:text-red-300 focus-visible:opacity-100 group-hover/card:opacity-100"
+                            >
+                              <Trash2 size={11} />
+                            </button>
                           </span>
                         </div>
                         {/* Default review: Original ↔ the approved (Pro by default) result. */}
@@ -2245,14 +2255,6 @@ export default function JewelrySwap() {
                               <Download size={12} />
                             </a>
                           ) : null}
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => void removeSwap(index)}
-                            className="rounded-lg border-white/15 bg-transparent text-[11px] hover:border-red-400/60 hover:text-red-300"
-                          >
-                            <Trash2 size={12} />
-                          </Button>
                         </div>
 
                         {/* Regenerate panel — advanced controls live here only. */}
