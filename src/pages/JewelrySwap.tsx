@@ -2443,7 +2443,111 @@ export default function JewelrySwap() {
         </DialogContent>
       </Dialog>
 
+      {/* Opt-in alternate-model comparison — Pro stays untouched until a pick is made. */}
+      <Dialog
+        open={compareIndex !== null}
+        onOpenChange={(open) => !open && setCompareIndex(null)}
+      >
+        <DialogContent className="max-w-5xl border-white/10 bg-[#05070f]/95 backdrop-blur-xl">
+          {(() => {
+            if (compareIndex === null) return null;
+            const index = compareIndex;
+            const swap = swaps[index];
+            const alt = altSwaps[index];
+            const frame = frames[index];
+            if (!swap) return null;
+            const altFailed = alt?.status === "failed" || alt?.status === "canceled";
+            return (
+              <>
+                <DialogHeader>
+                  <DialogTitle className="font-heading text-base text-foreground">
+                    Compare models{frame ? ` · frame at ${frame.time.toFixed(2)}s` : ""}
+                  </DialogTitle>
+                </DialogHeader>
+                <div className="grid gap-3 sm:grid-cols-3">
+                  <figure className="overflow-hidden rounded-2xl border border-white/10 bg-black/50">
+                    {frame ? (
+                      <img src={frame.url} alt="Original frame" className="max-h-[50vh] w-full object-contain" />
+                    ) : null}
+                    <figcaption className="px-3 py-2 text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
+                      Original
+                    </figcaption>
+                  </figure>
+                  <figure className="overflow-hidden rounded-2xl border border-white/10 bg-black/50">
+                    {swap.status === "complete" && swap.outputUrl ? (
+                      <img src={swap.outputUrl} alt="Nano Banana Pro result" className="max-h-[50vh] w-full object-contain" />
+                    ) : (
+                      <div className="flex h-40 items-center justify-center">
+                        <Loader2 size={18} className="animate-spin text-cyan-200" />
+                      </div>
+                    )}
+                    <figcaption className="px-3 py-2 text-[10px] uppercase tracking-[0.14em] text-cyan-200/70">
+                      Nano Banana Pro
+                    </figcaption>
+                  </figure>
+                  <figure className="overflow-hidden rounded-2xl border border-white/10 bg-black/50">
+                    {alt?.status === "complete" && alt.outputUrl ? (
+                      <img src={alt.outputUrl} alt="Alternate model result" className="max-h-[50vh] w-full object-contain" />
+                    ) : altFailed ? (
+                      <div className="space-y-2 p-3">
+                        <p className="text-[11px] text-foreground/85">Alternate generation failed</p>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => void tryAlternateModel(index)}
+                          className="rounded-lg border-white/15 bg-transparent text-[11px]"
+                        >
+                          Try again
+                        </Button>
+                        <details className="rounded-lg border border-white/10 bg-black/40 px-2 py-1.5">
+                          <summary className="cursor-pointer text-[10px] text-muted-foreground">
+                            Technical details
+                          </summary>
+                          <p className="mt-1 break-words text-[10px] text-muted-foreground">
+                            {alt?.error ?? "No details available"}
+                          </p>
+                        </details>
+                      </div>
+                    ) : (
+                      <div className="flex h-40 items-center justify-center">
+                        <Loader2 size={18} className="animate-spin text-cyan-200" />
+                      </div>
+                    )}
+                    <figcaption className="px-3 py-2 text-[10px] uppercase tracking-[0.14em] text-cyan-200/70">
+                      {IMAGE_MODEL_LABELS.nb2}
+                    </figcaption>
+                  </figure>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Button
+                    onClick={() => {
+                      setChosenModel((prev) => ({ ...prev, [index]: "pro" }));
+                      setCompareIndex(null);
+                    }}
+                    className="rounded-xl bg-[hsl(var(--primary))] text-xs text-primary-foreground hover:bg-[hsl(var(--primary))]/90"
+                  >
+                    Keep Pro
+                  </Button>
+                  <Button
+                    variant="outline"
+                    disabled={alt?.status !== "complete"}
+                    onClick={() => {
+                      setChosenModel((prev) => ({ ...prev, [index]: "nb2" }));
+                      setCompareIndex(null);
+                    }}
+                    className="rounded-xl border-white/15 bg-transparent text-xs"
+                  >
+                    Use alternate
+                  </Button>
+                </div>
+              </>
+            );
+          })()}
+        </DialogContent>
+      </Dialog>
+
       {/* Library video player */}
+
       <Dialog
         open={videoLightboxId !== null}
         onOpenChange={(open) => !open && setVideoLightboxId(null)}
