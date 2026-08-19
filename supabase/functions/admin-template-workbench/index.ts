@@ -1090,9 +1090,18 @@ Deno.serve(async (req) => {
     if (action === "add_node") {
       const versionId = cleanText(body.versionId);
       const nodeType = cleanText(body.nodeType) as NodeType;
-      const name = cleanText(body.name, nodeType === "user_input" ? "New Input" : nodeType === "video_gen" ? "New Video Step" : "New Image Step");
+      const name = cleanText(
+        body.name,
+        nodeType === "user_input"
+          ? "New Input"
+          : nodeType === "video_gen"
+          ? "New Video Step"
+          : nodeType === "prompt"
+          ? "New Prompt"
+          : "New Image Step",
+      );
       if (!versionId) throw new Error("versionId is required");
-      if (!["user_input", "image_gen", "video_gen"].includes(nodeType)) throw new Error("Invalid nodeType");
+      if (!["user_input", "image_gen", "video_gen", "prompt"].includes(nodeType)) throw new Error("Invalid nodeType");
       await assertVersionAccess(admin, access, versionId);
 
 
@@ -1102,6 +1111,11 @@ Deno.serve(async (req) => {
             editor_slot_key: cleanText(body.slotKey, name.toLowerCase().replace(/[^a-z0-9]+/g, "-")),
             editor_label: name,
             editor_expected: cleanText(body.expected, "image"),
+          }
+        : nodeType === "prompt"
+        ? {
+            text: cleanText(body.prompt, ""),
+            prompt: cleanText(body.prompt, ""),
           }
         : nodeType === "video_gen"
         ? {
