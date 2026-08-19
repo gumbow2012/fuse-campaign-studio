@@ -155,15 +155,18 @@ const ANGLE_ROLE_OPTIONS = [
 /** Optional regenerate reasons — each appends a targeted corrective sentence. */
 const FAILURE_REASONS = [
   "Wrong angle",
-  "Wrong crop",
-  "Wrong bail",
-  "Wrong stones/details",
-  "Wrong lettering/logo",
-  "Wrong size",
-  "Hallucinated geometry",
+  "Wrong crop / zoom",
+  "Wrong jewelry geometry",
+  "Wrong bail / connector",
+  "Wrong stones / setting",
+  "Wrong lettering / logo",
+  "Wrong scale",
+  "Wrong rotation",
+  "Hallucinated detail",
   "Wrong chain interaction",
   "Other",
 ];
+
 
 const IMAGE_MODEL_LABELS: Record<JewelryImageModel, string> = {
   pro: "Nano Banana Pro",
