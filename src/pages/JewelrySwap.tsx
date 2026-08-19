@@ -453,6 +453,7 @@ export default function JewelrySwap() {
         const stored = await uploadToStorage(folder, compressed, compressed.name);
         uploaded.push({
           urls: [stored.url],
+          roles: [""],
           name: file.name,
           type: JEWELRY_TYPES[0],
           metal: AUTO_METAL,
@@ -492,7 +493,13 @@ export default function JewelrySwap() {
         }
         setPieces((prev) =>
           prev.map((item, index) =>
-            index === target ? { ...item, urls: [...item.urls, ...urls].slice(0, 6) } : item,
+            index === target
+              ? {
+                  ...item,
+                  urls: [...item.urls, ...urls].slice(0, 6),
+                  roles: [...item.roles, ...urls.map(() => "")].slice(0, 6),
+                }
+              : item,
           ),
         );
       } catch (error) {
@@ -1120,7 +1127,11 @@ export default function JewelrySwap() {
                                 setPieces((prev) =>
                                   prev.map((item, i) =>
                                     i === index
-                                      ? { ...item, urls: item.urls.filter((_, a) => a !== angleIndex) }
+                                      ? {
+                                          ...item,
+                                          urls: item.urls.filter((_, a) => a !== angleIndex),
+                                          roles: item.roles.filter((_, a) => a !== angleIndex),
+                                        }
                                       : item,
                                   ),
                                 )
