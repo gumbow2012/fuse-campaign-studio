@@ -2216,9 +2216,12 @@ export default function JewelrySwap() {
             if (lightboxIndex === null) return null;
             const index = lightboxIndex;
             const swap = swaps[index];
+            const alt = altSwaps[index];
             const frame = frames[index];
             if (!swap) return null;
             const isApproved = approved.has(index);
+            const picked = chosenModel[index] === "nb2" && alt ? "nb2" : "pro";
+            const active = (picked === "nb2" ? alt : swap)!;
             return (
               <>
                 <DialogHeader>
@@ -2227,7 +2230,7 @@ export default function JewelrySwap() {
                   </DialogTitle>
                 </DialogHeader>
                 <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_260px]">
-                  <div className="grid gap-3 sm:grid-cols-2">
+                  <div className={cn("grid gap-3", alt ? "sm:grid-cols-3" : "sm:grid-cols-2")}>
                     <figure className="overflow-hidden rounded-2xl border border-white/10 bg-black/50">
                       {frame ? (
                         <img src={frame.url} alt="Original frame" className="max-h-[62vh] w-full object-contain" />
@@ -2236,31 +2239,57 @@ export default function JewelrySwap() {
                         Original
                       </figcaption>
                     </figure>
-                    <figure className="overflow-hidden rounded-2xl border border-cyan-200/30 bg-black/50">
-                      {swap.status === "complete" && swap.outputUrl ? (
-                        <img src={swap.outputUrl} alt="Swapped frame" className="max-h-[62vh] w-full object-contain" />
-                      ) : swap.status === "failed" || swap.status === "canceled" ? (
-                        <p className="p-3 text-xs text-red-300">{swap.error ?? "Generation failed"}</p>
-                      ) : (
-                        <div className="flex h-48 items-center justify-center">
-                          <Loader2 size={18} className="animate-spin text-cyan-200" />
-                        </div>
-                      )}
-                      <figcaption className="px-3 py-2 text-[10px] uppercase tracking-[0.14em] text-cyan-200/70">
-                        Swapped
-                      </figcaption>
-                    </figure>
+                    {([["pro", swap], ["nb2", alt]] as const)
+                      .filter(([, generation]) => !!generation)
+                      .map(([key, generation]) => (
+                        <figure
+                          key={key}
+                          className={cn(
+                            "overflow-hidden rounded-2xl bg-black/50",
+                            picked === key ? "border-2 border-cyan-200/50" : "border border-white/10",
+                          )}
+                        >
+                          {generation!.status === "complete" && generation!.outputUrl ? (
+                            <img
+                              src={generation!.outputUrl}
+                              alt={`${IMAGE_MODEL_LABELS[key]} result`}
+                              className="max-h-[62vh] w-full object-contain"
+                            />
+                          ) : generation!.status === "failed" || generation!.status === "canceled" ? (
+                            <p className="p-3 text-xs text-red-300">{generation!.error ?? "Generation failed"}</p>
+                          ) : (
+                            <div className="flex h-48 items-center justify-center">
+                              <Loader2 size={18} className="animate-spin text-cyan-200" />
+                            </div>
+                          )}
+                          <figcaption className="flex items-center justify-between gap-2 px-3 py-2 text-[10px] uppercase tracking-[0.14em] text-cyan-200/70">
+                            {IMAGE_MODEL_LABELS[key]}
+                            <button
+                              type="button"
+                              onClick={() => setChosenModel((prev) => ({ ...prev, [index]: key }))}
+                              className={cn(
+                                "rounded-md border px-2 py-0.5 text-[9px] tracking-normal normal-case transition-colors",
+                                picked === key
+                                  ? "border-cyan-200/60 bg-cyan-400/15 text-cyan-100"
+                                  : "border-white/15 text-foreground/70 hover:border-cyan-200/40",
+                              )}
+                            >
+                              {picked === key ? "Selected" : `Use ${key === "pro" ? "Pro" : "NB2"}`}
+                            </button>
+                          </figcaption>
+                        </figure>
+                      ))}
                   </div>
 
                   <aside className="space-y-3">
                     <div className="flex items-center justify-between gap-2 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2">
-                      <StatusPill generation={swap} />
+                      <StatusPill generation={active} />
                       <span className="text-[11px] text-cyan-200/70">
                         {costPreview(swap.estimatedCredits, swap.estimatedCostUsd)}
                       </span>
                     </div>
                     <Button
-                      disabled={swap.status !== "complete"}
+                      disabled={active.status !== "complete"}
                       onClick={() => toggleApproved(index)}
                       className={cn(
                         "w-full rounded-xl text-xs font-semibold",
@@ -2273,14 +2302,29 @@ export default function JewelrySwap() {
                     </Button>
                     <Button
                       variant="outline"
-                      onClick={() => void swapFrame(index)}
+                      onClick={() =>
+                        void swapFrame(index, {
+                          imageModel: picked,
+                          failureReason: frameReason[index] || null,
+                        })
+                      }
                       className="w-full rounded-xl border-white/15 bg-transparent text-xs"
                     >
                       <RefreshCw size={13} /> Regenerate
                     </Button>
-                    {swap.outputUrl ? (
+                    {!alt ? (
+                      <Button
+                        variant="outline"
+                        disabled={swap.status !== "complete"}
+                        onClick={() => void swapFrame(index, { imageModel: "nb2" })}
+                        className="w-full rounded-xl border-white/15 bg-transparent text-xs"
+                      >
+                        Try with Nano Banana 2
+                      </Button>
+                    ) : null}
+                    {active.outputUrl ? (
                       <a
-                        href={swap.outputUrl}
+                        href={active.outputUrl}
                         download
                         target="_blank"
                         rel="noreferrer"
