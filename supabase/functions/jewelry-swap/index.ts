@@ -1020,29 +1020,74 @@ export function planShotSet(frameCount: number, pieceTypes: string[]): ShotSpec[
   return plan;
 }
 
-/** Compose the final Kling prompt for one clip. */
+/** Kling 3.0 caps `prompt` at 2500 chars; stay safely under it. */
+const ANIMATE_PROMPT_MAX = 2400;
+
+const LOCK_GEOMETRY_COMPACT =
+  "Preserve the object identity, geometry and proportions exactly — only the features actually visible in the first frame, never adding, removing, redesigning or inventing anything.";
+
+const OPTICS_DIAMONDS_COMPACT =
+  "Any visible faceted stones show physically realistic brilliance and scintillation, each stone responding independently to the changing camera and light angle — no synchronized blinking, no glitter or sparkle particles, no glow, no heavy bloom.";
+
+const OPTICS_METAL_COMPACT =
+  "Visible metal keeps its exact colour and finish; the moving camera and lights create realistic specular travel — never liquid chrome, never a material change.";
+
+const NEGATIVES_COMPACT =
+  "Negative: no morphing, no geometry drift, no deformation, no changed or disappearing or added stones, no changed logos or lettering, no floating, no object rotation, no fake glitter, no recentering, no scene change, no invented unseen geometry.";
+
+/** Hard-trim to the cap on a sentence/word boundary. */
+function capPrompt(text: string, max = ANIMATE_PROMPT_MAX) {
+  const clean = text.trim();
+  if (clean.length <= max) return clean;
+  const slice = clean.slice(0, max);
+  const sentence = Math.max(slice.lastIndexOf(". "), slice.lastIndexOf(".\n"));
+  if (sentence > max * 0.6) return slice.slice(0, sentence + 1).trim();
+  const word = slice.lastIndexOf(" ");
+  return (word > max * 0.6 ? slice.slice(0, word) : slice).trim();
+}
+
+/** Compose the final Kling prompt for one clip, in strict priority order. */
 function buildAnimationPrompt(shot: ShotSpec | null, customPrompt?: string | null) {
-  const parts: string[] = [
+  const custom = String(customPrompt ?? "").trim();
+
+  // Priority order — highest first. Lower-priority parts are only added while
+  // the running total stays under the cap.
+  const ordered: string[] = [
     "Luxury jewelry motion-control cinematography, photoreal, 1080p, cinematic studio lighting.",
     LOCK_FIRST_FRAME,
     LOCK_OBJECT,
   ];
 
-  if (shot) {
-    parts.push(`SHOT — ${shot.label}. ${shot.body}`);
-  }
-  const custom = String(customPrompt ?? "").trim();
+  if (shot) ordered.push(`SHOT — ${shot.label}. ${shot.body}`);
   if (custom) {
-    parts.push(`DIRECTOR NOTE (camera and lighting only, never object motion): ${custom}`);
+    ordered.push(
+      capPrompt(
+        `DIRECTOR NOTE (camera and lighting only, never object motion): ${custom}`,
+        900,
+      ),
+    );
   }
 
-  parts.push(LOCK_CAMERA_LANGUAGE, LOCK_GEOMETRY, OPTICS_DIAMONDS, OPTICS_METAL);
-  parts.push(
-    `${NEGATIVES_BASE} ${shot?.energy === "high" ? NEGATIVES_FAST : NEGATIVES_STEADY}`,
+  ordered.push(
+    LOCK_GEOMETRY_COMPACT,
+    LOCK_CAMERA_LANGUAGE,
+    OPTICS_DIAMONDS_COMPACT,
+    OPTICS_METAL_COMPACT,
+    NEGATIVES_COMPACT,
   );
 
-  return parts.join("\n\n");
+  const parts: string[] = [];
+  let length = 0;
+  for (const part of ordered) {
+    const add = (parts.length ? 2 : 0) + part.length;
+    if (length + add > ANIMATE_PROMPT_MAX) continue;
+    parts.push(part);
+    length += add;
+  }
+
+  return capPrompt(parts.join("\n\n"));
 }
+
 
 const CUSTOM_SUMMARY = {
   shot: "Custom direction",
