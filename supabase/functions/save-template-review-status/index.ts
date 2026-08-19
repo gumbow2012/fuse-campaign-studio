@@ -5,6 +5,7 @@ import {
   createAdminClient,
   errorMessage,
   json,
+  logAuditEvent,
   requireBuilderUser,
 } from "../_shared/supabase-admin.ts";
 import { assertCanPublish, FORBIDDEN_PUBLISH_MESSAGE } from "../_shared/template-scope.ts";
@@ -12,10 +13,12 @@ import { assertCanPublish, FORBIDDEN_PUBLISH_MESSAGE } from "../_shared/template
 type Body = {
   versionId?: string;
   reviewStatus?: string | null;
+  reviewNote?: string | null;
 };
 
 const ALLOWED_STATUSES = new Set([
   "Unreviewed",
+  "Submitted",
   "Structurally Correct",
   "Prompt Drift",
   "Blocked by Provider",
@@ -60,6 +63,19 @@ Deno.serve(async (req) => {
       })
       .eq("id", versionId);
     if (updateError) throw new Error(updateError.message);
+
+    const reviewNote = typeof body.reviewNote === "string" ? body.reviewNote.trim().slice(0, 1000) : "";
+    if (reviewNote) {
+      await logAuditEvent({
+        eventType: "template_review_note",
+        message: reviewNote,
+        source: "admin",
+        versionId,
+        metadata: { reviewStatus },
+      }, admin);
+    }
+
+
 
     return json({
       ok: true,

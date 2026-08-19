@@ -10,6 +10,7 @@ import BuilderRoute from "@/components/BuilderRoute";
 import Admin from "@/pages/Admin";
 import AdminAudits from "@/pages/AdminAudits";
 import AdminAnalytics from "@/pages/AdminAnalytics";
+import AdminCreators from "@/pages/AdminCreators";
 import AdminTemplateImport from "@/pages/AdminTemplateImport";
 import AdminTemplates from "@/pages/AdminTemplates";
 import FlowEmbed from "@/pages/FlowEmbed";
@@ -121,6 +122,14 @@ const App = () => (
               element={
                 <AdminRoute>
                   <AdminTemplates />
+                </AdminRoute>
+              }
+            />
+            <Route
+              path="/admin/creators"
+              element={
+                <AdminRoute>
+                  <AdminCreators />
                 </AdminRoute>
               }
             />

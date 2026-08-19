@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Copy, EyeOff, Film, GitBranch, Image as ImageIcon, Loader2, Maximize2, Minus, ImageDown, Layers, Move, Play, Plus, RefreshCw, Save, Search, Trash2, Type, Upload, X } from "lucide-react";
+import { CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Clock3, Copy, EyeOff, Film, GitBranch, Image as ImageIcon, Loader2, Maximize2, Minus, ImageDown, Layers, Move, Play, Plus, RefreshCw, Save, Search, Trash2, Type, Upload, X } from "lucide-react";
 import { Link, useSearchParams } from "react-router-dom";
 import SiteShell from "@/components/mvp/SiteShell";
 import TemplateGallery from "@/components/lab/TemplateGallery";
@@ -1691,6 +1691,40 @@ const TemplateCanvas = () => {
     }
   }, [detail, invokeWorkbench, refreshAfterMutation, selectedActivationGate, selectedTemplate?.activationGate]);
 
+  const submitForReview = useCallback(async () => {
+    if (!detail) return;
+    setMutating("submit-for-review");
+    try {
+      const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/submit-for-review`, {
+        method: "POST",
+        headers: { ...(await buildAuthHeaders()), "Content-Type": "application/json" },
+        body: JSON.stringify({ versionId: detail.versionId }),
+      });
+      const raw = await response.text();
+      let data: { error?: string } = {};
+      if (raw) {
+        try {
+          data = JSON.parse(raw) as { error?: string };
+        } catch {
+          data = { error: raw };
+        }
+      }
+      if (!response.ok) throw new Error(data.error ?? `Request failed (${response.status})`);
+      await refreshAfterMutation(detail.versionId);
+      toast({
+        title: "Submitted for review",
+        description: "An admin will review this template before it goes live.",
+      });
+    } catch (submitError) {
+      const message = submitError instanceof Error ? submitError.message : "Could not submit for review";
+      toast({ title: "Submit failed", description: message, variant: "destructive" });
+    } finally {
+      setMutating(null);
+    }
+  }, [buildAuthHeaders, detail, refreshAfterMutation]);
+
+
+
   const saveTemplateMetadata = useCallback(async () => {
     if (!selectedTemplate) return;
     const name = templateMetaName.trim();
@@ -2944,6 +2978,23 @@ const TemplateCanvas = () => {
                       Publish Live
                     </Button>
                   ) : null}
+                  {!canPublishTemplates && detail ? (
+                    detail.reviewStatus === "Submitted" ? (
+                      <span className="inline-flex items-center gap-2 rounded-full border border-amber-300/30 bg-amber-300/[0.08] px-3 py-1.5 text-xs font-semibold text-amber-100">
+                        <Clock3 className="h-3.5 w-3.5" />
+                        Submitted — pending review
+                      </span>
+                    ) : (
+                      <Button type="button" size="sm" onClick={() => void submitForReview()} disabled={!!mutating}>
+                        {mutating === "submit-for-review" ? (
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        ) : (
+                          <CheckCircle2 className="mr-2 h-4 w-4" />
+                        )}
+                        Submit for review
+                      </Button>
+                    )
+                  ) : null}
                 </div>
               </div>
               <div className="mt-4 grid gap-3 lg:grid-cols-4">
@@ -3181,6 +3232,22 @@ const TemplateCanvas = () => {
                   <CheckCircle2 className="mr-2 h-4 w-4" />
                   Publish Version Live
                 </Button>
+              ) : null}
+              {!canPublishTemplates && detail ? (
+                detail.reviewStatus === "Submitted" ? (
+                  <p className="rounded-xl border border-amber-300/25 bg-amber-300/[0.08] px-3 py-2 text-xs font-medium text-amber-100">
+                    Submitted — pending review by the FUSE team.
+                  </p>
+                ) : (
+                  <Button type="button" size="sm" onClick={() => void submitForReview()} disabled={!!mutating}>
+                    {mutating === "submit-for-review" ? (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    ) : (
+                      <CheckCircle2 className="mr-2 h-4 w-4" />
+                    )}
+                    Submit for Review
+                  </Button>
+                )
               ) : null}
               {testingGateActive && !testingGateSatisfied ? (
                 <p className="rounded-xl border border-amber-300/20 bg-amber-300/[0.06] px-3 py-2 text-xs text-amber-100">

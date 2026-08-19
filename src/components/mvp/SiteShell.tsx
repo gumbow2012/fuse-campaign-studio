@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { Link, NavLink, useNavigate } from "react-router-dom";
-import { ClipboardCheck, Home, Info, Layers3, Mail, RefreshCw, Star, UserRound } from "lucide-react";
+import { ClipboardCheck, Home, Info, Layers3, Mail, RefreshCw, Star, UserRound, UsersRound } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
@@ -184,6 +184,12 @@ export default function SiteShell({ children }: { children: ReactNode }) {
                   <ClipboardCheck className="h-3.5 w-3.5" />
                   Output Audit
                 </NavLink>
+                {isAdmin ? (
+                  <NavLink to="/admin/creators" className={adminNavLinkClass}>
+                    <UsersRound className="h-3.5 w-3.5" />
+                    Creators
+                  </NavLink>
+                ) : null}
               </nav>
             ) : null}
 
