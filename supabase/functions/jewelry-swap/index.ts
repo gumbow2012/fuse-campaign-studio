@@ -537,6 +537,7 @@ async function startSwapFrame(admin: AdminClient, args: {
           geometry_fidelity: "strict",
           preferred_role: args.preferredRole ?? null,
           failure_reason: args.failureReason ?? null,
+          macro_mode: args.macro === true,
           source_frame_url: sourceFrameUrl,
           frame_index: Number(args.frameIndex ?? 0),
           frame_time: Number(args.frameTime ?? 0),
