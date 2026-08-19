@@ -221,7 +221,8 @@ type Piece = {
   height: string;
   depth: string;
   weight: string;
-  cad: boolean;
+  /** Geometry-authority override per angle. null = auto (from the role label). */
+  cads: (boolean | null)[];
   person: string;
   notes: string;
   /** "piece" (default) or "piece_chain". */
