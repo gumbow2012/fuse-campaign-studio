@@ -15,6 +15,7 @@ import {
   buildVideoModelInput,
   getVideoModel,
   IMAGE_MODEL,
+  IMAGE_MODEL_ALT,
   referenceToVideoEndpoint,
   submitFalJob,
   videoFallbackUsdPerSecond,
@@ -92,6 +93,8 @@ function serialize(row: any) {
     frameIndex: typeof payload.frame_index === "number" ? payload.frame_index : null,
     frameTime: typeof payload.frame_time === "number" ? payload.frame_time : null,
     sourceFrameUrl: typeof payload.source_frame_url === "string" ? payload.source_frame_url : null,
+    imageModel: payload.image_model === "nb2" ? "nb2" : payload.image_model === "pro" ? "pro" : null,
+    preferredRole: typeof payload.preferred_role === "string" ? payload.preferred_role : null,
     createdAt: row.created_at ?? null,
     completedAt: row.completed_at ?? null,
   };
@@ -767,6 +770,9 @@ Deno.serve(async (req) => {
         aspectRatio: body.aspectRatio,
         resolution: body.resolution,
         extraPrompt: body.extraPrompt,
+        imageModel: body.imageModel,
+        preferredRole: body.preferredRole ?? null,
+        failureReason: body.failureReason ?? null,
         webhookBase,
       });
       return json({ generation });
