@@ -853,18 +853,32 @@ export default function JewelrySwap() {
 
   const [animating, setAnimating] = useState(false);
   const [zipping, setZipping] = useState(false);
+  const [cameraDirection, setCameraDirection] = useState<string>("auto");
+  const [customCameraPrompt, setCustomCameraPrompt] = useState("");
+
+  const pieceTypes = useMemo(
+    () => pieces.map((piece) => piece.type).filter(Boolean),
+    [pieces],
+  );
 
   const animateFrame = useCallback(
-    async (frame: { index: number; url: string; time: number }) => {
-      const data = await callJewelrySwap<{ generation: SwapGeneration }>({
-        action: "animate_frame",
+    async (
+      frame: { index: number; url: string; time: number },
+      position: { setIndex: number; setSize: number; direction?: string },
+    ) => {
+      const generation = await animateJewelryFrame({
         imageUrl: frame.url,
         frameIndex: frame.index,
         frameTime: frame.time,
+        cameraDirection: position.direction ?? cameraDirection,
+        customPrompt: customCameraPrompt.trim() || null,
+        setIndex: position.setIndex,
+        setSize: position.setSize,
+        pieceTypes,
       });
-      setVideos((prev) => [data.generation, ...prev]);
+      setVideos((prev) => [generation, ...prev]);
     },
-    [],
+    [cameraDirection, customCameraPrompt, pieceTypes],
   );
 
   const animateApproved = useCallback(async () => {
@@ -872,37 +886,54 @@ export default function JewelrySwap() {
       toast.error("Approve at least one swapped frame first");
       return;
     }
+    if (cameraDirection === "custom" && !customCameraPrompt.trim()) {
+      toast.error("Describe the camera move, or switch back to Auto");
+      return;
+    }
     setAnimating(true);
     try {
-      for (const frame of approvedFrames) await animateFrame(frame);
+      let setIndex = 0;
+      for (const frame of approvedFrames) {
+        await animateFrame(frame, { setIndex, setSize: approvedFrames.length });
+        setIndex += 1;
+      }
       toast.success(`${approvedFrames.length} clip${approvedFrames.length === 1 ? "" : "s"} queued`);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Could not start the clips");
     } finally {
       setAnimating(false);
     }
-  }, [approvedFrames, animateFrame]);
+  }, [approvedFrames, animateFrame, cameraDirection, customCameraPrompt]);
 
   const regenerateClip = useCallback(
-    async (clip: SwapGeneration) => {
+    async (clip: JewelryGeneration) => {
       if (!clip.sourceFrameUrl) {
         toast.error("That clip has no source frame to reuse");
         return;
       }
       try {
-        await animateFrame({
-          index: clip.frameIndex ?? 0,
-          url: clip.sourceFrameUrl,
-          time: clip.frameTime ?? 0,
-        });
+        const position = approvedFrames.findIndex((frame) => frame.url === clip.sourceFrameUrl);
+        await animateFrame(
+          {
+            index: clip.frameIndex ?? 0,
+            url: clip.sourceFrameUrl,
+            time: clip.frameTime ?? 0,
+          },
+          {
+            setIndex: position >= 0 ? position : 0,
+            setSize: Math.max(1, approvedFrames.length),
+            direction: clip.cameraDirection ?? undefined,
+          },
+        );
         setVideos((prev) => prev.filter((entry) => entry.id !== clip.id));
         await callJewelrySwap({ action: "delete", generationIds: [clip.id] }).catch(() => null);
       } catch (error) {
         toast.error(error instanceof Error ? error.message : "Could not regenerate that clip");
       }
     },
-    [animateFrame],
+    [animateFrame, approvedFrames],
   );
+
 
   /** Zip every finished clip client-side so one click gets the whole set. */
   const downloadAllClips = useCallback(async () => {
