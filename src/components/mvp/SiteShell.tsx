@@ -184,6 +184,12 @@ export default function SiteShell({ children }: { children: ReactNode }) {
                   <ClipboardCheck className="h-3.5 w-3.5" />
                   Output Audit
                 </NavLink>
+                {isAdmin ? (
+                  <NavLink to="/admin/creators" className={adminNavLinkClass}>
+                    <UsersRound className="h-3.5 w-3.5" />
+                    Creators
+                  </NavLink>
+                ) : null}
               </nav>
             ) : null}
 
