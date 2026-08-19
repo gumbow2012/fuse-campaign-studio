@@ -25,7 +25,9 @@ interface AuthContextType {
   loading: boolean;
   roles: string[];
   isAdmin: boolean;
+  isCreator: boolean;
   hasAppAccess: boolean;
+  canUseBuilder: boolean;
   signOut: () => Promise<void>;
   refreshAccess: () => Promise<void>;
   refreshProfile: () => Promise<Profile | null>;
@@ -39,7 +41,9 @@ const AuthContext = createContext<AuthContextType>({
   loading: true,
   roles: [],
   isAdmin: false,
+  isCreator: false,
   hasAppAccess: false,
+  canUseBuilder: false,
   signOut: async () => {},
   refreshAccess: async () => {},
   refreshProfile: async () => null,
@@ -55,12 +59,14 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [loading, setLoading] = useState(true);
   const [roles, setRoles] = useState<string[]>([]);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [isCreator, setIsCreator] = useState(false);
   const [hasAppAccess, setHasAppAccess] = useState(false);
 
   const clearAccessState = useCallback(() => {
     setProfile(null);
     setRoles([]);
     setIsAdmin(false);
+    setIsCreator(false);
     setHasAppAccess(false);
   }, []);
 
@@ -89,6 +95,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       console.error("Failed to load roles:", error);
       setRoles([]);
       setIsAdmin(false);
+      setIsCreator(false);
       setHasAppAccess(false);
       return;
     }
@@ -96,6 +103,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     const nextRoles = ((data ?? []) as Array<{ role: string }>).map((row) => String(row.role));
     setRoles(nextRoles);
     setIsAdmin(nextRoles.includes("admin"));
+    setIsCreator(nextRoles.includes("creator"));
     setHasAppAccess(nextRoles.includes("admin") || nextRoles.includes("dev"));
   }, []);
 
@@ -224,7 +232,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   }, [fetchProfile, user]);
 
   return (
-    <AuthContext.Provider value={{ user, session, profile, loading, roles, isAdmin, hasAppAccess, signOut, refreshAccess, refreshProfile, refreshSubscription }}>
+    <AuthContext.Provider value={{ user, session, profile, loading, roles, isAdmin, isCreator, hasAppAccess, canUseBuilder: hasAppAccess || isCreator, signOut, refreshAccess, refreshProfile, refreshSubscription }}>
       {children}
     </AuthContext.Provider>
   );
