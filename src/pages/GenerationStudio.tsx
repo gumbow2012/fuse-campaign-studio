@@ -290,6 +290,7 @@ function GenerationCard({
   }, [inFlight]);
 
   const isImage = generation.outputType !== "video";
+  const videoRef = useRef<HTMLVideoElement | null>(null);
   const done = generation.status === "complete" && !!generation.outputUrl;
 
   return (
