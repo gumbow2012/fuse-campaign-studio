@@ -219,6 +219,30 @@ function readReferenceLibrary(): string[] {
   }
 }
 
+/**
+ * Cross-origin URLs ignore the anchor `download` attribute, so fetch the bytes
+ * and download the blob instead. Falls back to opening the URL if that fails.
+ */
+async function downloadAsset(url: string, id: string, type?: string | null) {
+  const extension = type === "video" ? "mp4" : "png";
+  try {
+    const response = await fetch(url);
+    if (!response.ok) throw new Error(String(response.status));
+    const blob = await response.blob();
+    const objectUrl = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = objectUrl;
+    link.download = `fuse-${id}.${extension}`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(objectUrl);
+  } catch {
+    window.open(url, "_blank", "noopener,noreferrer");
+  }
+}
+
+
 function AspectGlyph({ ratio }: { ratio: string }) {
   if (ratio === "auto") return <Sparkles size={12} className="text-cyan-200/80" />;
   const [w, h] = ratio.split(":").map(Number);
@@ -307,17 +331,22 @@ function GenerationCard({
                   <Wand2 size={13} />
                 </button>
               ) : null}
-              <a
-                href={generation.outputUrl as string}
-                download
-                target="_blank"
-                rel="noreferrer"
+              <button
+                type="button"
+                onClick={() =>
+                  void downloadAsset(
+                    generation.outputUrl as string,
+                    generation.id,
+                    generation.outputType,
+                  )
+                }
                 aria-label="Download"
                 title="Download"
                 className={ICON_ACTION_CLASS}
               >
                 <Download size={13} />
-              </a>
+              </button>
+
               <button
                 type="button"
                 aria-label="Delete"
@@ -384,6 +413,8 @@ export default function GenerationStudio() {
   const [generations, setGenerations] = useState<Generation[]>([]);
   const [library, setLibrary] = useState<string[]>(() => readReferenceLibrary());
   const [selected, setSelected] = useState<string[]>([]);
+  const [assetTypeFilter, setAssetTypeFilter] = useState<"all" | "image" | "video">("all");
+  const [assetSort, setAssetSort] = useState<"newest" | "oldest">("newest");
   const [lightboxId, setLightboxId] = useState<string | null>(null);
   const [confirmSingle, setConfirmSingle] = useState<Generation | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -476,6 +507,26 @@ export default function GenerationStudio() {
     },
     [addReference],
   );
+
+  /** Adds one of the SOURCE references shown in the lightbox; keeps the lightbox open. */
+  const addSourceReference = useCallback(
+    (url: string) => {
+      setReferences((prev) => {
+        if (prev.some((entry) => entry.url === url)) {
+          toast.message("Already in your references");
+          return prev;
+        }
+        if (prev.length >= MAX_REFERENCES) {
+          toast.message(`Up to ${MAX_REFERENCES} reference images`);
+          return prev;
+        }
+        toast.success("Added to references");
+        return [...prev, { url, label: "" }];
+      });
+    },
+    [],
+  );
+
 
   const copyPrompt = useCallback(async (text: string) => {
     try {
@@ -599,15 +650,37 @@ export default function GenerationStudio() {
         url: entry.outputUrl as string,
         type: entry.outputType === "video" ? "video" : "image",
         generationId: entry.id,
+        createdAt: entry.createdAt,
       }));
-    const uploads = library.map((url) => ({
+    const uploads = library.map((url, index) => ({
       id: `upload:${url}`,
       url,
       type: "image" as const,
       generationId: null as string | null,
+      // Uploads have no timestamp — the store is newest-first, so use its order.
+      createdAt: null as string | null,
+      order: index,
     }));
     return { outputs, uploads };
   }, [generations, library]);
+
+  /** Client-side type filter + created-at sort shared by both library grids. */
+  const arrangeAssets = useCallback(
+    <T extends { type: string; createdAt: string | null; order?: number }>(items: T[]) => {
+      const filtered =
+        assetTypeFilter === "all" ? items : items.filter((item) => item.type === assetTypeFilter);
+      const sorted = [...filtered].sort((a, b) => {
+        const left = a.createdAt ? Date.parse(a.createdAt) : -(a.order ?? 0);
+        const right = b.createdAt ? Date.parse(b.createdAt) : -(b.order ?? 0);
+        return assetSort === "newest" ? right - left : left - right;
+      });
+      return sorted;
+    },
+    [assetSort, assetTypeFilter],
+  );
+
+  const visibleOutputs = useMemo(() => arrangeAssets(assets.outputs), [arrangeAssets, assets.outputs]);
+  const visibleUploads = useMemo(() => arrangeAssets(assets.uploads), [arrangeAssets, assets.uploads]);
 
   const toggleSelect = (id: string, ids: string[], shiftKey: boolean) => {
     setSelected((prev) => {
@@ -631,19 +704,33 @@ export default function GenerationStudio() {
   const bulkDownload = () => {
     if (!selectedAssets.length) return;
     selectedAssets.forEach((asset, index) => {
-      setTimeout(() => {
-        const link = document.createElement("a");
-        link.href = asset.url;
-        link.download = "";
-        link.target = "_blank";
-        link.rel = "noreferrer";
-        document.body.appendChild(link);
-        link.click();
-        link.remove();
-      }, index * 350);
+      setTimeout(() => void downloadAsset(asset.url, asset.generationId ?? `ref-${index + 1}`, asset.type), index * 350);
     });
     toast.success(`Downloading ${selectedAssets.length} asset${selectedAssets.length > 1 ? "s" : ""}`);
   };
+
+  /** Images only — videos can't be reference frames. Respects the 15-max. */
+  const addSelectedToReferences = () => {
+    const urls = selectedAssets.filter((asset) => asset.type === "image").map((asset) => asset.url);
+    if (!urls.length) {
+      toast.message("Select at least one image to use as a reference");
+      return;
+    }
+    let added = 0;
+    setReferences((prev) => {
+      const next = [...prev];
+      for (const url of urls) {
+        if (next.length >= MAX_REFERENCES) break;
+        if (next.some((entry) => entry.url === url)) continue;
+        next.push({ url, label: "" });
+        added += 1;
+      }
+      return next;
+    });
+    if (added) toast.success(`${added} added to references`);
+    else toast.message(`Up to ${MAX_REFERENCES} reference images`);
+  };
+
 
   const deleteSelected = async () => {
     const generationIds = selectedAssets
@@ -1122,15 +1209,76 @@ export default function GenerationStudio() {
               </TabsContent>
 
               <TabsContent value="library" className="mt-4 space-y-6">
-                <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
-                  <SectionLabel hint="Shift-click to select a range">Generated outputs</SectionLabel>
-                  {assetGrid(assets.outputs, "No generated assets yet.")}
+                {/* Type filter + created-at sort, applied to both grids below. */}
+                <div className="flex flex-wrap items-center gap-2">
+                  <div className="flex gap-1 rounded-xl border border-white/12 bg-black/30 p-1">
+                    {(["all", "image", "video"] as const).map((option) => (
+                      <button
+                        key={option}
+                        type="button"
+                        onClick={() => setAssetTypeFilter(option)}
+                        className={cn(
+                          "rounded-lg px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] transition-colors",
+                          assetTypeFilter === option
+                            ? "bg-cyan-300/20 text-cyan-100"
+                            : "text-muted-foreground hover:text-foreground",
+                        )}
+                      >
+                        {option}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="flex gap-1 rounded-xl border border-white/12 bg-black/30 p-1">
+                    {([
+                      { value: "newest", label: "Newest first" },
+                      { value: "oldest", label: "Oldest first" },
+                    ] as const).map((option) => (
+                      <button
+                        key={option.value}
+                        type="button"
+                        onClick={() => setAssetSort(option.value)}
+                        className={cn(
+                          "rounded-lg px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] transition-colors",
+                          assetSort === option.value
+                            ? "bg-cyan-300/20 text-cyan-100"
+                            : "text-muted-foreground hover:text-foreground",
+                        )}
+                      >
+                        {option.label}
+                      </button>
+                    ))}
+                  </div>
+                  {selected.length ? (
+                    <div className="ml-auto flex items-center gap-2">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={addSelectedToReferences}
+                        className="border-white/15 bg-white/[0.04]"
+                      >
+                        <Wand2 size={14} className="mr-1.5" /> Add selected to references
+                      </Button>
+                      <Button size="sm" variant="ghost" onClick={() => setSelected([])}>
+                        Clear selection
+                      </Button>
+                    </div>
+                  ) : null}
                 </div>
+
                 <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
-                  <SectionLabel>Uploaded references</SectionLabel>
-                  {assetGrid(assets.uploads, "Uploaded references appear here.")}
+                  <SectionLabel hint="Click a tile's checkbox to select — shift-click for a range">
+                    Generated outputs
+                  </SectionLabel>
+                  {assetGrid(visibleOutputs, "No generated assets yet.")}
                 </div>
+                {assetTypeFilter !== "video" ? (
+                  <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+                    <SectionLabel>Uploaded references</SectionLabel>
+                    {assetGrid(visibleUploads, "Uploaded references appear here.")}
+                  </div>
+                ) : null}
               </TabsContent>
+
             </Tabs>
           </div>
         </div>
@@ -1275,18 +1423,25 @@ export default function GenerationStudio() {
                         </span>
                         <div className="flex flex-wrap gap-2">
                           {recipe.urls.map((url, index) => (
-                            <div
+                            <button
+                              type="button"
                               key={`${url}-${index}`}
-                              className="relative h-14 w-14 overflow-hidden rounded-lg border border-white/12"
+                              onClick={() => addSourceReference(url)}
+                              title="Add this reference to the stack"
+                              className="group/ref relative h-14 w-14 overflow-hidden rounded-lg border border-white/12 transition-colors hover:border-cyan-200/60"
                             >
                               <img src={url} alt={`Reference ${index + 1}`} className="h-full w-full object-cover" />
-                              <span className="absolute inset-x-0 bottom-0 bg-black/75 text-center text-[9px] font-semibold uppercase text-cyan-100">
+                              <span className="absolute inset-0 hidden items-center justify-center bg-black/70 text-[10px] font-semibold text-cyan-100 group-hover/ref:flex">
+                                + Add
+                              </span>
+                              <span className="absolute inset-x-0 bottom-0 bg-black/75 text-center text-[9px] font-semibold uppercase text-cyan-100 group-hover/ref:hidden">
                                 Ref {index + 1}
                               </span>
-                            </div>
+                            </button>
                           ))}
                         </div>
                       </div>
+
                     ) : null}
 
                     <div className="mt-auto space-y-2 border-t border-white/10 pt-4">
@@ -1300,13 +1455,18 @@ export default function GenerationStudio() {
                       {lightbox.outputUrl ? (
                         <Button
                           variant="outline"
-                          asChild
+                          onClick={() =>
+                            void downloadAsset(
+                              lightbox.outputUrl as string,
+                              lightbox.id,
+                              lightbox.outputType,
+                            )
+                          }
                           className="w-full border-white/15 bg-white/[0.04]"
                         >
-                          <a href={lightbox.outputUrl} download target="_blank" rel="noreferrer">
-                            <Download size={15} className="mr-2" /> Download
-                          </a>
+                          <Download size={15} className="mr-2" /> Download
                         </Button>
+
                       ) : null}
                       <Button
                         variant="outline"
