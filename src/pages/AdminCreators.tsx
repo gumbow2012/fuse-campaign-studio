@@ -204,6 +204,7 @@ const AdminCreators = () => {
       <PageMeta
         title="Creators & Review Queue | FUSE Admin"
         description="Invite creators, manage their access, and review template submissions before they go live."
+        path="/admin/creators"
       />
       <div className="mx-auto w-full max-w-6xl px-4 py-10 sm:px-6 lg:px-8">
         <header className="flex flex-wrap items-end justify-between gap-4">
