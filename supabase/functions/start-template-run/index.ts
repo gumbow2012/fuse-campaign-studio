@@ -197,10 +197,10 @@ Deno.serve(async (req) => {
       ((versionEdges ?? []) as VersionEdge[]).map((edge) => edge.target_node_id).filter(Boolean),
     );
     const orphanExecutionNodes = allVersionNodes.filter((node) =>
-      node.node_type !== "user_input" && !targetNodeIds.has(node.id)
+      node.node_type !== "user_input" && node.node_type !== "prompt" && !targetNodeIds.has(node.id)
     );
     const executionNodes = allVersionNodes.filter((node) =>
-      node.node_type !== "user_input" && targetNodeIds.has(node.id)
+      node.node_type !== "user_input" && node.node_type !== "prompt" && targetNodeIds.has(node.id)
     );
     const deliverableCounts = countTemplateDeliverables(executionNodes);
 

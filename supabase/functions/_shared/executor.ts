@@ -16,6 +16,7 @@ import {
   submitVideoJob,
 } from "./fal.ts";
 import { sortEdgesByExecutionOrder, targetParamOrder } from "./edge-order.ts";
+import { isPromptNode, resolveNodePrompt } from "./prompt-nodes.ts";
 
 type NodeRow = {
   id: string;
@@ -883,9 +884,17 @@ export async function runGraphJob(admin: AdminClient, jobId: string) {
   const nodeMap = new Map((nodes as NodeRow[]).map((node) => [node.id, node]));
   const assetMap = new Map((assets ?? []).map((asset) => [asset.id, asset as AssetRow]));
   const incomingByTarget = new Map<string, EdgeRow[]>();
+  const promptEdgesByTarget = new Map<string, EdgeRow[]>();
   const nodeIdsWithOutgoingEdges = new Set<string>();
 
   for (const edge of edges as EdgeRow[]) {
+    // Prompt-node edges carry text, not assets — keep them out of dependency resolution.
+    if (isPromptNode(nodeMap.get(edge.source_node_id))) {
+      const promptList = promptEdgesByTarget.get(edge.target_node_id) ?? [];
+      promptList.push(edge);
+      promptEdgesByTarget.set(edge.target_node_id, promptList);
+      continue;
+    }
     nodeIdsWithOutgoingEdges.add(edge.source_node_id);
     const list = incomingByTarget.get(edge.target_node_id) ?? [];
     list.push(edge);
@@ -1014,7 +1023,7 @@ export async function runGraphJob(admin: AdminClient, jobId: string) {
 
       if (node.node_type === "image_gen") {
         try {
-          const prompt = String(node.prompt_config?.prompt ?? "").trim();
+          const prompt = resolveNodePrompt(node, promptEdgesByTarget.get(node.id) ?? [], nodeMap);
           const referenceAsset = getNodeReferenceAsset(node, assetMap);
           const orderedInputs = orderedParamEntries
             .map(([, value]) => value.url)
@@ -1107,7 +1116,7 @@ export async function runGraphJob(admin: AdminClient, jobId: string) {
         }
       } else if (node.node_type === "video_gen") {
         try {
-          const prompt = String(node.prompt_config?.prompt ?? "").trim();
+          const prompt = resolveNodePrompt(node, promptEdgesByTarget.get(node.id) ?? [], nodeMap);
           const initImageUrl = params.get("init_image")?.url ??
             params.get("start_frame_image")?.url ??
             [...params.values()][0]?.url;

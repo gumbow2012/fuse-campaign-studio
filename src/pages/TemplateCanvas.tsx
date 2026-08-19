@@ -275,7 +275,7 @@ type RunNodeResult = {
   startedAt?: string | null;
 };
 
-type NewNodeKind = NodeDraft["editorMode"] | "image_gen" | "video_gen";
+type NewNodeKind = NodeDraft["editorMode"] | "image_gen" | "video_gen" | "prompt";
 type TemplateWizardStep = "setup" | "branches";
 type EdgeMoveDirection = -1 | 1;
 
@@ -394,6 +394,7 @@ function inferEdgeTargetParam(
   targetNode: TemplateDetailNode | undefined,
   incomingCount: number,
 ) {
+  if (sourceNode?.nodeType === "prompt") return "prompt";
   if (targetNode?.nodeType === "video_gen") return "start_frame_image";
   if (targetNode?.nodeType !== "image_gen") return "image";
 
@@ -421,12 +422,14 @@ function compactText(value: string | null | undefined, maxLength = 150) {
 
 function nodeKind(node: { nodeType: string }): GraphCanvasNodeData["kind"] {
   if (node.nodeType === "user_input") return "input";
+  if (node.nodeType === "prompt") return "prompt";
   if (node.nodeType === "image_gen") return "image";
   if (node.nodeType === "video_gen") return "video";
   return "other";
 }
 
 function nodeKindLabel(node: TemplateDetailNode) {
+  if (node.nodeType === "prompt") return "Prompt block";
   if (node.nodeType === "video_gen") return "Video model";
   if (node.nodeType === "image_gen") return "Image model";
   if (node.editor?.mode === "upload") return "Upload input";
@@ -444,6 +447,7 @@ function sourcePreview(node: TemplateDetailNode) {
 
 function promptPreview(node: TemplateDetailNode) {
   if (node.prompt) return compactText(node.prompt, 170);
+  if (node.nodeType === "prompt") return "Double-click to write this prompt";
   if (node.nodeType === "user_input") return compactText(node.editor?.expected || node.expected || "Runtime image input", 110);
   return compactText(node.summary, 140);
 }
@@ -1812,6 +1816,7 @@ const TemplateCanvas = () => {
   const addNode = useCallback(async (kind: NewNodeKind, videoModelOverride?: VideoModelKey) => {
     if (!detail) return;
     const isInput = kind === "upload" || kind === "reference";
+    const isPromptBlock = kind === "prompt";
     setMutating("add-node");
     try {
       const created = await invokeWorkbench({
@@ -1819,7 +1824,7 @@ const TemplateCanvas = () => {
         versionId: detail.versionId,
         nodeType: isInput ? "user_input" : kind,
         editorMode: isInput ? kind : undefined,
-        expected: kind === "video_gen" ? "video" : "image",
+        expected: isPromptBlock ? undefined : kind === "video_gen" ? "video" : "image",
         prompt: "",
         outputExposed: kind === "image_gen" || kind === "video_gen",
       });
@@ -1852,7 +1857,12 @@ const TemplateCanvas = () => {
         setSelectedNodeId(createdNodeId);
         setFocusNodeId(createdNodeId);
       }
-      toast({ title: "Step added", description: "Rename it and set the prompt in the inspector." });
+      toast({
+        title: isPromptBlock ? "Prompt block added" : "Step added",
+        description: isPromptBlock
+          ? "Double-click it to write the prompt, then connect it to a model step."
+          : "Rename it and set the prompt in the inspector.",
+      });
     } catch (addError) {
       const message = addError instanceof Error ? addError.message : "Could not add node";
       toast({ title: "Add step failed", description: message, variant: "destructive" });
@@ -2146,7 +2156,7 @@ const TemplateCanvas = () => {
       if (!nodeMap.has(incoming.sourceNodeId)) return [];
       const sourceNode = nodeMap.get(incoming.sourceNodeId);
       const param = (incoming.targetParam ?? "").trim().toLowerCase();
-      const portType: PortType = param.includes("prompt")
+      const portType: PortType = param.includes("prompt") || sourceNode?.nodeType === "prompt"
         ? "prompt"
         : sourceNode?.nodeType === "video_gen"
         ? "video"
@@ -2162,7 +2172,11 @@ const TemplateCanvas = () => {
           targetHandle = targetPorts.find((port) => port.includes("prompt")) ?? targetPorts[0];
         }
       }
-      const sourceHandle = sourceNode?.nodeType === "video_gen" ? "video" : "image";
+      const sourceHandle = sourceNode?.nodeType === "prompt"
+        ? "prompt"
+        : sourceNode?.nodeType === "video_gen"
+        ? "video"
+        : "image";
       return [{
         id: `${incoming.edgeId ?? `${incoming.sourceNodeId}-${target.id}`}-${index}`,
         source: incoming.sourceNodeId,
@@ -2367,7 +2381,7 @@ const TemplateCanvas = () => {
                 { key: "reference", label: "Image Reference", icon: ImageDown, onClick: () => void addNode("reference"), disabled: !detail || !!mutating, hint: "Fixed image you upload now" },
                 { key: "image", label: "Image", icon: ImageIcon, onClick: () => void addNode("image_gen"), disabled: !detail || !!mutating, hint: "nano-banana-pro image step" },
                 { key: "video", label: "Video", icon: Film, onClick: () => void addNode("video_gen", paletteVideoModel), disabled: !detail || !!mutating, hint: `${resolveVideoModelOption(paletteVideoModel).label} step` },
-                { key: "prompt", label: "Prompt", icon: Type, onClick: () => {}, disabled: true, hint: "coming soon" },
+                { key: "prompt", label: "Prompt", icon: Type, onClick: () => void addNode("prompt"), disabled: !detail || !!mutating, hint: "Reusable prompt text block" },
               ]
                 .filter((item) => item.label.toLowerCase().includes(paletteSearch.trim().toLowerCase()))
                 .map((item) => (

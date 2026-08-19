@@ -25,7 +25,7 @@ import {
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 
-import { Film, Image as ImageIcon, Loader2, Maximize2, Play, Plus, Upload, X } from "lucide-react";
+import { Film, Image as ImageIcon, Loader2, Maximize2, Play, Plus, Type, Upload, X } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 export type PortType = "prompt" | "image" | "video";
@@ -34,7 +34,7 @@ export type GraphCanvasNodeData = {
   title: string;
   nodeNumber?: number | null;
   outputNumber?: number | null;
-  kind: "input" | "image" | "video" | "other";
+  kind: "input" | "image" | "video" | "prompt" | "other";
   kindLabel: string;
   laneLabel: string;
   modelBadge: string | null;
@@ -72,6 +72,7 @@ const KIND_ICON = {
   input: Upload,
   image: ImageIcon,
   video: Film,
+  prompt: Type,
   other: ImageIcon,
 } as const;
 
@@ -79,6 +80,7 @@ const KIND_ACCENT: Record<GraphCanvasNodeData["kind"], string> = {
   input: "border-cyan-300/40 text-cyan-200",
   image: "border-emerald-300/40 text-emerald-200",
   video: "border-primary/50 text-primary",
+  prompt: "border-fuchsia-300/40 text-fuchsia-200",
   other: "border-border/60 text-muted-foreground",
 };
 
@@ -120,6 +122,7 @@ function inputPortsFor(data: GraphCanvasNodeData): Port[] {
 }
 
 function outputPortFor(data: GraphCanvasNodeData): Port {
+  if (data.kind === "prompt") return { id: "prompt", label: "Prompt", type: "prompt" };
   if (data.kind === "video") return { id: "video", label: "Video", type: "video" };
   return { id: "image", label: "Image", type: "image" };
 }
@@ -138,7 +141,8 @@ const TemplateFlowNode = ({ id, data, selected }: NodeProps<GraphCanvasNode>) =>
   const inputPorts = inputPortsFor(data);
   const outputPort = outputPortFor(data);
   const isModelNode = data.kind === "image" || data.kind === "video";
-  const promptEditable = isModelNode && typeof data.onPromptCommit === "function";
+  const isPromptBlock = data.kind === "prompt";
+  const promptEditable = (isModelNode || isPromptBlock) && typeof data.onPromptCommit === "function";
   const [editingPrompt, setEditingPrompt] = useState(false);
   const promptRaw = data.promptValue ?? data.promptPreview;
   const [promptDraft, setPromptDraft] = useState(promptRaw);
@@ -174,7 +178,7 @@ const TemplateFlowNode = ({ id, data, selected }: NodeProps<GraphCanvasNode>) =>
           : "border-border/60 shadow-[0_14px_40px_-24px_rgba(0,0,0,0.85)] hover:border-primary/40"
       }`}
     >
-      {!inputPorts.length ? (
+      {!inputPorts.length && !isPromptBlock ? (
         <Handle
           type="target"
           position={Position.Left}
