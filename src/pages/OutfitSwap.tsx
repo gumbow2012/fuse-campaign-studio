@@ -873,11 +873,17 @@ export default function OutfitSwap() {
                       }`
                     : "Generate video"}
                 </Button>
-                {approvedUrls.length ? null : (
+                {approvedUrls.length ? (
+                  <p className="text-[11px] text-muted-foreground">
+                    Each click queues its own clip — you can run several at once, and closing or
+                    refreshing the page won't cancel them. They land in the Library below.
+                  </p>
+                ) : (
                   <p className="text-[11px] text-muted-foreground">
                     Approve at least one swapped frame to continue.
                   </p>
                 )}
+
               </div>
             </SectionCard>
           </div>
