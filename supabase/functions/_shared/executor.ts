@@ -21,11 +21,17 @@ import { isPromptNode, resolveNodePrompt } from "./prompt-nodes.ts";
 
 /* ============ Seedance multi-reference (additive, isolated) ============ */
 
+/** Provider cap: Seedance reference-to-video accepts up to 9 reference images. */
+const SEEDANCE_MAX_REFERENCE_IMAGES = 9;
+
 /**
- * True only when the node's model is a Seedance reference-capable model AND the
- * step resolved 2+ incoming images. Kling and single-image Seedance never match.
+ * True only when the node is EXPLICITLY configured for multi-reference
+ * (prompt_config.video_mode === "multi_reference"), its model is a Seedance
+ * reference-capable model, AND the step resolved 2+ incoming images.
+ * Without the explicit flag we always fall through to the single-image path.
  */
 function isSeedanceMultiReferenceRequest(node: NodeRow, resolvedImageInputs: string[]) {
+  if (node.prompt_config?.video_mode !== "multi_reference") return false;
   const model = getVideoModel(node.prompt_config?.video_model);
   if (model.family !== "seedance" || !model.supportsMultiReference) return false;
   return (resolvedImageInputs ?? []).filter(Boolean).length >= 2;
@@ -50,16 +56,26 @@ async function runSeedanceMultiReference(admin: AdminClient, args: {
     : VERTICAL_VIDEO_ASPECT_RATIO;
   const generateAudio = node.prompt_config?.generate_audio !== false;
 
+  // Never silently drop references: cap at the provider limit and surface it.
+  const requestedImages = (args.imageUrls ?? []).filter(Boolean);
+  const sentImages = requestedImages.slice(0, SEEDANCE_MAX_REFERENCE_IMAGES);
+  const droppedImages = requestedImages.slice(SEEDANCE_MAX_REFERENCE_IMAGES);
+  const capNote = droppedImages.length
+    ? `${node.name}: ${requestedImages.length} reference images supplied, but ${model.label} reference-to-video accepts ${SEEDANCE_MAX_REFERENCE_IMAGES}. The last ${droppedImages.length} were not sent.`
+    : null;
+  if (capNote) console.warn(capNote);
+
   const { requestId, endpointId, input } = await submitSeedanceReferenceVideoJob({
     modelKey: model.key,
     prompt: args.prompt,
-    imageUrls: args.imageUrls,
+    imageUrls: sentImages,
     duration,
     resolution,
     aspectRatio,
     generateAudio,
     webhookUrl: `${Deno.env.get("SUPABASE_URL")}/functions/v1/fal-webhook?jobId=${encodeURIComponent(args.jobId)}&stepId=${encodeURIComponent(step.id)}`,
   });
+
 
   const costEstimate = await getStepCostEstimate(
     endpointId,
