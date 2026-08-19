@@ -1024,6 +1024,13 @@ async function startAnimateFrame(admin: AdminClient, args: {
   imageUrl: string;
   frameIndex?: number;
   frameTime?: number;
+  /** "auto" | a shot key | "custom" */
+  cameraDirection?: unknown;
+  customPrompt?: string | null;
+  /** Position of this clip inside the approved set + the set size (Auto mode). */
+  setIndex?: number;
+  setSize?: number;
+  pieceTypes?: unknown;
   webhookBase: string;
 }) {
   const imageUrl = String(args.imageUrl ?? "").trim();
@@ -1032,6 +1039,26 @@ async function startAnimateFrame(admin: AdminClient, args: {
   const videoModel = getVideoModel(ANIMATE_MODEL_KEY);
   const endpointId = videoModel.endpointId;
 
+  const direction = String(args.cameraDirection ?? "auto").trim().toLowerCase() || "auto";
+  const pieceTypes = (Array.isArray(args.pieceTypes) ? args.pieceTypes : [])
+    .map((entry) => String(entry ?? "").trim())
+    .filter(Boolean);
+  const setSize = Math.max(1, Number(args.setSize ?? 1) || 1);
+  const setIndex = Math.max(0, Number(args.setIndex ?? 0) || 0);
+
+  let shot: ShotSpec | null = null;
+  if (direction === "custom") {
+    shot = null;
+  } else if (direction === "auto" || !direction) {
+    const plan = planShotSet(setSize, pieceTypes);
+    shot = plan[Math.min(setIndex, plan.length - 1)] ?? null;
+  } else {
+    shot = resolveShot(direction) ?? planShotSet(setSize, pieceTypes)[0] ?? null;
+  }
+
+  const prompt = buildAnimationPrompt(shot, args.customPrompt);
+  const summary = shot ? shot.summary : CUSTOM_SUMMARY;
+
   const { data: inserted, error: insertError } = await admin
     .from("studio_generations")
     .insert({
@@ -1039,7 +1066,7 @@ async function startAnimateFrame(admin: AdminClient, args: {
       status: "queued",
       kind: "video",
       provider: "fal",
-      prompt: ANIMATE_PROMPT,
+      prompt,
     })
     .select("*")
     .single();
@@ -1056,7 +1083,7 @@ async function startAnimateFrame(admin: AdminClient, args: {
 
     const falInput = buildVideoModelInput(ANIMATE_MODEL_KEY, {
       imageUrl,
-      prompt: ANIMATE_PROMPT,
+      prompt,
       duration: ANIMATE_DURATION,
       generateAudio: false,
     });
@@ -1081,11 +1108,18 @@ async function startAnimateFrame(admin: AdminClient, args: {
           source_frame_url: imageUrl,
           frame_index: Number(args.frameIndex ?? 0),
           frame_time: Number(args.frameTime ?? 0),
+          camera_direction: direction,
+          shot_key: shot?.key ?? "custom",
+          shot_label: shot?.label ?? "Custom direction",
+          shot_energy: shot?.energy ?? "custom",
+          direction_summary: summary,
+          animation_prompt: prompt,
         },
       })
       .eq("id", inserted.id)
       .select("*")
       .single();
+
 
     return serialize(updated ?? inserted);
   } catch (error) {
