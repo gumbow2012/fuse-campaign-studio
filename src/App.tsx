@@ -6,6 +6,7 @@ import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { AuthProvider } from "@/contexts/AuthContext";
 import CustomerRoute from "@/components/CustomerRoute";
 import AdminRoute from "@/components/AdminRoute";
+import BuilderRoute from "@/components/BuilderRoute";
 import Admin from "@/pages/Admin";
 import AdminAudits from "@/pages/AdminAudits";
 import AdminAnalytics from "@/pages/AdminAnalytics";
@@ -78,17 +79,17 @@ const App = () => (
             <Route
               path="/app/lab/templates"
               element={
-                <AdminRoute>
+                <BuilderRoute>
                   <TemplateLab />
-                </AdminRoute>
+                </BuilderRoute>
               }
             />
             <Route
               path="/app/lab/canvas"
               element={
-                <AdminRoute>
+                <BuilderRoute>
                   <TemplateCanvas />
-                </AdminRoute>
+                </BuilderRoute>
               }
             />
             <Route
