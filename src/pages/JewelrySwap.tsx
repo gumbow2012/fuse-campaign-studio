@@ -1881,13 +1881,6 @@ export default function JewelrySwap() {
                       : "border-white/12 bg-white/[0.03] text-foreground/70 hover:border-cyan-200/40",
                   )}
                 >
-
-                    "flex w-full items-center justify-between gap-3 rounded-xl border px-4 py-2.5 text-xs font-medium transition-colors",
-                    preserveAudio
-                      ? "border-cyan-200/60 bg-cyan-400/15 text-cyan-100"
-                      : "border-white/12 bg-white/[0.03] text-foreground/70 hover:border-cyan-200/40",
-                  )}
-                >
                   <span>Preserve original audio</span>
                   <span
                     className={cn(
