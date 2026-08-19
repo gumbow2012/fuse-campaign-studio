@@ -2193,29 +2193,32 @@ export default function JewelrySwap() {
                           ))}
                         </select>
 
-                        {/* Per-frame Macro mode — forces macro replacement for this frame. */}
-                        <div className="flex items-center justify-between gap-2 rounded-lg border border-white/12 bg-black/40 px-2 py-1.5">
-                          <label
-                            htmlFor={`macro-mode-${index}`}
-                            className="flex items-center gap-1.5 text-[10px] uppercase tracking-[0.14em] text-muted-foreground"
+                        {/* Per-frame replacement mode — persists for regenerations. */}
+                        <div className="flex items-center gap-1.5">
+                          <select
+                            aria-label="Replacement mode"
+                            value={frameMode[index] ?? "auto"}
+                            onChange={(event) =>
+                              setFrameMode((prev) => ({
+                                ...prev,
+                                [index]: event.target.value as ReplacementMode,
+                              }))
+                            }
+                            className="flex-1 rounded-lg border border-white/12 bg-black/40 px-2 py-1.5 text-[10px] text-foreground outline-none focus:border-cyan-200/60"
                           >
-                            <input
-                              id={`macro-mode-${index}`}
-                              type="checkbox"
-                              checked={frameMacro[index] === true}
-                              onChange={(event) =>
-                                setFrameMacro((prev) => ({ ...prev, [index]: event.target.checked }))
-                              }
-                              className="h-3 w-3 accent-cyan-300"
-                            />
-                            Macro mode
-                          </label>
-                          {frameMacro[index] === true ? (
+                            {REPLACEMENT_MODES.map((option) => (
+                              <option key={option.value} value={option.value}>
+                                Mode: {option.label}
+                              </option>
+                            ))}
+                          </select>
+                          {(frameMode[index] ?? "auto") === "macro" ? (
                             <span className="rounded-md border border-cyan-200/40 bg-cyan-400/15 px-1.5 py-0.5 text-[9px] uppercase tracking-[0.14em] text-cyan-100">
                               Macro
                             </span>
                           ) : null}
                         </div>
+
 
 
 
