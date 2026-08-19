@@ -432,10 +432,10 @@ export function referenceToVideoEndpoint(modelKey: unknown) {
 }
 
 /**
- * Seedance reference-to-video submit. Payload/endpoint mirror the known-good
- * Outfit Swap reconstruction call; Outfit Swap itself is unchanged.
+ * Builds the Seedance reference-to-video payload. Endpoint + fields mirror the
+ * known-good Outfit Swap reconstruction call; Outfit Swap itself is unchanged.
  */
-export async function submitSeedanceReferenceVideoJob(args: {
+export function buildSeedanceReferenceInput(args: {
   modelKey: unknown;
   prompt: string;
   imageUrls: string[];
@@ -443,7 +443,6 @@ export async function submitSeedanceReferenceVideoJob(args: {
   resolution?: string | null;
   aspectRatio?: string | null;
   generateAudio?: boolean | null;
-  webhookUrl: string;
 }) {
   const model = getVideoModel(args.modelKey);
   if (model.family !== "seedance" || !model.supportsMultiReference) {
@@ -476,6 +475,22 @@ export async function submitSeedanceReferenceVideoJob(args: {
     generate_audio: args.generateAudio !== false,
   };
 
+  return { endpointId, input };
+}
+
+/** Seedance reference-to-video submit (queue + webhook), multi-reference only. */
+export async function submitSeedanceReferenceVideoJob(args: {
+  modelKey: unknown;
+  prompt: string;
+  imageUrls: string[];
+  duration?: unknown;
+  resolution?: string | null;
+  aspectRatio?: string | null;
+  generateAudio?: boolean | null;
+  webhookUrl: string;
+}) {
+  const { endpointId, input } = buildSeedanceReferenceInput(args);
   const requestId = await submitFalJob(endpointId, input, args.webhookUrl);
   return { requestId, endpointId, input };
 }
+
