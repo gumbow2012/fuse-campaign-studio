@@ -378,6 +378,9 @@ function buildJewelryPrompt(args: {
     "If a piece is a pendant only, replace only the pendant and keep the existing chain. If a chain only, replace only the chain and keep the existing pendant. If \"Pendant + Chain\", replace both.",
     "",
     "Every unrelated detail from SOURCE_FRAME — subject identity, skin, hair, clothing, hands, environment — must be preserved exactly. Respect layering: whatever was in front stays in front. Match the source lighting, contact shadows and reflections.",
+    "",
+    CONTEXT_NEGATIVES,
+
     cadActive ? "" : null,
     cadActive
       ? (cadRefNums.length
