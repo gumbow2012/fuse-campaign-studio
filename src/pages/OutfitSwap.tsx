@@ -23,7 +23,12 @@ import { Progress } from "@/components/ui/progress";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { IMAGE_FLAT_USD, costPreview, creditsFromUsd, resolutionMultiplier } from "@/lib/costEstimate";
-import { uploadRunInputFile } from "@/services/runInputUpload";
+import {
+  createOutfitSwapFolder,
+  uploadToStorage,
+  uploadWithConcurrency,
+} from "@/services/storageUpload";
+
 import { callOutfitSwap, type SwapGeneration } from "@/services/outfitSwap";
 import { extractFrames, frameTimestamps, loadVideo, readMeta, type VideoMeta } from "@/lib/videoFrames";
 
@@ -154,8 +159,11 @@ export default function OutfitSwap() {
       const nextMeta = readMeta(element);
       setMeta(nextMeta);
 
+      const folder = await createOutfitSwapFolder();
+
       setUploadingVideo(true);
-      setVideoUrl(await uploadRunInputFile(file));
+      const uploadedVideo = await uploadToStorage(folder, file, file.name);
+      setVideoUrl(uploadedVideo.url);
 
       // Extract ~1 frame/second plus the final frame, then upload each frame.
       setExtracting(true);
@@ -165,18 +173,23 @@ export default function OutfitSwap() {
         setExtractProgress(Math.round((done / total) * 50)),
       );
 
-      const uploaded: Frame[] = [];
-      for (const frame of captured) {
-        uploaded.push({ time: frame.time, url: await uploadRunInputFile(frame.file) });
-        setExtractProgress(50 + Math.round((uploaded.length / captured.length) * 50));
-        setFrames([...uploaded]);
-      }
+      const uploaded = await uploadWithConcurrency(
+        captured,
+        3,
+        async (frame) => {
+          const stored = await uploadToStorage(folder, frame.file, frame.file.name);
+          return { time: frame.time, url: stored.url } as Frame;
+        },
+        (done, total) => setExtractProgress(50 + Math.round((done / total) * 50)),
+      );
+      setFrames(uploaded);
       // Offer a spread of frames by default; the user can change the selection.
       const spread = uploaded
         .map((_, index) => index)
         .filter((index) => index % Math.max(1, Math.ceil(uploaded.length / 4)) === 0);
       setSelectedFrames(new Set(spread));
       toast.success(`${uploaded.length} source frames extracted`);
+
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Could not process that video");
     } finally {
@@ -191,16 +204,19 @@ export default function OutfitSwap() {
     if (!files.length) return;
     setUploadingGarment(true);
     try {
+      const folder = await createOutfitSwapFolder();
       const uploaded: Garment[] = [];
       for (const file of files) {
+        const stored = await uploadToStorage(folder, file, file.name);
         uploaded.push({
-          url: await uploadRunInputFile(file),
+          url: stored.url,
           name: file.name,
           type: GARMENT_TYPES[0],
           label: "",
           person: DEFAULT_APPLY_TO,
         });
       }
+
       setGarments((prev) => [...prev, ...uploaded].slice(0, 14));
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Could not upload that reference");
