@@ -277,6 +277,7 @@ Deno.serve(async (req) => {
       asset: uploadedAsset,
     });
   } catch (error) {
-    return json({ error: errorMessage(error) }, 400);
+    const message = errorMessage(error);
+    return json({ error: message }, message === FORBIDDEN_TEMPLATE_MESSAGE ? 403 : 400);
   }
 });
