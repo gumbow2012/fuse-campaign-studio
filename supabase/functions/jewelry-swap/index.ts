@@ -144,6 +144,9 @@ type JewelryPiece = {
   cad?: boolean;
   person?: string;
   notes?: string;
+  /** "piece" (default, narrowest) or "piece_chain" — what the swap may replace. */
+  scope?: string;
+
 };
 
 /** Normalized labeled references for a piece, in supplied order. */
