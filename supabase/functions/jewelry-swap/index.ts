@@ -474,6 +474,7 @@ async function startSwapFrame(admin: AdminClient, args: {
     extra: args.extraPrompt,
     preferredRole: args.preferredRole ?? null,
     failureReason: args.failureReason ?? null,
+    macro: args.macro === true,
   });
 
   const { data: inserted, error: insertError } = await admin
