@@ -548,7 +548,29 @@ Deno.serve(async (req) => {
       return json({ generations });
     }
 
+    if (action === "cancel") {
+      const ids = (Array.isArray(body.generationIds) ? body.generationIds : [body.generationId])
+        .map((id: unknown) => String(id ?? "").trim())
+        .filter(Boolean);
+      if (!ids.length) throw new Error("Select at least one generation to cancel");
+
+      // The provider job may already be in flight; we simply stop tracking it.
+      const { error } = await admin
+        .from("studio_generations")
+        .update({
+          status: "canceled",
+          error_log: "Canceled by the user",
+          completed_at: new Date().toISOString(),
+        })
+        .eq("user_id", user.id)
+        .in("id", ids)
+        .in("status", ["queued", "running"]);
+      if (error) throw new Error(error.message);
+      return json({ canceled: ids.length });
+    }
+
     if (action === "delete") {
+
       const ids = (Array.isArray(body.generationIds) ? body.generationIds : [body.generationId])
         .map((id: unknown) => String(id ?? "").trim())
         .filter(Boolean);

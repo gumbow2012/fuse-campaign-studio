@@ -2,7 +2,7 @@ import { SUPABASE_PUBLISHABLE_KEY, SUPABASE_URL, supabase } from "@/integrations
 
 export type SwapGeneration = {
   id: string;
-  status: "queued" | "running" | "complete" | "failed";
+  status: "queued" | "running" | "complete" | "failed" | "canceled";
   kind: string | null;
   prompt: string | null;
   outputUrl: string | null;

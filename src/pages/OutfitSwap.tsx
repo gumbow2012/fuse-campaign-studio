@@ -5,6 +5,7 @@ import {
   Film,
   ImageIcon,
   Loader2,
+  Maximize2,
   Plus,
   RefreshCw,
   Shirt,
@@ -21,6 +22,17 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
 import { Textarea } from "@/components/ui/textarea";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { cn } from "@/lib/utils";
 import { IMAGE_FLAT_USD, costPreview, creditsFromUsd, resolutionMultiplier } from "@/lib/costEstimate";
 import {
@@ -28,6 +40,7 @@ import {
   uploadToStorage,
   uploadWithConcurrency,
 } from "@/services/storageUpload";
+
 
 import { callOutfitSwap, type SwapGeneration } from "@/services/outfitSwap";
 import { extractFrames, frameTimestamps, loadVideo, readMeta, type VideoMeta } from "@/lib/videoFrames";
@@ -96,6 +109,8 @@ function StatusPill({ generation }: { generation?: SwapGeneration }) {
     ? "Ready"
     : generation.status === "failed"
     ? "Failed"
+    : generation.status === "canceled"
+    ? "Canceled"
     : generation.status === "running"
     ? "Generating"
     : "Queued";
@@ -114,6 +129,62 @@ function StatusPill({ generation }: { generation?: SwapGeneration }) {
     </span>
   );
 }
+
+const PHASE_MESSAGES = [
+  "Preparing your references…",
+  "Reconstructing the motion…",
+  "Rendering the new wardrobe…",
+  "Matching lighting & fabric folds…",
+  "Stabilizing frames…",
+  "Finalizing the clip…",
+];
+
+/**
+ * The provider does not report granular progress, so we ease a simulated meter
+ * toward ~95% and only snap to 100% when the job actually finishes.
+ */
+function VideoProgress({ generationId, onCancel }: { generationId: string; onCancel: () => void }) {
+  const [elapsed, setElapsed] = useState(0);
+
+  useEffect(() => {
+    setElapsed(0);
+    const started = Date.now();
+    const timer = setInterval(() => setElapsed((Date.now() - started) / 1000), 500);
+    return () => clearInterval(timer);
+  }, [generationId]);
+
+  // Exponential ease: fast early, asymptotic toward 95%.
+  const percent = Math.min(95, Math.round(95 * (1 - Math.exp(-elapsed / 55))));
+  const phase = PHASE_MESSAGES[Math.min(PHASE_MESSAGES.length - 1, Math.floor(elapsed / 6))];
+  const minutes = Math.floor(elapsed / 60);
+  const seconds = Math.floor(elapsed % 60);
+
+  return (
+    <div className="space-y-3 rounded-2xl border border-white/10 bg-black/30 p-4">
+      <div className="flex items-center justify-between gap-3">
+        <span className="flex items-center gap-2 text-[11px] uppercase tracking-[0.16em] text-cyan-200/70">
+          <Video size={14} /> {phase}
+        </span>
+        <span className="font-heading text-sm font-semibold text-cyan-100">{percent}%</span>
+      </div>
+      <Progress value={percent} className="h-1.5" />
+      <div className="flex items-center justify-between gap-3">
+        <span className="text-[11px] text-muted-foreground">
+          Elapsed {minutes}:{String(seconds).padStart(2, "0")}
+        </span>
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={onCancel}
+          className="rounded-lg border-white/15 bg-transparent text-[11px] hover:border-red-400/60 hover:text-red-300"
+        >
+          <X size={12} /> Cancel generation
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 
 export default function OutfitSwap() {
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
@@ -139,6 +210,11 @@ export default function OutfitSwap() {
   const [resolution, setResolution] = useState("1080p");
   const [reconstruction, setReconstruction] = useState<SwapGeneration | null>(null);
   const [reconstructing, setReconstructing] = useState(false);
+  const [cancelOpen, setCancelOpen] = useState(false);
+
+  // Which reviewed frame is open in the comparison lightbox.
+  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
+
 
   const videoInputRef = useRef<HTMLInputElement>(null);
   const garmentInputRef = useRef<HTMLInputElement>(null);
@@ -388,6 +464,29 @@ export default function OutfitSwap() {
       setReconstructing(false);
     }
   }, [approvedUrls, garments, videoModel, resolution, preserveAudio, meta, extraPrompt, videoDuration]);
+
+  /** Stops polling and frees the UI, even if the provider job keeps running. */
+  const cancelReconstruction = useCallback(async () => {
+    const current = reconstruction;
+    setCancelOpen(false);
+    if (!current) return;
+    setReconstruction({ ...current, status: "canceled" });
+    try {
+      await callOutfitSwap({ action: "cancel", generationIds: [current.id] });
+    } catch {
+      // The record may already be terminal; the UI is free either way.
+    }
+    toast.success("Video generation canceled");
+  }, [reconstruction]);
+
+  const toggleApproved = useCallback((index: number) => {
+    setApproved((prev) => {
+      const next = new Set(prev);
+      next.has(index) ? next.delete(index) : next.add(index);
+      return next;
+    });
+  }, []);
+
 
   const swapEntries = useMemo(
     () =>
@@ -827,7 +926,12 @@ export default function OutfitSwap() {
                             <StatusPill generation={swap} />
                           </span>
                         </div>
-                        <div className="grid grid-cols-2 gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setLightboxIndex(index)}
+                          className="group grid w-full grid-cols-2 gap-2 text-left"
+                          aria-label="Open full-size comparison"
+                        >
                           <div className="overflow-hidden rounded-xl border border-white/10 bg-black/40">
                             {frame ? (
                               <img src={frame.url} alt="Original frame" className="h-32 w-full object-cover" />
@@ -836,10 +940,10 @@ export default function OutfitSwap() {
                               Original
                             </p>
                           </div>
-                          <div className="overflow-hidden rounded-xl border border-white/10 bg-black/40">
+                          <div className="relative overflow-hidden rounded-xl border border-white/10 bg-black/40">
                             {swap.status === "complete" && swap.outputUrl ? (
                               <img src={swap.outputUrl} alt="Swapped frame" className="h-32 w-full object-cover" />
-                            ) : swap.status === "failed" ? (
+                            ) : swap.status === "failed" || swap.status === "canceled" ? (
                               <p className="h-32 overflow-y-auto p-2 text-[10px] text-red-300">
                                 {swap.error ?? "Generation failed"}
                               </p>
@@ -848,23 +952,20 @@ export default function OutfitSwap() {
                                 <Loader2 size={16} className="animate-spin text-cyan-200" />
                               </div>
                             )}
+                            <span className="absolute right-1.5 top-1.5 rounded-lg border border-white/15 bg-black/70 p-1 text-cyan-100 opacity-0 transition-opacity group-hover:opacity-100">
+                              <Maximize2 size={11} />
+                            </span>
                             <p className="px-2 py-1 text-[10px] uppercase tracking-[0.14em] text-cyan-200/70">
                               Swapped
                             </p>
                           </div>
-                        </div>
+                        </button>
                         <div className="flex items-center gap-1.5">
                           <Button
                             size="sm"
                             variant={isApproved ? "default" : "outline"}
                             disabled={swap.status !== "complete"}
-                            onClick={() =>
-                              setApproved((prev) => {
-                                const next = new Set(prev);
-                                next.has(index) ? next.delete(index) : next.add(index);
-                                return next;
-                              })
-                            }
+                            onClick={() => toggleApproved(index)}
                             className={cn(
                               "flex-1 rounded-lg text-[11px]",
                               isApproved
@@ -874,6 +975,7 @@ export default function OutfitSwap() {
                           >
                             <Check size={12} /> {isApproved ? "Approved" : "Approve"}
                           </Button>
+
                           <Button
                             size="sm"
                             variant="outline"
@@ -929,25 +1031,151 @@ export default function OutfitSwap() {
                         <Download size={13} /> Download clip
                       </a>
                     </>
-                  ) : reconstruction.status === "failed" ? (
+                  ) : reconstruction.status === "failed" || reconstruction.status === "canceled" ? (
                     <p className="rounded-xl border border-red-400/30 bg-red-500/10 p-3 text-xs text-red-300">
-                      {reconstruction.error ?? "Reconstruction failed"}
+                      {reconstruction.status === "canceled"
+                        ? "Canceled — you can start a new video whenever you're ready."
+                        : reconstruction.error ?? "Reconstruction failed"}
                     </p>
                   ) : (
-                    <div className="space-y-2 rounded-2xl border border-white/10 bg-black/30 p-4 text-center">
-                      <Video size={18} className="mx-auto text-cyan-200" />
-                      <p className="text-[11px] uppercase tracking-[0.16em] text-cyan-200/70">
-                        {reconstruction.status === "queued" ? "Queued with the provider" : "Rebuilding the clip"}
-                      </p>
-                      <Progress value={reconstruction.status === "queued" ? 12 : 55} className="h-1.5" />
-                    </div>
+                    <VideoProgress
+                      generationId={reconstruction.id}
+                      onCancel={() => setCancelOpen(true)}
+                    />
                   )}
+
                 </div>
               </SectionCard>
             ) : null}
           </div>
         </div>
       </div>
+
+      {/* Full-size original ↔ swapped comparison */}
+      <Dialog
+        open={lightboxIndex !== null}
+        onOpenChange={(open) => !open && setLightboxIndex(null)}
+      >
+        <DialogContent className="max-w-6xl border-white/10 bg-[#05070f]/95 backdrop-blur-xl">
+          {(() => {
+            if (lightboxIndex === null) return null;
+            const index = lightboxIndex;
+            const swap = swaps[index];
+            const frame = frames[index];
+            if (!swap) return null;
+            const isApproved = approved.has(index);
+            return (
+              <>
+                <DialogHeader>
+                  <DialogTitle className="font-heading text-base text-foreground">
+                    {frame ? `Frame at ${frame.time.toFixed(2)}s` : `Frame ${index + 1}`}
+                  </DialogTitle>
+                </DialogHeader>
+                <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_260px]">
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <figure className="overflow-hidden rounded-2xl border border-white/10 bg-black/50">
+                      {frame ? (
+                        <img src={frame.url} alt="Original frame" className="max-h-[62vh] w-full object-contain" />
+                      ) : null}
+                      <figcaption className="px-3 py-2 text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
+                        Original
+                      </figcaption>
+                    </figure>
+                    <figure className="overflow-hidden rounded-2xl border border-cyan-200/30 bg-black/50">
+                      {swap.status === "complete" && swap.outputUrl ? (
+                        <img src={swap.outputUrl} alt="Swapped frame" className="max-h-[62vh] w-full object-contain" />
+                      ) : swap.status === "failed" || swap.status === "canceled" ? (
+                        <p className="p-3 text-xs text-red-300">{swap.error ?? "Generation failed"}</p>
+                      ) : (
+                        <div className="flex h-48 items-center justify-center">
+                          <Loader2 size={18} className="animate-spin text-cyan-200" />
+                        </div>
+                      )}
+                      <figcaption className="px-3 py-2 text-[10px] uppercase tracking-[0.14em] text-cyan-200/70">
+                        Swapped
+                      </figcaption>
+                    </figure>
+                  </div>
+
+                  <aside className="space-y-3">
+                    <div className="flex items-center justify-between gap-2 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2">
+                      <StatusPill generation={swap} />
+                      <span className="text-[11px] text-cyan-200/70">
+                        {costPreview(swap.estimatedCredits, swap.estimatedCostUsd)}
+                      </span>
+                    </div>
+                    <Button
+                      disabled={swap.status !== "complete"}
+                      onClick={() => toggleApproved(index)}
+                      className={cn(
+                        "w-full rounded-xl text-xs font-semibold",
+                        isApproved
+                          ? "bg-cyan-400/20 text-cyan-100 hover:bg-cyan-400/30"
+                          : "bg-[hsl(var(--primary))] text-primary-foreground hover:bg-[hsl(var(--primary))]/90",
+                      )}
+                    >
+                      <Check size={13} /> {isApproved ? "Approved" : "Approve"}
+                    </Button>
+                    <Button
+                      variant="outline"
+                      onClick={() => void swapFrame(index)}
+                      className="w-full rounded-xl border-white/15 bg-transparent text-xs"
+                    >
+                      <RefreshCw size={13} /> Regenerate
+                    </Button>
+                    {swap.outputUrl ? (
+                      <a
+                        href={swap.outputUrl}
+                        download
+                        target="_blank"
+                        rel="noreferrer"
+                        className="flex items-center justify-center gap-2 rounded-xl border border-white/15 bg-black/40 py-2 text-xs text-foreground/85 transition-colors hover:border-cyan-200/50 hover:text-cyan-100"
+                      >
+                        <Download size={13} /> Download
+                      </a>
+                    ) : null}
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        setLightboxIndex(null);
+                        void removeSwap(index);
+                      }}
+                      className="w-full rounded-xl border-white/15 bg-transparent text-xs hover:border-red-400/60 hover:text-red-300"
+                    >
+                      <Trash2 size={13} /> Remove
+                    </Button>
+                  </aside>
+                </div>
+              </>
+            );
+          })()}
+        </DialogContent>
+      </Dialog>
+
+      <AlertDialog open={cancelOpen} onOpenChange={setCancelOpen}>
+        <AlertDialogContent className="border-border bg-card">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="font-heading">Cancel this video?</AlertDialogTitle>
+            <AlertDialogDescription>
+              We'll stop tracking this generation and free up the studio. Credits already spent on the
+              job may not be refunded.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="border-border bg-secondary text-foreground">
+              Keep generating
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => void cancelReconstruction()}
+              className="bg-red-500/80 text-white hover:bg-red-500"
+            >
+              Cancel generation
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+
+      </AlertDialog>
+
     </SiteShell>
   );
 }
