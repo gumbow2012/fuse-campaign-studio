@@ -841,11 +841,11 @@ export default function JewelrySwap() {
         .sort((a, b) => a - b)
         .map((index) => ({
           index,
-          url: swaps[index]?.outputUrl ?? null,
+          url: selectedSwap(index)?.outputUrl ?? null,
           time: frames[index]?.time ?? 0,
         }))
         .filter((entry): entry is { index: number; url: string; time: number } => !!entry.url),
-    [approved, swaps, frames],
+    [approved, selectedSwap, frames],
   );
 
   // Kling 3.0 without audio: $0.112 per second.
