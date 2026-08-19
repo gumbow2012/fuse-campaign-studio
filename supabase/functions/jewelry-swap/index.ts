@@ -1050,42 +1050,41 @@ function capPrompt(text: string, max = ANIMATE_PROMPT_MAX) {
 function buildAnimationPrompt(shot: ShotSpec | null, customPrompt?: string | null) {
   const custom = String(customPrompt ?? "").trim();
 
-  // Priority order — highest first. Lower-priority parts are only added while
-  // the running total stays under the cap.
-  const ordered: string[] = [
-    "Luxury jewelry motion-control cinematography, photoreal, 1080p, cinematic studio lighting.",
-    LOCK_FIRST_FRAME,
-    LOCK_OBJECT,
-  ];
+  const direction = [
+    shot ? `SHOT — ${shot.label}. ${shot.body}` : "",
+    custom
+      ? capPrompt(
+          `DIRECTOR NOTE (camera, focus and lighting only; the object never moves): ${custom}`,
+          900,
+        )
+      : "",
+    "The CAMERA performs every move; the first-frame object remains rigid and unchanged, and motion blur is produced exclusively by camera movement.",
+  ]
+    .filter(Boolean)
+    .join(" ");
 
-  if (shot) ordered.push(`SHOT — ${shot.label}. ${shot.body}`);
-  if (custom) {
-    ordered.push(
-      capPrompt(
-        `DIRECTOR NOTE (camera and lighting only, never object motion): ${custom}`,
-        900,
-      ),
-    );
-  }
-
-  ordered.push(
-    LOCK_GEOMETRY_COMPACT,
-    LOCK_CAMERA_LANGUAGE,
-    OPTICS_DIAMONDS_COMPACT,
-    OPTICS_METAL_COMPACT,
-    NEGATIVES_COMPACT,
-  );
+  // Exact priority order. The first four parts are deliberately concise and
+  // mandatory; optics and negatives are appended only when they fit.
+  const required = [LOCK_FIRST_FRAME, LOCK_OBJECT, direction, LOCK_GEOMETRY_COMPACT];
+  const optional = [OPTICS_DIAMONDS_COMPACT, OPTICS_METAL_COMPACT, NEGATIVES_COMPACT];
 
   const parts: string[] = [];
   let length = 0;
-  for (const part of ordered) {
+  for (const part of [...required, ...optional]) {
     const add = (parts.length ? 2 : 0) + part.length;
-    if (length + add > ANIMATE_PROMPT_MAX) continue;
+    if (length + add > ANIMATE_PROMPT_MAX) {
+      if (required.includes(part)) {
+        const remaining = ANIMATE_PROMPT_MAX - length - (parts.length ? 2 : 0);
+        if (remaining > 0) parts.push(capPrompt(part, remaining));
+      }
+      continue;
+    }
     parts.push(part);
     length += add;
   }
 
-  return capPrompt(parts.join("\n\n"));
+  // Final hard guard before this value can reach the provider payload.
+  return capPrompt(parts.join("\n\n"), ANIMATE_PROMPT_MAX);
 }
 
 
