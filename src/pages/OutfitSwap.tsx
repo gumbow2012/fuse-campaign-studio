@@ -329,15 +329,54 @@ export default function OutfitSwap() {
 
   /* ------------------------------ 4. Frame swaps ---------------------------- */
 
+  /** Merge a fresh generation record into whichever collection owns it. */
+  const applyGeneration = useCallback((generation: SwapGeneration) => {
+    if (generation.kind === "video") {
+      setVideos((prev) => {
+        const index = prev.findIndex((entry) => entry.id === generation.id);
+        if (index === -1) return [generation, ...prev];
+        const next = [...prev];
+        next[index] = generation;
+        return next;
+      });
+      return;
+    }
+    if (generation.frameIndex !== null) {
+      setSwaps((prev) => ({ ...prev, [generation.frameIndex as number]: generation }));
+    }
+  }, []);
+
+  // Re-attach to anything the backend still has in flight (refresh-safe).
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const data = await callOutfitSwap<{ generations: SwapGeneration[] }>({
+          action: "list",
+          limit: 24,
+        });
+        if (cancelled) return;
+        setVideos(data.generations ?? []);
+      } catch {
+        // The library simply stays empty; generating still works.
+      } finally {
+        if (!cancelled) setLibraryLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const inFlightIds = useMemo(() => {
     const ids = Object.values(swaps)
       .filter((swap) => swap.status === "queued" || swap.status === "running")
       .map((swap) => swap.id);
-    if (reconstruction && (reconstruction.status === "queued" || reconstruction.status === "running")) {
-      ids.push(reconstruction.id);
+    for (const video of videos) {
+      if (video.status === "queued" || video.status === "running") ids.push(video.id);
     }
     return ids;
-  }, [swaps, reconstruction]);
+  }, [swaps, videos]);
 
   useEffect(() => {
     if (!inFlightIds.length) return;
@@ -350,13 +389,8 @@ export default function OutfitSwap() {
           generationIds: inFlightIds,
         });
         if (cancelled) return;
-        for (const generation of data.generations ?? []) {
-          if (generation.frameIndex === null && generation.kind === "video") {
-            setReconstruction(generation);
-          } else if (generation.frameIndex !== null) {
-            setSwaps((prev) => ({ ...prev, [generation.frameIndex as number]: generation }));
-          }
-        }
+        for (const generation of data.generations ?? []) applyGeneration(generation);
+
       } catch {
         // transient — the next tick retries
       }
