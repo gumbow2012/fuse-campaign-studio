@@ -1534,6 +1534,15 @@ export default function JewelrySwap() {
                         <Plus size={12} className="text-cyan-200" />
                         Angle
                       </button>
+                      <button
+                        type="button"
+                        onClick={() => openPicker({ kind: "angle", index })}
+                        className="flex h-16 w-20 flex-col items-center justify-center gap-1 rounded-lg border border-white/12 bg-black/25 text-[9px] text-foreground/75 transition-colors hover:border-cyan-200/50"
+                      >
+                        <ImageIcon size={12} className="text-cyan-200" />
+                        Library
+                      </button>
+
                     </div>
 
 
