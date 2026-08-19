@@ -436,9 +436,7 @@ async function startSwapFrame(admin: AdminClient, args: {
       .select("*")
       .single();
 
-      .eq("id", inserted.id)
-      .select("*")
-      .single();
+
 
     return serialize(updated ?? inserted);
   } catch (error) {
