@@ -241,6 +241,8 @@ export type VideoModelDefinition = {
   aspectRatios?: string[];
   /** Fallback price per second in USD when fal pricing lookup is unavailable. */
   fallbackUsdPerSecond?: number;
+  /** True when the model has a reference-to-video endpoint accepting many images. */
+  supportsMultiReference?: boolean;
 };
 
 export const DEFAULT_VIDEO_MODEL: VideoModelKey = "kling-3.0-pro";
