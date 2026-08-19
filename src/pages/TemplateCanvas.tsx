@@ -3233,6 +3233,22 @@ const TemplateCanvas = () => {
                   Publish Version Live
                 </Button>
               ) : null}
+              {!canPublishTemplates && detail ? (
+                detail.reviewStatus === "Submitted" ? (
+                  <p className="rounded-xl border border-amber-300/25 bg-amber-300/[0.08] px-3 py-2 text-xs font-medium text-amber-100">
+                    Submitted — pending review by the FUSE team.
+                  </p>
+                ) : (
+                  <Button type="button" size="sm" onClick={() => void submitForReview()} disabled={!!mutating}>
+                    {mutating === "submit-for-review" ? (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    ) : (
+                      <CheckCircle2 className="mr-2 h-4 w-4" />
+                    )}
+                    Submit for Review
+                  </Button>
+                )
+              ) : null}
               {testingGateActive && !testingGateSatisfied ? (
                 <p className="rounded-xl border border-amber-300/20 bg-amber-300/[0.06] px-3 py-2 text-xs text-amber-100">
                   {publishGateReasons.join(" ")}
