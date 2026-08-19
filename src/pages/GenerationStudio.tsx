@@ -1082,8 +1082,11 @@ export default function GenerationStudio() {
                       <GenerationCard
                         key={generation.id}
                         generation={generation}
-                        onUseAsReference={addReference}
+                        onUseAsReference={useAsReference}
+                        onExpand={(entry) => setLightboxId(entry.id)}
+                        onDelete={(entry) => setConfirmSingle(entry)}
                       />
+
                     ))}
                   </div>
                 ) : (
