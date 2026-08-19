@@ -528,7 +528,7 @@ export default function JewelrySwap() {
   /* ------------------------------ 4. Frame swaps ---------------------------- */
 
   /** Merge a fresh generation record into whichever collection owns it. */
-  const applyGeneration = useCallback((generation: SwapGeneration) => {
+  const applyGeneration = useCallback((generation: JewelryGeneration) => {
     if (generation.kind === "video") {
       setVideos((prev) => {
         const index = prev.findIndex((entry) => entry.id === generation.id);
@@ -615,11 +615,11 @@ export default function JewelrySwap() {
         references: piece.urls.map((url, angleIndex) => ({
           url,
           role: piece.roles[angleIndex] || null,
-          cad: piece.cad && /^CAD/i.test(piece.roles[angleIndex] ?? "")
-            ? true
-            : piece.cad && !piece.roles.some((role) => /^CAD/i.test(role ?? ""))
-            ? true
-            : /^CAD/i.test(piece.roles[angleIndex] ?? ""),
+          // A CAD-flagged card marks its CAD-labeled angles as the geometry
+          // authority; if no angle is labeled CAD, every angle inherits the flag.
+          cad: piece.cad === true &&
+            (/^CAD/i.test(piece.roles[angleIndex] ?? "") ||
+              !piece.roles.some((role) => /^CAD/i.test(role ?? ""))),
         })),
         type: piece.type,
         metal: piece.metal === AUTO_METAL ? null : piece.metal,
