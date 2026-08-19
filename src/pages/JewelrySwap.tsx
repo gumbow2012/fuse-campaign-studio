@@ -541,9 +541,24 @@ export default function JewelrySwap() {
       const data = await callJewelrySwap<{ generation: SwapGeneration }>({
         action: "swap_frame",
         sourceFrameUrl: frame.url,
-        pieces,
-        // Per-product targets travel with each piece; this is only a fallback.
-        person: pieces[0]?.person ?? DEFAULT_APPLY_TO,
+        // Reference order is preserved: the source frame is image 1, then each
+        // piece's angles in card order.
+        pieces: pieces.map((piece) => ({
+          urls: piece.urls,
+          type: piece.type,
+          metal: piece.metal === AUTO_METAL ? null : piece.metal,
+          stone: piece.stone === AUTO_STONE ? null : piece.stone,
+          quality: piece.quality || null,
+          dimensions: {
+            width: piece.width || null,
+            height: piece.height || null,
+            depth: piece.depth || null,
+            weight: piece.weight || null,
+          },
+          cad: piece.cad,
+          person: piece.person,
+          notes: piece.notes || null,
+        })),
         frameIndex,
         frameTime: frame.time,
         aspectRatio: meta?.aspectRatio,
@@ -562,7 +577,7 @@ export default function JewelrySwap() {
 
   const runSelectedSwaps = useCallback(async () => {
     if (!pieces.length) {
-      toast.error("Add at least one clothing reference");
+      toast.error("Add at least one jewelry reference");
       return;
     }
     const indices = [...selectedFrames].sort((a, b) => a - b);
