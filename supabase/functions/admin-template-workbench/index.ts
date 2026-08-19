@@ -1205,6 +1205,8 @@ Deno.serve(async (req) => {
       const direction = cleanInteger(body.direction, 0, -1, 1);
       if (!edgeId) throw new Error("edgeId is required");
       if (direction !== -1 && direction !== 1) throw new Error("direction must be -1 or 1");
+      await assertEdgeAccess(admin, access, edgeId);
+
 
       const { data: edge, error: edgeLookupError } = await admin
         .from("edges")
