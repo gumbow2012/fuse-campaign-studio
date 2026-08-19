@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { forwardRef, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ChevronDown,
   Download,
@@ -187,13 +187,10 @@ function AspectGlyph({ ratio }: { ratio: string }) {
   );
 }
 
-function Chip({
-  children,
-  className,
-  ...props
-}: React.ButtonHTMLAttributes<HTMLButtonElement>) {
-  return (
+const Chip = forwardRef<HTMLButtonElement, React.ButtonHTMLAttributes<HTMLButtonElement>>(
+  ({ children, className, ...props }, ref) => (
     <button
+      ref={ref}
       type="button"
       className={cn(
         "flex items-center gap-1.5 rounded-full border border-white/12 bg-white/[0.04] px-3 py-1.5 text-xs font-medium text-foreground/90 transition-colors hover:border-cyan-200/40 hover:bg-cyan-400/10",
@@ -203,8 +200,9 @@ function Chip({
     >
       {children}
     </button>
-  );
-}
+  ),
+);
+Chip.displayName = "Chip";
 
 function GenerationCard({ generation }: { generation: Generation }) {
   const inFlight = generation.status === "queued" || generation.status === "running";
@@ -281,6 +279,9 @@ export default function GenerationStudio() {
   const [generations, setGenerations] = useState<Generation[]>([]);
   const [library, setLibrary] = useState<string[]>(() => readReferenceLibrary());
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const [aspectOpen, setAspectOpen] = useState(false);
+  const [qualityOpen, setQualityOpen] = useState(false);
+  const [motionOpen, setMotionOpen] = useState(false);
 
   const model = useMemo(
     () => STUDIO_MODELS.find((entry) => entry.key === modelKey) ?? STUDIO_MODELS[0],
@@ -576,10 +577,6 @@ export default function GenerationStudio() {
           />
 
           <div className="mt-2 flex flex-wrap items-center gap-2">
-            <Chip onClick={() => fileInputRef.current?.click()} aria-label="Add reference images">
-              {uploading ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
-              <span className="hidden sm:inline">Reference</span>
-            </Chip>
             <input
               ref={fileInputRef}
               type="file"
@@ -646,9 +643,15 @@ export default function GenerationStudio() {
               </PopoverContent>
             </Popover>
 
+            {/* Reference images */}
+            <Chip onClick={() => fileInputRef.current?.click()} aria-label="Add reference images">
+              {uploading ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
+              <span className="hidden sm:inline">Reference</span>
+            </Chip>
+
             {/* Aspect ratio */}
             {aspectOptions.length ? (
-              <Popover>
+              <Popover open={aspectOpen} onOpenChange={setAspectOpen}>
                 <PopoverTrigger asChild>
                   <Chip>
                     <AspectGlyph ratio={aspectRatio} />
@@ -662,7 +665,7 @@ export default function GenerationStudio() {
                       <button
                         key={ratio}
                         type="button"
-                        onClick={() => setAspectRatio(ratio)}
+                        onClick={() => { setAspectRatio(ratio); setAspectOpen(false); }}
                         className={cn(
                           "flex items-center gap-2 rounded-lg px-2 py-1.5 text-xs transition-colors",
                           ratio === aspectRatio
@@ -681,7 +684,7 @@ export default function GenerationStudio() {
 
             {/* Quality */}
             {qualityOptions.length ? (
-              <Popover>
+              <Popover open={qualityOpen} onOpenChange={setQualityOpen}>
                 <PopoverTrigger asChild>
                   <Chip>
                     {quality.toUpperCase()}
@@ -694,7 +697,7 @@ export default function GenerationStudio() {
                       <button
                         key={option}
                         type="button"
-                        onClick={() => setQuality(option)}
+                        onClick={() => { setQuality(option); setQualityOpen(false); }}
                         className={cn(
                           "block w-full rounded-lg px-2 py-1.5 text-left text-xs transition-colors",
                           option === quality
@@ -712,7 +715,7 @@ export default function GenerationStudio() {
 
             {/* Motion settings */}
             {isVideo ? (
-              <Popover>
+              <Popover open={motionOpen} onOpenChange={setMotionOpen}>
                 <PopoverTrigger asChild>
                   <Chip>
                     {duration}s{model.supportsAudio ? (generateAudio ? " · audio" : " · silent") : ""}
