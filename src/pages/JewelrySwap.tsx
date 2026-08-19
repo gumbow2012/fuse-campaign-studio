@@ -664,6 +664,14 @@ export default function JewelrySwap() {
     });
   }, [assetSearch, assetTypeFilter, assets]);
 
+  // Only mount a page of tiles at a time — full-res fal media freezes the modal.
+  const pagedAssets = useMemo(() => visibleAssets.slice(0, pickerLimit), [visibleAssets, pickerLimit]);
+
+  // Any change to the filters restarts paging at the first page.
+  useEffect(() => {
+    setPickerLimit(24);
+  }, [assetSearch, assetTypeFilter]);
+
 
 
   /* -------------------------- 3. Piece references ------------------------- */
