@@ -1983,6 +1983,14 @@ export default function JewelrySwap() {
                   {costPreview(creditsFromUsd(videoCostUsd), videoCostUsd)}
                 </p>
 
+                {/* Provider caps reference-to-video at 9 images — inform, never block. */}
+                {approvedUrls.length > 9 ? (
+                  <p className="rounded-xl border border-amber-300/30 bg-amber-400/10 px-3 py-2 text-[10px] text-amber-100">
+                    Seedance uses up to 9 reference frames — 9 evenly-spaced approved frames will be
+                    used.
+                  </p>
+                ) : null}
+
                 <Button
                   onClick={reconstruct}
                   disabled={reconstructing || !approvedUrls.length}
