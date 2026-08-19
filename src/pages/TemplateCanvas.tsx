@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Copy, EyeOff, Film, GitBranch, Image as ImageIcon, Loader2, Maximize2, Minus, ImageDown, Layers, Move, Play, Plus, RefreshCw, Save, Search, Trash2, Type, Upload, X } from "lucide-react";
+import { CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Clock3, Copy, EyeOff, Film, GitBranch, Image as ImageIcon, Loader2, Maximize2, Minus, ImageDown, Layers, Move, Play, Plus, RefreshCw, Save, Search, Trash2, Type, Upload, X } from "lucide-react";
 import { Link, useSearchParams } from "react-router-dom";
 import SiteShell from "@/components/mvp/SiteShell";
 import TemplateGallery from "@/components/lab/TemplateGallery";
