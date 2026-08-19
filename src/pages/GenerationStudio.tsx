@@ -508,6 +508,26 @@ export default function GenerationStudio() {
     [addReference],
   );
 
+  /** Adds one of the SOURCE references shown in the lightbox; keeps the lightbox open. */
+  const addSourceReference = useCallback(
+    (url: string) => {
+      setReferences((prev) => {
+        if (prev.some((entry) => entry.url === url)) {
+          toast.message("Already in your references");
+          return prev;
+        }
+        if (prev.length >= MAX_REFERENCES) {
+          toast.message(`Up to ${MAX_REFERENCES} reference images`);
+          return prev;
+        }
+        toast.success("Added to references");
+        return [...prev, { url, label: "" }];
+      });
+    },
+    [],
+  );
+
+
   const copyPrompt = useCallback(async (text: string) => {
     try {
       await navigator.clipboard.writeText(text);
