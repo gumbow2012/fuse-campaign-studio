@@ -1726,7 +1726,28 @@ export default function JewelrySwap() {
                           className="h-8 rounded-lg border-white/12 bg-black/40 text-xs"
                         />
                       </div>
+                      <div className="sm:col-span-2">
+                        <label className="mb-1 block text-[10px] uppercase tracking-[0.14em] text-cyan-200/70">
+                          Replacement includes
+                        </label>
+                        <select
+                          value={piece.scope || DEFAULT_SCOPE}
+                          onChange={(event) =>
+                            setPieces((prev) =>
+                              prev.map((item, i) => (i === index ? { ...item, scope: event.target.value } : item)),
+                            )
+                          }
+                          className={SELECT_CLASS}
+                        >
+                          {SCOPE_OPTIONS.map((option) => (
+                            <option key={option.value} value={option.value}>
+                              {option.label}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
                     </div>
+
 
                     <button
                       type="button"
