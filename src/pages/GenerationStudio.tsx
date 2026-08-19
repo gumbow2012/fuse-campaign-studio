@@ -475,18 +475,36 @@ export default function GenerationStudio() {
     });
   }, []);
 
-  const loadQueue = useCallback(async (silent = true) => {
+  const [galleryLimit, setGalleryLimit] = useState(24);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(false);
+
+  const loadQueue = useCallback(async (silent = true, limitOverride?: number) => {
+    const limit = limitOverride ?? galleryLimit;
     try {
-      const data = await callStudio({ action: "queue", limit: 36 });
-      setGenerations((data?.generations ?? []) as Generation[]);
+      const data = await callStudio({ action: "queue", limit });
+      const rows = (data?.generations ?? []) as Generation[];
+      setGenerations(rows);
+      setHasMore(rows.length >= limit);
     } catch (error) {
       if (!silent) toast.error(error instanceof Error ? error.message : "Could not load generations");
     }
-  }, []);
+  }, [galleryLimit]);
 
   useEffect(() => {
     void loadQueue(false);
   }, [loadQueue]);
+
+  const loadMore = useCallback(async () => {
+    const next = galleryLimit + 24;
+    setLoadingMore(true);
+    setGalleryLimit(next);
+    try {
+      await loadQueue(false, next);
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [galleryLimit, loadQueue]);
 
   const hasInFlight = generations.some((entry) => entry.status === "queued" || entry.status === "running");
   useEffect(() => {
