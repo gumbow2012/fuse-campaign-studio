@@ -219,6 +219,30 @@ function readReferenceLibrary(): string[] {
   }
 }
 
+/**
+ * Cross-origin URLs ignore the anchor `download` attribute, so fetch the bytes
+ * and download the blob instead. Falls back to opening the URL if that fails.
+ */
+async function downloadAsset(url: string, id: string, type?: string | null) {
+  const extension = type === "video" ? "mp4" : "png";
+  try {
+    const response = await fetch(url);
+    if (!response.ok) throw new Error(String(response.status));
+    const blob = await response.blob();
+    const objectUrl = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = objectUrl;
+    link.download = `fuse-${id}.${extension}`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(objectUrl);
+  } catch {
+    window.open(url, "_blank", "noopener,noreferrer");
+  }
+}
+
+
 function AspectGlyph({ ratio }: { ratio: string }) {
   if (ratio === "auto") return <Sparkles size={12} className="text-cyan-200/80" />;
   const [w, h] = ratio.split(":").map(Number);
