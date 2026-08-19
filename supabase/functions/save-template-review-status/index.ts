@@ -5,6 +5,7 @@ import {
   createAdminClient,
   errorMessage,
   json,
+  logAuditEvent,
   requireBuilderUser,
 } from "../_shared/supabase-admin.ts";
 import { assertCanPublish, FORBIDDEN_PUBLISH_MESSAGE } from "../_shared/template-scope.ts";
