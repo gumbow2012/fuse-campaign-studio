@@ -1691,6 +1691,40 @@ const TemplateCanvas = () => {
     }
   }, [detail, invokeWorkbench, refreshAfterMutation, selectedActivationGate, selectedTemplate?.activationGate]);
 
+  const submitForReview = useCallback(async () => {
+    if (!detail) return;
+    setMutating("submit-for-review");
+    try {
+      const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/submit-for-review`, {
+        method: "POST",
+        headers: { ...(await buildAuthHeaders()), "Content-Type": "application/json" },
+        body: JSON.stringify({ versionId: detail.versionId }),
+      });
+      const raw = await response.text();
+      let data: { error?: string } = {};
+      if (raw) {
+        try {
+          data = JSON.parse(raw) as { error?: string };
+        } catch {
+          data = { error: raw };
+        }
+      }
+      if (!response.ok) throw new Error(data.error ?? `Request failed (${response.status})`);
+      await refreshAfterMutation(detail.versionId);
+      toast({
+        title: "Submitted for review",
+        description: "An admin will review this template before it goes live.",
+      });
+    } catch (submitError) {
+      const message = submitError instanceof Error ? submitError.message : "Could not submit for review";
+      toast({ title: "Submit failed", description: message, variant: "destructive" });
+    } finally {
+      setMutating(null);
+    }
+  }, [buildAuthHeaders, detail, refreshAfterMutation]);
+
+
+
   const saveTemplateMetadata = useCallback(async () => {
     if (!selectedTemplate) return;
     const name = templateMetaName.trim();
