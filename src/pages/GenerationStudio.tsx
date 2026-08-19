@@ -1209,15 +1209,76 @@ export default function GenerationStudio() {
               </TabsContent>
 
               <TabsContent value="library" className="mt-4 space-y-6">
-                <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
-                  <SectionLabel hint="Shift-click to select a range">Generated outputs</SectionLabel>
-                  {assetGrid(assets.outputs, "No generated assets yet.")}
+                {/* Type filter + created-at sort, applied to both grids below. */}
+                <div className="flex flex-wrap items-center gap-2">
+                  <div className="flex gap-1 rounded-xl border border-white/12 bg-black/30 p-1">
+                    {(["all", "image", "video"] as const).map((option) => (
+                      <button
+                        key={option}
+                        type="button"
+                        onClick={() => setAssetTypeFilter(option)}
+                        className={cn(
+                          "rounded-lg px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] transition-colors",
+                          assetTypeFilter === option
+                            ? "bg-cyan-300/20 text-cyan-100"
+                            : "text-muted-foreground hover:text-foreground",
+                        )}
+                      >
+                        {option}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="flex gap-1 rounded-xl border border-white/12 bg-black/30 p-1">
+                    {([
+                      { value: "newest", label: "Newest first" },
+                      { value: "oldest", label: "Oldest first" },
+                    ] as const).map((option) => (
+                      <button
+                        key={option.value}
+                        type="button"
+                        onClick={() => setAssetSort(option.value)}
+                        className={cn(
+                          "rounded-lg px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] transition-colors",
+                          assetSort === option.value
+                            ? "bg-cyan-300/20 text-cyan-100"
+                            : "text-muted-foreground hover:text-foreground",
+                        )}
+                      >
+                        {option.label}
+                      </button>
+                    ))}
+                  </div>
+                  {selected.length ? (
+                    <div className="ml-auto flex items-center gap-2">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={addSelectedToReferences}
+                        className="border-white/15 bg-white/[0.04]"
+                      >
+                        <Wand2 size={14} className="mr-1.5" /> Add selected to references
+                      </Button>
+                      <Button size="sm" variant="ghost" onClick={() => setSelected([])}>
+                        Clear selection
+                      </Button>
+                    </div>
+                  ) : null}
                 </div>
+
                 <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
-                  <SectionLabel>Uploaded references</SectionLabel>
-                  {assetGrid(assets.uploads, "Uploaded references appear here.")}
+                  <SectionLabel hint="Click a tile's checkbox to select — shift-click for a range">
+                    Generated outputs
+                  </SectionLabel>
+                  {assetGrid(visibleOutputs, "No generated assets yet.")}
                 </div>
+                {assetTypeFilter !== "video" ? (
+                  <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+                    <SectionLabel>Uploaded references</SectionLabel>
+                    {assetGrid(visibleUploads, "Uploaded references appear here.")}
+                  </div>
+                ) : null}
               </TabsContent>
+
             </Tabs>
           </div>
         </div>
