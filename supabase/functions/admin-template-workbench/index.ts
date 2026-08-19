@@ -868,7 +868,9 @@ Deno.serve(async (req) => {
         .insert({
           name,
           description: nullableText(body.description),
+          created_by: user.id,
         })
+
         .select("id, name")
         .single();
       if (templateError || !template) throw new Error(templateError?.message ?? "Template create failed");
