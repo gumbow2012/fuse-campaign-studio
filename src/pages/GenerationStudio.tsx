@@ -413,6 +413,8 @@ export default function GenerationStudio() {
   const [generations, setGenerations] = useState<Generation[]>([]);
   const [library, setLibrary] = useState<string[]>(() => readReferenceLibrary());
   const [selected, setSelected] = useState<string[]>([]);
+  const [assetTypeFilter, setAssetTypeFilter] = useState<"all" | "image" | "video">("all");
+  const [assetSort, setAssetSort] = useState<"newest" | "oldest">("newest");
   const [lightboxId, setLightboxId] = useState<string | null>(null);
   const [confirmSingle, setConfirmSingle] = useState<Generation | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
