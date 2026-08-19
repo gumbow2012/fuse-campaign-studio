@@ -1114,33 +1114,58 @@ export default function JewelrySwap() {
                     {/* Every image on this card describes the SAME physical piece. */}
                     <div className="mt-2 flex flex-wrap gap-1.5">
                       {piece.urls.map((url, angleIndex) => (
-                        <div
-                          key={`${url}-${angleIndex}`}
-                          className="relative h-16 w-14 overflow-hidden rounded-lg border border-white/10 bg-black/50"
-                        >
-                          <img src={url} alt={`Angle ${angleIndex + 1}`} className="h-full w-full object-cover" />
-                          {piece.urls.length > 1 ? (
-                            <button
-                              type="button"
-                              aria-label="Remove angle"
-                              onClick={() =>
-                                setPieces((prev) =>
-                                  prev.map((item, i) =>
-                                    i === index
-                                      ? {
-                                          ...item,
-                                          urls: item.urls.filter((_, a) => a !== angleIndex),
-                                          roles: item.roles.filter((_, a) => a !== angleIndex),
-                                        }
-                                      : item,
-                                  ),
-                                )
-                              }
-                              className="absolute right-0.5 top-0.5 rounded bg-black/80 p-0.5 text-foreground/80 hover:text-red-300"
-                            >
-                              <X size={9} />
-                            </button>
-                          ) : null}
+                        <div key={`${url}-${angleIndex}`} className="w-20 space-y-1">
+                          <div className="relative h-16 w-20 overflow-hidden rounded-lg border border-white/10 bg-black/50">
+                            <img src={url} alt={`Angle ${angleIndex + 1}`} className="h-full w-full object-cover" />
+                            {piece.urls.length > 1 ? (
+                              <button
+                                type="button"
+                                aria-label="Remove angle"
+                                onClick={() =>
+                                  setPieces((prev) =>
+                                    prev.map((item, i) =>
+                                      i === index
+                                        ? {
+                                            ...item,
+                                            urls: item.urls.filter((_, a) => a !== angleIndex),
+                                            roles: item.roles.filter((_, a) => a !== angleIndex),
+                                          }
+                                        : item,
+                                    ),
+                                  )
+                                }
+                                className="absolute right-0.5 top-0.5 rounded bg-black/80 p-0.5 text-foreground/80 hover:text-red-300"
+                              >
+                                <X size={9} />
+                              </button>
+                            ) : null}
+                          </div>
+                          {/* Optional role label — helps the model match the source view. */}
+                          <select
+                            aria-label={`Role for angle ${angleIndex + 1}`}
+                            value={piece.roles[angleIndex] ?? ""}
+                            onChange={(event) =>
+                              setPieces((prev) =>
+                                prev.map((item, i) =>
+                                  i === index
+                                    ? {
+                                        ...item,
+                                        roles: item.urls.map((_, a) =>
+                                          a === angleIndex ? event.target.value : item.roles[a] ?? "",
+                                        ),
+                                      }
+                                    : item,
+                                ),
+                              )
+                            }
+                            className="w-full rounded-md border border-white/12 bg-black/40 px-1 py-1 text-[9px] text-foreground outline-none transition-colors hover:border-cyan-200/40 focus:border-cyan-200/60"
+                          >
+                            {ANGLE_ROLE_OPTIONS.map((option) => (
+                              <option key={option || "unlabeled"} value={option}>
+                                {option || "Role (optional)"}
+                              </option>
+                            ))}
+                          </select>
                         </div>
                       ))}
                       <button
@@ -1149,12 +1174,13 @@ export default function JewelrySwap() {
                           setAngleTarget(index);
                           angleInputRef.current?.click();
                         }}
-                        className="flex h-16 w-14 flex-col items-center justify-center gap-1 rounded-lg border border-dashed border-white/15 bg-black/25 text-[9px] text-foreground/75 transition-colors hover:border-cyan-200/50"
+                        className="flex h-16 w-20 flex-col items-center justify-center gap-1 rounded-lg border border-dashed border-white/15 bg-black/25 text-[9px] text-foreground/75 transition-colors hover:border-cyan-200/50"
                       >
                         <Plus size={12} className="text-cyan-200" />
                         Angle
                       </button>
                     </div>
+
 
                     <div className="mt-2.5 grid gap-2 sm:grid-cols-2">
                       <div>
