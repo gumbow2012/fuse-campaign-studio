@@ -4,6 +4,7 @@ import {
   Download,
   Film,
   ImageIcon,
+  Layers,
   Loader2,
   Maximize2,
   Plus,
