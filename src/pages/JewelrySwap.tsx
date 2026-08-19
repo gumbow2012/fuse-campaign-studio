@@ -357,7 +357,15 @@ export default function JewelrySwap() {
   const [uploadingPiece, setUploadingPiece] = useState(false);
   const [extraPrompt, setExtraPrompt] = useState("");
 
-  const [swaps, setSwaps] = useState<Record<number, SwapGeneration>>({});
+  // Nano Banana Pro results (the default) and the opt-in Nano Banana 2 runs live
+  // side by side so a frame can be compared before one is approved.
+  const [swaps, setSwaps] = useState<Record<number, JewelryGeneration>>({});
+  const [altSwaps, setAltSwaps] = useState<Record<number, JewelryGeneration>>({});
+  const [chosenModel, setChosenModel] = useState<Record<number, JewelryImageModel>>({});
+  const [framePreferredRole, setFramePreferredRole] = useState<Record<number, string>>({});
+  const [frameReason, setFrameReason] = useState<Record<number, string>>({});
+  const [needsReview, setNeedsReview] = useState<Set<number>>(new Set());
+  const [generateBoth, setGenerateBoth] = useState(false);
   const [approved, setApproved] = useState<Set<number>>(new Set());
   const [swapping, setSwapping] = useState(false);
 
@@ -391,6 +399,11 @@ export default function JewelrySwap() {
     setVideoPreview(objectUrl);
     setFrames([]);
     setSwaps({});
+    setAltSwaps({});
+    setChosenModel({});
+    setFramePreferredRole({});
+    setFrameReason({});
+    setNeedsReview(new Set());
     setApproved(new Set());
     setSelectedFrames(new Set());
     // The video library is intentionally preserved across new source clips.
@@ -527,7 +540,12 @@ export default function JewelrySwap() {
       return;
     }
     if (generation.frameIndex !== null) {
-      setSwaps((prev) => ({ ...prev, [generation.frameIndex as number]: generation }));
+      const index = generation.frameIndex as number;
+      if (generation.imageModel === "nb2") {
+        setAltSwaps((prev) => ({ ...prev, [index]: generation }));
+        return;
+      }
+      setSwaps((prev) => ({ ...prev, [index]: generation }));
     }
   }, []);
 
@@ -554,14 +572,14 @@ export default function JewelrySwap() {
   }, []);
 
   const inFlightIds = useMemo(() => {
-    const ids = Object.values(swaps)
+    const ids = [...Object.values(swaps), ...Object.values(altSwaps)]
       .filter((swap) => swap.status === "queued" || swap.status === "running")
       .map((swap) => swap.id);
     for (const video of videos) {
       if (video.status === "queued" || video.status === "running") ids.push(video.id);
     }
     return ids;
-  }, [swaps, videos]);
+  }, [swaps, altSwaps, videos]);
 
   useEffect(() => {
     if (!inFlightIds.length) return;
@@ -569,7 +587,7 @@ export default function JewelrySwap() {
 
     const poll = async () => {
       try {
-        const data = await callJewelrySwap<{ generations: SwapGeneration[] }>({
+        const data = await callJewelrySwap<{ generations: JewelryGeneration[] }>({
           action: "status",
           generationIds: inFlightIds,
         });
