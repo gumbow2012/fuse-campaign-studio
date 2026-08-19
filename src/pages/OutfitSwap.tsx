@@ -1573,7 +1573,7 @@ export default function OutfitSwap() {
               <>
                 <DialogHeader>
                   <DialogTitle className="font-heading text-base text-foreground">
-                    Rebuilt clip
+                    {video.stage === "frame_animation" ? "Animated clip" : "Rebuilt clip"}
                     {video.createdAt ? (
                       <span className="ml-2 text-xs font-normal text-muted-foreground">
                         {new Date(video.createdAt).toLocaleString()}
