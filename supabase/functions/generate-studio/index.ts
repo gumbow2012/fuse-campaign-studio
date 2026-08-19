@@ -415,6 +415,7 @@ Deno.serve(async (req) => {
     const body = await req.json().catch(() => ({})) as StartInput & {
       action?: string;
       generationId?: string;
+      generationIds?: string[];
       limit?: number;
     };
     const action = body.action ?? (body.generationId ? "status" : "start");
