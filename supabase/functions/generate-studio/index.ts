@@ -98,20 +98,43 @@ type StartInput = {
   prompt?: string;
   startImageUrl?: string;
   endImageUrl?: string;
+  imageUrls?: string[];
   duration?: number | string;
   resolution?: string;
   generateAudio?: boolean;
   aspectRatio?: string;
 };
 
+const MAX_REFERENCE_IMAGES = 15;
+
+function collectImageUrls(input: StartInput) {
+  const raw = [
+    ...(Array.isArray(input.imageUrls) ? input.imageUrls : []),
+    input.startImageUrl,
+    input.endImageUrl,
+  ];
+  const seen = new Set<string>();
+  const urls: string[] = [];
+  for (const entry of raw) {
+    const url = String(entry ?? "").trim();
+    if (!url || seen.has(url)) continue;
+    seen.add(url);
+    urls.push(url);
+    if (urls.length >= MAX_REFERENCE_IMAGES) break;
+  }
+  return urls;
+}
+
 async function startGeneration(admin: AdminClient, args: { input: StartInput; userId: string }) {
   const input = args.input;
   const kind = input.kind === "video" ? "video" : "image";
   const prompt = String(input.prompt ?? "").trim();
-  const startImageUrl = String(input.startImageUrl ?? "").trim();
+  const referenceUrls = collectImageUrls(input);
+  const startImageUrl = String(input.startImageUrl ?? referenceUrls[0] ?? "").trim();
 
   if (!prompt) throw new Error("Add a prompt before generating");
-  if (!startImageUrl) throw new Error("Upload a start frame before generating");
+  if (kind === "video" && !startImageUrl) throw new Error("Upload a start frame before generating");
+  if (kind === "image" && !referenceUrls.length) throw new Error("Add at least one reference image");
 
   const webhookBase =
     `${Deno.env.get("SUPABASE_URL")}/functions/v1/generate-studio?callback=1&generationId=`;
@@ -140,13 +163,18 @@ async function startGeneration(admin: AdminClient, args: { input: StartInput; us
         fallbackFlatUsd: IMAGE_FALLBACK_USD,
       });
 
-      const imageUrls = [startImageUrl, ...(input.endImageUrl ? [String(input.endImageUrl)] : [])];
+      const imageUrls = referenceUrls;
+      const requestedAspect = String(input.aspectRatio ?? "").trim();
       const requestId = await submitImageJob({
         prompt,
         imageUrls,
-        aspectRatio: String(input.aspectRatio ?? VERTICAL_VIDEO_ASPECT_RATIO),
+        aspectRatio: requestedAspect && requestedAspect !== "auto"
+          ? requestedAspect
+          : VERTICAL_VIDEO_ASPECT_RATIO,
         webhookUrl,
       });
+
+
 
       const { data: updated } = await admin
         .from("studio_generations")
@@ -366,7 +394,7 @@ Deno.serve(async (req) => {
       return json({ generation: await syncGeneration(admin, row) });
     }
 
-    if (action === "list") {
+    if (action === "list" || action === "queue") {
       const limit = Math.min(50, Math.max(1, Number(body.limit ?? 20)));
       const { data: rows, error } = await admin
         .from("studio_generations")
@@ -375,8 +403,18 @@ Deno.serve(async (req) => {
         .order("created_at", { ascending: false })
         .limit(limit);
       if (error) throw new Error(error.message);
-      return json({ generations: (rows ?? []).map(serializeGeneration) });
+
+      // Reconcile every in-flight row so the queue reflects terminal results.
+      const generations = await Promise.all(
+        (rows ?? []).map((row) =>
+          row.status === "queued" || row.status === "running"
+            ? syncGeneration(admin, row)
+            : Promise.resolve(serializeGeneration(row))
+        ),
+      );
+      return json({ generations });
     }
+
 
     if (action !== "start") throw new Error(`Unsupported action: ${action}`);
 
