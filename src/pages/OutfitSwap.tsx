@@ -210,6 +210,11 @@ export default function OutfitSwap() {
   const [resolution, setResolution] = useState("1080p");
   const [reconstruction, setReconstruction] = useState<SwapGeneration | null>(null);
   const [reconstructing, setReconstructing] = useState(false);
+  const [cancelOpen, setCancelOpen] = useState(false);
+
+  // Which reviewed frame is open in the comparison lightbox.
+  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
+
 
   const videoInputRef = useRef<HTMLInputElement>(null);
   const garmentInputRef = useRef<HTMLInputElement>(null);
