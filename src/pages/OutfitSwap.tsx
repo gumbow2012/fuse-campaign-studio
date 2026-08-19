@@ -1280,13 +1280,77 @@ export default function OutfitSwap() {
         </DialogContent>
       </Dialog>
 
-      <AlertDialog open={cancelOpen} onOpenChange={setCancelOpen}>
+      {/* Library video player */}
+      <Dialog
+        open={videoLightboxId !== null}
+        onOpenChange={(open) => !open && setVideoLightboxId(null)}
+      >
+        <DialogContent className="max-w-4xl border-white/10 bg-[#05070f]/95 backdrop-blur-xl">
+          {(() => {
+            const video = videos.find((entry) => entry.id === videoLightboxId);
+            if (!video) return null;
+            return (
+              <>
+                <DialogHeader>
+                  <DialogTitle className="font-heading text-base text-foreground">
+                    Rebuilt clip
+                    {video.createdAt ? (
+                      <span className="ml-2 text-xs font-normal text-muted-foreground">
+                        {new Date(video.createdAt).toLocaleString()}
+                      </span>
+                    ) : null}
+                  </DialogTitle>
+                </DialogHeader>
+                {video.outputUrl ? (
+                  <video
+                    src={video.outputUrl}
+                    controls
+                    autoPlay
+                    playsInline
+                    className="max-h-[70vh] w-full rounded-2xl border border-white/10 bg-black"
+                  />
+                ) : null}
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="text-[11px] text-cyan-200/70">
+                    {costPreview(video.estimatedCredits, video.estimatedCostUsd)}
+                  </span>
+                  <div className="flex items-center gap-2">
+                    {video.outputUrl ? (
+                      <a
+                        href={video.outputUrl}
+                        download
+                        target="_blank"
+                        rel="noreferrer"
+                        className="flex items-center gap-2 rounded-xl border border-white/15 bg-black/40 px-3 py-2 text-xs text-foreground/85 transition-colors hover:border-cyan-200/50 hover:text-cyan-100"
+                      >
+                        <Download size={13} /> Download
+                      </a>
+                    ) : null}
+                    <Button
+                      variant="outline"
+                      onClick={() => void deleteVideo(video.id)}
+                      className="rounded-xl border-white/15 bg-transparent text-xs hover:border-red-400/60 hover:text-red-300"
+                    >
+                      <Trash2 size={13} /> Remove
+                    </Button>
+                  </div>
+                </div>
+              </>
+            );
+          })()}
+        </DialogContent>
+      </Dialog>
+
+      <AlertDialog
+        open={cancelTarget !== null}
+        onOpenChange={(open) => !open && setCancelTarget(null)}
+      >
         <AlertDialogContent className="border-border bg-card">
           <AlertDialogHeader>
             <AlertDialogTitle className="font-heading">Cancel this video?</AlertDialogTitle>
             <AlertDialogDescription>
-              We'll stop tracking this generation and free up the studio. Credits already spent on the
-              job may not be refunded.
+              This is the only way to stop a generation — closing or refreshing the page keeps it
+              running. Credits already spent on the job may not be refunded.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -1294,15 +1358,15 @@ export default function OutfitSwap() {
               Keep generating
             </AlertDialogCancel>
             <AlertDialogAction
-              onClick={() => void cancelReconstruction()}
+              onClick={() => void cancelVideo()}
               className="bg-red-500/80 text-white hover:bg-red-500"
             >
               Cancel generation
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
-
       </AlertDialog>
+
 
     </SiteShell>
   );
