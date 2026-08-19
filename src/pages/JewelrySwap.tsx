@@ -332,6 +332,9 @@ export default function JewelrySwap() {
 
   const videoInputRef = useRef<HTMLInputElement>(null);
   const pieceInputRef = useRef<HTMLInputElement>(null);
+  const angleInputRef = useRef<HTMLInputElement>(null);
+  // Which piece card an "+ Angle" upload belongs to.
+  const [angleTarget, setAngleTarget] = useState<number | null>(null);
 
   /* ---------------------------- 1. Source video ---------------------------- */
 
