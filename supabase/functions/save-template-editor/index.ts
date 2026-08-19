@@ -127,6 +127,7 @@ Deno.serve(async (req) => {
 
     if ("prompt" in body) {
       nextPromptConfig.prompt = normalizeNullable(body.prompt);
+      if (node.node_type === "prompt") nextPromptConfig.text = nextPromptConfig.prompt;
     }
 
     if ("expected" in body) {
