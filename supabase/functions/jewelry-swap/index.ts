@@ -429,13 +429,22 @@ async function startSwapFrame(admin: AdminClient, args: {
 
     const aspect = String(args.aspectRatio ?? "").trim();
     const resolution = String(args.resolution ?? "").trim().toUpperCase();
-    const falInput: Record<string, unknown> = {
-      prompt,
-      image_urls: imageUrls,
-      output_format: "png",
-      ...(aspect && aspect !== "auto" ? { aspect_ratio: aspect } : {}),
-      ...(["1K", "2K", "4K"].includes(resolution) ? { resolution } : {}),
-    };
+    // The standard nano-banana edit endpoint rejects Pro-only fields (resolution,
+    // aspect_ratio) with a 422 — the alt path sends only the supported fields.
+    const falInput: Record<string, unknown> = imageModelKey === "nb2"
+      ? {
+        prompt,
+        image_urls: imageUrls,
+        output_format: "png",
+      }
+      : {
+        prompt,
+        image_urls: imageUrls,
+        output_format: "png",
+        ...(aspect && aspect !== "auto" ? { aspect_ratio: aspect } : {}),
+        ...(["1K", "2K", "4K"].includes(resolution) ? { resolution } : {}),
+      };
+
 
     const webhookUrl = `${args.webhookBase}${encodeURIComponent(inserted.id)}`;
     const requestId = await submitFalJob(endpointId, falInput, webhookUrl);
