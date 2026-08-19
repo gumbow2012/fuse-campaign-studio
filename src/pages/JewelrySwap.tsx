@@ -884,6 +884,7 @@ export default function JewelrySwap() {
         imageModel?: JewelryImageModel;
         preferredRole?: string | null;
         failureReason?: string | null;
+        macro?: boolean;
       },
     ) => {
       const frame = frames[frameIndex];
@@ -906,6 +907,7 @@ export default function JewelrySwap() {
             ? options.preferredRole
             : framePreferredRole[frameIndex] || null,
         failureReason: options?.failureReason ?? null,
+        macro: options?.macro ?? frameMacro[frameIndex] === true,
       });
       if (imageModel === "nb2") {
         setAltSwaps((prev) => ({ ...prev, [frameIndex]: data.generation }));
@@ -918,7 +920,7 @@ export default function JewelrySwap() {
         });
       }
     },
-    [frames, piecePayload, meta, extraPrompt, framePreferredRole],
+    [frames, piecePayload, meta, extraPrompt, framePreferredRole, frameMacro],
   );
 
   /**
