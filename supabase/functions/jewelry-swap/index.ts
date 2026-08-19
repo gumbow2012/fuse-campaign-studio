@@ -196,23 +196,56 @@ const SURGICAL_REPLACEMENT_CORE =
   "Perform a SURGICAL object replacement. SOURCE_FRAME is the absolute authority for the photograph and every pixel outside the target jewelry region. JEWELRY_REFERENCES are the authority ONLY for the physical target jewelry. Conceptually: identify the original jewelry region in SOURCE_FRAME, remove ONLY that jewelry, insert the replacement jewelry, and leave everything outside that region visually identical to SOURCE_FRAME. Modify the SMALLEST possible region needed for the swap. Do not blend the two photographs. Adapt the replacement object's perspective AND lighting to SOURCE_FRAME — use the references only for the jewelry's metal, material, stone color, finish and construction, then relight it to match SOURCE_FRAME's lighting; do not transplant the reference's background, environment, shadows or lighting. New local contact shadows/reflections from the replacement are allowed only where physically required by its placement in SOURCE_FRAME.";
 
 const PRIORITY_ORDER_TEXT =
-  "PRIORITY ORDER (highest first): 1) preserve SOURCE_FRAME composition, 2) preserve SOURCE_FRAME environment, 3) preserve the replacement jewelry's exact geometry, 4) never transfer reference context, 5) match SOURCE_FRAME perspective and crop, 6) match SOURCE_FRAME lighting.";
+  "PRIORITY ORDER (highest first): 1) the replacement product's identity is correct, 2) NO recognizable identity from the original source jewelry survives, 3) the replacement's geometry and real proportions are authentic, 4) SOURCE_FRAME camera angle preserved, 5) SOURCE_FRAME crop and magnification preserved, 6) SOURCE_FRAME environment preserved, 7) the correct replacement reference angle is prioritized, 8) SOURCE_FRAME lighting inherited, 9) no reference-background contamination, 10) optical polish.";
 
 const CONTEXT_NEGATIVES =
-  "NEGATIVES: No reference-background transfer, no reference hands/fingers/gloves/arms, no reference props/surfaces/display stands/boxes/fabric, no imported reference shadows or reflections, no reference-image environment or lighting, no unrelated jewelry, no context blending between SOURCE_FRAME and the product references.";
+  "NEGATIVES: No reference-background transfer, no reference hands/fingers/gloves/arms, no reference props/surfaces/display stands/boxes/fabric, no imported reference shadows or reflections, no reference-image environment or lighting, no unrelated jewelry, no context blending between SOURCE_FRAME and the product references. No surviving original lettering, logo, symbol, icon or character head; no original stone layout; no original bail, border, cutout, engraving or silhouette; no hybrid or blended object; no replacement \"attached to\" the old object.";
+
+/** ANTI-HYBRID: the source photograph survives, the source product does not. */
+const ANTI_HYBRID_BLOCK = [
+  "COMPLETE PRODUCT IDENTITY REPLACEMENT: Remove the original jewelry object's identity completely. Do NOT preserve, merge, combine, reinterpret or reuse recognizable design elements from the original jewelry — not its lettering, logos, symbols, icons, character heads, decorative shapes, stone layout, bail design, borders, cutouts, engraving, silhouette details or internal geometry. The replacement must be ONE coherent physical jewelry object derived EXCLUSIVELY from JEWELRY_REFERENCES. Never create a hybrid of the source jewelry and the replacement jewelry. Think of the frame as a PHOTOGRAPHIC SHELL (from SOURCE_FRAME) plus a PRODUCT IDENTITY (from the references) — SOURCE controls location, angle, scale, orientation, crop, perspective, camera, lighting and environment; SOURCE does NOT control lettering, silhouette, decorative shapes, stone layout, stone cuts, bail construction, internal geometry, engraving or product identity. Preserve the POSITION of the original jewelry, not its design.",
+  "FULL-REGION REPLACEMENT: When the source jewelry occupies a region, replace the ENTIRE semantic jewelry region — do not change only the color/stones/material/one letter/one section while leaving the rest of the original identity intact. Partial VISIBILITY is fine (if the source shows ~30% of the jewelry, show ~30% of the replacement) — but that visible portion must be 100% replacement jewelry, never 30% replacement + 70% surviving original identity.",
+  "Do not restyle the original jewelry into the replacement. Remove the original jewelry identity and reconstruct the replacement jewelry in its place. Mental model: the photographer captured this exact shot using the REPLACEMENT jewelry instead of the original — the photograph survives, the old product does not.",
+].join("\n\n");
+
+/** No invention, and the replacement's real proportions always win. */
+const NO_INVENTION_BLOCK = [
+  "NO INVENTION: If SOURCE_FRAME shows a feature the replacement does NOT have (for example the original has a circular character head, a plaque, a letter or a motif the replacement lacks), do NOT invent that feature for the replacement. Use the replacement's actual corresponding region at approximately the same scale, location and depth, keeping SOURCE_FRAME's framing and placement. The replacement's real design always wins.",
+  "REAL PROPORTIONS: \"Preserve source composition\" must NEVER stretch, squash or morph the replacement into the original's silhouette. If the replacement is wider, shorter, rounder, thinner or a different aspect ratio, keep the replacement's REAL proportions and position it inside the spatial area the original occupied. Priority within this rule: replacement geometry > source camera > source object placement > source approximate scale.",
+].join("\n\n");
+
+/** Angle-role intelligence for rear and thin side-profile source views. */
+const VIEW_SIDE_INTELLIGENCE_BLOCK =
+  "REFERENCE ANGLE INTELLIGENCE: First determine which side of the piece SOURCE_FRAME is actually photographing, then pick references accordingly using their labels. If the source view is rear/back-facing, prioritize references in this order: Back, then CAD Back, then Side/rear (3/4 Rear, Left/Right Side), then any macro reference showing the corresponding rear geometry, then others — never default a back or detail frame to the prettiest Front reference, and never rotate the piece into a front-facing hero view. If the source is a thin side profile, prioritize Side / 3-4 / Back-side / CAD Side references and preserve the replacement's real thickness and sidewall construction; do not rotate it front-facing to show more detail.";
 
 /** Macro frames need cinematography preserved but jewelry detail fully rebuilt. */
 const MACRO_REPLACEMENT_BLOCK =
-  "MACRO REPLACEMENT MODE: Use SOURCE_FRAME strictly as a MACRO CINEMATOGRAPHY template. Preserve ONLY the source's macro magnification, crop, camera angle, orientation, framing density, depth of field, focus characteristics, lighting direction, exposure and environmental background. The original jewelry visible inside SOURCE_FRAME must be COMPLETELY replaced — do NOT preserve the original piece's stones, prongs, settings, metal shapes, engravings, borders or microscopic construction, and do NOT copy the original stone layout, count or placement. Reconstruct this photograph as if the camera were photographing the REPLACEMENT jewelry instead: JEWELRY_REFERENCES are the absolute authority for the physical microscopic detail — actual gemstone cuts and sizes, the replacement's own stone arrangement and density, prong/bead/channel/bezel style, metal borders, engraving, lettering, surface relief, material and metal color. If the original has 6 large stones and the replacement is 35 small pavé stones, show the replacement's real design — never invent large versions to match the source layout. Stay at the source's macro distance (if 1:1 macro, remain 1:1 macro — do not pull back to a hero/product shot). Show only the amount of replacement jewelry appropriate for the existing crop. In macro mode the replaced region MAY cover most of the frame — the only protected pixels are the non-jewelry environmental background, which still must come from SOURCE_FRAME (never import the reference's background, hand, finger, glove, surface, box or lighting). Relight the replacement detail to match SOURCE_FRAME while keeping physically realistic diamond optics (crisp brilliance, internal refraction, independent scintillation, spectral dispersion) and source-consistent metal specular response. Prefer references in this order for the detail: Macro Detail, then CAD/design-authority, then the closest matching side/front/back, then highest-resolution product reference, then others. Match the source's detail type to the best reference (diamond surface → replacement diamond macro; edge → replacement edge; clasp/hinge → replacement clasp; engraving → replacement engraving; links → replacement link reference). If no directly corresponding detail exists, use the closest visible region of the replacement and infer minimally — never fall back to preserving the original jewelry, and never invent decorative detail.";
+  "MACRO REPLACEMENT MODE: Use SOURCE_FRAME ONLY for magnification, crop, camera angle, orientation, focus/depth-of-field characteristics, lighting direction, exposure and environmental background. COMPLETELY reconstruct the visible jewelry region from JEWELRY_REFERENCES — do NOT preserve the original piece's stones, prongs, settings, metal shapes, engraving, borders or microscopic construction, do NOT copy the original stone layout, count or placement, and NEVER force the replacement's materials onto the original's geometry. Reconstruct this photograph as if the camera were photographing the REPLACEMENT jewelry instead: the references are the absolute authority for the microscopic detail — actual gemstone cuts and sizes, the replacement's own stone arrangement and density, prong/bead/channel/bezel style, metal borders, engraving, lettering, surface relief, material and metal color. If the original has 6 large stones and the replacement is 35 small pavé stones, show the replacement's real design — never invent large versions to match the source layout. SEMANTIC MATCHING: identify what kind of detail the source is photographing (gemstone field, pavé, prong row, letter edge, engraved surface, bail, hinge, sidewall, link, clasp, bezel, metal edge, back plate) and reproduce the REPLACEMENT's corresponding detail at the same macro scale. If no directly corresponding detail exists, use the closest visible region of the replacement and infer minimally — never revert to the original's geometry and never invent decorative detail. Stay at the source's macro distance (if 1:1 macro, remain 1:1 macro — do not pull back to a hero/product shot) and show only the amount of replacement jewelry appropriate for the existing crop. In macro the replaced region MAY cover most of the frame — the only protected pixels are the non-jewelry environmental background, which still must come from SOURCE_FRAME (never import the reference's background, hand, finger, glove, surface, box or lighting). Relight the replacement detail to match SOURCE_FRAME while keeping physically realistic diamond optics (crisp brilliance, internal refraction, independent scintillation, spectral dispersion) and source-consistent metal specular response. Prefer references in this order for the detail: Macro Detail, then CAD/design-authority, then the closest matching side/front/back, then highest-resolution product reference, then others.";
 
 const MACRO_FORCED_PREFIX =
-  "This frame IS an extreme macro — apply the following unconditionally, and in this frame the \"modify the smallest possible region\" rule does NOT override it: the only protected region is the non-jewelry environmental background.";
+  "MODE: MACRO. This frame IS a local-detail / extreme macro of the jewelry — apply the following unconditionally, and in this frame the \"modify the smallest possible region\" rule does NOT override it: the only protected region is the non-jewelry environmental background.";
+
+const STANDARD_FORCED_PREFIX =
+  "MODE: STANDARD. Treat this frame as a normal full or partial product view: use the strict surgical object-replacement strategy above (identify the original jewelry region, remove the whole original jewelry identity, reconstruct the replacement in its place, and leave every non-jewelry pixel identical to SOURCE_FRAME). Ignore the macro paragraph below entirely.";
+
+const AUTO_CLASSIFY_BLOCK =
+  "MODE: AUTO. Before generating, silently classify SOURCE_FRAME internally as exactly one of: FULL_FRONT, FULL_3Q, SIDE, BACK, PARTIAL_FRONT, PARTIAL_SIDE, PARTIAL_BACK, MACRO_STONES, MACRO_LETTERING, MACRO_METAL, MACRO_EDGE, MACRO_LINK, MACRO_BAIL_OR_CONNECTOR, ABSTRACT_PRODUCT_DETAIL. Do not output the classification. For FULL_* / PARTIAL_* / SIDE / BACK views apply the STANDARD strict surgical replacement strategy above. For MACRO_* and ABSTRACT_PRODUCT_DETAIL apply the MACRO strategy below. MACRO means the photographed subject is a LOCAL DETAIL of the jewelry (individual stones, pavé, prongs, a letter section, an edge, a sidewall, links, engraving, a bezel, or bail/connector detail) — NOT merely that the jewelry is large in the frame. A tight but recognizable full-product shot is STANDARD.";
 
 const MACRO_CONDITIONAL_PREFIX =
-  "IF SOURCE_FRAME is an extreme macro / detail shot where the jewelry fills most of the frame, apply the following (it then takes precedence over the \"modify the smallest possible region\" rule, whose protected region becomes the non-jewelry environmental background only); otherwise ignore this paragraph entirely and use the surgical replacement above.";
+  "MACRO STRATEGY (apply only if the classification above is a MACRO_* / ABSTRACT_PRODUCT_DETAIL frame; it then takes precedence over the \"modify the smallest possible region\" rule, whose protected region becomes the non-jewelry environmental background only — otherwise ignore this paragraph entirely):";
 
-function macroBlock(forced: boolean) {
-  return `${forced ? MACRO_FORCED_PREFIX : MACRO_CONDITIONAL_PREFIX}\n${MACRO_REPLACEMENT_BLOCK}`;
+export type ReplacementMode = "auto" | "standard" | "macro";
+
+function normalizeMode(mode: unknown, legacyMacro?: boolean): ReplacementMode {
+  const raw = String(mode ?? "").trim().toLowerCase();
+  if (raw === "macro" || raw === "standard" || raw === "auto") return raw as ReplacementMode;
+  return legacyMacro === true ? "macro" : "auto";
+}
+
+function modeBlock(mode: ReplacementMode) {
+  if (mode === "macro") return `${MACRO_FORCED_PREFIX}\n${MACRO_REPLACEMENT_BLOCK}`;
+  if (mode === "standard") return STANDARD_FORCED_PREFIX;
+  return `${AUTO_CLASSIFY_BLOCK}\n\n${MACRO_CONDITIONAL_PREFIX}\n${MACRO_REPLACEMENT_BLOCK}`;
 }
 
 
@@ -258,6 +291,20 @@ const FAILURE_CORRECTIONS: Record<string, string> = {
     "CORRECTION: The previous attempt invented or incorrectly translated the replacement jewelry's microscopic design. Prioritize the uploaded Macro Detail / CAD / closest product references and reproduce the replacement's actual stone cuts, settings, metal construction and surface geometry.",
   "macrodetaildoesn’tmatchreference":
     "CORRECTION: The previous attempt invented or incorrectly translated the replacement jewelry's microscopic design. Prioritize the uploaded Macro Detail / CAD / closest product references and reproduce the replacement's actual stone cuts, settings, metal construction and surface geometry.",
+  "macromismatch":
+    "CORRECTION: The previous attempt invented or incorrectly translated the replacement jewelry's microscopic design, or matched the wrong kind of detail. Identify what detail the source is photographing and reproduce the REPLACEMENT's corresponding detail at the same macro scale, prioritizing the uploaded Macro Detail / CAD / closest product references.",
+  "incompletereplacement":
+    "CORRECTION: Previous result left recognizable original jewelry in the target region. Remove ALL original identity and rebuild the entire jewelry region from the references.",
+  "hybridofold+new":
+    "CORRECTION: Previous generation created a hybrid object containing recognizable elements from the original jewelry. Completely remove all source-jewelry identity from the target region. Reconstruct one coherent replacement object exclusively from the uploaded jewelry references.",
+  "hybridofoldandnew":
+    "CORRECTION: Previous generation created a hybrid object containing recognizable elements from the original jewelry. Completely remove all source-jewelry identity from the target region. Reconstruct one coherent replacement object exclusively from the uploaded jewelry references.",
+  "wrongreplacementsection":
+    "CORRECTION: The previous attempt reproduced the wrong region of the replacement object. Re-identify which part of the piece SOURCE_FRAME is showing, then render the REPLACEMENT's corresponding part — same component, same approximate scale, same viewing side.",
+  "wrongfront/back/side":
+    "CORRECTION: Match the source's viewing side and prioritize the correspondingly-labeled reference (Back/Side/CAD); do not switch to a front hero view.",
+  "wrongfrontbackside":
+    "CORRECTION: Match the source's viewing side and prioritize the correspondingly-labeled reference (Back/Side/CAD); do not switch to a front hero view.",
   other:
 
     "CORRECTION: the previous attempt was inaccurate. Re-read SOURCE_FRAME for the shot and the references for the object's construction, and follow both strictly.",
@@ -287,7 +334,9 @@ function buildJewelryPrompt(args: {
   extra?: string;
   preferredRole?: string | null;
   failureReason?: string | null;
-  /** Force MACRO REPLACEMENT MODE for this frame (per-frame UI toggle). */
+  /** Per-frame replacement mode: "auto" (self-classify), "standard", "macro". */
+  mode?: ReplacementMode | string | null;
+  /** Legacy per-frame Macro toggle — equivalent to mode = "macro". */
   macro?: boolean;
 }) {
   let cursor = 2; // image 1 is the source frame
@@ -355,6 +404,7 @@ function buildJewelryPrompt(args: {
 
   const preferred = String(args.preferredRole ?? "").trim();
   const correction = failureCorrection(args.failureReason);
+  const mode = normalizeMode(args.mode, args.macro === true);
 
   const prompt = [
     "Use SOURCE_FRAME (image 1) as the ABSOLUTE authority for the photograph. This is a precise jewelry replacement, not a redesign or a product shot. Do NOT reframe or recreate the photograph.",
@@ -363,7 +413,11 @@ function buildJewelryPrompt(args: {
     "",
     REFERENCE_CONTEXT_EXCLUSION,
     "",
+    ANTI_HYBRID_BLOCK,
+    "",
     SURGICAL_REPLACEMENT_CORE,
+    "",
+    NO_INVENTION_BLOCK,
     "",
     PRIORITY_ORDER_TEXT,
     "",
@@ -378,13 +432,15 @@ function buildJewelryPrompt(args: {
     "- Preserve the same focus/DOF, and any foreground occlusion.",
     "The final image should align closely if overlaid on SOURCE_FRAME. Only the jewelry identity changes — never the shot.",
     "",
-    "BOUNDING-BOX / SCALE LOCK: the replacement occupies approximately the same region of the frame the original jewelry occupied; for partial shots, the same partial region. Never enlarge the piece to showcase detail.",
+    "BOUNDING-BOX / SCALE LOCK: the replacement occupies approximately the same region of the frame the original jewelry occupied; for partial shots, the same partial region. Never enlarge the piece to showcase detail. This is a placement rule only — it must never distort the replacement's real proportions.",
     "",
     "BAIL / CONNECTOR LOCK: treat MAIN BODY / BAIL / CONNECTOR-HINGE / CHAIN as distinct components. The replacement's bail is the SAME physical bail in every frame, using the reference's own bail geometry (outer silhouette, inner opening, width, height, thickness, stone coverage, edge thickness, attachment point, hinge). Position and rotate it to fit the source — but NEVER morph the replacement bail toward the original piece's bail, and never resize it to match the original's bail. Geometry comes from the REFERENCE; the SOURCE controls only camera + placement. (If the original bail is 30mm and the replacement is 20mm, keep the replacement's real 20mm geometry, just placed and rotated correctly.)",
     "",
     "DO NOT HALLUCINATE: if the visible source region needs a part of the piece that no reference shows, infer minimally. Never invent extra stones, prongs, hinges, engraving, lettering or decorative structures. If the source region is too abstract to identify confidently, reproduce the closest corresponding macro region rather than inventing a full front-facing pendant.",
     "",
-    "GEOMETRY FIDELITY: STRICT. Source composition dominates, geometry cannot drift, and there is no beautification, reframing, added visibility or invented detail.",
+    "GEOMETRY FIDELITY: STRICT — replacement geometry locked, source camera and composition locked. The REPLACEMENT object's geometry may not drift, soften, average or be redesigned, and SOURCE_FRAME's camera, crop and composition may not change. This does NOT mean preserving the original object's construction: the original jewelry's geometry, identity and design must be fully removed. No beautification, reframing, added visibility or invented detail.",
+    "",
+    VIEW_SIDE_INTELLIGENCE_BLOCK,
     "",
     `PIECES: ${lines.join(" ")}`,
     refLabels.length ? "" : null,
@@ -405,7 +461,8 @@ function buildJewelryPrompt(args: {
     "",
     CONTEXT_NEGATIVES,
     "",
-    macroBlock(args.macro === true),
+    modeBlock(mode),
+
 
 
 
@@ -448,7 +505,9 @@ async function startSwapFrame(admin: AdminClient, args: {
   imageModel?: string;
   preferredRole?: string | null;
   failureReason?: string | null;
-  /** Per-frame Macro mode toggle (forces MACRO REPLACEMENT MODE). */
+  /** Per-frame replacement mode: "auto" | "standard" | "macro". */
+  mode?: string | null;
+  /** Legacy per-frame Macro toggle (equivalent to mode = "macro"). */
   macro?: boolean;
   webhookBase: string;
 }) {
@@ -474,6 +533,7 @@ async function startSwapFrame(admin: AdminClient, args: {
     extra: args.extraPrompt,
     preferredRole: args.preferredRole ?? null,
     failureReason: args.failureReason ?? null,
+    mode: args.mode ?? null,
     macro: args.macro === true,
   });
 
@@ -537,7 +597,8 @@ async function startSwapFrame(admin: AdminClient, args: {
           geometry_fidelity: "strict",
           preferred_role: args.preferredRole ?? null,
           failure_reason: args.failureReason ?? null,
-          macro_mode: args.macro === true,
+          replacement_mode: normalizeMode(args.mode, args.macro === true),
+          macro_mode: normalizeMode(args.mode, args.macro === true) === "macro",
           source_frame_url: sourceFrameUrl,
           frame_index: Number(args.frameIndex ?? 0),
           frame_time: Number(args.frameTime ?? 0),
@@ -1419,6 +1480,7 @@ Deno.serve(async (req) => {
         imageModel: body.imageModel,
         preferredRole: body.preferredRole ?? null,
         failureReason: body.failureReason ?? null,
+        mode: typeof body.mode === "string" ? body.mode : null,
         macro: body.macro === true,
         webhookBase,
       });

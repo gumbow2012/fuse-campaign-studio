@@ -19,8 +19,10 @@ export type AnimationDirectionSummary = {
 export type JewelryGeneration = SwapGeneration & {
   imageModel?: JewelryImageModel | null;
   preferredRole?: string | null;
-  /** True when MACRO REPLACEMENT MODE was forced for this frame. */
+  /** True when MACRO REPLACEMENT MODE was applied for this frame. */
   macroMode?: boolean | null;
+  /** Per-frame replacement strategy used: "auto" | "standard" | "macro". */
+  replacementMode?: "auto" | "standard" | "macro" | null;
   /** Animate stage: the chosen shot + its direction summary and full prompt. */
   shotKey?: string | null;
   shotLabel?: string | null;

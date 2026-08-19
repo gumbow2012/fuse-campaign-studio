@@ -164,12 +164,25 @@ const ANGLE_ROLE_OPTIONS = [
   "Other",
 ];
 
+/** Per-frame replacement strategy. Auto lets the model self-classify the frame. */
+const REPLACEMENT_MODES = [
+  { value: "auto", label: "Auto" },
+  { value: "standard", label: "Standard" },
+  { value: "macro", label: "Macro" },
+] as const;
+
+type ReplacementMode = (typeof REPLACEMENT_MODES)[number]["value"];
+
 /** Optional regenerate reasons — each appends a targeted corrective sentence. */
 const FAILURE_REASONS = [
-  "Wrong angle",
-  "Reference background leaked in",
+  "Incomplete replacement",
   "Original jewelry still visible",
-  "Macro detail doesn't match reference",
+  "Hybrid of old + new",
+  "Wrong replacement section",
+  "Wrong front/back/side",
+  "Macro mismatch",
+  "Reference background leaked in",
+  "Wrong angle",
   "Wrong crop / zoom",
   "Wrong jewelry geometry",
   "Wrong bail / connector",
@@ -386,9 +399,12 @@ export default function JewelrySwap() {
   const [chosenModel, setChosenModel] = useState<Record<number, JewelryImageModel>>({});
   const [framePreferredRole, setFramePreferredRole] = useState<Record<number, string>>({});
   const [frameReason, setFrameReason] = useState<Record<number, string>>({});
-  /** Per-frame Macro mode toggle — forces macro replacement for that frame. */
-  const [frameMacro, setFrameMacro] = useState<Record<number, boolean>>({});
+  /** Per-frame replacement mode — persists so later regenerations reuse it. */
+  const [frameMode, setFrameMode] = useState<Record<number, ReplacementMode>>({});
   const [needsReview, setNeedsReview] = useState<Set<number>>(new Set());
+  /** Manual, user-set review flags only — no automatic similarity detection. */
+  const [flagIncomplete, setFlagIncomplete] = useState<Set<number>>(new Set());
+  const [flagHybrid, setFlagHybrid] = useState<Set<number>>(new Set());
   // Which frame's Regenerate menu is expanded, and which frame is being compared
   // against the opt-in alternate model.
   const [regenMenu, setRegenMenu] = useState<number | null>(null);
@@ -432,6 +448,8 @@ export default function JewelrySwap() {
     setFramePreferredRole({});
     setFrameReason({});
     setNeedsReview(new Set());
+    setFlagIncomplete(new Set());
+    setFlagHybrid(new Set());
     setApproved(new Set());
     setSelectedFrames(new Set());
     // The video library is intentionally preserved across new source clips.
@@ -530,6 +548,9 @@ export default function JewelrySwap() {
     setFramePreferredRole({});
     setFrameReason({});
     setNeedsReview(new Set());
+    setFlagIncomplete(new Set());
+    setFlagHybrid(new Set());
+    setFrameMode({});
     setApproved(new Set());
     setSelectedFrames(new Set());
     setSourceNotice(null);
@@ -884,12 +905,13 @@ export default function JewelrySwap() {
         imageModel?: JewelryImageModel;
         preferredRole?: string | null;
         failureReason?: string | null;
-        macro?: boolean;
+        mode?: ReplacementMode;
       },
     ) => {
       const frame = frames[frameIndex];
       if (!frame) return;
       const imageModel: JewelryImageModel = options?.imageModel ?? "pro";
+      const mode: ReplacementMode = options?.mode ?? frameMode[frameIndex] ?? "auto";
       const data = await callJewelrySwap<{ generation: JewelryGeneration }>({
         action: "swap_frame",
         sourceFrameUrl: frame.url,
@@ -907,7 +929,9 @@ export default function JewelrySwap() {
             ? options.preferredRole
             : framePreferredRole[frameIndex] || null,
         failureReason: options?.failureReason ?? null,
-        macro: options?.macro ?? frameMacro[frameIndex] === true,
+        mode,
+        // Back-compat with the previous per-frame Macro toggle.
+        macro: mode === "macro",
       });
       if (imageModel === "nb2") {
         setAltSwaps((prev) => ({ ...prev, [frameIndex]: data.generation }));
@@ -920,7 +944,8 @@ export default function JewelrySwap() {
         });
       }
     },
-    [frames, piecePayload, meta, extraPrompt, framePreferredRole, frameMacro],
+    [frames, piecePayload, meta, extraPrompt, framePreferredRole, frameMode],
+
   );
 
   /**
@@ -1830,7 +1855,7 @@ export default function JewelrySwap() {
                   Geometry fidelity: Strict
                 </span>
                 <span className="text-[10px] text-cyan-100/70">
-                  Source composition dominates · no reframing or invented detail
+                  Replacement geometry locked · source camera &amp; composition locked
                 </span>
               </div>
 
@@ -2173,29 +2198,32 @@ export default function JewelrySwap() {
                           ))}
                         </select>
 
-                        {/* Per-frame Macro mode — forces macro replacement for this frame. */}
-                        <div className="flex items-center justify-between gap-2 rounded-lg border border-white/12 bg-black/40 px-2 py-1.5">
-                          <label
-                            htmlFor={`macro-mode-${index}`}
-                            className="flex items-center gap-1.5 text-[10px] uppercase tracking-[0.14em] text-muted-foreground"
+                        {/* Per-frame replacement mode — persists for regenerations. */}
+                        <div className="flex items-center gap-1.5">
+                          <select
+                            aria-label="Replacement mode"
+                            value={frameMode[index] ?? "auto"}
+                            onChange={(event) =>
+                              setFrameMode((prev) => ({
+                                ...prev,
+                                [index]: event.target.value as ReplacementMode,
+                              }))
+                            }
+                            className="flex-1 rounded-lg border border-white/12 bg-black/40 px-2 py-1.5 text-[10px] text-foreground outline-none focus:border-cyan-200/60"
                           >
-                            <input
-                              id={`macro-mode-${index}`}
-                              type="checkbox"
-                              checked={frameMacro[index] === true}
-                              onChange={(event) =>
-                                setFrameMacro((prev) => ({ ...prev, [index]: event.target.checked }))
-                              }
-                              className="h-3 w-3 accent-cyan-300"
-                            />
-                            Macro mode
-                          </label>
-                          {frameMacro[index] === true ? (
+                            {REPLACEMENT_MODES.map((option) => (
+                              <option key={option.value} value={option.value}>
+                                Mode: {option.label}
+                              </option>
+                            ))}
+                          </select>
+                          {(frameMode[index] ?? "auto") === "macro" ? (
                             <span className="rounded-md border border-cyan-200/40 bg-cyan-400/15 px-1.5 py-0.5 text-[9px] uppercase tracking-[0.14em] text-cyan-100">
                               Macro
                             </span>
                           ) : null}
                         </div>
+
 
 
 
@@ -2328,6 +2356,46 @@ export default function JewelrySwap() {
                             ? "Flagged: source region ambiguous"
                             : "Flag — source region ambiguous"}
                         </button>
+
+                        {/* Manual review flags — user-set only, no auto-detection. */}
+                        <div className="grid grid-cols-2 gap-1.5">
+                          {[
+                            {
+                              label: "Possible incomplete replacement",
+                              short: "Incomplete?",
+                              on: flagIncomplete.has(index),
+                              set: setFlagIncomplete,
+                            },
+                            {
+                              label: "Possible hybrid replacement",
+                              short: "Hybrid?",
+                              on: flagHybrid.has(index),
+                              set: setFlagHybrid,
+                            },
+                          ].map((flag) => (
+                            <button
+                              key={flag.short}
+                              type="button"
+                              title={flag.label}
+                              onClick={() =>
+                                flag.set((prev) => {
+                                  const next = new Set(prev);
+                                  if (next.has(index)) next.delete(index);
+                                  else next.add(index);
+                                  return next;
+                                })
+                              }
+                              className={cn(
+                                "rounded-lg border px-2 py-1.5 text-[10px] transition-colors",
+                                flag.on
+                                  ? "border-amber-300/60 bg-amber-300/10 text-amber-100"
+                                  : "border-white/12 bg-transparent text-muted-foreground hover:border-amber-300/40",
+                              )}
+                            >
+                              {flag.on ? `Flagged: ${flag.short}` : flag.short}
+                            </button>
+                          ))}
+                        </div>
                       </article>
                     );
                   })}
