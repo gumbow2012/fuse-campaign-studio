@@ -394,6 +394,7 @@ function inferEdgeTargetParam(
   targetNode: TemplateDetailNode | undefined,
   incomingCount: number,
 ) {
+  if (sourceNode?.nodeType === "prompt") return "prompt";
   if (targetNode?.nodeType === "video_gen") return "start_frame_image";
   if (targetNode?.nodeType !== "image_gen") return "image";
 
