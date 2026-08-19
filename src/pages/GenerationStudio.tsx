@@ -290,6 +290,7 @@ function GenerationCard({
   }, [inFlight]);
 
   const isImage = generation.outputType !== "video";
+  const videoRef = useRef<HTMLVideoElement | null>(null);
   const done = generation.status === "complete" && !!generation.outputUrl;
 
   return (
@@ -311,11 +312,22 @@ function GenerationCard({
                 />
               ) : (
                 <video
+                  ref={videoRef}
                   src={generation.outputUrl as string}
                   muted
                   loop
                   playsInline
-                  className="h-full w-full object-cover"
+                  preload="none"
+                  onMouseEnter={() => {
+                    void videoRef.current?.play()?.catch(() => {});
+                  }}
+                  onMouseLeave={() => {
+                    const el = videoRef.current;
+                    if (!el) return;
+                    el.pause();
+                    el.currentTime = 0;
+                  }}
+                  className="h-full w-full bg-black/60 object-cover"
                 />
               )}
             </button>
