@@ -54,6 +54,7 @@ import {
   type SwapGeneration,
 } from "@/services/outfitSwap";
 import { extractFrames, frameTimestamps, loadVideo, readMeta, type VideoMeta } from "@/lib/videoFrames";
+import { compressImageFile } from "@/lib/imageCompress";
 
 const GARMENT_TYPES = [
   "Shirt / Top",
