@@ -560,6 +560,35 @@ export default function GenerationStudio() {
     }
   }, []);
 
+  /** Stale failed rows clutter the gallery; delete them via the existing delete action. */
+  const failedGenerations = useMemo(
+    () => generations.filter((entry) => entry.status === "failed"),
+    [generations],
+  );
+  const visibleGenerations = useMemo(
+    () => generations.filter((entry) => entry.status !== "failed"),
+    [generations],
+  );
+  const [clearingFailed, setClearingFailed] = useState(false);
+
+  const clearFailed = useCallback(async () => {
+    const ids = generations.filter((entry) => entry.status === "failed").map((entry) => entry.id);
+    if (!ids.length) return;
+    if (!window.confirm(`Delete ${ids.length} failed generation${ids.length === 1 ? "" : "s"}?`)) return;
+    setClearingFailed(true);
+    try {
+      await callStudio({ action: "delete", generationIds: ids });
+      setSelected((prev) => prev.filter((id) => !ids.includes(id)));
+      setLightboxId((prev) => (prev && ids.includes(prev) ? null : prev));
+      await loadQueue(true);
+      toast.success("Failed generations cleared");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not clear the failed generations");
+    } finally {
+      setClearingFailed(false);
+    }
+  }, [generations, loadQueue]);
+
 
 
   const addFiles = useCallback(
@@ -1181,13 +1210,24 @@ export default function GenerationStudio() {
                       Clear
                     </Button>
                   </div>
+                ) : failedGenerations.length ? (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={clearingFailed}
+                    onClick={() => void clearFailed()}
+                    className="border-white/15 bg-white/[0.04] text-[11px]"
+                  >
+                    <Trash2 size={14} className="mr-1.5" />
+                    {clearingFailed ? "Clearing…" : `Clear failed (${failedGenerations.length})`}
+                  </Button>
                 ) : null}
               </div>
 
               <TabsContent value="gallery" className="mt-4">
-                {generations.length ? (
+                {visibleGenerations.length ? (
                   <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-4">
-                    {generations.map((generation) => (
+                    {visibleGenerations.map((generation) => (
                       <GenerationCard
                         key={generation.id}
                         generation={generation}
