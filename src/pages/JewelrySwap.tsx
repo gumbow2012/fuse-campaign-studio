@@ -124,10 +124,53 @@ const QUALITY_OPTIONS = ["", "D–F", "G–H", "VS", "VVS", "SI", "Custom/Notes"
 const APPLY_TO_OPTIONS = ["Main subject", "Person on the left", "Person on the right"];
 const DEFAULT_APPLY_TO = APPLY_TO_OPTIONS[0];
 
+/**
+ * Optional role label for each reference angle. The model does the matching from
+ * SOURCE_FRAME + these labels — there is no external vision classifier.
+ */
+const ANGLE_ROLE_OPTIONS = [
+  "",
+  "Front",
+  "Back",
+  "Left Side",
+  "Right Side",
+  "3/4 Front",
+  "3/4 Rear",
+  "Top",
+  "Bottom",
+  "Bail",
+  "Connector/Hinge",
+  "Macro Detail",
+  "CAD Front",
+  "CAD Back",
+  "CAD Side",
+  "CAD 3/4",
+  "Other",
+];
+
+/** Optional regenerate reasons — each appends a targeted corrective sentence. */
+const FAILURE_REASONS = [
+  "Wrong angle",
+  "Wrong crop",
+  "Wrong bail",
+  "Wrong stones/details",
+  "Wrong lettering/logo",
+  "Wrong size",
+  "Hallucinated geometry",
+  "Wrong chain interaction",
+  "Other",
+];
+
+const IMAGE_MODEL_LABELS: Record<JewelryImageModel, string> = {
+  pro: "Nano Banana Pro",
+  nb2: "Nano Banana 2",
+};
+
 const VIDEO_MODELS = [
   { key: "seedance-2.0", label: "Seedance 2.0", usdPerSecond: 0.3024 },
   { key: "seedance-2.0-fast", label: "Seedance 2.0 Fast", usdPerSecond: 0.2419 },
 ];
+
 
 type Frame = { time: number; url: string };
 /** One card = ONE physical piece, described by one or more reference angles. */
