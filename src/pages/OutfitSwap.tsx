@@ -44,7 +44,13 @@ import {
 } from "@/services/storageUpload";
 
 
-import { callOutfitSwap, type SwapGeneration } from "@/services/outfitSwap";
+import {
+  callOutfitSwap,
+  createTemplateFromOutfitSwap,
+  persistTemplateLayout,
+  type OutfitSwapTemplateResult,
+  type SwapGeneration,
+} from "@/services/outfitSwap";
 import { extractFrames, frameTimestamps, loadVideo, readMeta, type VideoMeta } from "@/lib/videoFrames";
 
 const GARMENT_TYPES = [
