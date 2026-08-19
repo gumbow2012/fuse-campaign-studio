@@ -205,16 +205,19 @@ export default function OutfitSwap() {
     if (!files.length) return;
     setUploadingGarment(true);
     try {
+      const folder = await createOutfitSwapFolder();
       const uploaded: Garment[] = [];
       for (const file of files) {
+        const stored = await uploadToStorage(folder, file, file.name);
         uploaded.push({
-          url: await uploadRunInputFile(file),
+          url: stored.url,
           name: file.name,
           type: GARMENT_TYPES[0],
           label: "",
           person: DEFAULT_APPLY_TO,
         });
       }
+
       setGarments((prev) => [...prev, ...uploaded].slice(0, 14));
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Could not upload that reference");
