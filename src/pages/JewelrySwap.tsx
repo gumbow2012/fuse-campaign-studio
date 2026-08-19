@@ -548,6 +548,9 @@ export default function JewelrySwap() {
     setFramePreferredRole({});
     setFrameReason({});
     setNeedsReview(new Set());
+    setFlagIncomplete(new Set());
+    setFlagHybrid(new Set());
+    setFrameMode({});
     setApproved(new Set());
     setSelectedFrames(new Set());
     setSourceNotice(null);
