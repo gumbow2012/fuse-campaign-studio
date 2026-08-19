@@ -884,9 +884,17 @@ export async function runGraphJob(admin: AdminClient, jobId: string) {
   const nodeMap = new Map((nodes as NodeRow[]).map((node) => [node.id, node]));
   const assetMap = new Map((assets ?? []).map((asset) => [asset.id, asset as AssetRow]));
   const incomingByTarget = new Map<string, EdgeRow[]>();
+  const promptEdgesByTarget = new Map<string, EdgeRow[]>();
   const nodeIdsWithOutgoingEdges = new Set<string>();
 
   for (const edge of edges as EdgeRow[]) {
+    // Prompt-node edges carry text, not assets — keep them out of dependency resolution.
+    if (isPromptNode(nodeMap.get(edge.source_node_id))) {
+      const promptList = promptEdgesByTarget.get(edge.target_node_id) ?? [];
+      promptList.push(edge);
+      promptEdgesByTarget.set(edge.target_node_id, promptList);
+      continue;
+    }
     nodeIdsWithOutgoingEdges.add(edge.source_node_id);
     const list = incomingByTarget.get(edge.target_node_id) ?? [];
     list.push(edge);
