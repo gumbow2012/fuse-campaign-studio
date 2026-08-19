@@ -141,18 +141,30 @@ const PHASE_MESSAGES = [
 
 /**
  * The provider does not report granular progress, so we ease a simulated meter
- * toward ~95% and only snap to 100% when the job actually finishes.
+ * toward ~95% and only snap to 100% when the job actually finishes. Elapsed time
+ * is derived from the record's created_at so a page refresh keeps counting.
  */
-function VideoProgress({ generationId, onCancel }: { generationId: string; onCancel: () => void }) {
-  const [elapsed, setElapsed] = useState(0);
+function VideoProgress({
+  startedAt,
+  onCancel,
+  compact,
+}: {
+  startedAt?: string | null;
+  onCancel?: () => void;
+  compact?: boolean;
+}) {
+  const started = useMemo(() => {
+    const parsed = startedAt ? Date.parse(startedAt) : NaN;
+    return Number.isFinite(parsed) ? parsed : Date.now();
+  }, [startedAt]);
+  const [now, setNow] = useState(() => Date.now());
 
   useEffect(() => {
-    setElapsed(0);
-    const started = Date.now();
-    const timer = setInterval(() => setElapsed((Date.now() - started) / 1000), 500);
+    const timer = setInterval(() => setNow(Date.now()), 500);
     return () => clearInterval(timer);
-  }, [generationId]);
+  }, []);
 
+  const elapsed = Math.max(0, (now - started) / 1000);
   // Exponential ease: fast early, asymptotic toward 95%.
   const percent = Math.min(95, Math.round(95 * (1 - Math.exp(-elapsed / 55))));
   const phase = PHASE_MESSAGES[Math.min(PHASE_MESSAGES.length - 1, Math.floor(elapsed / 6))];
@@ -160,10 +172,15 @@ function VideoProgress({ generationId, onCancel }: { generationId: string; onCan
   const seconds = Math.floor(elapsed % 60);
 
   return (
-    <div className="space-y-3 rounded-2xl border border-white/10 bg-black/30 p-4">
+    <div
+      className={cn(
+        "space-y-2.5 rounded-2xl border border-white/10 bg-black/30",
+        compact ? "p-3" : "p-4",
+      )}
+    >
       <div className="flex items-center justify-between gap-3">
-        <span className="flex items-center gap-2 text-[11px] uppercase tracking-[0.16em] text-cyan-200/70">
-          <Video size={14} /> {phase}
+        <span className="flex min-w-0 items-center gap-2 text-[11px] uppercase tracking-[0.16em] text-cyan-200/70">
+          <Video size={14} className="shrink-0" /> <span className="truncate">{phase}</span>
         </span>
         <span className="font-heading text-sm font-semibold text-cyan-100">{percent}%</span>
       </div>
@@ -172,18 +189,21 @@ function VideoProgress({ generationId, onCancel }: { generationId: string; onCan
         <span className="text-[11px] text-muted-foreground">
           Elapsed {minutes}:{String(seconds).padStart(2, "0")}
         </span>
-        <Button
-          size="sm"
-          variant="outline"
-          onClick={onCancel}
-          className="rounded-lg border-white/15 bg-transparent text-[11px] hover:border-red-400/60 hover:text-red-300"
-        >
-          <X size={12} /> Cancel generation
-        </Button>
+        {onCancel ? (
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={onCancel}
+            className="rounded-lg border-white/15 bg-transparent text-[11px] hover:border-red-400/60 hover:text-red-300"
+          >
+            <X size={12} /> Cancel generation
+          </Button>
+        ) : null}
       </div>
     </div>
   );
 }
+
 
 
 export default function OutfitSwap() {
@@ -208,12 +228,18 @@ export default function OutfitSwap() {
   const [videoModel, setVideoModel] = useState("seedance-2.0");
   const [preserveAudio, setPreserveAudio] = useState(true);
   const [resolution, setResolution] = useState("1080p");
-  const [reconstruction, setReconstruction] = useState<SwapGeneration | null>(null);
+  // Every Outfit Swap video the user has started — newest first. Jobs live
+  // server-side, so refreshing simply re-attaches to the running ones.
+  const [videos, setVideos] = useState<SwapGeneration[]>([]);
+  const [libraryLoading, setLibraryLoading] = useState(true);
   const [reconstructing, setReconstructing] = useState(false);
-  const [cancelOpen, setCancelOpen] = useState(false);
+  const [cancelTarget, setCancelTarget] = useState<string | null>(null);
 
   // Which reviewed frame is open in the comparison lightbox.
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
+  // Which library video is open in the player lightbox.
+  const [videoLightboxId, setVideoLightboxId] = useState<string | null>(null);
+
 
 
   const videoInputRef = useRef<HTMLInputElement>(null);
@@ -228,7 +254,7 @@ export default function OutfitSwap() {
     setSwaps({});
     setApproved(new Set());
     setSelectedFrames(new Set());
-    setReconstruction(null);
+    // The video library is intentionally preserved across new source clips.
 
     try {
       const element = await loadVideo(objectUrl);
@@ -303,15 +329,54 @@ export default function OutfitSwap() {
 
   /* ------------------------------ 4. Frame swaps ---------------------------- */
 
+  /** Merge a fresh generation record into whichever collection owns it. */
+  const applyGeneration = useCallback((generation: SwapGeneration) => {
+    if (generation.kind === "video") {
+      setVideos((prev) => {
+        const index = prev.findIndex((entry) => entry.id === generation.id);
+        if (index === -1) return [generation, ...prev];
+        const next = [...prev];
+        next[index] = generation;
+        return next;
+      });
+      return;
+    }
+    if (generation.frameIndex !== null) {
+      setSwaps((prev) => ({ ...prev, [generation.frameIndex as number]: generation }));
+    }
+  }, []);
+
+  // Re-attach to anything the backend still has in flight (refresh-safe).
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const data = await callOutfitSwap<{ generations: SwapGeneration[] }>({
+          action: "list",
+          limit: 24,
+        });
+        if (cancelled) return;
+        setVideos(data.generations ?? []);
+      } catch {
+        // The library simply stays empty; generating still works.
+      } finally {
+        if (!cancelled) setLibraryLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const inFlightIds = useMemo(() => {
     const ids = Object.values(swaps)
       .filter((swap) => swap.status === "queued" || swap.status === "running")
       .map((swap) => swap.id);
-    if (reconstruction && (reconstruction.status === "queued" || reconstruction.status === "running")) {
-      ids.push(reconstruction.id);
+    for (const video of videos) {
+      if (video.status === "queued" || video.status === "running") ids.push(video.id);
     }
     return ids;
-  }, [swaps, reconstruction]);
+  }, [swaps, videos]);
 
   useEffect(() => {
     if (!inFlightIds.length) return;
@@ -324,13 +389,8 @@ export default function OutfitSwap() {
           generationIds: inFlightIds,
         });
         if (cancelled) return;
-        for (const generation of data.generations ?? []) {
-          if (generation.frameIndex === null && generation.kind === "video") {
-            setReconstruction(generation);
-          } else if (generation.frameIndex !== null) {
-            setSwaps((prev) => ({ ...prev, [generation.frameIndex as number]: generation }));
-          }
-        }
+        for (const generation of data.generations ?? []) applyGeneration(generation);
+
       } catch {
         // transient — the next tick retries
       }
@@ -456,8 +516,9 @@ export default function OutfitSwap() {
         generateAudio: preserveAudio,
         extraPrompt,
       });
-      setReconstruction(data.generation);
-      toast.success("Video generation queued");
+      // Non-blocking: each click is its own record, so several can run at once.
+      setVideos((prev) => [data.generation, ...prev]);
+      toast.success("Video queued — you can start another while this runs");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Could not start the video");
     } finally {
@@ -465,19 +526,28 @@ export default function OutfitSwap() {
     }
   }, [approvedUrls, garments, videoModel, resolution, preserveAudio, meta, extraPrompt, videoDuration]);
 
-  /** Stops polling and frees the UI, even if the provider job keeps running. */
-  const cancelReconstruction = useCallback(async () => {
-    const current = reconstruction;
-    setCancelOpen(false);
-    if (!current) return;
-    setReconstruction({ ...current, status: "canceled" });
+  /** Stops tracking and frees the UI, even if the provider job keeps running. */
+  const cancelVideo = useCallback(async () => {
+    const id = cancelTarget;
+    setCancelTarget(null);
+    if (!id) return;
+    setVideos((prev) =>
+      prev.map((entry) => (entry.id === id ? { ...entry, status: "canceled" } : entry)),
+    );
     try {
-      await callOutfitSwap({ action: "cancel", generationIds: [current.id] });
+      await callOutfitSwap({ action: "cancel", generationIds: [id] });
     } catch {
       // The record may already be terminal; the UI is free either way.
     }
     toast.success("Video generation canceled");
-  }, [reconstruction]);
+  }, [cancelTarget]);
+
+  const deleteVideo = useCallback(async (id: string) => {
+    setVideos((prev) => prev.filter((entry) => entry.id !== id));
+    setVideoLightboxId((current) => (current === id ? null : current));
+    await callOutfitSwap({ action: "delete", generationIds: [id] }).catch(() => null);
+  }, []);
+
 
   const toggleApproved = useCallback((index: number) => {
     setApproved((prev) => {
@@ -803,11 +873,17 @@ export default function OutfitSwap() {
                       }`
                     : "Generate video"}
                 </Button>
-                {approvedUrls.length ? null : (
+                {approvedUrls.length ? (
+                  <p className="text-[11px] text-muted-foreground">
+                    Each click queues its own clip — you can run several at once, and closing or
+                    refreshing the page won't cancel them. They land in the Library below.
+                  </p>
+                ) : (
                   <p className="text-[11px] text-muted-foreground">
                     Approve at least one swapped frame to continue.
                   </p>
                 )}
+
               </div>
             </SectionCard>
           </div>
@@ -1004,49 +1080,107 @@ export default function OutfitSwap() {
               )}
             </SectionCard>
 
-            {reconstruction ? (
-              <SectionCard step={6} title="Rebuilt clip" hint="Same video, new clothes.">
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between gap-2">
-                    <StatusPill generation={reconstruction} />
-                    <span className="text-[11px] text-cyan-200/70">
-                      {costPreview(reconstruction.estimatedCredits, reconstruction.estimatedCostUsd)}
-                    </span>
-                  </div>
-                  {reconstruction.status === "complete" && reconstruction.outputUrl ? (
-                    <>
-                      <video
-                        src={reconstruction.outputUrl}
-                        controls
-                        playsInline
-                        className="w-full rounded-2xl border border-white/10 bg-black"
-                      />
-                      <a
-                        href={reconstruction.outputUrl}
-                        download
-                        target="_blank"
-                        rel="noreferrer"
-                        className="flex items-center justify-center gap-2 rounded-xl border border-white/15 bg-black/40 py-2 text-xs text-foreground/85 transition-colors hover:border-cyan-200/50 hover:text-cyan-100"
-                      >
-                        <Download size={13} /> Download clip
-                      </a>
-                    </>
-                  ) : reconstruction.status === "failed" || reconstruction.status === "canceled" ? (
-                    <p className="rounded-xl border border-red-400/30 bg-red-500/10 p-3 text-xs text-red-300">
-                      {reconstruction.status === "canceled"
-                        ? "Canceled — you can start a new video whenever you're ready."
-                        : reconstruction.error ?? "Reconstruction failed"}
-                    </p>
-                  ) : (
-                    <VideoProgress
-                      generationId={reconstruction.id}
-                      onCancel={() => setCancelOpen(true)}
-                    />
-                  )}
-
+            <SectionCard
+              step={6}
+              title="Library"
+              hint="Every clip you've rebuilt. Generations keep running on our servers — closing or refreshing this page won't cancel them."
+            >
+              {libraryLoading ? (
+                <div className="flex items-center gap-2 rounded-2xl border border-white/10 bg-black/25 px-4 py-8 text-xs text-muted-foreground">
+                  <Loader2 size={14} className="animate-spin text-cyan-200" /> Loading your clips…
                 </div>
-              </SectionCard>
-            ) : null}
+              ) : videos.length ? (
+                <div className="grid gap-3 sm:grid-cols-2">
+                  {videos.map((video) => {
+                    const running = video.status === "queued" || video.status === "running";
+                    return (
+                      <article
+                        key={video.id}
+                        className={cn(
+                          "space-y-2.5 rounded-2xl border bg-black/25 p-2.5",
+                          video.status === "complete" ? "border-cyan-200/40" : "border-white/10",
+                        )}
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <StatusPill generation={video} />
+                          <span className="text-[10px] text-cyan-200/70">
+                            {costPreview(video.estimatedCredits, video.estimatedCostUsd)}
+                          </span>
+                        </div>
+
+                        {video.status === "complete" && video.outputUrl ? (
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => setVideoLightboxId(video.id)}
+                              className="group relative block w-full overflow-hidden rounded-xl border border-white/10 bg-black"
+                              aria-label="Open clip"
+                            >
+                              <video
+                                src={video.outputUrl}
+                                muted
+                                playsInline
+                                preload="metadata"
+                                className="h-40 w-full object-cover"
+                              />
+                              <span className="absolute right-1.5 top-1.5 rounded-lg border border-white/15 bg-black/70 p-1 text-cyan-100 opacity-0 transition-opacity group-hover:opacity-100">
+                                <Maximize2 size={11} />
+                              </span>
+                            </button>
+                            <div className="flex items-center gap-1.5">
+                              <a
+                                href={video.outputUrl}
+                                download
+                                target="_blank"
+                                rel="noreferrer"
+                                className="flex flex-1 items-center justify-center gap-2 rounded-lg border border-white/15 bg-black/40 py-1.5 text-[11px] text-foreground/85 transition-colors hover:border-cyan-200/50 hover:text-cyan-100"
+                              >
+                                <Download size={12} /> Download
+                              </a>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => void deleteVideo(video.id)}
+                                className="rounded-lg border-white/15 bg-transparent text-[11px] hover:border-red-400/60 hover:text-red-300"
+                              >
+                                <Trash2 size={12} />
+                              </Button>
+                            </div>
+                          </>
+                        ) : running ? (
+                          <VideoProgress
+                            compact
+                            startedAt={video.createdAt}
+                            onCancel={() => setCancelTarget(video.id)}
+                          />
+                        ) : (
+                          <div className="space-y-2">
+                            <p className="rounded-xl border border-red-400/30 bg-red-500/10 p-2.5 text-[11px] text-red-300">
+                              {video.status === "canceled"
+                                ? "Canceled — start a new video whenever you're ready."
+                                : video.error ?? "Reconstruction failed"}
+                            </p>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => void deleteVideo(video.id)}
+                              className="w-full rounded-lg border-white/15 bg-transparent text-[11px] hover:border-red-400/60 hover:text-red-300"
+                            >
+                              <Trash2 size={12} /> Remove
+                            </Button>
+                          </div>
+                        )}
+                      </article>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="flex items-center gap-2 rounded-2xl border border-white/10 bg-black/25 px-4 py-8 text-xs text-muted-foreground">
+                  <Film size={14} /> Your rebuilt clips will collect here.
+                </div>
+              )}
+            </SectionCard>
+
           </div>
         </div>
       </div>
@@ -1152,13 +1286,77 @@ export default function OutfitSwap() {
         </DialogContent>
       </Dialog>
 
-      <AlertDialog open={cancelOpen} onOpenChange={setCancelOpen}>
+      {/* Library video player */}
+      <Dialog
+        open={videoLightboxId !== null}
+        onOpenChange={(open) => !open && setVideoLightboxId(null)}
+      >
+        <DialogContent className="max-w-4xl border-white/10 bg-[#05070f]/95 backdrop-blur-xl">
+          {(() => {
+            const video = videos.find((entry) => entry.id === videoLightboxId);
+            if (!video) return null;
+            return (
+              <>
+                <DialogHeader>
+                  <DialogTitle className="font-heading text-base text-foreground">
+                    Rebuilt clip
+                    {video.createdAt ? (
+                      <span className="ml-2 text-xs font-normal text-muted-foreground">
+                        {new Date(video.createdAt).toLocaleString()}
+                      </span>
+                    ) : null}
+                  </DialogTitle>
+                </DialogHeader>
+                {video.outputUrl ? (
+                  <video
+                    src={video.outputUrl}
+                    controls
+                    autoPlay
+                    playsInline
+                    className="max-h-[70vh] w-full rounded-2xl border border-white/10 bg-black"
+                  />
+                ) : null}
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="text-[11px] text-cyan-200/70">
+                    {costPreview(video.estimatedCredits, video.estimatedCostUsd)}
+                  </span>
+                  <div className="flex items-center gap-2">
+                    {video.outputUrl ? (
+                      <a
+                        href={video.outputUrl}
+                        download
+                        target="_blank"
+                        rel="noreferrer"
+                        className="flex items-center gap-2 rounded-xl border border-white/15 bg-black/40 px-3 py-2 text-xs text-foreground/85 transition-colors hover:border-cyan-200/50 hover:text-cyan-100"
+                      >
+                        <Download size={13} /> Download
+                      </a>
+                    ) : null}
+                    <Button
+                      variant="outline"
+                      onClick={() => void deleteVideo(video.id)}
+                      className="rounded-xl border-white/15 bg-transparent text-xs hover:border-red-400/60 hover:text-red-300"
+                    >
+                      <Trash2 size={13} /> Remove
+                    </Button>
+                  </div>
+                </div>
+              </>
+            );
+          })()}
+        </DialogContent>
+      </Dialog>
+
+      <AlertDialog
+        open={cancelTarget !== null}
+        onOpenChange={(open) => !open && setCancelTarget(null)}
+      >
         <AlertDialogContent className="border-border bg-card">
           <AlertDialogHeader>
             <AlertDialogTitle className="font-heading">Cancel this video?</AlertDialogTitle>
             <AlertDialogDescription>
-              We'll stop tracking this generation and free up the studio. Credits already spent on the
-              job may not be refunded.
+              This is the only way to stop a generation — closing or refreshing the page keeps it
+              running. Credits already spent on the job may not be refunded.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -1166,15 +1364,15 @@ export default function OutfitSwap() {
               Keep generating
             </AlertDialogCancel>
             <AlertDialogAction
-              onClick={() => void cancelReconstruction()}
+              onClick={() => void cancelVideo()}
               className="bg-red-500/80 text-white hover:bg-red-500"
             >
               Cancel generation
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
-
       </AlertDialog>
+
 
     </SiteShell>
   );
