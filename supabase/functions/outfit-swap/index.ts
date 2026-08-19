@@ -531,7 +531,39 @@ Deno.serve(async (req) => {
       return json({ generation });
     }
 
+    // Recent Outfit Swap video generations for the caller — powers the Library
+    // and lets a refreshed page re-attach to in-flight jobs.
+    if (action === "list") {
+      const limit = Math.min(60, Math.max(1, Number(body.limit ?? 24)));
+      const { data: rows, error } = await admin
+        .from("studio_generations")
+        .select("*")
+        .eq("user_id", user.id)
+        .eq("kind", "video")
+        .order("created_at", { ascending: false })
+        .limit(120);
+      if (error) throw new Error(error.message);
+
+      const outfitSwapRows = (rows ?? [])
+        .filter((row: any) => {
+          const payload = (row.input_payload ?? {}) as Record<string, unknown>;
+          return payload.feature === "outfit-swap" && payload.stage === "reconstruction";
+        })
+        .slice(0, limit);
+
+      // Refresh anything still in flight so the client gets truth on first load.
+      const generations = await Promise.all(
+        outfitSwapRows.map((row: any) =>
+          row.status === "queued" || row.status === "running"
+            ? syncRow(admin, row)
+            : Promise.resolve(serialize(row)),
+        ),
+      );
+      return json({ generations });
+    }
+
     if (action === "status") {
+
       const ids = (Array.isArray(body.generationIds) ? body.generationIds : [body.generationId])
         .map((id: unknown) => String(id ?? "").trim())
         .filter(Boolean);
