@@ -386,6 +386,8 @@ export default function JewelrySwap() {
   const [chosenModel, setChosenModel] = useState<Record<number, JewelryImageModel>>({});
   const [framePreferredRole, setFramePreferredRole] = useState<Record<number, string>>({});
   const [frameReason, setFrameReason] = useState<Record<number, string>>({});
+  /** Per-frame Macro mode toggle — forces macro replacement for that frame. */
+  const [frameMacro, setFrameMacro] = useState<Record<number, boolean>>({});
   const [needsReview, setNeedsReview] = useState<Set<number>>(new Set());
   // Which frame's Regenerate menu is expanded, and which frame is being compared
   // against the opt-in alternate model.
