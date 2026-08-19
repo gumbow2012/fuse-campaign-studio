@@ -187,31 +187,52 @@ const CAD_AUTHORITY_TEXT =
 
 /** Targeted corrective lines appended when the user regenerates with a reason. */
 const FAILURE_CORRECTIONS: Record<string, string> = {
-  "wrong angle":
-    "CORRECTION: the previous attempt used the wrong viewing angle. Re-derive the camera angle, yaw/pitch/roll and viewing direction strictly from SOURCE_FRAME, and reproduce the corresponding region of the replacement piece as seen from that exact angle.",
-  "wrong crop":
-    "CORRECTION: the previous attempt reframed the shot. Match SOURCE_FRAME's crop, zoom and framing exactly — same visible portion of the piece, same partiality, no zoom-out to reveal the whole piece.",
-  "wrong bail":
-    "CORRECTION: the previous attempt produced an inaccurate bail; strictly follow the uploaded bail/CAD references and preserve the exact replacement bail geometry — do not substitute or redesign it.",
-  "wrong stones/details":
+  "wrongangle":
+    "CORRECTION: The previous result changed the viewing angle. Match the original source-frame yaw, pitch, roll, perspective and visible surfaces exactly. Do not convert the shot into a frontal product view.",
+  "wrongcrop":
+    "CORRECTION: The previous result revealed substantially more of the replacement object than exists in the source composition. Preserve the source crop exactly. Do not pull the camera backward. Do not reveal the full jewelry piece. Render only the replacement geometry physically visible from this exact source-frame camera position.",
+  "wrongcrop/zoom":
+    "CORRECTION: The previous result revealed substantially more of the replacement object than exists in the source composition. Preserve the source crop exactly. Do not pull the camera backward. Do not reveal the full jewelry piece. Render only the replacement geometry physically visible from this exact source-frame camera position.",
+  "wrongbail":
+    "CORRECTION: The previous result changed the bail/connector construction. Use the uploaded bail, connector, side and design-authority references as strict geometry authority. Preserve exact outer silhouette, opening, thickness, hinge, attachment and stone layout.",
+  "wrongbail/connector":
+    "CORRECTION: The previous result changed the bail/connector construction. Use the uploaded bail, connector, side and design-authority references as strict geometry authority. Preserve exact outer silhouette, opening, thickness, hinge, attachment and stone layout.",
+  "wrongjewelrygeometry":
+    "CORRECTION: the previous attempt drifted from the replacement object's real geometry. Reproduce the reference silhouette, dimensions, proportions, thickness, depth, borders, cutouts, negative space and structural features exactly — geometry may not be softened, averaged, stylised or redesigned.",
+  "wrongstones/details":
     "CORRECTION: the previous attempt got the stones wrong. Reproduce the reference's exact stone layout, cuts, sizes, density and setting geometry — no invented, added, removed or resized stones.",
-  "wrong lettering/logo":
+  "wrongstones/setting":
+    "CORRECTION: the previous attempt got the stones or setting wrong. Reproduce the reference's exact stone layout, cuts, sizes, density, prong/bezel/pavé setting geometry and seat locations — no invented, added, removed or resized stones.",
+  "wronglettering/logo":
     "CORRECTION: the previous attempt got the lettering/logo wrong. Reproduce the reference's exact letterforms, symbols, spacing and relief, at SOURCE_FRAME's rotation — never rotate lettering upright for legibility.",
-  "wrong size":
+  "wrongsize":
     "CORRECTION: the previous attempt mis-scaled the piece. Keep the replacement's real physical proportions from the references, occupying approximately the same region of the frame the original jewelry occupied.",
-  "hallucinated geometry":
+  "wrongscale":
+    "CORRECTION: the previous attempt mis-scaled the piece. Keep the replacement's real physical proportions from the references, occupying approximately the same region of the frame the original jewelry occupied — do not enlarge or shrink it relative to the wearer or the source composition.",
+  "wrongrotation":
+    "CORRECTION: the previous attempt rotated the replacement object. Match SOURCE_FRAME's exact yaw, pitch and roll of the original jewelry — do not straighten, level or re-orient the piece for legibility or presentation.",
+  "hallucinatedgeometry":
     "CORRECTION: the previous attempt invented structure. Do not add stones, prongs, hinges, engraving, lettering or decorative elements that no reference shows; infer minimally and only where unavoidable.",
-  "wrong chain interaction":
+  "hallucinateddetail":
+    "CORRECTION: the previous attempt invented detail. Do not add stones, prongs, hinges, engraving, lettering, textures or decorative elements that no reference shows; infer minimally and only where unavoidable.",
+  "wrongchaininteraction":
     "CORRECTION: the previous attempt broke the chain interaction. Preserve SOURCE_FRAME's chain placement, path, tension, contact and occlusion exactly, and attach the replacement at its own reference attachment point.",
   other:
     "CORRECTION: the previous attempt was inaccurate. Re-read SOURCE_FRAME for the shot and the references for the object's construction, and follow both strictly.",
 };
 
-function failureCorrection(reason: unknown) {
-  const key = String(reason ?? "").trim().toLowerCase();
-  if (!key) return null;
-  return FAILURE_CORRECTIONS[key] ?? `${FAILURE_CORRECTIONS.other} Reported issue: "${String(reason).trim()}".`;
+/** Reasons arrive as UI labels ("Wrong crop / zoom") — match them space-insensitively. */
+function normalizeFailureKey(reason: string) {
+  return reason.trim().toLowerCase().replace(/\s+/g, "");
 }
+
+function failureCorrection(reason: unknown) {
+  const raw = String(reason ?? "").trim();
+  if (!raw) return null;
+  const key = normalizeFailureKey(raw);
+  return FAILURE_CORRECTIONS[key] ?? `${FAILURE_CORRECTIONS.other} Reported issue: "${raw}".`;
+}
+
 
 /**
  * Precision jewelry replacement prompt. Image 1 is always the SOURCE_FRAME and
@@ -408,13 +429,22 @@ async function startSwapFrame(admin: AdminClient, args: {
 
     const aspect = String(args.aspectRatio ?? "").trim();
     const resolution = String(args.resolution ?? "").trim().toUpperCase();
-    const falInput: Record<string, unknown> = {
-      prompt,
-      image_urls: imageUrls,
-      output_format: "png",
-      ...(aspect && aspect !== "auto" ? { aspect_ratio: aspect } : {}),
-      ...(["1K", "2K", "4K"].includes(resolution) ? { resolution } : {}),
-    };
+    // The standard nano-banana edit endpoint rejects Pro-only fields (resolution,
+    // aspect_ratio) with a 422 — the alt path sends only the supported fields.
+    const falInput: Record<string, unknown> = imageModelKey === "nb2"
+      ? {
+        prompt,
+        image_urls: imageUrls,
+        output_format: "png",
+      }
+      : {
+        prompt,
+        image_urls: imageUrls,
+        output_format: "png",
+        ...(aspect && aspect !== "auto" ? { aspect_ratio: aspect } : {}),
+        ...(["1K", "2K", "4K"].includes(resolution) ? { resolution } : {}),
+      };
+
 
     const webhookUrl = `${args.webhookBase}${encodeURIComponent(inserted.id)}`;
     const requestId = await submitFalJob(endpointId, falInput, webhookUrl);

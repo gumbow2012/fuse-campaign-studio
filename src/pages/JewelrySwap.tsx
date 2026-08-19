@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import {
   Check,
+  ChevronDown,
+
   Download,
   Film,
   ImageIcon,
@@ -155,15 +157,18 @@ const ANGLE_ROLE_OPTIONS = [
 /** Optional regenerate reasons — each appends a targeted corrective sentence. */
 const FAILURE_REASONS = [
   "Wrong angle",
-  "Wrong crop",
-  "Wrong bail",
-  "Wrong stones/details",
-  "Wrong lettering/logo",
-  "Wrong size",
-  "Hallucinated geometry",
+  "Wrong crop / zoom",
+  "Wrong jewelry geometry",
+  "Wrong bail / connector",
+  "Wrong stones / setting",
+  "Wrong lettering / logo",
+  "Wrong scale",
+  "Wrong rotation",
+  "Hallucinated detail",
   "Wrong chain interaction",
   "Other",
 ];
+
 
 const IMAGE_MODEL_LABELS: Record<JewelryImageModel, string> = {
   pro: "Nano Banana Pro",
@@ -367,7 +372,11 @@ export default function JewelrySwap() {
   const [framePreferredRole, setFramePreferredRole] = useState<Record<number, string>>({});
   const [frameReason, setFrameReason] = useState<Record<number, string>>({});
   const [needsReview, setNeedsReview] = useState<Set<number>>(new Set());
-  const [generateBoth, setGenerateBoth] = useState(false);
+  // Which frame's Regenerate menu is expanded, and which frame is being compared
+  // against the opt-in alternate model.
+  const [regenMenu, setRegenMenu] = useState<number | null>(null);
+  const [compareIndex, setCompareIndex] = useState<number | null>(null);
+
   const [approved, setApproved] = useState<Set<number>>(new Set());
   const [swapping, setSwapping] = useState(false);
 
@@ -684,6 +693,23 @@ export default function JewelrySwap() {
     [frames, piecePayload, meta, extraPrompt, framePreferredRole],
   );
 
+  /**
+   * Opt-in only: runs the alternate image model WITHOUT touching the Pro result,
+   * then opens the comparison modal so one of them can be approved.
+   */
+  const tryAlternateModel = useCallback(
+    async (frameIndex: number) => {
+      try {
+        await swapFrame(frameIndex, { imageModel: "nb2" });
+        setCompareIndex(frameIndex);
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : "Could not start the alternate model");
+      }
+    },
+    [swapFrame],
+  );
+
+
   const runSelectedSwaps = useCallback(async () => {
     if (!pieces.length) {
       toast.error("Add at least one jewelry reference");
@@ -697,9 +723,8 @@ export default function JewelrySwap() {
     setSwapping(true);
     try {
       for (const index of indices) {
+        // Initial generation is always Nano Banana Pro only — never two models.
         await swapFrame(index, { imageModel: "pro" });
-        // Comparison runs are opt-in only — never automatic.
-        if (generateBoth) await swapFrame(index, { imageModel: "nb2" });
       }
       toast.success(`${indices.length} frame swap(s) queued`);
     } catch (error) {
@@ -707,7 +732,8 @@ export default function JewelrySwap() {
     } finally {
       setSwapping(false);
     }
-  }, [selectedFrames, pieces, swapFrame, generateBoth]);
+  }, [selectedFrames, pieces, swapFrame]);
+
 
   const removeSwap = useCallback(async (frameIndex: number) => {
     const ids = [swaps[frameIndex]?.id, altSwaps[frameIndex]?.id].filter(Boolean) as string[];
@@ -1501,38 +1527,12 @@ export default function JewelrySwap() {
                 </span>
               </div>
 
-              <button
-                type="button"
-                role="switch"
-                aria-checked={generateBoth}
-                onClick={() => setGenerateBoth((prev) => !prev)}
-                className={cn(
-                  "mt-2 flex w-full items-center justify-between gap-3 rounded-xl border px-3 py-2 text-[11px] font-medium transition-colors",
-                  generateBoth
-                    ? "border-cyan-200/60 bg-cyan-400/15 text-cyan-100"
-                    : "border-white/12 bg-white/[0.03] text-foreground/70 hover:border-cyan-200/40",
-                )}
-              >
-                <span className="text-left">
-                  Advanced: generate both models for comparison
-                  <span className="block text-[10px] font-normal text-muted-foreground">
-                    Off by default — doubles the image cost per frame.
-                  </span>
-                </span>
-                <span
-                  className={cn(
-                    "relative h-4 w-8 shrink-0 rounded-full transition-colors",
-                    generateBoth ? "bg-cyan-300/80" : "bg-white/15",
-                  )}
-                >
-                  <span
-                    className={cn(
-                      "absolute top-0.5 h-3 w-3 rounded-full bg-black transition-all",
-                      generateBoth ? "left-[18px]" : "left-0.5",
-                    )}
-                  />
-                </span>
-              </button>
+              <p className="mt-2 text-[10px] text-muted-foreground">
+                Every swap generates with Nano Banana Pro. An alternate model is available
+                per frame after review.
+              </p>
+
+
 
               <div className="mt-4">
                 <Textarea
@@ -1789,13 +1789,11 @@ export default function JewelrySwap() {
                             <StatusPill generation={active ?? swap} />
                           </span>
                         </div>
+                        {/* Default review: Original ↔ the approved (Pro by default) result. */}
                         <button
                           type="button"
                           onClick={() => setLightboxIndex(index)}
-                          className={cn(
-                            "group grid w-full gap-2 text-left",
-                            alt ? "grid-cols-3" : "grid-cols-2",
-                          )}
+                          className="group grid w-full grid-cols-2 gap-2 text-left"
                           aria-label="Open full-size comparison"
                         >
                           <div className="overflow-hidden rounded-xl border border-white/10 bg-black/40">
@@ -1806,108 +1804,47 @@ export default function JewelrySwap() {
                               Original
                             </p>
                           </div>
-                          {([["pro", swap], ["nb2", alt]] as const)
-                            .filter(([, generation]) => !!generation)
-                            .map(([key, generation]) => (
-                              <div
-                                key={key}
-                                className={cn(
-                                  "relative overflow-hidden rounded-xl border bg-black/40",
-                                  picked === key ? "border-cyan-200/60" : "border-white/10",
-                                )}
-                              >
-                                {generation!.status === "complete" && generation!.outputUrl ? (
-                                  <img
-                                    src={generation!.outputUrl}
-                                    alt={`${IMAGE_MODEL_LABELS[key]} result`}
-                                    className="h-32 w-full object-cover"
-                                  />
-                                ) : generation!.status === "failed" || generation!.status === "canceled" ? (
-                                  <p className="h-32 overflow-y-auto p-2 text-[10px] text-red-300">
-                                    {generation!.error ?? "Generation failed"}
-                                  </p>
-                                ) : (
-                                  <div className="flex h-32 items-center justify-center">
-                                    <Loader2 size={16} className="animate-spin text-cyan-200" />
-                                  </div>
-                                )}
-                                {key === "pro" ? (
-                                  <span className="absolute right-1.5 top-1.5 rounded-lg border border-white/15 bg-black/70 p-1 text-cyan-100 opacity-0 transition-opacity group-hover:opacity-100">
-                                    <Maximize2 size={11} />
-                                  </span>
-                                ) : null}
-                                <p className="px-2 py-1 text-[10px] uppercase tracking-[0.14em] text-cyan-200/70">
-                                  {IMAGE_MODEL_LABELS[key]}
-                                </p>
+                          <div className="relative overflow-hidden rounded-xl border border-cyan-200/40 bg-black/40">
+                            {active?.status === "complete" && active.outputUrl ? (
+                              <img
+                                src={active.outputUrl}
+                                alt="Swapped result"
+                                className="h-32 w-full object-cover"
+                              />
+                            ) : active?.status === "failed" || active?.status === "canceled" ? (
+                              <p className="flex h-32 items-center justify-center px-2 text-center text-[10px] text-red-300">
+                                Generation failed
+                              </p>
+                            ) : (
+                              <div className="flex h-32 items-center justify-center">
+                                <Loader2 size={16} className="animate-spin text-cyan-200" />
                               </div>
-                            ))}
+                            )}
+                            <span className="absolute right-1.5 top-1.5 rounded-lg border border-white/15 bg-black/70 p-1 text-cyan-100 opacity-0 transition-opacity group-hover:opacity-100">
+                              <Maximize2 size={11} />
+                            </span>
+                            <p className="px-2 py-1 text-[10px] uppercase tracking-[0.14em] text-cyan-200/70">
+                              Swapped — {IMAGE_MODEL_LABELS[picked]}
+                            </p>
+                          </div>
                         </button>
 
-                        {/* The picked result is the one that flows downstream. */}
-                        {alt ? (
-                          <div className="flex items-center gap-1.5">
-                            {(["pro", "nb2"] as const).map((key) => (
-                              <Button
-                                key={key}
-                                size="sm"
-                                variant="outline"
-                                onClick={() => setChosenModel((prev) => ({ ...prev, [index]: key }))}
-                                className={cn(
-                                  "flex-1 rounded-lg text-[11px]",
-                                  picked === key
-                                    ? "border-cyan-200/60 bg-cyan-400/15 text-cyan-100"
-                                    : "border-white/15 bg-transparent",
-                                )}
-                              >
-                                Use {key === "pro" ? "Pro" : "NB2"}
-                              </Button>
-                            ))}
-                          </div>
-                        ) : (
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            disabled={swap.status !== "complete"}
-                            onClick={() => void swapFrame(index, { imageModel: "nb2" })}
-                            className="w-full rounded-lg border-white/15 bg-transparent text-[11px]"
-                          >
-                            Try with Nano Banana 2
-                          </Button>
-                        )}
-
                         {/* Manual angle override — no auto-detection. */}
-                        <div className="grid gap-1.5 sm:grid-cols-2">
-                          <select
-                            aria-label="Preferred angle reference"
-                            value={framePreferredRole[index] ?? ""}
-                            onChange={(event) =>
-                              setFramePreferredRole((prev) => ({ ...prev, [index]: event.target.value }))
-                            }
-                            className="rounded-lg border border-white/12 bg-black/40 px-2 py-1.5 text-[10px] text-foreground outline-none focus:border-cyan-200/60"
-                          >
-                            <option value="">Preferred angle: Auto</option>
-                            {ANGLE_ROLE_OPTIONS.filter(Boolean).map((role) => (
-                              <option key={role} value={role}>
-                                Preferred angle: {role}
-                              </option>
-                            ))}
-                          </select>
-                          <select
-                            aria-label="Failure reason for regeneration"
-                            value={frameReason[index] ?? ""}
-                            onChange={(event) =>
-                              setFrameReason((prev) => ({ ...prev, [index]: event.target.value }))
-                            }
-                            className="rounded-lg border border-white/12 bg-black/40 px-2 py-1.5 text-[10px] text-foreground outline-none focus:border-cyan-200/60"
-                          >
-                            <option value="">Regen reason: none</option>
-                            {FAILURE_REASONS.map((reason) => (
-                              <option key={reason} value={reason}>
-                                {reason}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
+                        <select
+                          aria-label="Preferred angle reference"
+                          value={framePreferredRole[index] ?? ""}
+                          onChange={(event) =>
+                            setFramePreferredRole((prev) => ({ ...prev, [index]: event.target.value }))
+                          }
+                          className="w-full rounded-lg border border-white/12 bg-black/40 px-2 py-1.5 text-[10px] text-foreground outline-none focus:border-cyan-200/60"
+                        >
+                          <option value="">Preferred angle: Auto</option>
+                          {ANGLE_ROLE_OPTIONS.filter(Boolean).map((role) => (
+                            <option key={role} value={role}>
+                              Preferred angle: {role}
+                            </option>
+                          ))}
+                        </select>
 
                         <div className="flex items-center gap-1.5">
                           <Button
@@ -1928,17 +1865,27 @@ export default function JewelrySwap() {
                           <Button
                             size="sm"
                             variant="outline"
-                            title="Regenerate with the selected angle and reason"
-                            onClick={() =>
-                              void swapFrame(index, {
-                                imageModel: picked,
-                                failureReason: frameReason[index] || null,
-                              })
-                            }
+                            onClick={() => setRegenMenu((prev) => (prev === index ? null : index))}
                             className="rounded-lg border-white/15 bg-transparent text-[11px]"
                           >
-                            <RefreshCw size={12} />
+                            <RefreshCw size={12} /> Regenerate
+                            <ChevronDown
+                              size={11}
+                              className={cn("transition-transform", regenMenu === index && "rotate-180")}
+                            />
                           </Button>
+                          {active?.outputUrl ? (
+                            <a
+                              href={active.outputUrl}
+                              download
+                              target="_blank"
+                              rel="noreferrer"
+                              title="Download"
+                              className="flex h-8 items-center rounded-lg border border-white/15 px-2 text-foreground/80 transition-colors hover:border-cyan-200/50 hover:text-cyan-100"
+                            >
+                              <Download size={12} />
+                            </a>
+                          ) : null}
                           <Button
                             size="sm"
                             variant="outline"
@@ -1948,6 +1895,64 @@ export default function JewelrySwap() {
                             <Trash2 size={12} />
                           </Button>
                         </div>
+
+                        {/* Regenerate menu — Pro first, alternate model tucked away. */}
+                        {regenMenu === index ? (
+                          <div className="space-y-2 rounded-xl border border-white/12 bg-black/40 p-2">
+                            <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-cyan-200/70">
+                              Regenerate with Nano Banana Pro
+                            </p>
+                            <select
+                              aria-label="What went wrong?"
+                              value={frameReason[index] ?? ""}
+                              onChange={(event) =>
+                                setFrameReason((prev) => ({ ...prev, [index]: event.target.value }))
+                              }
+                              className="w-full rounded-lg border border-white/12 bg-black/50 px-2 py-1.5 text-[10px] text-foreground outline-none focus:border-cyan-200/60"
+                            >
+                              <option value="">What went wrong? (optional)</option>
+                              {FAILURE_REASONS.map((reason) => (
+                                <option key={reason} value={reason}>
+                                  {reason}
+                                </option>
+                              ))}
+                            </select>
+                            <Button
+                              size="sm"
+                              onClick={() => {
+                                setRegenMenu(null);
+                                void swapFrame(index, {
+                                  imageModel: "pro",
+                                  failureReason: frameReason[index] || null,
+                                });
+                              }}
+                              className="w-full rounded-lg bg-[hsl(var(--primary))] text-[11px] text-primary-foreground hover:bg-[hsl(var(--primary))]/90"
+                            >
+                              Regenerate
+                            </Button>
+                            <details className="rounded-lg border border-white/10 bg-black/30 px-2 py-1.5">
+                              <summary className="cursor-pointer text-[10px] text-muted-foreground">
+                                More options
+                              </summary>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                disabled={swap.status !== "complete"}
+                                onClick={() => {
+                                  setRegenMenu(null);
+                                  void tryAlternateModel(index);
+                                }}
+                                className="mt-2 w-full rounded-lg border-white/15 bg-transparent text-[10px]"
+                              >
+                                Try Nano Banana 2
+                              </Button>
+                              <p className="mt-1 text-[9px] text-muted-foreground">
+                                Alternative model — keeps the Pro result and opens a comparison.
+                              </p>
+                            </details>
+                          </div>
+                        ) : null}
+
 
                         <button
                           type="button"
@@ -2336,7 +2341,7 @@ export default function JewelrySwap() {
                   </DialogTitle>
                 </DialogHeader>
                 <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_260px]">
-                  <div className={cn("grid gap-3", alt ? "sm:grid-cols-3" : "sm:grid-cols-2")}>
+                  <div className="grid gap-3 sm:grid-cols-2">
                     <figure className="overflow-hidden rounded-2xl border border-white/10 bg-black/50">
                       {frame ? (
                         <img src={frame.url} alt="Original frame" className="max-h-[62vh] w-full object-contain" />
@@ -2345,46 +2350,24 @@ export default function JewelrySwap() {
                         Original
                       </figcaption>
                     </figure>
-                    {([["pro", swap], ["nb2", alt]] as const)
-                      .filter(([, generation]) => !!generation)
-                      .map(([key, generation]) => (
-                        <figure
-                          key={key}
-                          className={cn(
-                            "overflow-hidden rounded-2xl bg-black/50",
-                            picked === key ? "border-2 border-cyan-200/50" : "border border-white/10",
-                          )}
-                        >
-                          {generation!.status === "complete" && generation!.outputUrl ? (
-                            <img
-                              src={generation!.outputUrl}
-                              alt={`${IMAGE_MODEL_LABELS[key]} result`}
-                              className="max-h-[62vh] w-full object-contain"
-                            />
-                          ) : generation!.status === "failed" || generation!.status === "canceled" ? (
-                            <p className="p-3 text-xs text-red-300">{generation!.error ?? "Generation failed"}</p>
-                          ) : (
-                            <div className="flex h-48 items-center justify-center">
-                              <Loader2 size={18} className="animate-spin text-cyan-200" />
-                            </div>
-                          )}
-                          <figcaption className="flex items-center justify-between gap-2 px-3 py-2 text-[10px] uppercase tracking-[0.14em] text-cyan-200/70">
-                            {IMAGE_MODEL_LABELS[key]}
-                            <button
-                              type="button"
-                              onClick={() => setChosenModel((prev) => ({ ...prev, [index]: key }))}
-                              className={cn(
-                                "rounded-md border px-2 py-0.5 text-[9px] tracking-normal normal-case transition-colors",
-                                picked === key
-                                  ? "border-cyan-200/60 bg-cyan-400/15 text-cyan-100"
-                                  : "border-white/15 text-foreground/70 hover:border-cyan-200/40",
-                              )}
-                            >
-                              {picked === key ? "Selected" : `Use ${key === "pro" ? "Pro" : "NB2"}`}
-                            </button>
-                          </figcaption>
-                        </figure>
-                      ))}
+                    <figure className="overflow-hidden rounded-2xl border-2 border-cyan-200/50 bg-black/50">
+                      {active.status === "complete" && active.outputUrl ? (
+                        <img
+                          src={active.outputUrl}
+                          alt={`${IMAGE_MODEL_LABELS[picked]} result`}
+                          className="max-h-[62vh] w-full object-contain"
+                        />
+                      ) : active.status === "failed" || active.status === "canceled" ? (
+                        <p className="p-3 text-xs text-red-300">Generation failed</p>
+                      ) : (
+                        <div className="flex h-48 items-center justify-center">
+                          <Loader2 size={18} className="animate-spin text-cyan-200" />
+                        </div>
+                      )}
+                      <figcaption className="px-3 py-2 text-[10px] uppercase tracking-[0.14em] text-cyan-200/70">
+                        Swapped — {IMAGE_MODEL_LABELS[picked]}
+                      </figcaption>
+                    </figure>
                   </div>
 
                   <aside className="space-y-3">
@@ -2410,24 +2393,27 @@ export default function JewelrySwap() {
                       variant="outline"
                       onClick={() =>
                         void swapFrame(index, {
-                          imageModel: picked,
+                          imageModel: "pro",
                           failureReason: frameReason[index] || null,
                         })
                       }
                       className="w-full rounded-xl border-white/15 bg-transparent text-xs"
                     >
-                      <RefreshCw size={13} /> Regenerate
+                      <RefreshCw size={13} /> Regenerate with Pro
                     </Button>
-                    {!alt ? (
+                    {alt ? (
                       <Button
                         variant="outline"
-                        disabled={swap.status !== "complete"}
-                        onClick={() => void swapFrame(index, { imageModel: "nb2" })}
+                        onClick={() => {
+                          setLightboxIndex(null);
+                          setCompareIndex(index);
+                        }}
                         className="w-full rounded-xl border-white/15 bg-transparent text-xs"
                       >
-                        Try with Nano Banana 2
+                        Compare alternate model
                       </Button>
                     ) : null}
+
                     {active.outputUrl ? (
                       <a
                         href={active.outputUrl}
@@ -2457,7 +2443,111 @@ export default function JewelrySwap() {
         </DialogContent>
       </Dialog>
 
+      {/* Opt-in alternate-model comparison — Pro stays untouched until a pick is made. */}
+      <Dialog
+        open={compareIndex !== null}
+        onOpenChange={(open) => !open && setCompareIndex(null)}
+      >
+        <DialogContent className="max-w-5xl border-white/10 bg-[#05070f]/95 backdrop-blur-xl">
+          {(() => {
+            if (compareIndex === null) return null;
+            const index = compareIndex;
+            const swap = swaps[index];
+            const alt = altSwaps[index];
+            const frame = frames[index];
+            if (!swap) return null;
+            const altFailed = alt?.status === "failed" || alt?.status === "canceled";
+            return (
+              <>
+                <DialogHeader>
+                  <DialogTitle className="font-heading text-base text-foreground">
+                    Compare models{frame ? ` · frame at ${frame.time.toFixed(2)}s` : ""}
+                  </DialogTitle>
+                </DialogHeader>
+                <div className="grid gap-3 sm:grid-cols-3">
+                  <figure className="overflow-hidden rounded-2xl border border-white/10 bg-black/50">
+                    {frame ? (
+                      <img src={frame.url} alt="Original frame" className="max-h-[50vh] w-full object-contain" />
+                    ) : null}
+                    <figcaption className="px-3 py-2 text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
+                      Original
+                    </figcaption>
+                  </figure>
+                  <figure className="overflow-hidden rounded-2xl border border-white/10 bg-black/50">
+                    {swap.status === "complete" && swap.outputUrl ? (
+                      <img src={swap.outputUrl} alt="Nano Banana Pro result" className="max-h-[50vh] w-full object-contain" />
+                    ) : (
+                      <div className="flex h-40 items-center justify-center">
+                        <Loader2 size={18} className="animate-spin text-cyan-200" />
+                      </div>
+                    )}
+                    <figcaption className="px-3 py-2 text-[10px] uppercase tracking-[0.14em] text-cyan-200/70">
+                      Nano Banana Pro
+                    </figcaption>
+                  </figure>
+                  <figure className="overflow-hidden rounded-2xl border border-white/10 bg-black/50">
+                    {alt?.status === "complete" && alt.outputUrl ? (
+                      <img src={alt.outputUrl} alt="Alternate model result" className="max-h-[50vh] w-full object-contain" />
+                    ) : altFailed ? (
+                      <div className="space-y-2 p-3">
+                        <p className="text-[11px] text-foreground/85">Alternate generation failed</p>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => void tryAlternateModel(index)}
+                          className="rounded-lg border-white/15 bg-transparent text-[11px]"
+                        >
+                          Try again
+                        </Button>
+                        <details className="rounded-lg border border-white/10 bg-black/40 px-2 py-1.5">
+                          <summary className="cursor-pointer text-[10px] text-muted-foreground">
+                            Technical details
+                          </summary>
+                          <p className="mt-1 break-words text-[10px] text-muted-foreground">
+                            {alt?.error ?? "No details available"}
+                          </p>
+                        </details>
+                      </div>
+                    ) : (
+                      <div className="flex h-40 items-center justify-center">
+                        <Loader2 size={18} className="animate-spin text-cyan-200" />
+                      </div>
+                    )}
+                    <figcaption className="px-3 py-2 text-[10px] uppercase tracking-[0.14em] text-cyan-200/70">
+                      {IMAGE_MODEL_LABELS.nb2}
+                    </figcaption>
+                  </figure>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Button
+                    onClick={() => {
+                      setChosenModel((prev) => ({ ...prev, [index]: "pro" }));
+                      setCompareIndex(null);
+                    }}
+                    className="rounded-xl bg-[hsl(var(--primary))] text-xs text-primary-foreground hover:bg-[hsl(var(--primary))]/90"
+                  >
+                    Keep Pro
+                  </Button>
+                  <Button
+                    variant="outline"
+                    disabled={alt?.status !== "complete"}
+                    onClick={() => {
+                      setChosenModel((prev) => ({ ...prev, [index]: "nb2" }));
+                      setCompareIndex(null);
+                    }}
+                    className="rounded-xl border-white/15 bg-transparent text-xs"
+                  >
+                    Use alternate
+                  </Button>
+                </div>
+              </>
+            );
+          })()}
+        </DialogContent>
+      </Dialog>
+
       {/* Library video player */}
+
       <Dialog
         open={videoLightboxId !== null}
         onOpenChange={(open) => !open && setVideoLightboxId(null)}
