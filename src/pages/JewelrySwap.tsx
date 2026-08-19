@@ -3053,43 +3053,63 @@ export default function JewelrySwap() {
               Nothing here yet — generate something first, or upload a file instead.
             </p>
           ) : (
-            <div className="grid max-h-[60vh] gap-2 overflow-y-auto sm:grid-cols-3 md:grid-cols-4">
-              {visibleAssets.map((asset) => (
-                <button
-                  key={asset.id}
-                  type="button"
-                  onClick={() => handlePick(asset)}
-                  className="group overflow-hidden rounded-xl border border-white/10 bg-black/40 text-left transition-colors hover:border-cyan-200/60"
-                >
-                  {asset.outputType === "video" ? (
-                    <video
-                      src={asset.outputUrl}
-                      muted
-                      loop
-                      playsInline
-                      preload="metadata"
-                      className="aspect-square w-full object-cover"
-                      onMouseEnter={(event) => void event.currentTarget.play().catch(() => {})}
-                      onMouseLeave={(event) => event.currentTarget.pause()}
-                    />
-                  ) : (
-                    <img
-                      src={asset.outputUrl}
-                      alt={asset.prompt ?? "Library asset"}
-                      loading="lazy"
-                      className="aspect-square w-full object-cover"
-                    />
-                  )}
-                  <div className="px-2 py-1.5">
-                    <p className="truncate text-[10px] uppercase tracking-[0.12em] text-cyan-200/70">
-                      {asset.feature ?? "studio"} · {asset.outputType}
-                    </p>
-                    <p className="text-[10px] text-muted-foreground">
-                      {new Date(asset.createdAt).toLocaleDateString()}
-                    </p>
-                  </div>
-                </button>
-              ))}
+            <div className="max-h-[60vh] overflow-y-auto">
+              <div className="grid gap-2 sm:grid-cols-3 md:grid-cols-4">
+                {pagedAssets.map((asset) => (
+                  <button
+                    key={asset.id}
+                    type="button"
+                    onClick={() => handlePick(asset)}
+                    className="group overflow-hidden rounded-xl border border-white/10 bg-black/40 text-left transition-colors hover:border-cyan-200/60"
+                  >
+                    {asset.outputType === "video" ? (
+                      <video
+                        src={asset.outputUrl}
+                        muted
+                        loop
+                        playsInline
+                        preload="none"
+                        className="aspect-square w-full bg-black/60 object-contain"
+                        onMouseEnter={(event) => {
+                          // Only play if bytes are already buffered — never trigger a download on hover.
+                          if (event.currentTarget.readyState >= 2) {
+                            void event.currentTarget.play().catch(() => {});
+                          }
+                        }}
+                        onMouseLeave={(event) => event.currentTarget.pause()}
+                      />
+                    ) : (
+                      <img
+                        src={asset.outputUrl}
+                        alt={asset.prompt ?? "Library asset"}
+                        loading="lazy"
+                        decoding="async"
+                        className="aspect-square w-full bg-black/60 object-contain"
+                      />
+                    )}
+                    <div className="px-2 py-1.5">
+                      <p className="truncate text-[10px] uppercase tracking-[0.12em] text-cyan-200/70">
+                        {asset.feature ?? "studio"} · {asset.outputType}
+                      </p>
+                      <p className="text-[10px] text-muted-foreground">
+                        {new Date(asset.createdAt).toLocaleDateString()}
+                      </p>
+                    </div>
+                  </button>
+                ))}
+              </div>
+
+              {visibleAssets.length > pagedAssets.length ? (
+                <div className="flex justify-center py-4">
+                  <button
+                    type="button"
+                    onClick={() => setPickerLimit((current) => current + 24)}
+                    className="rounded-xl border border-white/12 bg-black/40 px-4 py-2 text-[11px] uppercase tracking-[0.12em] text-cyan-100 transition-colors hover:border-cyan-200/60"
+                  >
+                    Show more ({visibleAssets.length - pagedAssets.length} left)
+                  </button>
+                </div>
+              ) : null}
             </div>
           )}
         </DialogContent>
