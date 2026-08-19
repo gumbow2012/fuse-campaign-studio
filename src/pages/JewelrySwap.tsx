@@ -502,6 +502,7 @@ export default function JewelrySwap() {
       setPickerTarget(target);
       setAssetSearch("");
       setAssetTypeFilter(type);
+      setPickerLimit(24);
       void loadAssets(type);
     },
     [loadAssets],
