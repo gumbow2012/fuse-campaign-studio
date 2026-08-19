@@ -201,6 +201,20 @@ const PRIORITY_ORDER_TEXT =
 const CONTEXT_NEGATIVES =
   "NEGATIVES: No reference-background transfer, no reference hands/fingers/gloves/arms, no reference props/surfaces/display stands/boxes/fabric, no imported reference shadows or reflections, no reference-image environment or lighting, no unrelated jewelry, no context blending between SOURCE_FRAME and the product references.";
 
+/** Macro frames need cinematography preserved but jewelry detail fully rebuilt. */
+const MACRO_REPLACEMENT_BLOCK =
+  "MACRO REPLACEMENT MODE: Use SOURCE_FRAME strictly as a MACRO CINEMATOGRAPHY template. Preserve ONLY the source's macro magnification, crop, camera angle, orientation, framing density, depth of field, focus characteristics, lighting direction, exposure and environmental background. The original jewelry visible inside SOURCE_FRAME must be COMPLETELY replaced — do NOT preserve the original piece's stones, prongs, settings, metal shapes, engravings, borders or microscopic construction, and do NOT copy the original stone layout, count or placement. Reconstruct this photograph as if the camera were photographing the REPLACEMENT jewelry instead: JEWELRY_REFERENCES are the absolute authority for the physical microscopic detail — actual gemstone cuts and sizes, the replacement's own stone arrangement and density, prong/bead/channel/bezel style, metal borders, engraving, lettering, surface relief, material and metal color. If the original has 6 large stones and the replacement is 35 small pavé stones, show the replacement's real design — never invent large versions to match the source layout. Stay at the source's macro distance (if 1:1 macro, remain 1:1 macro — do not pull back to a hero/product shot). Show only the amount of replacement jewelry appropriate for the existing crop. In macro mode the replaced region MAY cover most of the frame — the only protected pixels are the non-jewelry environmental background, which still must come from SOURCE_FRAME (never import the reference's background, hand, finger, glove, surface, box or lighting). Relight the replacement detail to match SOURCE_FRAME while keeping physically realistic diamond optics (crisp brilliance, internal refraction, independent scintillation, spectral dispersion) and source-consistent metal specular response. Prefer references in this order for the detail: Macro Detail, then CAD/design-authority, then the closest matching side/front/back, then highest-resolution product reference, then others. Match the source's detail type to the best reference (diamond surface → replacement diamond macro; edge → replacement edge; clasp/hinge → replacement clasp; engraving → replacement engraving; links → replacement link reference). If no directly corresponding detail exists, use the closest visible region of the replacement and infer minimally — never fall back to preserving the original jewelry, and never invent decorative detail.";
+
+const MACRO_FORCED_PREFIX =
+  "This frame IS an extreme macro — apply the following unconditionally, and in this frame the \"modify the smallest possible region\" rule does NOT override it: the only protected region is the non-jewelry environmental background.";
+
+const MACRO_CONDITIONAL_PREFIX =
+  "IF SOURCE_FRAME is an extreme macro / detail shot where the jewelry fills most of the frame, apply the following (it then takes precedence over the \"modify the smallest possible region\" rule, whose protected region becomes the non-jewelry environmental background only); otherwise ignore this paragraph entirely and use the surgical replacement above.";
+
+function macroBlock(forced: boolean) {
+  return `${forced ? MACRO_FORCED_PREFIX : MACRO_CONDITIONAL_PREFIX}\n${MACRO_REPLACEMENT_BLOCK}`;
+}
+
 
 /** Targeted corrective lines appended when the user regenerates with a reason. */
 const FAILURE_CORRECTIONS: Record<string, string> = {
