@@ -228,12 +228,18 @@ export default function OutfitSwap() {
   const [videoModel, setVideoModel] = useState("seedance-2.0");
   const [preserveAudio, setPreserveAudio] = useState(true);
   const [resolution, setResolution] = useState("1080p");
-  const [reconstruction, setReconstruction] = useState<SwapGeneration | null>(null);
+  // Every Outfit Swap video the user has started — newest first. Jobs live
+  // server-side, so refreshing simply re-attaches to the running ones.
+  const [videos, setVideos] = useState<SwapGeneration[]>([]);
+  const [libraryLoading, setLibraryLoading] = useState(true);
   const [reconstructing, setReconstructing] = useState(false);
-  const [cancelOpen, setCancelOpen] = useState(false);
+  const [cancelTarget, setCancelTarget] = useState<string | null>(null);
 
   // Which reviewed frame is open in the comparison lightbox.
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
+  // Which library video is open in the player lightbox.
+  const [videoLightboxId, setVideoLightboxId] = useState<string | null>(null);
+
 
 
   const videoInputRef = useRef<HTMLInputElement>(null);
