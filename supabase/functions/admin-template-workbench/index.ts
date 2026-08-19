@@ -1169,6 +1169,8 @@ Deno.serve(async (req) => {
         throw new Error("versionId, sourceNodeId, and targetNodeId are required");
       }
       if (sourceNodeId === targetNodeId) throw new Error("An edge cannot target the same node");
+      await assertVersionAccess(admin, access, versionId);
+
 
       const { sourceNode, targetNode } = await loadEndpointNodes(admin, versionId, sourceNodeId, targetNodeId);
       const targetEdges = await loadTargetEdges(admin, versionId, targetNodeId);
