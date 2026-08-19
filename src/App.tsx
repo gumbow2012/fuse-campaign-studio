@@ -16,6 +16,7 @@ import AdminTemplates from "@/pages/AdminTemplates";
 import FlowEmbed from "@/pages/FlowEmbed";
 import FlowTest from "@/pages/FlowTest";
 import GenerationStudio from "@/pages/GenerationStudio";
+import OutfitSwap from "@/pages/OutfitSwap";
 import NanoRun from "@/pages/NanoRun";
 import TemplateCanvas from "@/pages/TemplateCanvas";
 import TemplateLab from "@/pages/TemplateLab";
@@ -99,6 +100,14 @@ const App = () => (
               element={
                 <BuilderRoute>
                   <GenerationStudio />
+                </BuilderRoute>
+              }
+            />
+            <Route
+              path="/app/lab/outfit-swap"
+              element={
+                <BuilderRoute>
+                  <OutfitSwap />
                 </BuilderRoute>
               }
             />

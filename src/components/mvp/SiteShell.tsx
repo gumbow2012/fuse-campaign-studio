@@ -184,6 +184,10 @@ export default function SiteShell({ children }: { children: ReactNode }) {
                   <Sparkles className="h-3.5 w-3.5" />
                   Generation Studio
                 </NavLink>
+                <NavLink to="/app/lab/outfit-swap" className={adminNavLinkClass}>
+                  <Shirt className="h-3.5 w-3.5" />
+                  Outfit Swap
+                </NavLink>
                 <NavLink to="/admin/audits" className={adminNavLinkClass}>
                   <ClipboardCheck className="h-3.5 w-3.5" />
                   Output Audit

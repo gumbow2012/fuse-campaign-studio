@@ -298,6 +298,11 @@ const Navbar = () => {
                       Template Canvas
                     </Button>
                   </Link>
+                  <Link to="/app/lab/outfit-swap">
+                    <Button variant="outline" size="sm" className="rounded-full border-border/60 text-foreground hover:text-foreground hover:border-foreground/30 bg-transparent px-4 text-xs">
+                      Outfit Swap
+                    </Button>
+                  </Link>
                   <Link to="/app/lab/studio">
                     <Button variant="outline" size="sm" className="rounded-full border-border/60 text-foreground hover:text-foreground hover:border-foreground/30 bg-transparent px-4 text-xs">
                       Generation Studio
