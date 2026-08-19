@@ -874,19 +874,37 @@ export default function GenerationStudio() {
                 isSelected ? "border-cyan-300/70 ring-1 ring-cyan-300/40" : "border-white/10",
               )}
             >
-              {item.type === "video" ? (
-                <video src={item.url} className="aspect-square w-full object-cover" muted />
+              {item.generationId ? (
+                <button
+                  type="button"
+                  aria-label="Open asset details"
+                  onClick={() => setLightboxId(item.generationId)}
+                  className="block w-full cursor-zoom-in"
+                >
+                  {item.type === "video" ? (
+                    <video src={item.url} className="aspect-square w-full object-cover" muted preload="none" />
+                  ) : (
+                    <img src={item.url} alt="Asset" className="aspect-square w-full object-cover" />
+                  )}
+                </button>
+              ) : item.type === "video" ? (
+                <video src={item.url} className="aspect-square w-full object-cover" muted preload="none" />
               ) : (
                 <img src={item.url} alt="Asset" className="aspect-square w-full object-cover" />
               )}
               <button
                 type="button"
                 aria-label={isSelected ? "Deselect asset" : "Select asset"}
-                onClick={(event) => toggleSelect(item.id, ids, event.shiftKey)}
-                className="absolute left-1 top-1 rounded-md bg-black/70 p-1 text-cyan-100"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  event.preventDefault();
+                  toggleSelect(item.id, ids, event.shiftKey);
+                }}
+                className="absolute left-1 top-1 z-10 rounded-md bg-black/70 p-1 text-cyan-100"
               >
                 {isSelected ? <CheckSquare size={13} /> : <Square size={13} />}
               </button>
+
               {item.type === "image" ? (
                 <button
                   type="button"
