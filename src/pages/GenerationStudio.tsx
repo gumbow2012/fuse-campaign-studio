@@ -640,6 +640,12 @@ export default function GenerationStudio() {
               </PopoverContent>
             </Popover>
 
+            {/* Reference images */}
+            <Chip onClick={() => fileInputRef.current?.click()} aria-label="Add reference images">
+              {uploading ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
+              <span className="hidden sm:inline">Reference</span>
+            </Chip>
+
             {/* Aspect ratio */}
             {aspectOptions.length ? (
               <Popover>
