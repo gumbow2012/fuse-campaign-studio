@@ -54,6 +54,7 @@ import {
   type SwapGeneration,
 } from "@/services/outfitSwap";
 import { extractFrames, frameTimestamps, loadVideo, readMeta, type VideoMeta } from "@/lib/videoFrames";
+import { compressImageFile } from "@/lib/imageCompress";
 
 const GARMENT_TYPES = [
   "Shirt / Top",
@@ -319,7 +320,8 @@ export default function OutfitSwap() {
       const folder = await createOutfitSwapFolder();
       const uploaded: Garment[] = [];
       for (const file of files) {
-        const stored = await uploadToStorage(folder, file, file.name);
+        const compressed = await compressImageFile(file);
+        const stored = await uploadToStorage(folder, compressed, compressed.name);
         uploaded.push({
           url: stored.url,
           name: file.name,
