@@ -1265,6 +1265,11 @@ Deno.serve(async (req) => {
 
     return json({ error: `Unsupported action: ${action}` }, 400);
   } catch (error) {
-    return json({ error: errorMessage(error) }, 400);
+    const message = errorMessage(error);
+    const forbidden = message === FORBIDDEN_TEMPLATE_MESSAGE ||
+      message === FORBIDDEN_PUBLISH_MESSAGE ||
+      message === "Builder access required";
+    return json({ error: message }, forbidden ? 403 : 400);
   }
+
 });
