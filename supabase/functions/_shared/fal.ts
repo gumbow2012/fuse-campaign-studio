@@ -385,3 +385,30 @@ export function videoFallbackUsdPerSecond(
   }
   return model.fallbackUsdPerSecond;
 }
+
+/* ==================== Generation Studio helpers (additive) ==================== */
+
+/** Text-to-image endpoint for nano-banana-pro (no reference images). */
+export const TEXT_IMAGE_MODEL = "fal-ai/nano-banana-pro";
+
+/** Map an image-to-video endpoint id to its text-to-video sibling. */
+export function textToVideoEndpoint(endpointId: string) {
+  return endpointId.replace(/\/image-to-video$/, "/text-to-video");
+}
+
+/** Generic queue submit used by the Generation Studio only. */
+export async function submitFalJob(
+  endpointId: string,
+  input: Record<string, unknown>,
+  webhookUrl: string,
+) {
+  let queued: unknown;
+  try {
+    queued = await fal.queue.submit(endpointId, { input, webhookUrl });
+  } catch (error) {
+    throw new Error(describeFalError(error, `fal submit failed (${endpointId})`));
+  }
+  const requestId = (queued as any)?.request_id ?? (queued as any)?.requestId;
+  if (!requestId) throw new Error(`fal submit to ${endpointId} completed without request_id`);
+  return requestId as string;
+}
