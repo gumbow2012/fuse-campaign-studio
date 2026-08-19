@@ -24,6 +24,12 @@ import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { IMAGE_FLAT_USD, costPreview, creditsFromUsd, resolutionMultiplier } from "@/lib/costEstimate";
 import { uploadRunInputFile } from "@/services/runInputUpload";
+import {
+  createOutfitSwapFolder,
+  uploadToStorage,
+  uploadWithConcurrency,
+} from "@/services/storageUpload";
+
 import { callOutfitSwap, type SwapGeneration } from "@/services/outfitSwap";
 import { extractFrames, frameTimestamps, loadVideo, readMeta, type VideoMeta } from "@/lib/videoFrames";
 
