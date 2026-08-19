@@ -229,11 +229,23 @@ type Piece = {
   scope: string;
 };
 
+/** Geometry authority is auto-on for CAD-labeled angles, overridable per image. */
+function isGeometryAuthority(piece: Piece, angleIndex: number) {
+  const override = piece.cads?.[angleIndex];
+  if (override === true || override === false) return override;
+  return /^CAD/i.test(piece.roles[angleIndex] ?? "");
+}
+
+function authorityCount(piece: Piece) {
+  return piece.urls.filter((_, index) => isGeometryAuthority(piece, index)).length;
+}
+
 /** Compact, factual config line — never a fabricated accuracy score. */
 function pieceSummary(piece: Piece, frameCount: number) {
+  const authority = authorityCount(piece);
   const parts = [
     `${piece.type.toUpperCase()} REPLACEMENT`,
-    `CAD Authority: ${piece.cad ? "ON" : "OFF"}`,
+    `Design authority: ${authority ? `${authority} reference${authority === 1 ? "" : "s"}` : "none"}`,
     `Metal: ${piece.metal === AUTO_METAL ? "Auto" : piece.metal}`,
     `Stone: ${piece.stone === AUTO_STONE ? "Auto" : piece.stone}`,
   ];
