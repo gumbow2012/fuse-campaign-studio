@@ -15,6 +15,8 @@ import {
   Square,
   Trash2,
   Video,
+  Volume2,
+  VolumeX,
   Wand2,
   X,
 } from "lucide-react";
@@ -1037,12 +1039,6 @@ export default function GenerationStudio() {
                     onValueChange={([value]) => setDuration(value)}
                   />
                 </div>
-                {model.supportsAudio ? (
-                  <label className="flex items-center justify-between text-xs text-foreground/90">
-                    Generate audio
-                    <Switch checked={generateAudio} onCheckedChange={setGenerateAudio} />
-                  </label>
-                ) : null}
               </section>
             ) : null}
 
