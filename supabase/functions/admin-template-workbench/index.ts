@@ -956,6 +956,7 @@ Deno.serve(async (req) => {
     if (action === "clone_version") {
       const sourceVersionId = cleanText(body.sourceVersionId);
       if (!sourceVersionId) throw new Error("sourceVersionId is required");
+      await assertVersionAccess(admin, access, sourceVersionId);
 
       let targetTemplateId = cleanText(body.targetTemplateId);
       const newTemplateName = cleanText(body.newTemplateName);
@@ -966,20 +967,26 @@ Deno.serve(async (req) => {
           .insert({
             name: newTemplateName,
             description: nullableText(body.newTemplateDescription),
+            created_by: user.id,
           })
           .select("id")
           .single();
         if (error || !template) throw new Error(error?.message ?? "New template create failed");
         targetTemplateId = template.id;
+      } else if (targetTemplateId) {
+        await assertTemplateAccess(admin, access, targetTemplateId);
       }
 
       if (!targetTemplateId) throw new Error("targetTemplateId or newTemplateName is required");
+
+      const makeActive = body.makeActive === true;
+      if (makeActive) assertCanPublish(access);
 
       const result = await cloneVersion({
         admin,
         sourceVersionId,
         targetTemplateId,
-        makeActive: body.makeActive === true,
+        makeActive,
       });
 
       await logAuditEvent({
@@ -995,6 +1002,7 @@ Deno.serve(async (req) => {
     }
 
     if (action === "activate_version") {
+      assertCanPublish(access);
       const versionId = cleanText(body.versionId);
       if (!versionId) throw new Error("versionId is required");
 
@@ -1012,12 +1020,15 @@ Deno.serve(async (req) => {
     if (action === "publish_gate") {
       const versionId = cleanText(body.versionId);
       if (!versionId) throw new Error("versionId is required");
+      await assertVersionAccess(admin, access, versionId);
       return json({ versionId, activationGate: await getVersionPublishGate(admin, versionId) });
     }
 
     if (action === "unpublish_template") {
+      assertCanPublish(access);
       const templateId = cleanText(body.templateId);
       if (!templateId) throw new Error("templateId is required");
+
 
       const { error: deactivateError } = await admin
         .from("template_versions")
