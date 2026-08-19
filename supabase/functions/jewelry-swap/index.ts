@@ -299,6 +299,12 @@ const FAILURE_CORRECTIONS: Record<string, string> = {
     "CORRECTION: Previous generation created a hybrid object containing recognizable elements from the original jewelry. Completely remove all source-jewelry identity from the target region. Reconstruct one coherent replacement object exclusively from the uploaded jewelry references.",
   "hybridofoldandnew":
     "CORRECTION: Previous generation created a hybrid object containing recognizable elements from the original jewelry. Completely remove all source-jewelry identity from the target region. Reconstruct one coherent replacement object exclusively from the uploaded jewelry references.",
+  "hybridold+new":
+    "CORRECTION: Previous generation created a hybrid object containing recognizable elements from the original jewelry. Completely remove all source-jewelry identity from the target region. Reconstruct one coherent replacement object exclusively from the uploaded jewelry references.",
+  "hybridoldnew":
+    "CORRECTION: Previous generation created a hybrid object containing recognizable elements from the original jewelry. Completely remove all source-jewelry identity from the target region. Reconstruct one coherent replacement object exclusively from the uploaded jewelry references.",
+  "macrodetailincorrect":
+    "CORRECTION: The previous attempt invented or incorrectly translated the replacement jewelry's microscopic design, or matched the wrong kind of detail. Identify what detail the source is photographing and reproduce the REPLACEMENT's corresponding detail at the same macro scale, prioritizing the uploaded Macro Detail / CAD / closest product references.",
   "wrongreplacementsection":
     "CORRECTION: The previous attempt reproduced the wrong region of the replacement object. Re-identify which part of the piece SOURCE_FRAME is showing, then render the REPLACEMENT's corresponding part — same component, same approximate scale, same viewing side.",
   "wrongfront/back/side":

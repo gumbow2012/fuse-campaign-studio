@@ -175,21 +175,20 @@ type ReplacementMode = (typeof REPLACEMENT_MODES)[number]["value"];
 
 /** Optional regenerate reasons — each appends a targeted corrective sentence. */
 const FAILURE_REASONS = [
-  "Incomplete replacement",
-  "Original jewelry still visible",
-  "Hybrid of old + new",
-  "Wrong replacement section",
-  "Wrong front/back/side",
-  "Macro mismatch",
-  "Reference background leaked in",
   "Wrong angle",
   "Wrong crop / zoom",
+  "Incomplete replacement",
+  "Original jewelry still visible",
+  "Hybrid old + new",
   "Wrong jewelry geometry",
   "Wrong bail / connector",
   "Wrong stones / setting",
   "Wrong lettering / logo",
   "Wrong scale",
   "Wrong rotation",
+  "Wrong front / back / side",
+  "Macro detail incorrect",
+  "Reference background leaked in",
   "Hallucinated detail",
   "Wrong chain interaction",
   "Other",
@@ -222,18 +221,31 @@ type Piece = {
   height: string;
   depth: string;
   weight: string;
-  cad: boolean;
+  /** Geometry-authority override per angle. null = auto (from the role label). */
+  cads: (boolean | null)[];
   person: string;
   notes: string;
   /** "piece" (default) or "piece_chain". */
   scope: string;
 };
 
+/** Geometry authority is auto-on for CAD-labeled angles, overridable per image. */
+function isGeometryAuthority(piece: Piece, angleIndex: number) {
+  const override = piece.cads?.[angleIndex];
+  if (override === true || override === false) return override;
+  return /^CAD/i.test(piece.roles[angleIndex] ?? "");
+}
+
+function authorityCount(piece: Piece) {
+  return piece.urls.filter((_, index) => isGeometryAuthority(piece, index)).length;
+}
+
 /** Compact, factual config line — never a fabricated accuracy score. */
 function pieceSummary(piece: Piece, frameCount: number) {
+  const authority = authorityCount(piece);
   const parts = [
     `${piece.type.toUpperCase()} REPLACEMENT`,
-    `CAD Authority: ${piece.cad ? "ON" : "OFF"}`,
+    `Design authority: ${authority ? `${authority} reference${authority === 1 ? "" : "s"}` : "none"}`,
     `Metal: ${piece.metal === AUTO_METAL ? "Auto" : piece.metal}`,
     `Stone: ${piece.stone === AUTO_STONE ? "Auto" : piece.stone}`,
   ];
@@ -401,10 +413,7 @@ export default function JewelrySwap() {
   const [frameReason, setFrameReason] = useState<Record<number, string>>({});
   /** Per-frame replacement mode — persists so later regenerations reuse it. */
   const [frameMode, setFrameMode] = useState<Record<number, ReplacementMode>>({});
-  const [needsReview, setNeedsReview] = useState<Set<number>>(new Set());
   /** Manual, user-set review flags only — no automatic similarity detection. */
-  const [flagIncomplete, setFlagIncomplete] = useState<Set<number>>(new Set());
-  const [flagHybrid, setFlagHybrid] = useState<Set<number>>(new Set());
   // Which frame's Regenerate menu is expanded, and which frame is being compared
   // against the opt-in alternate model.
   const [regenMenu, setRegenMenu] = useState<number | null>(null);
@@ -447,9 +456,6 @@ export default function JewelrySwap() {
     setChosenModel({});
     setFramePreferredRole({});
     setFrameReason({});
-    setNeedsReview(new Set());
-    setFlagIncomplete(new Set());
-    setFlagHybrid(new Set());
     setApproved(new Set());
     setSelectedFrames(new Set());
     // The video library is intentionally preserved across new source clips.
@@ -547,9 +553,6 @@ export default function JewelrySwap() {
     setChosenModel({});
     setFramePreferredRole({});
     setFrameReason({});
-    setNeedsReview(new Set());
-    setFlagIncomplete(new Set());
-    setFlagHybrid(new Set());
     setFrameMode({});
     setApproved(new Set());
     setSelectedFrames(new Set());
@@ -649,7 +652,7 @@ export default function JewelrySwap() {
           height: "",
           depth: "",
           weight: "",
-          cad: false,
+          cads: [null],
           person: DEFAULT_APPLY_TO,
           notes: "",
           scope: DEFAULT_SCOPE,
@@ -667,6 +670,7 @@ export default function JewelrySwap() {
               ...item,
               urls: [...item.urls, url].slice(0, 6),
               roles: [...item.roles, ""].slice(0, 6),
+              cads: [...(item.cads ?? []), null].slice(0, 6),
             }
           : item,
       ),
@@ -734,7 +738,7 @@ export default function JewelrySwap() {
           height: "",
           depth: "",
           weight: "",
-          cad: false,
+          cads: [null],
           person: DEFAULT_APPLY_TO,
           notes: "",
           scope: DEFAULT_SCOPE,
@@ -770,6 +774,7 @@ export default function JewelrySwap() {
                   ...item,
                   urls: [...item.urls, ...urls].slice(0, 6),
                   roles: [...item.roles, ...urls.map(() => "")].slice(0, 6),
+                  cads: [...(item.cads ?? []), ...urls.map(() => null)].slice(0, 6),
                 }
               : item,
           ),
@@ -874,11 +879,9 @@ export default function JewelrySwap() {
         references: piece.urls.map((url, angleIndex) => ({
           url,
           role: piece.roles[angleIndex] || null,
-          // A CAD-flagged card marks its CAD-labeled angles as the geometry
-          // authority; if no angle is labeled CAD, every angle inherits the flag.
-          cad: piece.cad === true &&
-            (/^CAD/i.test(piece.roles[angleIndex] ?? "") ||
-              !piece.roles.some((role) => /^CAD/i.test(role ?? ""))),
+          // Geometry authority is decided PER reference image (auto for CAD
+          // labels, overridable per image).
+          cad: isGeometryAuthority(piece, angleIndex),
         })),
         type: piece.type,
         metal: piece.metal === AUTO_METAL ? null : piece.metal,
@@ -890,7 +893,7 @@ export default function JewelrySwap() {
           depth: piece.depth || null,
           weight: piece.weight || null,
         },
-        cad: piece.cad,
+        cad: authorityCount(piece) > 0,
         person: piece.person,
         notes: piece.notes || null,
         scope: piece.scope || DEFAULT_SCOPE,
@@ -1326,7 +1329,7 @@ export default function JewelrySwap() {
           metal: piece.metal === AUTO_METAL ? null : piece.metal,
           stone: piece.stone === AUTO_STONE ? null : piece.stone,
           quality: piece.quality || null,
-          cad: piece.cad,
+          cad: authorityCount(piece) > 0,
           notes: piece.notes || null,
         })),
         includeAnimation: clips.length > 0,
@@ -1508,7 +1511,7 @@ export default function JewelrySwap() {
                     key={`${piece.urls[0] ?? index}-${index}`}
                     className={cn(
                       "rounded-2xl border bg-black/25 p-2.5",
-                      piece.cad ? "border-cyan-200/50" : "border-white/10",
+                      authorityCount(piece) > 0 ? "border-cyan-200/50" : "border-white/10",
                     )}
                   >
                     <div className="flex items-start justify-between gap-2">
@@ -1516,11 +1519,12 @@ export default function JewelrySwap() {
                         {piece.name || `Piece ${index + 1}`}
                       </p>
                       <span className="flex shrink-0 items-center gap-1.5">
-                        {piece.cad ? (
-                          <span className="rounded-full border border-cyan-200/60 bg-cyan-400/15 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.14em] text-cyan-100">
-                            CAD authority
-                          </span>
-                        ) : null}
+                        <span className="rounded-full border border-white/12 bg-black/40 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.14em] text-foreground/70">
+                          Design authority:{" "}
+                          {authorityCount(piece)
+                            ? `${authorityCount(piece)} reference${authorityCount(piece) === 1 ? "" : "s"}`
+                            : "none"}
+                        </span>
                         <button
                           type="button"
                           aria-label="Remove piece"
@@ -1550,6 +1554,9 @@ export default function JewelrySwap() {
                                             ...item,
                                             urls: item.urls.filter((_, a) => a !== angleIndex),
                                             roles: item.roles.filter((_, a) => a !== angleIndex),
+                                            cads: item.urls
+                                              .map((_, a) => item.cads?.[a] ?? null)
+                                              .filter((_, a) => a !== angleIndex),
                                           }
                                         : item,
                                     ),
@@ -1587,6 +1594,34 @@ export default function JewelrySwap() {
                               </option>
                             ))}
                           </select>
+                          {/* Geometry authority is per reference image — auto-on for CAD labels. */}
+                          <label
+                            className="flex items-center gap-1 text-[9px] text-muted-foreground"
+                            title="Use this image as the geometry / design authority"
+                          >
+                            <input
+                              type="checkbox"
+                              checked={isGeometryAuthority(piece, angleIndex)}
+                              onChange={(event) =>
+                                setPieces((prev) =>
+                                  prev.map((item, i) =>
+                                    i === index
+                                      ? {
+                                          ...item,
+                                          cads: item.urls.map((_, a) =>
+                                            a === angleIndex
+                                              ? event.target.checked
+                                              : item.cads?.[a] ?? null,
+                                          ),
+                                        }
+                                      : item,
+                                  ),
+                                )
+                              }
+                              className="h-2.5 w-2.5 accent-cyan-300"
+                            />
+                            Authority
+                          </label>
                         </div>
                       ))}
                       <button
@@ -1780,37 +1815,6 @@ export default function JewelrySwap() {
                     </div>
 
 
-                    <button
-                      type="button"
-                      role="switch"
-                      aria-checked={piece.cad}
-                      onClick={() =>
-                        setPieces((prev) =>
-                          prev.map((item, i) => (i === index ? { ...item, cad: !item.cad } : item)),
-                        )
-                      }
-                      className={cn(
-                        "mt-2 flex w-full items-center justify-between gap-3 rounded-xl border px-3 py-2 text-[11px] font-medium transition-colors",
-                        piece.cad
-                          ? "border-cyan-200/60 bg-cyan-400/15 text-cyan-100"
-                          : "border-white/12 bg-white/[0.03] text-foreground/70 hover:border-cyan-200/40",
-                      )}
-                    >
-                      <span className="text-left">This is a CAD / design-authority reference</span>
-                      <span
-                        className={cn(
-                          "relative h-4 w-8 shrink-0 rounded-full transition-colors",
-                          piece.cad ? "bg-cyan-300/80" : "bg-white/15",
-                        )}
-                      >
-                        <span
-                          className={cn(
-                            "absolute top-0.5 h-3 w-3 rounded-full bg-black transition-all",
-                            piece.cad ? "left-[18px]" : "left-0.5",
-                          )}
-                        />
-                      </span>
-                    </button>
                   </div>
                 ))}
                 <button
@@ -2120,14 +2124,12 @@ export default function JewelrySwap() {
                     const isApproved = approved.has(index);
                     const picked = chosenModel[index] === "nb2" && alt ? "nb2" : "pro";
                     const active = picked === "nb2" ? alt : swap;
-                    const flagged = needsReview.has(index);
                     return (
                       <article
                         key={swap.id}
                         className={cn(
                           "space-y-2 rounded-2xl border bg-black/25 p-2.5",
                           isApproved ? "border-cyan-200/50" : "border-white/10",
-                          flagged ? "border-amber-300/50" : "",
                         )}
                       >
                         <div className="flex items-center justify-between gap-2">
@@ -2181,48 +2183,24 @@ export default function JewelrySwap() {
                           </div>
                         </button>
 
-                        {/* Manual angle override — no auto-detection. */}
+                        {/* Per-frame replacement mode — persists for regenerations. */}
                         <select
-                          aria-label="Preferred angle reference"
-                          value={framePreferredRole[index] ?? ""}
+                          aria-label="Replacement mode"
+                          value={frameMode[index] ?? "auto"}
                           onChange={(event) =>
-                            setFramePreferredRole((prev) => ({ ...prev, [index]: event.target.value }))
+                            setFrameMode((prev) => ({
+                              ...prev,
+                              [index]: event.target.value as ReplacementMode,
+                            }))
                           }
                           className="w-full rounded-lg border border-white/12 bg-black/40 px-2 py-1.5 text-[10px] text-foreground outline-none focus:border-cyan-200/60"
                         >
-                          <option value="">Preferred angle: Auto</option>
-                          {ANGLE_ROLE_OPTIONS.filter(Boolean).map((role) => (
-                            <option key={role} value={role}>
-                              Preferred angle: {role}
+                          {REPLACEMENT_MODES.map((option) => (
+                            <option key={option.value} value={option.value}>
+                              Mode: {option.label}
                             </option>
                           ))}
                         </select>
-
-                        {/* Per-frame replacement mode — persists for regenerations. */}
-                        <div className="flex items-center gap-1.5">
-                          <select
-                            aria-label="Replacement mode"
-                            value={frameMode[index] ?? "auto"}
-                            onChange={(event) =>
-                              setFrameMode((prev) => ({
-                                ...prev,
-                                [index]: event.target.value as ReplacementMode,
-                              }))
-                            }
-                            className="flex-1 rounded-lg border border-white/12 bg-black/40 px-2 py-1.5 text-[10px] text-foreground outline-none focus:border-cyan-200/60"
-                          >
-                            {REPLACEMENT_MODES.map((option) => (
-                              <option key={option.value} value={option.value}>
-                                Mode: {option.label}
-                              </option>
-                            ))}
-                          </select>
-                          {(frameMode[index] ?? "auto") === "macro" ? (
-                            <span className="rounded-md border border-cyan-200/40 bg-cyan-400/15 px-1.5 py-0.5 text-[9px] uppercase tracking-[0.14em] text-cyan-100">
-                              Macro
-                            </span>
-                          ) : null}
-                        </div>
 
 
 
@@ -2277,27 +2255,67 @@ export default function JewelrySwap() {
                           </Button>
                         </div>
 
-                        {/* Regenerate menu — Pro first, alternate model tucked away. */}
+                        {/* Regenerate panel — advanced controls live here only. */}
                         {regenMenu === index ? (
                           <div className="space-y-2 rounded-xl border border-white/12 bg-black/40 p-2">
                             <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-cyan-200/70">
                               Regenerate with Nano Banana Pro
                             </p>
                             <select
-                              aria-label="What went wrong?"
+                              aria-label="Reason"
                               value={frameReason[index] ?? ""}
                               onChange={(event) =>
                                 setFrameReason((prev) => ({ ...prev, [index]: event.target.value }))
                               }
                               className="w-full rounded-lg border border-white/12 bg-black/50 px-2 py-1.5 text-[10px] text-foreground outline-none focus:border-cyan-200/60"
                             >
-                              <option value="">What went wrong? (optional)</option>
+                              <option value="">Choose reason (optional)</option>
                               {FAILURE_REASONS.map((reason) => (
                                 <option key={reason} value={reason}>
                                   {reason}
                                 </option>
                               ))}
                             </select>
+                            <select
+                              aria-label="Replacement mode for regeneration"
+                              value={frameMode[index] ?? "auto"}
+                              onChange={(event) =>
+                                setFrameMode((prev) => ({
+                                  ...prev,
+                                  [index]: event.target.value as ReplacementMode,
+                                }))
+                              }
+                              className="w-full rounded-lg border border-white/12 bg-black/50 px-2 py-1.5 text-[10px] text-foreground outline-none focus:border-cyan-200/60"
+                            >
+                              {REPLACEMENT_MODES.map((option) => (
+                                <option key={option.value} value={option.value}>
+                                  Mode: {option.label}
+                                </option>
+                              ))}
+                            </select>
+                            <details className="rounded-lg border border-white/10 bg-black/30 px-2 py-1.5">
+                              <summary className="cursor-pointer text-[10px] text-muted-foreground">
+                                Advanced
+                              </summary>
+                              <select
+                                aria-label="Preferred reference angle"
+                                value={framePreferredRole[index] ?? ""}
+                                onChange={(event) =>
+                                  setFramePreferredRole((prev) => ({
+                                    ...prev,
+                                    [index]: event.target.value,
+                                  }))
+                                }
+                                className="mt-2 w-full rounded-lg border border-white/12 bg-black/50 px-2 py-1.5 text-[10px] text-foreground outline-none focus:border-cyan-200/60"
+                              >
+                                <option value="">Preferred reference: Auto</option>
+                                {ANGLE_ROLE_OPTIONS.filter(Boolean).map((role) => (
+                                  <option key={role} value={role}>
+                                    Preferred reference: {role}
+                                  </option>
+                                ))}
+                              </select>
+                            </details>
                             <Button
                               size="sm"
                               onClick={() => {
@@ -2333,69 +2351,6 @@ export default function JewelrySwap() {
                             </details>
                           </div>
                         ) : null}
-
-
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setNeedsReview((prev) => {
-                              const next = new Set(prev);
-                              if (next.has(index)) next.delete(index);
-                              else next.add(index);
-                              return next;
-                            })
-                          }
-                          className={cn(
-                            "w-full rounded-lg border px-2 py-1.5 text-[10px] transition-colors",
-                            flagged
-                              ? "border-amber-300/60 bg-amber-300/10 text-amber-100"
-                              : "border-white/12 bg-transparent text-muted-foreground hover:border-amber-300/40",
-                          )}
-                        >
-                          {flagged
-                            ? "Flagged: source region ambiguous"
-                            : "Flag — source region ambiguous"}
-                        </button>
-
-                        {/* Manual review flags — user-set only, no auto-detection. */}
-                        <div className="grid grid-cols-2 gap-1.5">
-                          {[
-                            {
-                              label: "Possible incomplete replacement",
-                              short: "Incomplete?",
-                              on: flagIncomplete.has(index),
-                              set: setFlagIncomplete,
-                            },
-                            {
-                              label: "Possible hybrid replacement",
-                              short: "Hybrid?",
-                              on: flagHybrid.has(index),
-                              set: setFlagHybrid,
-                            },
-                          ].map((flag) => (
-                            <button
-                              key={flag.short}
-                              type="button"
-                              title={flag.label}
-                              onClick={() =>
-                                flag.set((prev) => {
-                                  const next = new Set(prev);
-                                  if (next.has(index)) next.delete(index);
-                                  else next.add(index);
-                                  return next;
-                                })
-                              }
-                              className={cn(
-                                "rounded-lg border px-2 py-1.5 text-[10px] transition-colors",
-                                flag.on
-                                  ? "border-amber-300/60 bg-amber-300/10 text-amber-100"
-                                  : "border-white/12 bg-transparent text-muted-foreground hover:border-amber-300/40",
-                              )}
-                            >
-                              {flag.on ? `Flagged: ${flag.short}` : flag.short}
-                            </button>
-                          ))}
-                        </div>
                       </article>
                     );
                   })}
