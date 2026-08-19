@@ -1050,6 +1050,8 @@ Deno.serve(async (req) => {
     if (action === "update_template") {
       const templateId = cleanText(body.templateId);
       if (!templateId) throw new Error("templateId is required");
+      await assertTemplateAccess(admin, access, templateId);
+
       const patch: Record<string, unknown> = {};
       if ("name" in body) patch.name = cleanText(body.name);
       if ("description" in body) patch.description = nullableText(body.description);
