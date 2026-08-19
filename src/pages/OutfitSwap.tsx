@@ -141,18 +141,30 @@ const PHASE_MESSAGES = [
 
 /**
  * The provider does not report granular progress, so we ease a simulated meter
- * toward ~95% and only snap to 100% when the job actually finishes.
+ * toward ~95% and only snap to 100% when the job actually finishes. Elapsed time
+ * is derived from the record's created_at so a page refresh keeps counting.
  */
-function VideoProgress({ generationId, onCancel }: { generationId: string; onCancel: () => void }) {
-  const [elapsed, setElapsed] = useState(0);
+function VideoProgress({
+  startedAt,
+  onCancel,
+  compact,
+}: {
+  startedAt?: string | null;
+  onCancel?: () => void;
+  compact?: boolean;
+}) {
+  const started = useMemo(() => {
+    const parsed = startedAt ? Date.parse(startedAt) : NaN;
+    return Number.isFinite(parsed) ? parsed : Date.now();
+  }, [startedAt]);
+  const [now, setNow] = useState(() => Date.now());
 
   useEffect(() => {
-    setElapsed(0);
-    const started = Date.now();
-    const timer = setInterval(() => setElapsed((Date.now() - started) / 1000), 500);
+    const timer = setInterval(() => setNow(Date.now()), 500);
     return () => clearInterval(timer);
-  }, [generationId]);
+  }, []);
 
+  const elapsed = Math.max(0, (now - started) / 1000);
   // Exponential ease: fast early, asymptotic toward 95%.
   const percent = Math.min(95, Math.round(95 * (1 - Math.exp(-elapsed / 55))));
   const phase = PHASE_MESSAGES[Math.min(PHASE_MESSAGES.length - 1, Math.floor(elapsed / 6))];
@@ -160,10 +172,15 @@ function VideoProgress({ generationId, onCancel }: { generationId: string; onCan
   const seconds = Math.floor(elapsed % 60);
 
   return (
-    <div className="space-y-3 rounded-2xl border border-white/10 bg-black/30 p-4">
+    <div
+      className={cn(
+        "space-y-2.5 rounded-2xl border border-white/10 bg-black/30",
+        compact ? "p-3" : "p-4",
+      )}
+    >
       <div className="flex items-center justify-between gap-3">
-        <span className="flex items-center gap-2 text-[11px] uppercase tracking-[0.16em] text-cyan-200/70">
-          <Video size={14} /> {phase}
+        <span className="flex min-w-0 items-center gap-2 text-[11px] uppercase tracking-[0.16em] text-cyan-200/70">
+          <Video size={14} className="shrink-0" /> <span className="truncate">{phase}</span>
         </span>
         <span className="font-heading text-sm font-semibold text-cyan-100">{percent}%</span>
       </div>
@@ -172,18 +189,21 @@ function VideoProgress({ generationId, onCancel }: { generationId: string; onCan
         <span className="text-[11px] text-muted-foreground">
           Elapsed {minutes}:{String(seconds).padStart(2, "0")}
         </span>
-        <Button
-          size="sm"
-          variant="outline"
-          onClick={onCancel}
-          className="rounded-lg border-white/15 bg-transparent text-[11px] hover:border-red-400/60 hover:text-red-300"
-        >
-          <X size={12} /> Cancel generation
-        </Button>
+        {onCancel ? (
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={onCancel}
+            className="rounded-lg border-white/15 bg-transparent text-[11px] hover:border-red-400/60 hover:text-red-300"
+          >
+            <X size={12} /> Cancel generation
+          </Button>
+        ) : null}
       </div>
     </div>
   );
 }
+
 
 
 export default function OutfitSwap() {
