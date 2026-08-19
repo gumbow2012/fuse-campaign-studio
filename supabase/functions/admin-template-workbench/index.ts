@@ -1241,7 +1241,9 @@ Deno.serve(async (req) => {
     if (action === "delete_edge") {
       const edgeId = cleanText(body.edgeId);
       if (!edgeId) throw new Error("edgeId is required");
+      await assertEdgeAccess(admin, access, edgeId);
       const { data: edge, error: edgeLookupError } = await admin
+
         .from("edges")
         .select("version_id, target_node_id")
         .eq("id", edgeId)
