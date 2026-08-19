@@ -553,9 +553,468 @@ async function startReconstruction(admin: AdminClient, args: {
   }
 }
 
-/** Universal motion prompt for the optional Kling clip stage. */
-const ANIMATE_PROMPT =
-  "Slow realistic dolly in toward the jewelry and subject. Preserve the exact subject identity and the exact jewelry design — identical metal, gemstones, stone placement, setting geometry, chain, bail, logos and proportions. Natural subtle body movement only. Realistic independent diamond scintillation and physically plausible reflections. No jewelry morphing, no changing stone layout, no changing metal, no extra or disappearing stones, no camera orbit, no scene change.";
+/* ========================= ANIMATE: adaptive shot system =====================
+ * Universal luxury-jewelry motion-control cinematography. Every prompt is
+ * composed from shared "locks" (first frame, geometry, camera-only motion,
+ * optics, negatives) plus one shot recipe. Nothing here is piece-specific:
+ * the language only ever refers to what the approved frame actually shows.
+ * ---------------------------------------------------------------------------*/
+
+const LOCK_FIRST_FRAME =
+  "Use the provided approved image as the exact first frame of the shot. The first frame must match the source image pixel-for-pixel in composition, crop, framing, colour and lighting.";
+
+const LOCK_OBJECT =
+  "The jewelry is physically locked in place. All primary motion is produced exclusively by the camera, lens focus and moving studio lights. Preserve the approved first-frame geometry throughout the entire shot.";
+
+const LOCK_GEOMETRY =
+  "Preserve the object identity, geometry and proportions exactly, including whichever of these features are actually visible in the first frame: stones, prongs, bezels, channels, lettering, logos, engraving, metal surfaces, clasp, links, settings, crown, shank, band, case, hinge, connector, chain, overall arrangement, composition, background and surface. Never add, remove, redesign or invent any feature that is not already visible in the first frame.";
+
+const LOCK_CAMERA_LANGUAGE =
+  "All movement is camera movement: the CAMERA performs the move, the first-frame object remains rigid and unchanged, and any motion blur is produced exclusively by camera movement. The object itself never rotates, spins, sways, floats or reframes itself.";
+
+const OPTICS_DIAMONDS =
+  "If faceted stones are visible in the first frame, render physically realistic brilliance, scintillation, internal refraction, total internal reflection, spectral dispersion, crown reflections, table flashes and facet-dependent highlights. Individual stones respond INDEPENDENTLY to the changing camera angle, light angle and facet orientation, with restrained white, blue, cyan, green, yellow, orange, violet and red flashes. Never uniform or synchronized blinking, never all stones flashing at once, no glitter overlays, no sparkle particles, no star fields, no glowing stones, no excessive bloom.";
+
+const OPTICS_METAL =
+  "Keep the visible metal and its exact colour and finish unchanged. The moving camera and moving lights create realistic specular travel, edge reflection and polished-highlight movement across the real metal surface — never liquid chrome, never a material change.";
+
+const NEGATIVES_BASE =
+  "Negative: no morphing, no geometry drift, no object deformation, no changing stones, no disappearing stones, no new stones, no changed logos or lettering or engraving, no melting metal, no floating, no random object rotation, no fake glitter, no sparkle particles, no synchronized sparkle, no excessive bloom, no star filter, no recentering, no revealing unsupported unseen geometry.";
+
+const NEGATIVES_STEADY = "no camera shake, no arbitrary zoom-out, no scene change.";
+const NEGATIVES_FAST = "no camera shake beyond the intended move, no scene change, no AI morph transition.";
+
+const WHIP_LINE =
+  "The camera performs the rapid whip-pan while the jewelry remains completely stationary. Motion blur is produced exclusively by camera movement.";
+
+type ShotEnergy = "slow" | "medium" | "high";
+
+type ShotSpec = {
+  key: string;
+  label: string;
+  energy: ShotEnergy;
+  summary: { shot: string; camera: string; focus: string; light: string; end: string };
+  body: string;
+  /** true when the shot is safe for literally any approved frame. */
+  safe?: boolean;
+};
+
+const SHOT_LIBRARY: ShotSpec[] = [
+  {
+    key: "hero_push",
+    label: "Precision Hero Push",
+    energy: "slow",
+    safe: true,
+    summary: {
+      shot: "Precision hero push on the piece as framed",
+      camera: "Slow robotic dolly forward, 5–10% approach, optional micro rise",
+      focus: "Held on the main visible feature, gentle focus breathing",
+      light: "Studio key drifts slowly, reflections travel across the surfaces",
+      end: "Settles slightly closer on the same composition",
+    },
+    body:
+      "The CAMERA performs an extremely slow, robotic hero push straight toward the piece, approaching only 5–10% closer over the whole shot, with an optional almost imperceptible arc or rise. The change is true perspective from physical camera travel, not a digital zoom. Reflections travel across the metal and any visible stones flash independently as the camera angle changes.",
+  },
+  {
+    key: "micro_orbit",
+    label: "Micro Orbit / Parallax Reveal",
+    energy: "slow",
+    summary: {
+      shot: "Micro orbit revealing the existing thickness and side profile",
+      camera: "Camera arcs 3–10° around the piece, object does not rotate",
+      focus: "Locked on the nearest visible surface, shallow depth of field",
+      light: "Highlights slide across edges as the viewing angle changes",
+      end: "Stops inside the same near-frontal view",
+    },
+    body:
+      "The CAMERA performs a tiny motion-control orbit of no more than 3–10° around the piece, just enough to reveal the dimensional thickness and side profile that are already visible in the first frame. The object does not rotate — only the camera moves. Never a large orbit, and never reveal geometry the first frame does not support.",
+  },
+  {
+    key: "extreme_macro",
+    label: "Extreme 1:1 Macro Diamond Scan",
+    energy: "slow",
+    safe: true,
+    summary: {
+      shot: "Extreme 1:1 macro scan across the visible stone or surface field",
+      camera: "Macro camera glides only 2–3 cm across the surface",
+      focus: "Very shallow depth of field, optional rack from foreground to deeper stones",
+      light: "Small moving jewelry lights trigger independent facet response",
+      end: "Ends still inside the macro detail, never pulling back",
+    },
+    body:
+      "A true 1:1 macro shot. The CAMERA glides only 2–3 centimetres across the surface of the piece as framed, holding a very shallow depth of field, with an optional slow rack focus from the foreground detail to slightly deeper detail. NEVER pull back, never reveal the whole object, never reframe: the shot lives entirely inside the macro detail already visible in the first frame.",
+  },
+  {
+    key: "surface_scan",
+    label: "Surface-Contour Track",
+    energy: "slow",
+    summary: {
+      shot: "Motion-control probe following the existing surface contour",
+      camera: "Camera tracks along the visible geometry, matching its curve",
+      focus: "Continuous focus on the travelling contour",
+      light: "Raking light reveals relief, engraving and edges",
+      end: "Completes the contour pass in tight detail",
+    },
+    body:
+      "The CAMERA behaves like a motion-control probe following the existing surface geometry visible in the first frame — lettering, engraving, a logo, a band, a bezel, a link pattern or a curved surface — tracking along that contour at a slow, mechanical speed. The path is dictated by the geometry that is already there; nothing is straightened, re-shaped or added.",
+  },
+  {
+    key: "edge_glide",
+    label: "Edge / Sidewall Trail",
+    energy: "medium",
+    summary: {
+      shot: "Low-angle lateral trail along the visible edge or sidewall",
+      camera: "Macro slider parallel to the edge, strong near-field parallax",
+      focus: "Shallow, riding the edge as it passes",
+      light: "Specular line travels along the edge and any side stones",
+      end: "Exits laterally, still on the side composition",
+    },
+    body:
+      "A low-angle lateral macro slider move: the CAMERA travels parallel to the visible edge, sidewall or case profile of the piece, producing strong parallax between the near edge and the background. Keep the side composition of the first frame — do NOT rotate around to a front view and do not reveal an unseen face of the object.",
+  },
+  {
+    key: "rack_focus",
+    label: "Rack-Focus Reveal",
+    energy: "slow",
+    safe: true,
+    summary: {
+      shot: "Rack-focus reveal across the existing depth planes",
+      camera: "Barely-moving camera, a few millimetres of drift",
+      focus: "Deliberate focal path with realistic focus breathing",
+      light: "Steady studio light, reflections shift subtly",
+      end: "Rests with the main feature in crisp focus",
+    },
+    body:
+      "The CAMERA barely moves — a few millimetres of drift at most. All interest comes from a meaningful focal path across the depth planes already present in the frame, with realistic focus breathing and a shallow depth of field: one plane falls off as another resolves into crisp detail.",
+  },
+  {
+    key: "chain_track",
+    label: "Chain / Link Track",
+    energy: "medium",
+    summary: {
+      shot: "Macro track along the visible link pathway",
+      camera: "Camera follows the chain or link run toward the main feature",
+      focus: "Shallow, riding the links as they pass",
+      light: "Highlights roll link to link as the camera advances",
+      end: "Arrives at the main feature or continues abstractly",
+    },
+    body:
+      "The CAMERA tracks along the visible chain, link or bracelet run exactly as it lies in the first frame, moving toward the main feature (or continuing abstractly past it if no feature is in reach). Every link stays fixed in place — the sense of travel comes only from the camera advancing along the existing pathway.",
+  },
+  {
+    key: "overhead_descent",
+    label: "Overhead Descent",
+    energy: "slow",
+    summary: {
+      shot: "Slow overhead descent onto the arrangement as laid out",
+      camera: "Physical descent near the existing overhead orientation, tiny diagonal drift",
+      focus: "Held on the hero item in the arrangement",
+      light: "Moving soft light produces independent stone response",
+      end: "Settles closer above the same layout",
+    },
+    body:
+      "The CAMERA performs a slow physical descent from directly above, staying close to the existing overhead orientation, with an optional tiny diagonal drift. The layout is untouched: no piece rotates, shifts or levitates, and the arrangement stays exactly as composed in the first frame.",
+  },
+  {
+    key: "low_creep",
+    label: "Low-Surface Creep",
+    energy: "slow",
+    summary: {
+      shot: "Low creep across the resting surface toward the piece",
+      camera: "Camera low to the surface, moving slowly toward or along the object",
+      focus: "Shallow, foreground surface texture soft in front",
+      light: "Grazing light reveals surface grain and specular travel",
+      end: "Stops low and close, the piece still touching the surface",
+    },
+    body:
+      "The CAMERA sits low on the resting surface — leather, velvet, glass, stone, metal or fabric as visible — and creeps slowly toward or along the piece, with foreground surface texture passing softly through the near field and a shallow depth of field. The piece remains in contact with its surface at all times: no floating, no lifting.",
+  },
+  {
+    key: "diagonal_parallax",
+    label: "Diagonal Parallax Slide",
+    energy: "medium",
+    summary: {
+      shot: "Diagonal parallax slide across the layered composition",
+      camera: "Slight forward-and-sideways camera move, no large orbit",
+      focus: "Holds the hero plane while layers separate",
+      light: "Reflections sweep as the viewing angle shifts",
+      end: "Ends offset from the start with added dimension",
+    },
+    body:
+      "The CAMERA performs a slight combined forward-and-sideways (or back-and-sideways) move so the layered elements of the composition separate dimensionally through parallax. The move is small and controlled — never a large orbit, never a new viewing angle that would require unseen geometry.",
+  },
+  {
+    key: "micro_pullback",
+    label: "Micro Pull-Back",
+    energy: "slow",
+    summary: {
+      shot: "Controlled micro pull-back from the tight framing",
+      camera: "Dolly back 5–10% only, no reveal beyond the frame's support",
+      focus: "Stays locked on the main visible feature",
+      light: "Highlights recede naturally along the surfaces",
+      end: "Settles marginally wider on the same composition",
+    },
+    body:
+      "The CAMERA performs a controlled dolly back of only 5–10% from the already-tight framing, and only as far as the frame genuinely supports. Do NOT reveal unseen geometry, new context or additional pieces — the wider framing must remain physically consistent with the first frame.",
+  },
+  {
+    key: "whip_transition",
+    label: "Hero → Whip Transition",
+    energy: "high",
+    summary: {
+      shot: "Hero hold into a fast camera whip exit",
+      camera: "Slow push, then a rapid camera whip-pan with slight optical roll",
+      focus: "Sharp on the hero feature, dissolving into directional blur",
+      light: "Specular streaks smear along the whip direction",
+      end: "Ends in pure directional camera motion blur",
+    },
+    body:
+      `The CAMERA begins with a slow, controlled hero move, then executes a fast whip-pan out with an optional slight optical roll, ending in strong directional camera motion blur. ${WHIP_LINE}`,
+  },
+  {
+    key: "whip_macro",
+    label: "Whip Into Macro",
+    energy: "high",
+    summary: {
+      shot: "Controlled start whipping into a tight macro ending",
+      camera: "Steady move, rapid camera whip, arrival in extreme detail",
+      focus: "Resolves from directional blur into crisp macro detail",
+      light: "Streaked speculars settle into facet-dependent flashes",
+      end: "Ends locked on tight visible detail",
+    },
+    body:
+      `The CAMERA starts with a controlled move, executes a rapid whip, passes through directional motion blur, and arrives on a tight detail that is already visible in the first frame. ${WHIP_LINE}`,
+  },
+  {
+    key: "rapid_pass",
+    label: "Rapid Macro Detail Pass",
+    energy: "high",
+    summary: {
+      shot: "Fast macro pass across a short visible region",
+      camera: "Smooth but fast camera travel over a stone row, edge or link run",
+      focus: "Shallow, riding the passing detail",
+      light: "Real motion blur with rolling specular highlights",
+      end: "Exits the region still in macro",
+    },
+    body:
+      "The CAMERA travels smoothly but quickly across a short region that is already visible in the first frame — a stone row, a letter edge, a bezel arc, a halo or a link run — producing real optical motion blur. No deformation, no stretching of the object, no change to the geometry passing through frame.",
+  },
+  {
+    key: "kaleidoscope",
+    label: "Kaleidoscopic Diamond Transition",
+    energy: "high",
+    summary: {
+      shot: "Rapid advance into the dense faceted field as a transition bridge",
+      camera: "Camera pushes fast into the stones until optics dominate",
+      focus: "Collapses into extreme shallow macro bokeh",
+      light: "Brilliance and dispersion overwhelm the frame from proximity",
+      end: "Ends inside refracted light, geometry still intact",
+    },
+    body:
+      "As a transition bridge only: the CAMERA advances rapidly into the dense faceted field visible in the first frame until brilliance, spectral dispersion and lens bokeh dominate the frame. The effect comes from real proximity, lens characteristics and facet orientation — never particles or overlays — and the underlying geometry remains unchanged throughout.",
+  },
+  {
+    key: "light_sweep",
+    label: "Light-Sweep Hero",
+    energy: "slow",
+    safe: true,
+    summary: {
+      shot: "Light-sweep hero: the lighting is the motion",
+      camera: "Camera barely moves, millimetres of drift only",
+      focus: "Locked on the main visible feature",
+      light: "Studio strip, point and specular sources travel across the piece",
+      end: "Ends as the sweep clears the surface",
+    },
+    body:
+      "The CAMERA is nearly static, drifting only millimetres. The motion of the shot comes from studio strip lights, point sources and specular reflections physically travelling across the piece, raking over the metal, engraving, case or stones exactly as they sit in the first frame. The lighting is the movement.",
+  },
+  {
+    key: "spectral_wave",
+    label: "Spectral Fire Wave",
+    energy: "medium",
+    summary: {
+      shot: "Cascading spectral fire across the stone field",
+      camera: "Slow lateral camera slide",
+      focus: "Shallow, held across the stone field",
+      light: "Moving jewelry lights create an unsynchronized scintillation wave",
+      end: "Ends as the wave passes off the piece",
+    },
+    body:
+      "A slow lateral CAMERA slide combined with moving jewelry lights produces a cascading, unsynchronized wave of facet-dependent scintillation across the visible stones. Each stone ignites and fades on its own timing with restrained spectral colour. No glitter filter, no synchronized twinkle, no particle layer.",
+  },
+  {
+    key: "center_stone",
+    label: "Center-Stone Reveal",
+    energy: "slow",
+    summary: {
+      shot: "Center-stone reveal around the existing focal stone",
+      camera: "Tiny 3D camera move around the stone as placed",
+      focus: "Rides the table into the pavilion depth",
+      light: "Angled light reveals crown flashes and internal refraction",
+      end: "Settles with the stone reading deep and crisp",
+    },
+    body:
+      "The CAMERA performs a tiny three-dimensional move around the focal stone exactly where it sits in the first frame, revealing pavilion depth, crown geometry, table reflections and facet structure through parallax and light. Never change the stone's cut, size, colour, setting or position.",
+  },
+  {
+    key: "multi_parallax",
+    label: "Multi-Object Parallax",
+    energy: "medium",
+    summary: {
+      shot: "Lateral parallax across multiple pieces as arranged",
+      camera: "Slow lateral camera slide for foreground/background separation",
+      focus: "May transition between pieces along the slide",
+      light: "Reflections travel piece to piece",
+      end: "Ends offset with the arrangement untouched",
+    },
+    body:
+      "The CAMERA slides laterally across the arrangement so the foreground and background pieces separate through parallax, with focus optionally transitioning from one piece to another. Preserve the exact arrangement, spacing and orientation of every piece: no object moves.",
+  },
+  {
+    key: "transition_out",
+    label: "Transition Out",
+    energy: "high",
+    summary: {
+      shot: "Transition-out clip built to cut away",
+      camera: "Fast push or rapid lateral camera exit",
+      focus: "Collapses into optical defocus or extreme macro blur",
+      light: "Specular bloom builds off a reflective facet",
+      end: "Ends in directional blur, ready to cut",
+    },
+    body:
+      `The clip is designed as a transition out: the CAMERA ends the shot in directional whip blur, extreme macro blur, optical defocus bloom, a rapid lateral camera exit, or a fast push toward a reflective facet already visible in the frame. No generic AI morph, no dissolve effect. ${WHIP_LINE}`,
+  },
+];
+
+const SHOT_BY_KEY = new Map(SHOT_LIBRARY.map((shot) => [shot.key, shot]));
+
+/** UI aliases → library keys, so the dropdown stays short. */
+const SHOT_ALIASES: Record<string, string> = {
+  hero: "hero_push",
+  macro: "extreme_macro",
+  surface: "surface_scan",
+  edge: "edge_glide",
+  orbit: "micro_orbit",
+  rack: "rack_focus",
+  overhead: "overhead_descent",
+  chain: "chain_track",
+  light: "light_sweep",
+  whip: "whip_transition",
+  kaleido: "kaleidoscope",
+};
+
+function resolveShot(key: unknown): ShotSpec | null {
+  const raw = String(key ?? "").trim().toLowerCase();
+  if (!raw) return null;
+  return SHOT_BY_KEY.get(raw) ?? SHOT_BY_KEY.get(SHOT_ALIASES[raw] ?? "") ?? null;
+}
+
+const SAFE_SHOTS = ["hero_push", "extreme_macro", "rack_focus", "light_sweep"];
+
+/** Deterministic per-type bias pools for Auto mode. */
+function shotPoolForTypes(pieceTypes: string[]) {
+  const text = pieceTypes.join(" ").toLowerCase();
+  const pool: string[] = [];
+  const push = (...keys: string[]) => {
+    for (const key of keys) if (!pool.includes(key)) pool.push(key);
+  };
+
+  const chainy = /(chain|necklace|bracelet|cuban|tennis|rope|anklet|choker|watch)/.test(text);
+  const ringy = /(ring|signet|engagement|watch|cufflink)/.test(text);
+  const heroy = /(grill|earring|stud|hoop|pendant|brooch|charm|custom|piece|other)/.test(text);
+  const stoney = /(tennis|diamond|stone|iced|pav|halo|gem)/.test(text);
+  const multi = pieceTypes.length > 1;
+
+  if (chainy) push("chain_track", "edge_glide", "diagonal_parallax");
+  if (ringy) push("micro_orbit", "edge_glide", "center_stone", "light_sweep");
+  if (heroy) push("hero_push", "extreme_macro", "surface_scan", "light_sweep");
+  if (stoney) push("extreme_macro", "spectral_wave", "center_stone");
+  if (multi) push("overhead_descent", "multi_parallax");
+
+  push("hero_push", "extreme_macro", "rack_focus", "light_sweep", "surface_scan", "low_creep");
+  return pool;
+}
+
+/**
+ * Plans the whole approved set as one coherent shot pack — deterministic,
+ * no randomness. Mostly slow/medium coverage, at most ~1 high-energy shot per
+ * 5 clips and only near the end, and never the same shot twice in a row.
+ */
+export function planShotSet(frameCount: number, pieceTypes: string[]): ShotSpec[] {
+  const size = Math.max(1, Math.floor(frameCount || 1));
+  const pool = shotPoolForTypes(pieceTypes)
+    .map((key) => SHOT_BY_KEY.get(key))
+    .filter((shot): shot is ShotSpec => !!shot && shot.energy !== "high");
+
+  const highEnergyBudget = size >= 5 ? Math.max(1, Math.floor(size / 5)) : 0;
+  const highSlots = new Set<number>();
+  for (let i = 0; i < highEnergyBudget; i += 1) {
+    // High-energy shots only near the END of the set.
+    const slot = size - 1 - i * 5;
+    if (slot > 0) highSlots.add(slot);
+  }
+  const highShots = ["whip_transition", "rapid_pass", "kaleidoscope"]
+    .map((key) => SHOT_BY_KEY.get(key))
+    .filter((shot): shot is ShotSpec => !!shot);
+
+  const plan: ShotSpec[] = [];
+  let calmCursor = 0;
+  let highCursor = 0;
+
+  for (let index = 0; index < size; index += 1) {
+    let chosen: ShotSpec;
+    if (highSlots.has(index) && highShots.length) {
+      chosen = highShots[highCursor % highShots.length];
+      highCursor += 1;
+    } else {
+      chosen = pool[calmCursor % pool.length];
+      calmCursor += 1;
+      if (plan.length && plan[plan.length - 1].key === chosen.key) {
+        chosen = pool[calmCursor % pool.length];
+        calmCursor += 1;
+      }
+    }
+    if (plan.length && plan[plan.length - 1].key === chosen.key) {
+      chosen = SHOT_BY_KEY.get(SAFE_SHOTS[index % SAFE_SHOTS.length])!;
+    }
+    plan.push(chosen);
+  }
+
+  return plan;
+}
+
+/** Compose the final Kling prompt for one clip. */
+function buildAnimationPrompt(shot: ShotSpec | null, customPrompt?: string | null) {
+  const parts: string[] = [
+    "Luxury jewelry motion-control cinematography, photoreal, 1080p, cinematic studio lighting.",
+    LOCK_FIRST_FRAME,
+    LOCK_OBJECT,
+  ];
+
+  if (shot) {
+    parts.push(`SHOT — ${shot.label}. ${shot.body}`);
+  }
+  const custom = String(customPrompt ?? "").trim();
+  if (custom) {
+    parts.push(`DIRECTOR NOTE (camera and lighting only, never object motion): ${custom}`);
+  }
+
+  parts.push(LOCK_CAMERA_LANGUAGE, LOCK_GEOMETRY, OPTICS_DIAMONDS, OPTICS_METAL);
+  parts.push(
+    `${NEGATIVES_BASE} ${shot?.energy === "high" ? NEGATIVES_FAST : NEGATIVES_STEADY}`,
+  );
+
+  return parts.join("\n\n");
+}
+
+const CUSTOM_SUMMARY = {
+  shot: "Custom direction",
+  camera: "As described in the director note (camera-only motion)",
+  focus: "As described in the director note",
+  light: "Studio lighting travel per the director note",
+  end: "As described in the director note",
+};
+
 
 const ANIMATE_MODEL_KEY = "kling-3.0-pro";
 const ANIMATE_DURATION = 3;
