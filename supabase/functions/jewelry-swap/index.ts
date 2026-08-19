@@ -404,6 +404,7 @@ function buildJewelryPrompt(args: {
 
   const preferred = String(args.preferredRole ?? "").trim();
   const correction = failureCorrection(args.failureReason);
+  const mode = normalizeMode(args.mode, args.macro === true);
 
   const prompt = [
     "Use SOURCE_FRAME (image 1) as the ABSOLUTE authority for the photograph. This is a precise jewelry replacement, not a redesign or a product shot. Do NOT reframe or recreate the photograph.",
@@ -412,7 +413,11 @@ function buildJewelryPrompt(args: {
     "",
     REFERENCE_CONTEXT_EXCLUSION,
     "",
+    ANTI_HYBRID_BLOCK,
+    "",
     SURGICAL_REPLACEMENT_CORE,
+    "",
+    NO_INVENTION_BLOCK,
     "",
     PRIORITY_ORDER_TEXT,
     "",
@@ -427,13 +432,15 @@ function buildJewelryPrompt(args: {
     "- Preserve the same focus/DOF, and any foreground occlusion.",
     "The final image should align closely if overlaid on SOURCE_FRAME. Only the jewelry identity changes — never the shot.",
     "",
-    "BOUNDING-BOX / SCALE LOCK: the replacement occupies approximately the same region of the frame the original jewelry occupied; for partial shots, the same partial region. Never enlarge the piece to showcase detail.",
+    "BOUNDING-BOX / SCALE LOCK: the replacement occupies approximately the same region of the frame the original jewelry occupied; for partial shots, the same partial region. Never enlarge the piece to showcase detail. This is a placement rule only — it must never distort the replacement's real proportions.",
     "",
     "BAIL / CONNECTOR LOCK: treat MAIN BODY / BAIL / CONNECTOR-HINGE / CHAIN as distinct components. The replacement's bail is the SAME physical bail in every frame, using the reference's own bail geometry (outer silhouette, inner opening, width, height, thickness, stone coverage, edge thickness, attachment point, hinge). Position and rotate it to fit the source — but NEVER morph the replacement bail toward the original piece's bail, and never resize it to match the original's bail. Geometry comes from the REFERENCE; the SOURCE controls only camera + placement. (If the original bail is 30mm and the replacement is 20mm, keep the replacement's real 20mm geometry, just placed and rotated correctly.)",
     "",
     "DO NOT HALLUCINATE: if the visible source region needs a part of the piece that no reference shows, infer minimally. Never invent extra stones, prongs, hinges, engraving, lettering or decorative structures. If the source region is too abstract to identify confidently, reproduce the closest corresponding macro region rather than inventing a full front-facing pendant.",
     "",
-    "GEOMETRY FIDELITY: STRICT. Source composition dominates, geometry cannot drift, and there is no beautification, reframing, added visibility or invented detail.",
+    "GEOMETRY FIDELITY: STRICT — replacement geometry locked, source camera and composition locked. The REPLACEMENT object's geometry may not drift, soften, average or be redesigned, and SOURCE_FRAME's camera, crop and composition may not change. This does NOT mean preserving the original object's construction: the original jewelry's geometry, identity and design must be fully removed. No beautification, reframing, added visibility or invented detail.",
+    "",
+    VIEW_SIDE_INTELLIGENCE_BLOCK,
     "",
     `PIECES: ${lines.join(" ")}`,
     refLabels.length ? "" : null,
@@ -454,7 +461,8 @@ function buildJewelryPrompt(args: {
     "",
     CONTEXT_NEGATIVES,
     "",
-    macroBlock(args.macro === true),
+    modeBlock(mode),
+
 
 
 
