@@ -14,8 +14,10 @@ import {
   getFalQueueStatus,
   getVideoModel,
   IMAGE_MODEL,
-  submitImageJob,
+  submitFalJob,
   submitVideoJob,
+  TEXT_IMAGE_MODEL,
+  textToVideoEndpoint,
   VERTICAL_VIDEO_ASPECT_RATIO,
   videoFallbackUsdPerSecond,
 } from "../_shared/fal.ts";
