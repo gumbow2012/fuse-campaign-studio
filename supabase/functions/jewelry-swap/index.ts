@@ -533,6 +533,7 @@ async function startSwapFrame(admin: AdminClient, args: {
     extra: args.extraPrompt,
     preferredRole: args.preferredRole ?? null,
     failureReason: args.failureReason ?? null,
+    mode: args.mode ?? null,
     macro: args.macro === true,
   });
 
