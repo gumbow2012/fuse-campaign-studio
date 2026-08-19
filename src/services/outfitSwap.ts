@@ -4,6 +4,7 @@ export type SwapGeneration = {
   id: string;
   status: "queued" | "running" | "complete" | "failed" | "canceled";
   kind: string | null;
+  stage?: string | null;
   prompt: string | null;
   outputUrl: string | null;
   outputType: string | null;

@@ -9,12 +9,14 @@ import {
   Plus,
   RefreshCw,
   Shirt,
+  Sparkles,
   Trash2,
   Upload,
   Video,
   X,
 } from "lucide-react";
 import { toast } from "sonner";
+import JSZip from "jszip";
 
 import SiteShell from "@/components/mvp/SiteShell";
 import PageMeta from "@/components/mvp/PageMeta";
@@ -549,6 +551,126 @@ export default function OutfitSwap() {
   }, []);
 
 
+  /* --------------------- Optional: animate swapped frames ------------------- */
+
+  // Kling clips live in the same records but carry stage="frame_animation", so
+  // they never mix with the Seedance rebuilds and stay refresh-safe.
+  const reconstructions = useMemo(
+    () => videos.filter((entry) => entry.stage !== "frame_animation"),
+    [videos],
+  );
+  const clips = useMemo(
+    () => videos.filter((entry) => entry.stage === "frame_animation"),
+    [videos],
+  );
+  const clipsRunning = useMemo(
+    () => clips.filter((clip) => clip.status === "queued" || clip.status === "running").length,
+    [clips],
+  );
+
+  const approvedFrames = useMemo(
+    () =>
+      [...approved]
+        .sort((a, b) => a - b)
+        .map((index) => ({
+          index,
+          url: swaps[index]?.outputUrl ?? null,
+          time: frames[index]?.time ?? 0,
+        }))
+        .filter((entry): entry is { index: number; url: string; time: number } => !!entry.url),
+    [approved, swaps, frames],
+  );
+
+  // Kling 3.0 without audio: $0.112 per second.
+  const animateCostUsd = useMemo(() => 0.112 * 3 * approvedFrames.length, [approvedFrames]);
+
+  const [animating, setAnimating] = useState(false);
+  const [zipping, setZipping] = useState(false);
+
+  const animateFrame = useCallback(
+    async (frame: { index: number; url: string; time: number }) => {
+      const data = await callOutfitSwap<{ generation: SwapGeneration }>({
+        action: "animate_frame",
+        imageUrl: frame.url,
+        frameIndex: frame.index,
+        frameTime: frame.time,
+      });
+      setVideos((prev) => [data.generation, ...prev]);
+    },
+    [],
+  );
+
+  const animateApproved = useCallback(async () => {
+    if (!approvedFrames.length) {
+      toast.error("Approve at least one swapped frame first");
+      return;
+    }
+    setAnimating(true);
+    try {
+      for (const frame of approvedFrames) await animateFrame(frame);
+      toast.success(`${approvedFrames.length} clip${approvedFrames.length === 1 ? "" : "s"} queued`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not start the clips");
+    } finally {
+      setAnimating(false);
+    }
+  }, [approvedFrames, animateFrame]);
+
+  const regenerateClip = useCallback(
+    async (clip: SwapGeneration) => {
+      if (!clip.sourceFrameUrl) {
+        toast.error("That clip has no source frame to reuse");
+        return;
+      }
+      try {
+        await animateFrame({
+          index: clip.frameIndex ?? 0,
+          url: clip.sourceFrameUrl,
+          time: clip.frameTime ?? 0,
+        });
+        setVideos((prev) => prev.filter((entry) => entry.id !== clip.id));
+        await callOutfitSwap({ action: "delete", generationIds: [clip.id] }).catch(() => null);
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : "Could not regenerate that clip");
+      }
+    },
+    [animateFrame],
+  );
+
+  /** Zip every finished clip client-side so one click gets the whole set. */
+  const downloadAllClips = useCallback(async () => {
+    const ready = clips.filter((clip) => clip.status === "complete" && clip.outputUrl);
+    if (!ready.length) {
+      toast.error("No finished clips yet");
+      return;
+    }
+    setZipping(true);
+    try {
+      const zip = new JSZip();
+      const ordered = [...ready].sort((a, b) => (a.frameTime ?? 0) - (b.frameTime ?? 0));
+      let position = 0;
+      for (const clip of ordered) {
+        position += 1;
+        const response = await fetch(clip.outputUrl as string);
+        if (!response.ok) continue;
+        const blob = await response.blob();
+        const name = `clip-${String(position).padStart(2, "0")}-${(clip.frameTime ?? 0).toFixed(1)}s.mp4`;
+        zip.file(name, blob);
+      }
+      const archive = await zip.generateAsync({ type: "blob" });
+      const href = URL.createObjectURL(archive);
+      const link = document.createElement("a");
+      link.href = href;
+      link.download = "fuse-outfit-swap-clips.zip";
+      link.click();
+      URL.revokeObjectURL(href);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not build the zip");
+    } finally {
+      setZipping(false);
+    }
+  }, [clips]);
+
   const toggleApproved = useCallback((index: number) => {
     setApproved((prev) => {
       const next = new Set(prev);
@@ -1082,6 +1204,158 @@ export default function OutfitSwap() {
 
             <SectionCard
               step={6}
+              title="Animate swapped frames"
+              hint="Optional — turn each approved swapped frame into a short Kling clip. Separate from the rebuilt video."
+            >
+              <div className="space-y-3">
+                <dl className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                  {[
+                    ["Model", "Kling 3.0"],
+                    ["Resolution", "1080p"],
+                    ["Duration", "3 sec"],
+                    ["Motion", "Dolly in"],
+                  ].map(([label, value]) => (
+                    <div
+                      key={label}
+                      className="rounded-xl border border-white/10 bg-black/25 px-3 py-2"
+                    >
+                      <dt className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
+                        {label}
+                      </dt>
+                      <dd className="mt-0.5 text-xs font-semibold text-foreground">{value}</dd>
+                    </div>
+                  ))}
+                </dl>
+
+                <Button
+                  disabled={animating || !approvedFrames.length}
+                  onClick={() => void animateApproved()}
+                  className="w-full rounded-xl bg-[hsl(var(--primary))] text-xs font-semibold text-primary-foreground hover:bg-[hsl(var(--primary))]/90"
+                >
+                  {animating ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
+                  {approvedFrames.length
+                    ? `Animate ${approvedFrames.length} approved frame${
+                        approvedFrames.length === 1 ? "" : "s"
+                      }`
+                    : "Approve frames to animate"}
+                </Button>
+                {approvedFrames.length ? (
+                  <p className="text-center text-[11px] text-cyan-200/70">
+                    Est. {costPreview(creditsFromUsd(animateCostUsd), animateCostUsd)} ·{" "}
+                    {approvedFrames.length} clip{approvedFrames.length === 1 ? "" : "s"}
+                  </p>
+                ) : null}
+
+                {clipsRunning ? (
+                  <p className="text-[11px] uppercase tracking-[0.16em] text-cyan-200/70">
+                    Animating clips · {clips.length - clipsRunning} / {clips.length}
+                  </p>
+                ) : null}
+
+                {clips.length ? (
+                  <>
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      {clips.map((clip) => {
+                        const running = clip.status === "queued" || clip.status === "running";
+                        return (
+                          <article
+                            key={clip.id}
+                            className={cn(
+                              "space-y-2.5 rounded-2xl border bg-black/25 p-2.5",
+                              clip.status === "complete" ? "border-cyan-200/40" : "border-white/10",
+                            )}
+                          >
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="text-[11px] text-muted-foreground">
+                                {(clip.frameTime ?? 0).toFixed(2)}s
+                              </span>
+                              <StatusPill generation={clip} />
+                            </div>
+
+                            {clip.status === "complete" && clip.outputUrl ? (
+                              <button
+                                type="button"
+                                onClick={() => setVideoLightboxId(clip.id)}
+                                className="group relative block w-full overflow-hidden rounded-xl border border-white/10 bg-black"
+                                aria-label="Open clip"
+                              >
+                                <video
+                                  src={clip.outputUrl}
+                                  muted
+                                  playsInline
+                                  preload="metadata"
+                                  className="h-40 w-full object-cover"
+                                />
+                                <span className="absolute right-1.5 top-1.5 rounded-lg border border-white/15 bg-black/70 p-1 text-cyan-100 opacity-0 transition-opacity group-hover:opacity-100">
+                                  <Maximize2 size={11} />
+                                </span>
+                              </button>
+                            ) : running ? (
+                              <VideoProgress compact startedAt={clip.createdAt} />
+                            ) : (
+                              <p className="rounded-xl border border-red-400/30 bg-red-500/5 p-2 text-[10px] text-red-300">
+                                {clip.error ?? "Clip failed"}
+                              </p>
+                            )}
+
+                            <p className="text-[10px] uppercase tracking-[0.14em] text-cyan-200/70">
+                              Kling 3.0 · 3 sec · 1080p
+                            </p>
+
+                            <div className="flex items-center gap-1.5">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => void regenerateClip(clip)}
+                                className="flex-1 rounded-lg border-white/15 bg-transparent text-[11px]"
+                              >
+                                <RefreshCw size={12} /> Regenerate
+                              </Button>
+                              {clip.outputUrl ? (
+                                <a
+                                  href={clip.outputUrl}
+                                  download
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="flex items-center justify-center gap-2 rounded-lg border border-white/15 bg-black/40 px-2.5 py-1.5 text-[11px] text-foreground/85 transition-colors hover:border-cyan-200/50 hover:text-cyan-100"
+                                >
+                                  <Download size={12} />
+                                </a>
+                              ) : null}
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => void deleteVideo(clip.id)}
+                                className="rounded-lg border-white/15 bg-transparent text-[11px] hover:border-red-400/60 hover:text-red-300"
+                              >
+                                <Trash2 size={12} />
+                              </Button>
+                            </div>
+                          </article>
+                        );
+                      })}
+                    </div>
+
+                    <Button
+                      disabled={zipping}
+                      onClick={() => void downloadAllClips()}
+                      variant="outline"
+                      className="w-full rounded-xl border-cyan-200/40 bg-cyan-400/10 text-xs font-semibold text-cyan-100 hover:bg-cyan-400/20"
+                    >
+                      {zipping ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />}
+                      Download all clips
+                    </Button>
+                  </>
+                ) : (
+                  <div className="flex items-center gap-2 rounded-2xl border border-white/10 bg-black/25 px-4 py-8 text-xs text-muted-foreground">
+                    <Film size={14} /> Animated clips land here.
+                  </div>
+                )}
+              </div>
+            </SectionCard>
+
+            <SectionCard
+              step={7}
               title="Library"
               hint="Every clip you've rebuilt. Generations keep running on our servers — closing or refreshing this page won't cancel them."
             >
@@ -1089,9 +1363,9 @@ export default function OutfitSwap() {
                 <div className="flex items-center gap-2 rounded-2xl border border-white/10 bg-black/25 px-4 py-8 text-xs text-muted-foreground">
                   <Loader2 size={14} className="animate-spin text-cyan-200" /> Loading your clips…
                 </div>
-              ) : videos.length ? (
+              ) : reconstructions.length ? (
                 <div className="grid gap-3 sm:grid-cols-2">
-                  {videos.map((video) => {
+                  {reconstructions.map((video) => {
                     const running = video.status === "queued" || video.status === "running";
                     return (
                       <article
@@ -1299,7 +1573,7 @@ export default function OutfitSwap() {
               <>
                 <DialogHeader>
                   <DialogTitle className="font-heading text-base text-foreground">
-                    Rebuilt clip
+                    {video.stage === "frame_animation" ? "Animated clip" : "Rebuilt clip"}
                     {video.createdAt ? (
                       <span className="ml-2 text-xs font-normal text-muted-foreground">
                         {new Date(video.createdAt).toLocaleString()}

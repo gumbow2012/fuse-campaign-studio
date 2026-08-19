@@ -12,6 +12,7 @@ import {
   getFalPricing,
   getFalQueueResult,
   getFalQueueStatus,
+  buildVideoModelInput,
   getVideoModel,
   IMAGE_MODEL,
   referenceToVideoEndpoint,
@@ -86,6 +87,7 @@ function serialize(row: any) {
     estimatedCostUsd: row.estimated_cost_usd ? Number(row.estimated_cost_usd) : null,
     providerModel: row.provider_model ?? null,
     inputPayload: payload,
+    stage: typeof payload.stage === "string" ? payload.stage : null,
     frameIndex: typeof payload.frame_index === "number" ? payload.frame_index : null,
     frameTime: typeof payload.frame_time === "number" ? payload.frame_time : null,
     sourceFrameUrl: typeof payload.source_frame_url === "string" ? payload.source_frame_url : null,
@@ -382,6 +384,101 @@ async function startReconstruction(admin: AdminClient, args: {
   }
 }
 
+/** Universal motion prompt for the optional Kling clip stage. */
+const ANIMATE_PROMPT =
+  "Slow cinematic dolly in toward the subject. Preserve the exact subject identity, outfit, garment graphics, logos, colors, pose, environment, lighting, framing and overall composition. Natural subtle body movement only. Realistic fabric movement and natural micro-motion. No major subject movement, no outfit changes, no camera orbit, no scene changes, no identity drift. Smooth realistic camera motion.";
+
+const ANIMATE_MODEL_KEY = "kling-3.0-pro";
+const ANIMATE_DURATION = 3;
+
+/**
+ * Optional Option A stage: animate one approved swapped frame with Kling 3.0.
+ * Fully independent of the Seedance reconstruction — these clips are never fed
+ * back into it.
+ */
+async function startAnimateFrame(admin: AdminClient, args: {
+  userId: string;
+  imageUrl: string;
+  frameIndex?: number;
+  frameTime?: number;
+  webhookBase: string;
+}) {
+  const imageUrl = String(args.imageUrl ?? "").trim();
+  if (!imageUrl) throw new Error("A swapped frame is required");
+
+  const videoModel = getVideoModel(ANIMATE_MODEL_KEY);
+  const endpointId = videoModel.endpointId;
+
+  const { data: inserted, error: insertError } = await admin
+    .from("studio_generations")
+    .insert({
+      user_id: args.userId,
+      status: "queued",
+      kind: "video",
+      provider: "fal",
+      prompt: ANIMATE_PROMPT,
+    })
+    .select("*")
+    .single();
+  if (insertError || !inserted) {
+    throw new Error(insertError?.message ?? "Could not start the clip");
+  }
+
+  try {
+    const estimatedCostUsd = await estimateUsd({
+      endpointId,
+      seconds: ANIMATE_DURATION,
+      fallbackUsdPerSecond: videoFallbackUsdPerSecond(videoModel, false) ?? null,
+    });
+
+    const falInput = buildVideoModelInput(ANIMATE_MODEL_KEY, {
+      imageUrl,
+      prompt: ANIMATE_PROMPT,
+      duration: ANIMATE_DURATION,
+      generateAudio: false,
+    });
+
+    const webhookUrl = `${args.webhookBase}${encodeURIComponent(inserted.id)}`;
+    const requestId = await submitFalJob(endpointId, falInput, webhookUrl);
+
+    const { data: updated } = await admin
+      .from("studio_generations")
+      .update({
+        status: "running",
+        provider_model: endpointId,
+        provider_request_id: requestId,
+        estimated_cost_usd: estimatedCostUsd,
+        estimated_credits: creditsFromUsd(estimatedCostUsd),
+        input_payload: {
+          ...falInput,
+          feature: "outfit-swap",
+          stage: "frame_animation",
+          video_model: ANIMATE_MODEL_KEY,
+          resolution: "1080p",
+          source_frame_url: imageUrl,
+          frame_index: Number(args.frameIndex ?? 0),
+          frame_time: Number(args.frameTime ?? 0),
+        },
+      })
+      .eq("id", inserted.id)
+      .select("*")
+      .single();
+
+    return serialize(updated ?? inserted);
+  } catch (error) {
+    const message = errorMessage(error);
+    await admin
+      .from("studio_generations")
+      .update({
+        status: "failed",
+        error_log: message.slice(0, 10000),
+        completed_at: new Date().toISOString(),
+      })
+      .eq("id", inserted.id);
+    throw error;
+  }
+}
+
 /** Poll fal for an in-flight row and persist any terminal result. */
 async function syncRow(admin: AdminClient, row: any) {
   if (row.status !== "running" && row.status !== "queued") return serialize(row);
@@ -533,6 +630,17 @@ Deno.serve(async (req) => {
 
     // Recent Outfit Swap video generations for the caller — powers the Library
     // and lets a refreshed page re-attach to in-flight jobs.
+    if (action === "animate_frame") {
+      const generation = await startAnimateFrame(admin, {
+        userId: user.id,
+        imageUrl: body.imageUrl ?? body.sourceFrameUrl,
+        frameIndex: body.frameIndex,
+        frameTime: body.frameTime,
+        webhookBase,
+      });
+      return json({ generation });
+    }
+
     if (action === "list") {
       const limit = Math.min(60, Math.max(1, Number(body.limit ?? 24)));
       const { data: rows, error } = await admin
@@ -547,7 +655,8 @@ Deno.serve(async (req) => {
       const outfitSwapRows = (rows ?? [])
         .filter((row: any) => {
           const payload = (row.input_payload ?? {}) as Record<string, unknown>;
-          return payload.feature === "outfit-swap" && payload.stage === "reconstruction";
+          return payload.feature === "outfit-swap" &&
+            (payload.stage === "reconstruction" || payload.stage === "frame_animation");
         })
         .slice(0, limit);
 
