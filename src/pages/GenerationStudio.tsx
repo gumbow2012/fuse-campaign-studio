@@ -73,7 +73,8 @@ type StudioModel = {
   supportsEndFrame?: boolean;
 };
 
-const DEFAULT_RESOLUTIONS = ["2K", "4K"];
+const IMAGE_RESOLUTIONS = ["1K", "2K", "4K"];
+const KLING_RESOLUTIONS = ["720p", "1080p", "4K"];
 const SEEDANCE_RESOLUTIONS = ["480p", "720p", "1080p", "4K"];
 
 const ASPECT_OPTIONS: { value: string; note: string }[] = [
