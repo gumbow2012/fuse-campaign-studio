@@ -465,6 +465,29 @@ export default function OutfitSwap() {
     }
   }, [approvedUrls, garments, videoModel, resolution, preserveAudio, meta, extraPrompt, videoDuration]);
 
+  /** Stops polling and frees the UI, even if the provider job keeps running. */
+  const cancelReconstruction = useCallback(async () => {
+    const current = reconstruction;
+    setCancelOpen(false);
+    if (!current) return;
+    setReconstruction({ ...current, status: "canceled" });
+    try {
+      await callOutfitSwap({ action: "cancel", generationIds: [current.id] });
+    } catch {
+      // The record may already be terminal; the UI is free either way.
+    }
+    toast.success("Video generation canceled");
+  }, [reconstruction]);
+
+  const toggleApproved = useCallback((index: number) => {
+    setApproved((prev) => {
+      const next = new Set(prev);
+      next.has(index) ? next.delete(index) : next.add(index);
+      return next;
+    });
+  }, []);
+
+
   const swapEntries = useMemo(
     () =>
       Object.keys(swaps)
