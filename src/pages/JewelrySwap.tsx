@@ -2115,7 +2115,45 @@ export default function JewelrySwap() {
 
                             <p className="text-[10px] uppercase tracking-[0.14em] text-cyan-200/70">
                               Kling 3.0 · 3 sec · 1080p
+                              {clip.shotLabel ? ` · ${clip.shotLabel}` : ""}
                             </p>
+
+                            {clip.directionSummary || clip.animationPrompt ? (
+                              <details className="rounded-xl border border-white/10 bg-black/30 px-2.5 py-1.5">
+                                <summary className="cursor-pointer list-none text-[10px] uppercase tracking-[0.14em] text-cyan-200/70">
+                                  View animation direction
+                                </summary>
+                                <dl className="mt-2 space-y-1">
+                                  {([
+                                    ["Shot", clip.directionSummary?.shot],
+                                    ["Camera", clip.directionSummary?.camera],
+                                    ["Focus", clip.directionSummary?.focus],
+                                    ["Light", clip.directionSummary?.light],
+                                    ["End", clip.directionSummary?.end],
+                                  ] as [string, string | undefined][])
+                                    .filter(([, value]) => !!value)
+                                    .map(([label, value]) => (
+                                      <div key={label} className="text-[10px] leading-snug">
+                                        <dt className="inline uppercase tracking-[0.14em] text-muted-foreground">
+                                          {label}:{" "}
+                                        </dt>
+                                        <dd className="inline text-foreground/85">{value}</dd>
+                                      </div>
+                                    ))}
+                                </dl>
+                                {clip.animationPrompt ? (
+                                  <details className="mt-2">
+                                    <summary className="cursor-pointer list-none text-[10px] uppercase tracking-[0.14em] text-cyan-200/60">
+                                      View full prompt
+                                    </summary>
+                                    <p className="mt-1.5 max-h-40 overflow-y-auto whitespace-pre-wrap text-[10px] leading-snug text-muted-foreground">
+                                      {clip.animationPrompt}
+                                    </p>
+                                  </details>
+                                ) : null}
+                              </details>
+                            ) : null}
+
 
                             <div className="flex items-center gap-1.5">
                               <Button
