@@ -221,8 +221,8 @@ function StatusPill({ generation }: { generation?: SwapGeneration }) {
 const PHASE_MESSAGES = [
   "Preparing your references…",
   "Reconstructing the motion…",
-  "Rendering the new wardrobe…",
-  "Matching lighting & fabric folds…",
+  "Rendering the new jewelry…",
+  "Matching metal, stones & reflections…",
   "Stabilizing frames…",
   "Finalizing the clip…",
 ];
@@ -912,7 +912,7 @@ export default function JewelrySwap() {
     <SiteShell>
       <PageMeta
         title="Jewelry Swap | FUSE"
-        description="Swap the wardrobe in any clip: extract source frames, restyle them, and rebuild the video."
+        description="Swap the jewelry in any clip: extract source frames, replace the pieces, and rebuild the video."
         path="/app/lab/jewelry-swap"
       />
 
@@ -921,8 +921,8 @@ export default function JewelrySwap() {
           <p className="text-xs font-semibold uppercase tracking-[0.2em] text-cyan-200/70">FUSE Lab</p>
           <h1 className="font-heading text-2xl font-semibold text-foreground sm:text-3xl">Jewelry Swap</h1>
           <p className="max-w-2xl text-sm text-muted-foreground">
-            Upload a clip, restyle the frames you pick with your product references, then rebuild the
-            same video in the new wardrobe.
+            Upload a clip, replace the jewelry in the frames you pick with your references, then rebuild the
+            same video with the new pieces.
           </p>
         </header>
 
@@ -1431,8 +1431,8 @@ export default function JewelrySwap() {
                 </Button>
                 <p className="text-[11px] text-muted-foreground">
                   {canMakeTemplate
-                    ? "Saves this run's structure as a real, editable template — future runs use new images and new products."
-                    : "Needs source frames, at least one product and one approved swapped frame."}
+                    ? "Saves this run's structure as a real, editable template — future runs use new images and new jewelry references."
+                    : "Needs source frames, at least one jewelry reference and one approved swapped frame."}
                 </p>
 
 
@@ -2097,7 +2097,7 @@ export default function JewelrySwap() {
               <dl className="grid grid-cols-2 gap-2 text-[11px] sm:grid-cols-4">
                 {[
                   ["Input slots", `${createdTemplate.inputSlotCount}`],
-                  ["Products", `${createdTemplate.productReferenceCount}`],
+                  ["Pieces", `${createdTemplate.productReferenceCount}`],
                   ["Steps", `${createdTemplate.nodeCount}`],
                   ["Clips", `${createdTemplate.klingClipCount}`],
                 ].map(([label, value]) => (
@@ -2150,7 +2150,7 @@ export default function JewelrySwap() {
               </div>
               <p className="text-[11px] text-muted-foreground">
                 Creates {approvedFrames.length} replaceable image input{approvedFrames.length === 1 ? "" : "s"},{" "}
-                {pieces.length} product reference{pieces.length === 1 ? "" : "s"},{" "}
+                {pieces.length} jewelry reference{pieces.length === 1 ? "" : "s"},{" "}
                 {approvedFrames.length} Nano Banana step{approvedFrames.length === 1 ? "" : "s"} and one
                 Seedance final video{clips.length ? ", plus an optional Kling clip branch" : ""}. The
                 current run's images are examples only.
