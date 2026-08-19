@@ -404,6 +404,10 @@ function buildJewelryPrompt(args: {
     "Every unrelated detail from SOURCE_FRAME — subject identity, skin, hair, clothing, hands, environment — must be preserved exactly. Respect layering: whatever was in front stays in front. Match the source lighting, contact shadows and reflections.",
     "",
     CONTEXT_NEGATIVES,
+    "",
+    macroBlock(args.macro === true),
+
+
 
     cadActive ? "" : null,
     cadActive
