@@ -999,6 +999,27 @@ export default function GenerationStudio() {
               </div>
             </section>
 
+            {/* Sound */}
+            {isVideo && model.supportsAudio ? (
+              <section>
+                <SectionLabel>Sound</SectionLabel>
+                <button
+                  type="button"
+                  aria-pressed={generateAudio}
+                  onClick={() => setGenerateAudio((prev) => !prev)}
+                  className={cn(
+                    "flex w-full items-center justify-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-medium transition-colors",
+                    generateAudio
+                      ? "border-cyan-200/60 bg-cyan-400/15 text-cyan-100"
+                      : "border-white/12 bg-white/[0.03] text-foreground/70 hover:border-cyan-200/40",
+                  )}
+                >
+                  {generateAudio ? <Volume2 size={15} /> : <VolumeX size={15} />}
+                  {generateAudio ? "Sound on" : "Sound off"}
+                </button>
+              </section>
+            ) : null}
+
             {/* Motion */}
             {isVideo ? (
               <section className="space-y-3 rounded-2xl border border-white/10 bg-black/20 p-3">
