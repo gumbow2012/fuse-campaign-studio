@@ -448,6 +448,8 @@ async function startSwapFrame(admin: AdminClient, args: {
   imageModel?: string;
   preferredRole?: string | null;
   failureReason?: string | null;
+  /** Per-frame Macro mode toggle (forces MACRO REPLACEMENT MODE). */
+  macro?: boolean;
   webhookBase: string;
 }) {
   const sourceFrameUrl = String(args.sourceFrameUrl ?? "").trim();
