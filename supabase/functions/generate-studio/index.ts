@@ -107,6 +107,7 @@ type StartInput = {
 
 const MAX_REFERENCE_IMAGES = 15;
 
+/** Reference URLs in REF order — REF 1 becomes image 1 for the model. */
 function collectImageUrls(input: StartInput) {
   const raw = [
     ...(Array.isArray(input.imageUrls) ? input.imageUrls : []),
@@ -125,6 +126,17 @@ function collectImageUrls(input: StartInput) {
   return urls;
 }
 
+/** Normalize an image-model resolution request; unsupported values are dropped. */
+function imageResolution(value: unknown) {
+  const raw = String(value ?? "").trim().toUpperCase();
+  return raw === "1K" || raw === "2K" || raw === "4K" ? raw : null;
+}
+
+function requestedAspect(value: unknown) {
+  const raw = String(value ?? "").trim();
+  return raw && raw.toLowerCase() !== "auto" ? raw : null;
+}
+
 async function startGeneration(admin: AdminClient, args: { input: StartInput; userId: string }) {
   const input = args.input;
   const kind = input.kind === "video" ? "video" : "image";
@@ -132,9 +144,8 @@ async function startGeneration(admin: AdminClient, args: { input: StartInput; us
   const referenceUrls = collectImageUrls(input);
   const startImageUrl = String(input.startImageUrl ?? referenceUrls[0] ?? "").trim();
 
+  // References are optional: a prompt alone drives text-to-image / text-to-video.
   if (!prompt) throw new Error("Add a prompt before generating");
-  if (kind === "video" && !startImageUrl) throw new Error("Upload a start frame before generating");
-  if (kind === "image" && !referenceUrls.length) throw new Error("Add at least one reference image");
 
   const webhookBase =
     `${Deno.env.get("SUPABASE_URL")}/functions/v1/generate-studio?callback=1&generationId=`;
@@ -158,33 +169,34 @@ async function startGeneration(admin: AdminClient, args: { input: StartInput; us
 
   try {
     if (kind === "image") {
+      const aspect = requestedAspect(input.aspectRatio);
+      const resolution = imageResolution(input.resolution);
+      const endpointId = referenceUrls.length ? IMAGE_MODEL : TEXT_IMAGE_MODEL;
+
       const estimatedCostUsd = await estimateUsd({
-        endpointId: IMAGE_MODEL,
+        endpointId,
         fallbackFlatUsd: IMAGE_FALLBACK_USD,
       });
 
-      const imageUrls = referenceUrls;
-      const requestedAspect = String(input.aspectRatio ?? "").trim();
-      const requestId = await submitImageJob({
+      const falInput: Record<string, unknown> = {
         prompt,
-        imageUrls,
-        aspectRatio: requestedAspect && requestedAspect !== "auto"
-          ? requestedAspect
-          : VERTICAL_VIDEO_ASPECT_RATIO,
-        webhookUrl,
-      });
+        output_format: "png",
+        ...(referenceUrls.length ? { image_urls: referenceUrls } : {}),
+        ...(aspect ? { aspect_ratio: aspect } : {}),
+        ...(resolution ? { resolution } : {}),
+      };
 
-
+      const requestId = await submitFalJob(endpointId, falInput, webhookUrl);
 
       const { data: updated } = await admin
         .from("studio_generations")
         .update({
           status: "running",
-          provider_model: IMAGE_MODEL,
+          provider_model: endpointId,
           provider_request_id: requestId,
           estimated_cost_usd: estimatedCostUsd,
           estimated_credits: creditsFromUsd(estimatedCostUsd),
-          input_payload: { prompt, image_urls: imageUrls },
+          input_payload: falInput,
         })
         .eq("id", inserted.id)
         .select("*")
@@ -194,16 +206,24 @@ async function startGeneration(admin: AdminClient, args: { input: StartInput; us
     }
 
     const videoModel = getVideoModel(input.model);
-    const isKling3 = videoModel.family === "kling3";
-    const duration = clampSeedanceDuration(input.duration ?? (isKling3 ? 5 : undefined), videoModel);
+    const duration = clampSeedanceDuration(input.duration ?? 5, videoModel);
     const generateAudio = videoModel.supportsAudio ? input.generateAudio !== false : null;
-    const resolution = videoModel.resolutions?.includes(String(input.resolution ?? ""))
-      ? String(input.resolution)
+    // Only forward params the selected model supports; everything else is dropped.
+    const resolution = videoModel.resolutions?.includes(String(input.resolution ?? "").toLowerCase())
+      ? String(input.resolution).toLowerCase()
       : (videoModel.resolutions?.length ? "720p" : null);
-    const aspectRatio = videoModel.aspectRatios?.includes(String(input.aspectRatio ?? ""))
-      ? String(input.aspectRatio)
-      : VERTICAL_VIDEO_ASPECT_RATIO;
+    const aspect = requestedAspect(input.aspectRatio);
+    const aspectRatio = videoModel.fixedAspect
+      ? videoModel.fixedAspect
+      : videoModel.aspectRatios
+      ? (aspect && videoModel.aspectRatios.includes(aspect) ? aspect : VERTICAL_VIDEO_ASPECT_RATIO)
+      : null;
     const endFrameUrl = input.endImageUrl ? String(input.endImageUrl).trim() : undefined;
+
+    const textToVideo = !startImageUrl;
+    const endpointId = textToVideo
+      ? textToVideoEndpoint(videoModel.endpointId)
+      : videoModel.endpointId;
 
     const estimatedCostUsd = await estimateUsd({
       endpointId: videoModel.endpointId,
@@ -211,35 +231,51 @@ async function startGeneration(admin: AdminClient, args: { input: StartInput; us
       fallbackUsdPerSecond: videoFallbackUsdPerSecond(videoModel, generateAudio) ?? null,
     });
 
-    const requestId = await submitVideoJob({
-      prompt,
-      initImageUrl: startImageUrl,
-      ...(endFrameUrl ? { endFrameUrl } : {}),
-      modelKey: videoModel.key,
-      duration,
-      aspectRatio,
-      ...(resolution ? { resolution } : {}),
-      ...(generateAudio === null ? {} : { generateAudio }),
-      webhookUrl,
-    });
+    let requestId: string;
+    let payload: Record<string, unknown>;
+
+    if (textToVideo) {
+      payload = {
+        prompt,
+        duration: String(duration),
+        ...(aspectRatio ? { aspect_ratio: aspectRatio } : {}),
+        ...(resolution ? { resolution } : {}),
+        ...(generateAudio === null ? {} : { generate_audio: generateAudio }),
+        ...(videoModel.family === "kling3" ? { cfg_scale: 0.5 } : {}),
+      };
+      requestId = await submitFalJob(endpointId, payload, webhookUrl);
+    } else {
+      payload = {
+        prompt,
+        init_image: startImageUrl,
+        ...(endFrameUrl ? { end_frame_image: endFrameUrl } : {}),
+        duration,
+        ...(resolution ? { resolution } : {}),
+        ...(aspectRatio ? { aspect_ratio: aspectRatio } : {}),
+        ...(generateAudio === null ? {} : { generate_audio: generateAudio }),
+      };
+      requestId = await submitVideoJob({
+        prompt,
+        initImageUrl: startImageUrl,
+        ...(endFrameUrl ? { endFrameUrl } : {}),
+        modelKey: videoModel.key,
+        duration,
+        ...(aspectRatio ? { aspectRatio } : {}),
+        ...(resolution ? { resolution } : {}),
+        ...(generateAudio === null ? {} : { generateAudio }),
+        webhookUrl,
+      });
+    }
 
     const { data: updated } = await admin
       .from("studio_generations")
       .update({
         status: "running",
-        provider_model: videoModel.endpointId,
+        provider_model: endpointId,
         provider_request_id: requestId,
         estimated_cost_usd: estimatedCostUsd,
         estimated_credits: creditsFromUsd(estimatedCostUsd),
-        input_payload: {
-          prompt,
-          init_image: startImageUrl,
-          ...(endFrameUrl ? { end_frame_image: endFrameUrl } : {}),
-          video_model: videoModel.key,
-          duration,
-          ...(resolution ? { resolution } : {}),
-          ...(generateAudio === null ? {} : { generate_audio: generateAudio }),
-        },
+        input_payload: { ...payload, video_model: videoModel.key },
       })
       .eq("id", inserted.id)
       .select("*")
