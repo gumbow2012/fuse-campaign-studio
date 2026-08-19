@@ -469,7 +469,7 @@ Deno.serve(async (req) => {
     }
 
     if (action === "list" || action === "queue") {
-      const limit = Math.min(50, Math.max(1, Number(body.limit ?? 20)));
+      const limit = Math.min(200, Math.max(1, Number(body.limit ?? 20)));
       const { data: rows, error } = await admin
         .from("studio_generations")
         .select("*")

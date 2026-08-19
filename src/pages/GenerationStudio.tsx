@@ -475,18 +475,36 @@ export default function GenerationStudio() {
     });
   }, []);
 
-  const loadQueue = useCallback(async (silent = true) => {
+  const [galleryLimit, setGalleryLimit] = useState(24);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(false);
+
+  const loadQueue = useCallback(async (silent = true, limitOverride?: number) => {
+    const limit = limitOverride ?? galleryLimit;
     try {
-      const data = await callStudio({ action: "queue", limit: 36 });
-      setGenerations((data?.generations ?? []) as Generation[]);
+      const data = await callStudio({ action: "queue", limit });
+      const rows = (data?.generations ?? []) as Generation[];
+      setGenerations(rows);
+      setHasMore(rows.length >= limit);
     } catch (error) {
       if (!silent) toast.error(error instanceof Error ? error.message : "Could not load generations");
     }
-  }, []);
+  }, [galleryLimit]);
 
   useEffect(() => {
     void loadQueue(false);
   }, [loadQueue]);
+
+  const loadMore = useCallback(async () => {
+    const next = galleryLimit + 24;
+    setLoadingMore(true);
+    setGalleryLimit(next);
+    try {
+      await loadQueue(false, next);
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [galleryLimit, loadQueue]);
 
   const hasInFlight = generations.some((entry) => entry.status === "queued" || entry.status === "running");
   useEffect(() => {
@@ -1294,18 +1312,32 @@ export default function GenerationStudio() {
                   </div>
                 ) : null}
                 {visibleGenerations.length ? (
-                  <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-4">
-                    {visibleGenerations.map((generation) => (
-                      <GenerationCard
-                        key={generation.id}
-                        generation={generation}
-                        onUseAsReference={useAsReference}
-                        onExpand={(entry) => setLightboxId(entry.id)}
-                        onDelete={(entry) => setConfirmSingle(entry)}
-                      />
-
-                    ))}
-                  </div>
+                  <>
+                    <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-4">
+                      {visibleGenerations.map((generation) => (
+                        <GenerationCard
+                          key={generation.id}
+                          generation={generation}
+                          onUseAsReference={useAsReference}
+                          onExpand={(entry) => setLightboxId(entry.id)}
+                          onDelete={(entry) => setConfirmSingle(entry)}
+                        />
+                      ))}
+                    </div>
+                    {hasMore ? (
+                      <div className="mt-6 flex justify-center">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={() => void loadMore()}
+                          disabled={loadingMore}
+                          className="border-white/15 bg-white/[0.03]"
+                        >
+                          {loadingMore ? "Loading…" : "Load more"}
+                        </Button>
+                      </div>
+                    ) : null}
+                  </>
                 ) : (
                   <div className="rounded-2xl border border-dashed border-white/12 bg-white/[0.02] p-14 text-center">
                     <Sparkles className="mx-auto mb-3 text-cyan-200/70" size={22} />
