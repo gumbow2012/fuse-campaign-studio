@@ -1419,6 +1419,7 @@ Deno.serve(async (req) => {
         imageModel: body.imageModel,
         preferredRole: body.preferredRole ?? null,
         failureReason: body.failureReason ?? null,
+        macro: body.macro === true,
         webhookBase,
       });
       return json({ generation });
