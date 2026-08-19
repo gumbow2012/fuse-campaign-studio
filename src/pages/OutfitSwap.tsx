@@ -926,7 +926,12 @@ export default function OutfitSwap() {
                             <StatusPill generation={swap} />
                           </span>
                         </div>
-                        <div className="grid grid-cols-2 gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setLightboxIndex(index)}
+                          className="group grid w-full grid-cols-2 gap-2 text-left"
+                          aria-label="Open full-size comparison"
+                        >
                           <div className="overflow-hidden rounded-xl border border-white/10 bg-black/40">
                             {frame ? (
                               <img src={frame.url} alt="Original frame" className="h-32 w-full object-cover" />
@@ -935,10 +940,10 @@ export default function OutfitSwap() {
                               Original
                             </p>
                           </div>
-                          <div className="overflow-hidden rounded-xl border border-white/10 bg-black/40">
+                          <div className="relative overflow-hidden rounded-xl border border-white/10 bg-black/40">
                             {swap.status === "complete" && swap.outputUrl ? (
                               <img src={swap.outputUrl} alt="Swapped frame" className="h-32 w-full object-cover" />
-                            ) : swap.status === "failed" ? (
+                            ) : swap.status === "failed" || swap.status === "canceled" ? (
                               <p className="h-32 overflow-y-auto p-2 text-[10px] text-red-300">
                                 {swap.error ?? "Generation failed"}
                               </p>
@@ -947,23 +952,20 @@ export default function OutfitSwap() {
                                 <Loader2 size={16} className="animate-spin text-cyan-200" />
                               </div>
                             )}
+                            <span className="absolute right-1.5 top-1.5 rounded-lg border border-white/15 bg-black/70 p-1 text-cyan-100 opacity-0 transition-opacity group-hover:opacity-100">
+                              <Maximize2 size={11} />
+                            </span>
                             <p className="px-2 py-1 text-[10px] uppercase tracking-[0.14em] text-cyan-200/70">
                               Swapped
                             </p>
                           </div>
-                        </div>
+                        </button>
                         <div className="flex items-center gap-1.5">
                           <Button
                             size="sm"
                             variant={isApproved ? "default" : "outline"}
                             disabled={swap.status !== "complete"}
-                            onClick={() =>
-                              setApproved((prev) => {
-                                const next = new Set(prev);
-                                next.has(index) ? next.delete(index) : next.add(index);
-                                return next;
-                              })
-                            }
+                            onClick={() => toggleApproved(index)}
                             className={cn(
                               "flex-1 rounded-lg text-[11px]",
                               isApproved
@@ -973,6 +975,7 @@ export default function OutfitSwap() {
                           >
                             <Check size={12} /> {isApproved ? "Approved" : "Approve"}
                           </Button>
+
                           <Button
                             size="sm"
                             variant="outline"
