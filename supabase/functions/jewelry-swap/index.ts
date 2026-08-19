@@ -95,6 +95,13 @@ function serialize(row: any) {
     sourceFrameUrl: typeof payload.source_frame_url === "string" ? payload.source_frame_url : null,
     imageModel: payload.image_model === "nb2" ? "nb2" : payload.image_model === "pro" ? "pro" : null,
     preferredRole: typeof payload.preferred_role === "string" ? payload.preferred_role : null,
+    shotKey: typeof payload.shot_key === "string" ? payload.shot_key : null,
+    shotLabel: typeof payload.shot_label === "string" ? payload.shot_label : null,
+    cameraDirection: typeof payload.camera_direction === "string" ? payload.camera_direction : null,
+    directionSummary: payload.direction_summary && typeof payload.direction_summary === "object"
+      ? payload.direction_summary as Record<string, string>
+      : null,
+    animationPrompt: typeof payload.animation_prompt === "string" ? payload.animation_prompt : null,
     createdAt: row.created_at ?? null,
     completedAt: row.completed_at ?? null,
   };
