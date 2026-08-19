@@ -96,10 +96,15 @@ async function runSeedanceMultiReference(admin: AdminClient, args: {
         ...input,
         video_model: model.key,
         multi_reference: true,
+        reference_image_count: sentImages.length,
+        ...(capNote
+          ? { reference_images_dropped: droppedImages.length, reference_cap_note: capNote }
+          : {}),
       },
       output_payload: {
         requestId,
         status: "queued",
+        ...(capNote ? { note: capNote } : {}),
         telemetry: {
           estimatedCostUsd: costEstimate?.estimatedCostUsd ?? null,
           billingUnit: costEstimate?.unit ?? null,
