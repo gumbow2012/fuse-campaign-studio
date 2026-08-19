@@ -23,7 +23,6 @@ import { Progress } from "@/components/ui/progress";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { IMAGE_FLAT_USD, costPreview, creditsFromUsd, resolutionMultiplier } from "@/lib/costEstimate";
-import { uploadRunInputFile } from "@/services/runInputUpload";
 import {
   createOutfitSwapFolder,
   uploadToStorage,
