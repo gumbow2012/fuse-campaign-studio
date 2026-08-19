@@ -1299,6 +1299,11 @@ Deno.serve(async (req) => {
         imageUrl: body.imageUrl ?? body.sourceFrameUrl,
         frameIndex: body.frameIndex,
         frameTime: body.frameTime,
+        cameraDirection: body.cameraDirection,
+        customPrompt: body.customPrompt ?? null,
+        setIndex: body.setIndex,
+        setSize: body.setSize,
+        pieceTypes: body.pieceTypes ?? [],
         webhookBase,
       });
       return json({ generation });
