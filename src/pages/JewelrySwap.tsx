@@ -983,7 +983,7 @@ export default function JewelrySwap() {
               </div>
             </SectionCard>
 
-            <SectionCard step={5} title="Video generation" hint="Your clip, rebuilt in the new wardrobe.">
+            <SectionCard step={5} title="Video generation" hint="Your clip, rebuilt with the new jewelry.">
               <div className="space-y-3">
                 <div className="grid grid-cols-2 gap-2">
                   <div>
