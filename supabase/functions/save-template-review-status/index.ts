@@ -12,10 +12,12 @@ import { assertCanPublish, FORBIDDEN_PUBLISH_MESSAGE } from "../_shared/template
 type Body = {
   versionId?: string;
   reviewStatus?: string | null;
+  reviewNote?: string | null;
 };
 
 const ALLOWED_STATUSES = new Set([
   "Unreviewed",
+  "Submitted",
   "Structurally Correct",
   "Prompt Drift",
   "Blocked by Provider",
