@@ -331,17 +331,22 @@ function GenerationCard({
                   <Wand2 size={13} />
                 </button>
               ) : null}
-              <a
-                href={generation.outputUrl as string}
-                download
-                target="_blank"
-                rel="noreferrer"
+              <button
+                type="button"
+                onClick={() =>
+                  void downloadAsset(
+                    generation.outputUrl as string,
+                    generation.id,
+                    generation.outputType,
+                  )
+                }
                 aria-label="Download"
                 title="Download"
                 className={ICON_ACTION_CLASS}
               >
                 <Download size={13} />
-              </a>
+              </button>
+
               <button
                 type="button"
                 aria-label="Delete"
