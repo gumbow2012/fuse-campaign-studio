@@ -1849,12 +1849,39 @@ export default function JewelrySwap() {
                   </div>
                 </div>
 
+                <div>
+                  <label className="mb-1 block text-[11px] uppercase tracking-[0.14em] text-cyan-200/70">
+                    Duration
+                  </label>
+                  <select
+                    value={videoDuration}
+                    onChange={(event) => {
+                      setDurationTouched(true);
+                      setVideoDuration(Number(event.target.value));
+                    }}
+                    className={SELECT_CLASS}
+                  >
+                    {DURATION_OPTIONS.map((option) => (
+                      <option key={option} value={option}>
+                        {option} seconds
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
                 <button
                   type="button"
                   role="switch"
                   aria-checked={preserveAudio}
                   onClick={() => setPreserveAudio((prev) => !prev)}
                   className={cn(
+                    "flex w-full items-center justify-between gap-3 rounded-xl border px-4 py-2.5 text-xs font-medium transition-colors",
+                    preserveAudio
+                      ? "border-cyan-200/60 bg-cyan-400/15 text-cyan-100"
+                      : "border-white/12 bg-white/[0.03] text-foreground/70 hover:border-cyan-200/40",
+                  )}
+                >
+
                     "flex w-full items-center justify-between gap-3 rounded-xl border px-4 py-2.5 text-xs font-medium transition-colors",
                     preserveAudio
                       ? "border-cyan-200/60 bg-cyan-400/15 text-cyan-100"
