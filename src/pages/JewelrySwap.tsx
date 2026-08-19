@@ -47,9 +47,11 @@ import {
 
 
 import {
+  animateJewelryFrame,
   callJewelrySwap,
   createTemplateFromJewelrySwap,
   persistTemplateLayout,
+  CAMERA_DIRECTIONS,
   type JewelryGeneration,
   type JewelryImageModel,
   type JewelrySwapTemplateResult,
@@ -374,7 +376,7 @@ export default function JewelrySwap() {
   const [resolution, setResolution] = useState("1080p");
   // Every Jewelry Swap video the user has started — newest first. Jobs live
   // server-side, so refreshing simply re-attaches to the running ones.
-  const [videos, setVideos] = useState<SwapGeneration[]>([]);
+  const [videos, setVideos] = useState<JewelryGeneration[]>([]);
   const [libraryLoading, setLibraryLoading] = useState(true);
   const [reconstructing, setReconstructing] = useState(false);
   const [cancelTarget, setCancelTarget] = useState<string | null>(null);
@@ -853,18 +855,32 @@ export default function JewelrySwap() {
 
   const [animating, setAnimating] = useState(false);
   const [zipping, setZipping] = useState(false);
+  const [cameraDirection, setCameraDirection] = useState<string>("auto");
+  const [customCameraPrompt, setCustomCameraPrompt] = useState("");
+
+  const pieceTypes = useMemo(
+    () => pieces.map((piece) => piece.type).filter(Boolean),
+    [pieces],
+  );
 
   const animateFrame = useCallback(
-    async (frame: { index: number; url: string; time: number }) => {
-      const data = await callJewelrySwap<{ generation: SwapGeneration }>({
-        action: "animate_frame",
+    async (
+      frame: { index: number; url: string; time: number },
+      position: { setIndex: number; setSize: number; direction?: string },
+    ) => {
+      const generation = await animateJewelryFrame({
         imageUrl: frame.url,
         frameIndex: frame.index,
         frameTime: frame.time,
+        cameraDirection: position.direction ?? cameraDirection,
+        customPrompt: customCameraPrompt.trim() || null,
+        setIndex: position.setIndex,
+        setSize: position.setSize,
+        pieceTypes,
       });
-      setVideos((prev) => [data.generation, ...prev]);
+      setVideos((prev) => [generation, ...prev]);
     },
-    [],
+    [cameraDirection, customCameraPrompt, pieceTypes],
   );
 
   const animateApproved = useCallback(async () => {
@@ -872,37 +888,54 @@ export default function JewelrySwap() {
       toast.error("Approve at least one swapped frame first");
       return;
     }
+    if (cameraDirection === "custom" && !customCameraPrompt.trim()) {
+      toast.error("Describe the camera move, or switch back to Auto");
+      return;
+    }
     setAnimating(true);
     try {
-      for (const frame of approvedFrames) await animateFrame(frame);
+      let setIndex = 0;
+      for (const frame of approvedFrames) {
+        await animateFrame(frame, { setIndex, setSize: approvedFrames.length });
+        setIndex += 1;
+      }
       toast.success(`${approvedFrames.length} clip${approvedFrames.length === 1 ? "" : "s"} queued`);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Could not start the clips");
     } finally {
       setAnimating(false);
     }
-  }, [approvedFrames, animateFrame]);
+  }, [approvedFrames, animateFrame, cameraDirection, customCameraPrompt]);
 
   const regenerateClip = useCallback(
-    async (clip: SwapGeneration) => {
+    async (clip: JewelryGeneration) => {
       if (!clip.sourceFrameUrl) {
         toast.error("That clip has no source frame to reuse");
         return;
       }
       try {
-        await animateFrame({
-          index: clip.frameIndex ?? 0,
-          url: clip.sourceFrameUrl,
-          time: clip.frameTime ?? 0,
-        });
+        const position = approvedFrames.findIndex((frame) => frame.url === clip.sourceFrameUrl);
+        await animateFrame(
+          {
+            index: clip.frameIndex ?? 0,
+            url: clip.sourceFrameUrl,
+            time: clip.frameTime ?? 0,
+          },
+          {
+            setIndex: position >= 0 ? position : 0,
+            setSize: Math.max(1, approvedFrames.length),
+            direction: clip.cameraDirection ?? undefined,
+          },
+        );
         setVideos((prev) => prev.filter((entry) => entry.id !== clip.id));
         await callJewelrySwap({ action: "delete", generationIds: [clip.id] }).catch(() => null);
       } catch (error) {
         toast.error(error instanceof Error ? error.message : "Could not regenerate that clip");
       }
     },
-    [animateFrame],
+    [animateFrame, approvedFrames],
   );
+
 
   /** Zip every finished clip client-side so one click gets the whole set. */
   const downloadAllClips = useCallback(async () => {
@@ -1960,7 +1993,11 @@ export default function JewelrySwap() {
                     ["Model", "Kling 3.0"],
                     ["Resolution", "1080p"],
                     ["Duration", "3 sec"],
-                    ["Motion", "Dolly in"],
+                    [
+                      "Motion",
+                      CAMERA_DIRECTIONS.find((option) => option.value === cameraDirection)?.label ??
+                        "Auto — Jewelry Cinematic",
+                    ],
                   ].map(([label, value]) => (
                     <div
                       key={label}
@@ -1973,6 +2010,37 @@ export default function JewelrySwap() {
                     </div>
                   ))}
                 </dl>
+
+                <div>
+                  <label className="mb-1 block text-[10px] uppercase tracking-[0.14em] text-cyan-200/70">
+                    Camera direction
+                  </label>
+                  <select
+                    value={cameraDirection}
+                    onChange={(event) => setCameraDirection(event.target.value)}
+                    className={SELECT_CLASS}
+                  >
+                    {CAMERA_DIRECTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="mt-1 text-[10px] text-muted-foreground">
+                    Auto plans the whole approved set as one varied shot pack — the jewelry stays
+                    locked, only the camera, focus and lights move.
+                  </p>
+                </div>
+
+                {cameraDirection === "custom" ? (
+                  <Textarea
+                    value={customCameraPrompt}
+                    onChange={(event) => setCustomCameraPrompt(event.target.value)}
+                    placeholder="Describe the camera move, focus and lighting (the jewelry always stays locked)."
+                    className="min-h-[70px] rounded-xl border-white/12 bg-black/40 text-xs"
+                  />
+                ) : null}
+
 
                 <Button
                   disabled={animating || !approvedFrames.length}
@@ -2047,7 +2115,45 @@ export default function JewelrySwap() {
 
                             <p className="text-[10px] uppercase tracking-[0.14em] text-cyan-200/70">
                               Kling 3.0 · 3 sec · 1080p
+                              {clip.shotLabel ? ` · ${clip.shotLabel}` : ""}
                             </p>
+
+                            {clip.directionSummary || clip.animationPrompt ? (
+                              <details className="rounded-xl border border-white/10 bg-black/30 px-2.5 py-1.5">
+                                <summary className="cursor-pointer list-none text-[10px] uppercase tracking-[0.14em] text-cyan-200/70">
+                                  View animation direction
+                                </summary>
+                                <dl className="mt-2 space-y-1">
+                                  {([
+                                    ["Shot", clip.directionSummary?.shot],
+                                    ["Camera", clip.directionSummary?.camera],
+                                    ["Focus", clip.directionSummary?.focus],
+                                    ["Light", clip.directionSummary?.light],
+                                    ["End", clip.directionSummary?.end],
+                                  ] as [string, string | undefined][])
+                                    .filter(([, value]) => !!value)
+                                    .map(([label, value]) => (
+                                      <div key={label} className="text-[10px] leading-snug">
+                                        <dt className="inline uppercase tracking-[0.14em] text-muted-foreground">
+                                          {label}:{" "}
+                                        </dt>
+                                        <dd className="inline text-foreground/85">{value}</dd>
+                                      </div>
+                                    ))}
+                                </dl>
+                                {clip.animationPrompt ? (
+                                  <details className="mt-2">
+                                    <summary className="cursor-pointer list-none text-[10px] uppercase tracking-[0.14em] text-cyan-200/60">
+                                      View full prompt
+                                    </summary>
+                                    <p className="mt-1.5 max-h-40 overflow-y-auto whitespace-pre-wrap text-[10px] leading-snug text-muted-foreground">
+                                      {clip.animationPrompt}
+                                    </p>
+                                  </details>
+                                ) : null}
+                              </details>
+                            ) : null}
+
 
                             <div className="flex items-center gap-1.5">
                               <Button
