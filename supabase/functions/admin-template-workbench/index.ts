@@ -778,22 +778,32 @@ Deno.serve(async (req) => {
   const admin = createAdminClient();
 
   try {
-    const user = await requireAdminUser(req, admin);
+    const access = await requireBuilderUser(req, admin);
+    const user = access.user;
+    const scoped = isScopedToOwnTemplates(access);
     const body = await req.json().catch(() => ({})) as Record<string, unknown>;
     const action = cleanText(body.action, "catalog") as Action;
 
     if (action === "catalog") {
-      const { data: templates, error: templateError } = await admin
+      const templateQuery = admin
         .from("fuse_templates")
         .select("id, name, description, preview_url, preview_asset_type, created_at, updated_at")
         .order("name", { ascending: true });
+      if (scoped) templateQuery.eq("created_by", user.id);
+
+      const { data: templates, error: templateError } = await templateQuery;
       if (templateError) throw new Error(templateError.message);
 
-      const { data: versions, error: versionError } = await admin
-        .from("template_versions")
-        .select("id, template_id, version_number, is_active, review_status, reviewed_at, created_at")
-        .order("version_number", { ascending: false });
+      const templateIds = (templates ?? []).map((template: any) => template.id);
+      const { data: versions, error: versionError } = templateIds.length
+        ? await admin
+            .from("template_versions")
+            .select("id, template_id, version_number, is_active, review_status, reviewed_at, created_at")
+            .in("template_id", templateIds)
+            .order("version_number", { ascending: false })
+        : { data: [], error: null };
       if (versionError) throw new Error(versionError.message);
+
 
       const versionIds = (versions ?? []).map((version: any) => version.id);
       const { data: nodes, error: nodeError } = versionIds.length
