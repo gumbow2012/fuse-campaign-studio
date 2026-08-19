@@ -14,9 +14,89 @@ import {
   normalizeVideoDuration,
   submitImageJob,
   submitVideoJob,
+  submitSeedanceReferenceVideoJob,
 } from "./fal.ts";
 import { sortEdgesByExecutionOrder, targetParamOrder } from "./edge-order.ts";
 import { isPromptNode, resolveNodePrompt } from "./prompt-nodes.ts";
+
+/* ============ Seedance multi-reference (additive, isolated) ============ */
+
+/**
+ * True only when the node's model is a Seedance reference-capable model AND the
+ * step resolved 2+ incoming images. Kling and single-image Seedance never match.
+ */
+function isSeedanceMultiReferenceRequest(node: NodeRow, resolvedImageInputs: string[]) {
+  const model = getVideoModel(node.prompt_config?.video_model);
+  if (model.family !== "seedance" || !model.supportsMultiReference) return false;
+  return (resolvedImageInputs ?? []).filter(Boolean).length >= 2;
+}
+
+/** Submits the known-good Seedance reference-to-video job for one video step. */
+async function runSeedanceMultiReference(admin: AdminClient, args: {
+  jobId: string;
+  step: StepRow;
+  node: NodeRow;
+  prompt: string;
+  imageUrls: string[];
+}) {
+  const { node, step } = args;
+  const model = getVideoModel(node.prompt_config?.video_model);
+  const duration = clampSeedanceDuration(node.prompt_config?.duration, model);
+  const resolution = model.resolutions?.includes(String(node.prompt_config?.resolution ?? "").toLowerCase())
+    ? String(node.prompt_config?.resolution).toLowerCase()
+    : "1080p";
+  const aspectRatio = model.aspectRatios?.includes(String(node.prompt_config?.aspect_ratio ?? ""))
+    ? String(node.prompt_config?.aspect_ratio)
+    : VERTICAL_VIDEO_ASPECT_RATIO;
+  const generateAudio = node.prompt_config?.generate_audio !== false;
+
+  const { requestId, endpointId, input } = await submitSeedanceReferenceVideoJob({
+    modelKey: model.key,
+    prompt: args.prompt,
+    imageUrls: args.imageUrls,
+    duration,
+    resolution,
+    aspectRatio,
+    generateAudio,
+    webhookUrl: `${Deno.env.get("SUPABASE_URL")}/functions/v1/fal-webhook?jobId=${encodeURIComponent(args.jobId)}&stepId=${encodeURIComponent(step.id)}`,
+  });
+
+  const costEstimate = await getStepCostEstimate(
+    endpointId,
+    { ...(node.prompt_config ?? {}), duration },
+    {
+      fallbackUsdPerSecond: videoFallbackUsdPerSecond(model, generateAudio),
+      seconds: duration,
+    },
+  );
+
+  await admin
+    .from("execution_steps")
+    .update({
+      provider_model: endpointId,
+      provider_request_id: requestId,
+      input_payload: {
+        ...(step.input_payload ?? {}),
+        ...input,
+        video_model: model.key,
+        multi_reference: true,
+      },
+      output_payload: {
+        requestId,
+        status: "queued",
+        telemetry: {
+          estimatedCostUsd: costEstimate?.estimatedCostUsd ?? null,
+          billingUnit: costEstimate?.unit ?? null,
+          billingQuantity: costEstimate?.quantity ?? null,
+          unitPriceUsd: costEstimate?.unitPriceUsd ?? null,
+          currency: costEstimate?.currency ?? null,
+        },
+      },
+    })
+    .eq("id", step.id);
+
+  return requestId;
+}
 
 type NodeRow = {
   id: string;
@@ -1135,6 +1215,24 @@ export async function runGraphJob(admin: AdminClient, jobId: string) {
             }
 
             step.status = "complete";
+            await refreshJobProgress(admin, job.id);
+            continue;
+          }
+
+          // Guarded additive branch: Seedance reference-to-video for 2+ images.
+          const resolvedImageInputs = orderedParamEntries
+            .filter(([, value]) => value.type === "image")
+            .map(([, value]) => value.url)
+            .filter(Boolean);
+          if (isSeedanceMultiReferenceRequest(node, resolvedImageInputs)) {
+            const multiRefRequestId = await runSeedanceMultiReference(admin, {
+              jobId: job.id,
+              step,
+              node,
+              prompt,
+              imageUrls: resolvedImageInputs,
+            });
+            step.provider_request_id = multiRefRequestId;
             await refreshJobProgress(admin, job.id);
             continue;
           }
