@@ -52,13 +52,16 @@ import {
   animateJewelryFrame,
   callJewelrySwap,
   createTemplateFromJewelrySwap,
+  listAssets,
   persistTemplateLayout,
   CAMERA_DIRECTIONS,
   type JewelryGeneration,
   type JewelryImageModel,
   type JewelrySwapTemplateResult,
+  type LibraryAsset,
   type SwapGeneration,
 } from "@/services/jewelrySwap";
+
 import { extractFrames, frameTimestamps, loadVideo, readMeta, type VideoMeta } from "@/lib/videoFrames";
 import { compressImageFile } from "@/lib/imageCompress";
 
