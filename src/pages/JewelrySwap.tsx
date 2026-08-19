@@ -50,6 +50,8 @@ import {
   callJewelrySwap,
   createTemplateFromJewelrySwap,
   persistTemplateLayout,
+  type JewelryGeneration,
+  type JewelryImageModel,
   type JewelrySwapTemplateResult,
   type SwapGeneration,
 } from "@/services/jewelrySwap";
@@ -124,15 +126,60 @@ const QUALITY_OPTIONS = ["", "D–F", "G–H", "VS", "VVS", "SI", "Custom/Notes"
 const APPLY_TO_OPTIONS = ["Main subject", "Person on the left", "Person on the right"];
 const DEFAULT_APPLY_TO = APPLY_TO_OPTIONS[0];
 
+/**
+ * Optional role label for each reference angle. The model does the matching from
+ * SOURCE_FRAME + these labels — there is no external vision classifier.
+ */
+const ANGLE_ROLE_OPTIONS = [
+  "",
+  "Front",
+  "Back",
+  "Left Side",
+  "Right Side",
+  "3/4 Front",
+  "3/4 Rear",
+  "Top",
+  "Bottom",
+  "Bail",
+  "Connector/Hinge",
+  "Macro Detail",
+  "CAD Front",
+  "CAD Back",
+  "CAD Side",
+  "CAD 3/4",
+  "Other",
+];
+
+/** Optional regenerate reasons — each appends a targeted corrective sentence. */
+const FAILURE_REASONS = [
+  "Wrong angle",
+  "Wrong crop",
+  "Wrong bail",
+  "Wrong stones/details",
+  "Wrong lettering/logo",
+  "Wrong size",
+  "Hallucinated geometry",
+  "Wrong chain interaction",
+  "Other",
+];
+
+const IMAGE_MODEL_LABELS: Record<JewelryImageModel, string> = {
+  pro: "Nano Banana Pro",
+  nb2: "Nano Banana 2",
+};
+
 const VIDEO_MODELS = [
   { key: "seedance-2.0", label: "Seedance 2.0", usdPerSecond: 0.3024 },
   { key: "seedance-2.0-fast", label: "Seedance 2.0 Fast", usdPerSecond: 0.2419 },
 ];
 
+
 type Frame = { time: number; url: string };
 /** One card = ONE physical piece, described by one or more reference angles. */
 type Piece = {
   urls: string[];
+  /** Optional role label per angle, aligned by index with `urls`. */
+  roles: string[];
   name: string;
   type: string;
   metal: string;
@@ -310,7 +357,15 @@ export default function JewelrySwap() {
   const [uploadingPiece, setUploadingPiece] = useState(false);
   const [extraPrompt, setExtraPrompt] = useState("");
 
-  const [swaps, setSwaps] = useState<Record<number, SwapGeneration>>({});
+  // Nano Banana Pro results (the default) and the opt-in Nano Banana 2 runs live
+  // side by side so a frame can be compared before one is approved.
+  const [swaps, setSwaps] = useState<Record<number, JewelryGeneration>>({});
+  const [altSwaps, setAltSwaps] = useState<Record<number, JewelryGeneration>>({});
+  const [chosenModel, setChosenModel] = useState<Record<number, JewelryImageModel>>({});
+  const [framePreferredRole, setFramePreferredRole] = useState<Record<number, string>>({});
+  const [frameReason, setFrameReason] = useState<Record<number, string>>({});
+  const [needsReview, setNeedsReview] = useState<Set<number>>(new Set());
+  const [generateBoth, setGenerateBoth] = useState(false);
   const [approved, setApproved] = useState<Set<number>>(new Set());
   const [swapping, setSwapping] = useState(false);
 
@@ -344,6 +399,11 @@ export default function JewelrySwap() {
     setVideoPreview(objectUrl);
     setFrames([]);
     setSwaps({});
+    setAltSwaps({});
+    setChosenModel({});
+    setFramePreferredRole({});
+    setFrameReason({});
+    setNeedsReview(new Set());
     setApproved(new Set());
     setSelectedFrames(new Set());
     // The video library is intentionally preserved across new source clips.
@@ -406,6 +466,7 @@ export default function JewelrySwap() {
         const stored = await uploadToStorage(folder, compressed, compressed.name);
         uploaded.push({
           urls: [stored.url],
+          roles: [""],
           name: file.name,
           type: JEWELRY_TYPES[0],
           metal: AUTO_METAL,
@@ -445,7 +506,13 @@ export default function JewelrySwap() {
         }
         setPieces((prev) =>
           prev.map((item, index) =>
-            index === target ? { ...item, urls: [...item.urls, ...urls].slice(0, 6) } : item,
+            index === target
+              ? {
+                  ...item,
+                  urls: [...item.urls, ...urls].slice(0, 6),
+                  roles: [...item.roles, ...urls.map(() => "")].slice(0, 6),
+                }
+              : item,
           ),
         );
       } catch (error) {
@@ -461,7 +528,7 @@ export default function JewelrySwap() {
   /* ------------------------------ 4. Frame swaps ---------------------------- */
 
   /** Merge a fresh generation record into whichever collection owns it. */
-  const applyGeneration = useCallback((generation: SwapGeneration) => {
+  const applyGeneration = useCallback((generation: JewelryGeneration) => {
     if (generation.kind === "video") {
       setVideos((prev) => {
         const index = prev.findIndex((entry) => entry.id === generation.id);
@@ -473,7 +540,12 @@ export default function JewelrySwap() {
       return;
     }
     if (generation.frameIndex !== null) {
-      setSwaps((prev) => ({ ...prev, [generation.frameIndex as number]: generation }));
+      const index = generation.frameIndex as number;
+      if (generation.imageModel === "nb2") {
+        setAltSwaps((prev) => ({ ...prev, [index]: generation }));
+        return;
+      }
+      setSwaps((prev) => ({ ...prev, [index]: generation }));
     }
   }, []);
 
@@ -500,14 +572,14 @@ export default function JewelrySwap() {
   }, []);
 
   const inFlightIds = useMemo(() => {
-    const ids = Object.values(swaps)
+    const ids = [...Object.values(swaps), ...Object.values(altSwaps)]
       .filter((swap) => swap.status === "queued" || swap.status === "running")
       .map((swap) => swap.id);
     for (const video of videos) {
       if (video.status === "queued" || video.status === "running") ids.push(video.id);
     }
     return ids;
-  }, [swaps, videos]);
+  }, [swaps, altSwaps, videos]);
 
   useEffect(() => {
     if (!inFlightIds.length) return;
@@ -515,7 +587,7 @@ export default function JewelrySwap() {
 
     const poll = async () => {
       try {
-        const data = await callJewelrySwap<{ generations: SwapGeneration[] }>({
+        const data = await callJewelrySwap<{ generations: JewelryGeneration[] }>({
           action: "status",
           generationIds: inFlightIds,
         });
@@ -535,45 +607,79 @@ export default function JewelrySwap() {
     };
   }, [inFlightIds.join(",")]);
 
+  /** Labeled references for the function: {url, role, cad} per angle. */
+  const piecePayload = useCallback(
+    () =>
+      pieces.map((piece) => ({
+        urls: piece.urls,
+        references: piece.urls.map((url, angleIndex) => ({
+          url,
+          role: piece.roles[angleIndex] || null,
+          // A CAD-flagged card marks its CAD-labeled angles as the geometry
+          // authority; if no angle is labeled CAD, every angle inherits the flag.
+          cad: piece.cad === true &&
+            (/^CAD/i.test(piece.roles[angleIndex] ?? "") ||
+              !piece.roles.some((role) => /^CAD/i.test(role ?? ""))),
+        })),
+        type: piece.type,
+        metal: piece.metal === AUTO_METAL ? null : piece.metal,
+        stone: piece.stone === AUTO_STONE ? null : piece.stone,
+        quality: piece.quality || null,
+        dimensions: {
+          width: piece.width || null,
+          height: piece.height || null,
+          depth: piece.depth || null,
+          weight: piece.weight || null,
+        },
+        cad: piece.cad,
+        person: piece.person,
+        notes: piece.notes || null,
+      })),
+    [pieces],
+  );
+
   const swapFrame = useCallback(
-    async (frameIndex: number) => {
+    async (
+      frameIndex: number,
+      options?: {
+        imageModel?: JewelryImageModel;
+        preferredRole?: string | null;
+        failureReason?: string | null;
+      },
+    ) => {
       const frame = frames[frameIndex];
       if (!frame) return;
-      const data = await callJewelrySwap<{ generation: SwapGeneration }>({
+      const imageModel: JewelryImageModel = options?.imageModel ?? "pro";
+      const data = await callJewelrySwap<{ generation: JewelryGeneration }>({
         action: "swap_frame",
         sourceFrameUrl: frame.url,
         // Reference order is preserved: the source frame is image 1, then each
         // piece's angles in card order.
-        pieces: pieces.map((piece) => ({
-          urls: piece.urls,
-          type: piece.type,
-          metal: piece.metal === AUTO_METAL ? null : piece.metal,
-          stone: piece.stone === AUTO_STONE ? null : piece.stone,
-          quality: piece.quality || null,
-          dimensions: {
-            width: piece.width || null,
-            height: piece.height || null,
-            depth: piece.depth || null,
-            weight: piece.weight || null,
-          },
-          cad: piece.cad,
-          person: piece.person,
-          notes: piece.notes || null,
-        })),
+        pieces: piecePayload(),
         frameIndex,
         frameTime: frame.time,
         aspectRatio: meta?.aspectRatio,
         extraPrompt,
         resolution: "2K",
+        imageModel,
+        preferredRole:
+          options?.preferredRole !== undefined
+            ? options.preferredRole
+            : framePreferredRole[frameIndex] || null,
+        failureReason: options?.failureReason ?? null,
       });
-      setSwaps((prev) => ({ ...prev, [frameIndex]: data.generation }));
-      setApproved((prev) => {
-        const next = new Set(prev);
-        next.delete(frameIndex);
-        return next;
-      });
+      if (imageModel === "nb2") {
+        setAltSwaps((prev) => ({ ...prev, [frameIndex]: data.generation }));
+      } else {
+        setSwaps((prev) => ({ ...prev, [frameIndex]: data.generation }));
+        setApproved((prev) => {
+          const next = new Set(prev);
+          next.delete(frameIndex);
+          return next;
+        });
+      }
     },
-    [frames, pieces, meta, extraPrompt],
+    [frames, piecePayload, meta, extraPrompt, framePreferredRole],
   );
 
   const runSelectedSwaps = useCallback(async () => {
@@ -588,18 +694,27 @@ export default function JewelrySwap() {
     }
     setSwapping(true);
     try {
-      for (const index of indices) await swapFrame(index);
+      for (const index of indices) {
+        await swapFrame(index, { imageModel: "pro" });
+        // Comparison runs are opt-in only — never automatic.
+        if (generateBoth) await swapFrame(index, { imageModel: "nb2" });
+      }
       toast.success(`${indices.length} frame swap(s) queued`);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Could not queue the swaps");
     } finally {
       setSwapping(false);
     }
-  }, [selectedFrames, pieces, swapFrame]);
+  }, [selectedFrames, pieces, swapFrame, generateBoth]);
 
   const removeSwap = useCallback(async (frameIndex: number) => {
-    const swap = swaps[frameIndex];
+    const ids = [swaps[frameIndex]?.id, altSwaps[frameIndex]?.id].filter(Boolean) as string[];
     setSwaps((prev) => {
+      const next = { ...prev };
+      delete next[frameIndex];
+      return next;
+    });
+    setAltSwaps((prev) => {
       const next = { ...prev };
       delete next[frameIndex];
       return next;
@@ -609,10 +724,17 @@ export default function JewelrySwap() {
       next.delete(frameIndex);
       return next;
     });
-    if (swap) {
-      await callJewelrySwap({ action: "delete", generationIds: [swap.id] }).catch(() => null);
+    if (ids.length) {
+      await callJewelrySwap({ action: "delete", generationIds: ids }).catch(() => null);
     }
-  }, [swaps]);
+  }, [swaps, altSwaps]);
+
+  /** The result the user picked (defaults to Nano Banana Pro). */
+  const selectedSwap = useCallback(
+    (index: number) =>
+      (chosenModel[index] === "nb2" ? altSwaps[index] : swaps[index]) ?? swaps[index] ?? null,
+    [chosenModel, swaps, altSwaps],
+  );
 
   /* ---------------------------- 5. Reconstruction --------------------------- */
 
@@ -620,10 +742,11 @@ export default function JewelrySwap() {
     () =>
       [...approved]
         .sort((a, b) => a - b)
-        .map((index) => swaps[index]?.outputUrl)
+        .map((index) => selectedSwap(index)?.outputUrl)
         .filter((url): url is string => !!url),
-    [approved, swaps],
+    [approved, selectedSwap],
   );
+
 
   const videoDuration = useMemo(
     () => Math.min(15, Math.max(4, Math.round(meta?.duration ?? 5))),
@@ -652,7 +775,7 @@ export default function JewelrySwap() {
       const data = await callJewelrySwap<{ generation: SwapGeneration }>({
         action: "reconstruct",
         frameUrls: approvedUrls,
-        pieces,
+        pieces: piecePayload(),
         model: videoModel,
         duration: videoDuration,
         resolution,
@@ -670,7 +793,7 @@ export default function JewelrySwap() {
     } finally {
       setReconstructing(false);
     }
-  }, [approvedUrls, pieces, videoModel, resolution, preserveAudio, meta, extraPrompt, videoDuration]);
+  }, [approvedUrls, piecePayload, videoModel, resolution, preserveAudio, meta, extraPrompt, videoDuration]);
 
   /** Stops tracking and frees the UI, even if the provider job keeps running. */
   const cancelVideo = useCallback(async () => {
@@ -718,11 +841,11 @@ export default function JewelrySwap() {
         .sort((a, b) => a - b)
         .map((index) => ({
           index,
-          url: swaps[index]?.outputUrl ?? null,
+          url: selectedSwap(index)?.outputUrl ?? null,
           time: frames[index]?.time ?? 0,
         }))
         .filter((entry): entry is { index: number; url: string; time: number } => !!entry.url),
-    [approved, swaps, frames],
+    [approved, selectedSwap, frames],
   );
 
   // Kling 3.0 without audio: $0.112 per second.
@@ -1060,29 +1183,58 @@ export default function JewelrySwap() {
                     {/* Every image on this card describes the SAME physical piece. */}
                     <div className="mt-2 flex flex-wrap gap-1.5">
                       {piece.urls.map((url, angleIndex) => (
-                        <div
-                          key={`${url}-${angleIndex}`}
-                          className="relative h-16 w-14 overflow-hidden rounded-lg border border-white/10 bg-black/50"
-                        >
-                          <img src={url} alt={`Angle ${angleIndex + 1}`} className="h-full w-full object-cover" />
-                          {piece.urls.length > 1 ? (
-                            <button
-                              type="button"
-                              aria-label="Remove angle"
-                              onClick={() =>
-                                setPieces((prev) =>
-                                  prev.map((item, i) =>
-                                    i === index
-                                      ? { ...item, urls: item.urls.filter((_, a) => a !== angleIndex) }
-                                      : item,
-                                  ),
-                                )
-                              }
-                              className="absolute right-0.5 top-0.5 rounded bg-black/80 p-0.5 text-foreground/80 hover:text-red-300"
-                            >
-                              <X size={9} />
-                            </button>
-                          ) : null}
+                        <div key={`${url}-${angleIndex}`} className="w-20 space-y-1">
+                          <div className="relative h-16 w-20 overflow-hidden rounded-lg border border-white/10 bg-black/50">
+                            <img src={url} alt={`Angle ${angleIndex + 1}`} className="h-full w-full object-cover" />
+                            {piece.urls.length > 1 ? (
+                              <button
+                                type="button"
+                                aria-label="Remove angle"
+                                onClick={() =>
+                                  setPieces((prev) =>
+                                    prev.map((item, i) =>
+                                      i === index
+                                        ? {
+                                            ...item,
+                                            urls: item.urls.filter((_, a) => a !== angleIndex),
+                                            roles: item.roles.filter((_, a) => a !== angleIndex),
+                                          }
+                                        : item,
+                                    ),
+                                  )
+                                }
+                                className="absolute right-0.5 top-0.5 rounded bg-black/80 p-0.5 text-foreground/80 hover:text-red-300"
+                              >
+                                <X size={9} />
+                              </button>
+                            ) : null}
+                          </div>
+                          {/* Optional role label — helps the model match the source view. */}
+                          <select
+                            aria-label={`Role for angle ${angleIndex + 1}`}
+                            value={piece.roles[angleIndex] ?? ""}
+                            onChange={(event) =>
+                              setPieces((prev) =>
+                                prev.map((item, i) =>
+                                  i === index
+                                    ? {
+                                        ...item,
+                                        roles: item.urls.map((_, a) =>
+                                          a === angleIndex ? event.target.value : item.roles[a] ?? "",
+                                        ),
+                                      }
+                                    : item,
+                                ),
+                              )
+                            }
+                            className="w-full rounded-md border border-white/12 bg-black/40 px-1 py-1 text-[9px] text-foreground outline-none transition-colors hover:border-cyan-200/40 focus:border-cyan-200/60"
+                          >
+                            {ANGLE_ROLE_OPTIONS.map((option) => (
+                              <option key={option || "unlabeled"} value={option}>
+                                {option || "Role (optional)"}
+                              </option>
+                            ))}
+                          </select>
                         </div>
                       ))}
                       <button
@@ -1091,12 +1243,13 @@ export default function JewelrySwap() {
                           setAngleTarget(index);
                           angleInputRef.current?.click();
                         }}
-                        className="flex h-16 w-14 flex-col items-center justify-center gap-1 rounded-lg border border-dashed border-white/15 bg-black/25 text-[9px] text-foreground/75 transition-colors hover:border-cyan-200/50"
+                        className="flex h-16 w-20 flex-col items-center justify-center gap-1 rounded-lg border border-dashed border-white/15 bg-black/25 text-[9px] text-foreground/75 transition-colors hover:border-cyan-200/50"
                       >
                         <Plus size={12} className="text-cyan-200" />
                         Angle
                       </button>
                     </div>
+
 
                     <div className="mt-2.5 grid gap-2 sm:grid-cols-2">
                       <div>
@@ -1305,6 +1458,48 @@ export default function JewelrySwap() {
                   ))}
                 </ul>
               ) : null}
+
+              <div className="mt-3 flex items-center justify-between gap-2 rounded-xl border border-cyan-200/30 bg-cyan-400/10 px-3 py-2">
+                <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-cyan-100">
+                  Geometry fidelity: Strict
+                </span>
+                <span className="text-[10px] text-cyan-100/70">
+                  Source composition dominates · no reframing or invented detail
+                </span>
+              </div>
+
+              <button
+                type="button"
+                role="switch"
+                aria-checked={generateBoth}
+                onClick={() => setGenerateBoth((prev) => !prev)}
+                className={cn(
+                  "mt-2 flex w-full items-center justify-between gap-3 rounded-xl border px-3 py-2 text-[11px] font-medium transition-colors",
+                  generateBoth
+                    ? "border-cyan-200/60 bg-cyan-400/15 text-cyan-100"
+                    : "border-white/12 bg-white/[0.03] text-foreground/70 hover:border-cyan-200/40",
+                )}
+              >
+                <span className="text-left">
+                  Advanced: generate both models for comparison
+                  <span className="block text-[10px] font-normal text-muted-foreground">
+                    Off by default — doubles the image cost per frame.
+                  </span>
+                </span>
+                <span
+                  className={cn(
+                    "relative h-4 w-8 shrink-0 rounded-full transition-colors",
+                    generateBoth ? "bg-cyan-300/80" : "bg-white/15",
+                  )}
+                >
+                  <span
+                    className={cn(
+                      "absolute top-0.5 h-3 w-3 rounded-full bg-black transition-all",
+                      generateBoth ? "left-[18px]" : "left-0.5",
+                    )}
+                  />
+                </span>
+              </button>
 
               <div className="mt-4">
                 <Textarea
@@ -1535,14 +1730,19 @@ export default function JewelrySwap() {
                 <div className="grid gap-3 sm:grid-cols-2">
                   {swapEntries.map((index) => {
                     const swap = swaps[index];
+                    const alt = altSwaps[index];
                     const frame = frames[index];
                     const isApproved = approved.has(index);
+                    const picked = chosenModel[index] === "nb2" && alt ? "nb2" : "pro";
+                    const active = picked === "nb2" ? alt : swap;
+                    const flagged = needsReview.has(index);
                     return (
                       <article
                         key={swap.id}
                         className={cn(
                           "space-y-2 rounded-2xl border bg-black/25 p-2.5",
                           isApproved ? "border-cyan-200/50" : "border-white/10",
+                          flagged ? "border-amber-300/50" : "",
                         )}
                       >
                         <div className="flex items-center justify-between gap-2">
@@ -1553,13 +1753,16 @@ export default function JewelrySwap() {
                             <span className="text-[10px] text-cyan-200/70">
                               {costPreview(swap.estimatedCredits, swap.estimatedCostUsd)}
                             </span>
-                            <StatusPill generation={swap} />
+                            <StatusPill generation={active ?? swap} />
                           </span>
                         </div>
                         <button
                           type="button"
                           onClick={() => setLightboxIndex(index)}
-                          className="group grid w-full grid-cols-2 gap-2 text-left"
+                          className={cn(
+                            "group grid w-full gap-2 text-left",
+                            alt ? "grid-cols-3" : "grid-cols-2",
+                          )}
                           aria-label="Open full-size comparison"
                         >
                           <div className="overflow-hidden rounded-xl border border-white/10 bg-black/40">
@@ -1570,31 +1773,114 @@ export default function JewelrySwap() {
                               Original
                             </p>
                           </div>
-                          <div className="relative overflow-hidden rounded-xl border border-white/10 bg-black/40">
-                            {swap.status === "complete" && swap.outputUrl ? (
-                              <img src={swap.outputUrl} alt="Swapped frame" className="h-32 w-full object-cover" />
-                            ) : swap.status === "failed" || swap.status === "canceled" ? (
-                              <p className="h-32 overflow-y-auto p-2 text-[10px] text-red-300">
-                                {swap.error ?? "Generation failed"}
-                              </p>
-                            ) : (
-                              <div className="flex h-32 items-center justify-center">
-                                <Loader2 size={16} className="animate-spin text-cyan-200" />
+                          {([["pro", swap], ["nb2", alt]] as const)
+                            .filter(([, generation]) => !!generation)
+                            .map(([key, generation]) => (
+                              <div
+                                key={key}
+                                className={cn(
+                                  "relative overflow-hidden rounded-xl border bg-black/40",
+                                  picked === key ? "border-cyan-200/60" : "border-white/10",
+                                )}
+                              >
+                                {generation!.status === "complete" && generation!.outputUrl ? (
+                                  <img
+                                    src={generation!.outputUrl}
+                                    alt={`${IMAGE_MODEL_LABELS[key]} result`}
+                                    className="h-32 w-full object-cover"
+                                  />
+                                ) : generation!.status === "failed" || generation!.status === "canceled" ? (
+                                  <p className="h-32 overflow-y-auto p-2 text-[10px] text-red-300">
+                                    {generation!.error ?? "Generation failed"}
+                                  </p>
+                                ) : (
+                                  <div className="flex h-32 items-center justify-center">
+                                    <Loader2 size={16} className="animate-spin text-cyan-200" />
+                                  </div>
+                                )}
+                                {key === "pro" ? (
+                                  <span className="absolute right-1.5 top-1.5 rounded-lg border border-white/15 bg-black/70 p-1 text-cyan-100 opacity-0 transition-opacity group-hover:opacity-100">
+                                    <Maximize2 size={11} />
+                                  </span>
+                                ) : null}
+                                <p className="px-2 py-1 text-[10px] uppercase tracking-[0.14em] text-cyan-200/70">
+                                  {IMAGE_MODEL_LABELS[key]}
+                                </p>
                               </div>
-                            )}
-                            <span className="absolute right-1.5 top-1.5 rounded-lg border border-white/15 bg-black/70 p-1 text-cyan-100 opacity-0 transition-opacity group-hover:opacity-100">
-                              <Maximize2 size={11} />
-                            </span>
-                            <p className="px-2 py-1 text-[10px] uppercase tracking-[0.14em] text-cyan-200/70">
-                              Swapped
-                            </p>
-                          </div>
+                            ))}
                         </button>
+
+                        {/* The picked result is the one that flows downstream. */}
+                        {alt ? (
+                          <div className="flex items-center gap-1.5">
+                            {(["pro", "nb2"] as const).map((key) => (
+                              <Button
+                                key={key}
+                                size="sm"
+                                variant="outline"
+                                onClick={() => setChosenModel((prev) => ({ ...prev, [index]: key }))}
+                                className={cn(
+                                  "flex-1 rounded-lg text-[11px]",
+                                  picked === key
+                                    ? "border-cyan-200/60 bg-cyan-400/15 text-cyan-100"
+                                    : "border-white/15 bg-transparent",
+                                )}
+                              >
+                                Use {key === "pro" ? "Pro" : "NB2"}
+                              </Button>
+                            ))}
+                          </div>
+                        ) : (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            disabled={swap.status !== "complete"}
+                            onClick={() => void swapFrame(index, { imageModel: "nb2" })}
+                            className="w-full rounded-lg border-white/15 bg-transparent text-[11px]"
+                          >
+                            Try with Nano Banana 2
+                          </Button>
+                        )}
+
+                        {/* Manual angle override — no auto-detection. */}
+                        <div className="grid gap-1.5 sm:grid-cols-2">
+                          <select
+                            aria-label="Preferred angle reference"
+                            value={framePreferredRole[index] ?? ""}
+                            onChange={(event) =>
+                              setFramePreferredRole((prev) => ({ ...prev, [index]: event.target.value }))
+                            }
+                            className="rounded-lg border border-white/12 bg-black/40 px-2 py-1.5 text-[10px] text-foreground outline-none focus:border-cyan-200/60"
+                          >
+                            <option value="">Preferred angle: Auto</option>
+                            {ANGLE_ROLE_OPTIONS.filter(Boolean).map((role) => (
+                              <option key={role} value={role}>
+                                Preferred angle: {role}
+                              </option>
+                            ))}
+                          </select>
+                          <select
+                            aria-label="Failure reason for regeneration"
+                            value={frameReason[index] ?? ""}
+                            onChange={(event) =>
+                              setFrameReason((prev) => ({ ...prev, [index]: event.target.value }))
+                            }
+                            className="rounded-lg border border-white/12 bg-black/40 px-2 py-1.5 text-[10px] text-foreground outline-none focus:border-cyan-200/60"
+                          >
+                            <option value="">Regen reason: none</option>
+                            {FAILURE_REASONS.map((reason) => (
+                              <option key={reason} value={reason}>
+                                {reason}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+
                         <div className="flex items-center gap-1.5">
                           <Button
                             size="sm"
                             variant={isApproved ? "default" : "outline"}
-                            disabled={swap.status !== "complete"}
+                            disabled={active?.status !== "complete"}
                             onClick={() => toggleApproved(index)}
                             className={cn(
                               "flex-1 rounded-lg text-[11px]",
@@ -1609,7 +1895,13 @@ export default function JewelrySwap() {
                           <Button
                             size="sm"
                             variant="outline"
-                            onClick={() => void swapFrame(index)}
+                            title="Regenerate with the selected angle and reason"
+                            onClick={() =>
+                              void swapFrame(index, {
+                                imageModel: picked,
+                                failureReason: frameReason[index] || null,
+                              })
+                            }
                             className="rounded-lg border-white/15 bg-transparent text-[11px]"
                           >
                             <RefreshCw size={12} />
@@ -1623,9 +1915,32 @@ export default function JewelrySwap() {
                             <Trash2 size={12} />
                           </Button>
                         </div>
+
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setNeedsReview((prev) => {
+                              const next = new Set(prev);
+                              if (next.has(index)) next.delete(index);
+                              else next.add(index);
+                              return next;
+                            })
+                          }
+                          className={cn(
+                            "w-full rounded-lg border px-2 py-1.5 text-[10px] transition-colors",
+                            flagged
+                              ? "border-amber-300/60 bg-amber-300/10 text-amber-100"
+                              : "border-white/12 bg-transparent text-muted-foreground hover:border-amber-300/40",
+                          )}
+                        >
+                          {flagged
+                            ? "Flagged: source region ambiguous"
+                            : "Flag — source region ambiguous"}
+                        </button>
                       </article>
                     );
                   })}
+
                 </div>
               ) : (
                 <div className="flex items-center gap-2 rounded-2xl border border-white/10 bg-black/25 px-4 py-8 text-xs text-muted-foreground">
@@ -1901,9 +2216,12 @@ export default function JewelrySwap() {
             if (lightboxIndex === null) return null;
             const index = lightboxIndex;
             const swap = swaps[index];
+            const alt = altSwaps[index];
             const frame = frames[index];
             if (!swap) return null;
             const isApproved = approved.has(index);
+            const picked = chosenModel[index] === "nb2" && alt ? "nb2" : "pro";
+            const active = (picked === "nb2" ? alt : swap)!;
             return (
               <>
                 <DialogHeader>
@@ -1912,7 +2230,7 @@ export default function JewelrySwap() {
                   </DialogTitle>
                 </DialogHeader>
                 <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_260px]">
-                  <div className="grid gap-3 sm:grid-cols-2">
+                  <div className={cn("grid gap-3", alt ? "sm:grid-cols-3" : "sm:grid-cols-2")}>
                     <figure className="overflow-hidden rounded-2xl border border-white/10 bg-black/50">
                       {frame ? (
                         <img src={frame.url} alt="Original frame" className="max-h-[62vh] w-full object-contain" />
@@ -1921,31 +2239,57 @@ export default function JewelrySwap() {
                         Original
                       </figcaption>
                     </figure>
-                    <figure className="overflow-hidden rounded-2xl border border-cyan-200/30 bg-black/50">
-                      {swap.status === "complete" && swap.outputUrl ? (
-                        <img src={swap.outputUrl} alt="Swapped frame" className="max-h-[62vh] w-full object-contain" />
-                      ) : swap.status === "failed" || swap.status === "canceled" ? (
-                        <p className="p-3 text-xs text-red-300">{swap.error ?? "Generation failed"}</p>
-                      ) : (
-                        <div className="flex h-48 items-center justify-center">
-                          <Loader2 size={18} className="animate-spin text-cyan-200" />
-                        </div>
-                      )}
-                      <figcaption className="px-3 py-2 text-[10px] uppercase tracking-[0.14em] text-cyan-200/70">
-                        Swapped
-                      </figcaption>
-                    </figure>
+                    {([["pro", swap], ["nb2", alt]] as const)
+                      .filter(([, generation]) => !!generation)
+                      .map(([key, generation]) => (
+                        <figure
+                          key={key}
+                          className={cn(
+                            "overflow-hidden rounded-2xl bg-black/50",
+                            picked === key ? "border-2 border-cyan-200/50" : "border border-white/10",
+                          )}
+                        >
+                          {generation!.status === "complete" && generation!.outputUrl ? (
+                            <img
+                              src={generation!.outputUrl}
+                              alt={`${IMAGE_MODEL_LABELS[key]} result`}
+                              className="max-h-[62vh] w-full object-contain"
+                            />
+                          ) : generation!.status === "failed" || generation!.status === "canceled" ? (
+                            <p className="p-3 text-xs text-red-300">{generation!.error ?? "Generation failed"}</p>
+                          ) : (
+                            <div className="flex h-48 items-center justify-center">
+                              <Loader2 size={18} className="animate-spin text-cyan-200" />
+                            </div>
+                          )}
+                          <figcaption className="flex items-center justify-between gap-2 px-3 py-2 text-[10px] uppercase tracking-[0.14em] text-cyan-200/70">
+                            {IMAGE_MODEL_LABELS[key]}
+                            <button
+                              type="button"
+                              onClick={() => setChosenModel((prev) => ({ ...prev, [index]: key }))}
+                              className={cn(
+                                "rounded-md border px-2 py-0.5 text-[9px] tracking-normal normal-case transition-colors",
+                                picked === key
+                                  ? "border-cyan-200/60 bg-cyan-400/15 text-cyan-100"
+                                  : "border-white/15 text-foreground/70 hover:border-cyan-200/40",
+                              )}
+                            >
+                              {picked === key ? "Selected" : `Use ${key === "pro" ? "Pro" : "NB2"}`}
+                            </button>
+                          </figcaption>
+                        </figure>
+                      ))}
                   </div>
 
                   <aside className="space-y-3">
                     <div className="flex items-center justify-between gap-2 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2">
-                      <StatusPill generation={swap} />
+                      <StatusPill generation={active} />
                       <span className="text-[11px] text-cyan-200/70">
                         {costPreview(swap.estimatedCredits, swap.estimatedCostUsd)}
                       </span>
                     </div>
                     <Button
-                      disabled={swap.status !== "complete"}
+                      disabled={active.status !== "complete"}
                       onClick={() => toggleApproved(index)}
                       className={cn(
                         "w-full rounded-xl text-xs font-semibold",
@@ -1958,14 +2302,29 @@ export default function JewelrySwap() {
                     </Button>
                     <Button
                       variant="outline"
-                      onClick={() => void swapFrame(index)}
+                      onClick={() =>
+                        void swapFrame(index, {
+                          imageModel: picked,
+                          failureReason: frameReason[index] || null,
+                        })
+                      }
                       className="w-full rounded-xl border-white/15 bg-transparent text-xs"
                     >
                       <RefreshCw size={13} /> Regenerate
                     </Button>
-                    {swap.outputUrl ? (
+                    {!alt ? (
+                      <Button
+                        variant="outline"
+                        disabled={swap.status !== "complete"}
+                        onClick={() => void swapFrame(index, { imageModel: "nb2" })}
+                        className="w-full rounded-xl border-white/15 bg-transparent text-xs"
+                      >
+                        Try with Nano Banana 2
+                      </Button>
+                    ) : null}
+                    {active.outputUrl ? (
                       <a
-                        href={swap.outputUrl}
+                        href={active.outputUrl}
                         download
                         target="_blank"
                         rel="noreferrer"

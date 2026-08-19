@@ -1,6 +1,8 @@
 import { fal } from "npm:@fal-ai/client";
 
 export const IMAGE_MODEL = "fal-ai/nano-banana-pro/edit";
+/** Additive: Nano Banana 2 image-edit endpoint, used for opt-in comparisons. */
+export const IMAGE_MODEL_ALT = "fal-ai/nano-banana/edit";
 export const VIDEO_MODEL = "fal-ai/kling-video/v2.5-turbo/pro/image-to-video";
 export const VERTICAL_VIDEO_ASPECT_RATIO = "9:16";
 export const MAX_VIDEO_DURATION_SECONDS = 5;
