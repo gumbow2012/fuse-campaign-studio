@@ -574,10 +574,6 @@ export default function GenerationStudio() {
           />
 
           <div className="mt-2 flex flex-wrap items-center gap-2">
-            <Chip onClick={() => fileInputRef.current?.click()} aria-label="Add reference images">
-              {uploading ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
-              <span className="hidden sm:inline">Reference</span>
-            </Chip>
             <input
               ref={fileInputRef}
               type="file"
