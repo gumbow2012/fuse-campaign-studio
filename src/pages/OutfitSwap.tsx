@@ -1074,49 +1074,107 @@ export default function OutfitSwap() {
               )}
             </SectionCard>
 
-            {reconstruction ? (
-              <SectionCard step={6} title="Rebuilt clip" hint="Same video, new clothes.">
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between gap-2">
-                    <StatusPill generation={reconstruction} />
-                    <span className="text-[11px] text-cyan-200/70">
-                      {costPreview(reconstruction.estimatedCredits, reconstruction.estimatedCostUsd)}
-                    </span>
-                  </div>
-                  {reconstruction.status === "complete" && reconstruction.outputUrl ? (
-                    <>
-                      <video
-                        src={reconstruction.outputUrl}
-                        controls
-                        playsInline
-                        className="w-full rounded-2xl border border-white/10 bg-black"
-                      />
-                      <a
-                        href={reconstruction.outputUrl}
-                        download
-                        target="_blank"
-                        rel="noreferrer"
-                        className="flex items-center justify-center gap-2 rounded-xl border border-white/15 bg-black/40 py-2 text-xs text-foreground/85 transition-colors hover:border-cyan-200/50 hover:text-cyan-100"
-                      >
-                        <Download size={13} /> Download clip
-                      </a>
-                    </>
-                  ) : reconstruction.status === "failed" || reconstruction.status === "canceled" ? (
-                    <p className="rounded-xl border border-red-400/30 bg-red-500/10 p-3 text-xs text-red-300">
-                      {reconstruction.status === "canceled"
-                        ? "Canceled — you can start a new video whenever you're ready."
-                        : reconstruction.error ?? "Reconstruction failed"}
-                    </p>
-                  ) : (
-                    <VideoProgress
-                      generationId={reconstruction.id}
-                      onCancel={() => setCancelOpen(true)}
-                    />
-                  )}
-
+            <SectionCard
+              step={6}
+              title="Library"
+              hint="Every clip you've rebuilt. Generations keep running on our servers — closing or refreshing this page won't cancel them."
+            >
+              {libraryLoading ? (
+                <div className="flex items-center gap-2 rounded-2xl border border-white/10 bg-black/25 px-4 py-8 text-xs text-muted-foreground">
+                  <Loader2 size={14} className="animate-spin text-cyan-200" /> Loading your clips…
                 </div>
-              </SectionCard>
-            ) : null}
+              ) : videos.length ? (
+                <div className="grid gap-3 sm:grid-cols-2">
+                  {videos.map((video) => {
+                    const running = video.status === "queued" || video.status === "running";
+                    return (
+                      <article
+                        key={video.id}
+                        className={cn(
+                          "space-y-2.5 rounded-2xl border bg-black/25 p-2.5",
+                          video.status === "complete" ? "border-cyan-200/40" : "border-white/10",
+                        )}
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <StatusPill generation={video} />
+                          <span className="text-[10px] text-cyan-200/70">
+                            {costPreview(video.estimatedCredits, video.estimatedCostUsd)}
+                          </span>
+                        </div>
+
+                        {video.status === "complete" && video.outputUrl ? (
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => setVideoLightboxId(video.id)}
+                              className="group relative block w-full overflow-hidden rounded-xl border border-white/10 bg-black"
+                              aria-label="Open clip"
+                            >
+                              <video
+                                src={video.outputUrl}
+                                muted
+                                playsInline
+                                preload="metadata"
+                                className="h-40 w-full object-cover"
+                              />
+                              <span className="absolute right-1.5 top-1.5 rounded-lg border border-white/15 bg-black/70 p-1 text-cyan-100 opacity-0 transition-opacity group-hover:opacity-100">
+                                <Maximize2 size={11} />
+                              </span>
+                            </button>
+                            <div className="flex items-center gap-1.5">
+                              <a
+                                href={video.outputUrl}
+                                download
+                                target="_blank"
+                                rel="noreferrer"
+                                className="flex flex-1 items-center justify-center gap-2 rounded-lg border border-white/15 bg-black/40 py-1.5 text-[11px] text-foreground/85 transition-colors hover:border-cyan-200/50 hover:text-cyan-100"
+                              >
+                                <Download size={12} /> Download
+                              </a>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => void deleteVideo(video.id)}
+                                className="rounded-lg border-white/15 bg-transparent text-[11px] hover:border-red-400/60 hover:text-red-300"
+                              >
+                                <Trash2 size={12} />
+                              </Button>
+                            </div>
+                          </>
+                        ) : running ? (
+                          <VideoProgress
+                            compact
+                            startedAt={video.createdAt}
+                            onCancel={() => setCancelTarget(video.id)}
+                          />
+                        ) : (
+                          <div className="space-y-2">
+                            <p className="rounded-xl border border-red-400/30 bg-red-500/10 p-2.5 text-[11px] text-red-300">
+                              {video.status === "canceled"
+                                ? "Canceled — start a new video whenever you're ready."
+                                : video.error ?? "Reconstruction failed"}
+                            </p>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => void deleteVideo(video.id)}
+                              className="w-full rounded-lg border-white/15 bg-transparent text-[11px] hover:border-red-400/60 hover:text-red-300"
+                            >
+                              <Trash2 size={12} /> Remove
+                            </Button>
+                          </div>
+                        )}
+                      </article>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="flex items-center gap-2 rounded-2xl border border-white/10 bg-black/25 px-4 py-8 text-xs text-muted-foreground">
+                  <Film size={14} /> Your rebuilt clips will collect here.
+                </div>
+              )}
+            </SectionCard>
+
           </div>
         </div>
       </div>
