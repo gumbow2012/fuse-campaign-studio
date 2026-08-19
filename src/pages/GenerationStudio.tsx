@@ -187,13 +187,10 @@ function AspectGlyph({ ratio }: { ratio: string }) {
   );
 }
 
-function Chip({
-  children,
-  className,
-  ...props
-}: React.ButtonHTMLAttributes<HTMLButtonElement>) {
-  return (
+const Chip = forwardRef<HTMLButtonElement, React.ButtonHTMLAttributes<HTMLButtonElement>>(
+  ({ children, className, ...props }, ref) => (
     <button
+      ref={ref}
       type="button"
       className={cn(
         "flex items-center gap-1.5 rounded-full border border-white/12 bg-white/[0.04] px-3 py-1.5 text-xs font-medium text-foreground/90 transition-colors hover:border-cyan-200/40 hover:bg-cyan-400/10",
@@ -203,8 +200,9 @@ function Chip({
     >
       {children}
     </button>
-  );
-}
+  ),
+);
+Chip.displayName = "Chip";
 
 function GenerationCard({ generation }: { generation: Generation }) {
   const inFlight = generation.status === "queued" || generation.status === "running";
