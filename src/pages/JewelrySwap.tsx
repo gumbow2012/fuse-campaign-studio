@@ -47,9 +47,11 @@ import {
 
 
 import {
+  animateJewelryFrame,
   callJewelrySwap,
   createTemplateFromJewelrySwap,
   persistTemplateLayout,
+  CAMERA_DIRECTIONS,
   type JewelryGeneration,
   type JewelryImageModel,
   type JewelrySwapTemplateResult,
