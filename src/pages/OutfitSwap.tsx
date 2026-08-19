@@ -1084,6 +1084,22 @@ export default function OutfitSwap() {
                   </p>
                 )}
 
+                <Button
+                  variant="outline"
+                  onClick={openTemplateModal}
+                  disabled={!canMakeTemplate}
+                  className="w-full rounded-xl border-white/15 bg-transparent text-xs font-semibold hover:border-cyan-200/60 hover:text-cyan-100"
+                >
+                  <Layers size={14} /> Make into template
+                </Button>
+                <p className="text-[11px] text-muted-foreground">
+                  {canMakeTemplate
+                    ? "Saves this run's structure as a real, editable template — future runs use new images and new products."
+                    : "Needs source frames, at least one product and one approved swapped frame."}
+                </p>
+
+
+
               </div>
             </SectionCard>
           </div>
