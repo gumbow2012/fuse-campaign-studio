@@ -164,9 +164,26 @@ type Generation = {
   estimatedCredits: number | null;
   estimatedCostUsd: number | null;
   providerModel: string | null;
+  inputPayload: Record<string, unknown> | null;
   createdAt: string | null;
   completedAt: string | null;
 };
+
+/** Prompt + reference urls that produced a generation, read from the stored payload. */
+function generationRecipe(generation: Generation) {
+  const payload = (generation.inputPayload ?? {}) as Record<string, unknown>;
+  const prompt = String(payload.prompt ?? generation.prompt ?? "");
+  const rawUrls = Array.isArray(payload.image_urls) ? payload.image_urls : [];
+  const urls = rawUrls.map((entry) => String(entry ?? "").trim()).filter(Boolean);
+  if (!urls.length) {
+    const single = String(payload.init_image ?? payload.image_url ?? "").trim();
+    if (single) urls.push(single);
+  }
+  const aspect = String(payload.aspect_ratio ?? "").trim();
+  const resolution = String(payload.resolution ?? "").trim();
+  return { prompt, urls, aspect, resolution };
+}
+
 
 type Reference = { url: string; label: string };
 
