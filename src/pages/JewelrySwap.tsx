@@ -2194,48 +2194,24 @@ export default function JewelrySwap() {
                           </div>
                         </button>
 
-                        {/* Manual angle override — no auto-detection. */}
+                        {/* Per-frame replacement mode — persists for regenerations. */}
                         <select
-                          aria-label="Preferred angle reference"
-                          value={framePreferredRole[index] ?? ""}
+                          aria-label="Replacement mode"
+                          value={frameMode[index] ?? "auto"}
                           onChange={(event) =>
-                            setFramePreferredRole((prev) => ({ ...prev, [index]: event.target.value }))
+                            setFrameMode((prev) => ({
+                              ...prev,
+                              [index]: event.target.value as ReplacementMode,
+                            }))
                           }
                           className="w-full rounded-lg border border-white/12 bg-black/40 px-2 py-1.5 text-[10px] text-foreground outline-none focus:border-cyan-200/60"
                         >
-                          <option value="">Preferred angle: Auto</option>
-                          {ANGLE_ROLE_OPTIONS.filter(Boolean).map((role) => (
-                            <option key={role} value={role}>
-                              Preferred angle: {role}
+                          {REPLACEMENT_MODES.map((option) => (
+                            <option key={option.value} value={option.value}>
+                              Mode: {option.label}
                             </option>
                           ))}
                         </select>
-
-                        {/* Per-frame replacement mode — persists for regenerations. */}
-                        <div className="flex items-center gap-1.5">
-                          <select
-                            aria-label="Replacement mode"
-                            value={frameMode[index] ?? "auto"}
-                            onChange={(event) =>
-                              setFrameMode((prev) => ({
-                                ...prev,
-                                [index]: event.target.value as ReplacementMode,
-                              }))
-                            }
-                            className="flex-1 rounded-lg border border-white/12 bg-black/40 px-2 py-1.5 text-[10px] text-foreground outline-none focus:border-cyan-200/60"
-                          >
-                            {REPLACEMENT_MODES.map((option) => (
-                              <option key={option.value} value={option.value}>
-                                Mode: {option.label}
-                              </option>
-                            ))}
-                          </select>
-                          {(frameMode[index] ?? "auto") === "macro" ? (
-                            <span className="rounded-md border border-cyan-200/40 bg-cyan-400/15 px-1.5 py-0.5 text-[9px] uppercase tracking-[0.14em] text-cyan-100">
-                              Macro
-                            </span>
-                          ) : null}
-                        </div>
 
 
 
@@ -2290,27 +2266,67 @@ export default function JewelrySwap() {
                           </Button>
                         </div>
 
-                        {/* Regenerate menu — Pro first, alternate model tucked away. */}
+                        {/* Regenerate panel — advanced controls live here only. */}
                         {regenMenu === index ? (
                           <div className="space-y-2 rounded-xl border border-white/12 bg-black/40 p-2">
                             <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-cyan-200/70">
                               Regenerate with Nano Banana Pro
                             </p>
                             <select
-                              aria-label="What went wrong?"
+                              aria-label="Reason"
                               value={frameReason[index] ?? ""}
                               onChange={(event) =>
                                 setFrameReason((prev) => ({ ...prev, [index]: event.target.value }))
                               }
                               className="w-full rounded-lg border border-white/12 bg-black/50 px-2 py-1.5 text-[10px] text-foreground outline-none focus:border-cyan-200/60"
                             >
-                              <option value="">What went wrong? (optional)</option>
+                              <option value="">Choose reason (optional)</option>
                               {FAILURE_REASONS.map((reason) => (
                                 <option key={reason} value={reason}>
                                   {reason}
                                 </option>
                               ))}
                             </select>
+                            <select
+                              aria-label="Replacement mode for regeneration"
+                              value={frameMode[index] ?? "auto"}
+                              onChange={(event) =>
+                                setFrameMode((prev) => ({
+                                  ...prev,
+                                  [index]: event.target.value as ReplacementMode,
+                                }))
+                              }
+                              className="w-full rounded-lg border border-white/12 bg-black/50 px-2 py-1.5 text-[10px] text-foreground outline-none focus:border-cyan-200/60"
+                            >
+                              {REPLACEMENT_MODES.map((option) => (
+                                <option key={option.value} value={option.value}>
+                                  Mode: {option.label}
+                                </option>
+                              ))}
+                            </select>
+                            <details className="rounded-lg border border-white/10 bg-black/30 px-2 py-1.5">
+                              <summary className="cursor-pointer text-[10px] text-muted-foreground">
+                                Advanced
+                              </summary>
+                              <select
+                                aria-label="Preferred reference angle"
+                                value={framePreferredRole[index] ?? ""}
+                                onChange={(event) =>
+                                  setFramePreferredRole((prev) => ({
+                                    ...prev,
+                                    [index]: event.target.value,
+                                  }))
+                                }
+                                className="mt-2 w-full rounded-lg border border-white/12 bg-black/50 px-2 py-1.5 text-[10px] text-foreground outline-none focus:border-cyan-200/60"
+                              >
+                                <option value="">Preferred reference: Auto</option>
+                                {ANGLE_ROLE_OPTIONS.filter(Boolean).map((role) => (
+                                  <option key={role} value={role}>
+                                    Preferred reference: {role}
+                                  </option>
+                                ))}
+                              </select>
+                            </details>
                             <Button
                               size="sm"
                               onClick={() => {
@@ -2346,69 +2362,6 @@ export default function JewelrySwap() {
                             </details>
                           </div>
                         ) : null}
-
-
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setNeedsReview((prev) => {
-                              const next = new Set(prev);
-                              if (next.has(index)) next.delete(index);
-                              else next.add(index);
-                              return next;
-                            })
-                          }
-                          className={cn(
-                            "w-full rounded-lg border px-2 py-1.5 text-[10px] transition-colors",
-                            flagged
-                              ? "border-amber-300/60 bg-amber-300/10 text-amber-100"
-                              : "border-white/12 bg-transparent text-muted-foreground hover:border-amber-300/40",
-                          )}
-                        >
-                          {flagged
-                            ? "Flagged: source region ambiguous"
-                            : "Flag — source region ambiguous"}
-                        </button>
-
-                        {/* Manual review flags — user-set only, no auto-detection. */}
-                        <div className="grid grid-cols-2 gap-1.5">
-                          {[
-                            {
-                              label: "Possible incomplete replacement",
-                              short: "Incomplete?",
-                              on: flagIncomplete.has(index),
-                              set: setFlagIncomplete,
-                            },
-                            {
-                              label: "Possible hybrid replacement",
-                              short: "Hybrid?",
-                              on: flagHybrid.has(index),
-                              set: setFlagHybrid,
-                            },
-                          ].map((flag) => (
-                            <button
-                              key={flag.short}
-                              type="button"
-                              title={flag.label}
-                              onClick={() =>
-                                flag.set((prev) => {
-                                  const next = new Set(prev);
-                                  if (next.has(index)) next.delete(index);
-                                  else next.add(index);
-                                  return next;
-                                })
-                              }
-                              className={cn(
-                                "rounded-lg border px-2 py-1.5 text-[10px] transition-colors",
-                                flag.on
-                                  ? "border-amber-300/60 bg-amber-300/10 text-amber-100"
-                                  : "border-white/12 bg-transparent text-muted-foreground hover:border-amber-300/40",
-                              )}
-                            >
-                              {flag.on ? `Flagged: ${flag.short}` : flag.short}
-                            </button>
-                          ))}
-                        </div>
                       </article>
                     );
                   })}
