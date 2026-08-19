@@ -560,6 +560,35 @@ export default function GenerationStudio() {
     }
   }, []);
 
+  /** Stale failed rows clutter the gallery; delete them via the existing delete action. */
+  const failedGenerations = useMemo(
+    () => generations.filter((entry) => entry.status === "failed"),
+    [generations],
+  );
+  const visibleGenerations = useMemo(
+    () => generations.filter((entry) => entry.status !== "failed"),
+    [generations],
+  );
+  const [clearingFailed, setClearingFailed] = useState(false);
+
+  const clearFailed = useCallback(async () => {
+    const ids = generations.filter((entry) => entry.status === "failed").map((entry) => entry.id);
+    if (!ids.length) return;
+    if (!window.confirm(`Delete ${ids.length} failed generation${ids.length === 1 ? "" : "s"}?`)) return;
+    setClearingFailed(true);
+    try {
+      await callStudio({ action: "delete", generationIds: ids });
+      setSelected((prev) => prev.filter((id) => !ids.includes(id)));
+      setLightboxId((prev) => (prev && ids.includes(prev) ? null : prev));
+      await loadQueue(true);
+      toast.success("Failed generations cleared");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not clear the failed generations");
+    } finally {
+      setClearingFailed(false);
+    }
+  }, [generations, loadQueue]);
+
 
 
   const addFiles = useCallback(
