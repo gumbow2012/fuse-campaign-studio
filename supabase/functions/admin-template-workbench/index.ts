@@ -7,10 +7,19 @@ import {
   errorMessage,
   json,
   logAuditEvent,
-  requireAdminUser,
+  requireBuilderUser,
 } from "../_shared/supabase-admin.ts";
+import {
+  assertCanPublish,
+  assertEdgeAccess,
+  assertNodeAccess,
+  assertTemplateAccess,
+  assertVersionAccess,
+  isScopedToOwnTemplates,
+} from "../_shared/template-scope.ts";
 import { uploadTemplateCoverAsset, uploadTemplateReferenceAsset } from "../_shared/template-assets.ts";
 import { nextEdgeOrder, sortEdgesByExecutionOrder } from "../_shared/edge-order.ts";
+
 
 type Action =
   | "catalog"
