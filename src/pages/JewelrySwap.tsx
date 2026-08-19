@@ -888,11 +888,9 @@ export default function JewelrySwap() {
         references: piece.urls.map((url, angleIndex) => ({
           url,
           role: piece.roles[angleIndex] || null,
-          // A CAD-flagged card marks its CAD-labeled angles as the geometry
-          // authority; if no angle is labeled CAD, every angle inherits the flag.
-          cad: piece.cad === true &&
-            (/^CAD/i.test(piece.roles[angleIndex] ?? "") ||
-              !piece.roles.some((role) => /^CAD/i.test(role ?? ""))),
+          // Geometry authority is decided PER reference image (auto for CAD
+          // labels, overridable per image).
+          cad: isGeometryAuthority(piece, angleIndex),
         })),
         type: piece.type,
         metal: piece.metal === AUTO_METAL ? null : piece.metal,
