@@ -413,10 +413,7 @@ export default function JewelrySwap() {
   const [frameReason, setFrameReason] = useState<Record<number, string>>({});
   /** Per-frame replacement mode — persists so later regenerations reuse it. */
   const [frameMode, setFrameMode] = useState<Record<number, ReplacementMode>>({});
-  const [needsReview, setNeedsReview] = useState<Set<number>>(new Set());
   /** Manual, user-set review flags only — no automatic similarity detection. */
-  const [flagIncomplete, setFlagIncomplete] = useState<Set<number>>(new Set());
-  const [flagHybrid, setFlagHybrid] = useState<Set<number>>(new Set());
   // Which frame's Regenerate menu is expanded, and which frame is being compared
   // against the opt-in alternate model.
   const [regenMenu, setRegenMenu] = useState<number | null>(null);
@@ -459,9 +456,6 @@ export default function JewelrySwap() {
     setChosenModel({});
     setFramePreferredRole({});
     setFrameReason({});
-    setNeedsReview(new Set());
-    setFlagIncomplete(new Set());
-    setFlagHybrid(new Set());
     setApproved(new Set());
     setSelectedFrames(new Set());
     // The video library is intentionally preserved across new source clips.
@@ -559,9 +553,6 @@ export default function JewelrySwap() {
     setChosenModel({});
     setFramePreferredRole({});
     setFrameReason({});
-    setNeedsReview(new Set());
-    setFlagIncomplete(new Set());
-    setFlagHybrid(new Set());
     setFrameMode({});
     setApproved(new Set());
     setSelectedFrames(new Set());
@@ -2133,14 +2124,12 @@ export default function JewelrySwap() {
                     const isApproved = approved.has(index);
                     const picked = chosenModel[index] === "nb2" && alt ? "nb2" : "pro";
                     const active = picked === "nb2" ? alt : swap;
-                    const flagged = needsReview.has(index);
                     return (
                       <article
                         key={swap.id}
                         className={cn(
                           "space-y-2 rounded-2xl border bg-black/25 p-2.5",
                           isApproved ? "border-cyan-200/50" : "border-white/10",
-                          flagged ? "border-amber-300/50" : "",
                         )}
                       >
                         <div className="flex items-center justify-between gap-2">
