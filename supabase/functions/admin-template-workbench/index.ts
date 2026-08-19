@@ -15,8 +15,11 @@ import {
   assertNodeAccess,
   assertTemplateAccess,
   assertVersionAccess,
+  FORBIDDEN_PUBLISH_MESSAGE,
+  FORBIDDEN_TEMPLATE_MESSAGE,
   isScopedToOwnTemplates,
 } from "../_shared/template-scope.ts";
+
 import { uploadTemplateCoverAsset, uploadTemplateReferenceAsset } from "../_shared/template-assets.ts";
 import { nextEdgeOrder, sortEdgesByExecutionOrder } from "../_shared/edge-order.ts";
 
