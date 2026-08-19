@@ -279,6 +279,9 @@ export default function GenerationStudio() {
   const [generations, setGenerations] = useState<Generation[]>([]);
   const [library, setLibrary] = useState<string[]>(() => readReferenceLibrary());
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const [aspectOpen, setAspectOpen] = useState(false);
+  const [qualityOpen, setQualityOpen] = useState(false);
+  const [motionOpen, setMotionOpen] = useState(false);
 
   const model = useMemo(
     () => STUDIO_MODELS.find((entry) => entry.key === modelKey) ?? STUDIO_MODELS[0],
