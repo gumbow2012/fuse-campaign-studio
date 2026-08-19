@@ -1,0 +1,438 @@
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
+import { CheckCircle2, Clock3, Loader2, Mail, RefreshCw, ShieldCheck, Undo2, UserPlus, Users } from "lucide-react";
+import SiteShell from "@/components/mvp/SiteShell";
+import PageMeta from "@/components/mvp/PageMeta";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { toast } from "@/hooks/use-toast";
+import { useAuth } from "@/contexts/AuthContext";
+
+type CreatorRow = {
+  userId: string;
+  email: string | null;
+  name: string | null;
+  createdAt: string | null;
+};
+
+type InviteRow = {
+  id: string;
+  email: string;
+  status: string;
+  created_at: string | null;
+  accepted_at: string | null;
+};
+
+type QueueRow = {
+  versionId: string;
+  versionNumber: number;
+  templateId: string;
+  templateName: string;
+  description: string | null;
+  previewUrl: string | null;
+  previewAssetType: "image" | "video" | null;
+  isActive: boolean;
+  submittedAt: string | null;
+  creator: { userId: string; email: string | null; name: string | null } | null;
+};
+
+function formatDate(value: string | null) {
+  if (!value) return "—";
+  return new Date(value).toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+}
+
+const AdminCreators = () => {
+  const { session } = useAuth();
+  const accessToken = session?.access_token;
+
+  const [loading, setLoading] = useState(false);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [creators, setCreators] = useState<CreatorRow[]>([]);
+  const [invites, setInvites] = useState<InviteRow[]>([]);
+  const [queue, setQueue] = useState<QueueRow[]>([]);
+  const [inviteEmail, setInviteEmail] = useState("");
+  const [notes, setNotes] = useState<Record<string, string>>({});
+
+  const callFunction = useCallback(
+    async (name: string, body: Record<string, unknown>) => {
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY) {
+        headers.apikey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+      }
+      if (accessToken) headers.Authorization = `Bearer ${accessToken}`;
+
+      const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/${name}`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify(body),
+      });
+      const raw = await response.text();
+      let data: Record<string, unknown> = {};
+      if (raw) {
+        try {
+          data = JSON.parse(raw) as Record<string, unknown>;
+        } catch {
+          data = { error: raw };
+        }
+      }
+      if (!response.ok) throw new Error(String(data.error ?? `Request failed (${response.status})`));
+      return data;
+    },
+    [accessToken],
+  );
+
+  const loadAll = useCallback(async () => {
+    if (!accessToken) return;
+    setLoading(true);
+    try {
+      const [listData, queueData] = await Promise.all([
+        callFunction("manage-creators", { action: "list" }),
+        callFunction("manage-creators", { action: "review_queue" }),
+      ]);
+      setCreators((listData.creators as CreatorRow[]) ?? []);
+      setInvites((listData.invites as InviteRow[]) ?? []);
+      setQueue((queueData.queue as QueueRow[]) ?? []);
+    } catch (error) {
+      toast({
+        title: "Could not load creators",
+        description: error instanceof Error ? error.message : "Unknown error",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  }, [accessToken, callFunction]);
+
+  useEffect(() => {
+    void loadAll();
+  }, [loadAll]);
+
+  const pendingInvites = useMemo(() => invites.filter((invite) => invite.status === "pending"), [invites]);
+
+  const sendInvite = async () => {
+    const email = inviteEmail.trim().toLowerCase();
+    if (!email.includes("@")) {
+      toast({ title: "Enter a valid email", variant: "destructive" });
+      return;
+    }
+    setBusy("invite");
+    try {
+      const data = await callFunction("manage-creators", { action: "invite", email });
+      toast({
+        title: data.grantedImmediately ? "Creator access granted" : "Invite sent",
+        description: data.grantedImmediately
+          ? `${email} already had an account, so creator access is active now.`
+          : `${email} will get an email to finish setting up their creator account.`,
+      });
+      setInviteEmail("");
+      await loadAll();
+    } catch (error) {
+      toast({
+        title: "Invite failed",
+        description: error instanceof Error ? error.message : "Unknown error",
+        variant: "destructive",
+      });
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const revoke = async (payload: { userId?: string; inviteId?: string }, label: string) => {
+    setBusy(`revoke-${payload.userId ?? payload.inviteId}`);
+    try {
+      await callFunction("manage-creators", { action: "revoke", ...payload });
+      toast({ title: `Revoked ${label}` });
+      await loadAll();
+    } catch (error) {
+      toast({
+        title: "Revoke failed",
+        description: error instanceof Error ? error.message : "Unknown error",
+        variant: "destructive",
+      });
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const approveAndPublish = async (row: QueueRow) => {
+    setBusy(`approve-${row.versionId}`);
+    try {
+      await callFunction("save-template-review-status", {
+        versionId: row.versionId,
+        reviewStatus: "Approved",
+        reviewNote: notes[row.versionId]?.trim() || null,
+      });
+      await callFunction("admin-template-workbench", { action: "activate_version", versionId: row.versionId });
+      toast({ title: "Approved and published", description: `${row.templateName} v${row.versionNumber} is live.` });
+      await loadAll();
+    } catch (error) {
+      toast({
+        title: "Approval failed",
+        description: error instanceof Error ? error.message : "Unknown error",
+        variant: "destructive",
+      });
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const sendBack = async (row: QueueRow) => {
+    setBusy(`send-back-${row.versionId}`);
+    try {
+      await callFunction("save-template-review-status", {
+        versionId: row.versionId,
+        reviewStatus: "Prompt Drift",
+        reviewNote: notes[row.versionId]?.trim() || null,
+      });
+      toast({ title: "Sent back to creator", description: `${row.templateName} v${row.versionNumber} needs changes.` });
+      await loadAll();
+    } catch (error) {
+      toast({
+        title: "Could not send back",
+        description: error instanceof Error ? error.message : "Unknown error",
+        variant: "destructive",
+      });
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  return (
+    <SiteShell>
+      <PageMeta
+        title="Creators & Review Queue | FUSE Admin"
+        description="Invite creators, manage their access, and review template submissions before they go live."
+      />
+      <div className="mx-auto w-full max-w-6xl px-4 py-10 sm:px-6 lg:px-8">
+        <header className="flex flex-wrap items-end justify-between gap-4">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.24em] text-cyan-300/80">Admin</p>
+            <h1 className="mt-2 text-3xl font-semibold tracking-tight text-foreground">Creators</h1>
+            <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
+              Invite-only creator accounts. Creators build in their own workspace and submit templates here for approval
+              before anything reaches customers.
+            </p>
+          </div>
+          <Button type="button" variant="outline" onClick={() => void loadAll()} disabled={loading}>
+            {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
+            Refresh
+          </Button>
+        </header>
+
+        <section className="mt-8 rounded-3xl border border-white/10 bg-white/[0.04] p-5 shadow-sm backdrop-blur">
+          <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.18em] text-foreground/70">
+            <UserPlus className="h-4 w-4 text-cyan-300" />
+            Invite a creator
+          </div>
+          <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-end">
+            <div className="flex-1">
+              <Label htmlFor="invite-email" className="text-foreground/80">
+                Email
+              </Label>
+              <Input
+                id="invite-email"
+                type="email"
+                value={inviteEmail}
+                onChange={(event) => setInviteEmail(event.target.value)}
+                placeholder="creator@studio.com"
+                className="mt-2 h-11"
+              />
+            </div>
+            <Button type="button" onClick={() => void sendInvite()} disabled={busy === "invite"} className="h-11">
+              {busy === "invite" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Mail className="mr-2 h-4 w-4" />}
+              Send invite
+            </Button>
+          </div>
+        </section>
+
+        <div className="mt-6 grid gap-6 lg:grid-cols-2">
+          <section className="rounded-3xl border border-white/10 bg-white/[0.04] p-5 shadow-sm backdrop-blur">
+            <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.18em] text-foreground/70">
+              <Users className="h-4 w-4 text-cyan-300" />
+              Active creators ({creators.length})
+            </div>
+            <div className="mt-4 space-y-2">
+              {creators.length === 0 ? (
+                <p className="rounded-2xl border border-white/10 bg-background/40 px-4 py-6 text-sm text-muted-foreground">
+                  No creators yet. Invite one above.
+                </p>
+              ) : (
+                creators.map((creator) => (
+                  <div
+                    key={creator.userId}
+                    className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-white/10 bg-background/40 px-4 py-3"
+                  >
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-medium text-foreground">{creator.email ?? creator.userId}</p>
+                      <p className="truncate text-xs text-muted-foreground">
+                        {creator.name || "No name set"} · joined {formatDate(creator.createdAt)}
+                      </p>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="border-red-400/40 bg-red-500/10 text-red-200 hover:bg-red-500/20"
+                      onClick={() => void revoke({ userId: creator.userId }, creator.email ?? "creator")}
+                      disabled={busy === `revoke-${creator.userId}`}
+                    >
+                      {busy === `revoke-${creator.userId}` ? (
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      ) : (
+                        <Undo2 className="mr-2 h-4 w-4" />
+                      )}
+                      Revoke
+                    </Button>
+                  </div>
+                ))
+              )}
+            </div>
+          </section>
+
+          <section className="rounded-3xl border border-white/10 bg-white/[0.04] p-5 shadow-sm backdrop-blur">
+            <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.18em] text-foreground/70">
+              <Clock3 className="h-4 w-4 text-amber-300" />
+              Pending invites ({pendingInvites.length})
+            </div>
+            <div className="mt-4 space-y-2">
+              {pendingInvites.length === 0 ? (
+                <p className="rounded-2xl border border-white/10 bg-background/40 px-4 py-6 text-sm text-muted-foreground">
+                  No invites waiting.
+                </p>
+              ) : (
+                pendingInvites.map((invite) => (
+                  <div
+                    key={invite.id}
+                    className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-white/10 bg-background/40 px-4 py-3"
+                  >
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-medium text-foreground">{invite.email}</p>
+                      <p className="text-xs text-muted-foreground">Invited {formatDate(invite.created_at)}</p>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => void revoke({ inviteId: invite.id }, invite.email)}
+                      disabled={busy === `revoke-${invite.id}`}
+                    >
+                      {busy === `revoke-${invite.id}` ? (
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      ) : (
+                        <Undo2 className="mr-2 h-4 w-4" />
+                      )}
+                      Cancel
+                    </Button>
+                  </div>
+                ))
+              )}
+            </div>
+          </section>
+        </div>
+
+        <section className="mt-6 rounded-3xl border border-white/10 bg-white/[0.04] p-5 shadow-sm backdrop-blur">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.18em] text-foreground/70">
+              <ShieldCheck className="h-4 w-4 text-emerald-300" />
+              Approval queue ({queue.length})
+            </div>
+            <Button asChild variant="ghost" size="sm">
+              <Link to="/app/lab/canvas">Open builder</Link>
+            </Button>
+          </div>
+
+          <div className="mt-4 space-y-3">
+            {queue.length === 0 ? (
+              <p className="rounded-2xl border border-white/10 bg-background/40 px-4 py-6 text-sm text-muted-foreground">
+                Nothing submitted for review right now.
+              </p>
+            ) : (
+              queue.map((row) => (
+                <div key={row.versionId} className="rounded-2xl border border-white/10 bg-background/40 p-4">
+                  <div className="flex flex-wrap gap-4">
+                    <div className="h-24 w-24 shrink-0 overflow-hidden rounded-xl border border-white/10 bg-black/30">
+                      {row.previewUrl ? (
+                        row.previewAssetType === "video" ? (
+                          <video src={row.previewUrl} className="h-full w-full object-cover" muted playsInline />
+                        ) : (
+                          <img
+                            src={row.previewUrl}
+                            alt={`${row.templateName} preview`}
+                            loading="lazy"
+                            className="h-full w-full object-cover"
+                          />
+                        )
+                      ) : (
+                        <div className="flex h-full w-full items-center justify-center text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
+                          No cover
+                        </div>
+                      )}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-semibold text-foreground">
+                        {row.templateName} · v{row.versionNumber}
+                      </p>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        Creator: {row.creator?.email ?? row.creator?.name ?? "Unknown"} · submitted{" "}
+                        {formatDate(row.submittedAt)}
+                      </p>
+                      {row.description ? (
+                        <p className="mt-2 line-clamp-2 text-sm text-muted-foreground">{row.description}</p>
+                      ) : null}
+                      <Textarea
+                        value={notes[row.versionId] ?? ""}
+                        onChange={(event) =>
+                          setNotes((prev) => ({ ...prev, [row.versionId]: event.target.value }))
+                        }
+                        placeholder="Optional note for the creator"
+                        className="mt-3 min-h-[64px]"
+                      />
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <Button
+                          type="button"
+                          size="sm"
+                          onClick={() => void approveAndPublish(row)}
+                          disabled={busy === `approve-${row.versionId}`}
+                        >
+                          {busy === `approve-${row.versionId}` ? (
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          ) : (
+                            <CheckCircle2 className="mr-2 h-4 w-4" />
+                          )}
+                          Approve &amp; publish
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => void sendBack(row)}
+                          disabled={busy === `send-back-${row.versionId}`}
+                        >
+                          {busy === `send-back-${row.versionId}` ? (
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          ) : (
+                            <Undo2 className="mr-2 h-4 w-4" />
+                          )}
+                          Send back
+                        </Button>
+                        <Button asChild variant="ghost" size="sm">
+                          <Link to={`/app/lab/canvas?template=${row.templateId}&version=${row.versionId}`}>
+                            Inspect graph
+                          </Link>
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </section>
+      </div>
+    </SiteShell>
+  );
+};
+
+export default AdminCreators;
