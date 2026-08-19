@@ -50,6 +50,8 @@ import {
   callJewelrySwap,
   createTemplateFromJewelrySwap,
   persistTemplateLayout,
+  type JewelryGeneration,
+  type JewelryImageModel,
   type JewelrySwapTemplateResult,
   type SwapGeneration,
 } from "@/services/jewelrySwap";
@@ -176,6 +178,8 @@ type Frame = { time: number; url: string };
 /** One card = ONE physical piece, described by one or more reference angles. */
 type Piece = {
   urls: string[];
+  /** Optional role label per angle, aligned by index with `urls`. */
+  roles: string[];
   name: string;
   type: string;
   metal: string;
