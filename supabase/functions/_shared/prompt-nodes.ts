@@ -21,9 +21,9 @@ export function isPromptNode(node?: { node_type?: string } | null): boolean {
 
 export function promptNodeText(node?: PromptNodeLike | null): string {
   const config = node?.prompt_config ?? {};
-  const text = typeof config.text === "string" ? config.text : null;
-  const prompt = typeof config.prompt === "string" ? config.prompt : null;
-  return String(text ?? prompt ?? "").trim();
+  const text = typeof config.text === "string" ? config.text.trim() : "";
+  const prompt = typeof config.prompt === "string" ? config.prompt.trim() : "";
+  return text || prompt;
 }
 
 /**
