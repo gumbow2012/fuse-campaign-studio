@@ -349,6 +349,7 @@ export default function GenerationStudio() {
       <PageMeta
         title="Generation Studio | FUSE"
         description="Generate standalone campaign images and video clips from a prompt and reference frames."
+        path="/app/lab/studio"
       />
 
       <div className="mx-auto w-full max-w-6xl px-4 py-8 sm:px-6">
