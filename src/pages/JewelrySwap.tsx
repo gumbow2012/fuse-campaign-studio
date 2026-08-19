@@ -2969,6 +2969,96 @@ export default function JewelrySwap() {
         </DialogContent>
       </Dialog>
 
+      {/* Library picker — reuse an already-generated asset as an input. */}
+      <Dialog open={pickerTarget !== null} onOpenChange={(open) => !open && setPickerTarget(null)}>
+        <DialogContent className="max-w-4xl border-white/10 bg-[#05070f]/95 backdrop-blur-xl">
+          <DialogHeader>
+            <DialogTitle className="font-heading text-base text-foreground">
+              {pickerTarget?.kind === "source" ? "Choose a source from your library" : "Choose a reference from your library"}
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <input
+              value={assetSearch}
+              onChange={(event) => setAssetSearch(event.target.value)}
+              placeholder="Search by prompt or feature"
+              className="min-w-[200px] flex-1 rounded-xl border border-white/12 bg-black/40 px-3 py-2 text-xs text-foreground outline-none transition-colors focus:border-cyan-200/60"
+            />
+            {pickerTarget?.kind === "source" ? (
+              <div className="flex gap-1 rounded-xl border border-white/12 bg-black/40 p-1">
+                {(["all", "image", "video"] as const).map((option) => (
+                  <button
+                    key={option}
+                    type="button"
+                    onClick={() => setAssetTypeFilter(option)}
+                    className={cn(
+                      "rounded-lg px-2.5 py-1 text-[10px] uppercase tracking-[0.12em] transition-colors",
+                      assetTypeFilter === option
+                        ? "bg-cyan-300/20 text-cyan-100"
+                        : "text-muted-foreground hover:text-foreground",
+                    )}
+                  >
+                    {option}
+                  </button>
+                ))}
+              </div>
+            ) : null}
+          </div>
+
+          {assetsLoading ? (
+            <div className="flex items-center justify-center py-12 text-xs text-muted-foreground">
+              <Loader2 size={16} className="mr-2 animate-spin text-cyan-200" /> Loading your library…
+            </div>
+          ) : assetsError ? (
+            <p className="py-10 text-center text-xs text-amber-100">{assetsError}</p>
+          ) : !visibleAssets.length ? (
+            <p className="py-10 text-center text-xs text-muted-foreground">
+              Nothing here yet — generate something first, or upload a file instead.
+            </p>
+          ) : (
+            <div className="grid max-h-[60vh] gap-2 overflow-y-auto sm:grid-cols-3 md:grid-cols-4">
+              {visibleAssets.map((asset) => (
+                <button
+                  key={asset.id}
+                  type="button"
+                  onClick={() => handlePick(asset)}
+                  className="group overflow-hidden rounded-xl border border-white/10 bg-black/40 text-left transition-colors hover:border-cyan-200/60"
+                >
+                  {asset.outputType === "video" ? (
+                    <video
+                      src={asset.outputUrl}
+                      muted
+                      loop
+                      playsInline
+                      preload="metadata"
+                      className="aspect-square w-full object-cover"
+                      onMouseEnter={(event) => void event.currentTarget.play().catch(() => {})}
+                      onMouseLeave={(event) => event.currentTarget.pause()}
+                    />
+                  ) : (
+                    <img
+                      src={asset.outputUrl}
+                      alt={asset.prompt ?? "Library asset"}
+                      loading="lazy"
+                      className="aspect-square w-full object-cover"
+                    />
+                  )}
+                  <div className="px-2 py-1.5">
+                    <p className="truncate text-[10px] uppercase tracking-[0.12em] text-cyan-200/70">
+                      {asset.feature ?? "studio"} · {asset.outputType}
+                    </p>
+                    <p className="text-[10px] text-muted-foreground">
+                      {new Date(asset.createdAt).toLocaleDateString()}
+                    </p>
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </SiteShell>
+
   );
 }
