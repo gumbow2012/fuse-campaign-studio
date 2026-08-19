@@ -589,6 +589,38 @@ export default function GenerationStudio() {
     }
   }, [generations, loadQueue]);
 
+  /**
+   * Failed tiles are hidden from the gallery, so surface the reason once —
+   * compact headline, provider detail tucked behind an expander.
+   */
+  const [recentFailure, setRecentFailure] = useState<{ id: string; error: string | null } | null>(
+    null,
+  );
+  const seenStatusRef = useRef<Map<string, string>>(new Map());
+
+  useEffect(() => {
+    const seen = seenStatusRef.current;
+    let latest: Generation | null = null;
+    for (const entry of generations) {
+      const previous = seen.get(entry.id);
+      seen.set(entry.id, entry.status);
+      if (entry.status === "failed" && previous && previous !== "failed") latest = entry;
+    }
+    if (!latest) return;
+    setRecentFailure({ id: latest.id, error: latest.error ?? null });
+    toast.error("Generation failed", {
+      description: "See “Technical details” above the gallery for the provider reason.",
+    });
+  }, [generations]);
+
+  useEffect(() => {
+    if (recentFailure && !generations.some((entry) => entry.id === recentFailure.id)) {
+      setRecentFailure(null);
+    }
+  }, [generations, recentFailure]);
+
+
+
 
 
   const addFiles = useCallback(
