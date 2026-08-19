@@ -5,6 +5,7 @@ import {
   Film,
   ImageIcon,
   Loader2,
+  Maximize2,
   Plus,
   RefreshCw,
   Shirt,
@@ -21,6 +22,17 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
 import { Textarea } from "@/components/ui/textarea";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { cn } from "@/lib/utils";
 import { IMAGE_FLAT_USD, costPreview, creditsFromUsd, resolutionMultiplier } from "@/lib/costEstimate";
 import {
@@ -28,6 +40,7 @@ import {
   uploadToStorage,
   uploadWithConcurrency,
 } from "@/services/storageUpload";
+
 
 import { callOutfitSwap, type SwapGeneration } from "@/services/outfitSwap";
 import { extractFrames, frameTimestamps, loadVideo, readMeta, type VideoMeta } from "@/lib/videoFrames";
