@@ -1855,7 +1855,7 @@ export default function JewelrySwap() {
                   Geometry fidelity: Strict
                 </span>
                 <span className="text-[10px] text-cyan-100/70">
-                  Source composition dominates · no reframing or invented detail
+                  Replacement geometry locked · source camera &amp; composition locked
                 </span>
               </div>
 
