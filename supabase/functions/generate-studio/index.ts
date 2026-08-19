@@ -394,7 +394,7 @@ Deno.serve(async (req) => {
       return json({ generation: await syncGeneration(admin, row) });
     }
 
-    if (action === "list") {
+    if (action === "list" || action === "queue") {
       const limit = Math.min(50, Math.max(1, Number(body.limit ?? 20)));
       const { data: rows, error } = await admin
         .from("studio_generations")
@@ -403,8 +403,18 @@ Deno.serve(async (req) => {
         .order("created_at", { ascending: false })
         .limit(limit);
       if (error) throw new Error(error.message);
-      return json({ generations: (rows ?? []).map(serializeGeneration) });
+
+      // Reconcile every in-flight row so the queue reflects terminal results.
+      const generations = await Promise.all(
+        (rows ?? []).map((row) =>
+          row.status === "queued" || row.status === "running"
+            ? syncGeneration(admin, row)
+            : Promise.resolve(serializeGeneration(row))
+        ),
+      );
+      return json({ generations });
     }
+
 
     if (action !== "start") throw new Error(`Unsupported action: ${action}`);
 
