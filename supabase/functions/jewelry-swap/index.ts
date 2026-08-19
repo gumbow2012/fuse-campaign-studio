@@ -505,7 +505,9 @@ async function startSwapFrame(admin: AdminClient, args: {
   imageModel?: string;
   preferredRole?: string | null;
   failureReason?: string | null;
-  /** Per-frame Macro mode toggle (forces MACRO REPLACEMENT MODE). */
+  /** Per-frame replacement mode: "auto" | "standard" | "macro". */
+  mode?: string | null;
+  /** Legacy per-frame Macro toggle (equivalent to mode = "macro"). */
   macro?: boolean;
   webhookBase: string;
 }) {
