@@ -1730,14 +1730,19 @@ export default function JewelrySwap() {
                 <div className="grid gap-3 sm:grid-cols-2">
                   {swapEntries.map((index) => {
                     const swap = swaps[index];
+                    const alt = altSwaps[index];
                     const frame = frames[index];
                     const isApproved = approved.has(index);
+                    const picked = chosenModel[index] === "nb2" && alt ? "nb2" : "pro";
+                    const active = picked === "nb2" ? alt : swap;
+                    const flagged = needsReview.has(index);
                     return (
                       <article
                         key={swap.id}
                         className={cn(
                           "space-y-2 rounded-2xl border bg-black/25 p-2.5",
                           isApproved ? "border-cyan-200/50" : "border-white/10",
+                          flagged ? "border-amber-300/50" : "",
                         )}
                       >
                         <div className="flex items-center justify-between gap-2">
@@ -1748,13 +1753,16 @@ export default function JewelrySwap() {
                             <span className="text-[10px] text-cyan-200/70">
                               {costPreview(swap.estimatedCredits, swap.estimatedCostUsd)}
                             </span>
-                            <StatusPill generation={swap} />
+                            <StatusPill generation={active ?? swap} />
                           </span>
                         </div>
                         <button
                           type="button"
                           onClick={() => setLightboxIndex(index)}
-                          className="group grid w-full grid-cols-2 gap-2 text-left"
+                          className={cn(
+                            "group grid w-full gap-2 text-left",
+                            alt ? "grid-cols-3" : "grid-cols-2",
+                          )}
                           aria-label="Open full-size comparison"
                         >
                           <div className="overflow-hidden rounded-xl border border-white/10 bg-black/40">
@@ -1765,31 +1773,114 @@ export default function JewelrySwap() {
                               Original
                             </p>
                           </div>
-                          <div className="relative overflow-hidden rounded-xl border border-white/10 bg-black/40">
-                            {swap.status === "complete" && swap.outputUrl ? (
-                              <img src={swap.outputUrl} alt="Swapped frame" className="h-32 w-full object-cover" />
-                            ) : swap.status === "failed" || swap.status === "canceled" ? (
-                              <p className="h-32 overflow-y-auto p-2 text-[10px] text-red-300">
-                                {swap.error ?? "Generation failed"}
-                              </p>
-                            ) : (
-                              <div className="flex h-32 items-center justify-center">
-                                <Loader2 size={16} className="animate-spin text-cyan-200" />
+                          {([["pro", swap], ["nb2", alt]] as const)
+                            .filter(([, generation]) => !!generation)
+                            .map(([key, generation]) => (
+                              <div
+                                key={key}
+                                className={cn(
+                                  "relative overflow-hidden rounded-xl border bg-black/40",
+                                  picked === key ? "border-cyan-200/60" : "border-white/10",
+                                )}
+                              >
+                                {generation!.status === "complete" && generation!.outputUrl ? (
+                                  <img
+                                    src={generation!.outputUrl}
+                                    alt={`${IMAGE_MODEL_LABELS[key]} result`}
+                                    className="h-32 w-full object-cover"
+                                  />
+                                ) : generation!.status === "failed" || generation!.status === "canceled" ? (
+                                  <p className="h-32 overflow-y-auto p-2 text-[10px] text-red-300">
+                                    {generation!.error ?? "Generation failed"}
+                                  </p>
+                                ) : (
+                                  <div className="flex h-32 items-center justify-center">
+                                    <Loader2 size={16} className="animate-spin text-cyan-200" />
+                                  </div>
+                                )}
+                                {key === "pro" ? (
+                                  <span className="absolute right-1.5 top-1.5 rounded-lg border border-white/15 bg-black/70 p-1 text-cyan-100 opacity-0 transition-opacity group-hover:opacity-100">
+                                    <Maximize2 size={11} />
+                                  </span>
+                                ) : null}
+                                <p className="px-2 py-1 text-[10px] uppercase tracking-[0.14em] text-cyan-200/70">
+                                  {IMAGE_MODEL_LABELS[key]}
+                                </p>
                               </div>
-                            )}
-                            <span className="absolute right-1.5 top-1.5 rounded-lg border border-white/15 bg-black/70 p-1 text-cyan-100 opacity-0 transition-opacity group-hover:opacity-100">
-                              <Maximize2 size={11} />
-                            </span>
-                            <p className="px-2 py-1 text-[10px] uppercase tracking-[0.14em] text-cyan-200/70">
-                              Swapped
-                            </p>
-                          </div>
+                            ))}
                         </button>
+
+                        {/* The picked result is the one that flows downstream. */}
+                        {alt ? (
+                          <div className="flex items-center gap-1.5">
+                            {(["pro", "nb2"] as const).map((key) => (
+                              <Button
+                                key={key}
+                                size="sm"
+                                variant="outline"
+                                onClick={() => setChosenModel((prev) => ({ ...prev, [index]: key }))}
+                                className={cn(
+                                  "flex-1 rounded-lg text-[11px]",
+                                  picked === key
+                                    ? "border-cyan-200/60 bg-cyan-400/15 text-cyan-100"
+                                    : "border-white/15 bg-transparent",
+                                )}
+                              >
+                                Use {key === "pro" ? "Pro" : "NB2"}
+                              </Button>
+                            ))}
+                          </div>
+                        ) : (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            disabled={swap.status !== "complete"}
+                            onClick={() => void swapFrame(index, { imageModel: "nb2" })}
+                            className="w-full rounded-lg border-white/15 bg-transparent text-[11px]"
+                          >
+                            Try with Nano Banana 2
+                          </Button>
+                        )}
+
+                        {/* Manual angle override — no auto-detection. */}
+                        <div className="grid gap-1.5 sm:grid-cols-2">
+                          <select
+                            aria-label="Preferred angle reference"
+                            value={framePreferredRole[index] ?? ""}
+                            onChange={(event) =>
+                              setFramePreferredRole((prev) => ({ ...prev, [index]: event.target.value }))
+                            }
+                            className="rounded-lg border border-white/12 bg-black/40 px-2 py-1.5 text-[10px] text-foreground outline-none focus:border-cyan-200/60"
+                          >
+                            <option value="">Preferred angle: Auto</option>
+                            {ANGLE_ROLE_OPTIONS.filter(Boolean).map((role) => (
+                              <option key={role} value={role}>
+                                Preferred angle: {role}
+                              </option>
+                            ))}
+                          </select>
+                          <select
+                            aria-label="Failure reason for regeneration"
+                            value={frameReason[index] ?? ""}
+                            onChange={(event) =>
+                              setFrameReason((prev) => ({ ...prev, [index]: event.target.value }))
+                            }
+                            className="rounded-lg border border-white/12 bg-black/40 px-2 py-1.5 text-[10px] text-foreground outline-none focus:border-cyan-200/60"
+                          >
+                            <option value="">Regen reason: none</option>
+                            {FAILURE_REASONS.map((reason) => (
+                              <option key={reason} value={reason}>
+                                {reason}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+
                         <div className="flex items-center gap-1.5">
                           <Button
                             size="sm"
                             variant={isApproved ? "default" : "outline"}
-                            disabled={swap.status !== "complete"}
+                            disabled={active?.status !== "complete"}
                             onClick={() => toggleApproved(index)}
                             className={cn(
                               "flex-1 rounded-lg text-[11px]",
@@ -1804,7 +1895,13 @@ export default function JewelrySwap() {
                           <Button
                             size="sm"
                             variant="outline"
-                            onClick={() => void swapFrame(index)}
+                            title="Regenerate with the selected angle and reason"
+                            onClick={() =>
+                              void swapFrame(index, {
+                                imageModel: picked,
+                                failureReason: frameReason[index] || null,
+                              })
+                            }
                             className="rounded-lg border-white/15 bg-transparent text-[11px]"
                           >
                             <RefreshCw size={12} />
@@ -1818,9 +1915,32 @@ export default function JewelrySwap() {
                             <Trash2 size={12} />
                           </Button>
                         </div>
+
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setNeedsReview((prev) => {
+                              const next = new Set(prev);
+                              if (next.has(index)) next.delete(index);
+                              else next.add(index);
+                              return next;
+                            })
+                          }
+                          className={cn(
+                            "w-full rounded-lg border px-2 py-1.5 text-[10px] transition-colors",
+                            flagged
+                              ? "border-amber-300/60 bg-amber-300/10 text-amber-100"
+                              : "border-white/12 bg-transparent text-muted-foreground hover:border-amber-300/40",
+                          )}
+                        >
+                          {flagged
+                            ? "Flagged: source region ambiguous"
+                            : "Flag — source region ambiguous"}
+                        </button>
                       </article>
                     );
                   })}
+
                 </div>
               ) : (
                 <div className="flex items-center gap-2 rounded-2xl border border-white/10 bg-black/25 px-4 py-8 text-xs text-muted-foreground">
