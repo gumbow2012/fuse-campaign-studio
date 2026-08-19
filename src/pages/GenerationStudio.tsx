@@ -4,11 +4,13 @@ import {
   ArrowRight,
   CheckSquare,
   ChevronDown,
+  Copy,
   Download,
   ImageIcon,
   Images,
   Loader2,
   Plus,
+  RefreshCw,
   Sparkles,
   Square,
   Trash2,
@@ -16,6 +18,7 @@ import {
   Wand2,
   X,
 } from "lucide-react";
+
 import { toast } from "sonner";
 import SiteShell from "@/components/mvp/SiteShell";
 import PageMeta from "@/components/mvp/PageMeta";
@@ -38,6 +41,8 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
+
 import { supabase } from "@/integrations/supabase/client";
 import { uploadRunInputFile } from "@/services/runInputUpload";
 import { cn } from "@/lib/utils";
@@ -159,9 +164,26 @@ type Generation = {
   estimatedCredits: number | null;
   estimatedCostUsd: number | null;
   providerModel: string | null;
+  inputPayload: Record<string, unknown> | null;
   createdAt: string | null;
   completedAt: string | null;
 };
+
+/** Prompt + reference urls that produced a generation, read from the stored payload. */
+function generationRecipe(generation: Generation) {
+  const payload = (generation.inputPayload ?? {}) as Record<string, unknown>;
+  const prompt = String(payload.prompt ?? generation.prompt ?? "");
+  const rawUrls = Array.isArray(payload.image_urls) ? payload.image_urls : [];
+  const urls = rawUrls.map((entry) => String(entry ?? "").trim()).filter(Boolean);
+  if (!urls.length) {
+    const single = String(payload.init_image ?? payload.image_url ?? "").trim();
+    if (single) urls.push(single);
+  }
+  const aspect = String(payload.aspect_ratio ?? "").trim();
+  const resolution = String(payload.resolution ?? "").trim();
+  return { prompt, urls, aspect, resolution };
+}
+
 
 type Reference = { url: string; label: string };
 
@@ -218,12 +240,19 @@ function SectionLabel({ children, hint }: { children: React.ReactNode; hint?: st
   );
 }
 
+const ICON_ACTION_CLASS =
+  "flex h-7 w-7 items-center justify-center rounded-lg border border-white/15 bg-black/60 text-foreground/80 backdrop-blur-md transition-colors hover:border-cyan-200/60 hover:text-cyan-100";
+
 function GenerationCard({
   generation,
   onUseAsReference,
+  onExpand,
+  onDelete,
 }: {
   generation: Generation;
   onUseAsReference: (url: string) => void;
+  onExpand: (generation: Generation) => void;
+  onDelete: (generation: Generation) => void;
 }) {
   const inFlight = generation.status === "queued" || generation.status === "running";
   const [progress, setProgress] = useState(generation.status === "running" ? 25 : 8);
@@ -235,24 +264,87 @@ function GenerationCard({
   }, [inFlight]);
 
   const isImage = generation.outputType !== "video";
+  const done = generation.status === "complete" && !!generation.outputUrl;
 
   return (
-    <article className="overflow-hidden rounded-2xl border border-white/10 bg-white/[0.03] backdrop-blur-xl">
+    <article className="group overflow-hidden rounded-2xl border border-white/10 bg-white/[0.03] backdrop-blur-xl transition-colors hover:border-cyan-200/30">
       <div className="relative flex aspect-[3/4] items-center justify-center bg-black/50">
-        {generation.status === "complete" && generation.outputUrl ? (
-          isImage ? (
-            <img
-              src={generation.outputUrl}
-              alt={generation.prompt ?? "Generated result"}
-              className="h-full w-full object-cover"
-            />
-          ) : (
-            <video src={generation.outputUrl} controls loop className="h-full w-full object-cover" />
-          )
+        {done ? (
+          <>
+            <button
+              type="button"
+              onClick={() => onExpand(generation)}
+              aria-label="Expand result"
+              className="block h-full w-full"
+            >
+              {isImage ? (
+                <img
+                  src={generation.outputUrl as string}
+                  alt={generation.prompt ?? "Generated result"}
+                  className="h-full w-full object-cover"
+                />
+              ) : (
+                <video
+                  src={generation.outputUrl as string}
+                  muted
+                  loop
+                  playsInline
+                  className="h-full w-full object-cover"
+                />
+              )}
+            </button>
+            <div className="pointer-events-none absolute inset-x-0 top-0 flex justify-end gap-1.5 p-2 opacity-0 transition-opacity group-hover:pointer-events-auto group-hover:opacity-100 focus-within:pointer-events-auto focus-within:opacity-100">
+              {isImage ? (
+                <button
+                  type="button"
+                  aria-label="Use as reference"
+                  title="Use as reference"
+                  onClick={() => onUseAsReference(generation.outputUrl as string)}
+                  className={ICON_ACTION_CLASS}
+                >
+                  <Wand2 size={13} />
+                </button>
+              ) : null}
+              <a
+                href={generation.outputUrl as string}
+                download
+                target="_blank"
+                rel="noreferrer"
+                aria-label="Download"
+                title="Download"
+                className={ICON_ACTION_CLASS}
+              >
+                <Download size={13} />
+              </a>
+              <button
+                type="button"
+                aria-label="Delete"
+                title="Delete"
+                onClick={() => onDelete(generation)}
+                className={cn(ICON_ACTION_CLASS, "hover:border-red-400/60 hover:text-red-300")}
+              >
+                <Trash2 size={13} />
+              </button>
+            </div>
+          </>
         ) : generation.status === "failed" ? (
-          <p className="max-h-full overflow-y-auto px-5 py-4 text-center text-xs text-red-300">
-            {generation.error ?? "Generation failed"}
-          </p>
+          <>
+            <p className="max-h-full overflow-y-auto px-5 py-4 text-center text-xs text-red-300">
+              {generation.error ?? "Generation failed"}
+            </p>
+            <button
+              type="button"
+              aria-label="Delete"
+              title="Delete"
+              onClick={() => onDelete(generation)}
+              className={cn(
+                ICON_ACTION_CLASS,
+                "absolute right-2 top-2 opacity-0 transition-opacity group-hover:opacity-100 hover:border-red-400/60 hover:text-red-300",
+              )}
+            >
+              <Trash2 size={13} />
+            </button>
+          </>
         ) : (
           <div className="w-full space-y-3 px-6 text-center">
             <Loader2 size={20} className="mx-auto animate-spin text-cyan-200" />
@@ -264,38 +356,15 @@ function GenerationCard({
         )}
       </div>
 
-      <div className="space-y-2 p-3">
-        <p className="line-clamp-2 text-xs text-muted-foreground">{generation.prompt ?? "—"}</p>
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <span className="text-[11px] text-cyan-200/70">
-            {generation.estimatedCredits ? `${generation.estimatedCredits} credits` : "—"}
-          </span>
-          {generation.status === "complete" && generation.outputUrl ? (
-            <div className="flex items-center gap-1.5">
-              {isImage ? (
-                <button
-                  type="button"
-                  onClick={() => onUseAsReference(generation.outputUrl as string)}
-                  className="flex items-center gap-1 rounded-full border border-white/15 px-2.5 py-1 text-[11px] text-foreground/90 transition-colors hover:border-cyan-200/50 hover:text-cyan-100"
-                >
-                  <Wand2 size={12} /> Use as reference
-                </button>
-              ) : null}
-              <a
-                href={generation.outputUrl}
-                download
-                target="_blank"
-                rel="noreferrer"
-                className="flex items-center gap-1 rounded-full border border-white/15 px-2.5 py-1 text-[11px] text-foreground/90 transition-colors hover:border-cyan-200/50 hover:text-cyan-100"
-              >
-                <Download size={12} /> Download
-              </a>
-            </div>
-          ) : null}
-        </div>
+      <div className="flex items-center justify-between gap-2 px-3 py-2.5">
+        <p className="line-clamp-1 flex-1 text-xs text-muted-foreground">{generation.prompt ?? "—"}</p>
+        <span className="shrink-0 text-[11px] text-cyan-200/70">
+          {generation.estimatedCredits ? `${generation.estimatedCredits} cr` : "—"}
+        </span>
       </div>
     </article>
   );
+
 }
 
 export default function GenerationStudio() {
@@ -313,7 +382,10 @@ export default function GenerationStudio() {
   const [generations, setGenerations] = useState<Generation[]>([]);
   const [library, setLibrary] = useState<string[]>(() => readReferenceLibrary());
   const [selected, setSelected] = useState<string[]>([]);
+  const [lightboxId, setLightboxId] = useState<string | null>(null);
+  const [confirmSingle, setConfirmSingle] = useState<Generation | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
+
   const [deleting, setDeleting] = useState(false);
   const lastSelectedRef = useRef<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -385,6 +457,54 @@ export default function GenerationStudio() {
       return [...prev, { url, label: "" }];
     });
   }, []);
+
+  const lightbox = useMemo(
+    () => generations.find((entry) => entry.id === lightboxId) ?? null,
+    [generations, lightboxId],
+  );
+
+  const useAsReference = useCallback(
+    (url: string) => {
+      addReference(url);
+      setLightboxId(null);
+      toast.success("Added to references");
+    },
+    [addReference],
+  );
+
+  const copyPrompt = useCallback(async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      toast.success("Prompt copied");
+    } catch {
+      toast.error("Could not copy the prompt");
+    }
+  }, []);
+
+  /** Restore prompt + reference stack (REF order preserved) from a past generation. */
+  const recreate = useCallback((generation: Generation) => {
+    const recipe = generationRecipe(generation);
+    setPrompt(recipe.prompt);
+    setReferences(recipe.urls.slice(0, MAX_REFERENCES).map((url) => ({ url, label: "" })));
+    if (recipe.aspect) setAspectRatio(recipe.aspect);
+    setLightboxId(null);
+    toast.success("Loaded into the composer");
+  }, []);
+
+  const deleteGeneration = useCallback(async (generation: Generation) => {
+    try {
+      await callStudio({ action: "delete", generationIds: [generation.id] });
+      setGenerations((prev) => prev.filter((entry) => entry.id !== generation.id));
+      setSelected((prev) => prev.filter((id) => id !== generation.id));
+      setLightboxId((prev) => (prev === generation.id ? null : prev));
+      setConfirmSingle(null);
+      toast.success("Generation deleted");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not delete the generation");
+    }
+  }, []);
+
+
 
   const addFiles = useCallback(
     async (files: File[]) => {
@@ -962,8 +1082,11 @@ export default function GenerationStudio() {
                       <GenerationCard
                         key={generation.id}
                         generation={generation}
-                        onUseAsReference={addReference}
+                        onUseAsReference={useAsReference}
+                        onExpand={(entry) => setLightboxId(entry.id)}
+                        onDelete={(entry) => setConfirmSingle(entry)}
                       />
+
                     ))}
                   </div>
                 ) : (
@@ -1013,6 +1136,172 @@ export default function GenerationStudio() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <AlertDialog open={!!confirmSingle} onOpenChange={(open) => !open && setConfirmSingle(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete this generation?</AlertDialogTitle>
+            <AlertDialogDescription>
+              It will be removed from your gallery permanently. This can't be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(event) => {
+                event.preventDefault();
+                if (confirmSingle) void deleteGeneration(confirmSingle);
+              }}
+              className="bg-red-500/90 text-white hover:bg-red-500"
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Lightbox: big result on the left, recipe + actions on the right */}
+      <Dialog open={!!lightbox} onOpenChange={(open) => !open && setLightboxId(null)}>
+        <DialogContent className="max-w-[1200px] gap-0 overflow-hidden border-white/12 bg-background/95 p-0 backdrop-blur-xl">
+          {lightbox ? (
+            (() => {
+              const recipe = generationRecipe(lightbox);
+              const isImage = lightbox.outputType !== "video";
+              return (
+                <div className="grid max-h-[85vh] grid-cols-1 lg:grid-cols-[minmax(0,1fr)_360px]">
+                  <div className="flex max-h-[50vh] items-center justify-center bg-black/60 p-3 lg:max-h-[85vh]">
+                    {lightbox.outputUrl ? (
+                      isImage ? (
+                        <img
+                          src={lightbox.outputUrl}
+                          alt={recipe.prompt || "Generated result"}
+                          className="max-h-full w-auto max-w-full rounded-xl object-contain"
+                        />
+                      ) : (
+                        <video
+                          src={lightbox.outputUrl}
+                          controls
+                          loop
+                          autoPlay
+                          className="max-h-full w-auto max-w-full rounded-xl"
+                        />
+                      )
+                    ) : (
+                      <p className="text-xs text-muted-foreground">No output</p>
+                    )}
+                  </div>
+
+                  <aside className="flex max-h-[85vh] flex-col gap-4 overflow-y-auto border-t border-white/10 p-5 lg:border-l lg:border-t-0">
+                    <div className="space-y-1">
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-cyan-200/70">
+                        Result
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {lightbox.providerModel ?? "—"}
+                      </p>
+                      <div className="flex flex-wrap gap-1.5 pt-1">
+                        {recipe.aspect ? (
+                          <span className="rounded-full border border-white/12 bg-white/[0.04] px-2 py-0.5 text-[11px] text-foreground/80">
+                            {recipe.aspect}
+                          </span>
+                        ) : null}
+                        {recipe.resolution ? (
+                          <span className="rounded-full border border-white/12 bg-white/[0.04] px-2 py-0.5 text-[11px] text-foreground/80">
+                            {recipe.resolution}
+                          </span>
+                        ) : null}
+                        {lightbox.estimatedCredits ? (
+                          <span className="rounded-full border border-white/12 bg-white/[0.04] px-2 py-0.5 text-[11px] text-cyan-200/80">
+                            {lightbox.estimatedCredits} credits
+                          </span>
+                        ) : null}
+                      </div>
+                    </div>
+
+                    {isImage && lightbox.outputUrl ? (
+                      <Button
+                        onClick={() => useAsReference(lightbox.outputUrl as string)}
+                        className="w-full rounded-xl bg-[hsl(var(--primary))] text-primary-foreground hover:bg-[hsl(var(--primary))]/90"
+                      >
+                        <Wand2 size={15} className="mr-2" /> Use as reference
+                      </Button>
+                    ) : null}
+
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-[11px] font-semibold uppercase tracking-[0.2em] text-cyan-200/70">
+                          Prompt
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => void copyPrompt(recipe.prompt)}
+                          disabled={!recipe.prompt}
+                          className="flex items-center gap-1 rounded-lg border border-white/15 px-2 py-1 text-[11px] text-foreground/85 transition-colors hover:border-cyan-200/50 hover:text-cyan-100 disabled:opacity-40"
+                        >
+                          <Copy size={12} /> Copy
+                        </button>
+                      </div>
+                      <p className="max-h-48 overflow-y-auto whitespace-pre-wrap rounded-xl border border-white/10 bg-black/30 p-3 text-xs leading-relaxed text-foreground/90">
+                        {recipe.prompt || "No prompt stored for this generation."}
+                      </p>
+                    </div>
+
+                    {recipe.urls.length ? (
+                      <div className="space-y-2">
+                        <span className="text-[11px] font-semibold uppercase tracking-[0.2em] text-cyan-200/70">
+                          References used
+                        </span>
+                        <div className="flex flex-wrap gap-2">
+                          {recipe.urls.map((url, index) => (
+                            <div
+                              key={`${url}-${index}`}
+                              className="relative h-14 w-14 overflow-hidden rounded-lg border border-white/12"
+                            >
+                              <img src={url} alt={`Reference ${index + 1}`} className="h-full w-full object-cover" />
+                              <span className="absolute inset-x-0 bottom-0 bg-black/75 text-center text-[9px] font-semibold uppercase text-cyan-100">
+                                Ref {index + 1}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ) : null}
+
+                    <div className="mt-auto space-y-2 border-t border-white/10 pt-4">
+                      <Button
+                        variant="outline"
+                        onClick={() => recreate(lightbox)}
+                        className="w-full border-white/15 bg-white/[0.04]"
+                      >
+                        <RefreshCw size={15} className="mr-2" /> Recreate
+                      </Button>
+                      {lightbox.outputUrl ? (
+                        <Button
+                          variant="outline"
+                          asChild
+                          className="w-full border-white/15 bg-white/[0.04]"
+                        >
+                          <a href={lightbox.outputUrl} download target="_blank" rel="noreferrer">
+                            <Download size={15} className="mr-2" /> Download
+                          </a>
+                        </Button>
+                      ) : null}
+                      <Button
+                        variant="outline"
+                        onClick={() => setConfirmSingle(lightbox)}
+                        className="w-full border-red-400/40 bg-red-500/10 text-red-200 hover:bg-red-500/20 hover:text-red-100"
+                      >
+                        <Trash2 size={15} className="mr-2" /> Delete
+                      </Button>
+                    </div>
+                  </aside>
+                </div>
+              );
+            })()
+          ) : null}
+        </DialogContent>
+      </Dialog>
     </SiteShell>
+
   );
 }
