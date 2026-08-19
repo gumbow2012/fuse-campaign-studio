@@ -1132,6 +1132,8 @@ Deno.serve(async (req) => {
     if (action === "delete_node") {
       const nodeId = cleanText(body.nodeId);
       if (!nodeId) throw new Error("nodeId is required");
+      await assertNodeAccess(admin, access, nodeId);
+
 
       const { data: node, error: nodeLookupError } = await admin
         .from("nodes")
