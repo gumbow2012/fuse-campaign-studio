@@ -319,7 +319,8 @@ export default function OutfitSwap() {
       const folder = await createOutfitSwapFolder();
       const uploaded: Garment[] = [];
       for (const file of files) {
-        const stored = await uploadToStorage(folder, file, file.name);
+        const compressed = await compressImageFile(file);
+        const stored = await uploadToStorage(folder, compressed, compressed.name);
         uploaded.push({
           url: stored.url,
           name: file.name,
