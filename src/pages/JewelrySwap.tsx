@@ -370,7 +370,11 @@ export default function JewelrySwap() {
   const [framePreferredRole, setFramePreferredRole] = useState<Record<number, string>>({});
   const [frameReason, setFrameReason] = useState<Record<number, string>>({});
   const [needsReview, setNeedsReview] = useState<Set<number>>(new Set());
-  const [generateBoth, setGenerateBoth] = useState(false);
+  // Which frame's Regenerate menu is expanded, and which frame is being compared
+  // against the opt-in alternate model.
+  const [regenMenu, setRegenMenu] = useState<number | null>(null);
+  const [compareIndex, setCompareIndex] = useState<number | null>(null);
+
   const [approved, setApproved] = useState<Set<number>>(new Set());
   const [swapping, setSwapping] = useState(false);
 
