@@ -168,6 +168,8 @@ const ANGLE_ROLE_OPTIONS = [
 const FAILURE_REASONS = [
   "Wrong angle",
   "Reference background leaked in",
+  "Original jewelry still visible",
+  "Macro detail doesn't match reference",
   "Wrong crop / zoom",
   "Wrong jewelry geometry",
   "Wrong bail / connector",
@@ -384,6 +386,8 @@ export default function JewelrySwap() {
   const [chosenModel, setChosenModel] = useState<Record<number, JewelryImageModel>>({});
   const [framePreferredRole, setFramePreferredRole] = useState<Record<number, string>>({});
   const [frameReason, setFrameReason] = useState<Record<number, string>>({});
+  /** Per-frame Macro mode toggle — forces macro replacement for that frame. */
+  const [frameMacro, setFrameMacro] = useState<Record<number, boolean>>({});
   const [needsReview, setNeedsReview] = useState<Set<number>>(new Set());
   // Which frame's Regenerate menu is expanded, and which frame is being compared
   // against the opt-in alternate model.
@@ -880,6 +884,7 @@ export default function JewelrySwap() {
         imageModel?: JewelryImageModel;
         preferredRole?: string | null;
         failureReason?: string | null;
+        macro?: boolean;
       },
     ) => {
       const frame = frames[frameIndex];
@@ -902,6 +907,7 @@ export default function JewelrySwap() {
             ? options.preferredRole
             : framePreferredRole[frameIndex] || null,
         failureReason: options?.failureReason ?? null,
+        macro: options?.macro ?? frameMacro[frameIndex] === true,
       });
       if (imageModel === "nb2") {
         setAltSwaps((prev) => ({ ...prev, [frameIndex]: data.generation }));
@@ -914,7 +920,7 @@ export default function JewelrySwap() {
         });
       }
     },
-    [frames, piecePayload, meta, extraPrompt, framePreferredRole],
+    [frames, piecePayload, meta, extraPrompt, framePreferredRole, frameMacro],
   );
 
   /**
@@ -2166,6 +2172,32 @@ export default function JewelrySwap() {
                             </option>
                           ))}
                         </select>
+
+                        {/* Per-frame Macro mode — forces macro replacement for this frame. */}
+                        <div className="flex items-center justify-between gap-2 rounded-lg border border-white/12 bg-black/40 px-2 py-1.5">
+                          <label
+                            htmlFor={`macro-mode-${index}`}
+                            className="flex items-center gap-1.5 text-[10px] uppercase tracking-[0.14em] text-muted-foreground"
+                          >
+                            <input
+                              id={`macro-mode-${index}`}
+                              type="checkbox"
+                              checked={frameMacro[index] === true}
+                              onChange={(event) =>
+                                setFrameMacro((prev) => ({ ...prev, [index]: event.target.checked }))
+                              }
+                              className="h-3 w-3 accent-cyan-300"
+                            />
+                            Macro mode
+                          </label>
+                          {frameMacro[index] === true ? (
+                            <span className="rounded-md border border-cyan-200/40 bg-cyan-400/15 px-1.5 py-0.5 text-[9px] uppercase tracking-[0.14em] text-cyan-100">
+                              Macro
+                            </span>
+                          ) : null}
+                        </div>
+
+
 
                         <div className="flex items-center gap-1.5">
                           <Button

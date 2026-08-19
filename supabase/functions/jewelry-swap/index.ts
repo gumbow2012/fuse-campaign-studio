@@ -201,6 +201,20 @@ const PRIORITY_ORDER_TEXT =
 const CONTEXT_NEGATIVES =
   "NEGATIVES: No reference-background transfer, no reference hands/fingers/gloves/arms, no reference props/surfaces/display stands/boxes/fabric, no imported reference shadows or reflections, no reference-image environment or lighting, no unrelated jewelry, no context blending between SOURCE_FRAME and the product references.";
 
+/** Macro frames need cinematography preserved but jewelry detail fully rebuilt. */
+const MACRO_REPLACEMENT_BLOCK =
+  "MACRO REPLACEMENT MODE: Use SOURCE_FRAME strictly as a MACRO CINEMATOGRAPHY template. Preserve ONLY the source's macro magnification, crop, camera angle, orientation, framing density, depth of field, focus characteristics, lighting direction, exposure and environmental background. The original jewelry visible inside SOURCE_FRAME must be COMPLETELY replaced — do NOT preserve the original piece's stones, prongs, settings, metal shapes, engravings, borders or microscopic construction, and do NOT copy the original stone layout, count or placement. Reconstruct this photograph as if the camera were photographing the REPLACEMENT jewelry instead: JEWELRY_REFERENCES are the absolute authority for the physical microscopic detail — actual gemstone cuts and sizes, the replacement's own stone arrangement and density, prong/bead/channel/bezel style, metal borders, engraving, lettering, surface relief, material and metal color. If the original has 6 large stones and the replacement is 35 small pavé stones, show the replacement's real design — never invent large versions to match the source layout. Stay at the source's macro distance (if 1:1 macro, remain 1:1 macro — do not pull back to a hero/product shot). Show only the amount of replacement jewelry appropriate for the existing crop. In macro mode the replaced region MAY cover most of the frame — the only protected pixels are the non-jewelry environmental background, which still must come from SOURCE_FRAME (never import the reference's background, hand, finger, glove, surface, box or lighting). Relight the replacement detail to match SOURCE_FRAME while keeping physically realistic diamond optics (crisp brilliance, internal refraction, independent scintillation, spectral dispersion) and source-consistent metal specular response. Prefer references in this order for the detail: Macro Detail, then CAD/design-authority, then the closest matching side/front/back, then highest-resolution product reference, then others. Match the source's detail type to the best reference (diamond surface → replacement diamond macro; edge → replacement edge; clasp/hinge → replacement clasp; engraving → replacement engraving; links → replacement link reference). If no directly corresponding detail exists, use the closest visible region of the replacement and infer minimally — never fall back to preserving the original jewelry, and never invent decorative detail.";
+
+const MACRO_FORCED_PREFIX =
+  "This frame IS an extreme macro — apply the following unconditionally, and in this frame the \"modify the smallest possible region\" rule does NOT override it: the only protected region is the non-jewelry environmental background.";
+
+const MACRO_CONDITIONAL_PREFIX =
+  "IF SOURCE_FRAME is an extreme macro / detail shot where the jewelry fills most of the frame, apply the following (it then takes precedence over the \"modify the smallest possible region\" rule, whose protected region becomes the non-jewelry environmental background only); otherwise ignore this paragraph entirely and use the surgical replacement above.";
+
+function macroBlock(forced: boolean) {
+  return `${forced ? MACRO_FORCED_PREFIX : MACRO_CONDITIONAL_PREFIX}\n${MACRO_REPLACEMENT_BLOCK}`;
+}
+
 
 /** Targeted corrective lines appended when the user regenerates with a reason. */
 const FAILURE_CORRECTIONS: Record<string, string> = {
@@ -236,6 +250,14 @@ const FAILURE_CORRECTIONS: Record<string, string> = {
     "CORRECTION: the previous attempt broke the chain interaction. Preserve SOURCE_FRAME's chain placement, path, tension, contact and occlusion exactly, and attach the replacement at its own reference attachment point.",
   "referencebackgroundleakedin":
     "CORRECTION: The previous generation incorrectly copied environmental/contextual elements from a jewelry product reference (background, hands, gloves, props, surfaces or lighting). Remove ALL such contamination. The jewelry reference controls ONLY the target jewelry object's physical construction. Restore every non-jewelry region from SOURCE_FRAME exactly.",
+  "originaljewelrystillvisible":
+    "CORRECTION: The previous attempt preserved recognizable microscopic construction from the original source jewelry. Completely remove the source jewelry's stones, setting pattern, metal geometry and decorative details. Rebuild the jewelry-filled portion from the replacement references while preserving only the source camera, crop, depth of field and lighting.",
+  "macrodetaildoesn'tmatchreference":
+    "CORRECTION: The previous attempt invented or incorrectly translated the replacement jewelry's microscopic design. Prioritize the uploaded Macro Detail / CAD / closest product references and reproduce the replacement's actual stone cuts, settings, metal construction and surface geometry.",
+  "macrodetaildoesntmatchreference":
+    "CORRECTION: The previous attempt invented or incorrectly translated the replacement jewelry's microscopic design. Prioritize the uploaded Macro Detail / CAD / closest product references and reproduce the replacement's actual stone cuts, settings, metal construction and surface geometry.",
+  "macrodetaildoesn’tmatchreference":
+    "CORRECTION: The previous attempt invented or incorrectly translated the replacement jewelry's microscopic design. Prioritize the uploaded Macro Detail / CAD / closest product references and reproduce the replacement's actual stone cuts, settings, metal construction and surface geometry.",
   other:
 
     "CORRECTION: the previous attempt was inaccurate. Re-read SOURCE_FRAME for the shot and the references for the object's construction, and follow both strictly.",
@@ -265,6 +287,8 @@ function buildJewelryPrompt(args: {
   extra?: string;
   preferredRole?: string | null;
   failureReason?: string | null;
+  /** Force MACRO REPLACEMENT MODE for this frame (per-frame UI toggle). */
+  macro?: boolean;
 }) {
   let cursor = 2; // image 1 is the source frame
   const lines: string[] = [];
@@ -380,6 +404,10 @@ function buildJewelryPrompt(args: {
     "Every unrelated detail from SOURCE_FRAME — subject identity, skin, hair, clothing, hands, environment — must be preserved exactly. Respect layering: whatever was in front stays in front. Match the source lighting, contact shadows and reflections.",
     "",
     CONTEXT_NEGATIVES,
+    "",
+    macroBlock(args.macro === true),
+
+
 
     cadActive ? "" : null,
     cadActive
@@ -420,6 +448,8 @@ async function startSwapFrame(admin: AdminClient, args: {
   imageModel?: string;
   preferredRole?: string | null;
   failureReason?: string | null;
+  /** Per-frame Macro mode toggle (forces MACRO REPLACEMENT MODE). */
+  macro?: boolean;
   webhookBase: string;
 }) {
   const sourceFrameUrl = String(args.sourceFrameUrl ?? "").trim();
@@ -444,6 +474,7 @@ async function startSwapFrame(admin: AdminClient, args: {
     extra: args.extraPrompt,
     preferredRole: args.preferredRole ?? null,
     failureReason: args.failureReason ?? null,
+    macro: args.macro === true,
   });
 
   const { data: inserted, error: insertError } = await admin
@@ -506,6 +537,7 @@ async function startSwapFrame(admin: AdminClient, args: {
           geometry_fidelity: "strict",
           preferred_role: args.preferredRole ?? null,
           failure_reason: args.failureReason ?? null,
+          macro_mode: args.macro === true,
           source_frame_url: sourceFrameUrl,
           frame_index: Number(args.frameIndex ?? 0),
           frame_time: Number(args.frameTime ?? 0),
@@ -1387,6 +1419,7 @@ Deno.serve(async (req) => {
         imageModel: body.imageModel,
         preferredRole: body.preferredRole ?? null,
         failureReason: body.failureReason ?? null,
+        macro: body.macro === true,
         webhookBase,
       });
       return json({ generation });
