@@ -359,11 +359,13 @@ async function syncGeneration(admin: AdminClient, row: any) {
     const isTransient = /queue status lookup failed|fetch|network/i.test(message);
     if (isTransient) return serializeGeneration(row);
 
+    const detail = await providerFailureDetail(row);
+
     const { data: updated } = await admin
       .from("studio_generations")
       .update({
         status: "failed",
-        error_log: message.slice(0, 10000),
+        error_log: combineFailureMessage(message, detail),
         completed_at: new Date().toISOString(),
       })
       .eq("id", row.id)
