@@ -71,6 +71,25 @@ export async function animateJewelryFrame(args: {
   return data.generation;
 }
 
+/** A completed generation the user can re-use as an input. */
+export type LibraryAsset = {
+  id: string;
+  outputUrl: string;
+  outputType: "image" | "video";
+  kind: string | null;
+  prompt: string | null;
+  feature: string | null;
+  createdAt: string;
+};
+
+/** The caller's completed generations, newest first. */
+export async function listAssets(type: "image" | "video" | "all" = "all") {
+  const data = await callJewelrySwap<{ assets: LibraryAsset[] }>({
+    action: "list_assets",
+    type,
+  });
+  return data.assets ?? [];
+}
 
 
 /** Call the jewelry-swap edge function with a just-in-time session token. */
