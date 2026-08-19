@@ -2358,10 +2358,23 @@ export default function JewelrySwap() {
                             ) : running ? (
                               <VideoProgress compact startedAt={clip.createdAt} />
                             ) : (
-                              <p className="rounded-xl border border-red-400/30 bg-red-500/5 p-2 text-[10px] text-red-300">
-                                {clip.error ?? "Clip failed"}
-                              </p>
+                              <div className="space-y-1.5 rounded-xl border border-red-400/30 bg-red-500/5 p-2">
+                                <p className="text-[10px] text-red-300">
+                                  Animation failed — try Regenerate
+                                </p>
+                                {clip.error ? (
+                                  <details>
+                                    <summary className="cursor-pointer list-none text-[10px] uppercase tracking-[0.14em] text-red-200/60">
+                                      Technical details
+                                    </summary>
+                                    <p className="mt-1 max-h-24 overflow-y-auto whitespace-pre-wrap break-words text-[10px] leading-snug text-muted-foreground">
+                                      {clip.error}
+                                    </p>
+                                  </details>
+                                ) : null}
+                              </div>
                             )}
+
 
                             <p className="text-[10px] uppercase tracking-[0.14em] text-cyan-200/70">
                               Kling 3.0 · 3 sec · 1080p
