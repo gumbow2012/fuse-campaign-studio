@@ -688,6 +688,78 @@ export default function OutfitSwap() {
     [swaps],
   );
 
+  /* ------------------- Serialize this run into a real template -------------- */
+
+  const canMakeTemplate = frames.length > 0 && garments.length > 0 && approvedFrames.length > 0;
+  const [templateOpen, setTemplateOpen] = useState(false);
+  const [templateName, setTemplateName] = useState("");
+  const [templateDescription, setTemplateDescription] = useState(
+    "Reusable outfit replacement workflow generated from Outfit Swap.",
+  );
+  const [creatingTemplate, setCreatingTemplate] = useState(false);
+  const [createdTemplate, setCreatedTemplate] = useState<OutfitSwapTemplateResult | null>(null);
+
+  const openTemplateModal = useCallback(() => {
+    setCreatedTemplate(null);
+    setTemplateName(
+      `Outfit Swap – ${new Date().toLocaleDateString(undefined, {
+        year: "numeric",
+        month: "short",
+        day: "numeric",
+      })}`,
+    );
+    setTemplateDescription("Reusable outfit replacement workflow generated from Outfit Swap.");
+    setTemplateOpen(true);
+  }, []);
+
+  const createTemplate = useCallback(async () => {
+    if (!canMakeTemplate) return;
+    setCreatingTemplate(true);
+    try {
+      const result = await createTemplateFromOutfitSwap({
+        name: templateName,
+        description: templateDescription,
+        // Approved swapped frames define the STRUCTURE — each becomes a
+        // replaceable input slot with the swapped frame as its example.
+        frames: approvedFrames.map((frame, index) => ({
+          url: frame.url,
+          label: `Input Image ${String(index + 1).padStart(2, "0")}`,
+        })),
+        products: garments.map((garment) => ({
+          url: garment.url,
+          type: garment.type,
+          label: garment.label || garment.name,
+          person: garment.person,
+        })),
+        includeAnimation: clips.length > 0,
+        previewUrl: approvedFrames[0]?.url ?? null,
+        videoModel,
+        duration: videoDuration,
+        resolution,
+        aspectRatio: meta?.aspectRatio,
+      });
+      persistTemplateLayout(result.versionId, result.positions ?? {});
+      setCreatedTemplate(result);
+      toast.success("Template created");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not create the template");
+    } finally {
+      setCreatingTemplate(false);
+    }
+  }, [
+    canMakeTemplate,
+    templateName,
+    templateDescription,
+    approvedFrames,
+    garments,
+    clips.length,
+    videoModel,
+    videoDuration,
+    resolution,
+    meta,
+  ]);
+
+
   return (
     <SiteShell>
       <PageMeta
