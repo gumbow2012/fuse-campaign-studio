@@ -3,6 +3,16 @@ import type { SwapGeneration } from "@/services/outfitSwap";
 
 export type { SwapGeneration };
 
+/** Which image model produced a swapped frame. */
+export type JewelryImageModel = "pro" | "nb2";
+
+/** Jewelry Swap adds the image-model + preferred-angle metadata to each record. */
+export type JewelryGeneration = SwapGeneration & {
+  imageModel?: JewelryImageModel | null;
+  preferredRole?: string | null;
+};
+
+
 /** Call the jewelry-swap edge function with a just-in-time session token. */
 export async function callJewelrySwap<T = any>(body: Record<string, unknown>): Promise<T> {
   const {
