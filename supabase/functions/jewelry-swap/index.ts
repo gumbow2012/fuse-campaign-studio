@@ -345,6 +345,10 @@ async function startSwapFrame(admin: AdminClient, args: {
   aspectRatio?: string;
   resolution?: string;
   extraPrompt?: string;
+  /** "pro" = Nano Banana Pro (default), "nb2" = Nano Banana 2 comparison run. */
+  imageModel?: string;
+  preferredRole?: string | null;
+  failureReason?: string | null;
   webhookBase: string;
 }) {
   const sourceFrameUrl = String(args.sourceFrameUrl ?? "").trim();
@@ -354,12 +358,22 @@ async function startSwapFrame(admin: AdminClient, args: {
     .filter((piece) => pieceUrls(piece ?? {}).length);
   if (!pieces.length) throw new Error("Add at least one jewelry reference");
 
+  const imageModelKey = String(args.imageModel ?? "pro").trim().toLowerCase() === "nb2"
+    ? "nb2"
+    : "pro";
+  const endpointId = imageModelKey === "nb2" ? IMAGE_MODEL_ALT : IMAGE_MODEL;
+
   // REF order matters: the source frame is always image 1.
   const imageUrls = cleanUrls([
     sourceFrameUrl,
     ...pieces.flatMap((piece) => pieceUrls(piece)),
   ]);
-  const prompt = buildJewelryPrompt({ pieces, extra: args.extraPrompt });
+  const prompt = buildJewelryPrompt({
+    pieces,
+    extra: args.extraPrompt,
+    preferredRole: args.preferredRole ?? null,
+    failureReason: args.failureReason ?? null,
+  });
 
   const { data: inserted, error: insertError } = await admin
     .from("studio_generations")
@@ -378,7 +392,7 @@ async function startSwapFrame(admin: AdminClient, args: {
 
   try {
     const estimatedCostUsd = await estimateUsd({
-      endpointId: IMAGE_MODEL,
+      endpointId,
       fallbackFlatUsd: IMAGE_FALLBACK_USD,
     });
 
@@ -393,13 +407,13 @@ async function startSwapFrame(admin: AdminClient, args: {
     };
 
     const webhookUrl = `${args.webhookBase}${encodeURIComponent(inserted.id)}`;
-    const requestId = await submitFalJob(IMAGE_MODEL, falInput, webhookUrl);
+    const requestId = await submitFalJob(endpointId, falInput, webhookUrl);
 
     const { data: updated } = await admin
       .from("studio_generations")
       .update({
         status: "running",
-        provider_model: IMAGE_MODEL,
+        provider_model: endpointId,
         provider_request_id: requestId,
         estimated_cost_usd: estimatedCostUsd,
         estimated_credits: creditsFromUsd(estimatedCostUsd),
@@ -407,12 +421,21 @@ async function startSwapFrame(admin: AdminClient, args: {
           ...falInput,
           feature: "jewelry-swap",
           stage: "frame_swap",
+          image_model: imageModelKey,
+          image_endpoint: endpointId,
+          geometry_fidelity: "strict",
+          preferred_role: args.preferredRole ?? null,
+          failure_reason: args.failureReason ?? null,
           source_frame_url: sourceFrameUrl,
           frame_index: Number(args.frameIndex ?? 0),
           frame_time: Number(args.frameTime ?? 0),
           pieces,
         },
       })
+      .eq("id", inserted.id)
+      .select("*")
+      .single();
+
       .eq("id", inserted.id)
       .select("*")
       .single();
