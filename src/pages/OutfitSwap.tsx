@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Link } from "react-router-dom";
 import {
   Check,
   Download,
@@ -1742,6 +1743,95 @@ export default function OutfitSwap() {
         </AlertDialogContent>
       </AlertDialog>
 
+
+      {/* Serialize this run into a real, editable template */}
+      <Dialog open={templateOpen} onOpenChange={setTemplateOpen}>
+        <DialogContent className="max-w-lg border-white/10 bg-card">
+          <DialogHeader>
+            <DialogTitle className="font-heading">
+              {createdTemplate ? "Template created" : "Make into template"}
+            </DialogTitle>
+          </DialogHeader>
+
+          {createdTemplate ? (
+            <div className="space-y-4">
+              <p className="text-sm text-muted-foreground">
+                <span className="font-medium text-foreground">{createdTemplate.templateName}</span> is
+                a normal template — editable, publishable and runnable like any other.
+              </p>
+              <dl className="grid grid-cols-2 gap-2 text-[11px] sm:grid-cols-4">
+                {[
+                  ["Input slots", `${createdTemplate.inputSlotCount}`],
+                  ["Products", `${createdTemplate.productReferenceCount}`],
+                  ["Steps", `${createdTemplate.nodeCount}`],
+                  ["Clips", `${createdTemplate.klingClipCount}`],
+                ].map(([label, value]) => (
+                  <div key={label} className="rounded-xl border border-white/10 bg-black/25 px-3 py-2">
+                    <dt className="uppercase tracking-[0.14em] text-muted-foreground">{label}</dt>
+                    <dd className="mt-0.5 text-xs font-semibold text-foreground">{value}</dd>
+                  </div>
+                ))}
+              </dl>
+              <div className="flex flex-col gap-2 sm:flex-row">
+                <Button
+                  asChild
+                  className="flex-1 rounded-xl bg-[hsl(var(--primary))] font-semibold text-primary-foreground hover:bg-[hsl(var(--primary))]/90"
+                >
+                  <Link to={`/app/lab/canvas?versionId=${createdTemplate.versionId}`}>
+                    Open template
+                  </Link>
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => setTemplateOpen(false)}
+                  className="flex-1 rounded-xl border-white/15 bg-transparent"
+                >
+                  Stay here
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <div className="space-y-1.5">
+                <label className="text-[11px] uppercase tracking-[0.14em] text-muted-foreground">
+                  Template name
+                </label>
+                <Input
+                  value={templateName}
+                  onChange={(event) => setTemplateName(event.target.value)}
+                  className="rounded-xl border-white/12 bg-black/40"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-[11px] uppercase tracking-[0.14em] text-muted-foreground">
+                  Description
+                </label>
+                <Textarea
+                  value={templateDescription}
+                  onChange={(event) => setTemplateDescription(event.target.value)}
+                  rows={3}
+                  className="rounded-xl border-white/12 bg-black/40"
+                />
+              </div>
+              <p className="text-[11px] text-muted-foreground">
+                Creates {approvedFrames.length} replaceable image input{approvedFrames.length === 1 ? "" : "s"},{" "}
+                {garments.length} product reference{garments.length === 1 ? "" : "s"},{" "}
+                {approvedFrames.length} Nano Banana step{approvedFrames.length === 1 ? "" : "s"} and one
+                Seedance final video{clips.length ? ", plus an optional Kling clip branch" : ""}. The
+                current run's images are examples only.
+              </p>
+              <Button
+                onClick={() => void createTemplate()}
+                disabled={creatingTemplate || !templateName.trim()}
+                className="w-full rounded-xl bg-[hsl(var(--primary))] py-5 font-semibold text-primary-foreground hover:bg-[hsl(var(--primary))]/90"
+              >
+                {creatingTemplate ? <Loader2 size={15} className="animate-spin" /> : <Layers size={15} />}
+                Create template
+              </Button>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
 
     </SiteShell>
   );
