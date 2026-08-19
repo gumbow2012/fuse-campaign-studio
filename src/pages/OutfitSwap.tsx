@@ -254,7 +254,7 @@ export default function OutfitSwap() {
     setSwaps({});
     setApproved(new Set());
     setSelectedFrames(new Set());
-    setReconstruction(null);
+    // The video library is intentionally preserved across new source clips.
 
     try {
       const element = await loadVideo(objectUrl);
