@@ -390,6 +390,7 @@ export default function JewelrySwap() {
 
   /* -------------------------- 3. Piece references ------------------------- */
 
+  /** Each selected file becomes its own piece card. */
   const addPieces = useCallback(async (files: File[]) => {
     if (!files.length) return;
     setUploadingPiece(true);
@@ -400,21 +401,58 @@ export default function JewelrySwap() {
         const compressed = await compressImageFile(file);
         const stored = await uploadToStorage(folder, compressed, compressed.name);
         uploaded.push({
-          url: stored.url,
+          urls: [stored.url],
           name: file.name,
-          type: GARMENT_TYPES[0],
-          label: "",
+          type: JEWELRY_TYPES[0],
+          metal: AUTO_METAL,
+          stone: AUTO_STONE,
+          quality: "",
+          width: "",
+          height: "",
+          depth: "",
+          weight: "",
+          cad: false,
           person: DEFAULT_APPLY_TO,
+          notes: "",
         });
       }
 
-      setPieces((prev) => [...prev, ...uploaded].slice(0, 14));
+      setPieces((prev) => [...prev, ...uploaded].slice(0, 8));
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Could not upload that reference");
     } finally {
       setUploadingPiece(false);
     }
   }, []);
+
+  /** Extra angles of the SAME physical piece land on the targeted card. */
+  const addAngles = useCallback(
+    async (files: File[]) => {
+      const target = angleTarget;
+      if (!files.length || target === null) return;
+      setUploadingPiece(true);
+      try {
+        const folder = await createOutfitSwapFolder();
+        const urls: string[] = [];
+        for (const file of files) {
+          const compressed = await compressImageFile(file);
+          const stored = await uploadToStorage(folder, compressed, compressed.name);
+          urls.push(stored.url);
+        }
+        setPieces((prev) =>
+          prev.map((item, index) =>
+            index === target ? { ...item, urls: [...item.urls, ...urls].slice(0, 6) } : item,
+          ),
+        );
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : "Could not upload that angle");
+      } finally {
+        setUploadingPiece(false);
+        setAngleTarget(null);
+      }
+    },
+    [angleTarget],
+  );
 
   /* ------------------------------ 4. Frame swaps ---------------------------- */
 
