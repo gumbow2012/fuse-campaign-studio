@@ -1347,30 +1347,55 @@ export default function JewelrySwap() {
                       ))}
                     </dl>
                   ) : null}
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => videoInputRef.current?.click()}
+                      className="w-full rounded-xl border-white/15 bg-transparent text-xs"
+                    >
+                      <RefreshCw size={13} /> Replace video
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => openPicker({ kind: "source" })}
+                      className="w-full rounded-xl border-white/15 bg-transparent text-xs"
+                    >
+                      <ImageIcon size={13} /> Choose from library
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <button
+                    type="button"
+                    onClick={() => videoInputRef.current?.click()}
+                    className="flex w-full flex-col items-center gap-2 rounded-2xl border border-dashed border-white/15 bg-black/25 px-4 py-10 text-center transition-colors hover:border-cyan-200/50"
+                  >
+                    {uploadingVideo ? (
+                      <Loader2 size={18} className="animate-spin text-cyan-200" />
+                    ) : (
+                      <Upload size={18} className="text-cyan-200" />
+                    )}
+                    <span className="text-sm font-medium text-foreground">Upload a clip</span>
+                    <span className="text-xs text-muted-foreground">.mp4 or .mov</span>
+                  </button>
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => videoInputRef.current?.click()}
+                    onClick={() => openPicker({ kind: "source" })}
                     className="w-full rounded-xl border-white/15 bg-transparent text-xs"
                   >
-                    <RefreshCw size={13} /> Replace video
+                    <ImageIcon size={13} /> Choose from library
                   </Button>
                 </div>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => videoInputRef.current?.click()}
-                  className="flex w-full flex-col items-center gap-2 rounded-2xl border border-dashed border-white/15 bg-black/25 px-4 py-10 text-center transition-colors hover:border-cyan-200/50"
-                >
-                  {uploadingVideo ? (
-                    <Loader2 size={18} className="animate-spin text-cyan-200" />
-                  ) : (
-                    <Upload size={18} className="text-cyan-200" />
-                  )}
-                  <span className="text-sm font-medium text-foreground">Upload a clip</span>
-                  <span className="text-xs text-muted-foreground">.mp4 or .mov</span>
-                </button>
               )}
+              {sourceNotice ? (
+                <p className="mt-3 rounded-xl border border-amber-300/25 bg-amber-300/10 px-3 py-2 text-[11px] text-amber-100">
+                  {sourceNotice}
+                </p>
+              ) : null}
               {extracting ? (
                 <div className="mt-3 space-y-1.5">
                   <p className="text-[11px] uppercase tracking-[0.14em] text-cyan-200/70">
@@ -1379,6 +1404,7 @@ export default function JewelrySwap() {
                   <Progress value={extractProgress} className="h-1.5" />
                 </div>
               ) : null}
+
             </SectionCard>
 
             <SectionCard
