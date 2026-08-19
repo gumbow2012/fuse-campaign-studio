@@ -117,10 +117,11 @@ const STONE_OPTIONS = [
 const QUALITY_OPTIONS = ["", "D–F", "G–H", "VS", "VVS", "SI", "Custom/Notes"];
 
 /**
- * V1 has no real subject detection, so we never fabricate "Person 1/2/3".
- * Each piece carries its own target — room for real per-person thumbnails later.
+ * A single physical piece only ever goes on ONE person, so the target is a
+ * positional label ("Main subject" or left/right) — never "Everyone".
+ * V1 has no real subject detection, so we never fabricate numbered people.
  */
-const APPLY_TO_OPTIONS = ["Main subject", "Everyone"];
+const APPLY_TO_OPTIONS = ["Main subject", "Person on the left", "Person on the right"];
 const DEFAULT_APPLY_TO = APPLY_TO_OPTIONS[0];
 
 const VIDEO_MODELS = [
