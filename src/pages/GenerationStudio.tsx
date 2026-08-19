@@ -1210,13 +1210,24 @@ export default function GenerationStudio() {
                       Clear
                     </Button>
                   </div>
+                ) : failedGenerations.length ? (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={clearingFailed}
+                    onClick={() => void clearFailed()}
+                    className="border-white/15 bg-white/[0.04] text-[11px]"
+                  >
+                    <Trash2 size={14} className="mr-1.5" />
+                    {clearingFailed ? "Clearing…" : `Clear failed (${failedGenerations.length})`}
+                  </Button>
                 ) : null}
               </div>
 
               <TabsContent value="gallery" className="mt-4">
-                {generations.length ? (
+                {visibleGenerations.length ? (
                   <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-4">
-                    {generations.map((generation) => (
+                    {visibleGenerations.map((generation) => (
                       <GenerationCard
                         key={generation.id}
                         generation={generation}
