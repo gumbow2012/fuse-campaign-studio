@@ -412,11 +412,15 @@ Deno.serve(async (req) => {
       if (failed || !output) {
         // Let the poller reconcile if the payload was simply unusable.
         if (!body.error && !failed) return json({ ok: true });
+        const detail = await providerFailureDetail(row);
         await admin
           .from("studio_generations")
           .update({
             status: "failed",
-            error_log: String(body.error ?? "Generation failed").slice(0, 10000),
+            error_log: combineFailureMessage(
+              String(body.error ?? "Generation failed"),
+              detail,
+            ),
             completed_at: new Date().toISOString(),
           })
           .eq("id", row.id);
