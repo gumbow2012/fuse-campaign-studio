@@ -168,6 +168,8 @@ const ANGLE_ROLE_OPTIONS = [
 const FAILURE_REASONS = [
   "Wrong angle",
   "Reference background leaked in",
+  "Original jewelry still visible",
+  "Macro detail doesn't match reference",
   "Wrong crop / zoom",
   "Wrong jewelry geometry",
   "Wrong bail / connector",
