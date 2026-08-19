@@ -138,3 +138,6 @@ verify_jwt = false
 
 [functions.outfit-swap]
 verify_jwt = false
+
+[functions.jewelry-swap]
+verify_jwt = false
