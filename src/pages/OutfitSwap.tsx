@@ -1031,19 +1031,19 @@ export default function OutfitSwap() {
                         <Download size={13} /> Download clip
                       </a>
                     </>
-                  ) : reconstruction.status === "failed" ? (
+                  ) : reconstruction.status === "failed" || reconstruction.status === "canceled" ? (
                     <p className="rounded-xl border border-red-400/30 bg-red-500/10 p-3 text-xs text-red-300">
-                      {reconstruction.error ?? "Reconstruction failed"}
+                      {reconstruction.status === "canceled"
+                        ? "Canceled — you can start a new video whenever you're ready."
+                        : reconstruction.error ?? "Reconstruction failed"}
                     </p>
                   ) : (
-                    <div className="space-y-2 rounded-2xl border border-white/10 bg-black/30 p-4 text-center">
-                      <Video size={18} className="mx-auto text-cyan-200" />
-                      <p className="text-[11px] uppercase tracking-[0.16em] text-cyan-200/70">
-                        {reconstruction.status === "queued" ? "Queued with the provider" : "Rebuilding the clip"}
-                      </p>
-                      <Progress value={reconstruction.status === "queued" ? 12 : 55} className="h-1.5" />
-                    </div>
+                    <VideoProgress
+                      generationId={reconstruction.id}
+                      onCancel={() => setCancelOpen(true)}
+                    />
                   )}
+
                 </div>
               </SectionCard>
             ) : null}
