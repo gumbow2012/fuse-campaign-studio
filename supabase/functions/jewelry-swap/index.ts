@@ -287,6 +287,8 @@ function buildJewelryPrompt(args: {
   extra?: string;
   preferredRole?: string | null;
   failureReason?: string | null;
+  /** Force MACRO REPLACEMENT MODE for this frame (per-frame UI toggle). */
+  macro?: boolean;
 }) {
   let cursor = 2; // image 1 is the source frame
   const lines: string[] = [];
