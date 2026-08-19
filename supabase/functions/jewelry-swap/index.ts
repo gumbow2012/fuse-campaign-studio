@@ -144,6 +144,9 @@ type JewelryPiece = {
   cad?: boolean;
   person?: string;
   notes?: string;
+  /** "piece" (default, narrowest) or "piece_chain" — what the swap may replace. */
+  scope?: string;
+
 };
 
 /** Normalized labeled references for a piece, in supplied order. */
@@ -185,6 +188,20 @@ function refListPhrase(numbers: number[]) {
 const CAD_AUTHORITY_TEXT =
   "CAD AUTHORITY ACTIVE. The CAD-flagged reference(s) are the HIGHEST-PRIORITY GEOMETRY AUTHORITY and outrank every photographic reference for geometry: silhouette, dimensions, proportions, depth, thickness, bail and connector/hinge geometry, relative scale, cutouts, negative space, borders, raised and recessed surfaces, front/back/side structure, stone-seat locations, stone count and stone layout. Geometry must NEVER be reinvented, softened or averaged from photos when a CAD reference exists. Photographic references then control ONLY materials: metal color and alloy, polish, surface finish, diamond/stone appearance and scintillation, reflections and micro-texture. Render the CAD as a physically manufactured real-world piece, preserving every structural feature exactly.";
 
+/** The references are PRODUCT references — only the jewelry object may transfer. */
+const REFERENCE_CONTEXT_EXCLUSION =
+  "REFERENCE CONTEXT EXCLUSION: The uploaded jewelry reference images are PRODUCT REFERENCES ONLY. Extract visual information ONLY from the target jewelry object itself. Completely ignore and do not reproduce any incidental content surrounding the jewelry in the reference images — hands, fingers, skin, gloves, arms, necks, clothing, models, mannequins, display stands, jewelry boxes, trays, tables, velvet, leather, fabric, walls, backgrounds, flooring, props, other/unrelated jewelry, packaging, and the reference images' own shadows, reflections and lighting setup. Those exist only because the jewelry was photographed in that environment; they are NOT part of the replacement object. Do not copy them into SOURCE_FRAME.";
+
+const SURGICAL_REPLACEMENT_CORE =
+  "Perform a SURGICAL object replacement. SOURCE_FRAME is the absolute authority for the photograph and every pixel outside the target jewelry region. JEWELRY_REFERENCES are the authority ONLY for the physical target jewelry. Conceptually: identify the original jewelry region in SOURCE_FRAME, remove ONLY that jewelry, insert the replacement jewelry, and leave everything outside that region visually identical to SOURCE_FRAME. Modify the SMALLEST possible region needed for the swap. Do not blend the two photographs. Adapt the replacement object's perspective AND lighting to SOURCE_FRAME — use the references only for the jewelry's metal, material, stone color, finish and construction, then relight it to match SOURCE_FRAME's lighting; do not transplant the reference's background, environment, shadows or lighting. New local contact shadows/reflections from the replacement are allowed only where physically required by its placement in SOURCE_FRAME.";
+
+const PRIORITY_ORDER_TEXT =
+  "PRIORITY ORDER (highest first): 1) preserve SOURCE_FRAME composition, 2) preserve SOURCE_FRAME environment, 3) preserve the replacement jewelry's exact geometry, 4) never transfer reference context, 5) match SOURCE_FRAME perspective and crop, 6) match SOURCE_FRAME lighting.";
+
+const CONTEXT_NEGATIVES =
+  "NEGATIVES: No reference-background transfer, no reference hands/fingers/gloves/arms, no reference props/surfaces/display stands/boxes/fabric, no imported reference shadows or reflections, no reference-image environment or lighting, no unrelated jewelry, no context blending between SOURCE_FRAME and the product references.";
+
+
 /** Targeted corrective lines appended when the user regenerates with a reason. */
 const FAILURE_CORRECTIONS: Record<string, string> = {
   "wrongangle":
@@ -217,7 +234,10 @@ const FAILURE_CORRECTIONS: Record<string, string> = {
     "CORRECTION: the previous attempt invented detail. Do not add stones, prongs, hinges, engraving, lettering, textures or decorative elements that no reference shows; infer minimally and only where unavoidable.",
   "wrongchaininteraction":
     "CORRECTION: the previous attempt broke the chain interaction. Preserve SOURCE_FRAME's chain placement, path, tension, contact and occlusion exactly, and attach the replacement at its own reference attachment point.",
+  "referencebackgroundleakedin":
+    "CORRECTION: The previous generation incorrectly copied environmental/contextual elements from a jewelry product reference (background, hands, gloves, props, surfaces or lighting). Remove ALL such contamination. The jewelry reference controls ONLY the target jewelry object's physical construction. Restore every non-jewelry region from SOURCE_FRAME exactly.",
   other:
+
     "CORRECTION: the previous attempt was inaccurate. Re-read SOURCE_FRAME for the shot and the references for the object's construction, and follow both strictly.",
 };
 
@@ -296,6 +316,16 @@ function buildJewelryPrompt(args: {
       } — give it believable mass and thickness, not paper-thin.`;
     }
 
+    // Replacement scope: default to the narrowest safe scope (this piece only).
+    const scope = String(piece.scope ?? "").trim().toLowerCase();
+    if (scope === "piece_chain" || /chain/.test(scope)) {
+      line +=
+        " REPLACEMENT SCOPE: this piece PLUS its attached chain/bracelet may be replaced together as one object, using the references for both. Everything else in SOURCE_FRAME stays untouched.";
+    } else {
+      line +=
+        " REPLACEMENT SCOPE: replace ONLY this piece. Keep SOURCE_FRAME's existing chain, bracelet, clasp, other jewelry and all surroundings exactly as they are.";
+    }
+
     lines.push(line);
   }
 
@@ -307,6 +337,13 @@ function buildJewelryPrompt(args: {
     "",
     "Preserve EXACTLY from SOURCE_FRAME: camera position, camera angle, perspective, crop, zoom level, composition, depth of field, focus plane, lighting, background, chain placement, and the jewelry's position, orientation, rotation, tilt, visible percentage, occlusion and scale.",
     "",
+    REFERENCE_CONTEXT_EXCLUSION,
+    "",
+    SURGICAL_REPLACEMENT_CORE,
+    "",
+    PRIORITY_ORDER_TEXT,
+    "",
+
     "Replace ONLY the original jewelry piece with the piece defined by the JEWELRY_REFERENCES. The references are the ABSOLUTE authority for the replacement object's identity and construction: silhouette, lettering, symbols/logos, stone locations, stone cuts, stone sizes, stone density, metal geometry, bail, bail opening, hinges, connectors, bezels, prongs, edges, thickness, front, side and back construction, raised and recessed surfaces, and structural proportions.",
     "",
     "CRITICAL — do NOT make a product shot. Render ONLY the portion of the replacement jewelry that the exact source camera would physically see:",
@@ -341,6 +378,9 @@ function buildJewelryPrompt(args: {
     "If a piece is a pendant only, replace only the pendant and keep the existing chain. If a chain only, replace only the chain and keep the existing pendant. If \"Pendant + Chain\", replace both.",
     "",
     "Every unrelated detail from SOURCE_FRAME — subject identity, skin, hair, clothing, hands, environment — must be preserved exactly. Respect layering: whatever was in front stays in front. Match the source lighting, contact shadows and reflections.",
+    "",
+    CONTEXT_NEGATIVES,
+
     cadActive ? "" : null,
     cadActive
       ? (cadRefNums.length

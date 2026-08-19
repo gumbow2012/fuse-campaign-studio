@@ -137,6 +137,13 @@ const DEFAULT_APPLY_TO = APPLY_TO_OPTIONS[0];
  * Optional role label for each reference angle. The model does the matching from
  * SOURCE_FRAME + these labels — there is no external vision classifier.
  */
+/** How much of the source may be replaced. Narrowest scope is the default. */
+const SCOPE_OPTIONS = [
+  { value: "piece", label: "Jewelry piece only" },
+  { value: "piece_chain", label: "Jewelry piece + attached chain/bracelet" },
+];
+const DEFAULT_SCOPE = SCOPE_OPTIONS[0].value;
+
 const ANGLE_ROLE_OPTIONS = [
   "",
   "Front",
@@ -160,6 +167,7 @@ const ANGLE_ROLE_OPTIONS = [
 /** Optional regenerate reasons — each appends a targeted corrective sentence. */
 const FAILURE_REASONS = [
   "Wrong angle",
+  "Reference background leaked in",
   "Wrong crop / zoom",
   "Wrong jewelry geometry",
   "Wrong bail / connector",
@@ -202,6 +210,8 @@ type Piece = {
   cad: boolean;
   person: string;
   notes: string;
+  /** "piece" (default) or "piece_chain". */
+  scope: string;
 };
 
 /** Compact, factual config line — never a fabricated accuracy score. */
@@ -617,6 +627,7 @@ export default function JewelrySwap() {
           cad: false,
           person: DEFAULT_APPLY_TO,
           notes: "",
+          scope: DEFAULT_SCOPE,
         } as Piece,
       ].slice(0, 8),
     );
@@ -701,6 +712,7 @@ export default function JewelrySwap() {
           cad: false,
           person: DEFAULT_APPLY_TO,
           notes: "",
+          scope: DEFAULT_SCOPE,
         });
       }
 
@@ -856,6 +868,7 @@ export default function JewelrySwap() {
         cad: piece.cad,
         person: piece.person,
         notes: piece.notes || null,
+        scope: piece.scope || DEFAULT_SCOPE,
       })),
     [pieces],
   );
@@ -1713,7 +1726,28 @@ export default function JewelrySwap() {
                           className="h-8 rounded-lg border-white/12 bg-black/40 text-xs"
                         />
                       </div>
+                      <div className="sm:col-span-2">
+                        <label className="mb-1 block text-[10px] uppercase tracking-[0.14em] text-cyan-200/70">
+                          Replacement includes
+                        </label>
+                        <select
+                          value={piece.scope || DEFAULT_SCOPE}
+                          onChange={(event) =>
+                            setPieces((prev) =>
+                              prev.map((item, i) => (i === index ? { ...item, scope: event.target.value } : item)),
+                            )
+                          }
+                          className={SELECT_CLASS}
+                        >
+                          {SCOPE_OPTIONS.map((option) => (
+                            <option key={option.value} value={option.value}>
+                              {option.label}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
                     </div>
+
 
                     <button
                       type="button"
