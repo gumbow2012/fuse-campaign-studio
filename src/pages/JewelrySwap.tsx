@@ -661,7 +661,7 @@ export default function JewelrySwap() {
           height: "",
           depth: "",
           weight: "",
-          cad: false,
+          cads: [null],
           person: DEFAULT_APPLY_TO,
           notes: "",
           scope: DEFAULT_SCOPE,
