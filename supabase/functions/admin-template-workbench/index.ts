@@ -7,10 +7,22 @@ import {
   errorMessage,
   json,
   logAuditEvent,
-  requireAdminUser,
+  requireBuilderUser,
 } from "../_shared/supabase-admin.ts";
+import {
+  assertCanPublish,
+  assertEdgeAccess,
+  assertNodeAccess,
+  assertTemplateAccess,
+  assertVersionAccess,
+  FORBIDDEN_PUBLISH_MESSAGE,
+  FORBIDDEN_TEMPLATE_MESSAGE,
+  isScopedToOwnTemplates,
+} from "../_shared/template-scope.ts";
+
 import { uploadTemplateCoverAsset, uploadTemplateReferenceAsset } from "../_shared/template-assets.ts";
 import { nextEdgeOrder, sortEdgesByExecutionOrder } from "../_shared/edge-order.ts";
+
 
 type Action =
   | "catalog"
@@ -769,22 +781,32 @@ Deno.serve(async (req) => {
   const admin = createAdminClient();
 
   try {
-    const user = await requireAdminUser(req, admin);
+    const access = await requireBuilderUser(req, admin);
+    const user = access.user;
+    const scoped = isScopedToOwnTemplates(access);
     const body = await req.json().catch(() => ({})) as Record<string, unknown>;
     const action = cleanText(body.action, "catalog") as Action;
 
     if (action === "catalog") {
-      const { data: templates, error: templateError } = await admin
+      const templateQuery = admin
         .from("fuse_templates")
         .select("id, name, description, preview_url, preview_asset_type, created_at, updated_at")
         .order("name", { ascending: true });
+      if (scoped) templateQuery.eq("created_by", user.id);
+
+      const { data: templates, error: templateError } = await templateQuery;
       if (templateError) throw new Error(templateError.message);
 
-      const { data: versions, error: versionError } = await admin
-        .from("template_versions")
-        .select("id, template_id, version_number, is_active, review_status, reviewed_at, created_at")
-        .order("version_number", { ascending: false });
+      const templateIds = (templates ?? []).map((template: any) => template.id);
+      const { data: versions, error: versionError } = templateIds.length
+        ? await admin
+            .from("template_versions")
+            .select("id, template_id, version_number, is_active, review_status, reviewed_at, created_at")
+            .in("template_id", templateIds)
+            .order("version_number", { ascending: false })
+        : { data: [], error: null };
       if (versionError) throw new Error(versionError.message);
+
 
       const versionIds = (versions ?? []).map((version: any) => version.id);
       const { data: nodes, error: nodeError } = versionIds.length
@@ -849,7 +871,9 @@ Deno.serve(async (req) => {
         .insert({
           name,
           description: nullableText(body.description),
+          created_by: user.id,
         })
+
         .select("id, name")
         .single();
       if (templateError || !template) throw new Error(templateError?.message ?? "Template create failed");
@@ -935,6 +959,7 @@ Deno.serve(async (req) => {
     if (action === "clone_version") {
       const sourceVersionId = cleanText(body.sourceVersionId);
       if (!sourceVersionId) throw new Error("sourceVersionId is required");
+      await assertVersionAccess(admin, access, sourceVersionId);
 
       let targetTemplateId = cleanText(body.targetTemplateId);
       const newTemplateName = cleanText(body.newTemplateName);
@@ -945,20 +970,26 @@ Deno.serve(async (req) => {
           .insert({
             name: newTemplateName,
             description: nullableText(body.newTemplateDescription),
+            created_by: user.id,
           })
           .select("id")
           .single();
         if (error || !template) throw new Error(error?.message ?? "New template create failed");
         targetTemplateId = template.id;
+      } else if (targetTemplateId) {
+        await assertTemplateAccess(admin, access, targetTemplateId);
       }
 
       if (!targetTemplateId) throw new Error("targetTemplateId or newTemplateName is required");
+
+      const makeActive = body.makeActive === true;
+      if (makeActive) assertCanPublish(access);
 
       const result = await cloneVersion({
         admin,
         sourceVersionId,
         targetTemplateId,
-        makeActive: body.makeActive === true,
+        makeActive,
       });
 
       await logAuditEvent({
@@ -974,6 +1005,7 @@ Deno.serve(async (req) => {
     }
 
     if (action === "activate_version") {
+      assertCanPublish(access);
       const versionId = cleanText(body.versionId);
       if (!versionId) throw new Error("versionId is required");
 
@@ -991,12 +1023,15 @@ Deno.serve(async (req) => {
     if (action === "publish_gate") {
       const versionId = cleanText(body.versionId);
       if (!versionId) throw new Error("versionId is required");
+      await assertVersionAccess(admin, access, versionId);
       return json({ versionId, activationGate: await getVersionPublishGate(admin, versionId) });
     }
 
     if (action === "unpublish_template") {
+      assertCanPublish(access);
       const templateId = cleanText(body.templateId);
       if (!templateId) throw new Error("templateId is required");
+
 
       const { error: deactivateError } = await admin
         .from("template_versions")
@@ -1018,6 +1053,8 @@ Deno.serve(async (req) => {
     if (action === "update_template") {
       const templateId = cleanText(body.templateId);
       if (!templateId) throw new Error("templateId is required");
+      await assertTemplateAccess(admin, access, templateId);
+
       const patch: Record<string, unknown> = {};
       if ("name" in body) patch.name = cleanText(body.name);
       if ("description" in body) patch.description = nullableText(body.description);
@@ -1056,6 +1093,8 @@ Deno.serve(async (req) => {
       const name = cleanText(body.name, nodeType === "user_input" ? "New Input" : nodeType === "video_gen" ? "New Video Step" : "New Image Step");
       if (!versionId) throw new Error("versionId is required");
       if (!["user_input", "image_gen", "video_gen"].includes(nodeType)) throw new Error("Invalid nodeType");
+      await assertVersionAccess(admin, access, versionId);
+
 
       const promptConfig = nodeType === "user_input"
         ? {
@@ -1096,6 +1135,8 @@ Deno.serve(async (req) => {
     if (action === "delete_node") {
       const nodeId = cleanText(body.nodeId);
       if (!nodeId) throw new Error("nodeId is required");
+      await assertNodeAccess(admin, access, nodeId);
+
 
       const { data: node, error: nodeLookupError } = await admin
         .from("nodes")
@@ -1131,6 +1172,8 @@ Deno.serve(async (req) => {
         throw new Error("versionId, sourceNodeId, and targetNodeId are required");
       }
       if (sourceNodeId === targetNodeId) throw new Error("An edge cannot target the same node");
+      await assertVersionAccess(admin, access, versionId);
+
 
       const { sourceNode, targetNode } = await loadEndpointNodes(admin, versionId, sourceNodeId, targetNodeId);
       const targetEdges = await loadTargetEdges(admin, versionId, targetNodeId);
@@ -1165,6 +1208,8 @@ Deno.serve(async (req) => {
       const direction = cleanInteger(body.direction, 0, -1, 1);
       if (!edgeId) throw new Error("edgeId is required");
       if (direction !== -1 && direction !== 1) throw new Error("direction must be -1 or 1");
+      await assertEdgeAccess(admin, access, edgeId);
+
 
       const { data: edge, error: edgeLookupError } = await admin
         .from("edges")
@@ -1199,7 +1244,9 @@ Deno.serve(async (req) => {
     if (action === "delete_edge") {
       const edgeId = cleanText(body.edgeId);
       if (!edgeId) throw new Error("edgeId is required");
+      await assertEdgeAccess(admin, access, edgeId);
       const { data: edge, error: edgeLookupError } = await admin
+
         .from("edges")
         .select("version_id, target_node_id")
         .eq("id", edgeId)
@@ -1221,6 +1268,11 @@ Deno.serve(async (req) => {
 
     return json({ error: `Unsupported action: ${action}` }, 400);
   } catch (error) {
-    return json({ error: errorMessage(error) }, 400);
+    const message = errorMessage(error);
+    const forbidden = message === FORBIDDEN_TEMPLATE_MESSAGE ||
+      message === FORBIDDEN_PUBLISH_MESSAGE ||
+      message === "Builder access required";
+    return json({ error: message }, forbidden ? 403 : 400);
   }
+
 });

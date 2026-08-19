@@ -60,7 +60,8 @@ Deno.serve(async (req) => {
   try {
     const user = await requireUser(req, admin);
     const roles = await getUserRoles(user.id, admin);
-    const canInspectGraph = roles.some((role) => role === "admin" || role === "dev");
+    const isAdminOrDev = roles.some((role) => role === "admin" || role === "dev");
+    const isCreatorOnly = roles.includes("creator") && !isAdminOrDev;
 
     const url = new URL(req.url);
     let versionId = url.searchParams.get("versionId");
@@ -76,7 +77,7 @@ Deno.serve(async (req) => {
 
     const { data: version, error: versionError } = await admin
       .from("template_versions")
-      .select("id, template_id, version_number, is_active, review_status, fuse_templates!inner(id, name)")
+      .select("id, template_id, version_number, is_active, review_status, fuse_templates!inner(id, name, created_by)")
       .eq("id", versionId)
       .single();
     if (versionError || !version) throw new Error(versionError?.message ?? "Template version not found");
@@ -240,6 +241,10 @@ Deno.serve(async (req) => {
       required: true,
       hint: `${slot.name} is required for this template.`,
     }));
+
+    // Creators may only inspect the graph of templates they created themselves.
+    const ownsTemplate = (version as any).fuse_templates.created_by === user.id;
+    const canInspectGraph = isAdminOrDev || (isCreatorOnly && ownsTemplate);
 
     if (!canInspectGraph) {
       return json({

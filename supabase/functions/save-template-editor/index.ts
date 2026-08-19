@@ -5,8 +5,9 @@ import {
   createAdminClient,
   errorMessage,
   json,
-  requireTesterUser,
+  requireBuilderUser,
 } from "../_shared/supabase-admin.ts";
+import { assertVersionAccess, FORBIDDEN_TEMPLATE_MESSAGE } from "../_shared/template-scope.ts";
 import { uploadTemplateReferenceAsset } from "../_shared/template-assets.ts";
 
 const VERTICAL_VIDEO_ASPECT_RATIO = "9:16";
@@ -98,7 +99,7 @@ Deno.serve(async (req) => {
   const admin = createAdminClient();
 
   try {
-    await requireTesterUser(req, admin);
+    const access = await requireBuilderUser(req, admin);
 
     const body = await req.json() as Body;
     const versionId = normalizeNullable(body.versionId);
@@ -106,6 +107,7 @@ Deno.serve(async (req) => {
 
     if (!versionId) throw new Error("versionId is required");
     if (!nodeId) throw new Error("nodeId is required");
+    await assertVersionAccess(admin, access, versionId);
 
     const { data: node, error: nodeError } = await admin
       .from("nodes")
@@ -275,6 +277,7 @@ Deno.serve(async (req) => {
       asset: uploadedAsset,
     });
   } catch (error) {
-    return json({ error: errorMessage(error) }, 400);
+    const message = errorMessage(error);
+    return json({ error: message }, message === FORBIDDEN_TEMPLATE_MESSAGE ? 403 : 400);
   }
 });

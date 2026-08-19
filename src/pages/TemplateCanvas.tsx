@@ -512,6 +512,7 @@ function defaultPosition(laneIndex: number, nodeIndex: number): Point {
 
 const TemplateCanvas = () => {
   const { session, hasAppAccess } = useAuth();
+  const canPublishTemplates = hasAppAccess;
   const [searchParams, setSearchParams] = useSearchParams();
   const [templates, setTemplates] = useState<TemplateOption[]>([]);
   const [loadingTemplates, setLoadingTemplates] = useState(false);
@@ -2937,7 +2938,7 @@ const TemplateCanvas = () => {
                       Open Output Audit
                     </Link>
                   </Button>
-                  {testingGateSatisfied && detail && !detail.isActive ? (
+                  {canPublishTemplates && testingGateSatisfied && detail && !detail.isActive ? (
                     <Button type="button" size="sm" onClick={() => void activateCurrentVersion()} disabled={!!mutating}>
                       {mutating === "activate-version" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle2 className="mr-2 h-4 w-4" />}
                       Publish Live
@@ -3075,6 +3076,7 @@ const TemplateCanvas = () => {
                   {mutating === "save-template-meta" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
                   Save Details
                 </Button>
+                {canPublishTemplates ? (
                 <Button
                   type="button"
                   variant="outline"
@@ -3085,6 +3087,7 @@ const TemplateCanvas = () => {
                   {mutating === "unpublish-template" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <EyeOff className="mr-2 h-4 w-4" />}
                   Unpublish Live
                 </Button>
+                ) : null}
               </div>
             </div>
             <div className="mt-4 grid gap-4 xl:grid-cols-12">
@@ -3173,7 +3176,7 @@ const TemplateCanvas = () => {
                   <Copy className="h-4 w-4" />
                 </Button>
               </div>
-              {detail && !detail.isActive ? (
+              {canPublishTemplates && detail && !detail.isActive ? (
                 <Button type="button" size="sm" onClick={() => void activateCurrentVersion()} disabled={!!mutating || !testingGateSatisfied}>
                   <CheckCircle2 className="mr-2 h-4 w-4" />
                   Publish Version Live

@@ -95,6 +95,44 @@ export async function requireTesterUser(req: Request, admin = createAdminClient(
   return user;
 }
 
+export type BuilderAccess = {
+  user: Awaited<ReturnType<typeof requireUser>>;
+  roles: string[];
+  isAdmin: boolean;
+  isDev: boolean;
+  isCreator: boolean;
+  /** Creator role without admin/dev — scoped to their own templates, cannot publish. */
+  isCreatorOnly: boolean;
+  canPublish: boolean;
+};
+
+/** Allows admin, dev, or creator into the template builder surfaces. */
+export async function requireBuilderUser(
+  req: Request,
+  admin = createAdminClient(),
+): Promise<BuilderAccess> {
+  const user = await requireUser(req, admin);
+  const roles = await getUserRoles(user.id, admin);
+  const isAdmin = roles.includes("admin");
+  const isDev = roles.includes("dev");
+  const isCreator = roles.includes("creator");
+
+  if (!isAdmin && !isDev && !isCreator) {
+    throw new Error("Builder access required");
+  }
+
+  return {
+    user,
+    roles,
+    isAdmin,
+    isDev,
+    isCreator,
+    isCreatorOnly: isCreator && !isAdmin && !isDev,
+    canPublish: isAdmin || isDev,
+  };
+}
+
+
 export async function requireAdminUser(req: Request, admin = createAdminClient()) {
   const user = await requireUser(req, admin);
   const roles = await getUserRoles(user.id, admin);
