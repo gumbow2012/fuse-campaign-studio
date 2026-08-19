@@ -86,6 +86,7 @@ function serialize(row: any) {
     estimatedCostUsd: row.estimated_cost_usd ? Number(row.estimated_cost_usd) : null,
     providerModel: row.provider_model ?? null,
     inputPayload: payload,
+    stage: typeof payload.stage === "string" ? payload.stage : null,
     frameIndex: typeof payload.frame_index === "number" ? payload.frame_index : null,
     frameTime: typeof payload.frame_time === "number" ? payload.frame_time : null,
     sourceFrameUrl: typeof payload.source_frame_url === "string" ? payload.source_frame_url : null,
