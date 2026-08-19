@@ -1172,7 +1172,8 @@ export default function OutfitSwap() {
               Cancel generation
             </AlertDialogAction>
           </AlertDialogFooter>
-        </AlertDialogFooter>
+        </AlertDialogContent>
+
       </AlertDialog>
 
     </SiteShell>
