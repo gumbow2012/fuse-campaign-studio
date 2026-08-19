@@ -95,6 +95,14 @@ const App = () => (
               }
             />
             <Route
+              path="/app/lab/studio"
+              element={
+                <BuilderRoute>
+                  <GenerationStudio />
+                </BuilderRoute>
+              }
+            />
+            <Route
               path="/app/nano"
               element={
                 <AdminRoute>
