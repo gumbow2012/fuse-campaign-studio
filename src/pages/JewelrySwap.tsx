@@ -448,6 +448,8 @@ export default function JewelrySwap() {
     setFramePreferredRole({});
     setFrameReason({});
     setNeedsReview(new Set());
+    setFlagIncomplete(new Set());
+    setFlagHybrid(new Set());
     setApproved(new Set());
     setSelectedFrames(new Set());
     // The video library is intentionally preserved across new source clips.
