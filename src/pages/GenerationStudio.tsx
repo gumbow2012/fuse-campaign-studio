@@ -651,7 +651,7 @@ export default function GenerationStudio() {
 
             {/* Aspect ratio */}
             {aspectOptions.length ? (
-              <Popover>
+              <Popover open={aspectOpen} onOpenChange={setAspectOpen}>
                 <PopoverTrigger asChild>
                   <Chip>
                     <AspectGlyph ratio={aspectRatio} />
@@ -665,7 +665,7 @@ export default function GenerationStudio() {
                       <button
                         key={ratio}
                         type="button"
-                        onClick={() => setAspectRatio(ratio)}
+                        onClick={() => { setAspectRatio(ratio); setAspectOpen(false); }}
                         className={cn(
                           "flex items-center gap-2 rounded-lg px-2 py-1.5 text-xs transition-colors",
                           ratio === aspectRatio
@@ -684,7 +684,7 @@ export default function GenerationStudio() {
 
             {/* Quality */}
             {qualityOptions.length ? (
-              <Popover>
+              <Popover open={qualityOpen} onOpenChange={setQualityOpen}>
                 <PopoverTrigger asChild>
                   <Chip>
                     {quality.toUpperCase()}
@@ -697,7 +697,7 @@ export default function GenerationStudio() {
                       <button
                         key={option}
                         type="button"
-                        onClick={() => setQuality(option)}
+                        onClick={() => { setQuality(option); setQualityOpen(false); }}
                         className={cn(
                           "block w-full rounded-lg px-2 py-1.5 text-left text-xs transition-colors",
                           option === quality
@@ -715,7 +715,7 @@ export default function GenerationStudio() {
 
             {/* Motion settings */}
             {isVideo ? (
-              <Popover>
+              <Popover open={motionOpen} onOpenChange={setMotionOpen}>
                 <PopoverTrigger asChild>
                   <Chip>
                     {duration}s{model.supportsAudio ? (generateAudio ? " · audio" : " · silent") : ""}
