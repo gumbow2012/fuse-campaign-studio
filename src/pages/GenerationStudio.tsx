@@ -1312,18 +1312,32 @@ export default function GenerationStudio() {
                   </div>
                 ) : null}
                 {visibleGenerations.length ? (
-                  <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-4">
-                    {visibleGenerations.map((generation) => (
-                      <GenerationCard
-                        key={generation.id}
-                        generation={generation}
-                        onUseAsReference={useAsReference}
-                        onExpand={(entry) => setLightboxId(entry.id)}
-                        onDelete={(entry) => setConfirmSingle(entry)}
-                      />
-
-                    ))}
-                  </div>
+                  <>
+                    <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-4">
+                      {visibleGenerations.map((generation) => (
+                        <GenerationCard
+                          key={generation.id}
+                          generation={generation}
+                          onUseAsReference={useAsReference}
+                          onExpand={(entry) => setLightboxId(entry.id)}
+                          onDelete={(entry) => setConfirmSingle(entry)}
+                        />
+                      ))}
+                    </div>
+                    {hasMore ? (
+                      <div className="mt-6 flex justify-center">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={() => void loadMore()}
+                          disabled={loadingMore}
+                          className="border-white/15 bg-white/[0.03]"
+                        >
+                          {loadingMore ? "Loading…" : "Load more"}
+                        </Button>
+                      </div>
+                    ) : null}
+                  </>
                 ) : (
                   <div className="rounded-2xl border border-dashed border-white/12 bg-white/[0.02] p-14 text-center">
                     <Sparkles className="mx-auto mb-3 text-cyan-200/70" size={22} />
