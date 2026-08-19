@@ -679,6 +679,7 @@ export default function JewelrySwap() {
               ...item,
               urls: [...item.urls, url].slice(0, 6),
               roles: [...item.roles, ""].slice(0, 6),
+              cads: [...(item.cads ?? []), null].slice(0, 6),
             }
           : item,
       ),
@@ -746,7 +747,7 @@ export default function JewelrySwap() {
           height: "",
           depth: "",
           weight: "",
-          cad: false,
+          cads: [null],
           person: DEFAULT_APPLY_TO,
           notes: "",
           scope: DEFAULT_SCOPE,
@@ -782,6 +783,7 @@ export default function JewelrySwap() {
                   ...item,
                   urls: [...item.urls, ...urls].slice(0, 6),
                   roles: [...item.roles, ...urls.map(() => "")].slice(0, 6),
+                  cads: [...(item.cads ?? []), ...urls.map(() => null)].slice(0, 6),
                 }
               : item,
           ),
