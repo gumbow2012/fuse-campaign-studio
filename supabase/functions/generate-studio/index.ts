@@ -453,6 +453,38 @@ Deno.serve(async (req) => {
       return json({ generations });
     }
 
+    if (action === "delete") {
+      const ids = (Array.isArray(body.generationIds) ? body.generationIds : [body.generationId])
+        .map((id) => String(id ?? "").trim())
+        .filter(Boolean);
+      if (!ids.length) throw new Error("Select at least one asset to delete");
+
+      const { data: rows, error: readError } = await admin
+        .from("studio_generations")
+        .select("id, output_url")
+        .eq("user_id", user.id)
+        .in("id", ids);
+      if (readError) throw new Error(readError.message);
+
+      // Best-effort: drop any stored file we own; provider-hosted files simply expire.
+      const prefix = `${Deno.env.get("SUPABASE_URL")}/storage/v1/object/public/fuse-assets/`;
+      const paths = (rows ?? [])
+        .map((row) => String(row.output_url ?? ""))
+        .filter((url) => url.startsWith(prefix))
+        .map((url) => decodeURIComponent(url.slice(prefix.length)));
+      if (paths.length) {
+        await admin.storage.from("fuse-assets").remove(paths).catch(() => null);
+      }
+
+      const { error: deleteError } = await admin
+        .from("studio_generations")
+        .delete()
+        .eq("user_id", user.id)
+        .in("id", (rows ?? []).map((row) => row.id));
+      if (deleteError) throw new Error(deleteError.message);
+
+      return json({ deleted: (rows ?? []).length });
+    }
 
     if (action !== "start") throw new Error(`Unsupported action: ${action}`);
 
