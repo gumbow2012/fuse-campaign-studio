@@ -164,12 +164,25 @@ const ANGLE_ROLE_OPTIONS = [
   "Other",
 ];
 
+/** Per-frame replacement strategy. Auto lets the model self-classify the frame. */
+const REPLACEMENT_MODES = [
+  { value: "auto", label: "Auto" },
+  { value: "standard", label: "Standard" },
+  { value: "macro", label: "Macro" },
+] as const;
+
+type ReplacementMode = (typeof REPLACEMENT_MODES)[number]["value"];
+
 /** Optional regenerate reasons — each appends a targeted corrective sentence. */
 const FAILURE_REASONS = [
-  "Wrong angle",
-  "Reference background leaked in",
+  "Incomplete replacement",
   "Original jewelry still visible",
-  "Macro detail doesn't match reference",
+  "Hybrid of old + new",
+  "Wrong replacement section",
+  "Wrong front/back/side",
+  "Macro mismatch",
+  "Reference background leaked in",
+  "Wrong angle",
   "Wrong crop / zoom",
   "Wrong jewelry geometry",
   "Wrong bail / connector",
