@@ -250,6 +250,14 @@ const FAILURE_CORRECTIONS: Record<string, string> = {
     "CORRECTION: the previous attempt broke the chain interaction. Preserve SOURCE_FRAME's chain placement, path, tension, contact and occlusion exactly, and attach the replacement at its own reference attachment point.",
   "referencebackgroundleakedin":
     "CORRECTION: The previous generation incorrectly copied environmental/contextual elements from a jewelry product reference (background, hands, gloves, props, surfaces or lighting). Remove ALL such contamination. The jewelry reference controls ONLY the target jewelry object's physical construction. Restore every non-jewelry region from SOURCE_FRAME exactly.",
+  "originaljewelrystillvisible":
+    "CORRECTION: The previous attempt preserved recognizable microscopic construction from the original source jewelry. Completely remove the source jewelry's stones, setting pattern, metal geometry and decorative details. Rebuild the jewelry-filled portion from the replacement references while preserving only the source camera, crop, depth of field and lighting.",
+  "macrodetaildoesn'tmatchreference":
+    "CORRECTION: The previous attempt invented or incorrectly translated the replacement jewelry's microscopic design. Prioritize the uploaded Macro Detail / CAD / closest product references and reproduce the replacement's actual stone cuts, settings, metal construction and surface geometry.",
+  "macrodetaildoesntmatchreference":
+    "CORRECTION: The previous attempt invented or incorrectly translated the replacement jewelry's microscopic design. Prioritize the uploaded Macro Detail / CAD / closest product references and reproduce the replacement's actual stone cuts, settings, metal construction and surface geometry.",
+  "macrodetaildoesn’tmatchreference":
+    "CORRECTION: The previous attempt invented or incorrectly translated the replacement jewelry's microscopic design. Prioritize the uploaded Macro Detail / CAD / closest product references and reproduce the replacement's actual stone cuts, settings, metal construction and surface geometry.",
   other:
 
     "CORRECTION: the previous attempt was inaccurate. Re-read SOURCE_FRAME for the shot and the references for the object's construction, and follow both strictly.",
