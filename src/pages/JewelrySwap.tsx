@@ -466,6 +466,204 @@ export default function JewelrySwap() {
     }
   }, []);
 
+  /* ------------------- Library picker (already-made assets) ----------------- */
+
+  type PickerTarget =
+    | { kind: "source" }
+    | { kind: "piece" }
+    | { kind: "angle"; index: number };
+
+  const [pickerTarget, setPickerTarget] = useState<PickerTarget | null>(null);
+  const [assets, setAssets] = useState<LibraryAsset[]>([]);
+  const [assetsLoading, setAssetsLoading] = useState(false);
+  const [assetsError, setAssetsError] = useState<string | null>(null);
+  const [assetSearch, setAssetSearch] = useState("");
+  const [assetTypeFilter, setAssetTypeFilter] = useState<"all" | "image" | "video">("all");
+  const [sourceNotice, setSourceNotice] = useState<string | null>(null);
+
+  const loadAssets = useCallback(async (type: "all" | "image" | "video") => {
+    setAssetsLoading(true);
+    setAssetsError(null);
+    try {
+      const rows = await listAssets(type);
+      setAssets(rows);
+    } catch (error) {
+      setAssets([]);
+      setAssetsError(error instanceof Error ? error.message : "Could not load your library");
+    } finally {
+      setAssetsLoading(false);
+    }
+  }, []);
+
+  const openPicker = useCallback(
+    (target: PickerTarget) => {
+      const type = target.kind === "source" ? "all" : "image";
+      setPickerTarget(target);
+      setAssetSearch("");
+      setAssetTypeFilter(type);
+      void loadAssets(type);
+    },
+    [loadAssets],
+  );
+
+  const resetSourceState = useCallback(() => {
+    setFrames([]);
+    setSwaps({});
+    setAltSwaps({});
+    setChosenModel({});
+    setFramePreferredRole({});
+    setFrameReason({});
+    setNeedsReview(new Set());
+    setApproved(new Set());
+    setSelectedFrames(new Set());
+    setSourceNotice(null);
+  }, []);
+
+  /** Use a completed library asset as the source (image = single frame, video = extract). */
+  const useLibrarySource = useCallback(
+    async (asset: LibraryAsset) => {
+      resetSourceState();
+
+      if (asset.outputType === "image") {
+        setVideoPreview(null);
+        setVideoUrl(null);
+        setMeta(null);
+        setFrames([{ time: 0, url: asset.outputUrl }]);
+        setSelectedFrames(new Set([0]));
+        toast.success("Library image loaded as the source frame");
+        return;
+      }
+
+      setVideoPreview(asset.outputUrl);
+      setVideoUrl(asset.outputUrl);
+
+      let objectUrl: string | null = null;
+      try {
+        // Never draw a remote video straight to canvas — fetch the bytes first.
+        setUploadingVideo(true);
+        const response = await fetch(asset.outputUrl);
+        if (!response.ok) throw new Error(`Fetch failed (${response.status})`);
+        const blob = await response.blob();
+        objectUrl = URL.createObjectURL(blob);
+      } catch {
+        setUploadingVideo(false);
+        setSourceNotice(
+          "Couldn't load that video for frame extraction — try uploading the file instead.",
+        );
+        return;
+      }
+
+      try {
+        const element = await loadVideo(objectUrl);
+        const nextMeta = readMeta(element);
+        setMeta(nextMeta);
+
+        const folder = await createOutfitSwapFolder();
+        setUploadingVideo(false);
+        setExtracting(true);
+        setExtractProgress(0);
+
+        const times = frameTimestamps(nextMeta.duration);
+        const captured = await extractFrames(element, times, (done, total) =>
+          setExtractProgress(Math.round((done / total) * 50)),
+        );
+
+        const uploaded = await uploadWithConcurrency(
+          captured,
+          3,
+          async (frame) => {
+            const stored = await uploadToStorage(folder, frame.file, frame.file.name);
+            return { time: frame.time, url: stored.url } as Frame;
+          },
+          (done, total) => setExtractProgress(50 + Math.round((done / total) * 50)),
+        );
+        setFrames(uploaded);
+        const spread = uploaded
+          .map((_, index) => index)
+          .filter((index) => index % Math.max(1, Math.ceil(uploaded.length / 4)) === 0);
+        setSelectedFrames(new Set(spread));
+        toast.success(`${uploaded.length} source frames extracted`);
+      } catch {
+        setSourceNotice(
+          "Couldn't load that video for frame extraction — try uploading the file instead.",
+        );
+      } finally {
+        setUploadingVideo(false);
+        setExtracting(false);
+      }
+    },
+    [resetSourceState],
+  );
+
+  /** A library image becomes a new piece card. */
+  const addPieceFromLibrary = useCallback((url: string) => {
+    setPieces((prev) =>
+      [
+        ...prev,
+        {
+          urls: [url],
+          roles: [""],
+          name: "Library asset",
+          type: JEWELRY_TYPES[0],
+          metal: AUTO_METAL,
+          stone: AUTO_STONE,
+          quality: "",
+          width: "",
+          height: "",
+          depth: "",
+          weight: "",
+          cad: false,
+          person: DEFAULT_APPLY_TO,
+          notes: "",
+        } as Piece,
+      ].slice(0, 8),
+    );
+  }, []);
+
+  /** A library image becomes another angle of an existing piece. */
+  const addAngleFromLibrary = useCallback((index: number, url: string) => {
+    setPieces((prev) =>
+      prev.map((item, itemIndex) =>
+        itemIndex === index
+          ? {
+              ...item,
+              urls: [...item.urls, url].slice(0, 6),
+              roles: [...item.roles, ""].slice(0, 6),
+            }
+          : item,
+      ),
+    );
+  }, []);
+
+  const handlePick = useCallback(
+    (asset: LibraryAsset) => {
+      const target = pickerTarget;
+      setPickerTarget(null);
+      if (!target) return;
+      if (target.kind === "source") {
+        void useLibrarySource(asset);
+        return;
+      }
+      if (target.kind === "piece") {
+        addPieceFromLibrary(asset.outputUrl);
+        return;
+      }
+      addAngleFromLibrary(target.index, asset.outputUrl);
+    },
+    [addAngleFromLibrary, addPieceFromLibrary, pickerTarget, useLibrarySource],
+  );
+
+  const visibleAssets = useMemo(() => {
+    const query = assetSearch.trim().toLowerCase();
+    return assets.filter((asset) => {
+      if (assetTypeFilter !== "all" && asset.outputType !== assetTypeFilter) return false;
+      if (!query) return true;
+      return `${asset.feature ?? ""} ${asset.prompt ?? ""}`.toLowerCase().includes(query);
+    });
+  }, [assetSearch, assetTypeFilter, assets]);
+
+
+
   /* -------------------------- 3. Piece references ------------------------- */
 
   /** Each selected file becomes its own piece card. */
