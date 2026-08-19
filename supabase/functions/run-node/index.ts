@@ -8,6 +8,7 @@ import {
   requireBuilderUser,
 } from "../_shared/supabase-admin.ts";
 import { assertVersionAccess, FORBIDDEN_TEMPLATE_MESSAGE } from "../_shared/template-scope.ts";
+import { isPromptNode, resolveNodePrompt } from "../_shared/prompt-nodes.ts";
 import {
   clampSeedanceDuration,
   getFalPricing,
