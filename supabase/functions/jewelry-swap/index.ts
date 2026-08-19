@@ -316,6 +316,16 @@ function buildJewelryPrompt(args: {
       } — give it believable mass and thickness, not paper-thin.`;
     }
 
+    // Replacement scope: default to the narrowest safe scope (this piece only).
+    const scope = String(piece.scope ?? "").trim().toLowerCase();
+    if (scope === "piece_chain" || /chain/.test(scope)) {
+      line +=
+        " REPLACEMENT SCOPE: this piece PLUS its attached chain/bracelet may be replaced together as one object, using the references for both. Everything else in SOURCE_FRAME stays untouched.";
+    } else {
+      line +=
+        " REPLACEMENT SCOPE: replace ONLY this piece. Keep SOURCE_FRAME's existing chain, bracelet, clasp, other jewelry and all surroundings exactly as they are.";
+    }
+
     lines.push(line);
   }
 
@@ -327,6 +337,13 @@ function buildJewelryPrompt(args: {
     "",
     "Preserve EXACTLY from SOURCE_FRAME: camera position, camera angle, perspective, crop, zoom level, composition, depth of field, focus plane, lighting, background, chain placement, and the jewelry's position, orientation, rotation, tilt, visible percentage, occlusion and scale.",
     "",
+    REFERENCE_CONTEXT_EXCLUSION,
+    "",
+    SURGICAL_REPLACEMENT_CORE,
+    "",
+    PRIORITY_ORDER_TEXT,
+    "",
+
     "Replace ONLY the original jewelry piece with the piece defined by the JEWELRY_REFERENCES. The references are the ABSOLUTE authority for the replacement object's identity and construction: silhouette, lettering, symbols/logos, stone locations, stone cuts, stone sizes, stone density, metal geometry, bail, bail opening, hinges, connectors, bezels, prongs, edges, thickness, front, side and back construction, raised and recessed surfaces, and structural proportions.",
     "",
     "CRITICAL — do NOT make a product shot. Render ONLY the portion of the replacement jewelry that the exact source camera would physically see:",
