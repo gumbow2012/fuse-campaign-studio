@@ -432,6 +432,27 @@ const INTAKE_STAGES = [
  */
 const INTAKE_DEBOUNCE_MS = 1800;
 
+/**
+ * Any manual edit is PERMANENT: it stamps `user_override` on that field so a
+ * later reanalysis can flag a conflict but never silently overwrites it.
+ */
+function withOverride<T extends { sources?: Record<string, string> }>(
+  item: T,
+  field: string,
+  patch: Partial<T>,
+): T {
+  return { ...item, ...patch, sources: { ...(item.sources ?? {}), [field]: "user_override" } };
+}
+
+/** Small "Detected" marker so a resolved value never looks hand-picked. */
+function detectedTag(sources: Record<string, string> | undefined, field: string) {
+  const source = sources?.[field];
+  if (source === "gemini_detected") return " · Detected";
+  if (source === "gemini_suggested") return " · Suggested";
+  return "";
+}
+
+
 
 /** Non-Auto user value wins; otherwise fall back to the detected value. */
 function effectiveValue(userValue: string, autoValue: string, detected?: string | null) {
