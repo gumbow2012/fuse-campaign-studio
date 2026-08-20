@@ -159,7 +159,7 @@ function pieceReferences(piece: JewelryPiece): JewelryReference[] {
     refs.push({
       url,
       role: String((entry as any)?.role ?? "").trim() || null,
-      cad: (entry as any)?.cad === true || piece.cad === true,
+      cad: (entry as any)?.cad === true,
     });
   }
   if (refs.length) return refs;
