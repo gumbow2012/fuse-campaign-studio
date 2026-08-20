@@ -1251,6 +1251,7 @@ async function handleIntake(req: Request, body: any, user: { id: string }, apiKe
       version: cached.version ?? INTAKE_VERSION,
       analyzedAt: cached.analyzed_at,
       intake: cached.analysis,
+      timings: { cacheHit: true, totalMs: Date.now() - startedAt },
     });
   }
 
@@ -1259,15 +1260,24 @@ async function handleIntake(req: Request, body: any, user: { id: string }, apiKe
   const ai = new GoogleGenAI({ apiKey });
   // ONE call for the whole settled reference set — never one call per image.
   const batch = references.slice(0, MAX_IMAGES_PER_CALL);
-  const intake = stampSources(
-    await runIntake({ ai, references: batch, roleVocabulary, options }),
-    options,
-  );
+  const run = await runIntake({ ai, references: batch, roleVocabulary, options });
+  const intake = stampSources(run.intake, options);
   intake.version = INTAKE_VERSION;
   intake.referenceCount = batch.length;
 
+  const timings = {
+    cacheHit: false,
+    referenceFetchMs: run.timings.referenceFetchMs,
+    geminiMs: run.timings.geminiMs,
+    unavailableReferences: run.timings.unavailableReferences,
+    totalMs: Date.now() - startedAt,
+  };
+  // DEV-ONLY telemetry: server logs, never surfaced to normal users.
+  console.log("[intake] timings", JSON.stringify(timings));
+
   const stripped = assertAnalysisOnly(intake, "intake");
   if (stripped.length) console.warn("intake guard stripped:", stripped.join(", "));
+
 
   await admin.from("jewelry_still_analyses").upsert(
     {
