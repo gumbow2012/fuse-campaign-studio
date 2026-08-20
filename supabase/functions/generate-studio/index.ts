@@ -118,6 +118,7 @@ function serializeGeneration(row: any) {
     providerModel: row.provider_model ?? null,
     requestId: row.provider_request_id ?? null,
     inputPayload: row.input_payload ?? null,
+    favorited: row.favorited === true,
     createdAt: row.created_at ?? null,
     completedAt: row.completed_at ?? null,
   };
