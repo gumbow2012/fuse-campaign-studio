@@ -314,6 +314,24 @@ const VIDEO_MODELS = [
 
 
 type Frame = { time: number; url: string };
+
+/** One structured stone-setting entry. Stone/color/quality are optional overrides. */
+type PieceSetting = {
+  type: string;
+  region: string;
+  stone: string;
+  color: string;
+  quality: string;
+};
+
+const EMPTY_SETTING: PieceSetting = {
+  type: AUTO_SETTING,
+  region: "",
+  stone: "",
+  color: "",
+  quality: "",
+};
+
 /** One card = ONE physical piece, described by one or more reference angles. */
 type Piece = {
   urls: string[];
@@ -323,7 +341,11 @@ type Piece = {
   type: string;
   metal: string;
   stone: string;
+  /** Stone body color, independent of quality/clarity. */
+  stoneColor: string;
   quality: string;
+  /** Structured settings; blank stone/color/quality inherit the piece-level values. */
+  settings: PieceSetting[];
   width: string;
   height: string;
   depth: string;
@@ -335,6 +357,14 @@ type Piece = {
   /** "piece" (default) or "piece_chain". */
   scope: string;
 };
+
+/** Structured settings, dropping the Auto/blank rows the function ignores anyway. */
+function realSettings(piece: Piece): PieceSetting[] {
+  return (piece.settings ?? []).filter(
+    (setting) => setting.type && setting.type !== AUTO_SETTING,
+  );
+}
+
 
 /** Geometry authority is auto-on for CAD-labeled angles, overridable per image. */
 function isGeometryAuthority(piece: Piece, angleIndex: number) {
