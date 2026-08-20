@@ -1694,7 +1694,18 @@ export default function JewelrySwap() {
           // Geometry authority is decided PER reference image (auto for CAD
           // labels, overridable per image).
           cad: isGeometryAuthority(piece, angleIndex),
+          // Explicit backend typing — these are replacement-product references,
+          // never source cinematography.
+          assetPurpose: "REPLACEMENT_PRODUCT_REFERENCE" as const,
+          kind: piece.video
+            ? ("product_reference_video" as const)
+            : isGeometryAuthority(piece, angleIndex)
+              ? ("cad" as const)
+              : ("photographic_still" as const),
+          videoReferenceId: piece.video?.videoReferenceId ?? null,
+          timestamp: piece.video?.keyframeTimes?.[angleIndex] ?? null,
         })),
+
         type: piece.type,
         metal: piece.metal === AUTO_METAL ? null : piece.metal,
         stone: piece.stone === AUTO_STONE ? null : piece.stone,
