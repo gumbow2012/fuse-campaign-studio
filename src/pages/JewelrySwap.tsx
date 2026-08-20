@@ -1031,6 +1031,194 @@ export default function JewelrySwap() {
     [angleTarget],
   );
 
+  /* ---------------------- Reference intake (auto-organize) ------------------ */
+
+  const referenceKey = pieces.flatMap((piece) => piece.urls).join("|");
+
+  /**
+   * One fast batch pass over ALL uploaded references: recognition, grouping,
+   * role + design-authority proposals and spec extraction. Any user override is
+   * preserved; on failure the manual reference UI stays fully functional.
+   */
+  useEffect(() => {
+    const urls = referenceKey ? referenceKey.split("|").filter(Boolean) : [];
+    // References changed → cancel the stale result before re-analyzing.
+    intakeAbort.current?.abort();
+    intakeToken.current += 1;
+    const token = intakeToken.current;
+    if (!urls.length) {
+      setIntake({ status: "idle", stage: 0, productCount: 0 });
+      return;
+    }
+
+    const controller = new AbortController();
+    intakeAbort.current = controller;
+    setIntake({ status: "running", stage: 0, productCount: 0 });
+    // Staged ticks reflect the real request; they never delay the result.
+    const ticker = setInterval(() => {
+      setIntake((prev) =>
+        prev.status === "running"
+          ? { ...prev, stage: Math.min(prev.stage + 1, INTAKE_STAGES.length - 1) }
+          : prev,
+      );
+    }, 1200);
+
+    const run = async (attempt: number): Promise<void> => {
+      try {
+        const result = await analyzeJewelryIntake(
+          {
+            jewelryReferences: urls.map((url) => ({ url })),
+            roleVocabulary: Array.from(
+              new Set(pieces.flatMap((piece) => roleOptionsForType(piece.type))),
+            ).filter(Boolean),
+          },
+          controller.signal,
+        );
+        if (token !== intakeToken.current) return;
+        applyIntake(urls, result.intake);
+        setIntake({
+          status: "ready",
+          stage: INTAKE_STAGES.length,
+          productCount: result.intake?.products?.length ?? 1,
+        });
+      } catch (error) {
+        if (controller.signal.aborted || token !== intakeToken.current) return;
+        if (attempt === 0) return run(1); // one retry max
+        setIntake({
+          status: "failed",
+          stage: 0,
+          productCount: 0,
+          error: error instanceof Error ? error.message : "Analysis failed",
+        });
+      }
+    };
+
+    void run(0).finally(() => clearInterval(ticker));
+
+    return () => {
+      clearInterval(ticker);
+      controller.abort();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [referenceKey]);
+
+  /**
+   * Applies the intake result: regroups the references into one card per
+   * detected physical piece, pre-fills roles / design authority / specs, and
+   * NEVER overwrites a value the user set (user_override always wins).
+   */
+  const applyIntake = useCallback((urls: string[], result: JewelryIntake | null) => {
+    const products = Array.isArray(result?.products) ? result!.products : [];
+    if (!products.length) return;
+
+    setPieces((prev) => {
+      // Flat view of the references exactly as they were sent.
+      const flat = urls.map((url) => {
+        for (const piece of prev) {
+          const angleIndex = piece.urls.indexOf(url);
+          if (angleIndex !== -1) return { url, piece, angleIndex };
+        }
+        return { url, piece: null as Piece | null, angleIndex: -1 };
+      });
+
+      const claimed = new Set<number>();
+      const next: Piece[] = [];
+
+      products.forEach((product, productIndex) => {
+        const refs = (product.references ?? [])
+          .filter((ref) => Number.isInteger(ref.referenceIndex) && flat[ref.referenceIndex!])
+          .filter((ref) => !claimed.has(ref.referenceIndex!));
+        if (!refs.length) return;
+        refs.forEach((ref) => claimed.add(ref.referenceIndex!));
+
+        const base = flat[refs[0].referenceIndex!].piece ?? prev[0] ?? null;
+        const detectedSettings = (product.settings ?? [])
+          .map((setting) => ({
+            type: String(setting.setting ?? "").trim(),
+            region: String(setting.region ?? "").trim() || null,
+          }))
+          .filter((setting) => setting.type);
+
+        next.push({
+          urls: refs.map((ref) => flat[ref.referenceIndex!].url).slice(0, 6),
+          roles: refs
+            .map((ref) => {
+              const source = flat[ref.referenceIndex!];
+              const userRole = source.piece?.roles?.[source.angleIndex] ?? "";
+              // A role the user picked is never replaced by a proposal.
+              return userRole || String(ref.role ?? "").trim();
+            })
+            .slice(0, 6),
+          cads: refs
+            .map((ref) => {
+              const source = flat[ref.referenceIndex!];
+              const override = source.piece?.cads?.[source.angleIndex];
+              if (override === true || override === false) return override;
+              // Preselect authority only when the proposal is high-confidence.
+              return ref.designAuthorityLikely === true &&
+                Number(ref.designAuthorityConfidence ?? 0) >= 0.75
+                ? true
+                : null;
+            })
+            .slice(0, 6),
+          name: String(product.label ?? "").trim() || base?.name || `Piece ${productIndex + 1}`,
+          type: base?.type ?? JEWELRY_TYPES[0],
+          metal: base?.metal ?? AUTO_METAL,
+          stone: base?.stone ?? AUTO_STONE,
+          stoneColor: base?.stoneColor ?? AUTO_STONE_COLOR,
+          quality: base?.quality ?? AUTO_QUALITY,
+          settings: base?.settings?.length ? base.settings : [{ ...EMPTY_SETTING }],
+          width: base?.width ?? "",
+          height: base?.height ?? "",
+          depth: base?.depth ?? "",
+          weight: base?.weight ?? "",
+          person: base?.person ?? DEFAULT_APPLY_TO,
+          notes: base?.notes ?? "",
+          scope: base?.scope ?? DEFAULT_SCOPE,
+          expanded: base?.expanded ?? false,
+          // Detected values only RESOLVE fields left on Auto — see the backend.
+          detected: {
+            type: product.jewelryType?.value ?? null,
+            metal: product.metal?.value ?? null,
+            stone: product.stoneType?.value ?? null,
+            stoneColor: product.stoneColor?.value ?? null,
+            quality: product.stoneQuality?.value ?? null,
+            settings: detectedSettings,
+          },
+          sources: {
+            type: base?.type && base.type !== JEWELRY_TYPES[0] ? "user_override" : "gemini_detected",
+            metal: base?.metal && base.metal !== AUTO_METAL ? "user_override" : "gemini_detected",
+            stone: base?.stone && base.stone !== AUTO_STONE ? "user_override" : "gemini_detected",
+            stoneColor:
+              base?.stoneColor && base.stoneColor !== AUTO_STONE_COLOR
+                ? "user_override"
+                : "gemini_detected",
+            quality: base?.quality && base.quality !== AUTO_QUALITY ? "user_override" : "gemini_detected",
+            settings: realSettings(base ?? ({ settings: [] } as unknown as Piece)).length
+              ? "user_override"
+              : "gemini_detected",
+          },
+          needsConfirmation: Array.isArray(product.needsConfirmation) ? product.needsConfirmation : [],
+        });
+      });
+
+      if (!next.length) return prev;
+
+      // References the analysis did not assign stay with the first card —
+      // never silently dropped.
+      const leftovers = flat.filter((_, index) => !claimed.has(index));
+      for (const item of leftovers) {
+        if (next[0].urls.length >= 6) break;
+        next[0].urls.push(item.url);
+        next[0].roles.push(item.piece?.roles?.[item.angleIndex] ?? "");
+        next[0].cads.push(item.piece?.cads?.[item.angleIndex] ?? null);
+      }
+
+      return next.slice(0, 8);
+    });
+  }, []);
+
+
   /* ------------------------------ 4. Frame swaps ---------------------------- */
 
   /** Merge a fresh generation record into whichever collection owns it. */
