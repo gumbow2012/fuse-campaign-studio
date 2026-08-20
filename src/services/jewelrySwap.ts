@@ -197,6 +197,17 @@ export type DetectedField = {
   confidence?: number | null;
   confidenceTier?: "high" | "medium" | "low";
   source?: "user_override" | "cad" | "gemini_detected" | "reference_inference" | "unknown";
+  /** stoneQuality only: where a clarity grade was actually read from. */
+  qualityEvidenceSource?:
+    | "cad_text"
+    | "certification"
+    | "product_text"
+    | "user_input"
+    | "visual_only"
+    | string
+    | null;
+  /** True when the field must be confirmed by the user before it is trusted. */
+  needsConfirmation?: boolean;
 };
 
 /** The canonical dropdown vocabularies handed to the intake analysis. */
@@ -219,9 +230,14 @@ export type IntakeSetting = {
   confidence?: number;
   confidenceTier?: "high" | "medium" | "low";
   settingVisualSignature?: string | null;
+  /** The classifier's evidence statement, produced before the enum choice. */
+  settingClassificationReason?: string | null;
+  /** True when the construction did not clearly match one canonical setting. */
+  needsConfirmation?: boolean;
   evidenceReferenceIndexes?: number[];
   source?: string;
 };
+
 
 export type IntakeProduct = {
   productIndex: number;

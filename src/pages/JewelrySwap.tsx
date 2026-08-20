@@ -410,13 +410,55 @@ type Piece = {
     stone?: string | null;
     stoneColor?: string | null;
     quality?: string | null;
-    settings?: { type: string; region: string | null }[];
+    settings?: {
+      type: string;
+      region: string | null;
+      /** The classifier declined to name a canonical setting for this region. */
+      needsConfirmation?: boolean;
+      /** Its evidence statement, produced before the enum choice. */
+      reason?: string | null;
+    }[];
+    /** Where a clarity grade was actually read from (visual_only → review). */
+    qualityEvidenceSource?: string | null;
   } | null;
   /** Provenance per field: user_override | gemini_detected | unknown. */
   sources?: Record<string, string>;
   /** Fields the analysis was unsure about — surfaced for a quick review. */
   needsConfirmation?: string[];
 };
+
+/** Analysis field names → the control keys they highlight in the piece card. */
+const REVIEW_FIELD_CONTROLS: Record<string, string> = {
+  jewelryType: "type",
+  metal: "metal",
+  stoneType: "stone",
+  stoneColor: "stoneColor",
+  stoneQuality: "quality",
+  settings: "settings",
+  dimensions: "dimensions",
+  weight: "weight",
+};
+
+/** The control keys on this piece that still need user confirmation. */
+function reviewControls(piece: Piece): Set<string> {
+  const set = new Set<string>();
+  for (const field of piece.needsConfirmation ?? []) {
+    const control = REVIEW_FIELD_CONTROLS[field];
+    if (control) set.add(control);
+    // A user override resolves the concern, whatever the analysis thought.
+    if (control && piece.sources?.[control] === "user_override") set.delete(control);
+  }
+  return set;
+}
+
+/** Material product-spec concerns still open across every piece. */
+function reviewCount(pieces: Piece[]): number {
+  return pieces.reduce((total, piece) => total + reviewControls(piece).size, 0);
+}
+
+/** Amber outline for a control the user still has to confirm. */
+const REVIEW_RING = " border-amber-300/50 ring-1 ring-amber-300/25";
+
 
 const INTAKE_STAGES = [
   "Reading references",
@@ -477,10 +519,13 @@ function detectedSettingsLine(piece: Piece) {
     setting.region ? `${setting.region} · ${setting.type}` : setting.type,
   );
   if (user.length) return user.join(" | ");
-  const detected = (piece.detected?.settings ?? []).map((setting) =>
-    setting.region ? `${setting.region} · ${setting.type}` : setting.type,
-  );
+  const detected = (piece.detected?.settings ?? []).map((setting) => {
+    // Declined regions read honestly instead of borrowing a common name.
+    const value = setting.needsConfirmation || !setting.type ? "Needs confirmation" : setting.type;
+    return setting.region ? `${setting.region} · ${value}` : value;
+  });
   return detected.length ? detected.join(" | ") : "Not detected";
+
 }
 
 
@@ -533,6 +578,17 @@ function pieceSummary(piece: Piece, frameCount: number) {
 
 const SELECT_CLASS =
   "w-full rounded-lg border border-white/12 bg-black/40 px-2.5 py-1.5 text-xs text-foreground outline-none transition-colors hover:border-cyan-200/40 focus:border-cyan-200/60";
+
+/** SELECT_CLASS, outlined in amber when this control still needs confirming. */
+function selectClass(piece: Piece, control: string) {
+  return reviewControls(piece).has(control) ? SELECT_CLASS + REVIEW_RING : SELECT_CLASS;
+}
+
+/** " · Needs confirmation" suffix for a label the user must resolve. */
+function reviewTag(piece: Piece, control: string) {
+  return reviewControls(piece).has(control) ? " · Needs confirmation" : "";
+}
+
 
 function SectionCard({
   step,
@@ -1134,11 +1190,9 @@ export default function JewelrySwap() {
     [pieces],
   );
   const referenceCount = pieces.reduce((total, piece) => total + piece.urls.length, 0);
-  /** Uncertain fields across all pieces — only these are surfaced for review. */
-  const uncertainCount = pieces.reduce(
-    (total, piece) => total + (piece.needsConfirmation?.length ?? 0),
-    0,
-  );
+  /** Unresolved product-spec concerns across all pieces (user overrides clear them). */
+  const uncertainCount = reviewCount(pieces);
+
 
   /** The app's canonical vocabularies, handed to the analysis every call. */
   const intakeOptions = useMemo(
@@ -1328,24 +1382,31 @@ export default function JewelrySwap() {
         const resolvedQuality = resolve("quality", base?.quality, AUTO_QUALITY, product.stoneQuality);
 
         // Canonical, per-region settings — the existing multi-setting rows are
-        // auto-populated without the user pressing "+ Add setting".
+        // auto-populated without the user pressing "+ Add setting". A region the
+        // classifier declined is kept (type "") so it can be surfaced for review.
         const detectedSettings = (product.settings ?? [])
           .map((setting) => ({
-            type: String(setting.resolvedSetting ?? setting.setting ?? "").trim(),
+            type: String(setting.resolvedSetting ?? "").trim(),
             region: String(setting.resolvedRegion ?? setting.region ?? "").trim() || null,
             tier: setting.confidenceTier ?? "low",
+            needsConfirmation:
+              setting.needsConfirmation === true || !String(setting.resolvedSetting ?? "").trim(),
+            reason: String(setting.settingClassificationReason ?? "").trim() || null,
           }))
-          .filter((setting) => setting.type);
+          .filter((setting) => setting.type || setting.region);
+
         const userSetSettings =
           baseSources.settings === "user_override" &&
           realSettings(base ?? ({ settings: [] } as unknown as Piece)).length > 0;
         const autoSettings = detectedSettings
-          .filter((setting) => setting.tier !== "low")
+          .filter((setting) => setting.type || setting.region)
           .map((setting) => ({
             ...EMPTY_SETTING,
-            type: setting.type,
+            // A declined / low-confidence region stays on Auto for the user.
+            type: setting.needsConfirmation || setting.tier === "low" ? "" : setting.type,
             region: setting.region ?? "",
           }));
+
         const settings = userSetSettings
           ? base!.settings
           : autoSettings.length
@@ -1397,10 +1458,14 @@ export default function JewelrySwap() {
             metal: product.metal?.resolvedValue ?? product.metal?.value ?? null,
             stone: product.stoneType?.resolvedValue ?? product.stoneType?.value ?? null,
             stoneColor: product.stoneColor?.resolvedValue ?? product.stoneColor?.value ?? null,
-            quality: product.stoneQuality?.resolvedValue ?? product.stoneQuality?.value ?? null,
+            // A photo-only clarity read is never treated as a detected grade.
+            quality: product.stoneQuality?.resolvedValue ?? null,
+            qualityEvidenceSource: product.stoneQuality?.qualityEvidenceSource ?? null,
             settings: detectedSettings.map((setting) => ({
               type: setting.type,
               region: setting.region,
+              needsConfirmation: setting.needsConfirmation,
+              reason: setting.reason,
             })),
           },
           sources: {
@@ -1412,11 +1477,12 @@ export default function JewelrySwap() {
             quality: resolvedQuality.source,
             settings: userSetSettings
               ? "user_override"
-              : autoSettings.length
+              : autoSettings.some((setting) => setting.type)
                 ? "gemini_detected"
                 : "unknown",
           },
           needsConfirmation: Array.isArray(product.needsConfirmation) ? product.needsConfirmation : [],
+
         });
       });
 
@@ -2449,7 +2515,7 @@ export default function JewelrySwap() {
                           onClick={() =>
                             setPieces((prev) =>
                               prev.map((item) =>
-                                item.needsConfirmation?.length ? { ...item, expanded: true } : item,
+                                reviewControls(item).size ? { ...item, expanded: true } : item,
                               ),
                             )
                           }
@@ -2634,10 +2700,16 @@ export default function JewelrySwap() {
                           ? `${authorityCount(piece)} reference${authorityCount(piece) === 1 ? "" : "s"}`
                           : "None selected"}
                       </p>
-                      {piece.needsConfirmation?.length ? (
+                      {reviewControls(piece).size ? (
                         <p className="text-[10px] text-amber-200/90">
-                          Review {piece.needsConfirmation.length} detail
-                          {piece.needsConfirmation.length === 1 ? "" : "s"}: {piece.needsConfirmation.join(", ")}
+                          Review {reviewControls(piece).size} detail
+                          {reviewControls(piece).size === 1 ? "" : "s"}:{" "}
+                          {[...reviewControls(piece)].join(", ")}
+                        </p>
+                      ) : null}
+                      {piece.detected?.qualityEvidenceSource === "visual_only" ? (
+                        <p className="text-[10px] text-foreground/60">
+                          Stone quality can't be graded from photography — confirm it yourself.
                         </p>
                       ) : null}
                       <button
@@ -2649,8 +2721,13 @@ export default function JewelrySwap() {
                         }
                         className="mt-1 text-[10px] uppercase tracking-[0.14em] text-cyan-200/80 transition-colors hover:text-cyan-100"
                       >
-                        {piece.expanded ? "Hide analysis" : piece.needsConfirmation?.length ? `Review ${piece.needsConfirmation.length} details` : "Edit analysis"}
+                        {piece.expanded
+                          ? "Hide analysis"
+                          : reviewControls(piece).size
+                            ? `Review ${reviewControls(piece).size} details`
+                            : "Edit analysis"}
                       </button>
+
                     </div>
 
                     {piece.expanded === true ? (
@@ -2659,7 +2736,7 @@ export default function JewelrySwap() {
 
                       <div>
                         <label className="mb-1 block text-[10px] uppercase tracking-[0.14em] text-cyan-200/70">
-                          Type{detectedTag(piece.sources, "type")}
+                          Type{detectedTag(piece.sources, "type")}{reviewTag(piece, "type")}
                         </label>
                         <select
                           value={piece.type}
@@ -2671,7 +2748,7 @@ export default function JewelrySwap() {
                             )
                           }
 
-                          className={SELECT_CLASS}
+                          className={selectClass(piece, "type")}
                         >
                           {JEWELRY_TYPES.map((type) => (
                             <option key={type} value={type}>
@@ -2682,7 +2759,7 @@ export default function JewelrySwap() {
                       </div>
                       <div>
                         <label className="mb-1 block text-[10px] uppercase tracking-[0.14em] text-cyan-200/70">
-                          Metal{detectedTag(piece.sources, "metal")}
+                          Metal{detectedTag(piece.sources, "metal")}{reviewTag(piece, "metal")}
                         </label>
                         <select
                           value={piece.metal}
@@ -2694,7 +2771,7 @@ export default function JewelrySwap() {
                             )
                           }
 
-                          className={SELECT_CLASS}
+                          className={selectClass(piece, "metal")}
                         >
                           {METAL_OPTIONS.map((option) => (
                             <option key={option} value={option}>
@@ -2705,7 +2782,7 @@ export default function JewelrySwap() {
                       </div>
                       <div>
                         <label className="mb-1 block text-[10px] uppercase tracking-[0.14em] text-cyan-200/70">
-                          Stone{detectedTag(piece.sources, "stone")}
+                          Stone{detectedTag(piece.sources, "stone")}{reviewTag(piece, "stone")}
                         </label>
                         <select
                           value={piece.stone}
@@ -2716,7 +2793,7 @@ export default function JewelrySwap() {
                               ),
                             )
                           }
-                          className={SELECT_CLASS}
+                          className={selectClass(piece, "stone")}
                         >
                           {STONE_OPTIONS.map((option) => (
                             <option key={option} value={option}>
@@ -2727,7 +2804,7 @@ export default function JewelrySwap() {
                       </div>
                       <div>
                         <label className="mb-1 block text-[10px] uppercase tracking-[0.14em] text-cyan-200/70">
-                          Stone color{detectedTag(piece.sources, "stoneColor")}
+                          Stone color{detectedTag(piece.sources, "stoneColor")}{reviewTag(piece, "stoneColor")}
                         </label>
                         <select
                           value={piece.stoneColor || AUTO_STONE_COLOR}
@@ -2740,7 +2817,7 @@ export default function JewelrySwap() {
                               ),
                             )
                           }
-                          className={SELECT_CLASS}
+                          className={selectClass(piece, "stoneColor")}
                         >
                           {STONE_COLOR_OPTIONS.map((option) => (
                             <option key={option} value={option}>
@@ -2751,7 +2828,7 @@ export default function JewelrySwap() {
                       </div>
                       <div>
                         <label className="mb-1 block text-[10px] uppercase tracking-[0.14em] text-cyan-200/70">
-                          Quality{detectedTag(piece.sources, "quality")}
+                          Quality{detectedTag(piece.sources, "quality")}{reviewTag(piece, "quality")}
                         </label>
                         <select
                           value={piece.quality || AUTO_QUALITY}
@@ -2763,7 +2840,7 @@ export default function JewelrySwap() {
                             )
                           }
 
-                          className={SELECT_CLASS}
+                          className={selectClass(piece, "quality")}
                         >
                           {QUALITY_OPTIONS.map((option) => (
                             <option key={option} value={option}>
@@ -2785,7 +2862,7 @@ export default function JewelrySwap() {
                               <div>
                                 {settingIndex === 0 ? (
                                   <label className="mb-1 block text-[10px] uppercase tracking-[0.14em] text-cyan-200/70">
-                                    Setting{detectedTag(piece.sources, "settings")}
+                                    Setting{detectedTag(piece.sources, "settings")}{reviewTag(piece, "settings")}
                                   </label>
                                 ) : null}
                                 <select
@@ -2808,7 +2885,7 @@ export default function JewelrySwap() {
                                       ),
                                     )
                                   }
-                                  className={SELECT_CLASS}
+                                  className={selectClass(piece, "settings")}
                                 >
                                   {SETTING_TYPE_OPTIONS.map((option) => (
                                     <option key={option} value={option}>
@@ -2872,6 +2949,25 @@ export default function JewelrySwap() {
                           );
                         },
                       )}
+                      {/* Why the classifier landed where it did, per region —
+                          shown so a declined region is reviewable, not guessed. */}
+                      {(piece.detected?.settings ?? [])
+                        .filter((entry) => entry.reason)
+                        .map((entry, entryIndex) => (
+                          <p
+                            key={`reason-${entryIndex}`}
+                            className={cn(
+                              "text-[10px] leading-snug",
+                              entry.needsConfirmation ? "text-amber-200/85" : "text-foreground/55",
+                            )}
+                          >
+                            <span className="uppercase tracking-[0.14em]">
+                              {entry.region || "Region"}
+                            </span>{" "}
+                            — {entry.needsConfirmation ? "Needs confirmation. " : `${entry.type}. `}
+                            {entry.reason}
+                          </p>
+                        ))}
                       <button
                         type="button"
                         onClick={() =>
@@ -2894,6 +2990,7 @@ export default function JewelrySwap() {
                         + Add setting
                       </button>
                     </div>
+
 
 
                     <div className="mt-2 grid grid-cols-4 gap-1.5">

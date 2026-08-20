@@ -584,6 +584,33 @@ const DETECTED_FIELD = {
   required: ["value", "confidence"],
 } as const;
 
+/**
+ * Stone quality can only be auto-resolved from EXPLICIT readable evidence, so
+ * the model must always declare where the grade came from.
+ */
+const QUALITY_FIELD = {
+  type: Type.OBJECT,
+  properties: {
+    value: { type: Type.STRING },
+    confidence: { type: Type.NUMBER },
+    qualityEvidenceSource: {
+      type: Type.STRING,
+      enum: ["cad_text", "certification", "product_text", "user_input", "visual_only"],
+    },
+    qualityEvidenceNote: { type: Type.STRING },
+  },
+  required: ["value", "confidence", "qualityEvidenceSource"],
+} as const;
+
+/** Evidence sources that may auto-populate a clarity grade. */
+const EXPLICIT_QUALITY_EVIDENCE = new Set([
+  "cad_text",
+  "certification",
+  "product_text",
+  "user_input",
+]);
+
+
 
 const INTAKE_SCHEMA = {
   type: Type.OBJECT,
@@ -600,7 +627,7 @@ const INTAKE_SCHEMA = {
           metal: DETECTED_FIELD,
           stoneType: DETECTED_FIELD,
           stoneColor: DETECTED_FIELD,
-          stoneQuality: DETECTED_FIELD,
+          stoneQuality: QUALITY_FIELD,
           dimensions: DETECTED_FIELD,
           weight: DETECTED_FIELD,
           visibleComponents: STRING_ARRAY,
@@ -610,15 +637,18 @@ const INTAKE_SCHEMA = {
             items: {
               type: Type.OBJECT,
               properties: {
+                // Reasoning FIRST, then the canonical enum (or needs_confirmation).
+                settingClassificationReason: { type: Type.STRING },
                 setting: { type: Type.STRING },
                 region: { type: Type.STRING },
                 confidence: { type: Type.NUMBER },
                 settingVisualSignature: { type: Type.STRING },
                 evidenceReferenceIndexes: { type: Type.ARRAY, items: { type: Type.NUMBER } },
               },
-              required: ["setting", "region", "confidence"],
+              required: ["settingClassificationReason", "setting", "region", "confidence"],
             },
           },
+
 
           settingSignatures: { type: Type.ARRAY, items: SETTING_SIGNATURE_SCHEMA as any },
           references: {
@@ -705,8 +735,11 @@ function buildIntakePrompt(args: {
     args.roleVocabulary.join(", ") +
     ". Use \"Uncertain\" when you are not reasonably sure. Set designAuthorityLikely = true only for genuine CAD / technical / design-authority renders (clean synthetic render, wireframe, spec drawing), with a confidence you actually believe.",
     "3. EXTRACTION — per product, detect jewelryType, metal, stoneType, stoneColor, stoneQuality, settings, visibleComponents, and connectedComponents (e.g. a chain physically attached to a pendant). Give dimensions and weight ONLY when explicitly readable in the image (printed CAD dimensions, a spec sheet, a caption) — otherwise leave value empty.",
-    "4. ENGINEERING-AWARE SETTING DETECTION — do NOT label every dense diamond surface generic pavé. Before naming a setting, inspect and weigh: stone-size distribution (uniform vs anchor stones with smaller filler stones), which stones are anchors and which are fillers, stone orientation and rotation, row regularity vs deliberate irregular tiling, stone density and spacing, how the stones are held (individual prongs, shared prongs, beads, channel walls, bezels, flush/burnish, invisible rails), how much metal is exposed between stones, and construction specific to the product class (link-by-link repetition, clasp mechanics, sidewall/underside build, rail or channel continuity). THEN pick the closest canonical setting from the list. Two dense white surfaces can be completely different settings — decide by construction, not by first impression.",
-    "5. MULTI-REGION SETTINGS — return ONE settings entry per physically distinct construction region you can actually see (for a bracelet typically the links, then the clasp, then the sidewall / underside; for a pendant the main face, border, lettering, bail). Use the canonical region labels for the resolved jewelryType. Include settingVisualSignature (the observed physical construction, in your own words) and evidenceReferenceIndexes (which referenceIndexes you actually saw it in) for every entry. If only one construction exists across the whole piece, return exactly one entry.",
+    "4. SETTING CLASSIFICATION — REASON BEFORE YOU NORMALIZE. For EVERY settings entry you MUST fill settingClassificationReason FIRST, as a short evidence statement, and only then choose the canonical enum. That reason must explicitly address: stone-size uniform vs mixed; whether larger ANCHOR stones exist; whether smaller FILLER stones sit around larger ones; regular vs irregular layout; whether stone borders visually overlap; stone orientation/rotation; individual vs shared prongs (or beads, channel walls, bezels, flush/burnish, rails); how much metal is exposed; whether the arrangement follows each link's own geometry; whether it repeats link-by-link; and whether the CLASP construction differs from the LINK construction.",
+    "4b. HARD RULE — dense small-diamond coverage ALONE is NOT evidence for a micro/pavé-family setting. Never pick a pavé-family value just because a surface looks densely iced. Choose a canonical setting ONLY when the physical characteristics you described actually match that setting's construction. If the characteristics do not clearly match exactly one canonical value, return setting = \"needs_confirmation\" for that region with a confidence below 0.45 — do NOT force the closest common name, and do NOT prefer or assume any particular named setting.",
+    "5. MULTI-REGION SETTINGS — return ONE settings entry per physically distinct construction region you can actually see (for a bracelet typically the links, then the clasp, then the sidewall / underside; for a pendant the main face, border, lettering, bail). Use the canonical region labels for the resolved jewelryType. Include settingVisualSignature (the observed physical construction, in your own words), settingClassificationReason and evidenceReferenceIndexes (which referenceIndexes you actually saw it in) for every entry. Regions can legitimately differ — classify the clasp independently of the links. If only one construction exists across the whole piece, return exactly one entry.",
+    "5b. STONE QUALITY EVIDENCE — clarity/quality grades (FL, IF, VVS, VS, SI, I…) are NEVER inferable from ordinary photography. Always set stoneQuality.qualityEvidenceSource to one of cad_text | certification | product_text | user_input | visual_only. Use visual_only whenever you are reading the stones off photographs or renders with no readable grade text; in that case leave value empty and confidence below 0.45. Only return an actual grade when the grade is explicitly READABLE (CAD annotation, certificate, product/spec text) or supplied by the user.",
+
     "6. SETTING SIGNATURES — one universal signature entry per setting region, populated exactly as described: echo the setting name in declaredSetting and describe the physical construction you observe, using the ENTIRE reference library as evidence. Never privilege or assume any particular named setting.",
     "7. CONFIDENCE — every detected field carries confidence 0..1. Anything below 0.7 must ALSO be listed in needsConfirmation by field name (jewelryType, metal, stoneType, stoneColor, stoneQuality, settings, dimensions, weight). Never guess to fill a field, and never turn uncertainty into a generic default: an empty value with low confidence is correct behaviour.",
     "Short phrases only. Never output URLs, file names, base64 or media of any kind.",
@@ -781,6 +814,32 @@ function stampSources(intake: any, options: IntakeOptions) {
     ["weight", []],
   ];
   for (const product of Array.isArray(intake?.products) ? intake.products : []) {
+    const needs = (): string[] =>
+      Array.isArray(product.needsConfirmation)
+        ? product.needsConfirmation
+        : (product.needsConfirmation = []);
+    const flag = (field: string) => {
+      const list = needs();
+      if (!list.includes(field)) list.push(field);
+    };
+
+    /**
+     * Clarity grades are only trustworthy with explicit readable evidence.
+     * Photograph-only reads are demoted to "needs confirmation" and never
+     * auto-populate a grade.
+     */
+    const quality = product?.stoneQuality;
+    if (quality && typeof quality === "object") {
+      const evidence = String(quality.qualityEvidenceSource ?? "visual_only").trim();
+      quality.qualityEvidenceSource = evidence || "visual_only";
+      if (!EXPLICIT_QUALITY_EVIDENCE.has(quality.qualityEvidenceSource)) {
+        quality.value = "";
+        quality.confidence = Math.min(Number(quality.confidence ?? 0), 0.3);
+        quality.needsConfirmation = true;
+        flag("stoneQuality");
+      }
+    }
+
     for (const [field, vocabulary] of fields) {
       const entry = product?.[field];
       if (!entry || typeof entry !== "object") continue;
@@ -791,10 +850,7 @@ function stampSources(intake: any, options: IntakeOptions) {
       entry.confidenceTier = tier;
       entry.source = canonical ? "gemini_detected" : "unknown";
       if (!entry.resolvedValue) {
-        const list: string[] = Array.isArray(product.needsConfirmation)
-          ? product.needsConfirmation
-          : (product.needsConfirmation = []);
-        if (String(entry.value ?? "").trim() && !list.includes(field)) list.push(field);
+        if (String(entry.value ?? "").trim()) flag(field);
       }
     }
 
@@ -808,11 +864,18 @@ function stampSources(intake: any, options: IntakeOptions) {
 
     for (const setting of Array.isArray(product?.settings) ? product.settings : []) {
       const tier = confidenceTier(setting.confidence);
-      setting.resolvedSetting = tier === "low" ? "" : toCanonical(setting.setting, options.settingTypes);
+      const raw = String(setting.setting ?? "").trim();
+      // The classifier may explicitly decline; that is a valid, honest answer.
+      const declined = /needs?[_\s-]?confirmation/i.test(raw) || !raw;
       setting.resolvedRegion = toCanonical(setting.region, regionVocabulary);
+      setting.resolvedSetting =
+        declined || tier === "low" ? "" : toCanonical(setting.setting, options.settingTypes);
       setting.confidenceTier = tier;
+      setting.needsConfirmation = !setting.resolvedSetting;
       setting.source = setting.resolvedSetting ? "gemini_detected" : "unknown";
+      if (setting.needsConfirmation) flag("settings");
     }
+
     for (const ref of Array.isArray(product?.references) ? product.references : []) {
       ref.source = ref?.designAuthorityLikely === true ? "cad" : "reference_inference";
     }
