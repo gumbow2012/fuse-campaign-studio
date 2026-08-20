@@ -1263,16 +1263,18 @@ export default function JewelrySwap() {
       }, 1200);
 
       const run = async (attempt: number): Promise<void> => {
+        const intakeReferences = pieces.flatMap((piece) =>
+          piece.urls.map((url, angleIndex) => ({
+            url,
+            role: piece.roles?.[angleIndex] || null,
+            cad: isGeometryAuthority(piece, angleIndex),
+          })),
+        );
+        const clientStarted = performance.now();
         try {
           const result = await analyzeJewelryIntake(
             {
-              jewelryReferences: pieces.flatMap((piece) =>
-                piece.urls.map((url, angleIndex) => ({
-                  url,
-                  role: piece.roles?.[angleIndex] || null,
-                  cad: isGeometryAuthority(piece, angleIndex),
-                })),
-              ),
+              jewelryReferences: intakeReferences,
               roleVocabulary: Array.from(
                 new Set(pieces.flatMap((piece) => roleOptionsForType(piece.type))),
               ).filter(Boolean),
@@ -1287,6 +1289,17 @@ export default function JewelrySwap() {
           if (token !== intakeToken.current) return;
           if (version !== intakeSetVersion.current) return;
           if (result.setVersion && result.setVersion !== intakeSetVersion.current) return;
+          // Remember WHICH reference set this intake understood, so the shot
+          // analysis can reuse the Product Knowledge Map instead of re-reading
+          // every reference image.
+          intakeProvenance.current = {
+            fingerprint: result.fingerprint ?? null,
+            references: intakeReferences,
+          };
+          recordJewelryTiming("intake", performance.now() - clientStarted, {
+            cached: result.cached,
+            server: result.timings,
+          });
           applyIntake(urls, result.intake);
           setIntake({
             status: "ready",
@@ -1294,6 +1307,7 @@ export default function JewelrySwap() {
             productCount: result.intake?.products?.length ?? 1,
             referenceCount: urls.length,
           });
+
         } catch (error) {
           if (controller.signal.aborted || token !== intakeToken.current) return;
           if (version !== intakeSetVersion.current) return;
