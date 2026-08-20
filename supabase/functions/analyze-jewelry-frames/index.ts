@@ -108,6 +108,8 @@ function readReferences(raw: unknown): JewelryReferenceInput[] {
         cad,
         assetPurpose: "REPLACEMENT_PRODUCT_REFERENCE" as AssetPurpose,
         kind: (cad ? "cad" : "photographic_still") as ReferenceKind,
+        // Absent client id ⇒ everything in this request observes ONE piece.
+        productCaseId: String(ref?.productCaseId ?? "").trim() || DEFAULT_PRODUCT_CASE_ID,
       };
     })
     .filter((ref: JewelryReferenceInput) => /^https?:\/\//.test(ref.url));
@@ -121,12 +123,30 @@ function readVideoReferences(raw: unknown): VideoReferenceInput[] {
       name: entry?.name ? String(entry.name).trim() : null,
       duration: Number(entry?.duration ?? 0) || 0,
       aspectRatio: entry?.aspectRatio ? String(entry.aspectRatio).trim() : null,
+      productCaseId: String(entry?.productCaseId ?? "").trim() || DEFAULT_PRODUCT_CASE_ID,
     }))
     .filter(
       (entry: VideoReferenceInput) =>
         entry.videoReferenceId && /^https?:\/\//.test(entry.videoUrl),
     );
 }
+
+/**
+ * The ONE case this request reconstructs. Mixed client ids never silently
+ * become several products here: the first id wins as the case identity, and the
+ * whole settled asset set is fused into a single ProductKnowledgeMap.
+ */
+function resolveProductCaseId(
+  references: JewelryReferenceInput[],
+  videoReferences: VideoReferenceInput[],
+) {
+  return (
+    references.find((ref) => ref.productCaseId)?.productCaseId ??
+      videoReferences.find((clip) => clip.productCaseId)?.productCaseId ??
+      DEFAULT_PRODUCT_CASE_ID
+  );
+}
+
 
 
 /** Stable, order-independent handle for a reference inside one analysis batch. */
