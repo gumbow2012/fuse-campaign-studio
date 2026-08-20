@@ -2737,7 +2737,7 @@ export default function JewelrySwap() {
                             )
                           }
 
-                          className={SELECT_CLASS}
+                          className={selectClass(piece, "type")}
                         >
                           {JEWELRY_TYPES.map((type) => (
                             <option key={type} value={type}>
@@ -2760,7 +2760,7 @@ export default function JewelrySwap() {
                             )
                           }
 
-                          className={SELECT_CLASS}
+                          className={selectClass(piece, "metal")}
                         >
                           {METAL_OPTIONS.map((option) => (
                             <option key={option} value={option}>
@@ -2782,7 +2782,7 @@ export default function JewelrySwap() {
                               ),
                             )
                           }
-                          className={SELECT_CLASS}
+                          className={selectClass(piece, "stone")}
                         >
                           {STONE_OPTIONS.map((option) => (
                             <option key={option} value={option}>
@@ -2806,7 +2806,7 @@ export default function JewelrySwap() {
                               ),
                             )
                           }
-                          className={SELECT_CLASS}
+                          className={selectClass(piece, "stoneColor")}
                         >
                           {STONE_COLOR_OPTIONS.map((option) => (
                             <option key={option} value={option}>
@@ -2829,7 +2829,7 @@ export default function JewelrySwap() {
                             )
                           }
 
-                          className={SELECT_CLASS}
+                          className={selectClass(piece, "quality")}
                         >
                           {QUALITY_OPTIONS.map((option) => (
                             <option key={option} value={option}>
@@ -2874,7 +2874,7 @@ export default function JewelrySwap() {
                                       ),
                                     )
                                   }
-                                  className={SELECT_CLASS}
+                                  className={selectClass(piece, "settings")}
                                 >
                                   {SETTING_TYPE_OPTIONS.map((option) => (
                                     <option key={option} value={option}>
