@@ -613,10 +613,13 @@ const INTAKE_SCHEMA = {
                 setting: { type: Type.STRING },
                 region: { type: Type.STRING },
                 confidence: { type: Type.NUMBER },
+                settingVisualSignature: { type: Type.STRING },
+                evidenceReferenceIndexes: { type: Type.ARRAY, items: { type: Type.NUMBER } },
               },
               required: ["setting", "region", "confidence"],
             },
           },
+
           settingSignatures: { type: Type.ARRAY, items: SETTING_SIGNATURE_SCHEMA as any },
           references: {
             type: Type.ARRAY,
