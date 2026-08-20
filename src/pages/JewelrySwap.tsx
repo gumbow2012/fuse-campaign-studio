@@ -3140,10 +3140,11 @@ export default function JewelrySwap() {
                       <span className="flex shrink-0 items-center gap-1.5">
                         {piece.video ? (
                           <span className="rounded-full border border-cyan-200/40 bg-cyan-200/10 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.14em] text-cyan-100">
-                            Video reference · {piece.video.duration.toFixed(1)}s ·{" "}
-                            {piece.urls.length} views
+                            Video reference · {formatDuration(piece.video.duration)} · full clip
+                            analysed
                           </span>
                         ) : null}
+
 
                         {/* No authority read-out in the normal UI — FUSE assigns it.
                             The full ranking lives in Engineering details. */}
