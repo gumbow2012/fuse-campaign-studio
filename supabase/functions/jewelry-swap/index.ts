@@ -175,6 +175,152 @@ function pieceUrls(piece: JewelryPiece) {
   return pieceReferences(piece).map((ref) => ref.url);
 }
 
+/* ------------------------------------------------------------------ *
+ * Deterministic, frame-aware IMAGE-PAYLOAD ROUTING
+ * ------------------------------------------------------------------ *
+ * Honest limitation: in Auto mode we do NOT inspect the source frame's
+ * pixels (no vision service). Orientation-specific routing (side / back /
+ * macro) therefore relies on the user's Mode + Preferred Reference. Auto
+ * returns a sensible small default set: CAD authority + the best 2-3
+ * product views + an optional macro-detail reference for finish.
+ */
+
+/** Product references sent alongside the SOURCE frame, per piece. */
+const MAX_PRODUCT_REFERENCES = 4;
+/** At most this many CAD/design-authority references. */
+const MAX_CAD_REFERENCES = 2;
+
+function roleText(ref: JewelryReference) {
+  return String(ref.role ?? "").trim();
+}
+
+function isCadRef(ref: JewelryReference) {
+  return ref.cad === true || /^cad/i.test(roleText(ref));
+}
+
+function isMacroRole(ref: JewelryReference) {
+  return /macro/i.test(roleText(ref));
+}
+
+/** Close-detail (non-macro) roles that matter most in macro reconstruction. */
+function isDetailRole(ref: JewelryReference) {
+  return /(link|clasp|setting|connector|hinge|bail|crown|face|bezel|dial|crown|shank|gallery|caseback|side)/i
+    .test(roleText(ref));
+}
+
+/** Overall identity views (hero-ish full product photos). */
+function isOverallRole(ref: JewelryReference) {
+  return /(front|back|3\/4|three quarter|dial|face|top|overall)/i.test(roleText(ref));
+}
+
+function rolesMatch(role: string, target: string) {
+  const a = role.trim().toLowerCase().replace(/[^a-z0-9]+/g, "");
+  const b = target.trim().toLowerCase().replace(/[^a-z0-9]+/g, "");
+  if (!a || !b) return false;
+  return a === b || a.includes(b) || b.includes(a);
+}
+
+/**
+ * Ordered, capped, role-deduped product references for one frame.
+ * SOURCE_FRAME is image 1 and is added by the CALLER, never by this selector.
+ *
+ * Ordering:
+ *   1. CAD / design-authority reference(s)  (best role match, else CAD Front, max 2)
+ *   2. Preferred-role photographic reference (top photographic slot, if set)
+ *   3. Mode-specific photographic references
+ *        macro    → Macro Detail, then closest detail view, then at most ONE overall photo
+ *        standard → strongest Front/overall, then a 3/4, then optional Macro Detail
+ *   4. Remaining photographic references in upload order (until the cap)
+ * Total product references capped at MAX_PRODUCT_REFERENCES. Duplicate roles are
+ * dropped (never "Front, Front"). Truncation protects, in order: CAD authority,
+ * then preferred/strongest match, then secondary views — CAD is never dropped
+ * first just because it was uploaded last.
+ */
+function selectReferencesForFrame(args: {
+  piece: JewelryPiece;
+  mode?: ReplacementMode | string | null;
+  preferredRole?: string | null;
+}): JewelryReference[] {
+  const all = pieceReferences(args.piece);
+  if (all.length <= 1) return all;
+
+  const mode = normalizeMode(args.mode ?? null, false);
+  const preferred = String(args.preferredRole ?? "").trim();
+  const hasPreferred = Boolean(preferred) && !isAuto(preferred);
+
+  const cads = all.filter(isCadRef);
+  const photos = all.filter((ref) => !isCadRef(ref));
+
+  const picked: JewelryReference[] = [];
+  const usedRoles = new Set<string>();
+  const usedUrls = new Set<string>();
+
+  const take = (ref: JewelryReference | undefined | null) => {
+    if (!ref) return false;
+    if (usedUrls.has(ref.url)) return false;
+    const key = roleText(ref).toLowerCase();
+    if (key && usedRoles.has(key)) return false; // dedupe by role
+    if (picked.length >= MAX_PRODUCT_REFERENCES) return false;
+    picked.push(ref);
+    usedUrls.add(ref.url);
+    if (key) usedRoles.add(key);
+    return true;
+  };
+
+  // 1) CAD authority first — best role match, else CAD Front, else first CAD.
+  if (cads.length) {
+    const ordered = [
+      hasPreferred ? cads.find((ref) => rolesMatch(roleText(ref), `CAD ${preferred}`)) : null,
+      hasPreferred ? cads.find((ref) => rolesMatch(roleText(ref), preferred)) : null,
+      cads.find((ref) => /cad\s*front/i.test(roleText(ref))),
+      cads[0],
+      cads[1],
+    ].filter(Boolean) as JewelryReference[];
+    let cadCount = 0;
+    for (const ref of ordered) {
+      if (cadCount >= MAX_CAD_REFERENCES) break;
+      if (take(ref)) cadCount++;
+    }
+  }
+
+  // 2) Preferred role takes the top PHOTOGRAPHIC slot.
+  if (hasPreferred) {
+    take(photos.find((ref) => rolesMatch(roleText(ref), preferred)));
+  }
+
+  // 3) Mode-specific photographic priorities.
+  if (mode === "macro") {
+    take(photos.find(isMacroRole));
+    take(photos.find(isDetailRole));
+    // At most ONE overall identity photo — avoid full-product hero photos.
+    take(photos.find(isOverallRole));
+  } else {
+    take(photos.find((ref) => /front/i.test(roleText(ref)) && !/3\/4/.test(roleText(ref))));
+    take(photos.find(isOverallRole));
+    take(photos.find((ref) => /3\/4|three quarter/i.test(roleText(ref))));
+    take(photos.find(isMacroRole));
+  }
+
+  // 4) Fill remaining slots deterministically in upload order.
+  for (const ref of photos) {
+    if (picked.length >= MAX_PRODUCT_REFERENCES) break;
+    take(ref);
+  }
+
+  return picked;
+}
+
+/** A copy of the piece whose references are exactly the routed selection. */
+function routePiece(
+  piece: JewelryPiece,
+  mode?: ReplacementMode | string | null,
+  preferredRole?: string | null,
+): { piece: JewelryPiece; refs: JewelryReference[] } {
+  const refs = selectReferencesForFrame({ piece, mode, preferredRole });
+  return { piece: { ...piece, references: refs, urls: refs.map((ref) => ref.url) }, refs };
+}
+
+
 function isAuto(value: unknown) {
   const text = String(value ?? "").trim();
   return !text || /^auto/i.test(text);
