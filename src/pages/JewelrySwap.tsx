@@ -1955,7 +1955,10 @@ export default function JewelrySwap() {
               region: setting.region,
               needsConfirmation: setting.needsConfirmation,
               reason: setting.reason,
+              // Compositional terminology from the fused map, when available.
+              label: setting.label ?? null,
             })),
+
           },
           sources: {
             ...baseSources,
