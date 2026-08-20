@@ -46,6 +46,30 @@ type AssetPurpose = "SOURCE_CINEMATOGRAPHY" | "REPLACEMENT_PRODUCT_REFERENCE";
 /** How FUSE auto-classified an uploaded replacement IMAGE (user never labels). */
 type ReferenceKind = "cad" | "photographic_still";
 
+/**
+ * ONE CARD = ONE PHYSICAL PIECE. Every asset that shares a productCaseId is a
+ * DIFFERENT OBSERVATION of the SAME physical object (CAD front + front/side/
+ * macro/clasp stills + the replacement product video), never a product of its
+ * own. A second case exists ONLY when the user explicitly adds a piece, or when
+ * the user answers a separation question — never because one reference looked
+ * different.
+ */
+type JewelryProductCase = {
+  productCaseId: string;
+  /** Image observations of this one piece (CAD + stills). */
+  references: JewelryReferenceInput[];
+  /** Full-clip video observations of the SAME piece. */
+  videoReferences: VideoReferenceInput[];
+  /** Per-reference observations: what each asset can and cannot see. */
+  observations: any[];
+  /** The single fused reconstruction of the piece. */
+  productKnowledgeMap: any;
+  /** The canonical spec the app renders from, after fusion. */
+  resolvedJewelrySpec: any;
+};
+
+const DEFAULT_PRODUCT_CASE_ID = "CASE_1";
+
 type JewelryReferenceInput = {
   url: string;
   role?: string | null;
@@ -53,6 +77,8 @@ type JewelryReferenceInput = {
   /** Always REPLACEMENT_PRODUCT_REFERENCE on this path. */
   assetPurpose?: AssetPurpose;
   kind?: ReferenceKind;
+  /** The ONE physical piece this observation belongs to. */
+  productCaseId?: string;
 };
 
 /** One replacement product VIDEO — the whole clip is the analysis unit. */
@@ -63,7 +89,10 @@ type VideoReferenceInput = {
   name?: string | null;
   duration: number;
   aspectRatio?: string | null;
+  /** The ONE physical piece this clip observes. */
+  productCaseId?: string;
 };
+
 
 /**
  * Every reference on this path is REPLACEMENT_PRODUCT_REFERENCE, typed
