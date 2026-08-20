@@ -760,6 +760,11 @@ async function startSwapFrame(admin: AdminClient, args: {
           source_frame_url: sourceFrameUrl,
           frame_index: Number(args.frameIndex ?? 0),
           frame_time: Number(args.frameTime ?? 0),
+          // Verification of the deterministic routing (payload order = prompt order).
+          selected_reference_roles: selectedRefs.map((ref) => ref.role || "Unlabeled view"),
+          selected_reference_cad: selectedRefs.map((ref) => isCadRef(ref)),
+          references_sent: selectedRefs.length,
+          references_available: pieces.reduce((sum, piece) => sum + pieceReferences(piece).length, 0),
           pieces,
         },
       })
