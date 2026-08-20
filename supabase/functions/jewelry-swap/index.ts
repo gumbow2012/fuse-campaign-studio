@@ -1487,7 +1487,67 @@ async function startReconstruction(admin: AdminClient, args: {
   );
   const endpointId = referenceToVideoEndpoint(videoModel.key);
   const duration = clampSeedanceDuration(args.duration ?? 5, videoModel);
-  const prompt = buildJewelryReconstructionPrompt({ extra: args.extraPrompt });
+
+  // The swap stage already stored each approved frame's view/coverage/mode and
+  // the structured product spec — read it back so the director timeline is
+  // generated from the real run instead of a generic constraint block.
+  const { data: metaRows } = await admin
+    .from("studio_generations")
+    .select("output_url,input_payload")
+    .eq("user_id", args.userId)
+    .in("output_url", referenceUrls)
+    .limit(SEEDANCE_MAX_REFERENCES * 2);
+
+  const metaByUrl = new Map<string, any>();
+  for (const row of metaRows ?? []) {
+    const url = (row as any)?.output_url;
+    if (url && !metaByUrl.has(url)) metaByUrl.set(url, (row as any)?.input_payload ?? {});
+  }
+
+  const frames: ApprovedFrame[] = referenceUrls.map((url, index) => {
+    const payload = metaByUrl.get(url) ?? {};
+    const roles = Array.isArray(payload.selected_reference_roles)
+      ? payload.selected_reference_roles.map((role: unknown) => String(role ?? ""))
+      : [];
+    return {
+      url,
+      coverage: typeof payload.coverage === "string" ? payload.coverage : null,
+      mode: typeof payload.replacement_mode === "string" ? payload.replacement_mode : null,
+      roles,
+      index: Number(payload.frame_index ?? index),
+    };
+  });
+
+  const specPieces: JewelryPiece[] = (() => {
+    for (const url of referenceUrls) {
+      const payload = metaByUrl.get(url);
+      if (Array.isArray(payload?.pieces) && payload.pieces.length) return payload.pieces as JewelryPiece[];
+    }
+    return [];
+  })();
+  const specs: TargetSpec[] = specPieces.length
+    ? specPieces.map((piece) => resolveTargetSpec(piece))
+    : (() => {
+      for (const url of referenceUrls) {
+        const payload = metaByUrl.get(url);
+        if (Array.isArray(payload?.target_spec) && payload.target_spec.length) {
+          return payload.target_spec as TargetSpec[];
+        }
+      }
+      return [];
+    })();
+  const notes = specPieces.map((piece) => String(piece?.notes ?? "").trim()).filter(Boolean).join(" ");
+
+  const director = buildSeedanceDirectorPrompt({
+    frames,
+    specs,
+    notes: notes || null,
+    duration,
+    aspectRatio: args.aspectRatio ?? null,
+    extra: args.extraPrompt ?? null,
+  });
+  const prompt = director.prompt;
+
 
   const { data: inserted, error: insertError } = await admin
     .from("studio_generations")
