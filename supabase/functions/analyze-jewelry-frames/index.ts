@@ -433,12 +433,14 @@ function buildAnalysisPrompt(args: {
   references: JewelryReferenceInput[];
   frames: SourceFrame[];
   specs: any[];
+  unavailable?: Set<number>;
 }) {
   const refLines = args.references.map((ref, index) =>
     `${referenceIdAt(index)}: user label "${ref.role || "Unlabeled view"}"${
       ref.cad === true ? " [CAD / DESIGN AUTHORITY]" : ""
-    }`
+    }${args.unavailable?.has(index) ? " [IMAGE UNAVAILABLE — no image was provided for this id; do not classify it and never recommend it]" : ""}`
   );
+
   const frameLines = args.frames.map((frame, index) =>
     `FRAME ${index + 1}: frameId "${frame.frameId}" (timestamp ${frame.timestamp}s)`
   );
