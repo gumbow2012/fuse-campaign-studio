@@ -2359,12 +2359,30 @@ export default function JewelrySwap() {
                     {intake.status === "running" ? (
                       <Loader2 size={12} className="animate-spin text-cyan-200" />
                     ) : null}
-                    {intake.status === "running"
-                      ? "Analyzing jewelry…"
-                      : intake.status === "ready"
-                        ? "Analysis ready"
-                        : "Analysis unavailable — the manual reference fields below still work"}
+                    {intake.status === "collecting"
+                      ? `${intake.referenceCount} reference${intake.referenceCount === 1 ? "" : "s"} ready`
+                      : intake.status === "running"
+                        ? "Understanding your jewelry…"
+                        : intake.status === "stale"
+                          ? "References changed"
+                          : intake.status === "ready"
+                            ? "Analysis ready"
+                            : "Analysis unavailable — the manual reference fields below still work"}
                   </p>
+                  {intake.status === "collecting" || intake.status === "stale" ? (
+                    <div className="mt-1.5 flex items-center gap-2">
+                      <span className="text-[10px] text-foreground/60">
+                        Waiting for the set to settle — all references are read in one pass.
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setIntakeNow((value) => value + 1)}
+                        className="text-[10px] uppercase tracking-[0.14em] text-cyan-200 transition-opacity hover:opacity-80"
+                      >
+                        {intake.status === "stale" ? "Reanalyze" : "Analyze now"}
+                      </button>
+                    </div>
+                  ) : null}
                   {intake.status === "running" ? (
                     <>
                       <ul className="mt-1.5 space-y-0.5 text-[10px] text-foreground/70">
@@ -2384,7 +2402,7 @@ export default function JewelrySwap() {
                         onClick={() => {
                           intakeToken.current += 1;
                           intakeAbort.current?.abort();
-                          setIntake({ status: "idle", stage: 0, productCount: 0 });
+                          setIntake({ status: "idle", stage: 0, productCount: 0, referenceCount: 0 });
                         }}
                         className="mt-1.5 text-[10px] uppercase tracking-[0.14em] text-foreground/60 transition-colors hover:text-foreground"
                       >
@@ -2392,6 +2410,7 @@ export default function JewelrySwap() {
                       </button>
                     </>
                   ) : null}
+
                   {intake.status === "failed" && intake.error ? (
                     <p className="mt-1 text-[10px] opacity-80">{intake.error}</p>
                   ) : null}
