@@ -1630,11 +1630,13 @@ export default function JewelrySwap() {
         });
         if (cancelled) return;
         for (const generation of data.generations ?? []) {
-          if (!inFlightIds.includes(generation.id) || generation.status !== "processing") {
+          // Anything that is no longer running means state moved on screen.
+          if (generation.status !== "queued" && generation.status !== "running") {
             changed = true;
           }
           applyGeneration(generation);
         }
+
       } catch {
         // transient — the next tick retries
       }
