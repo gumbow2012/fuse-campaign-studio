@@ -1591,31 +1591,69 @@ export default function JewelrySwap() {
     return ids;
   }, [swaps, altSwaps, videos]);
 
+  /**
+   * Adaptive status polling. A flat 5s tick meant a finished job could sit
+   * invisible for the full interval; polling every second instead would just
+   * add DB load for a spinner. So the interval starts tight right after
+   * submission, widens as the job keeps running, resets whenever something
+   * actually changes, and pauses entirely while the tab is hidden.
+   */
   useEffect(() => {
     if (!inFlightIds.length) return;
     let cancelled = false;
+    let timer: number | undefined;
+    let delay = POLL_MIN_MS;
 
     const poll = async () => {
+      if (document.hidden) {
+        // Tab in the background: idle instead of hammering the backend.
+        schedule(POLL_MAX_MS);
+        return;
+      }
+      let changed = false;
       try {
         const data = await callJewelrySwap<{ generations: JewelryGeneration[] }>({
           action: "status",
           generationIds: inFlightIds,
         });
         if (cancelled) return;
-        for (const generation of data.generations ?? []) applyGeneration(generation);
-
+        for (const generation of data.generations ?? []) {
+          if (!inFlightIds.includes(generation.id) || generation.status !== "processing") {
+            changed = true;
+          }
+          applyGeneration(generation);
+        }
       } catch {
         // transient — the next tick retries
       }
+      if (cancelled) return;
+      // Something moved → stay responsive. Nothing moved → back off gently.
+      delay = changed ? POLL_MIN_MS : Math.min(Math.round(delay * 1.4), POLL_MAX_MS);
+      schedule(delay);
     };
 
-    const timer = setInterval(poll, 5000);
+    function schedule(ms: number) {
+      if (cancelled) return;
+      timer = window.setTimeout(poll, ms);
+    }
+
+    const onVisible = () => {
+      // Coming back to the tab should show current state immediately.
+      if (document.hidden || cancelled) return;
+      if (timer) clearTimeout(timer);
+      delay = POLL_MIN_MS;
+      void poll();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+
     void poll();
     return () => {
       cancelled = true;
-      clearInterval(timer);
+      if (timer) clearTimeout(timer);
+      document.removeEventListener("visibilitychange", onVisible);
     };
   }, [inFlightIds.join(",")]);
+
 
   /** Labeled references for the function: {url, role, cad} per angle. */
   const piecePayload = useCallback(
