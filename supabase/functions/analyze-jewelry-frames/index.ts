@@ -3036,9 +3036,8 @@ function buildKnowledgeMapPrompt(args: {
     "",
     "ASSET FIREWALL: every image below is a REPLACEMENT_PRODUCT_REFERENCE — evidence of the ACTUAL replacement piece (geometry / material / stone / setting / component authority). None of them is source cinematography, and you are given NO source footage: never describe camera work of a shoot, only the physical product.",
     "",
-    `ONE PHYSICAL PRODUCT (case ${args.productCaseId ?? DEFAULT_PRODUCT_CASE_ID}) · ${
-      args.references.length + (args.videoReferences?.length ?? 0)
-    } OBSERVATIONS. Every asset listed below — CAD, front, side, macro, clasp still and the full product video — is a DIFFERENT OBSERVATION OF THE SAME PHYSICAL PIECE (one bracelet, pendant, ring, watch, earring, grill or custom object). RECONSTRUCT THE SINGLE OBJECT by combining complementary evidence. Do NOT produce one product interpretation per reference, do NOT finalise productType, metal, stone, setting, geometry, clasp, bail or stone layout from a single reference while other evidence for this case exists, and do NOT treat a reference that shows only a fragment (a tight CAD crop, a macro of three stones, a clasp close-up) as a different product. Return exactly ONE fused ProductKnowledgeMap plus perReferenceObservations, crossReferenceMatches and conflicts.",
+    onePhysicalProductLine,
+
     "",
     "REPLACEMENT EVIDENCE, in this exact order (images follow this text):",
 
