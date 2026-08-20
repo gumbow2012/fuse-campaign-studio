@@ -236,6 +236,28 @@ const SCOPE_OPTIONS = [
 ];
 const DEFAULT_SCOPE = SCOPE_OPTIONS[0].value;
 
+/** "REF_3" → index 2, as emitted by the analysis. */
+function referenceIdToIndex(referenceId?: string) {
+  return Number(String(referenceId ?? "").replace(/\D+/g, "")) - 1;
+}
+
+/**
+ * A card is a PHYSICAL PIECE, so its name is a plain product name — never an
+ * asset/render title like "Two-Tone Inverted Cuban Chain/Bracelet Render".
+ */
+function cleanCaseName(raw?: string | null) {
+  return String(raw ?? "")
+    .replace(/\.(png|jpe?g|webp|mp4|mov)$/i, "")
+    .replace(/\b(render(ing)?s?|mockups?|designs?|previews?|studies?|concepts?|3d|cad|untitled|final|v\d+)\b/gi, " ")
+    .replace(/[_\-]+/g, " ")
+    .replace(/\s{2,}/g, " ")
+    .replace(/^[\s/,.-]+|[\s/,.-]+$/g, "")
+    .slice(0, 48)
+    .trim();
+}
+
+
+
 const ANGLE_ROLE_OPTIONS = [
   "",
   "Front",
