@@ -3308,7 +3308,14 @@ export default function JewelrySwap() {
                                 <X size={9} />
                               </button>
                             ) : null}
+                            {/* EVIDENCE ROLE only — never a per-asset product name. */}
+                            {evidenceRoleFor(url) ? (
+                              <span className="absolute bottom-0.5 left-0.5 max-w-[72px] truncate rounded bg-black/75 px-1 py-0.5 text-[8px] font-semibold uppercase tracking-[0.1em] text-foreground/75">
+                                {evidenceRoleFor(url)}
+                              </span>
+                            ) : null}
                           </div>
+
                           {/* Optional role label — helps the model match the source view. */}
                           <select
                             aria-label={`Role for angle ${angleIndex + 1}`}
