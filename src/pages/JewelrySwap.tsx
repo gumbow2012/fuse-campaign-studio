@@ -1423,8 +1423,9 @@ export default function JewelrySwap() {
           });
           applyIntake(urls, result.intake);
           setKnowledgeMap(result.intake?.knowledgeMap ?? null);
-
+          setIntake({
             status: "ready",
+
             stage: INTAKE_STAGES.length,
             productCount: result.intake?.products?.length ?? 1,
             referenceCount: urls.length,
