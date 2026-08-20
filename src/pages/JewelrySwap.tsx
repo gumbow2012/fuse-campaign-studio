@@ -3801,7 +3801,12 @@ export default function JewelrySwap() {
                             <span className="uppercase tracking-[0.14em]">
                               {entry.region || "Region"}
                             </span>{" "}
-                            — {entry.needsConfirmation ? "Needs confirmation. " : `${entry.type}. `}
+                            — {entry.label
+                              ? `${entry.label}. `
+                              : entry.needsConfirmation
+                                ? "Needs confirmation. "
+                                : `${entry.type}. `}
+
                             {entry.reason}
                           </p>
                         ))}
