@@ -1240,17 +1240,29 @@ function buildSeedanceDirectorPrompt(args: {
     ].join("\n")
     : "SHOT TIMELINE:\n0-" + duration + "s — slow hero push on the approved view; product rigid";
 
-  // Priority-ordered: the tail entries are trimmed first when over the cap.
-  const core = [
-    `OBJECTIVE: Direct a ${duration}s luxury product film of ONE ${productType}${aspect ? ` framed ${aspect}` : ""}, built strictly from the approved reference views.`,
-    specLines.length ? `PRODUCT LOCK — ${specLines.join(" ")} These are HARD constraints.` : null,
-    DIRECTOR_PHYSICS,
-    DIRECTOR_TEMPORAL_LOCK,
-    timeline,
-    safeCameraLine(geometry),
-    mosaic ? DIRECTOR_MOSAIC : null,
-    DIRECTOR_HARD_NEGATIVES,
-  ].filter(Boolean) as string[];
+  // Shorter timeline wording used when the descriptive one blows the budget —
+  // the shot plan itself is never dropped.
+  const shortTimeline = plan.length
+    ? ["SHOT TIMELINE:", ...plan.map((shot) => `${shot.start}-${shot.end}s — ${shot.key} (${shot.role}); product rigid`)].join("\n")
+    : timeline;
+
+  const buildCore = (timelineText: string) =>
+    [
+      `OBJECTIVE: Direct a ${duration}s luxury product film of ONE ${productType}${aspect ? ` framed ${aspect}` : ""}, built strictly from the approved reference views.`,
+      specLines.length ? `PRODUCT LOCK — ${specLines.join(" ")} These are HARD constraints.` : null,
+      DIRECTOR_PHYSICS,
+      DIRECTOR_TEMPORAL_LOCK,
+      timelineText,
+      safeCameraLine(geometry),
+      mosaic ? DIRECTOR_MOSAIC : null,
+    ].filter(Boolean) as string[];
+
+  // Always protected: PRODUCT LOCK + GLOBAL PHYSICS + timeline + HARD NEGATIVES.
+  const negatives = DIRECTOR_HARD_NEGATIVES;
+  const fullCore = buildCore(timeline);
+  const coreLength = (sections: string[]) =>
+    sections.join("\n\n").length + negatives.length + 2;
+  const core = coreLength(fullCore) <= DIRECTOR_MAX_CHARS ? fullCore : buildCore(shortTimeline);
 
   const optional = [
     DIRECTOR_OPTICS,
@@ -1263,25 +1275,16 @@ function buildSeedanceDirectorPrompt(args: {
   ].filter(Boolean) as string[];
 
   // Insert optional sections before HARD NEGATIVES while the budget allows.
-  const negatives = core.pop() as string;
   const kept: string[] = [];
-  let length = core.join("\n\n").length + negatives.length + 2;
+  let length = coreLength(core);
   for (const section of optional) {
     if (length + section.length + 2 > DIRECTOR_MAX_CHARS) continue;
     kept.push(section);
     length += section.length + 2;
   }
 
-  let prompt = [...core, ...kept, negatives].join("\n\n");
-  if (prompt.length > DIRECTOR_MAX_CHARS) {
-    // Last resort: shorten the timeline detail, never the locks or negatives.
-    const shortTimeline = plan.length
-      ? ["SHOT TIMELINE:", ...plan.map((shot) => `${shot.start}-${shot.end}s — ${shot.key} (${shot.role}); product rigid`)].join("\n")
-      : timeline;
-    prompt = [...core.map((section) => (section === timeline ? shortTimeline : section)), negatives]
-      .join("\n\n")
-      .slice(0, DIRECTOR_MAX_CHARS);
-  }
+  const prompt = [...core, ...kept, negatives].join("\n\n").slice(0, DIRECTOR_MAX_CHARS);
+
 
   return {
     prompt,
