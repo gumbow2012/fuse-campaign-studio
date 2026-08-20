@@ -1082,6 +1082,87 @@ export default function JewelrySwap() {
     [pieces],
   );
 
+  /** Stable id for a selected frame — used to match analysis back to frames. */
+  const frameIdFor = useCallback(
+    (index: number) => `frame-${index}-${(frames[index]?.time ?? 0).toFixed(3)}`,
+    [frames],
+  );
+
+  /** The analysis INPUTS, serialized. A change here (and only here) invalidates. */
+  const analysisInputKey = useCallback(
+    (indices: number[]) =>
+      JSON.stringify({
+        frames: indices.map((index) => frames[index]?.url ?? "").filter(Boolean).sort(),
+        specs: piecePayload().map((piece: any) => ({
+          references: piece.references,
+          type: piece.type,
+          metal: piece.metal,
+          stone: piece.stone,
+          stoneColor: piece.stoneColor,
+          quality: piece.quality,
+          settings: piece.settings,
+          dimensions: piece.dimensions,
+          notes: piece.notes,
+        })),
+      }),
+    [frames, piecePayload],
+  );
+
+  /**
+   * Runs the still analysis at most once per input fingerprint, with a single
+   * automatic retry. Failure is never fatal — the deterministic selector and
+   * the existing strict prompt take over untouched.
+   */
+  const ensureAnalysis = useCallback(
+    async (indices: number[]): Promise<JewelryProjectAnalysis | null> => {
+      const specs = piecePayload();
+      const references = specs.flatMap((piece: any) => piece.references ?? []);
+      if (!indices.length || !references.length) return null;
+
+      const key = analysisInputKey(indices);
+      if (analysisKey === key && analysis) return analysis;
+
+      const sourceFrames = indices
+        .map((index) => ({
+          frameId: frameIdFor(index),
+          timestamp: frames[index]?.time ?? 0,
+          imageUrl: frames[index]?.url ?? "",
+        }))
+        .filter((frame) => frame.imageUrl);
+
+      setAnalysisState("running");
+      for (let attempt = 0; attempt < 2; attempt += 1) {
+        try {
+          const result = await analyzeJewelryFrames({
+            sourceFrames,
+            jewelryReferences: references,
+            jewelrySpecs: specs as any,
+          });
+          setAnalysis(result.analysis);
+          setAnalysisKey(key);
+          setAnalysisState("ready");
+          return result.analysis;
+        } catch {
+          if (attempt === 1) {
+            setAnalysisState("failed");
+            setAnalysis(null);
+            setAnalysisKey(null);
+          }
+        }
+      }
+      return null;
+    },
+    [analysis, analysisKey, analysisInputKey, frameIdFor, frames, piecePayload],
+  );
+
+  /** This frame's advisory analysis, if the current analysis covers it. */
+  const frameAnalysisFor = useCallback(
+    (frameIndex: number): JewelryFrameAnalysis | null =>
+      analysis?.frames?.find((entry) => entry.frameId === frameIdFor(frameIndex)) ?? null,
+    [analysis, frameIdFor],
+  );
+
+
   const swapFrame = useCallback(
     async (
       frameIndex: number,
