@@ -221,7 +221,64 @@ function generationRecipe(generation: Generation) {
 }
 
 
-type Reference = { url: string; label: string };
+type Reference = { url: string; label: string; role?: string };
+
+/** Optional creative role chips — cosmetic labels, never sent to a provider. */
+const REFERENCE_ROLES = [
+  "HERO",
+  "MACRO",
+  "DETAIL",
+  "SIDE",
+  "BACK",
+  "CLASP",
+  "LINK",
+  "TRANSITION",
+  "TEXTURE",
+  "LIGHTING",
+  "CUSTOM",
+];
+
+type ShotPlanEntry = { index: number; shot: string; start: number | null; end: number | null };
+
+/**
+ * Reads an already-stored shot plan off a generation payload (Jewelry Swap's
+ * Seedance director output). Nothing is generated or altered here.
+ */
+function readShotPlan(payload: Record<string, unknown> | null | undefined): ShotPlanEntry[] {
+  const raw = (payload ?? {}) as Record<string, unknown>;
+  const list = Array.isArray(raw.shot_plan)
+    ? raw.shot_plan
+    : Array.isArray((raw.shotPlan as unknown[]) ?? null)
+      ? (raw.shotPlan as unknown[])
+      : [];
+  return list
+    .map((entry, index) => {
+      const item = (entry ?? {}) as Record<string, unknown>;
+      const shot = String(item.shot ?? item.shot_type ?? item.label ?? item.name ?? "").trim();
+      if (!shot) return null;
+      const start = Number(item.start ?? item.start_s ?? item.startSeconds ?? NaN);
+      const end = Number(item.end ?? item.end_s ?? item.endSeconds ?? NaN);
+      return {
+        index: index + 1,
+        shot,
+        start: Number.isFinite(start) ? start : null,
+        end: Number.isFinite(end) ? end : null,
+      } satisfies ShotPlanEntry;
+    })
+    .filter((entry): entry is ShotPlanEntry => Boolean(entry));
+}
+
+/** Branded, human status wording for in-flight and finished work. */
+function statusLabel(status: Generation["status"], progress: number) {
+  if (status === "complete") return "READY";
+  if (status === "failed") return "FAILED";
+  if (status === "queued") return "ANALYZING REFERENCES";
+  if (progress < 35) return "BUILDING SHOT PLAN";
+  if (progress < 85) return "GENERATING";
+  return "FINALIZING";
+}
+
+
 
 
 async function callStudio(body: Record<string, unknown>) {
