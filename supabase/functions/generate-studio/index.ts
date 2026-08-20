@@ -570,14 +570,26 @@ Deno.serve(async (req) => {
         .limit(limit);
       if (error) throw new Error(error.message);
 
-      // Reconcile every in-flight row so the queue reflects terminal results.
-      const generations = await Promise.all(
-        (rows ?? []).map((row) =>
-          row.status === "queued" || row.status === "running"
-            ? syncGeneration(admin, row)
-            : Promise.resolve(serializeGeneration(row))
-        ),
-      );
+      /**
+       * Bounded reconciliation: expire dead rows, then poll at most
+       * MAX_RECONCILE_PER_CALL fresh in-flight rows sequentially. Anything else
+       * is returned as-is — its webhook completes it, or it expires above.
+       */
+      const results = new Map<string, ReturnType<typeof serializeGeneration>>();
+      let reconciled = 0;
+      for (const row of rows ?? []) {
+        if (!isInFlight(row)) continue;
+        if (isStuck(row)) {
+          results.set(row.id, await expireGeneration(admin, row));
+          continue;
+        }
+        if (reconciled >= MAX_RECONCILE_PER_CALL) continue;
+        reconciled += 1;
+        results.set(row.id, await syncGeneration(admin, row));
+      }
+
+      const generations = (rows ?? []).map((row) => results.get(row.id) ?? serializeGeneration(row));
+
       return json({ generations });
     }
 
