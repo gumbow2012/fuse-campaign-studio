@@ -592,10 +592,16 @@ function detectedSettingsLine(piece: Piece) {
   );
   if (user.length) return user.join(" | ");
   const detected = (piece.detected?.settings ?? []).map((setting) => {
-    // Declined regions read honestly instead of borrowing a common name.
-    const value = setting.needsConfirmation || !setting.type ? "Needs confirmation" : setting.type;
+    // The fused compositional wording is preferred; declined regions read
+    // honestly instead of borrowing a common name.
+    const value = setting.label
+      ? setting.label
+      : setting.needsConfirmation || !setting.type
+        ? "Needs confirmation"
+        : setting.type;
     return setting.region ? `${setting.region} · ${value}` : value;
   });
+
   return detected.length ? detected.join(" | ") : "Not detected";
 
 }
