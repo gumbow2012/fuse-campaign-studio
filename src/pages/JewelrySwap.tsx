@@ -1129,35 +1129,77 @@ export default function JewelrySwap() {
 
   /* -------------------------- 3. Piece references ------------------------- */
 
-  /** Each selected file becomes its own piece card. */
+  /**
+   * Each selected asset becomes its own piece card. The zone is mixed-media:
+   * images upload as stills, replacement VIDEOS are reduced client-side to a
+   * small diverse keyframe set which becomes that card's reference angles.
+   * FUSE types every asset itself — the user never labels anything.
+   */
   const addPieces = useCallback(async (files: File[]) => {
     if (!files.length) return;
     setUploadingPiece(true);
     try {
       const folder = await createOutfitSwapFolder();
       const uploaded: Piece[] = [];
+
+      const blank = (name: string): Piece => ({
+        urls: [],
+        roles: [],
+        name,
+        type: JEWELRY_TYPES[0],
+        metal: AUTO_METAL,
+        stone: AUTO_STONE,
+        stoneColor: AUTO_STONE_COLOR,
+        quality: AUTO_QUALITY,
+        settings: [{ ...EMPTY_SETTING }],
+        width: "",
+        height: "",
+        depth: "",
+        weight: "",
+        cads: [],
+        person: DEFAULT_APPLY_TO,
+        notes: "",
+        scope: DEFAULT_SCOPE,
+      });
+
       for (const file of files) {
+        const isVideo = file.type.startsWith("video/") || /\.(mp4|mov|m4v|webm)$/i.test(file.name);
+
+        if (isVideo) {
+          setKeyframeWork({ name: file.name, phase: "inspecting", done: 0, total: 0 });
+          const selection = await selectVideoKeyframes(file, (done, total, phase) =>
+            setKeyframeWork({ name: file.name, phase, done, total }),
+          );
+          const stored = await uploadWithConcurrency(
+            selection.keyframes,
+            3,
+            async (frame) => await uploadToStorage(folder, frame.file, frame.file.name),
+          );
+          setKeyframeWork(null);
+          uploaded.push({
+            ...blank(file.name),
+            urls: stored.map((item) => item.url),
+            roles: selection.keyframes.map(() => ""),
+            cads: selection.keyframes.map(() => null),
+            video: {
+              videoReferenceId: `vid-${crypto.randomUUID().slice(0, 8)}`,
+              name: file.name,
+              duration: selection.meta.duration,
+              aspectRatio: selection.meta.aspectRatio,
+              posterUrl: stored[0]?.url ?? "",
+              keyframeTimes: selection.keyframes.map((frame) => frame.time),
+            },
+          });
+          continue;
+        }
+
         const compressed = await compressImageFile(file);
         const stored = await uploadToStorage(folder, compressed, compressed.name);
         uploaded.push({
+          ...blank(file.name),
           urls: [stored.url],
           roles: [""],
-          name: file.name,
-          type: JEWELRY_TYPES[0],
-          metal: AUTO_METAL,
-          stone: AUTO_STONE,
-          stoneColor: AUTO_STONE_COLOR,
-          quality: AUTO_QUALITY,
-          settings: [{ ...EMPTY_SETTING }],
-
-          width: "",
-          height: "",
-          depth: "",
-          weight: "",
           cads: [null],
-          person: DEFAULT_APPLY_TO,
-          notes: "",
-          scope: DEFAULT_SCOPE,
         });
       }
 
@@ -1167,9 +1209,11 @@ export default function JewelrySwap() {
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Could not upload that reference");
     } finally {
+      setKeyframeWork(null);
       setUploadingPiece(false);
     }
   }, []);
+
 
   /** Extra angles of the SAME physical piece land on the targeted card. */
   const addAngles = useCallback(
