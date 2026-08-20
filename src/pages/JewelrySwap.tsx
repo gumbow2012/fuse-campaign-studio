@@ -2949,6 +2949,25 @@ export default function JewelrySwap() {
                           );
                         },
                       )}
+                      {/* Why the classifier landed where it did, per region —
+                          shown so a declined region is reviewable, not guessed. */}
+                      {(piece.detected?.settings ?? [])
+                        .filter((entry) => entry.reason)
+                        .map((entry, entryIndex) => (
+                          <p
+                            key={`reason-${entryIndex}`}
+                            className={cn(
+                              "text-[10px] leading-snug",
+                              entry.needsConfirmation ? "text-amber-200/85" : "text-foreground/55",
+                            )}
+                          >
+                            <span className="uppercase tracking-[0.14em]">
+                              {entry.region || "Region"}
+                            </span>{" "}
+                            — {entry.needsConfirmation ? "Needs confirmation. " : `${entry.type}. `}
+                            {entry.reason}
+                          </p>
+                        ))}
                       <button
                         type="button"
                         onClick={() =>
@@ -2971,6 +2990,7 @@ export default function JewelrySwap() {
                         + Add setting
                       </button>
                     </div>
+
 
 
                     <div className="mt-2 grid grid-cols-4 gap-1.5">
