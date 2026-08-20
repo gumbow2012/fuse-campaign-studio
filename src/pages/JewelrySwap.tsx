@@ -2659,15 +2659,18 @@ export default function JewelrySwap() {
 
                       <div>
                         <label className="mb-1 block text-[10px] uppercase tracking-[0.14em] text-cyan-200/70">
-                          Type
+                          Type{detectedTag(piece.sources, "type")}
                         </label>
                         <select
                           value={piece.type}
                           onChange={(event) =>
                             setPieces((prev) =>
-                              prev.map((item, i) => (i === index ? { ...item, type: event.target.value } : item)),
+                              prev.map((item, i) =>
+                                i === index ? withOverride(item, "type", { type: event.target.value }) : item,
+                              ),
                             )
                           }
+
                           className={SELECT_CLASS}
                         >
                           {JEWELRY_TYPES.map((type) => (
