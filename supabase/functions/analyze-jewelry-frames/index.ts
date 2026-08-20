@@ -474,7 +474,105 @@ async function analyseBatch(args: {
  * carrying its own confidence so the app can mark uncertain values.
  */
 
-const INTAKE_VERSION = "jewelry-intake-analysis-v1";
+const INTAKE_VERSION = "jewelry-intake-analysis-v2";
+
+/**
+ * The app's canonical dropdown vocabularies, handed in by the client so the
+ * intake answer maps 1:1 onto the existing controls. Nothing here is invented
+ * or hardcoded in this function: an empty list simply means "free text".
+ */
+type IntakeOptions = {
+  jewelryTypes: string[];
+  metals: string[];
+  stones: string[];
+  stoneColors: string[];
+  qualities: string[];
+  settingTypes: string[];
+  /** jewelry-type keyword -> allowed region labels (type-aware). */
+  settingRegions: Record<string, string[]>;
+};
+
+const EMPTY_OPTIONS: IntakeOptions = {
+  jewelryTypes: [],
+  metals: [],
+  stones: [],
+  stoneColors: [],
+  qualities: [],
+  settingTypes: [],
+  settingRegions: {},
+};
+
+function readOptions(raw: any): IntakeOptions {
+  const list = (value: any) =>
+    (Array.isArray(value) ? value : [])
+      .map((entry: any) => String(entry ?? "").trim())
+      .filter(Boolean)
+      .slice(0, 80);
+  const regions: Record<string, string[]> = {};
+  const rawRegions = raw?.settingRegions;
+  if (rawRegions && typeof rawRegions === "object" && !Array.isArray(rawRegions)) {
+    for (const [key, value] of Object.entries(rawRegions)) {
+      const normalized = list(value);
+      if (normalized.length) regions[String(key).trim().toLowerCase()] = normalized;
+    }
+  }
+  return {
+    jewelryTypes: list(raw?.jewelryTypes),
+    metals: list(raw?.metals),
+    stones: list(raw?.stones),
+    stoneColors: list(raw?.stoneColors),
+    qualities: list(raw?.qualities),
+    settingTypes: list(raw?.settingTypes),
+    settingRegions: regions,
+  };
+}
+
+/** Every canonical region label the app knows about, across all types. */
+function allRegions(options: IntakeOptions) {
+  return [...new Set(Object.values(options.settingRegions).flat())];
+}
+
+/**
+ * Maps a detected free-text value onto the app's canonical enum. Exact match
+ * first, then containment, then token overlap. No match → "" (the app keeps
+ * "Auto from reference" and the field is surfaced for confirmation) — a value
+ * is never bent into an unrelated option just to fill the slot.
+ */
+function toCanonical(value: unknown, options: string[]): string {
+  const raw = String(value ?? "").trim();
+  if (!raw || !options.length) return raw;
+  const lower = raw.toLowerCase();
+  const exact = options.find((option) => option.toLowerCase() === lower);
+  if (exact) return exact;
+  const contained = options.filter(
+    (option) =>
+      option.toLowerCase().includes(lower) || lower.includes(option.toLowerCase()),
+  );
+  if (contained.length) {
+    // Prefer the most specific (longest) canonical label that still matches.
+    return contained.sort((a, b) => b.length - a.length)[0];
+  }
+  const tokens = new Set(lower.split(/[^a-z0-9]+/).filter((token) => token.length > 2));
+  let best = "";
+  let bestScore = 0;
+  for (const option of options) {
+    const optionTokens = option.toLowerCase().split(/[^a-z0-9]+/).filter((t) => t.length > 2);
+    const score = optionTokens.filter((token) => tokens.has(token)).length;
+    if (score > bestScore) {
+      bestScore = score;
+      best = option;
+    }
+  }
+  return bestScore > 0 ? best : "";
+}
+
+/** high → auto-populate, medium → suggested, low → needs confirmation. */
+function confidenceTier(confidence: unknown): "high" | "medium" | "low" {
+  const value = Number(confidence ?? 0);
+  if (value >= 0.7) return "high";
+  if (value >= 0.45) return "medium";
+  return "low";
+}
 
 /** value + confidence; the app attaches the `source` (gemini_detected). */
 const DETECTED_FIELD = {
@@ -485,6 +583,7 @@ const DETECTED_FIELD = {
   },
   required: ["value", "confidence"],
 } as const;
+
 
 const INTAKE_SCHEMA = {
   type: Type.OBJECT,
