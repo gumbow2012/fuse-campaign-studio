@@ -1375,7 +1375,87 @@ export default function JewelrySwap() {
       .slice(0, 3);
   }, [knowledgeMap]);
 
+  /**
+   * REF handle per url — the analysis numbers references in the SAME flattened
+   * order the intake payload is built in, so the map can be read back per image.
+   */
+  const refIdByUrl = useMemo(() => {
+    const map = new Map<string, string>();
+    pieces.flatMap((piece) => piece.urls).forEach((url, index) => map.set(url, `REF_${index + 1}`));
+    return map;
+  }, [pieces]);
 
+  /**
+   * AUTO authority labels. The user assigns nothing: we read the attribute-level
+   * authority FUSE already computed (authorityFor + evidenceStrength) and show at
+   * most one plain badge per reference. No score, no checkbox, and nothing at all
+   * when the reference has no clearly useful specialty.
+   */
+  const autoAuthorityLabelByUrl = useMemo(() => {
+    const labels = new Map<string, string>();
+    const catalog = knowledgeMap?.referenceCatalog ?? [];
+    if (!catalog.length) return labels;
+
+    // Attribute → plain-language badge. Order = which specialty wins the badge.
+    const BADGES: { keys: string[]; label: string }[] = [
+      { keys: ["overallGeometry", "componentGeometry", "silhouette", "componentTopology"], label: "Best for geometry" },
+      { keys: ["stoneSize", "stoneCut", "stonePlacement", "stoneSeatLayout"], label: "Best for stone detail" },
+      { keys: ["settingMechanics", "prongConstruction"], label: "Best for setting detail" },
+      { keys: ["thicknessDepth"], label: "Best for side profile" },
+      { keys: ["claspBailConnector"], label: "Best for clasp" },
+      { keys: ["dimensions"], label: "Best for proportions" },
+      { keys: ["materialAppearance", "metalColor", "manufacturedFinish", "manufacturedAppearance"], label: "Best for finish" },
+    ];
+
+    const byId = new Map(catalog.map((entry) => [String(entry.referenceId ?? "").trim(), entry]));
+    // A badge is only useful if this reference is the STRONGEST for that group.
+    const bestFor = new Map<string, string>();
+    for (const badge of BADGES) {
+      let winner: { id: string; score: number } | null = null;
+      for (const entry of catalog) {
+        const strength = entry.evidenceStrength ?? {};
+        const claimed = new Set((entry.authorityFor ?? []).map((value) => String(value).toLowerCase()));
+        const score = Math.max(
+          ...badge.keys.map((key) => {
+            const numeric = Number((strength as Record<string, number | undefined>)[key] ?? 0);
+            const boost = claimed.has(key.toLowerCase()) ? 0.15 : 0;
+            return (Number.isFinite(numeric) ? numeric : 0) + boost;
+          }),
+        );
+        const id = String(entry.referenceId ?? "").trim();
+        if (!id) continue;
+        if (!winner || score > winner.score) winner = { id, score };
+      }
+      // Hide the badge unless the winner is genuinely strong for that attribute.
+      if (winner && winner.score >= 0.6 && !bestFor.has(winner.id)) bestFor.set(winner.id, badge.label);
+    }
+
+    for (const [url, refId] of refIdByUrl) {
+      if (!byId.has(refId)) continue;
+      const label = bestFor.get(refId);
+      if (label) labels.set(url, label);
+    }
+    return labels;
+  }, [knowledgeMap, refIdByUrl]);
+
+  /**
+   * Only GENUINE high-confidence conflicts become a question. Everything weaker
+   * is resolved by attribute authority inside the analysis and never surfaced.
+   */
+  const authorityQuestions = useMemo(() => {
+    return (knowledgeMap?.constructionConflicts ?? [])
+      .filter((conflict) => conflict.needsUserDecision === true && conflict.question)
+      .map((conflict, index) => ({
+        id: `${conflict.attribute ?? conflict.topic ?? "conflict"}-${index}`,
+        attribute: conflict.attribute || conflict.topic || "detail",
+        question: conflict.question as string,
+        options: (conflict.options ?? [conflict.cadClaim, conflict.photoClaim].filter(Boolean) as string[])
+          .filter(Boolean)
+          .slice(0, 3),
+      }))
+      .filter((question) => question.options.length > 0)
+      .slice(0, 3);
+  }, [knowledgeMap]);
 
 
   /** The app's canonical vocabularies, handed to the analysis every call. */
