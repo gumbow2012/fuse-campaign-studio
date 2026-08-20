@@ -1089,8 +1089,17 @@ function buildJewelryPrompt(args: {
 
   const preferred = String(args.preferredRole ?? "").trim();
   const correction = failureCorrection(args.failureReason);
-  const mode = normalizeMode(args.mode, args.macro === true);
-  const coverage = normalizeCoverage(args.coverage, mode);
+  const manualMode = normalizeMode(args.mode, args.macro === true);
+  const manualCoverage = normalizeCoverage(args.coverage, manualMode);
+  const frameAnalysis = normalizeFrameAnalysis(args.frameAnalysis ?? null);
+  const productAnalysis = normalizeProductAnalysis(args.productAnalysis ?? null);
+  // Auto ONLY: Stage-A analysis resolves standard vs macro reconstruct and the
+  // framing. Any manual selection wins outright.
+  const mode = manualMode === "auto" ? (modeFromAnalysis(frameAnalysis) ?? "auto") : manualMode;
+  const coverage = manualCoverage === "auto"
+    ? (coverageFromAnalysis(frameAnalysis) ?? normalizeCoverage(null, mode))
+    : manualCoverage;
+  const analysisBlock = frameAnalysisBlock(frameAnalysis, productAnalysis);
 
   // Structured product authority — injected into THIS prompt, after the PIECES
   // lines and before the negatives. Only non-Auto values are emitted.
@@ -1100,6 +1109,8 @@ function buildJewelryPrompt(args: {
   const colorless = isColorlessSpec(specs);
   const stoneLock = stoneEngineeringLockBlock(specs);
   const settingMap = multiSettingBlock(specs);
+
+
 
 
   const prompt = [
