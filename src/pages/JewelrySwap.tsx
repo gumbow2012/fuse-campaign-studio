@@ -2907,12 +2907,32 @@ export default function JewelrySwap() {
                       </span>
                     ))}
                   </div>
+                  {reconstructionNotes.length ? (
+                    <ul className="mt-1.5 space-y-0.5 text-[10px] text-foreground/70">
+                      {reconstructionNotes.map((note) => (
+                        <li key={note}>· {note}</li>
+                      ))}
+                    </ul>
+                  ) : null}
+                  {(knowledgeMap.styleDescriptors?.length ?? 0) > 0 ? (
+                    <p className="mt-1.5 text-[10px] text-foreground/55">
+                      Style read: {knowledgeMap.styleDescriptors!.slice(0, 4).join(", ")}
+                    </p>
+                  ) : null}
+                  {evidenceRequests.length ? (
+                    <ul className="mt-1.5 space-y-0.5 text-[10px] text-amber-100/85">
+                      {evidenceRequests.map((request) => (
+                        <li key={request}>· {request}</li>
+                      ))}
+                    </ul>
+                  ) : null}
                   {(knowledgeMap.unresolvedFeatures?.length ?? 0) > 0 ? (
                     <p className="mt-1.5 text-[10px] text-amber-100/85">
                       {knowledgeMap.unresolvedFeatures!.length} detail
                       {knowledgeMap.unresolvedFeatures!.length === 1 ? "" : "s"} need confirmation
                     </p>
                   ) : null}
+
                   <button
                     type="button"
                     onClick={() => setEngineeringOpen((open) => !open)}
