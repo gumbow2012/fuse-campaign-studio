@@ -3535,6 +3535,73 @@ function arrayOf(value: unknown): any[] {
   return Array.isArray(value) ? value : [];
 }
 
+/**
+ * THE user-facing setting authority. Built from the FUSED map only:
+ * complete reference set + complete product-video analysis -> PKM ->
+ * terminology ontology -> resolvedJewelrySpec -> UI + Nano engineering lock.
+ * The first-pass single-image classifier never contributes here.
+ */
+function buildResolvedJewelrySpec(pkm: any, options: IntakeOptions) {
+  const analysis = pkm?.settingAnalysis ?? null;
+  const terminology = pkm?.resolvedSettingTerminology ?? null;
+  const canonicalOf = (value: unknown) => {
+    const raw = String(value ?? "").trim();
+    if (!raw) return "";
+    const canonical = toCanonical(raw, options.settingTypes);
+    return canonical || "";
+  };
+
+  const settings = arrayOf(pkm?.settings).map((setting: any) => {
+    const label = String(setting?.detectedSetting ?? setting?.canonicalSetting ?? "").trim();
+    const needsConfirmation = setting?.needsConfirmation === true ||
+      /needs_confirmation/i.test(label) ||
+      Number(setting?.confidence ?? 0) < 0.45;
+    return {
+      region: String(setting?.regionId ?? setting?.componentId ?? "").trim() || null,
+      // The composed compositional terminology is what the user reads.
+      displayLabel: needsConfirmation ? "" : (terminology || label),
+      setting: needsConfirmation ? "" : (canonicalOf(terminology) || canonicalOf(label)),
+      detectedSetting: label || null,
+      vocabularyDomain: setting?.vocabularyDomain ?? analysis?.vocabularyDomain ?? null,
+      matchedSignals: arrayOf(setting?.matchedSignals),
+      conflictingSignals: arrayOf(setting?.conflictingSignals),
+      reason: String(setting?.settingClassificationReason ?? "").trim() || null,
+      provenance: setting?.provenance ?? analysis?.provenance ?? null,
+      userConfirmedTerm: setting?.userConfirmedTerm === true,
+      confidence: Number(setting?.confidence ?? 0) || 0,
+      needsConfirmation,
+    };
+  });
+
+  // A map with the compositional axes but no per-region rows still resolves.
+  if (!settings.length && terminology) {
+    settings.push({
+      region: null,
+      displayLabel: terminology,
+      setting: canonicalOf(terminology),
+      detectedSetting: terminology,
+      vocabularyDomain: analysis?.vocabularyDomain ?? null,
+      matchedSignals: arrayOf(analysis?.topologyEvidence),
+      conflictingSignals: arrayOf(analysis?.conflictingSignals),
+      reason: null,
+      provenance: analysis?.provenance ?? null,
+      userConfirmedTerm: analysis?.provenance === "USER_CONFIRMED",
+      confidence: Number(analysis?.confidence ?? 0) || 0,
+      needsConfirmation: analysis?.needsConfirmation === true,
+    });
+  }
+
+  return {
+    source: pkm ? "product_knowledge_map" : "unavailable",
+    version: pkm?.version ?? null,
+    productCaseId: pkm?.productCaseId ?? null,
+    userFacingTerminology: terminology,
+    settingAnalysis: analysis,
+    settings,
+  };
+}
+
+
 
 
 
