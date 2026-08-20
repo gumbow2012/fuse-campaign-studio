@@ -675,13 +675,19 @@ async function startSwapFrame(admin: AdminClient, args: {
     : "pro";
   const endpointId = imageModelKey === "nb2" ? IMAGE_MODEL_ALT : IMAGE_MODEL;
 
-  // REF order matters: the source frame is always image 1.
+  // Deterministic image-payload routing: computed ONCE and used for BOTH the
+  // payload order and the prompt's "reference image N = role" numbering so the
+  // two can never drift. SOURCE_FRAME is always image 1.
+  const routed = pieces.map((piece) => routePiece(piece, args.mode ?? null, args.preferredRole ?? null));
+  const routedPieces = routed.map((entry) => entry.piece);
+  const selectedRefs = routed.flatMap((entry) => entry.refs);
+
   const imageUrls = cleanUrls([
     sourceFrameUrl,
-    ...pieces.flatMap((piece) => pieceUrls(piece)),
+    ...selectedRefs.map((ref) => ref.url),
   ]);
   const prompt = buildJewelryPrompt({
-    pieces,
+    pieces: routedPieces,
     extra: args.extraPrompt,
     preferredRole: args.preferredRole ?? null,
     failureReason: args.failureReason ?? null,
