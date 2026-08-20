@@ -565,22 +565,138 @@ const OPTICS_VS_COLOR_LINE =
   "OPTICS vs COLOR: Spectral fire (white, blue, cyan, green, yellow, orange, restrained red/violet flashes from dispersion) is ALLOWED and does NOT change body color. Do not render colored diamonds (pink/champagne/yellow/blue) unless Stone Color specifies them.";
 
 const NO_INVENT_NEGATIVES_LINE =
-  "NO-INVENT NEGATIVES: No invented center stones, no added oversized diamonds, no random baguettes or marquise, no added halos or extra stone rows, no changing round↔fancy cuts, no arbitrary stone-size variation, no generic pavé substitution, no setting-style drift, no stone-color drift.";
+  "NO-INVENT NEGATIVES: No invented center stones, no added oversized diamonds, no random baguettes or marquise, no added halos or extra stone rows, no changing round↔fancy cuts, no arbitrary stone-size variation, no generic pavé substitution, no setting-style drift, no stone-color drift. No generic pavé substitution. No uniform same-size stone field when the reference uses mixed sizes. No invented center stones. No invented fancy cuts. No setting-style drift. No stone-color drift. No arbitrary stone-size changes. No regularized grid layout.";
 
 const SPEC_HIERARCHY_LINE =
   "SPECIFICATION HIERARCHY: CAD / design-authority references (geometry) > structured product fields (material, stone, stone color, quality, setting) > labeled product references (appearance) > Notes > model inference. If Notes conflict with the structured fields, the structured fields win unless the Notes explicitly state that they override them.";
+
+const AUTHORITY_HIERARCHY_LINE =
+  "AUTHORITY HIERARCHY (strict, highest first): 1) the user's structured product specification (type, metal, stone, stone color, quality, setting) — MANDATORY; 2) CAD / design-authority reference(s) — engineering truth for geometry, stone-size distribution, placement and construction; 3) the relevant product photographs — real material truth (metal alloy and color, polish, stone appearance, scintillation, micro-texture); 4) automated visual analysis — ANALYSIS ONLY, it may describe but may NEVER override an explicit setting, stone color, metal or quality; 5) Notes; 6) model inference (lowest). A structured setting such as Mosaic or Reverse Mosaic can NEVER be silently replaced with pavé, micro-pavé or a uniform round stone field because those are easier or faster to render. If a lower authority disagrees with a higher one, the higher one wins without exception.";
 
 /** True when any setting on any piece is a mosaic variant. */
 function hasMosaicSetting(specs: TargetSpec[]) {
   return specs.some((spec) => spec.settings.some((setting) => /mosaic/i.test(setting.type)));
 }
 
+/** True when a single stone-color value is a colorless/white option. */
+function isColorlessValue(color?: string | null) {
+  return !!color && /colorless|white|d–f|d-f|g–j|g-j/i.test(color);
+}
+
 /** True when every specified stone color is a colorless/white option. */
 function isColorlessSpec(specs: TargetSpec[]) {
   const colors = specs.map((spec) => spec.stoneColor).filter(Boolean) as string[];
   if (!colors.length) return false;
-  return colors.every((color) => /colorless|white|d–f|d-f|g–j|g-j/i.test(color));
+  return colors.every((color) => isColorlessValue(color));
 }
+
+/**
+ * Every specified setting across all pieces, with piece-level inheritance
+ * applied per setting. A setting's OWN stone/color/quality always wins, so a
+ * Clasp setting never inherits the Links setting's overrides.
+ */
+function resolvedSettings(specs: TargetSpec[]) {
+  const out: {
+    region: string;
+    type: string;
+    stone: string | null;
+    color: string | null;
+    quality: string | null;
+    inherited: boolean;
+  }[] = [];
+  for (const spec of specs) {
+    for (const setting of spec.settings) {
+      out.push({
+        region: setting.region || "Entire Piece",
+        type: setting.type,
+        stone: setting.stone || spec.stone,
+        color: setting.color || spec.stoneColor,
+        quality: setting.quality || spec.quality,
+        inherited: !setting.stone && !setting.color && !setting.quality,
+      });
+    }
+  }
+  return out;
+}
+
+function uniqueValues(values: (string | null | undefined)[]) {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const value of values) {
+    const text = String(value ?? "").trim();
+    if (!text || seen.has(text.toLowerCase())) continue;
+    seen.add(text.toLowerCase());
+    out.push(text);
+  }
+  return out;
+}
+
+/**
+ * Hard STONE ENGINEERING LOCK — emitted only when a Setting is specified.
+ * Ties the setting's visual interpretation to the CAD / product references
+ * instead of the generic setting name, so "Reverse Mosaic" cannot collapse
+ * into uniform micro-pavé.
+ */
+function stoneEngineeringLockBlock(specs: TargetSpec[]): string | null {
+  const settings = resolvedSettings(specs);
+  if (!settings.length) return null;
+
+  const settingText = uniqueValues(settings.map((s) => `${s.region}: ${s.type}`)).join("; ");
+  const stones = uniqueValues(settings.map((s) => s.stone));
+  const colors = uniqueValues(settings.map((s) => s.color));
+  const qualities = uniqueValues(settings.map((s) => s.quality));
+
+  const stoneText = stones.length ? stones.join(" / ") : "as shown in the references";
+  const colorText = colors.length ? colors.join(" / ") : "as shown in the references";
+  const qualityText = qualities.length ? qualities.join(" / ") : "as shown in the references";
+  const bodyColorText = colors.length
+    ? colors.every((color) => isColorlessValue(color))
+      ? "colorless / white"
+      : colors.join(" / ")
+    : "the specified body color";
+
+  const parts = [
+    `STONE ENGINEERING LOCK — Setting: ${settingText}. The exact visual interpretation of this setting is DEFINED BY the uploaded CAD / design-authority reference and the real product photographs — not by the generic name. Reproduce the reference-defined mixed stone-size distribution: larger anchor stones interspersed among smaller filler stones, the reference's irregular-but-engineered placement, orientation, density, spacing and metal separation, link by link. Do NOT convert this construction into generic pavé or micro-pavé. Do NOT regularize the stones into uniform rows or a repeated grid. Do NOT substitute same-size round stones across the link. If the CAD shows stone-size, placement, link geometry, width, clasp construction or setting distribution, that CAD information is authoritative — treat CAD as engineering truth, not inspiration.`,
+    `STONE: ${stoneText}. STONE COLOR: ${colorText}. QUALITY: ${qualityText}. The stones remain physically ${bodyColorText}. Rainbow blue/cyan/green/yellow/orange/red flashes may appear only as spectral dispersion from real diamond facets; they do NOT indicate a colored diamond body color.`,
+  ];
+
+  if (settings.some((s) => /mosaic/i.test(s.type))) {
+    const reverse = settings.some((s) => /reverse\s*mosaic/i.test(s.type));
+    parts.push(
+      `MOSAIC ENGINEERING EMPHASIS: this piece is explicitly ${
+        reverse ? "REVERSE MOSAIC" : "MOSAIC"
+      }-set. A mosaic is an engineered composition of DIFFERENTLY sized and shaped stones tightly fitted into a continuous iced surface with deliberate metal separators — never a uniform field. Preserve the design authority's exact stone-size mix, groupings, orientations, spacing and separator metal, link by link.${
+        reverse
+          ? " Reverse Mosaic = preserve the reverse orientation the design authority shows; do not flip it to a conventional mosaic and do not normalize it."
+          : ""
+      }`,
+    );
+  }
+
+  return parts.join("\n");
+}
+
+/** Per-region setting breakdown, emitted when more than one setting exists. */
+function multiSettingBlock(specs: TargetSpec[]): string | null {
+  const settings = resolvedSettings(specs);
+  if (settings.length < 2) return null;
+  const rows = settings.map((s) => {
+    const details = [
+      s.stone ? `stone: ${s.stone}` : null,
+      s.color ? `stone color: ${s.color}` : null,
+      s.quality ? `quality: ${s.quality}` : null,
+    ].filter(Boolean).join(", ");
+    return `- ${s.region} → ${s.type}${details ? ` (${details})` : ""}${
+      s.inherited ? " [inherits the piece-level stone/color/quality]" : " [region-specific override — do NOT inherit another region's values]"
+    }`;
+  });
+  return [
+    "MULTI-SETTING MAP: each region below has its OWN setting construction and its own stone/color/quality. Render each region exactly as specified:",
+    ...rows,
+    "Regions are independent: a Clasp setting must NOT inherit the Links setting (or any other region's construction) when a different clasp construction is specified. Do not average, blend or unify the regions into a single setting style.",
+  ].join("\n");
+}
+
 
 
 
