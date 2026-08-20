@@ -2015,13 +2015,20 @@ const PKM_SCHEMA = {
         type: Type.OBJECT,
         properties: {
           topic: { type: Type.STRING },
+          attribute: { type: Type.STRING },
           cadClaim: { type: Type.STRING },
           photoClaim: { type: Type.STRING },
           resolution: { type: Type.STRING },
+          /** True ONLY when both sides are high-confidence — then we ask the user. */
+          needsUserDecision: { type: Type.BOOLEAN },
+          question: { type: Type.STRING },
+          options: STRING_ARRAY,
+          confidence: CONFIDENCE,
         },
         required: ["topic", "resolution"],
       },
     },
+
     inferredFeatures: {
       type: Type.ARRAY,
       items: {
