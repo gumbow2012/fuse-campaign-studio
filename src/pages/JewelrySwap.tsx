@@ -476,6 +476,9 @@ const INTAKE_STAGES = [
  * files is one call, not six. Every change restarts this timer.
  */
 const INTAKE_DEBOUNCE_MS = 1800;
+/** Provider job submissions kept in flight at once (avoids rate limits). */
+const SWAP_SUBMIT_CONCURRENCY = 3;
+
 
 /**
  * Any manual edit is PERMANENT: it stamps `user_override` on that field so a
