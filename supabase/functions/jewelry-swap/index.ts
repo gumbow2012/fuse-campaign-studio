@@ -1019,7 +1019,10 @@ function buildJewelryPrompt(args: {
   coverage?: Coverage | string | null;
   /** Legacy per-frame Macro toggle — equivalent to mode = "macro". */
   macro?: boolean;
-
+  /** Stage-A still analysis for this frame (advisory). */
+  frameAnalysis?: GeminiFrameAnalysis | null;
+  /** Stage-A product-level analysis of the references (advisory). */
+  productAnalysis?: GeminiProductAnalysis | null;
 }) {
   let cursor = 2; // image 1 is the source frame
   const lines: string[] = [];
