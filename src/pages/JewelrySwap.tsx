@@ -1957,13 +1957,12 @@ export default function JewelrySwap() {
           // Explicit backend typing — these are replacement-product references,
           // never source cinematography.
           assetPurpose: "REPLACEMENT_PRODUCT_REFERENCE" as const,
-          kind: piece.video
-            ? ("product_reference_video" as const)
-            : isGeometryAuthority(piece, angleIndex)
-              ? ("cad" as const)
-              : ("photographic_still" as const),
-          videoReferenceId: piece.video?.videoReferenceId ?? null,
-          timestamp: piece.video?.keyframeTimes?.[angleIndex] ?? null,
+          // Only IMAGE references ever reach generation — a replacement video is
+          // analysis authority and is never sent to the image renderer.
+          kind: isGeometryAuthority(piece, angleIndex)
+            ? ("cad" as const)
+            : ("photographic_still" as const),
+
         })),
 
         type: piece.type,
