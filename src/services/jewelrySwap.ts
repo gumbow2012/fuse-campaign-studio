@@ -84,6 +84,9 @@ export type LibraryAsset = {
   prompt: string | null;
   feature: string | null;
   createdAt: string;
+  /** Where the asset came from: a prior generation or one of the user's uploads. */
+  source?: "generated" | "upload";
+
 };
 
 /** The caller's completed generations, newest first. */
