@@ -2508,12 +2508,13 @@ function buildKnowledgeMapPrompt(args: {
   ].filter(Boolean).join("\n");
 }
 
-/** ONE extra analysis call, reusing the already-inlined reference images. */
+/** ONE fusion call: reference images + the FULL-CLIP video findings. */
 async function runKnowledgeMap(args: {
   ai: GoogleGenAI;
   imageParts: unknown[];
   references: JewelryReferenceInput[];
   videoReferences: VideoReferenceInput[];
+  videoAnalyses?: any[];
   intake: any;
   options: IntakeOptions;
   unavailable: Set<number>;
@@ -2542,13 +2543,19 @@ async function runKnowledgeMap(args: {
   });
   const map = JSON.parse((response.text ?? "").trim());
   map.version = PKM_VERSION;
+  // The full-clip understanding is persisted alongside the fused map.
+  map.videoAnalyses = args.videoAnalyses ?? [];
   // The user's confirmations are persisted with the map and win forever.
   map.userConfirmedFacts = args.userConfirmedFacts ?? [];
   // The ontology travels with the map so the admin panel and any later
   // classification compare against the SAME signatures.
   map.settingOntology = SETTING_ONTOLOGY.map((entry) => entry.canonicalName);
+  console.log(
+    `[analyze-jewelry-frames] FINAL SETTING CLASSIFICATION setting=${detectedValue(map?.setting) || map?.setting?.canonical || "?"} reason=${String(map?.settingClassificationReason ?? "").slice(0, 300)}`,
+  );
   return { knowledgeMap: applyUserConfirmedFacts(map, args.userConfirmedFacts ?? []), geminiMs: Date.now() - started };
 }
+
 
 /**
  * Enforces the USER_CONFIRMED layer after the fact: any map entry whose
