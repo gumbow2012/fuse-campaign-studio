@@ -147,6 +147,33 @@ export type Database = {
           },
         ]
       }
+      jewelry_still_analyses: {
+        Row: {
+          analysis: Json
+          analyzed_at: string
+          fingerprint: string
+          id: string
+          user_id: string
+          version: string
+        }
+        Insert: {
+          analysis: Json
+          analyzed_at?: string
+          fingerprint: string
+          id?: string
+          user_id: string
+          version?: string
+        }
+        Update: {
+          analysis?: Json
+          analyzed_at?: string
+          fingerprint?: string
+          id?: string
+          user_id?: string
+          version?: string
+        }
+        Relationships: []
+      }
       node_runs: {
         Row: {
           completed_at: string | null
