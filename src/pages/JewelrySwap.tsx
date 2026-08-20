@@ -410,13 +410,55 @@ type Piece = {
     stone?: string | null;
     stoneColor?: string | null;
     quality?: string | null;
-    settings?: { type: string; region: string | null }[];
+    settings?: {
+      type: string;
+      region: string | null;
+      /** The classifier declined to name a canonical setting for this region. */
+      needsConfirmation?: boolean;
+      /** Its evidence statement, produced before the enum choice. */
+      reason?: string | null;
+    }[];
+    /** Where a clarity grade was actually read from (visual_only → review). */
+    qualityEvidenceSource?: string | null;
   } | null;
   /** Provenance per field: user_override | gemini_detected | unknown. */
   sources?: Record<string, string>;
   /** Fields the analysis was unsure about — surfaced for a quick review. */
   needsConfirmation?: string[];
 };
+
+/** Analysis field names → the control keys they highlight in the piece card. */
+const REVIEW_FIELD_CONTROLS: Record<string, string> = {
+  jewelryType: "type",
+  metal: "metal",
+  stoneType: "stone",
+  stoneColor: "stoneColor",
+  stoneQuality: "quality",
+  settings: "settings",
+  dimensions: "dimensions",
+  weight: "weight",
+};
+
+/** The control keys on this piece that still need user confirmation. */
+function reviewControls(piece: Piece): Set<string> {
+  const set = new Set<string>();
+  for (const field of piece.needsConfirmation ?? []) {
+    const control = REVIEW_FIELD_CONTROLS[field];
+    if (control) set.add(control);
+    // A user override resolves the concern, whatever the analysis thought.
+    if (control && piece.sources?.[control] === "user_override") set.delete(control);
+  }
+  return set;
+}
+
+/** Material product-spec concerns still open across every piece. */
+function reviewCount(pieces: Piece[]): number {
+  return pieces.reduce((total, piece) => total + reviewControls(piece).size, 0);
+}
+
+/** Amber outline for a control the user still has to confirm. */
+const REVIEW_RING = " border-amber-300/50 ring-1 ring-amber-300/25";
+
 
 const INTAKE_STAGES = [
   "Reading references",
