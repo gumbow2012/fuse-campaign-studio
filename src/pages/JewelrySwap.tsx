@@ -677,6 +677,11 @@ export default function JewelrySwap() {
   // Which frame's Regenerate menu is expanded, and which frame is being compared
   // against the opt-in alternate model.
   const [regenMenu, setRegenMenu] = useState<number | null>(null);
+  /** Batch-level Nano Banana Pro quality. Always defaults to 2K — never auto-4K. */
+  const [nanoQuality, setNanoQuality] = useState<NanoQuality>("2k");
+  /** Per-frame Regenerate quality, defaulting to that frame's previous value. */
+  const [frameQuality, setFrameQuality] = useState<Record<number, NanoQuality>>({});
+
   const [compareIndex, setCompareIndex] = useState<number | null>(null);
 
   const [approved, setApproved] = useState<Set<number>>(new Set());
