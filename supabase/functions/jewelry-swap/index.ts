@@ -367,6 +367,179 @@ function routePiece(
   return { piece: { ...piece, references: refs, urls: refs.map((ref) => ref.url) }, refs };
 }
 
+/* ------------------------------------------------------------------ *
+ * STAGE A — GEMINI STILL-IMAGE ANALYSIS (advisory)
+ * ------------------------------------------------------------------ *
+ * Produced by the analyze-jewelry-frames function from STILL IMAGES ONLY
+ * (never the source video). It ADVISES reference routing and appends a
+ * concise FRAME ANALYSIS section to the existing strict prompt. It may
+ * never override the structured spec, CAD authority, or any manual
+ * Mode / Framing / Preferred-Reference choice.
+ */
+
+type GeminiFrameAnalysis = {
+  frameId?: string;
+  view?: string | null;
+  coverage?: "full_object" | "partial_object" | "macro_detail" | string | null;
+  detailType?: string | null;
+  magnification?: string | null;
+  composition?: {
+    fullProductShouldBeVisible?: boolean;
+    preserveIntentionalCrop?: boolean;
+    negativeSpace?: string | null;
+  } | null;
+  orientation?: string | null;
+  camera?: { angleDescription?: string | null; depthOfField?: string | null } | null;
+  recommendedReferenceRoles?: string[] | null;
+  avoidReferenceRoles?: string[] | null;
+  replacementBehavior?: string | null;
+  riskFlags?: string[] | null;
+};
+
+type GeminiProductAnalysis = {
+  jewelryType?: string | null;
+  visibleComponents?: string[] | null;
+  disposableReferenceContext?: string[] | null;
+  geometryObservations?: string[] | null;
+  materialObservations?: string[] | null;
+  settingObservations?: string[] | null;
+  settingVisualSignature?: Record<string, unknown> | null;
+  conflictWarnings?: string[] | null;
+};
+
+/** Narrow, defensive normalization — anything unexpected becomes null. */
+function normalizeFrameAnalysis(value: unknown): GeminiFrameAnalysis | null {
+  if (!value || typeof value !== "object") return null;
+  const raw = value as Record<string, any>;
+  const list = (input: unknown) =>
+    (Array.isArray(input) ? input : []).map((entry) => String(entry ?? "").trim()).filter(Boolean);
+  return {
+    frameId: raw.frameId ? String(raw.frameId) : undefined,
+    view: raw.view ? String(raw.view) : null,
+    coverage: raw.coverage ? String(raw.coverage) : null,
+    detailType: raw.detailType ? String(raw.detailType) : null,
+    magnification: raw.magnification ? String(raw.magnification) : null,
+    composition: raw.composition && typeof raw.composition === "object"
+      ? {
+        fullProductShouldBeVisible: raw.composition.fullProductShouldBeVisible === true,
+        preserveIntentionalCrop: raw.composition.preserveIntentionalCrop === true,
+        negativeSpace: raw.composition.negativeSpace ? String(raw.composition.negativeSpace) : null,
+      }
+      : null,
+    orientation: raw.orientation ? String(raw.orientation) : null,
+    camera: raw.camera && typeof raw.camera === "object"
+      ? {
+        angleDescription: raw.camera.angleDescription ? String(raw.camera.angleDescription) : null,
+        depthOfField: raw.camera.depthOfField ? String(raw.camera.depthOfField) : null,
+      }
+      : null,
+    recommendedReferenceRoles: list(raw.recommendedReferenceRoles),
+    avoidReferenceRoles: list(raw.avoidReferenceRoles),
+    replacementBehavior: raw.replacementBehavior ? String(raw.replacementBehavior) : null,
+    riskFlags: list(raw.riskFlags),
+  };
+}
+
+function normalizeProductAnalysis(value: unknown): GeminiProductAnalysis | null {
+  if (!value || typeof value !== "object") return null;
+  return value as GeminiProductAnalysis;
+}
+
+/** Gemini's coverage vocabulary → FUSE coverage. Only used when Framing = Auto. */
+function coverageFromAnalysis(analysis: GeminiFrameAnalysis | null): Coverage | null {
+  const raw = String(analysis?.coverage ?? "").trim().toLowerCase();
+  if (raw === "full_object") return "full";
+  if (raw === "partial_object") return "partial";
+  if (raw === "macro_detail") return "macro";
+  return null;
+}
+
+/** Gemini's coverage/magnification → standard vs macro reconstruct. Auto only. */
+function modeFromAnalysis(analysis: GeminiFrameAnalysis | null): ReplacementMode | null {
+  const coverage = coverageFromAnalysis(analysis);
+  const magnification = String(analysis?.magnification ?? "").trim().toLowerCase();
+  if (coverage === "macro" || magnification === "macro" || magnification === "extreme_macro") {
+    return "macro";
+  }
+  if (coverage === "full" || coverage === "partial") return "standard";
+  return null;
+}
+
+/**
+ * The concise FRAME ANALYSIS section appended to the existing strict prompt.
+ * Explicitly labelled advisory so it can never outrank the locked blocks.
+ */
+function frameAnalysisBlock(
+  frame: GeminiFrameAnalysis | null,
+  product: GeminiProductAnalysis | null,
+): string | null {
+  if (!frame && !product) return null;
+  const lines: string[] = [
+    "FRAME ANALYSIS (automated still-image analysis — ADVISORY CONTEXT ONLY. It describes this source frame and the product references. It may NEVER override SOURCE_FRAME, the structured product specification, the CAD/design authority, the forced Mode/Coverage, or the Preferred Angle Reference above):",
+  ];
+
+  if (frame) {
+    const parts = [
+      frame.view ? `view: ${frame.view}` : null,
+      frame.coverage ? `coverage: ${frame.coverage}` : null,
+      frame.detailType ? `detail: ${frame.detailType}` : null,
+      frame.magnification ? `magnification: ${frame.magnification}` : null,
+      frame.orientation ? `orientation: ${frame.orientation}` : null,
+      frame.camera?.angleDescription ? `camera: ${frame.camera.angleDescription}` : null,
+      frame.camera?.depthOfField ? `depth of field: ${frame.camera.depthOfField}` : null,
+    ].filter(Boolean);
+    if (parts.length) lines.push(`- Source frame: ${parts.join("; ")}.`);
+    if (frame.composition) {
+      lines.push(
+        `- Composition: full product ${
+          frame.composition.fullProductShouldBeVisible ? "should" : "should NOT"
+        } be visible; intentional crop ${
+          frame.composition.preserveIntentionalCrop ? "MUST be preserved" : "not crop-critical"
+        }${frame.composition.negativeSpace ? `; negative space: ${frame.composition.negativeSpace}` : ""}.`,
+      );
+    }
+    if (frame.replacementBehavior) lines.push(`- Suggested replacement behaviour: ${frame.replacementBehavior}.`);
+    if (frame.recommendedReferenceRoles?.length) {
+      lines.push(`- Most relevant reference views for this frame: ${frame.recommendedReferenceRoles.join(", ")}.`);
+    }
+    if (frame.riskFlags?.length) {
+      lines.push(`- Watch out for: ${frame.riskFlags.join("; ")}.`);
+    }
+  }
+
+  if (product?.disposableReferenceContext?.length) {
+    lines.push(
+      `- DISPOSABLE REFERENCE CONTEXT detected in the product references — EXCLUDE all of it from the output: ${
+        product.disposableReferenceContext.join(", ")
+      }.`,
+    );
+  }
+  if (product?.settingVisualSignature) {
+    const sig = product.settingVisualSignature as Record<string, unknown>;
+    const parts = [
+      sig.declaredSetting ? `declared setting: ${sig.declaredSetting}` : null,
+      sig.stoneSizeDistribution ? `stone-size distribution: ${sig.stoneSizeDistribution}` : null,
+      sig.largeAnchorStonesVisible === true ? "large anchor stones present" : null,
+      sig.smallFillerStonesVisible === true ? "small filler stones present" : null,
+      sig.layoutRegularity ? `layout: ${sig.layoutRegularity}` : null,
+      sig.uniformRows === true ? "uniform rows observed" : "no uniform rows",
+      sig.metalSeparatorsVisible === true ? "metal separators visible" : null,
+      sig.dominantStoneColor ? `observed stone color: ${sig.dominantStoneColor}` : null,
+    ].filter(Boolean);
+    if (parts.length) {
+      lines.push(
+        `- OBSERVED SETTING SIGNATURE (reproduce this construction, do not regularize it): ${parts.join("; ")}.`,
+      );
+    }
+  }
+  if (product?.conflictWarnings?.length) {
+    lines.push(
+      `- Noted conflicts (the user's structured specification still wins): ${product.conflictWarnings.join("; ")}.`,
+    );
+  }
+
+  return lines.length > 1 ? lines.join("\n") : null;
+}
 
 
 function isAuto(value: unknown) {
