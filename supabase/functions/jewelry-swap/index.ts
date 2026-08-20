@@ -257,18 +257,16 @@ function rolesMatch(role: string, target: string) {
  * Ordered, capped, role-deduped product references for one frame.
  * SOURCE_FRAME is image 1 and is added by the CALLER, never by this selector.
  *
- * Ordering:
- *   1. CAD / design-authority reference(s)  (best role match, else CAD Front, max 2)
- *   2. Preferred-role photographic reference (top photographic slot, if set)
- *   3. Mode-specific photographic references
- *        macro    → Macro Detail, then closest detail view, then at most ONE overall photo
- *        standard → strongest Front/overall, then a 3/4, then optional Macro Detail
- *   4. Remaining photographic references in upload order (until the cap)
- * Total product references capped at MAX_PRODUCT_REFERENCES. Duplicate roles are
- * dropped (never "Front, Front"). Truncation protects, in order: CAD authority,
- * then preferred/strongest match, then secondary views — CAD is never dropped
- * first just because it was uploaded last.
+ * Authority order (FUSE is the final authority, Gemini is advisory):
+ *   1. explicit user override (Preferred Reference / Mode / Framing)
+ *   2. RELEVANT CAD / design authority for this view (never forced when none fits)
+ *   3. Gemini's per-frame ranking (best-first), minus anything it flagged avoid
+ *   4. deterministic role match for the mode (only tops up a thin payload)
+ *   5. remaining photos (last resort only — upload order has NO authority)
+ * Aim: 2-4 PRODUCT references + the source frame. Duplicate roles are dropped
+ * (never "Front, Front") and the total is capped at MAX_PRODUCT_REFERENCES.
  */
+
 function selectReferencesForFrame(args: {
   piece: JewelryPiece;
   mode?: ReplacementMode | string | null;
