@@ -630,6 +630,7 @@ export type Database = {
           error_log: string | null
           estimated_cost_usd: number | null
           estimated_credits: number | null
+          favorited: boolean
           id: string
           input_payload: Json
           kind: string
@@ -649,6 +650,7 @@ export type Database = {
           error_log?: string | null
           estimated_cost_usd?: number | null
           estimated_credits?: number | null
+          favorited?: boolean
           id?: string
           input_payload?: Json
           kind?: string
@@ -668,6 +670,7 @@ export type Database = {
           error_log?: string | null
           estimated_cost_usd?: number | null
           estimated_credits?: number | null
+          favorited?: boolean
           id?: string
           input_payload?: Json
           kind?: string
