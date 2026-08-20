@@ -173,7 +173,96 @@ export async function analyzeJewelryFrames(args: {
   return data as JewelryAnalysisResult;
 }
 
+/* ------------------------------------------------------------------ *
+ * INTAKE — fast batch recognition of the uploaded jewelry references
+ * ------------------------------------------------------------------ *
+ * Analysis only. References in, structured JSON out. Every detected
+ * field carries a `source`, and user overrides always win in the UI.
+ */
 
+export type DetectedField = {
+  value?: string | null;
+  confidence?: number | null;
+  source?: "user_override" | "cad" | "gemini_detected" | "reference_inference" | "unknown";
+};
+
+export type IntakeProduct = {
+  productIndex: number;
+  label?: string;
+  jewelryType?: DetectedField;
+  metal?: DetectedField;
+  stoneType?: DetectedField;
+  stoneColor?: DetectedField;
+  stoneQuality?: DetectedField;
+  dimensions?: DetectedField;
+  weight?: DetectedField;
+  visibleComponents?: string[];
+  connectedComponents?: string[];
+  settings?: { setting: string; region: string; confidence?: number; source?: string }[];
+  settingSignatures?: Record<string, unknown>[];
+  references?: {
+    referenceIndex: number;
+    role?: string;
+    roleConfidence?: number;
+    designAuthorityLikely?: boolean;
+    designAuthorityConfidence?: number;
+    source?: string;
+  }[];
+  needsConfirmation?: string[];
+  notes?: string;
+};
+
+export type JewelryIntake = {
+  version?: string;
+  productCount?: number;
+  referenceCount?: number;
+  products: IntakeProduct[];
+  conflictWarnings?: string[];
+};
+
+export type JewelryIntakeResult = {
+  cached: boolean;
+  fingerprint: string;
+  version: string;
+  analyzedAt: string;
+  intake: JewelryIntake;
+};
+
+/** One fast batch pass over the uploaded references (recognition/grouping). */
+export async function analyzeJewelryIntake(
+  args: {
+    jewelryReferences: { url: string; role?: string | null; cad?: boolean }[];
+    roleVocabulary?: string[];
+    force?: boolean;
+  },
+  signal?: AbortSignal,
+): Promise<JewelryIntakeResult> {
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+
+  const response = await fetch(`${SUPABASE_URL}/functions/v1/analyze-jewelry-frames`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      apikey: SUPABASE_PUBLISHABLE_KEY,
+      Authorization: `Bearer ${session?.access_token ?? SUPABASE_PUBLISHABLE_KEY}`,
+    },
+    body: JSON.stringify({
+      mode: "intake",
+      jewelryReferences: args.jewelryReferences,
+      roleVocabulary: args.roleVocabulary ?? [],
+      force: args.force === true,
+    }),
+    signal,
+  });
+
+  const data = await response.json().catch(() => null);
+  if (!response.ok || data?.error) {
+    throw new Error(data?.error ?? `Jewelry analysis failed (${response.status})`);
+  }
+  return data as JewelryIntakeResult;
+}
 
 
 /** Call the jewelry-swap edge function with a just-in-time session token. */

@@ -50,6 +50,9 @@ import {
 
 import {
   analyzeJewelryFrames,
+  analyzeJewelryIntake,
+  type JewelryIntake,
+
   animateJewelryFrame,
   callJewelrySwap,
   createTemplateFromJewelrySwap,
@@ -359,7 +362,63 @@ type Piece = {
   notes: string;
   /** "piece" (default) or "piece_chain". */
   scope: string;
+  /** Full structured controls open? Collapsed summary by default. */
+  expanded?: boolean;
+  /**
+   * Values the intake analysis detected. Sent to the backend so a field left on
+   * "Auto" resolves to the detected value; a user choice is never overwritten.
+   */
+  detected?: {
+    type?: string | null;
+    metal?: string | null;
+    stone?: string | null;
+    stoneColor?: string | null;
+    quality?: string | null;
+    settings?: { type: string; region: string | null }[];
+  } | null;
+  /** Provenance per field: user_override | gemini_detected | unknown. */
+  sources?: Record<string, string>;
+  /** Fields the analysis was unsure about — surfaced for a quick review. */
+  needsConfirmation?: string[];
 };
+
+const INTAKE_STAGES = [
+  "Reading references",
+  "Identifying jewelry",
+  "Organizing angles",
+  "Reading CAD",
+  "Detecting stones & settings",
+];
+
+/** Non-Auto user value wins; otherwise fall back to the detected value. */
+function effectiveValue(userValue: string, autoValue: string, detected?: string | null) {
+  if (userValue && userValue !== autoValue) return userValue;
+  const value = String(detected ?? "").trim();
+  return value || null;
+}
+
+function detectedProductLine(piece: Piece) {
+  const parts = [
+    effectiveValue(piece.type, "", piece.detected?.type) ?? "Type not detected",
+    effectiveValue(piece.metal, AUTO_METAL, piece.detected?.metal),
+    effectiveValue(piece.stone, AUTO_STONE, piece.detected?.stone),
+    effectiveValue(piece.stoneColor, AUTO_STONE_COLOR, piece.detected?.stoneColor),
+    effectiveValue(piece.quality, AUTO_QUALITY, piece.detected?.quality),
+  ].filter(Boolean) as string[];
+  return parts.join(" · ");
+}
+
+function detectedSettingsLine(piece: Piece) {
+  const user = realSettings(piece).map((setting) =>
+    setting.region ? `${setting.region} · ${setting.type}` : setting.type,
+  );
+  if (user.length) return user.join(" | ");
+  const detected = (piece.detected?.settings ?? []).map((setting) =>
+    setting.region ? `${setting.region} · ${setting.type}` : setting.type,
+  );
+  return detected.length ? detected.join(" | ") : "Not detected";
+}
+
 
 /** Structured settings, dropping the Auto/blank rows the function ignores anyway. */
 function realSettings(piece: Piece): PieceSetting[] {
@@ -554,6 +613,18 @@ export default function JewelrySwap() {
 
   const [pieces, setPieces] = useState<Piece[]>([]);
   const [uploadingPiece, setUploadingPiece] = useState(false);
+  const [dropActive, setDropActive] = useState(false);
+  // Reference intake (recognition / grouping / extraction). Never blocking:
+  // the manual fields stay usable and a failure just falls back to them.
+  const [intake, setIntake] = useState<{
+    status: "idle" | "running" | "ready" | "failed";
+    stage: number;
+    productCount: number;
+    error?: string | null;
+  }>({ status: "idle", stage: 0, productCount: 0 });
+  const intakeAbort = useRef<AbortController | null>(null);
+  const intakeToken = useRef(0);
+
   const [extraPrompt, setExtraPrompt] = useState("");
 
   // STAGE A — still-image shot analysis. Advisory: the deterministic selector
@@ -960,6 +1031,194 @@ export default function JewelrySwap() {
     [angleTarget],
   );
 
+  /* ---------------------- Reference intake (auto-organize) ------------------ */
+
+  const referenceKey = pieces.flatMap((piece) => piece.urls).join("|");
+
+  /**
+   * One fast batch pass over ALL uploaded references: recognition, grouping,
+   * role + design-authority proposals and spec extraction. Any user override is
+   * preserved; on failure the manual reference UI stays fully functional.
+   */
+  useEffect(() => {
+    const urls = referenceKey ? referenceKey.split("|").filter(Boolean) : [];
+    // References changed → cancel the stale result before re-analyzing.
+    intakeAbort.current?.abort();
+    intakeToken.current += 1;
+    const token = intakeToken.current;
+    if (!urls.length) {
+      setIntake({ status: "idle", stage: 0, productCount: 0 });
+      return;
+    }
+
+    const controller = new AbortController();
+    intakeAbort.current = controller;
+    setIntake({ status: "running", stage: 0, productCount: 0 });
+    // Staged ticks reflect the real request; they never delay the result.
+    const ticker = setInterval(() => {
+      setIntake((prev) =>
+        prev.status === "running"
+          ? { ...prev, stage: Math.min(prev.stage + 1, INTAKE_STAGES.length - 1) }
+          : prev,
+      );
+    }, 1200);
+
+    const run = async (attempt: number): Promise<void> => {
+      try {
+        const result = await analyzeJewelryIntake(
+          {
+            jewelryReferences: urls.map((url) => ({ url })),
+            roleVocabulary: Array.from(
+              new Set(pieces.flatMap((piece) => roleOptionsForType(piece.type))),
+            ).filter(Boolean),
+          },
+          controller.signal,
+        );
+        if (token !== intakeToken.current) return;
+        applyIntake(urls, result.intake);
+        setIntake({
+          status: "ready",
+          stage: INTAKE_STAGES.length,
+          productCount: result.intake?.products?.length ?? 1,
+        });
+      } catch (error) {
+        if (controller.signal.aborted || token !== intakeToken.current) return;
+        if (attempt === 0) return run(1); // one retry max
+        setIntake({
+          status: "failed",
+          stage: 0,
+          productCount: 0,
+          error: error instanceof Error ? error.message : "Analysis failed",
+        });
+      }
+    };
+
+    void run(0).finally(() => clearInterval(ticker));
+
+    return () => {
+      clearInterval(ticker);
+      controller.abort();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [referenceKey]);
+
+  /**
+   * Applies the intake result: regroups the references into one card per
+   * detected physical piece, pre-fills roles / design authority / specs, and
+   * NEVER overwrites a value the user set (user_override always wins).
+   */
+  const applyIntake = useCallback((urls: string[], result: JewelryIntake | null) => {
+    const products = Array.isArray(result?.products) ? result!.products : [];
+    if (!products.length) return;
+
+    setPieces((prev) => {
+      // Flat view of the references exactly as they were sent.
+      const flat = urls.map((url) => {
+        for (const piece of prev) {
+          const angleIndex = piece.urls.indexOf(url);
+          if (angleIndex !== -1) return { url, piece, angleIndex };
+        }
+        return { url, piece: null as Piece | null, angleIndex: -1 };
+      });
+
+      const claimed = new Set<number>();
+      const next: Piece[] = [];
+
+      products.forEach((product, productIndex) => {
+        const refs = (product.references ?? [])
+          .filter((ref) => Number.isInteger(ref.referenceIndex) && flat[ref.referenceIndex!])
+          .filter((ref) => !claimed.has(ref.referenceIndex!));
+        if (!refs.length) return;
+        refs.forEach((ref) => claimed.add(ref.referenceIndex!));
+
+        const base = flat[refs[0].referenceIndex!].piece ?? prev[0] ?? null;
+        const detectedSettings = (product.settings ?? [])
+          .map((setting) => ({
+            type: String(setting.setting ?? "").trim(),
+            region: String(setting.region ?? "").trim() || null,
+          }))
+          .filter((setting) => setting.type);
+
+        next.push({
+          urls: refs.map((ref) => flat[ref.referenceIndex!].url).slice(0, 6),
+          roles: refs
+            .map((ref) => {
+              const source = flat[ref.referenceIndex!];
+              const userRole = source.piece?.roles?.[source.angleIndex] ?? "";
+              // A role the user picked is never replaced by a proposal.
+              return userRole || String(ref.role ?? "").trim();
+            })
+            .slice(0, 6),
+          cads: refs
+            .map((ref) => {
+              const source = flat[ref.referenceIndex!];
+              const override = source.piece?.cads?.[source.angleIndex];
+              if (override === true || override === false) return override;
+              // Preselect authority only when the proposal is high-confidence.
+              return ref.designAuthorityLikely === true &&
+                Number(ref.designAuthorityConfidence ?? 0) >= 0.75
+                ? true
+                : null;
+            })
+            .slice(0, 6),
+          name: String(product.label ?? "").trim() || base?.name || `Piece ${productIndex + 1}`,
+          type: base?.type ?? JEWELRY_TYPES[0],
+          metal: base?.metal ?? AUTO_METAL,
+          stone: base?.stone ?? AUTO_STONE,
+          stoneColor: base?.stoneColor ?? AUTO_STONE_COLOR,
+          quality: base?.quality ?? AUTO_QUALITY,
+          settings: base?.settings?.length ? base.settings : [{ ...EMPTY_SETTING }],
+          width: base?.width ?? "",
+          height: base?.height ?? "",
+          depth: base?.depth ?? "",
+          weight: base?.weight ?? "",
+          person: base?.person ?? DEFAULT_APPLY_TO,
+          notes: base?.notes ?? "",
+          scope: base?.scope ?? DEFAULT_SCOPE,
+          expanded: base?.expanded ?? false,
+          // Detected values only RESOLVE fields left on Auto — see the backend.
+          detected: {
+            type: product.jewelryType?.value ?? null,
+            metal: product.metal?.value ?? null,
+            stone: product.stoneType?.value ?? null,
+            stoneColor: product.stoneColor?.value ?? null,
+            quality: product.stoneQuality?.value ?? null,
+            settings: detectedSettings,
+          },
+          sources: {
+            type: base?.type && base.type !== JEWELRY_TYPES[0] ? "user_override" : "gemini_detected",
+            metal: base?.metal && base.metal !== AUTO_METAL ? "user_override" : "gemini_detected",
+            stone: base?.stone && base.stone !== AUTO_STONE ? "user_override" : "gemini_detected",
+            stoneColor:
+              base?.stoneColor && base.stoneColor !== AUTO_STONE_COLOR
+                ? "user_override"
+                : "gemini_detected",
+            quality: base?.quality && base.quality !== AUTO_QUALITY ? "user_override" : "gemini_detected",
+            settings: realSettings(base ?? ({ settings: [] } as unknown as Piece)).length
+              ? "user_override"
+              : "gemini_detected",
+          },
+          needsConfirmation: Array.isArray(product.needsConfirmation) ? product.needsConfirmation : [],
+        });
+      });
+
+      if (!next.length) return prev;
+
+      // References the analysis did not assign stay with the first card —
+      // never silently dropped.
+      const leftovers = flat.filter((_, index) => !claimed.has(index));
+      for (const item of leftovers) {
+        if (next[0].urls.length >= 6) break;
+        next[0].urls.push(item.url);
+        next[0].roles.push(item.piece?.roles?.[item.angleIndex] ?? "");
+        next[0].cads.push(item.piece?.cads?.[item.angleIndex] ?? null);
+      }
+
+      return next.slice(0, 8);
+    });
+  }, []);
+
+
   /* ------------------------------ 4. Frame swaps ---------------------------- */
 
   /** Merge a fresh generation record into whichever collection owns it. */
@@ -1078,6 +1337,10 @@ export default function JewelrySwap() {
         person: piece.person,
         notes: piece.notes || null,
         scope: piece.scope || DEFAULT_SCOPE,
+        // Detected values — used ONLY to resolve fields left on "Auto" so the
+        // prompt never carries the literal word "Auto".
+        detected: piece.detected ?? null,
+
       })),
     [pieces],
   );
@@ -1775,7 +2038,7 @@ export default function JewelrySwap() {
             <SectionCard
               step={3}
               title="Jewelry references"
-              hint="One card per physical piece. Add extra angles (front / back / side / CAD / macro) to the same card."
+              hint="Drop everything for the piece at once — FUSE reads the references and organizes them."
             >
               <input
                 ref={pieceInputRef}
@@ -1801,8 +2064,102 @@ export default function JewelrySwap() {
                   void addAngles(files);
                 }}
               />
+
+              {/* ONE multi-file drop zone — no slot picking before uploading. */}
+              <div
+                onDragOver={(event) => {
+                  event.preventDefault();
+                  setDropActive(true);
+                }}
+                onDragLeave={() => setDropActive(false)}
+                onDrop={(event) => {
+                  event.preventDefault();
+                  setDropActive(false);
+                  const files = Array.from(event.dataTransfer.files ?? []).filter((file) =>
+                    file.type.startsWith("image/"),
+                  );
+                  if (files.length) void addPieces(files);
+                }}
+                className={cn(
+                  "mb-2.5 rounded-2xl border border-dashed bg-black/25 px-4 py-6 text-center transition-colors",
+                  dropActive ? "border-cyan-200/70 bg-cyan-200/5" : "border-white/15",
+                )}
+              >
+                <p className="text-xs text-foreground/85">
+                  Upload jewelry references — drag &amp; drop product photos, CAD, front/back/side, macro &amp;
+                  close-ups together; FUSE organizes them.
+                </p>
+                <div className="mt-2.5 flex flex-wrap items-center justify-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => pieceInputRef.current?.click()}
+                    className="inline-flex items-center gap-1.5 rounded-xl border border-white/15 bg-black/40 px-3 py-1.5 text-[11px] text-foreground/85 transition-colors hover:border-cyan-200/50"
+                  >
+                    {uploadingPiece ? (
+                      <Loader2 size={12} className="animate-spin text-cyan-200" />
+                    ) : (
+                      <Plus size={12} className="text-cyan-200" />
+                    )}
+                    Browse files
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => openPicker({ kind: "piece" })}
+                    className="inline-flex items-center gap-1.5 rounded-xl border border-white/12 bg-black/40 px-3 py-1.5 text-[11px] text-foreground/85 transition-colors hover:border-cyan-200/50"
+                  >
+                    <ImageIcon size={12} className="text-cyan-200" />
+                    Library
+                  </button>
+                </div>
+              </div>
+
+              {/* Compact analysis card — real progress only, never a fake delay. */}
+              {intake.status !== "idle" ? (
+                <div
+                  className={cn(
+                    "mb-2.5 rounded-2xl border px-3 py-2.5 text-[11px]",
+                    intake.status === "failed"
+                      ? "border-amber-300/25 bg-amber-300/10 text-amber-100"
+                      : "border-white/10 bg-black/30 text-foreground/85",
+                  )}
+                >
+                  <p className="flex items-center gap-2 font-medium">
+                    {intake.status === "running" ? (
+                      <Loader2 size={12} className="animate-spin text-cyan-200" />
+                    ) : null}
+                    {intake.status === "running"
+                      ? "Analyzing jewelry…"
+                      : intake.status === "ready"
+                        ? "Analysis ready"
+                        : "Analysis unavailable — the manual reference fields below still work"}
+                  </p>
+                  {intake.status === "running" ? (
+                    <ul className="mt-1.5 space-y-0.5 text-[10px] text-foreground/70">
+                      {INTAKE_STAGES.map((stage, stageIndex) => (
+                        <li key={stage} className="flex items-center gap-1.5">
+                          <span className={stageIndex <= intake.stage ? "text-cyan-200" : "text-white/25"}>
+                            {stageIndex < intake.stage ? "✓" : "•"}
+                          </span>
+                          {stage}
+                        </li>
+                      ))}
+                    </ul>
+                  ) : null}
+                  {intake.status === "failed" && intake.error ? (
+                    <p className="mt-1 text-[10px] opacity-80">{intake.error}</p>
+                  ) : null}
+                  {intake.status === "ready" && intake.productCount > 1 ? (
+                    <p className="mt-1 text-[10px] text-cyan-100/85">
+                      We found {intake.productCount} products — confirm the grouping below, or move a reference with
+                      "Edit analysis".
+                    </p>
+                  ) : null}
+                </div>
+              ) : null}
+
               <div className="space-y-2.5">
                 {pieces.map((piece, index) => (
+
                   <div
                     key={`${piece.urls[0] ?? index}-${index}`}
                     className={cn(
@@ -1947,8 +2304,43 @@ export default function JewelrySwap() {
 
                     </div>
 
+                    {/* Collapsed summary — Gemini's detected product, settings and
+                        authority. The full structured controls live behind
+                        "Edit analysis" and no field was removed. */}
+                    <div className="mt-2 space-y-1 rounded-xl border border-white/10 bg-black/30 px-3 py-2">
+                      <p className="text-[9px] uppercase tracking-[0.14em] text-cyan-200/70">Detected product</p>
+                      <p className="text-[11px] text-foreground/85">{detectedProductLine(piece)}</p>
+                      <p className="text-[9px] uppercase tracking-[0.14em] text-cyan-200/70">Settings</p>
+                      <p className="text-[11px] text-foreground/85">{detectedSettingsLine(piece)}</p>
+                      <p className="text-[9px] uppercase tracking-[0.14em] text-cyan-200/70">Design authority</p>
+                      <p className="text-[11px] text-foreground/85">
+                        {authorityCount(piece)
+                          ? `${authorityCount(piece)} reference${authorityCount(piece) === 1 ? "" : "s"}`
+                          : "None selected"}
+                      </p>
+                      {piece.needsConfirmation?.length ? (
+                        <p className="text-[10px] text-amber-200/90">
+                          Review {piece.needsConfirmation.length} detail
+                          {piece.needsConfirmation.length === 1 ? "" : "s"}: {piece.needsConfirmation.join(", ")}
+                        </p>
+                      ) : null}
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setPieces((prev) =>
+                            prev.map((item, i) => (i === index ? { ...item, expanded: !item.expanded } : item)),
+                          )
+                        }
+                        className="mt-1 text-[10px] uppercase tracking-[0.14em] text-cyan-200/80 transition-colors hover:text-cyan-100"
+                      >
+                        {piece.expanded ? "Hide analysis" : piece.needsConfirmation?.length ? `Review ${piece.needsConfirmation.length} details` : "Edit analysis"}
+                      </button>
+                    </div>
 
+                    {piece.expanded === true ? (
+                      <>
                     <div className="mt-2.5 grid gap-2 sm:grid-cols-2">
+
                       <div>
                         <label className="mb-1 block text-[10px] uppercase tracking-[0.14em] text-cyan-200/70">
                           Type
@@ -2259,9 +2651,11 @@ export default function JewelrySwap() {
                         </select>
                       </div>
                     </div>
-
+                      </>
+                    ) : null}
 
                   </div>
+
                 ))}
                 <button
                   type="button"
@@ -2273,8 +2667,9 @@ export default function JewelrySwap() {
                   ) : (
                     <Plus size={14} className="text-cyan-200" />
                   )}
-                  Add jewelry piece
+                  Add more references
                 </button>
+
                 <button
                   type="button"
                   onClick={() => openPicker({ kind: "piece" })}
