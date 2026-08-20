@@ -478,13 +478,11 @@ function buildAnalysisPrompt(args: {
 async function analyseBatch(args: {
   ai: GoogleGenAI;
   referenceParts: unknown[];
+  frameParts: unknown[];
   references: JewelryReferenceInput[];
   frames: SourceFrame[];
   specs: any[];
 }) {
-  const frameParts = [];
-  for (const frame of args.frames) frameParts.push(await inlineImage(frame.imageUrl));
-
   const response = await args.ai.models.generateContent({
     model: GEMINI_ANALYSIS_MODEL,
     contents: [
@@ -493,7 +491,7 @@ async function analyseBatch(args: {
         parts: [
           { text: buildAnalysisPrompt({ references: args.references, frames: args.frames, specs: args.specs }) },
           ...args.referenceParts,
-          ...frameParts,
+          ...args.frameParts,
         ],
       },
     ] as any,
@@ -509,6 +507,258 @@ async function analyseBatch(args: {
   const parsed = JSON.parse(text);
   return parsed;
 }
+
+/* ------------------------------------------------------------------ *
+ * PRODUCT KNOWLEDGE MAP reuse (shot analysis fast path)
+ * ------------------------------------------------------------------ *
+ * Intake already VISUALLY analysed the whole replacement-reference library and
+ * persisted the result. When the reference set has not changed, shot analysis
+ * must not pay for that work again: Gemini receives the SOURCE FRAMES as images
+ * plus the persisted knowledge map as TEXT, and answers only "what shot is this
+ * frame?" and "which already-understood references (by REF id) best recreate
+ * it?". The product itself is never re-derived.
+ */
+
+/** frames-only structured output — identical per-frame shape, no productAnalysis. */
+const FRAMES_ONLY_SCHEMA = {
+  type: Type.OBJECT,
+  properties: { frames: (RESPONSE_SCHEMA as any).properties.frames },
+  required: ["frames"],
+} as const;
+
+function normalizeRefKey(ref: JewelryReferenceInput) {
+  return `${ref.url}|${ref.role ?? ""}|${ref.cad ? 1 : 0}`;
+}
+
+/** True when the two reference sets are the same images with the same labels. */
+function sameReferenceSet(a: JewelryReferenceInput[], b: JewelryReferenceInput[]) {
+  if (a.length !== b.length || !a.length) return false;
+  const left = a.map(normalizeRefKey).sort();
+  const right = b.map(normalizeRefKey).sort();
+  return left.every((entry, index) => entry === right[index]);
+}
+
+const listOf = (value: unknown) =>
+  (Array.isArray(value) ? value : []).map((entry) => String(entry ?? "").trim()).filter(Boolean);
+
+const detectedValue = (field: any) =>
+  String(field?.resolvedValue ?? field?.value ?? "").trim();
+
+/**
+ * Turns the persisted intake into (a) a productAnalysis object in EXACTLY the
+ * shape the downstream prompt builder already consumes and (b) the text map +
+ * reference catalog handed to the ranking call.
+ */
+function buildKnowledgeMap(args: {
+  intake: any;
+  intakeReferences: JewelryReferenceInput[];
+  references: JewelryReferenceInput[];
+}) {
+  const products = Array.isArray(args.intake?.products) ? args.intake.products : [];
+  if (!products.length) return null;
+
+  const idByUrl = new Map<string, string>();
+  args.references.forEach((ref, index) => idByUrl.set(ref.url, referenceIdAt(index)));
+
+  const visibleComponents = new Set<string>();
+  const geometryObservations: string[] = [];
+  const materialObservations: string[] = [];
+  const settingObservations: string[] = [];
+  const settingSignatures: any[] = [];
+  const referenceMeta: any[] = [];
+  const mapLines: string[] = [];
+  const catalogLines: string[] = [];
+
+  products.forEach((product: any, productIndex: number) => {
+    const label = String(product?.label ?? `PIECE ${productIndex + 1}`);
+    const type = detectedValue(product?.jewelryType);
+    const metal = detectedValue(product?.metal);
+    const stone = detectedValue(product?.stoneType);
+    const stoneColor = detectedValue(product?.stoneColor);
+    const quality = detectedValue(product?.stoneQuality);
+    const dimensions = detectedValue(product?.dimensions);
+    const weight = detectedValue(product?.weight);
+
+    for (const component of listOf(product?.visibleComponents)) visibleComponents.add(component);
+    if (dimensions) geometryObservations.push(`${label} dimensions: ${dimensions}`);
+    if (weight) geometryObservations.push(`${label} weight: ${weight}`);
+    for (const component of listOf(product?.connectedComponents)) {
+      geometryObservations.push(`${label} connected component: ${component}`);
+    }
+    if (metal) materialObservations.push(`${label} metal: ${metal}`);
+    if (stone) materialObservations.push(`${label} stone: ${stone}`);
+    if (stoneColor) materialObservations.push(`${label} stone color: ${stoneColor}`);
+    if (quality) materialObservations.push(`${label} stone quality: ${quality}`);
+
+    mapLines.push(
+      `${label}${type ? ` — type: ${type}` : ""}${metal ? `; metal: ${metal}` : ""}${
+        stone ? `; stone: ${stone}` : ""
+      }${stoneColor ? `; stone color: ${stoneColor}` : ""}${quality ? `; quality: ${quality}` : ""}`,
+    );
+    const components = listOf(product?.visibleComponents);
+    if (components.length) mapLines.push(`  components/regions: ${components.join(", ")}`);
+
+    for (const setting of Array.isArray(product?.settings) ? product.settings : []) {
+      const region = String(setting?.resolvedRegion ?? setting?.region ?? "Entire Piece").trim();
+      const name = String(setting?.resolvedSetting ?? "").trim();
+      const state = name || "needs confirmation";
+      const signature = String(setting?.settingVisualSignature ?? "").trim();
+      settingObservations.push(`${region}: ${state}${signature ? ` — ${signature}` : ""}`);
+      mapLines.push(
+        `  setting @ ${region}: ${state}${
+          Number.isFinite(Number(setting?.confidence)) ? ` (confidence ${Number(setting.confidence).toFixed(2)})` : ""
+        }${signature ? ` — visual construction: ${signature}` : ""}`,
+      );
+    }
+
+    for (const signature of Array.isArray(product?.settingSignatures) ? product.settingSignatures : []) {
+      if (signature && typeof signature === "object") settingSignatures.push(signature);
+    }
+
+    for (const ref of Array.isArray(product?.references) ? product.references : []) {
+      const index = Number(ref?.referenceIndex);
+      const url = args.intakeReferences[index]?.url ?? "";
+      const referenceId = idByUrl.get(url);
+      if (!referenceId) continue;
+      const role = String(ref?.role ?? "").trim() || "Uncertain";
+      const cad = ref?.designAuthorityLikely === true ||
+        args.references.find((entry) => entry.url === url)?.cad === true;
+      const confidence = Number(ref?.roleConfidence ?? 0) || 0;
+      referenceMeta.push({
+        referenceId,
+        detectedRole: role,
+        view: role,
+        coverage: "unclear",
+        physicalRegionsVisible: listOf(product?.visibleComponents),
+        geometryValue: cad ? "high" : "medium",
+        materialValue: cad ? "medium" : "high",
+        settingValue: "medium",
+        usableFor: [],
+        disposableContext: [],
+        qualityNotes: "",
+        designAuthoritySuggested: cad,
+        confidence,
+      });
+      catalogLines.push(
+        `${referenceId}: ${label} — understood as "${role}"${cad ? " [CAD / DESIGN AUTHORITY]" : ""}${
+          confidence ? ` (confidence ${confidence.toFixed(2)})` : ""
+        }`,
+      );
+    }
+
+    const notes = String(product?.notes ?? "").trim();
+    if (notes) mapLines.push(`  notes: ${notes.slice(0, 400)}`);
+  });
+
+  // Any reference the intake did not itemise is still catalogued so it can rank.
+  for (const [url, referenceId] of idByUrl) {
+    if (catalogLines.some((line) => line.startsWith(`${referenceId}:`))) continue;
+    const ref = args.references.find((entry) => entry.url === url);
+    catalogLines.push(
+      `${referenceId}: user label "${ref?.role || "Unlabeled view"}"${ref?.cad ? " [CAD / DESIGN AUTHORITY]" : ""}`,
+    );
+  }
+
+  const productAnalysis = {
+    jewelryType: detectedValue(products[0]?.jewelryType),
+    references: referenceMeta,
+    visibleComponents: [...visibleComponents],
+    disposableReferenceContext: [],
+    geometryObservations,
+    materialObservations,
+    settingObservations,
+    settingSignatures,
+    conflictWarnings: listOf(args.intake?.conflictWarnings),
+    referenceIds: args.references.map((_, index) => referenceIdAt(index)),
+    /** Provenance: this map was reused, not re-derived. */
+    knowledgeMapReused: true,
+  };
+
+  return {
+    productAnalysis,
+    catalogLines: catalogLines.sort(),
+    mapLines,
+  };
+}
+
+function buildCachedShotPrompt(args: {
+  frames: SourceFrame[];
+  catalogLines: string[];
+  mapLines: string[];
+  specs: any[];
+}) {
+  const frameLines = args.frames.map((frame, index) =>
+    `FRAME ${index + 1}: frameId "${frame.frameId}" (timestamp ${frame.timestamp}s)`
+  );
+  return [
+    "You are a luxury-jewelry SHOT analyst. Return JSON only. You never generate images or video.",
+    "The replacement product has ALREADY been analysed and is described below as text. Do NOT re-derive, re-guess or re-describe the product. Your only two jobs are: (1) classify each SOURCE FRAME as a shot, and (2) rank which already-understood replacement references (by REF id) are the best evidence for recreating THAT frame.",
+    "",
+    "SOURCE DESIGN FIREWALL (absolute): the jewelry visible in the SOURCE FRAMES has ZERO design authority. From a source frame you may read ONLY photographic facts: camera angle, perspective, coverage (full / partial / macro), crop, magnification, orientation, placement, visible percentage, occlusion, focus and depth of field, and lighting. You may NEVER read product type, silhouette, setting, stones, metal, geometry, lettering, bail, clasp, link design or proportions from a source frame. All replacement design comes exclusively from the references, the CAD/design authority and the structured specification below.",
+    "",
+    "PRODUCT KNOWLEDGE MAP (already established from the replacement references — authoritative, do not contradict, do not restate):",
+    ...args.mapLines,
+    "",
+    "REFERENCE CATALOG (images NOT re-sent — rank by these REF ids only):",
+    ...args.catalogLines,
+    "",
+    "USER STRUCTURED SPECIFICATION (authoritative):",
+    specSummary(args.specs) || "(none provided)",
+    "",
+    "SOURCE FRAMES the user selected to swap (images provided after this text, in this order):",
+    ...frameLines,
+    "",
+    "TASKS — return EXACTLY one frames entry per SOURCE FRAME, in the same order, echoing the given frameId:",
+    "1. Classify each frame ONLY on its own photographic content (never by neighbouring frames or any temporal assumption): view, coverage (full_object | partial_object | macro_detail), detailType, magnification, composition (whether the full product should be visible, whether an intentional crop must be preserved, negative space), orientation, camera angle + depth of field, replacementBehavior, riskFlags.",
+    "2. PER-FRAME RANKED REFERENCE RECOMMENDATIONS: recommendedReferences — REF ids RANKED BEST-FIRST for reconstructing THAT frame; avoidReferences — REF ids that would mislead this frame; rankingReasons — one short reason per ranked reference, in the same order. Also give recommendedReferenceRoles / avoidReferenceRoles as role names.",
+    "Rank on: the source frame's view and orientation, its coverage, its magnification, which physical region of the piece is actually visible in it, whether a CAD view relevant to THAT view exists, setting/detail relevance, material relevance, context-contamination risk, and the user's preferred reference when one is declared.",
+    "Frame-type rules: an extreme-macro / macro_detail frame must prioritise macro, detail and setting references and SUPPRESS full hero product photos; a full-object hero frame must prioritise full / front / three-quarter references; a component close-up (clasp, link, hinge, bail, crown, shank, gallery) must prioritise references showing that component or its mechanics.",
+    "Cleanliness tie-break: when two references carry equivalent product information, prefer the cleaner one; a contaminated reference may still be recommended when it holds unique physical information. Do not recommend every reference: 2 to 4 strong ones per frame is right.",
+    "Be concise: short phrases, no prose paragraphs. Never output URLs, file names, base64 or media of any kind.",
+  ].join("\n");
+}
+
+/** Frame classification + ranking only — ONE batch call for ALL frames. */
+async function rankFramesWithKnowledgeMap(args: {
+  ai: GoogleGenAI;
+  frameParts: unknown[];
+  frames: SourceFrame[];
+  catalogLines: string[];
+  mapLines: string[];
+  specs: any[];
+}) {
+  const response = await args.ai.models.generateContent({
+    model: GEMINI_ANALYSIS_MODEL,
+    contents: [
+      {
+        role: "user",
+        parts: [
+          {
+            text: buildCachedShotPrompt({
+              frames: args.frames,
+              catalogLines: args.catalogLines,
+              mapLines: args.mapLines,
+              specs: args.specs,
+            }),
+          },
+          ...args.frameParts,
+        ],
+      },
+    ] as any,
+    config: {
+      responseMimeType: "application/json",
+      responseSchema: FRAMES_ONLY_SCHEMA as any,
+      // Classification + ranking only — sized to the schema, not to prose.
+      maxOutputTokens: Math.min(8192, 900 * args.frames.length + 1200),
+      temperature: 0.1,
+      // No product reasoning left to do, so keep thinking minimal.
+      thinkingConfig: { thinkingLevel: "low" },
+    },
+  });
+
+  return JSON.parse((response.text ?? "").trim());
+}
+
 
 
 /* ------------------------------------------------------------------ *
