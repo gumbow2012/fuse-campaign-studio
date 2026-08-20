@@ -297,14 +297,25 @@ async function callStudio(body: Record<string, unknown>) {
     const context = (error as { context?: Response }).context;
     let message = error.message;
     if (context) {
-      const parsed = await context.json().catch(() => null);
+      // Gateway timeouts return an HTML page — never parse it as JSON.
+      const text = await context.text().catch(() => "");
+      let parsed: any = null;
+      try {
+        parsed = text ? JSON.parse(text) : null;
+      } catch {
+        parsed = null;
+      }
       if (parsed?.error) message = String(parsed.error);
+      else if (context.status === 504 || context.status === 408 || context.status === 524) {
+        message = "Generation timed out — please retry.";
+      } else if (!parsed) message = `Generation request failed (${context.status}) — please retry.`;
     }
-    throw new Error(message || "Studio request failed");
+    throw new Error(message || "Generation timed out — please retry.");
   }
   if ((data as any)?.error) throw new Error(String((data as any).error));
   return data as any;
 }
+
 
 function readReferenceLibrary(): string[] {
   try {

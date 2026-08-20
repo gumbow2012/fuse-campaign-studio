@@ -1,6 +1,32 @@
 import { SUPABASE_PUBLISHABLE_KEY, SUPABASE_URL, supabase } from "@/integrations/supabase/client";
 import type { SwapGeneration } from "@/services/outfitSwap";
 
+
+/**
+ * Edge/gateway failures (504s) return an HTML page, not JSON — parsing that is
+ * what produced the `Unexpected token '<'` crash. Read the body defensively and
+ * surface a clean, retryable message instead.
+ */
+async function readJsonResponse<T>(response: Response, label: string): Promise<T> {
+  const text = await response.text().catch(() => "");
+  let data: any = null;
+  try {
+    data = text ? JSON.parse(text) : null;
+  } catch {
+    data = null;
+  }
+
+  if (!response.ok || data?.error) {
+    if (data?.error) throw new Error(String(data.error));
+    if (response.status === 504 || response.status === 408 || response.status === 524) {
+      throw new Error(`${label} timed out — please retry.`);
+    }
+    throw new Error(`${label} failed (${response.status}) — please retry.`);
+  }
+  if (data === null) throw new Error(`${label} returned an unreadable response — please retry.`);
+  return data as T;
+}
+
 export type { SwapGeneration };
 
 /** Which image model produced a swapped frame. */
@@ -225,10 +251,7 @@ export async function analyzeJewelryFrames(args: {
     }),
   });
 
-  const data = await response.json().catch(() => null);
-  if (!response.ok || data?.error) {
-    throw new Error(data?.error ?? `Shot analysis failed (${response.status})`);
-  }
+  const data = await readJsonResponse<any>(response, "Shot analysis");
   return data as JewelryAnalysisResult;
 }
 
@@ -988,10 +1011,7 @@ export async function analyzeJewelryIntake(
 
 
 
-  const data = await response.json().catch(() => null);
-  if (!response.ok || data?.error) {
-    throw new Error(data?.error ?? `Jewelry analysis failed (${response.status})`);
-  }
+  const data = await readJsonResponse<any>(response, "Jewelry analysis");
   return data as JewelryIntakeResult;
 }
 
@@ -1023,10 +1043,7 @@ export async function validateAgainstKnowledgeMap(
     signal,
   });
 
-  const data = await response.json().catch(() => null);
-  if (!response.ok || data?.error) {
-    throw new Error(data?.error ?? `Validation failed (${response.status})`);
-  }
+  const data = await readJsonResponse<any>(response, "Validation");
   return (data?.validation ?? null) as JewelryValidationReport | null;
 }
 
@@ -1048,10 +1065,7 @@ export async function callJewelrySwap<T = any>(body: Record<string, unknown>): P
     body: JSON.stringify(body),
   });
 
-  const data = await response.json().catch(() => null);
-  if (!response.ok || data?.error) {
-    throw new Error(data?.error ?? `Request failed (${response.status})`);
-  }
+  const data = await readJsonResponse<any>(response, "Request");
   return data as T;
 }
 
@@ -1089,10 +1103,7 @@ export async function createTemplateFromJewelrySwap(
     body: JSON.stringify(body),
   });
 
-  const data = await response.json().catch(() => null);
-  if (!response.ok || data?.error) {
-    throw new Error(data?.error ?? `Request failed (${response.status})`);
-  }
+  const data = await readJsonResponse<any>(response, "Request");
   return data as JewelrySwapTemplateResult;
 }
 
