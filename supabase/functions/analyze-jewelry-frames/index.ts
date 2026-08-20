@@ -1310,6 +1310,8 @@ async function handleIntake(req: Request, body: any, user: { id: string }, apiKe
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
+  const startedAt = Date.now();
+
 
   let user;
   try {
