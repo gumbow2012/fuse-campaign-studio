@@ -366,15 +366,24 @@ export function isLockableProvenance(provenance?: Provenance | string | null) {
 /** Per-attribute evidence strength (0..1) for ONE reference. */
 export type EvidenceStrength = {
   silhouette?: number;
+  overallGeometry?: number;
   dimensions?: number;
+  componentTopology?: number;
+  stoneSeatLayout?: number;
   stoneCut?: number;
   stoneSize?: number;
   stonePlacement?: number;
   settingMechanics?: number;
+  prongConstruction?: number;
+  thicknessDepth?: number;
+  claspBailConnector?: number;
   metalColor?: number;
+  materialAppearance?: number;
   componentGeometry?: number;
   manufacturedAppearance?: number;
+  manufacturedFinish?: number;
 };
+
 
 /** A fact the user locked; analysis may never override it. */
 export type UserConfirmedFact = {
@@ -584,10 +593,20 @@ export type ProductKnowledgeMap = {
   materialRegions?: PkmMaterialRegion[];
   constructionConflicts?: {
     topic?: string;
+    /** Which physical attribute the two references disagree about. */
+    attribute?: string;
     cadClaim?: string;
     photoClaim?: string;
     resolution?: string;
+    /** True ONLY when both sides are high-confidence and a human must decide. */
+    needsUserDecision?: boolean;
+    /** Plain-language question shown to the user (no engineering jargon). */
+    question?: string;
+    /** The two (or three) answers the user can pick from. */
+    options?: string[];
+    confidence?: number;
   }[];
+
   inferredFeatures?: { feature?: string; basis?: string; confidence?: number }[];
   unresolvedFeatures?: string[];
   /** Jeweler slang, kept strictly out of the engineering map. */

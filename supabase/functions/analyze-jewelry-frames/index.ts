@@ -1485,16 +1485,25 @@ const EVIDENCE_STRENGTH = {
   type: Type.OBJECT,
   properties: {
     silhouette: CONFIDENCE,
+    overallGeometry: CONFIDENCE,
     dimensions: CONFIDENCE,
+    componentTopology: CONFIDENCE,
+    stoneSeatLayout: CONFIDENCE,
     stoneCut: CONFIDENCE,
     stoneSize: CONFIDENCE,
     stonePlacement: CONFIDENCE,
     settingMechanics: CONFIDENCE,
+    prongConstruction: CONFIDENCE,
+    thicknessDepth: CONFIDENCE,
+    claspBailConnector: CONFIDENCE,
     metalColor: CONFIDENCE,
+    materialAppearance: CONFIDENCE,
     componentGeometry: CONFIDENCE,
     manufacturedAppearance: CONFIDENCE,
+    manufacturedFinish: CONFIDENCE,
   },
 } as const;
+
 
 /**
  * SETTING ONTOLOGY — engineering signatures, not prose. Classification compares
@@ -2006,13 +2015,20 @@ const PKM_SCHEMA = {
         type: Type.OBJECT,
         properties: {
           topic: { type: Type.STRING },
+          attribute: { type: Type.STRING },
           cadClaim: { type: Type.STRING },
           photoClaim: { type: Type.STRING },
           resolution: { type: Type.STRING },
+          /** True ONLY when both sides are high-confidence — then we ask the user. */
+          needsUserDecision: { type: Type.BOOLEAN },
+          question: { type: Type.STRING },
+          options: STRING_ARRAY,
+          confidence: CONFIDENCE,
         },
         required: ["topic", "resolution"],
       },
     },
+
     inferredFeatures: {
       type: Type.ARRAY,
       items: {
@@ -2210,7 +2226,10 @@ function buildKnowledgeMapPrompt(args: {
     "19. SCALE CLAIMS. Exact millimetres only with real evidence, priority: explicit user dimensions > CAD / spec > known stone dimensions > repeated calibrated geometry > photographic estimate. Store each claim separately in dimensions.scaleClaims with its basis, e.g. \"1.25mm\" basis measured_from_spec versus \"~1.2-1.5mm\" basis visually_estimated versus \"uniform stone size\" (a uniformity claim is NOT a millimetre claim).",
     "20. CONTRADICTIONS. Never silently merge disagreeing evidence: record it in constructionConflicts (or a physicalStone's conflictingEvidence) and resolve it by ATTRIBUTE authority, stating which reference won for which attribute.",
     "21. AGENTIC EVIDENCE-SEEKING. After forming the map, list every attribute that is still unresolved or low-confidence in evidenceGaps and FIRST try to resolve each one from the EXISTING reference set (other stills, other video keyframes, repeated modules, CAD, symmetry) — set resolvedFromExistingEvidence and resolutionMethod accordingly. Only when the existing evidence is genuinely exhausted set requestedUserReference to a specific, actionable ask (e.g. \"a clasp-side reference would improve accuracy\").",
+    "22. AUTOMATIC ATTRIBUTE AUTHORITY (the user never assigns authority — you do). For EVERY reference in referenceCatalog fill evidenceStrength 0-1 for each attribute (silhouette, overallGeometry, dimensions, componentTopology, stoneSeatLayout, stoneCut, stoneSize, stonePlacement, settingMechanics, prongConstruction, thicknessDepth, claspBailConnector, metalColor, materialAppearance, manufacturedFinish) using occlusion, blur, glare, scintillation, compression, angle, distance, scale, visible region and disposable context. Then set authorityFor to ONLY the attributes where that reference is among the strongest, and notAuthorityFor where it must not be trusted. NEVER a single global score, and NEVER assume CAD is authority for everything: CAD/render → geometry, proportions, topology, stone seats; macro → stone size, cut, setting mechanics, prongs; side profile → thickness/depth/sidewall; product front → manufactured finish, metal appearance, stone realism. Different references may each be authoritative for different attributes.",
+    "23. GENUINE CONFLICTS → ONE PLAIN QUESTION. When two HIGH-confidence references disagree on an attribute (e.g. CAD and product photos show different clasps), add a constructionConflicts entry with attribute, needsUserDecision true, a short plain-language question a non-technical owner can answer (\"CAD and the product photos show different clasp designs — which one is the final piece?\") and 2-3 concrete options. If either side is low-confidence, set needsUserDecision false and resolve it yourself by attribute authority — never nag on weak differences.",
     "NO PRODUCT-TYPE SHORTCUTS: never infer a setting, component list, stone count or module from the product type or from the piece's name. Everything must come from what the references physically show.",
+
     "Short phrases only. No prose paragraphs. Never output URLs, file names, base64 or media of any kind.",
 
   ].filter(Boolean).join("\n");

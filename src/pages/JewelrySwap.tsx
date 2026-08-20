@@ -56,6 +56,8 @@ import {
   type JewelryIntake,
   type DetectedField,
   type ProductKnowledgeMap,
+  type UserConfirmedFact,
+
   type JewelryVideoReferenceInput,
 
 
@@ -776,6 +778,12 @@ export default function JewelrySwap() {
   /** The fused engineering understanding from the last intake pass. */
   const [knowledgeMap, setKnowledgeMap] = useState<ProductKnowledgeMap | null>(null);
   const [engineeringOpen, setEngineeringOpen] = useState(false);
+  /**
+   * Facts the USER settled (answers to genuine conflicts). These are sent as
+   * USER_CONFIRMED and the analysis may never override them.
+   */
+  const [userLocks, setUserLocks] = useState<UserConfirmedFact[]>([]);
+
 
   const [dropActive, setDropActive] = useState(false);
   // Reference intake (recognition / grouping / extraction). Never blocking:
@@ -1279,7 +1287,7 @@ export default function JewelrySwap() {
    */
   const referenceSetVersion = useMemo(
     () =>
-      JSON.stringify(
+      JSON.stringify([
         pieces.map((piece) =>
           piece.urls.map((url, angleIndex) => [
             url,
@@ -1287,9 +1295,12 @@ export default function JewelrySwap() {
             piece.cads?.[angleIndex] ?? null,
           ]),
         ),
-      ),
-    [pieces],
+        // A newly locked fact must re-run the analysis with that fact enforced.
+        userLocks.map((lock) => [lock.attribute, lock.value, lock.appliesTo ?? ""]),
+      ]),
+    [pieces, userLocks],
   );
+
   const referenceCount = pieces.reduce((total, piece) => total + piece.urls.length, 0);
   /** Unresolved product-spec concerns across all pieces (user overrides clear them). */
   const uncertainCount = reviewCount(pieces);
@@ -1375,7 +1386,87 @@ export default function JewelrySwap() {
       .slice(0, 3);
   }, [knowledgeMap]);
 
+  /**
+   * REF handle per url — the analysis numbers references in the SAME flattened
+   * order the intake payload is built in, so the map can be read back per image.
+   */
+  const refIdByUrl = useMemo(() => {
+    const map = new Map<string, string>();
+    pieces.flatMap((piece) => piece.urls).forEach((url, index) => map.set(url, `REF_${index + 1}`));
+    return map;
+  }, [pieces]);
 
+  /**
+   * AUTO authority labels. The user assigns nothing: we read the attribute-level
+   * authority FUSE already computed (authorityFor + evidenceStrength) and show at
+   * most one plain badge per reference. No score, no checkbox, and nothing at all
+   * when the reference has no clearly useful specialty.
+   */
+  const autoAuthorityLabelByUrl = useMemo(() => {
+    const labels = new Map<string, string>();
+    const catalog = knowledgeMap?.referenceCatalog ?? [];
+    if (!catalog.length) return labels;
+
+    // Attribute → plain-language badge. Order = which specialty wins the badge.
+    const BADGES: { keys: string[]; label: string }[] = [
+      { keys: ["overallGeometry", "componentGeometry", "silhouette", "componentTopology"], label: "Best for geometry" },
+      { keys: ["stoneSize", "stoneCut", "stonePlacement", "stoneSeatLayout"], label: "Best for stone detail" },
+      { keys: ["settingMechanics", "prongConstruction"], label: "Best for setting detail" },
+      { keys: ["thicknessDepth"], label: "Best for side profile" },
+      { keys: ["claspBailConnector"], label: "Best for clasp" },
+      { keys: ["dimensions"], label: "Best for proportions" },
+      { keys: ["materialAppearance", "metalColor", "manufacturedFinish", "manufacturedAppearance"], label: "Best for finish" },
+    ];
+
+    const byId = new Map(catalog.map((entry) => [String(entry.referenceId ?? "").trim(), entry]));
+    // A badge is only useful if this reference is the STRONGEST for that group.
+    const bestFor = new Map<string, string>();
+    for (const badge of BADGES) {
+      let winner: { id: string; score: number } | null = null;
+      for (const entry of catalog) {
+        const strength = entry.evidenceStrength ?? {};
+        const claimed = new Set((entry.authorityFor ?? []).map((value) => String(value).toLowerCase()));
+        const score = Math.max(
+          ...badge.keys.map((key) => {
+            const numeric = Number((strength as Record<string, number | undefined>)[key] ?? 0);
+            const boost = claimed.has(key.toLowerCase()) ? 0.15 : 0;
+            return (Number.isFinite(numeric) ? numeric : 0) + boost;
+          }),
+        );
+        const id = String(entry.referenceId ?? "").trim();
+        if (!id) continue;
+        if (!winner || score > winner.score) winner = { id, score };
+      }
+      // Hide the badge unless the winner is genuinely strong for that attribute.
+      if (winner && winner.score >= 0.6 && !bestFor.has(winner.id)) bestFor.set(winner.id, badge.label);
+    }
+
+    for (const [url, refId] of refIdByUrl) {
+      if (!byId.has(refId)) continue;
+      const label = bestFor.get(refId);
+      if (label) labels.set(url, label);
+    }
+    return labels;
+  }, [knowledgeMap, refIdByUrl]);
+
+  /**
+   * Only GENUINE high-confidence conflicts become a question. Everything weaker
+   * is resolved by attribute authority inside the analysis and never surfaced.
+   */
+  const authorityQuestions = useMemo(() => {
+    return (knowledgeMap?.constructionConflicts ?? [])
+      .filter((conflict) => conflict.needsUserDecision === true && conflict.question)
+      .map((conflict, index) => ({
+        id: `${conflict.attribute ?? conflict.topic ?? "conflict"}-${index}`,
+        attribute: conflict.attribute || conflict.topic || "detail",
+        question: conflict.question as string,
+        options: (conflict.options ?? [conflict.cadClaim, conflict.photoClaim].filter(Boolean) as string[])
+          .filter(Boolean)
+          .slice(0, 3),
+      }))
+      .filter((question) => question.options.length > 0)
+      .slice(0, 3);
+  }, [knowledgeMap]);
 
 
   /** The app's canonical vocabularies, handed to the analysis every call. */
@@ -1484,6 +1575,9 @@ export default function JewelrySwap() {
               options: intakeOptions,
               setVersion: version,
               requestId: token,
+              // USER_CONFIRMED layer — analysis can never override these.
+              userConfirmedFacts: userLocks,
+
             },
             controller.signal,
           );
@@ -2941,10 +3035,95 @@ export default function JewelrySwap() {
                     {engineeringOpen ? "Hide engineering details" : "Engineering details"}
                   </button>
                   {engineeringOpen ? (
-                    <pre className="mt-1.5 max-h-64 overflow-auto rounded-xl border border-white/10 bg-black/50 p-2 text-[9px] leading-relaxed text-foreground/70">
-                      {JSON.stringify(knowledgeMap, null, 2)}
-                    </pre>
+                    <div className="mt-1.5 space-y-2">
+                      {/* MANUAL override — advanced only. The normal UI has no
+                          authority control at all; FUSE assigns it per attribute. */}
+                      <div className="rounded-xl border border-white/10 bg-black/40 p-2">
+                        <p className="text-[9px] uppercase tracking-[0.14em] text-cyan-200/70">
+                          Manual geometry-authority override
+                        </p>
+                        <p className="mb-1 text-[9px] text-foreground/50">
+                          Only for exceptional cases — leave alone to let FUSE decide.
+                        </p>
+                        <div className="space-y-1">
+                          {pieces.map((piece, pieceIndex) =>
+                            piece.urls.map((url, angleIndex) => (
+                              <label
+                                key={`override-${url}-${angleIndex}`}
+                                className="flex items-center gap-1.5 text-[9px] text-foreground/70"
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={isGeometryAuthority(piece, angleIndex)}
+                                  onChange={(event) =>
+                                    setPieces((prev) =>
+                                      prev.map((item, i) =>
+                                        i === pieceIndex
+                                          ? {
+                                              ...item,
+                                              cads: item.urls.map((_, a) =>
+                                                a === angleIndex
+                                                  ? event.target.checked
+                                                  : item.cads?.[a] ?? null,
+                                              ),
+                                            }
+                                          : item,
+                                      ),
+                                    )
+                                  }
+                                  className="h-2.5 w-2.5 accent-cyan-300"
+                                />
+                                {refIdByUrl.get(url) ?? `REF ${angleIndex + 1}`} ·{" "}
+                                {piece.roles?.[angleIndex] || "unlabeled"}
+                                {autoAuthorityLabelByUrl.get(url)
+                                  ? ` · auto: ${autoAuthorityLabelByUrl.get(url)}`
+                                  : ""}
+                              </label>
+                            )),
+                          )}
+                        </div>
+                      </div>
+                      <pre className="max-h-64 overflow-auto rounded-xl border border-white/10 bg-black/50 p-2 text-[9px] leading-relaxed text-foreground/70">
+                        {JSON.stringify({ knowledgeMap, userConfirmedFacts: userLocks }, null, 2)}
+                      </pre>
+                    </div>
                   ) : null}
+                  {/* GENUINE conflicts only — one plain question, answer becomes USER_CONFIRMED. */}
+                  {authorityQuestions.length ? (
+                    <div className="mt-2 space-y-2">
+                      {authorityQuestions.map((question) => (
+                        <div
+                          key={question.id}
+                          className="rounded-xl border border-amber-300/40 bg-amber-300/5 p-2"
+                        >
+                          <p className="text-[10px] text-amber-100/90">{question.question}</p>
+                          <div className="mt-1.5 flex flex-wrap gap-1.5">
+                            {question.options.map((option) => (
+                              <button
+                                key={option}
+                                type="button"
+                                onClick={() =>
+                                  setUserLocks((prev) => [
+                                    ...prev.filter((lock) => lock.attribute !== question.attribute),
+                                    { attribute: question.attribute, value: option },
+                                  ])
+                                }
+                                className="rounded-lg border border-amber-300/40 bg-black/40 px-2 py-1 text-[10px] text-amber-100 transition-colors hover:border-amber-200 hover:text-amber-50"
+                              >
+                                {option}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : null}
+                  {userLocks.length ? (
+                    <p className="mt-1.5 text-[9px] text-foreground/55">
+                      {userLocks.length} detail{userLocks.length === 1 ? "" : "s"} locked by you
+                    </p>
+                  ) : null}
+
                 </div>
               ) : null}
 
@@ -2971,12 +3150,9 @@ export default function JewelrySwap() {
                           </span>
                         ) : null}
 
-                        <span className="rounded-full border border-white/12 bg-black/40 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.14em] text-foreground/70">
-                          Design authority:{" "}
-                          {authorityCount(piece)
-                            ? `${authorityCount(piece)} reference${authorityCount(piece) === 1 ? "" : "s"}`
-                            : "none"}
-                        </span>
+                        {/* No authority read-out in the normal UI — FUSE assigns it.
+                            The full ranking lives in Engineering details. */}
+
                         <button
                           type="button"
                           aria-label="Remove piece"
@@ -3051,34 +3227,14 @@ export default function JewelrySwap() {
                               </option>
                             ))}
                           </select>
-                          {/* Geometry authority is per reference image — auto-on for CAD labels. */}
-                          <label
-                            className="flex items-center gap-1 text-[9px] text-muted-foreground"
-                            title="Use this image as the geometry / design authority"
-                          >
-                            <input
-                              type="checkbox"
-                              checked={isGeometryAuthority(piece, angleIndex)}
-                              onChange={(event) =>
-                                setPieces((prev) =>
-                                  prev.map((item, i) =>
-                                    i === index
-                                      ? {
-                                          ...item,
-                                          cads: item.urls.map((_, a) =>
-                                            a === angleIndex
-                                              ? event.target.checked
-                                              : item.cads?.[a] ?? null,
-                                          ),
-                                        }
-                                      : item,
-                                  ),
-                                )
-                              }
-                              className="h-2.5 w-2.5 accent-cyan-300"
-                            />
-                            Authority
-                          </label>
+                          {/* AUTO label only — authority is assigned by FUSE, never by
+                              the user. Hidden entirely when it wouldn't be useful. */}
+                          {autoAuthorityLabelByUrl.get(url) ? (
+                            <p className="truncate text-[8px] font-semibold uppercase tracking-[0.12em] text-cyan-200/80">
+                              {autoAuthorityLabelByUrl.get(url)}
+                            </p>
+                          ) : null}
+
                         </div>
                       ))}
                       <button
@@ -3111,12 +3267,8 @@ export default function JewelrySwap() {
                       <p className="text-[11px] text-foreground/85">{detectedProductLine(piece)}</p>
                       <p className="text-[9px] uppercase tracking-[0.14em] text-cyan-200/70">Settings</p>
                       <p className="text-[11px] text-foreground/85">{detectedSettingsLine(piece)}</p>
-                      <p className="text-[9px] uppercase tracking-[0.14em] text-cyan-200/70">Design authority</p>
-                      <p className="text-[11px] text-foreground/85">
-                        {authorityCount(piece)
-                          ? `${authorityCount(piece)} reference${authorityCount(piece) === 1 ? "" : "s"}`
-                          : "None selected"}
-                      </p>
+                      {/* Authority is automatic and intentionally not shown here. */}
+
                       {reviewControls(piece).size ? (
                         <p className="text-[10px] text-amber-200/90">
                           Review {reviewControls(piece).size} detail
