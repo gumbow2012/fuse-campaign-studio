@@ -930,8 +930,27 @@ function engineeringLockLines(pkm: any): string[] {
     }
   }
 
-  return lines.filter(Boolean).slice(0, 18);
+  // Derived negative constraints (still advisory text, provenance-gated groups only).
+  const hardGroups = (Array.isArray(pkm?.stoneGroups) ? pkm.stoneGroups : []).filter((g: any) => hard(g, 0.5));
+  const anyUniform = hardGroups.some((g: any) => g?.sizeUniformity === "uniform");
+  const anyMixed = hardGroups.some((g: any) => g?.sizeUniformity === "mixed");
+  if (anyUniform && !anyMixed) {
+    lines.push(
+      "do NOT invent anchor/filler or secondary stone-size classes; one physical size class per cross-view analysis",
+    );
+  }
+  if (anyMixed) {
+    lines.push("do NOT flatten the mapped stone-size classes into a single uniform field");
+  }
+  if (hardGroups.length) {
+    lines.push(
+      "preserve mapped stone centers, spacing and orientation; do NOT convert the observed field into generic uniform pavé rows",
+    );
+  }
+
+  return lines.filter(Boolean).slice(0, 20);
 }
+
 
 
 
