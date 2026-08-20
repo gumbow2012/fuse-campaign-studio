@@ -1376,8 +1376,16 @@ export default function JewelrySwap() {
     ).length;
     if (perspective) notes.push("Size differences caused by camera angle were discounted");
 
-    const setting = knowledgeMap.settings?.[0]?.ontologyMatch?.canonicalName;
-    if (setting) notes.push(`Construction matched to ${setting}`);
+    const primarySetting = knowledgeMap.settings?.[0];
+    const setting = primarySetting?.detectedSetting || primarySetting?.ontologyMatch?.canonicalName;
+    if (setting) {
+      notes.push(
+        primarySetting?.userConfirmedTerm
+          ? `Your terminology kept: ${setting}`
+          : `Construction matched to ${setting}`,
+      );
+    }
+
 
     const locked = knowledgeMap.userConfirmedFacts?.length ?? 0;
     if (locked) notes.push(`${locked} detail${locked === 1 ? "" : "s"} you confirmed are locked`);

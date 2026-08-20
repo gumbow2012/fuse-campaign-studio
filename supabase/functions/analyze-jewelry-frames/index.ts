@@ -1598,181 +1598,577 @@ const EVIDENCE_STRENGTH = {
 
 
 /**
- * SETTING ONTOLOGY — engineering signatures, not prose. Classification compares
- * OBSERVED construction against these; the ontology is data, extensible, and
- * contains no product-type branching whatsoever.
+ * JEWELRY TERMINOLOGY ONTOLOGY — engineering signatures, not prose.
+ *
+ * ONE ontology for the whole vocabulary (this is the 9a67a639 setting-signature
+ * work extended with `vocabularyDomain`, `aliases` and `definition` — there is
+ * deliberately no second parallel ontology). Classification compares OBSERVED
+ * construction against `engineeringSignature`; a NAME match alone never counts.
+ *
+ * The domains are kept STRICTLY separate: traditional/gemological terminology
+ * and modern custom-jeweler terminology do not always describe the same thing
+ * (classical "Mosaic" = tesserae forming a picture; a custom jeweler's "Mosaic
+ * Setting" is a specific diamond packing/retention construction). Same-sounding
+ * terms therefore live as distinct entries in distinct domains, linked only via
+ * `aliases` / `relatedTerms`. The data is seedable and extensible, and contains
+ * no product-type branching whatsoever.
  */
-type SettingOntologyEntry = {
+type VocabularyDomain = "classical" | "gemological" | "manufacturing" | "hip_hop_custom";
+
+type JewelryTerm = {
   canonicalName: string;
+  vocabularyDomain: VocabularyDomain;
   aliases: string[];
-  expectedStoneSizePattern: string;
-  expectedCuts: string[];
-  expectedPackingPattern: string;
-  expectedProngBehavior: string;
-  expectedMetalVisibility: string;
-  expectedRows: string;
-  expectedOrientationBehavior: string;
-  compatibleSurfaceGeometry: string[];
+  definition: string;
+  /** Which decision this term can be the answer to. */
+  termKind: "setting" | "component" | "cut" | "construction";
+  /** Terms in another domain that sound the same but mean something else. */
+  relatedTerms?: string[];
+  engineeringSignature: {
+    expectedStoneCuts: string[];
+    stoneSizePattern: string;
+    packingPattern: string;
+    retentionMechanics: string;
+    prongBehavior: string;
+    metalVisibility: string;
+    rowBehavior: string;
+    orientationBehavior: string;
+    compatibleGeometry: string[];
+  };
 };
 
-const SETTING_ONTOLOGY: SettingOntologyEntry[] = [
+const NO_STONE_SIGNATURE = (retention: string, geometry: string[]) => ({
+  expectedStoneCuts: [],
+  stoneSizePattern: "not a stone-field term",
+  packingPattern: "not a stone-field term",
+  retentionMechanics: retention,
+  prongBehavior: "n/a",
+  metalVisibility: "as observed",
+  rowBehavior: "n/a",
+  orientationBehavior: "as observed",
+  compatibleGeometry: geometry,
+});
+
+/* -------------------- Layer 1: classical / gemological / manufacturing ----- */
+
+const CLASSICAL_TERMS: JewelryTerm[] = [
   {
-    canonicalName: "Mosaic",
-    aliases: ["mosaic set", "cluster mosaic", "puzzle set"],
-    expectedStoneSizePattern: "mixed sizes fitted to a tiled field, or one repeated size tiled edge-to-edge",
-    expectedCuts: ["round_brilliant", "baguette", "princess", "custom", "mixed"],
-    expectedPackingPattern: "tiled/interlocking fill following the surface outline, minimal gaps, no straight repeating rows",
-    expectedProngBehavior: "few or no visible prongs; stones retained by shared metal walls or beads at junctions",
-    expectedMetalVisibility: "very low between stones, visible only at field boundaries",
-    expectedRows: "no regular row structure",
-    expectedOrientationBehavior: "orientation varies per tile to close gaps",
-    compatibleSurfaceGeometry: ["flat", "convex", "curved", "irregular", "letter/plaque"],
-  },
-  {
-    canonicalName: "Reverse Mosaic",
-    aliases: ["inverted mosaic", "negative mosaic"],
-    expectedStoneSizePattern: "tiled field with the metal forming the figure and stones the ground (or vice versa)",
-    expectedCuts: ["round_brilliant", "baguette", "custom", "mixed"],
-    expectedPackingPattern: "tiled fill with deliberate metal negative-space motif",
-    expectedProngBehavior: "shared walls; beads at junctions",
-    expectedMetalVisibility: "moderate — the metal pattern is intentional",
-    expectedRows: "no regular row structure",
-    expectedOrientationBehavior: "orientation follows the negative-space motif",
-    compatibleSurfaceGeometry: ["flat", "convex", "letter/plaque"],
+    canonicalName: "Pavé",
+    vocabularyDomain: "classical",
+    aliases: ["pave", "bright cut pave"],
+    definition:
+      "Established bench term: small stones of uniform size set close together in regular rows or a honeycomb, retained by small shared metal beads so the surface reads as paved with stone.",
+    termKind: "setting",
+    engineeringSignature: {
+      expectedStoneCuts: ["round_brilliant"],
+      stoneSizePattern: "uniform small stones (uniform AFTER perspective normalization)",
+      packingPattern: "regular dense rows or honeycomb",
+      retentionMechanics: "shared beads raised from the surrounding metal",
+      prongBehavior: "shared beads, 2–4 per stone",
+      metalVisibility: "low",
+      rowBehavior: "regular rows",
+      orientationBehavior: "table-up, uniform",
+      compatibleGeometry: ["flat", "convex", "curved"],
+    },
   },
   {
     canonicalName: "Micro Pavé",
+    vocabularyDomain: "classical",
     aliases: ["micropave", "micro pave"],
-    expectedStoneSizePattern: "uniform, very small stones (physically uniform after perspective normalization)",
-    expectedCuts: ["round_brilliant"],
-    expectedPackingPattern: "dense honeycomb of tiny stones, regular spacing",
-    expectedProngBehavior: "tiny shared beads between stones",
-    expectedMetalVisibility: "minimal, thin bead walls",
-    expectedRows: "regular multi-row or honeycomb",
-    expectedOrientationBehavior: "table-up, uniform",
-    compatibleSurfaceGeometry: ["flat", "convex", "curved"],
-  },
-  {
-    canonicalName: "Pavé",
-    aliases: ["pave", "bright cut pave"],
-    expectedStoneSizePattern: "uniform small stones",
-    expectedCuts: ["round_brilliant"],
-    expectedPackingPattern: "regular dense rows or honeycomb",
-    expectedProngBehavior: "shared beads, 2–4 per stone",
-    expectedMetalVisibility: "low",
-    expectedRows: "regular rows",
-    expectedOrientationBehavior: "table-up, uniform",
-    compatibleSurfaceGeometry: ["flat", "convex", "curved"],
+    definition:
+      "Pavé executed with very small stones (typically well under 1.3mm) and correspondingly tiny beads; construction is identical to pavé, only the scale differs.",
+    termKind: "setting",
+    engineeringSignature: {
+      expectedStoneCuts: ["round_brilliant"],
+      stoneSizePattern: "uniform, very small stones (physically uniform after perspective normalization)",
+      packingPattern: "dense honeycomb of tiny stones, regular spacing",
+      retentionMechanics: "tiny shared beads between neighbouring stones",
+      prongBehavior: "tiny shared beads",
+      metalVisibility: "minimal, thin bead walls",
+      rowBehavior: "regular multi-row or honeycomb",
+      orientationBehavior: "table-up, uniform",
+      compatibleGeometry: ["flat", "convex", "curved"],
+    },
   },
   {
     canonicalName: "Bead Set",
+    vocabularyDomain: "manufacturing",
     aliases: ["bead setting", "grain set"],
-    expectedStoneSizePattern: "uniform or lightly graduated",
-    expectedCuts: ["round_brilliant"],
-    expectedPackingPattern: "individually beaded seats with visible metal between stones",
-    expectedProngBehavior: "discrete raised beads per stone, not shared",
-    expectedMetalVisibility: "moderate",
-    expectedRows: "single or multi row",
-    expectedOrientationBehavior: "table-up",
-    compatibleSurfaceGeometry: ["flat", "convex"],
+    definition:
+      "Each stone sits in its own cut seat and is retained by discrete beads raised with a graver; unlike pavé the beads are not shared and metal remains visible between stones.",
+    termKind: "setting",
+    engineeringSignature: {
+      expectedStoneCuts: ["round_brilliant"],
+      stoneSizePattern: "uniform or lightly graduated",
+      packingPattern: "individually beaded seats with visible metal between stones",
+      retentionMechanics: "raised beads per stone, not shared",
+      prongBehavior: "discrete raised beads per stone",
+      metalVisibility: "moderate",
+      rowBehavior: "single or multi row",
+      orientationBehavior: "table-up",
+      compatibleGeometry: ["flat", "convex"],
+    },
   },
   {
     canonicalName: "Prong Set",
+    vocabularyDomain: "classical",
     aliases: ["claw set", "basket set"],
-    expectedStoneSizePattern: "individual larger stones, sizes may differ",
-    expectedCuts: ["round_brilliant", "oval", "pear", "emerald", "cushion", "marquise", "princess"],
-    expectedPackingPattern: "discrete stones with open metal between them",
-    expectedProngBehavior: "3–6 distinct prongs per stone, tips over the crown",
-    expectedMetalVisibility: "high; open gallery underneath",
-    expectedRows: "none required",
-    expectedOrientationBehavior: "per-stone, aligned to its seat",
-    compatibleSurfaceGeometry: ["flat", "convex", "open gallery"],
+    definition:
+      "Individual stones held by discrete metal claws bent over the crown, with open metal (and usually an open gallery) around and beneath each stone.",
+    termKind: "setting",
+    engineeringSignature: {
+      expectedStoneCuts: ["round_brilliant", "oval", "pear", "emerald", "cushion", "marquise", "princess"],
+      stoneSizePattern: "individual larger stones, sizes may differ",
+      packingPattern: "discrete stones with open metal between them",
+      retentionMechanics: "prong tips folded over each girdle/crown",
+      prongBehavior: "3–6 distinct prongs per stone, tips over the crown",
+      metalVisibility: "high; open gallery underneath",
+      rowBehavior: "none required",
+      orientationBehavior: "per-stone, aligned to its seat",
+      compatibleGeometry: ["flat", "convex", "open gallery"],
+    },
   },
   {
     canonicalName: "Shared Prong",
+    vocabularyDomain: "manufacturing",
     aliases: ["common prong", "shared claw"],
-    expectedStoneSizePattern: "uniform along a run",
-    expectedCuts: ["round_brilliant", "princess"],
-    expectedPackingPattern: "continuous line of stones sharing prongs between neighbours",
-    expectedProngBehavior: "one prong retains two adjacent stones",
-    expectedMetalVisibility: "low between stones, visible prong tips",
-    expectedRows: "single continuous row",
-    expectedOrientationBehavior: "aligned along the run",
-    compatibleSurfaceGeometry: ["curved", "linear run"],
+    definition:
+      "A continuous run of stones where one prong retains two neighbouring stones, minimising metal between them (classic tennis construction).",
+    termKind: "setting",
+    engineeringSignature: {
+      expectedStoneCuts: ["round_brilliant", "princess"],
+      stoneSizePattern: "uniform along a run",
+      packingPattern: "continuous line of stones sharing prongs between neighbours",
+      retentionMechanics: "one prong retains two adjacent stones",
+      prongBehavior: "shared prong tips at each junction",
+      metalVisibility: "low between stones, visible prong tips",
+      rowBehavior: "single continuous row",
+      orientationBehavior: "aligned along the run",
+      compatibleGeometry: ["curved", "linear run"],
+    },
   },
   {
     canonicalName: "Channel Set",
+    vocabularyDomain: "classical",
     aliases: ["channel setting"],
-    expectedStoneSizePattern: "uniform within the channel",
-    expectedCuts: ["round_brilliant", "princess", "baguette"],
-    expectedPackingPattern: "stones held between two continuous metal rails, touching, no prongs",
-    expectedProngBehavior: "no prongs; rails compress the girdles",
-    expectedMetalVisibility: "two parallel rails only",
-    expectedRows: "one row per channel",
-    expectedOrientationBehavior: "uniform along the channel axis",
-    compatibleSurfaceGeometry: ["linear run", "curved", "flat"],
+    definition:
+      "Stones suspended between two continuous parallel metal rails that grip the girdles; no prongs or beads are used.",
+    termKind: "setting",
+    engineeringSignature: {
+      expectedStoneCuts: ["round_brilliant", "princess", "baguette"],
+      stoneSizePattern: "uniform within the channel",
+      packingPattern: "stones held between two continuous rails, touching, no prongs",
+      retentionMechanics: "rails compress the girdles along the run",
+      prongBehavior: "no prongs",
+      metalVisibility: "two parallel rails only",
+      rowBehavior: "one row per channel",
+      orientationBehavior: "uniform along the channel axis",
+      compatibleGeometry: ["linear run", "curved", "flat"],
+    },
   },
   {
     canonicalName: "Baguette Channel",
+    vocabularyDomain: "manufacturing",
     aliases: ["baguette channel set", "step channel"],
-    expectedStoneSizePattern: "uniform or tapered baguettes",
-    expectedCuts: ["baguette", "tapered_baguette", "emerald"],
-    expectedPackingPattern: "rectangular stones abutting inside rails, long edges parallel",
-    expectedProngBehavior: "no prongs; rails only",
-    expectedMetalVisibility: "rails plus end walls",
-    expectedRows: "one row per channel",
-    expectedOrientationBehavior: "long axis perpendicular or parallel to the run, consistently",
-    compatibleSurfaceGeometry: ["linear run", "curved"],
+    definition:
+      "Channel construction dimensioned for step-cut rectangular stones, whose long edges abut inside the rails.",
+    termKind: "setting",
+    engineeringSignature: {
+      expectedStoneCuts: ["baguette", "tapered_baguette", "emerald"],
+      stoneSizePattern: "uniform or tapered baguettes",
+      packingPattern: "rectangular stones abutting inside rails, long edges parallel",
+      retentionMechanics: "rails plus end walls",
+      prongBehavior: "no prongs",
+      metalVisibility: "rails plus end walls",
+      rowBehavior: "one row per channel",
+      orientationBehavior: "long axis consistently parallel or perpendicular to the run",
+      compatibleGeometry: ["linear run", "curved"],
+    },
   },
   {
     canonicalName: "Bezel",
-    aliases: ["bezel set", "rub over"],
-    expectedStoneSizePattern: "individual stones",
-    expectedCuts: ["round_brilliant", "oval", "emerald", "cushion", "cabochon", "custom"],
-    expectedPackingPattern: "each stone fully surrounded by a continuous metal collar",
-    expectedProngBehavior: "no prongs; collar rubbed over the girdle",
-    expectedMetalVisibility: "high — continuous rim per stone",
-    expectedRows: "none required",
-    expectedOrientationBehavior: "per-stone",
-    compatibleSurfaceGeometry: ["flat", "convex", "irregular"],
+    vocabularyDomain: "classical",
+    aliases: ["bezel set", "rub over", "rub-over set"],
+    definition:
+      "A continuous metal collar surrounds the stone and is rubbed over its girdle; the rim is a visible design element.",
+    termKind: "setting",
+    engineeringSignature: {
+      expectedStoneCuts: ["round_brilliant", "oval", "emerald", "cushion", "cabochon", "custom"],
+      stoneSizePattern: "individual stones",
+      packingPattern: "each stone fully surrounded by a continuous metal collar",
+      retentionMechanics: "collar burnished over the girdle",
+      prongBehavior: "no prongs",
+      metalVisibility: "high — continuous rim per stone",
+      rowBehavior: "none required",
+      orientationBehavior: "per-stone",
+      compatibleGeometry: ["flat", "convex", "irregular"],
+    },
   },
   {
     canonicalName: "Invisible Set",
-    aliases: ["invisible setting", "mystery set"],
-    expectedStoneSizePattern: "uniform squares/rectangles",
-    expectedCuts: ["princess", "baguette"],
-    expectedPackingPattern: "stones abutting with NO visible metal between them, grooved girdles on a hidden rail",
-    expectedProngBehavior: "none visible",
-    expectedMetalVisibility: "none between stones; only outer frame",
-    expectedRows: "grid",
-    expectedOrientationBehavior: "grid-aligned",
-    compatibleSurfaceGeometry: ["flat", "convex"],
+    vocabularyDomain: "classical",
+    aliases: ["invisible setting", "mystery set", "serti mysterieux"],
+    definition:
+      "Calibrated step/square cuts with grooved girdles are locked onto a hidden sub-rail so no metal at all shows between the stones.",
+    termKind: "setting",
+    engineeringSignature: {
+      expectedStoneCuts: ["princess", "baguette"],
+      stoneSizePattern: "uniform squares/rectangles",
+      packingPattern: "stones abutting with NO visible metal between them",
+      retentionMechanics: "grooved girdles engaged on a concealed rail below the surface",
+      prongBehavior: "none visible",
+      metalVisibility: "none between stones; only the outer frame",
+      rowBehavior: "grid",
+      orientationBehavior: "grid-aligned",
+      compatibleGeometry: ["flat", "convex"],
+    },
   },
   {
     canonicalName: "Flush/Gypsy",
+    vocabularyDomain: "classical",
     aliases: ["flush set", "gypsy set", "burnish set"],
-    expectedStoneSizePattern: "individual or scattered",
-    expectedCuts: ["round_brilliant"],
-    expectedPackingPattern: "stones sunk level with the metal surface, no raised metal",
-    expectedProngBehavior: "burnished metal edge, no prongs or beads",
-    expectedMetalVisibility: "the whole surface is metal",
-    expectedRows: "none required",
-    expectedOrientationBehavior: "table flush with the surface",
-    compatibleSurfaceGeometry: ["flat", "convex", "curved"],
+    definition:
+      "The stone is sunk into the metal so its table sits level with the surface and the surrounding metal is burnished against the girdle.",
+    termKind: "setting",
+    engineeringSignature: {
+      expectedStoneCuts: ["round_brilliant"],
+      stoneSizePattern: "individual or scattered",
+      packingPattern: "stones sunk level with the metal surface, no raised metal",
+      retentionMechanics: "surrounding metal burnished down onto the girdle",
+      prongBehavior: "no prongs or beads",
+      metalVisibility: "the whole surface is metal",
+      rowBehavior: "none required",
+      orientationBehavior: "table flush with the surface",
+      compatibleGeometry: ["flat", "convex", "curved"],
+    },
+  },
+  {
+    canonicalName: "Tension Set",
+    vocabularyDomain: "manufacturing",
+    aliases: ["tension setting"],
+    definition:
+      "The stone is held by the spring pressure of two metal ends bearing on opposite girdle points, with no prongs, bezel or rail.",
+    termKind: "setting",
+    engineeringSignature: {
+      expectedStoneCuts: ["round_brilliant", "princess", "emerald", "oval"],
+      stoneSizePattern: "single focal stone",
+      packingPattern: "one stone spanning a gap in the metal",
+      retentionMechanics: "compressive spring load on two girdle points, notched seats",
+      prongBehavior: "none",
+      metalVisibility: "high; stone appears suspended",
+      rowBehavior: "none",
+      orientationBehavior: "girdle plane aligned to the metal ends",
+      compatibleGeometry: ["open span"],
+    },
+  },
+  {
+    canonicalName: "A-jour/Open Back",
+    vocabularyDomain: "manufacturing",
+    aliases: ["a jour", "ajour", "open back", "open gallery"],
+    definition:
+      "A construction property rather than a retention method: the seat is pierced through so light passes behind the stone and the pavilion is visible from the reverse.",
+    termKind: "construction",
+    engineeringSignature: {
+      expectedStoneCuts: [],
+      stoneSizePattern: "any",
+      packingPattern: "any",
+      retentionMechanics: "pierced seat behind each stone; combines with prongs, beads or bezel",
+      prongBehavior: "as per the retention term used with it",
+      metalVisibility: "open metal visible from the reverse",
+      rowBehavior: "any",
+      orientationBehavior: "any",
+      compatibleGeometry: ["open gallery", "flat", "convex"],
+    },
+  },
+  {
+    canonicalName: "Closed Back",
+    vocabularyDomain: "manufacturing",
+    aliases: ["solid back", "blind seat"],
+    definition:
+      "The reverse of the stone field is solid metal: no piercing behind the seats, so no light enters from behind.",
+    termKind: "construction",
+    engineeringSignature: {
+      expectedStoneCuts: [],
+      stoneSizePattern: "any",
+      packingPattern: "any",
+      retentionMechanics: "blind seats drilled into solid metal",
+      prongBehavior: "as per the retention term used with it",
+      metalVisibility: "solid metal on the reverse",
+      rowBehavior: "any",
+      orientationBehavior: "any",
+      compatibleGeometry: ["flat", "convex", "irregular"],
+    },
+  },
+  {
+    canonicalName: "Mosaic (classical)",
+    vocabularyDomain: "classical",
+    aliases: ["micromosaic", "pietra dura", "tessera work"],
+    definition:
+      "The TRADITIONAL decorative-arts meaning: small tesserae of stone, glass or enamel laid to form a picture or ornamental image. This is NOT the modern custom-jeweler setting term of the same name.",
+    termKind: "construction",
+    relatedTerms: ["Mosaic Setting (custom)"],
+    engineeringSignature: {
+      expectedStoneCuts: ["custom", "cabochon"],
+      stoneSizePattern: "small tesserae, sizes chosen to render an image",
+      packingPattern: "tesserae abutting to depict a figure or pattern; cement/adhesive ground",
+      retentionMechanics: "tesserae bedded into a matrix inside a frame — not individually set in metal",
+      prongBehavior: "none",
+      metalVisibility: "only the surrounding frame",
+      rowBehavior: "image-driven, no rows",
+      orientationBehavior: "follows the depicted image",
+      compatibleGeometry: ["flat", "plaque"],
+    },
+  },
+  {
+    canonicalName: "Bail",
+    vocabularyDomain: "manufacturing",
+    aliases: ["bale", "hanger", "pendant loop"],
+    definition:
+      "The loop or fitting through which a chain passes to carry a pendant or charm; may be fixed, hinged or a bar-and-tube arrangement.",
+    termKind: "component",
+    engineeringSignature: NO_STONE_SIGNATURE(
+      "connects the pendant body to the chain; load path runs through the loop into the body",
+      ["loop", "tube", "hinge"],
+    ),
+  },
+  {
+    canonicalName: "Curb Link",
+    vocabularyDomain: "classical",
+    aliases: ["curb chain", "flat curb"],
+    definition:
+      "Chain of interlocking oval/round links twisted so they lie flat in one plane; the Miami-Cuban family is a heavier, tighter derivative.",
+    termKind: "component",
+    engineeringSignature: NO_STONE_SIGNATURE(
+      "links twisted 90° so consecutive links lie flat and interlock in one plane",
+      ["linear run", "curved"],
+    ),
+  },
+  {
+    canonicalName: "Lobster/Box Clasp",
+    vocabularyDomain: "manufacturing",
+    aliases: ["lobster claw", "box clasp", "tongue clasp", "box lock"],
+    definition:
+      "Discrete closure component: a spring-loaded claw, or a tongue engaging a sprung box, usually with a safety catch on heavier work.",
+    termKind: "component",
+    engineeringSignature: NO_STONE_SIGNATURE(
+      "spring gate or sprung tongue-in-box carrying the full tensile load of the piece",
+      ["terminal component"],
+    ),
+  },
+  {
+    canonicalName: "Brilliant Cut",
+    vocabularyDomain: "gemological",
+    aliases: ["round brilliant", "RBC"],
+    definition:
+      "Gemological cut class: 57/58 triangular and kite facets optimised for return of light, circular girdle outline.",
+    termKind: "cut",
+    engineeringSignature: {
+      expectedStoneCuts: ["round_brilliant"],
+      stoneSizePattern: "any",
+      packingPattern: "circular girdles leave interstitial gaps when tiled",
+      retentionMechanics: "seated on a round bearing",
+      prongBehavior: "any",
+      metalVisibility: "interstitial metal is unavoidable between round girdles",
+      rowBehavior: "rows or honeycomb",
+      orientationBehavior: "rotationally symmetric — orientation not readable",
+      compatibleGeometry: ["flat", "convex", "curved"],
+    },
+  },
+  {
+    canonicalName: "Step Cut",
+    vocabularyDomain: "gemological",
+    aliases: ["baguette", "emerald cut", "asscher"],
+    definition:
+      "Gemological cut class: parallel elongated facets in steps with a rectangular or square girdle outline and corner facets.",
+    termKind: "cut",
+    engineeringSignature: {
+      expectedStoneCuts: ["baguette", "tapered_baguette", "emerald", "asscher"],
+      stoneSizePattern: "calibrated",
+      packingPattern: "straight girdles abut, so fields can close with no interstitial gaps",
+      retentionMechanics: "seated on straight bearings or rails",
+      prongBehavior: "corner prongs or rails",
+      metalVisibility: "can approach zero between stones",
+      rowBehavior: "rows, borders, rails",
+      orientationBehavior: "long axis is readable and consistent",
+      compatibleGeometry: ["linear run", "flat", "border"],
+    },
   },
   {
     canonicalName: "Custom/Unknown",
+    vocabularyDomain: "manufacturing",
     aliases: ["custom", "hybrid", "unclear"],
-    expectedStoneSizePattern: "as observed",
-    expectedCuts: ["custom", "mixed", "unclear"],
-    expectedPackingPattern: "as observed — use when construction matches no single signature",
-    expectedProngBehavior: "as observed",
-    expectedMetalVisibility: "as observed",
-    expectedRows: "as observed",
-    expectedOrientationBehavior: "as observed",
-    compatibleSurfaceGeometry: ["any"],
+    definition:
+      "Use when the observed construction genuinely matches no single signature in any domain, or the evidence cannot separate two candidates.",
+    termKind: "setting",
+    engineeringSignature: {
+      expectedStoneCuts: ["custom", "mixed", "unclear"],
+      stoneSizePattern: "as observed",
+      packingPattern: "as observed — use when construction matches no single signature",
+      retentionMechanics: "as observed",
+      prongBehavior: "as observed",
+      metalVisibility: "as observed",
+      rowBehavior: "as observed",
+      orientationBehavior: "as observed",
+      compatibleGeometry: ["any"],
+    },
   },
 ];
+
+/* -------------------- Layer 2: modern custom / hip-hop vocabulary ---------- */
+
+/**
+ * SEPARATE domain on purpose. These are the terms working custom jewelers use,
+ * and several of them collide with classical names while meaning something
+ * physically different. Never rewrite one of these into its classical namesake.
+ */
+const HIP_HOP_TERMS: JewelryTerm[] = [
+  {
+    canonicalName: "Mosaic Setting (custom)",
+    vocabularyDomain: "hip_hop_custom",
+    aliases: ["mosaic set", "mosaic", "puzzle set", "tile set"],
+    definition:
+      "Modern custom-jeweler term (NOT the classical tesserae meaning): stones of mixed sizes are fitted like a puzzle to fill a surface edge-to-edge, larger stones placed first and smaller stones fitted into the remaining gaps, retained by shared walls and junction beads so almost no metal shows.",
+    termKind: "setting",
+    relatedTerms: ["Mosaic (classical)"],
+    engineeringSignature: {
+      expectedStoneCuts: ["round_brilliant", "baguette", "princess", "custom", "mixed"],
+      stoneSizePattern:
+        "mixed physical size classes fitted to a tiled field (anchor stones plus smaller fitted fillers), or one repeated size tiled edge-to-edge",
+      packingPattern: "tiled/interlocking fill following the surface outline, minimal gaps, no straight repeating rows",
+      retentionMechanics: "shared metal walls between neighbours with beads worked at the junctions",
+      prongBehavior: "few or no discrete prongs; junction beads only",
+      metalVisibility: "very low between stones, visible mainly at field boundaries",
+      rowBehavior: "no regular row structure",
+      orientationBehavior: "orientation varies per tile to close gaps",
+      compatibleGeometry: ["flat", "convex", "curved", "irregular", "letter/plaque"],
+    },
+  },
+  {
+    canonicalName: "Reverse Mosaic (custom)",
+    vocabularyDomain: "hip_hop_custom",
+    aliases: ["inverted mosaic", "negative mosaic", "reverse mosaic"],
+    definition:
+      "Mosaic-family custom construction where the METAL is the deliberate figure and the tiled stone field is the ground (or the motif is cut out of the stone field), so the metal pattern is intentional rather than leftover.",
+    termKind: "setting",
+    relatedTerms: ["Mosaic Setting (custom)"],
+    engineeringSignature: {
+      expectedStoneCuts: ["round_brilliant", "baguette", "custom", "mixed"],
+      stoneSizePattern: "tiled field sized to the motif boundaries",
+      packingPattern: "tiled fill shaped around a deliberate metal negative-space motif",
+      retentionMechanics: "shared walls and junction beads, plus the motif walls themselves",
+      prongBehavior: "junction beads",
+      metalVisibility: "moderate — the metal pattern is intentional",
+      rowBehavior: "no regular row structure",
+      orientationBehavior: "orientation follows the negative-space motif",
+      compatibleGeometry: ["flat", "convex", "letter/plaque"],
+    },
+  },
+  {
+    canonicalName: "Honeycomb Set (custom)",
+    vocabularyDomain: "hip_hop_custom",
+    aliases: ["honeycomb", "flooded honeycomb"],
+    definition:
+      "Custom term for a dense field of ONE uniform round size packed hexagonally to full coverage. Physically pavé-family construction, but jewelers name it for the hexagonal packing rather than the bead work.",
+    termKind: "setting",
+    relatedTerms: ["Micro Pavé", "Pavé"],
+    engineeringSignature: {
+      expectedStoneCuts: ["round_brilliant"],
+      stoneSizePattern: "ONE uniform physical size class after perspective normalization",
+      packingPattern: "hexagonal close packing to full coverage",
+      retentionMechanics: "shared beads at every junction",
+      prongBehavior: "shared beads",
+      metalVisibility: "minimal thin bead walls",
+      rowBehavior: "offset rows forming hexagons",
+      orientationBehavior: "table-up, uniform",
+      compatibleGeometry: ["flat", "convex", "curved", "letter/plaque"],
+    },
+  },
+  {
+    canonicalName: "Cluster/Buster Set (custom)",
+    vocabularyDomain: "hip_hop_custom",
+    aliases: ["cluster set", "buster", "flower cluster"],
+    definition:
+      "Custom construction where groups of small stones are massed around a larger centre so the cluster reads as one big stone; each cluster is a repeated module.",
+    termKind: "setting",
+    engineeringSignature: {
+      expectedStoneCuts: ["round_brilliant", "princess", "mixed"],
+      stoneSizePattern: "clear anchor centre with a ring of smaller stones, repeated per cluster",
+      packingPattern: "radial clusters repeated across the surface, metal visible between clusters",
+      retentionMechanics: "beads or shared prongs within each cluster; cluster head is its own module",
+      prongBehavior: "beads inside the cluster, sometimes prongs on the centre",
+      metalVisibility: "low inside a cluster, visible between clusters",
+      rowBehavior: "clusters may sit in rows; stones within a cluster do not",
+      orientationBehavior: "radial about each cluster centre",
+      compatibleGeometry: ["flat", "convex", "irregular"],
+    },
+  },
+  {
+    canonicalName: "Rail/Bar Set (custom)",
+    vocabularyDomain: "hip_hop_custom",
+    aliases: ["rail set", "bar set", "channel-look"],
+    definition:
+      "Custom construction where continuous metal rails run the length of the piece and rows of stones sit between them; reads like channel work but rails are decorative full-length members.",
+    termKind: "setting",
+    relatedTerms: ["Channel Set"],
+    engineeringSignature: {
+      expectedStoneCuts: ["round_brilliant", "baguette", "princess"],
+      stoneSizePattern: "uniform within each rail run",
+      packingPattern: "one or more stone rows bounded by continuous longitudinal rails",
+      retentionMechanics: "rails plus beads or shared prongs inside the run",
+      prongBehavior: "beads or shared prongs between neighbours",
+      metalVisibility: "rails clearly visible, low between stones",
+      rowBehavior: "regular rows following the rails",
+      orientationBehavior: "aligned to the rail axis",
+      compatibleGeometry: ["linear run", "curved"],
+    },
+  },
+  {
+    canonicalName: "Iced Out (custom)",
+    vocabularyDomain: "hip_hop_custom",
+    aliases: ["fully iced", "flooded", "fully flooded", "blinged out"],
+    definition:
+      "COVERAGE description only, never a retention method: every available surface is stone-covered. It says nothing about how the stones are held, so it can never be the answer to a setting decision.",
+    termKind: "construction",
+    engineeringSignature: {
+      expectedStoneCuts: [],
+      stoneSizePattern: "any",
+      packingPattern: "full-coverage stone field; coverage only, construction unspecified",
+      retentionMechanics: "UNSPECIFIED — must be resolved to a real retention term",
+      prongBehavior: "unspecified",
+      metalVisibility: "low by definition",
+      rowBehavior: "unspecified",
+      orientationBehavior: "unspecified",
+      compatibleGeometry: ["any"],
+    },
+  },
+  {
+    canonicalName: "Baguette Iced (custom)",
+    vocabularyDomain: "hip_hop_custom",
+    aliases: ["all baguette", "bag set", "emerald cut set"],
+    definition:
+      "Custom construction using step cuts only, abutted so the field closes with essentially no visible metal; may or may not be true invisible setting depending on whether the girdles are grooved onto a hidden rail.",
+    termKind: "setting",
+    relatedTerms: ["Invisible Set", "Baguette Channel"],
+    engineeringSignature: {
+      expectedStoneCuts: ["baguette", "tapered_baguette", "emerald", "princess"],
+      stoneSizePattern: "calibrated step cuts, often tapered to the outline",
+      packingPattern: "straight girdles abutting to close the field, minimal interstitial metal",
+      retentionMechanics: "rails, corner beads or grooved girdles — inspect before naming invisible setting",
+      prongBehavior: "corner beads or none visible",
+      metalVisibility: "near zero between stones",
+      rowBehavior: "rows, borders or radiating fans",
+      orientationBehavior: "long axes consistent within a run",
+      compatibleGeometry: ["flat", "convex", "letter/plaque", "linear run"],
+    },
+  },
+];
+
+/** ONE ontology, two clearly labelled vocabulary layers. */
+const JEWELRY_TERMS: JewelryTerm[] = [...CLASSICAL_TERMS, ...HIP_HOP_TERMS];
+
+/** Only terms that can actually answer a setting decision. */
+const SETTING_ONTOLOGY: JewelryTerm[] = JEWELRY_TERMS.filter((term) => term.termKind === "setting");
+
 
 /** Extensible cut vocabulary — a low-confidence custom stone stays custom. */
 const CUT_VALUES = [
@@ -2059,6 +2455,19 @@ const PKM_SCHEMA = {
           regionId: { type: Type.STRING },
           settingClassificationReason: { type: Type.STRING },
           canonicalSetting: { type: Type.STRING },
+          /** The ontology term the OBSERVED construction actually satisfies. */
+          detectedSetting: { type: Type.STRING },
+          /** Which vocabulary layer that term belongs to — never blended. */
+          vocabularyDomain: {
+            type: Type.STRING,
+            enum: ["classical", "gemological", "manufacturing", "hip_hop_custom"],
+          },
+          /** Observed signature elements that MATCH the chosen term. */
+          matchedSignals: STRING_ARRAY,
+          /** Observed elements that CONTRADICT the chosen term. */
+          conflictingSignals: STRING_ARRAY,
+          /** True when the label came from the user and may not be renamed. */
+          userConfirmedTerm: { type: Type.BOOLEAN },
           settingVisualSignature: { type: Type.STRING },
           evidenceReferenceIds: STRING_ARRAY,
           provenance: PROVENANCE,
@@ -2067,6 +2476,7 @@ const PKM_SCHEMA = {
             type: Type.OBJECT,
             properties: {
               canonicalName: { type: Type.STRING },
+              vocabularyDomain: { type: Type.STRING },
               matchedSignals: STRING_ARRAY,
               deviatingSignals: STRING_ARRAY,
               score: CONFIDENCE,
@@ -2079,9 +2489,13 @@ const PKM_SCHEMA = {
           "regionId",
           "settingClassificationReason",
           "canonicalSetting",
+          "detectedSetting",
+          "vocabularyDomain",
+          "matchedSignals",
           "settingVisualSignature",
           "confidence",
         ],
+
       },
     },
     materialRegions: {
@@ -2520,15 +2934,23 @@ function buildKnowledgeMapPrompt(args: {
     "14. PERSPECTIVE-NORMALIZED SIZING. NEVER classify stone-size distribution from raw pixel diameter. A stone farther from the camera, on a turned link, or near a curved edge LOOKS smaller — that is perspective, not a new size class. Normalize apparent size using local component perspective, known CAD geometry, repeated calibrated modules, relative depth and agreement across views. Record apparentSizeClass (raw) separately from relativeSizeClass / physicalSizeClass (normalized), set perspectiveNormalized, and on each stoneGroup set sizeUniformity, physicalSizeDifference, apparentSizeDifference and perspectiveNormalizationBasis. Report multiple size classes ONLY when they survive normalization; otherwise report uniform size and state the evidence.",
     "15. ATTRIBUTE-SPECIFIC EVIDENCE STRENGTH. For every referenceCatalog entry score evidenceStrength 0..1 per attribute: silhouette, dimensions, stoneCut, stoneSize, stonePlacement, settingMechanics, metalColor, componentGeometry, manufacturedAppearance. A blurry full shot can be strong for silhouette and useless for prongs; a macro can be strong for stone distribution and useless for overall dimensions. Answer each physical question from the reference(s) strongest for THAT attribute, and cite them in evidenceReferenceIds.",
     "16. PROVENANCE. Every important geometry, stone, setting, scale and module claim carries provenance: DIRECTLY_OBSERVED | CROSS_VIEW_CONFIRMED | CAD_CONFIRMED | REPEATED_MODULE_INFERRED | USER_CONFIRMED | LOW_CONFIDENCE_INFERENCE. Mark anything you could not actually establish as LOW_CONFIDENCE_INFERENCE — it will be treated as advisory only and can never become a hard physical constraint.",
-    "17. SETTING ONTOLOGY. Compare the OBSERVED construction against the engineering signatures below and fill ontologyMatch with the best-matching canonicalName, matchedSignals, deviatingSignals and a score. Give settingClassificationReason FIRST, and keep it consistent with the enum you choose. A uniform, perspective-explained field must NOT be classified as a mixed-size setting, and a mixed-size field must NOT be classified as a uniform pavé-family setting. If no single signature matches, use Custom/Unknown or needs_confirmation with confidence below 0.45.",
-    "SETTING SIGNATURES:",
-    ...SETTING_ONTOLOGY.map((entry) =>
-      `- ${entry.canonicalName} (aliases: ${entry.aliases.join(", ")}): sizes ${entry.expectedStoneSizePattern}; cuts ${
-        entry.expectedCuts.join("/")
-      }; packing ${entry.expectedPackingPattern}; prongs ${entry.expectedProngBehavior}; metal ${entry.expectedMetalVisibility}; rows ${entry.expectedRows}; orientation ${entry.expectedOrientationBehavior}; surfaces ${
-        entry.compatibleSurfaceGeometry.join("/")
+    "17. TERMINOLOGY ONTOLOGY — MATCH CONSTRUCTION, NOT NAMES. Never classify a setting, cut or component from general visual intuition or from what a piece is usually called. Before committing ANY label, compare the OBSERVED physical construction (retention mechanics, prong/bead behaviour, rails, walls, seat depth, metal visibility, packing, physical size classes, orientation, surface geometry) against the engineeringSignature of the candidate terms below, and choose the term whose SIGNATURE the evidence actually satisfies. A name or alias match ALONE is never sufficient evidence, and a term's popularity for that product type is not evidence at all. For EVERY setting decision output: detectedSetting (the ontology canonicalName), vocabularyDomain (classical | gemological | manufacturing | hip_hop_custom), matchedSignals (the observed signature elements that MATCH), conflictingSignals (observed elements that CONTRADICT the chosen term), confidence and evidenceReferenceIds. Keep settingClassificationReason FIRST and consistent with everything you output, and separately map to one of the app's canonical enums. If conflictingSignals outweigh matchedSignals, or two terms fit equally, use Custom/Unknown or needs_confirmation with confidence below 0.45 — never guess.",
+    "17a. THE TWO VOCABULARY LAYERS ARE NOT INTERCHANGEABLE. Traditional/gemological/manufacturing terms and modern custom-jeweler (hip-hop) terms are separate vocabularies, and some names exist in BOTH with DIFFERENT physical meanings (e.g. classical \"Mosaic\" = tesserae forming a picture, versus the custom jeweler's \"Mosaic Setting\" = a mixed-size puzzle-fitted diamond field). Never translate a custom term into its classical namesake, never apply the classical definition to a custom construction, and never rename the user's vocabulary. Always state which domain the term you chose came from. If the construction matches a custom-domain signature, report the custom-domain term with vocabularyDomain hip_hop_custom.",
+    "17b. COVERAGE WORDS ARE NOT SETTINGS. A term whose retentionMechanics is UNSPECIFIED (e.g. the iced-out/flooded coverage family) can never be a setting answer — resolve to the real retention term or needs_confirmation.",
+    "17c. USER-SUPPLIED TERMINOLOGY WINS AND IS NEVER RENAMED. If a USER_CONFIRMED fact names the setting, cut, component or construction (e.g. Setting = Mosaic), that LABEL is final: set detectedSetting to the user's wording exactly, set userConfirmedTerm true, provenance USER_CONFIRMED, and pick the vocabularyDomain the user's wording belongs to (custom-jeweler wording stays hip_hop_custom). You may and should still describe the exact physical construction underneath that label in settingVisualSignature, matchedSignals and conflictingSignals — recording an honest conflictingSignals entry is correct — but you must NEVER substitute a different canonicalName, translate the term into another vocabulary domain, append a corrected name, or downgrade it to needs_confirmation.",
+
+    "TERMINOLOGY ONTOLOGY (candidate terms, grouped by vocabulary domain — signature must be satisfied by observation):",
+    ...JEWELRY_TERMS.map((term) =>
+      `- [${term.vocabularyDomain}/${term.termKind}] ${term.canonicalName} (aliases: ${
+        term.aliases.join(", ") || "none"
+      }${term.relatedTerms?.length ? `; different-domain look-alikes: ${term.relatedTerms.join(", ")}` : ""}): ${term.definition} SIGNATURE → retention ${term.engineeringSignature.retentionMechanics}; prongs ${term.engineeringSignature.prongBehavior}; sizes ${term.engineeringSignature.stoneSizePattern}; cuts ${
+        term.engineeringSignature.expectedStoneCuts.join("/") || "n/a"
+      }; packing ${term.engineeringSignature.packingPattern}; metal ${term.engineeringSignature.metalVisibility}; rows ${term.engineeringSignature.rowBehavior}; orientation ${term.engineeringSignature.orientationBehavior}; surfaces ${
+        term.engineeringSignature.compatibleGeometry.join("/")
       }`
     ),
+    "The ontology is a comparison table, not a menu of likely answers: if the evidence satisfies no signature, say so instead of picking the nearest name.",
+
     "18. STYLE SLANG SEPARATION. Jeweler style language (\"iced out\", \"fully flooded\", \"VVS look\", \"buster\", \"custom Cuban\") goes ONLY in styleDescriptors. It must never appear in the engineering map, a setting name, a settingClassificationReason or a signature.",
     "19. SCALE CLAIMS. Exact millimetres only with real evidence, priority: explicit user dimensions > CAD / spec > known stone dimensions > repeated calibrated geometry > photographic estimate. Store each claim separately in dimensions.scaleClaims with its basis, e.g. \"1.25mm\" basis measured_from_spec versus \"~1.2-1.5mm\" basis visually_estimated versus \"uniform stone size\" (a uniformity claim is NOT a millimetre claim).",
     "20. CONTRADICTIONS. Never silently merge disagreeing evidence: record it in constructionConflicts (or a physicalStone's conflictingEvidence) and resolve it by ATTRIBUTE authority, stating which reference won for which attribute.",
@@ -2582,11 +3004,30 @@ async function runKnowledgeMap(args: {
   // The user's confirmations are persisted with the map and win forever.
   map.userConfirmedFacts = args.userConfirmedFacts ?? [];
   // The ontology travels with the map so the admin panel and any later
-  // classification compare against the SAME signatures.
+  // classification compare against the SAME signatures, with the two vocabulary
+  // layers kept distinguishable (domain + which decision each term can answer).
   map.settingOntology = SETTING_ONTOLOGY.map((entry) => entry.canonicalName);
+  map.terminologyOntology = {
+    version: PKM_VERSION,
+    terms: JEWELRY_TERMS.map((term) => ({
+      canonicalName: term.canonicalName,
+      vocabularyDomain: term.vocabularyDomain,
+      termKind: term.termKind,
+      aliases: term.aliases,
+      relatedTerms: term.relatedTerms ?? [],
+    })),
+  };
+  for (const setting of arrayOf(map.settings)) {
+    console.log(
+      `[analyze-jewelry-frames] SETTING TERM MATCH region=${setting?.regionId ?? "?"} detected=${setting?.detectedSetting ?? setting?.canonicalSetting ?? "?"} domain=${setting?.vocabularyDomain ?? "?"} matched=${
+        arrayOf(setting?.matchedSignals).length
+      } conflicting=${arrayOf(setting?.conflictingSignals).length} confidence=${setting?.confidence ?? "?"}`,
+    );
+  }
   console.log(
     `[analyze-jewelry-frames] FINAL SETTING CLASSIFICATION setting=${detectedValue(map?.setting) || map?.setting?.canonical || "?"} reason=${String(map?.settingClassificationReason ?? "").slice(0, 300)}`,
   );
+
   return { knowledgeMap: applyUserConfirmedFacts(map, args.userConfirmedFacts ?? []), geminiMs: Date.now() - started };
 }
 
@@ -2607,7 +3048,27 @@ function applyUserConfirmedFacts(map: any, facts: UserConfirmedFact[]) {
     entry.needsConfirmation = false;
   };
 
+  // TERMINOLOGY LOCK: when the user named the setting, that WORDING is final.
+  // Gemini may describe the construction underneath it, but never rename it.
+  const settingTerm = facts.find((fact) =>
+    ["setting", "setting_name", "setting_terminology", "terminology"].includes(fact.attribute.toLowerCase())
+  );
+  if (settingTerm?.value) {
+    const label = String(settingTerm.value).trim();
+    const scope = settingTerm.appliesTo ? String(settingTerm.appliesTo).trim() : "";
+    for (const setting of arrayOf(map.settings)) {
+      // A scoped confirmation only locks the region/component it names.
+      if (scope && ![setting?.regionId, setting?.componentId].includes(scope)) continue;
+      setting.detectedSetting = label;
+      setting.canonicalSetting = label;
+      setting.userConfirmedTerm = true;
+      // The observed construction is kept — only the LABEL is locked.
+      lock(setting);
+    }
+  }
+
   if (locked.has("setting")) for (const setting of arrayOf(map.settings)) lock(setting);
+
   if (locked.has("stone_size") || locked.has("stone_sizes")) {
     for (const group of arrayOf(map.stoneGroups)) lock(group);
   }
