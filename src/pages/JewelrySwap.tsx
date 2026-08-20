@@ -1146,6 +1146,8 @@ export default function JewelrySwap() {
       }
 
       setPieces((prev) => [...prev, ...uploaded].slice(0, 8));
+      invalidateAssetCache(); // new uploads must appear next time the picker opens
+
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Could not upload that reference");
     } finally {
