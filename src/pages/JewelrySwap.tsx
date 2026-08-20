@@ -1450,6 +1450,7 @@ export default function JewelrySwap() {
    */
   const autoAuthorityLabelByUrl = useMemo(() => {
     const labels = new Map<string, string>();
+
     const catalog = knowledgeMap?.referenceCatalog ?? [];
     if (!catalog.length) return labels;
 
