@@ -2154,6 +2154,254 @@ const PKM_SCHEMA = {
   required: ["productType", "components", "regions", "coverage"],
 } as const;
 
+/* ------------------------------------------------------------------ *
+ * FULL-CLIP VIDEO UNDERSTANDING (analysis only)
+ * ------------------------------------------------------------------ */
+
+const VIDEO_EVIDENCE_STRENGTH = {
+  type: Type.OBJECT,
+  properties: {
+    silhouette: CONFIDENCE,
+    componentGeometry: CONFIDENCE,
+    thicknessDepth: CONFIDENCE,
+    stoneCut: CONFIDENCE,
+    stoneSize: CONFIDENCE,
+    stonePlacement: CONFIDENCE,
+    settingMechanics: CONFIDENCE,
+    claspBailConnector: CONFIDENCE,
+    materialAppearance: CONFIDENCE,
+    manufacturedFinish: CONFIDENCE,
+  },
+} as const;
+
+const VIDEO_ANALYSIS_SCHEMA = {
+  type: Type.OBJECT,
+  properties: {
+    productIdentity: { type: Type.STRING },
+    components: {
+      type: Type.ARRAY,
+      items: {
+        type: Type.OBJECT,
+        properties: {
+          componentId: { type: Type.STRING },
+          label: { type: Type.STRING },
+          construction: { type: Type.STRING },
+          confidence: CONFIDENCE,
+        },
+        required: ["componentId", "label"],
+      },
+    },
+    /** The SAME physical component followed across the clip. */
+    temporalComponentTracking: {
+      type: Type.ARRAY,
+      items: {
+        type: Type.OBJECT,
+        properties: {
+          componentId: { type: Type.STRING },
+          label: { type: Type.STRING },
+          observedFrom: STRING_ARRAY,
+          apparentSizeDifference: { type: Type.BOOLEAN },
+          physicalSizeDifference: { type: Type.BOOLEAN },
+          reconciliation: { type: Type.STRING },
+          confidence: CONFIDENCE,
+        },
+        required: ["componentId", "apparentSizeDifference", "physicalSizeDifference"],
+      },
+    },
+    geometryEvidence: {
+      type: Type.OBJECT,
+      properties: {
+        silhouette: { type: Type.STRING },
+        linkGeometry: { type: Type.STRING },
+        curvature: { type: Type.STRING },
+        thickness: { type: Type.STRING },
+        depth: { type: Type.STRING },
+        sidewalls: { type: Type.STRING },
+        rearConstruction: { type: Type.STRING },
+      },
+    },
+    stoneEvidence: {
+      type: Type.OBJECT,
+      properties: {
+        dominantCuts: STRING_ARRAY,
+        physicalSizeClasses: STRING_ARRAY,
+        sizeUniformity: { type: Type.STRING },
+        packingPattern: { type: Type.STRING },
+        stonePlacement: { type: Type.STRING },
+        orientationPattern: { type: Type.STRING },
+        exposedMetalPattern: { type: Type.STRING },
+      },
+    },
+    settingEvidence: {
+      type: Type.OBJECT,
+      properties: {
+        observedRetentionMechanics: { type: Type.STRING },
+        prongBehavior: { type: Type.STRING },
+        beadBehavior: { type: Type.STRING },
+        rails: { type: Type.STRING },
+        channels: { type: Type.STRING },
+        bezels: { type: Type.STRING },
+        seatDepth: { type: Type.STRING },
+        metalVisibility: { type: Type.STRING },
+      },
+    },
+    repeatedModules: {
+      type: Type.ARRAY,
+      items: {
+        type: Type.OBJECT,
+        properties: {
+          moduleId: { type: Type.STRING },
+          label: { type: Type.STRING },
+          masterGeometry: { type: Type.STRING },
+          masterStoneMap: { type: Type.STRING },
+          memberCount: { type: Type.NUMBER },
+          exceptions: STRING_ARRAY,
+          confidence: CONFIDENCE,
+        },
+        required: ["moduleId", "label"],
+      },
+    },
+    claspEvidence: { type: Type.STRING },
+    bailEvidence: { type: Type.STRING },
+    connectorEvidence: { type: Type.STRING },
+    materialEvidence: { type: Type.STRING },
+    manufacturedFinish: { type: Type.STRING },
+    /** INTERNAL evidence only — timestamps never become reference images. */
+    temporalObservations: {
+      type: Type.ARRAY,
+      items: {
+        type: Type.OBJECT,
+        properties: {
+          timestamp: { type: Type.NUMBER },
+          observation: { type: Type.STRING },
+          resolves: { type: Type.STRING },
+          confidence: CONFIDENCE,
+        },
+        required: ["observation"],
+      },
+    },
+    conflictingEvidence: STRING_ARRAY,
+    unresolvedFeatures: STRING_ARRAY,
+    evidenceStrength: VIDEO_EVIDENCE_STRENGTH,
+  },
+  required: ["productIdentity", "components", "geometryEvidence", "stoneEvidence", "settingEvidence"],
+} as const;
+
+function buildVideoAnalysisPrompt(clip: VideoReferenceInput, options: IntakeOptions) {
+  return [
+    "You are FUSE's jewelry reconstruction analyst. You are watching the COMPLETE product video of ONE physical replacement jewelry piece.",
+    `CLIP: "${clip.videoReferenceId}"${clip.duration ? `, ${clip.duration.toFixed(2)}s` : ""}${clip.aspectRatio ? `, ${clip.aspectRatio}` : ""}.`,
+    "ANALYSIS ONLY. You never generate, render or describe an output image. You reconstruct the physical object.",
+    "",
+    "RECONSTRUCTION PRECEDES CLASSIFICATION. Watch the whole clip before naming anything. Never classify a setting from the first second.",
+    "",
+    "TEMPORAL REASONING (required):",
+    "- Track the SAME physical component across time as the camera moves; give it one componentId for the whole clip.",
+    "- Track the SAME stone field across changing angles. Distinguish APPARENT size change (perspective, foreshortening, distance, receding surfaces) from REAL physical size difference. If stones look smaller as a link rotates away but identical links facing camera show the same apparent size, set apparentSizeDifference=true and physicalSizeDifference=false — do NOT invent separate physical size classes.",
+    "- Use geometry that becomes visible LATER to resolve ambiguity EARLIER: a fact clear at 7s resolves a doubt at 2s.",
+    "- Recover repeated link/module construction: reconstruct the MASTER module geometry and stone map, count members, and record exceptions.",
+    "- Reconcile front, side and rear relationships into one coherent object.",
+    "",
+    "Record timestamps in temporalObservations as INTERNAL evidence (e.g. best side profile, clasp fully visible). They are never used as generation reference images.",
+    "",
+    "SETTING MECHANICS: report what you OBSERVE (retention, prongs, beads, rails, channels, bezels, seat depth, exposed metal, packing) before any classification. If the evidence is insufficient, say so in unresolvedFeatures instead of guessing.",
+    "evidenceStrength: how strongly THIS clip supports each attribute (0-1).",
+    options.detailLevel ? `Detail level: ${options.detailLevel}.` : "",
+    "Short factual phrases. No marketing slang. Never output URLs, file names or base64.",
+  ].filter(Boolean).join("\n");
+}
+
+/**
+ * ONE analysis call per clip carrying the ENTIRE video. The clip is never split
+ * into image references and never reaches the image renderer.
+ */
+async function runVideoAnalysis(args: {
+  ai: GoogleGenAI;
+  videoReferences: VideoReferenceInput[];
+  options: IntakeOptions;
+}) {
+  const analyses: any[] = [];
+  const failures: string[] = [];
+  let geminiMs = 0;
+  for (const clip of args.videoReferences) {
+    const started = Date.now();
+    try {
+      const { part, transport, bytes } = await videoPartFor(args.ai, clip);
+      const response = await args.ai.models.generateContent({
+        model: GEMINI_ANALYSIS_MODEL,
+        contents: [
+          { role: "user", parts: [{ text: buildVideoAnalysisPrompt(clip, args.options) }, part] },
+        ] as any,
+        config: {
+          responseMimeType: "application/json",
+          responseSchema: VIDEO_ANALYSIS_SCHEMA as any,
+          maxOutputTokens: 16384,
+          temperature: 0,
+          thinkingConfig: { thinkingLevel: "medium" },
+        },
+      });
+      const parsed = JSON.parse((response.text ?? "").trim());
+      analyses.push({
+        ...parsed,
+        videoReferenceId: clip.videoReferenceId,
+        duration: clip.duration,
+        transport,
+        bytes,
+      });
+      console.log(
+        `[analyze-jewelry-frames] VIDEO ANALYSIS SUMMARY clip=${clip.videoReferenceId} transport=${transport} bytes=${bytes} identity=${String(parsed?.productIdentity ?? "?").slice(0, 160)}`,
+      );
+      console.log(
+        `[analyze-jewelry-frames] PHYSICAL STONE SIZE PATTERN clip=${clip.videoReferenceId} classes=${(parsed?.stoneEvidence?.physicalSizeClasses ?? []).join(" | ")} uniformity=${parsed?.stoneEvidence?.sizeUniformity ?? "?"} packing=${parsed?.stoneEvidence?.packingPattern ?? "?"}`,
+      );
+      console.log(
+        `[analyze-jewelry-frames] SETTING MECHANICS EVIDENCE clip=${clip.videoReferenceId} retention=${parsed?.settingEvidence?.observedRetentionMechanics ?? "?"} prongs=${parsed?.settingEvidence?.prongBehavior ?? "?"} metal=${parsed?.settingEvidence?.metalVisibility ?? "?"}`,
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Video analysis failed";
+      failures.push(`${clip.videoReferenceId}: ${message}`.slice(0, 400));
+      console.error(`[analyze-jewelry-frames] video analysis failed clip=${clip.videoReferenceId}`, message);
+    } finally {
+      geminiMs += Date.now() - started;
+    }
+  }
+  return { videoAnalyses: analyses, videoFailures: failures, geminiMs };
+}
+
+/** The full-clip findings, condensed for the fusion prompt. */
+function videoEvidenceLines(analyses: any[]) {
+  return analyses.flatMap((analysis) => {
+    const id = analysis?.videoReferenceId ?? "clip";
+    const tracking = (analysis?.temporalComponentTracking ?? [])
+      .map((entry: any) =>
+        `      ${entry?.label ?? entry?.componentId}: apparentSizeDifference=${entry?.apparentSizeDifference === true}, physicalSizeDifference=${entry?.physicalSizeDifference === true}${entry?.reconciliation ? ` — ${entry.reconciliation}` : ""}`,
+      );
+    const modules = (analysis?.repeatedModules ?? []).map((module: any) =>
+      `      MASTER ${module?.label ?? module?.moduleId}: ${module?.masterGeometry ?? "?"}; stones ${module?.masterStoneMap ?? "?"}; members ${module?.memberCount ?? "?"}`,
+    );
+    return [
+      `  FULL VIDEO "${id}" (complete clip analysed):`,
+      `    identity: ${analysis?.productIdentity ?? "?"}`,
+      `    geometry: ${Object.values(analysis?.geometryEvidence ?? {}).filter(Boolean).join("; ") || "?"}`,
+      `    stones: cuts ${(analysis?.stoneEvidence?.dominantCuts ?? []).join(", ") || "?"}; physical size classes ${(analysis?.stoneEvidence?.physicalSizeClasses ?? []).join(", ") || "?"}; uniformity ${analysis?.stoneEvidence?.sizeUniformity ?? "?"}; packing ${analysis?.stoneEvidence?.packingPattern ?? "?"}; exposed metal ${analysis?.stoneEvidence?.exposedMetalPattern ?? "?"}`,
+      `    setting mechanics observed: ${Object.values(analysis?.settingEvidence ?? {}).filter(Boolean).join("; ") || "?"}`,
+      `    clasp: ${analysis?.claspEvidence ?? "?"}; bail: ${analysis?.bailEvidence ?? "?"}; connector: ${analysis?.connectorEvidence ?? "?"}`,
+      `    material: ${analysis?.materialEvidence ?? "?"}; manufactured finish: ${analysis?.manufacturedFinish ?? "?"}`,
+      tracking.length ? "    temporal component tracking:" : "",
+      ...tracking,
+      modules.length ? "    repeated-module masters:" : "",
+      ...modules,
+      (analysis?.conflictingEvidence ?? []).length
+        ? `    conflicts: ${(analysis.conflictingEvidence ?? []).join("; ")}`
+        : "",
+      (analysis?.unresolvedFeatures ?? []).length
+        ? `    unresolved: ${(analysis.unresolvedFeatures ?? []).join("; ")}`
+        : "",
+    ].filter(Boolean);
+  });
+}
+
+
 function buildKnowledgeMapPrompt(args: {
   references: JewelryReferenceInput[];
   videoReferences: VideoReferenceInput[];
