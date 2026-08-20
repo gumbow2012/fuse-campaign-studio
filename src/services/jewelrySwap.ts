@@ -471,3 +471,43 @@ export function persistTemplateLayout(
     // Layout is a convenience only — the canvas falls back to auto lanes.
   }
 }
+
+/* ------------------------------------------------------------------ *
+ * Bounded-concurrency job submission
+ * ------------------------------------------------------------------ *
+ * Submitting N provider jobs strictly one-after-another makes the user wait
+ * for the whole chain; firing them all at once risks provider rate limits.
+ * This runs a small number in flight at a time, isolates every failure, and
+ * always resolves so one bad submission never blocks the rest.
+ */
+
+export type SubmissionOutcome<T> =
+  | { ok: true; index: number; value: T }
+  | { ok: false; index: number; error: Error };
+
+export async function submitWithConcurrency<T, R>(
+  items: T[],
+  limit: number,
+  submit: (item: T, index: number) => Promise<R>,
+): Promise<SubmissionOutcome<R>[]> {
+  const results: SubmissionOutcome<R>[] = new Array(items.length);
+  let cursor = 0;
+  const workers = Math.max(1, Math.min(limit, items.length));
+  const worker = async () => {
+    for (;;) {
+      const index = cursor++;
+      if (index >= items.length) return;
+      try {
+        results[index] = { ok: true, index, value: await submit(items[index], index) };
+      } catch (error) {
+        results[index] = {
+          ok: false,
+          index,
+          error: error instanceof Error ? error : new Error(String(error)),
+        };
+      }
+    }
+  };
+  await Promise.all(Array.from({ length: workers }, worker));
+  return results;
+}
