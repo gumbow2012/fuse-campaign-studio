@@ -1085,85 +1085,163 @@ export default function JewelrySwap() {
   /* ---------------------- Reference intake (auto-organize) ------------------ */
 
   const referenceKey = pieces.flatMap((piece) => piece.urls).join("|");
+  /**
+   * The reference-set VERSION: every url plus the role and authority flag the
+   * user has attached to it. This single string is both the debounce trigger and
+   * the stale guard — anything that materially changes the analysis changes it.
+   */
+  const referenceSetVersion = useMemo(
+    () =>
+      JSON.stringify(
+        pieces.map((piece) =>
+          piece.urls.map((url, angleIndex) => [
+            url,
+            piece.roles?.[angleIndex] ?? "",
+            piece.cads?.[angleIndex] ?? null,
+          ]),
+        ),
+      ),
+    [pieces],
+  );
+  const referenceCount = pieces.reduce((total, piece) => total + piece.urls.length, 0);
   /** Uncertain fields across all pieces — only these are surfaced for review. */
   const uncertainCount = pieces.reduce(
     (total, piece) => total + (piece.needsConfirmation?.length ?? 0),
     0,
   );
 
+  /** The app's canonical vocabularies, handed to the analysis every call. */
+  const intakeOptions = useMemo(
+    () => ({
+      jewelryTypes: JEWELRY_TYPES,
+      metals: METAL_OPTIONS.filter((option) => option !== AUTO_METAL),
+      stones: STONE_OPTIONS.filter((option) => option !== AUTO_STONE),
+      stoneColors: STONE_COLOR_OPTIONS.filter((option) => option !== AUTO_STONE_COLOR),
+      qualities: QUALITY_OPTIONS.filter((option) => option !== AUTO_QUALITY),
+      settingTypes: SETTING_TYPE_OPTIONS.filter((option) => option !== AUTO_SETTING),
+      settingRegions: TYPE_SETTING_REGIONS,
+    }),
+    [],
+  );
 
   /**
-   * One fast batch pass over ALL uploaded references: recognition, grouping,
-   * role + design-authority proposals and spec extraction. Any user override is
-   * preserved; on failure the manual reference UI stays fully functional.
+   * One DEBOUNCED batch pass over ALL current references: recognition, grouping,
+   * role + design-authority proposals and spec extraction. A 6-file bulk upload
+   * is one call, because every change to the set restarts the timer. Any user
+   * override is preserved; on failure the manual reference UI stays functional.
    */
   useEffect(() => {
-    const urls = referenceKey ? referenceKey.split("|").filter(Boolean) : [];
-    // References changed → cancel the stale result before re-analyzing.
-    intakeAbort.current?.abort();
-    intakeToken.current += 1;
-    const token = intakeToken.current;
-    if (!urls.length) {
-      setIntake({ status: "idle", stage: 0, productCount: 0 });
+    // The analysis writing back roles/grouping is not a user change.
+    if (intakeJustApplied.current) {
+      intakeJustApplied.current = false;
+      intakeSetVersion.current = referenceSetVersion;
       return;
     }
 
-    const controller = new AbortController();
-    intakeAbort.current = controller;
-    setIntake({ status: "running", stage: 0, productCount: 0 });
-    // Staged ticks reflect the real request; they never delay the result.
-    const ticker = setInterval(() => {
-      setIntake((prev) =>
-        prev.status === "running"
-          ? { ...prev, stage: Math.min(prev.stage + 1, INTAKE_STAGES.length - 1) }
-          : prev,
-      );
-    }, 1200);
+    const urls = pieces.flatMap((piece) => piece.urls);
+    intakeSetVersion.current = referenceSetVersion;
+    // Any in-flight request now answers an older set — drop it.
+    intakeAbort.current?.abort();
+    intakeToken.current += 1;
+    const token = intakeToken.current;
 
-    const run = async (attempt: number): Promise<void> => {
-      try {
-        const result = await analyzeJewelryIntake(
-          {
-            jewelryReferences: urls.map((url) => ({ url })),
-            roleVocabulary: Array.from(
-              new Set(pieces.flatMap((piece) => roleOptionsForType(piece.type))),
-            ).filter(Boolean),
-          },
-          controller.signal,
+    if (!urls.length) {
+      setIntake({ status: "idle", stage: 0, productCount: 0, referenceCount: 0 });
+      return;
+    }
+
+    // While the set is still settling we never apply conclusions.
+    setIntake((prev) => ({
+      status: prev.status === "ready" ? "stale" : "collecting",
+      stage: 0,
+      productCount: prev.productCount,
+      referenceCount: urls.length,
+    }));
+
+    const version = referenceSetVersion;
+    let ticker: number | undefined;
+
+    const start = window.setTimeout(() => {
+      const controller = new AbortController();
+      intakeAbort.current = controller;
+      setIntake({
+        status: "running",
+        stage: 0,
+        productCount: 0,
+        referenceCount: urls.length,
+      });
+      ticker = window.setInterval(() => {
+        setIntake((prev) =>
+          prev.status === "running"
+            ? { ...prev, stage: Math.min(prev.stage + 1, INTAKE_STAGES.length - 1) }
+            : prev,
         );
-        if (token !== intakeToken.current) return;
-        applyIntake(urls, result.intake);
-        setIntake({
-          status: "ready",
-          stage: INTAKE_STAGES.length,
-          productCount: result.intake?.products?.length ?? 1,
-        });
-      } catch (error) {
-        if (controller.signal.aborted || token !== intakeToken.current) return;
-        if (attempt === 0) return run(1); // one retry max
-        setIntake({
-          status: "failed",
-          stage: 0,
-          productCount: 0,
-          error: error instanceof Error ? error.message : "Analysis failed",
-        });
-      }
-    };
+      }, 1200);
 
-    void run(0).finally(() => clearInterval(ticker));
+      const run = async (attempt: number): Promise<void> => {
+        try {
+          const result = await analyzeJewelryIntake(
+            {
+              jewelryReferences: pieces.flatMap((piece) =>
+                piece.urls.map((url, angleIndex) => ({
+                  url,
+                  role: piece.roles?.[angleIndex] || null,
+                  cad: isGeometryAuthority(piece, angleIndex),
+                })),
+              ),
+              roleVocabulary: Array.from(
+                new Set(pieces.flatMap((piece) => roleOptionsForType(piece.type))),
+              ).filter(Boolean),
+              options: intakeOptions,
+              setVersion: version,
+              requestId: token,
+            },
+            controller.signal,
+          );
+          // STALE GUARD — both the monotonic request id and the set version must
+          // still match the set on screen, otherwise this answer is discarded.
+          if (token !== intakeToken.current) return;
+          if (version !== intakeSetVersion.current) return;
+          if (result.setVersion && result.setVersion !== intakeSetVersion.current) return;
+          applyIntake(urls, result.intake);
+          setIntake({
+            status: "ready",
+            stage: INTAKE_STAGES.length,
+            productCount: result.intake?.products?.length ?? 1,
+            referenceCount: urls.length,
+          });
+        } catch (error) {
+          if (controller.signal.aborted || token !== intakeToken.current) return;
+          if (version !== intakeSetVersion.current) return;
+          if (attempt === 0) return run(1); // one retry max
+          setIntake({
+            status: "failed",
+            stage: 0,
+            productCount: 0,
+            referenceCount: urls.length,
+            error: error instanceof Error ? error.message : "Analysis failed",
+          });
+        }
+      };
+
+      void run(0).finally(() => {
+        if (ticker) clearInterval(ticker);
+      });
+    }, INTAKE_DEBOUNCE_MS);
 
     return () => {
-      clearInterval(ticker);
-      controller.abort();
+      clearTimeout(start);
+      if (ticker) clearInterval(ticker);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [referenceKey]);
+  }, [referenceSetVersion, intakeNow]);
 
   /**
    * Applies the intake result: regroups the references into one card per
-   * detected physical piece, pre-fills roles / design authority / specs, and
-   * NEVER overwrites a value the user set (user_override always wins).
+   * detected physical piece, RESOLVES every "Auto from reference" field to the
+   * detected canonical value, and NEVER overwrites a user_override.
    */
+
   const applyIntake = useCallback((urls: string[], result: JewelryIntake | null) => {
     const products = Array.isArray(result?.products) ? result!.products : [];
     if (!products.length) return;
