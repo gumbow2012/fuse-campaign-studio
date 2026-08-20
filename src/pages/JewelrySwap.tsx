@@ -780,13 +780,9 @@ export default function JewelrySwap() {
 
   const [pieces, setPieces] = useState<Piece[]>([]);
   const [uploadingPiece, setUploadingPiece] = useState(false);
-  /** Live progress while a replacement VIDEO is reduced to keyframes. */
-  const [keyframeWork, setKeyframeWork] = useState<{
-    name: string;
-    phase: "inspecting" | "extracting";
-    done: number;
-    total: number;
-  } | null>(null);
+  /** Live progress while a replacement VIDEO is stored for full-clip analysis. */
+  const [videoWork, setVideoWork] = useState<{ name: string } | null>(null);
+
   /** The fused engineering understanding from the last intake pass. */
   const [knowledgeMap, setKnowledgeMap] = useState<ProductKnowledgeMap | null>(null);
   const [engineeringOpen, setEngineeringOpen] = useState(false);
