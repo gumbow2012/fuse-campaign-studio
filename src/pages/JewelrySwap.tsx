@@ -80,8 +80,17 @@ import {
   type SwapGeneration,
 } from "@/services/jewelrySwap";
 
-import { extractFrames, frameTimestamps, loadVideo, readMeta, type VideoMeta } from "@/lib/videoFrames";
-import { selectVideoKeyframes } from "@/lib/videoKeyframes";
+import {
+  extractFrames,
+  formatDuration,
+  frameTimestamps,
+  isVideoAsset,
+  loadVideo,
+  readMeta,
+  readVideoFileMeta,
+  type VideoMeta,
+} from "@/lib/videoFrames";
+
 import { compressImageFile } from "@/lib/imageCompress";
 
 
