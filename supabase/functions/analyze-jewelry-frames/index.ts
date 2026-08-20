@@ -2405,6 +2405,8 @@ function videoEvidenceLines(analyses: any[]) {
 function buildKnowledgeMapPrompt(args: {
   references: JewelryReferenceInput[];
   videoReferences: VideoReferenceInput[];
+  /** Structured findings from the COMPLETE-clip video passes. */
+  videoAnalyses?: any[];
   intake: any;
   options: IntakeOptions;
   unavailable: Set<number>;
@@ -2414,23 +2416,15 @@ function buildKnowledgeMapPrompt(args: {
 
   const refLines = args.references.map((ref, index) => {
     const id = referenceIdAt(index);
-    const clip = ref.videoReferenceId
-      ? ` — PRODUCT VIDEO KEYFRAME from clip "${ref.videoReferenceId}"${
-        Number.isFinite(Number(ref.timestamp)) ? ` at ${Number(ref.timestamp).toFixed(2)}s` : ""
-      }`
-      : "";
     return `${id} (index ${index}) — kind: ${ref.kind ?? "photographic_still"}${
       ref.role ? `; user label "${ref.role}"` : ""
-    }${ref.cad ? "; user marked DESIGN AUTHORITY" : ""}${clip}${
+    }${ref.cad ? "; user marked DESIGN AUTHORITY" : ""}${
       args.unavailable.has(index) ? " — IMAGE UNAVAILABLE (skip entirely)" : ""
     }`;
   });
 
-  const clipLines = args.videoReferences.map((clip) =>
-    `CLIP "${clip.videoReferenceId}": ${clip.duration.toFixed(2)}s, ${clip.keyframeCount} keyframes sampled${
-      clip.aspectRatio ? `, ${clip.aspectRatio}` : ""
-    }`
-  );
+  const clipLines = videoEvidenceLines(args.videoAnalyses ?? []);
+
 
   const products = Array.isArray(args.intake?.products) ? args.intake.products : [];
   const confirmedSpec = products.map((product: any, index: number) =>
