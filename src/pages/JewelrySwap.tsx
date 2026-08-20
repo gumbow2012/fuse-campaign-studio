@@ -3580,8 +3580,9 @@ export default function JewelrySwap() {
                     )}
                     <div className="px-2 py-1.5">
                       <p className="truncate text-[10px] uppercase tracking-[0.12em] text-cyan-200/70">
-                        {asset.feature ?? "studio"} · {asset.outputType}
+                        {asset.source === "upload" ? "Uploaded" : "Generated"} · {asset.outputType}
                       </p>
+
                       <p className="text-[10px] text-muted-foreground">
                         {new Date(asset.createdAt).toLocaleDateString()}
                       </p>
