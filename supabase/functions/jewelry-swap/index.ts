@@ -95,6 +95,7 @@ function serialize(row: any) {
     sourceFrameUrl: typeof payload.source_frame_url === "string" ? payload.source_frame_url : null,
     imageModel: payload.image_model === "nb2" ? "nb2" : payload.image_model === "pro" ? "pro" : null,
     preferredRole: typeof payload.preferred_role === "string" ? payload.preferred_role : null,
+    coverage: typeof payload.coverage === "string" ? payload.coverage : null,
     shotKey: typeof payload.shot_key === "string" ? payload.shot_key : null,
     shotLabel: typeof payload.shot_label === "string" ? payload.shot_label : null,
     cameraDirection: typeof payload.camera_direction === "string" ? payload.camera_direction : null,
@@ -725,6 +726,8 @@ async function startSwapFrame(admin: AdminClient, args: {
   failureReason?: string | null;
   /** Per-frame replacement mode: "auto" | "standard" | "macro". */
   mode?: string | null;
+  /** Per-frame coverage/framing: "auto" | "full" | "partial" | "macro". */
+  coverage?: string | null;
   /** Legacy per-frame Macro toggle (equivalent to mode = "macro"). */
   macro?: boolean;
   webhookBase: string;
@@ -758,6 +761,7 @@ async function startSwapFrame(admin: AdminClient, args: {
     preferredRole: args.preferredRole ?? null,
     failureReason: args.failureReason ?? null,
     mode: args.mode ?? null,
+    coverage: args.coverage ?? null,
     macro: args.macro === true,
   });
 
@@ -822,6 +826,7 @@ async function startSwapFrame(admin: AdminClient, args: {
           preferred_role: args.preferredRole ?? null,
           failure_reason: args.failureReason ?? null,
           replacement_mode: normalizeMode(args.mode, args.macro === true),
+          coverage: normalizeCoverage(args.coverage, normalizeMode(args.mode, args.macro === true)),
           macro_mode: normalizeMode(args.mode, args.macro === true) === "macro",
           source_frame_url: sourceFrameUrl,
           frame_index: Number(args.frameIndex ?? 0),
@@ -1731,6 +1736,7 @@ Deno.serve(async (req) => {
         preferredRole: body.preferredRole ?? null,
         failureReason: body.failureReason ?? null,
         mode: typeof body.mode === "string" ? body.mode : null,
+        coverage: typeof body.coverage === "string" ? body.coverage : null,
         macro: body.macro === true,
         webhookBase,
       });
