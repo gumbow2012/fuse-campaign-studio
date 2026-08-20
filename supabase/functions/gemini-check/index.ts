@@ -7,7 +7,7 @@ import { corsHeaders, errorMessage, json, requireUser } from "../_shared/supabas
 
 /** Single source of truth for the analysis model. */
 export const GEMINI_ANALYSIS_MODEL =
-  Deno.env.get("GEMINI_ANALYSIS_MODEL")?.trim() || "gemini-2.5-flash";
+  Deno.env.get("GEMINI_ANALYSIS_MODEL")?.trim() || "gemini-3.6-flash";
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
