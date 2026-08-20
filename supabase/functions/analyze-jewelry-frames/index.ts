@@ -3720,6 +3720,23 @@ async function handleIntake(req: Request, body: any, user: { id: string }, apiKe
     console.warn("[intake] knowledge map unavailable:", errorMessage(error));
   }
 
+  /* ---- THE VISIBLE SETTING COMES FROM THE FUSED MAP, NOT THE FIRST PASS --- */
+  // The single-pass, first-image classifier is demoted to PRELIMINARY evidence:
+  // it can never drive the user-facing field or the Nano engineering lock.
+  for (const product of arrayOf(intake.products)) {
+    for (const setting of arrayOf(product?.settings)) {
+      setting.preliminary = true;
+      setting.provenance = "PRELIMINARY_OBSERVATION";
+    }
+  }
+  intake.resolvedJewelrySpec = buildResolvedJewelrySpec(intake.knowledgeMap, options);
+  console.log(
+    `[intake] RESOLVED SETTING SPEC source=${intake.resolvedJewelrySpec.source} terminology=${
+      intake.resolvedJewelrySpec.userFacingTerminology ?? "needs_confirmation"
+    } regions=${intake.resolvedJewelrySpec.settings.length}`,
+  );
+
+
   const timings = {
     cacheHit: false,
     referenceFetchMs: run.timings.referenceFetchMs,
