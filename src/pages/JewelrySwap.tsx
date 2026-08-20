@@ -403,8 +403,22 @@ type Piece = {
   notes: string;
   /** "piece" (default) or "piece_chain". */
   scope: string;
+  /**
+   * Set when this card came from a REPLACEMENT product VIDEO: its `urls` are the
+   * selected keyframes, extracted client-side. Never a source-video asset.
+   */
+  video?: {
+    videoReferenceId: string;
+    name: string;
+    duration: number;
+    aspectRatio?: string | null;
+    posterUrl: string;
+    /** Aligned by index with `urls`. */
+    keyframeTimes: number[];
+  } | null;
   /** Full structured controls open? Collapsed summary by default. */
   expanded?: boolean;
+
   /**
    * Values the intake analysis detected. Sent to the backend so a field left on
    * "Auto" resolves to the detected value; a user choice is never overwritten.
