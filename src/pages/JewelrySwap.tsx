@@ -1422,7 +1422,8 @@ export default function JewelrySwap() {
             server: result.timings,
           });
           applyIntake(urls, result.intake);
-          setIntake({
+          setKnowledgeMap(result.intake?.knowledgeMap ?? null);
+
             status: "ready",
             stage: INTAKE_STAGES.length,
             productCount: result.intake?.products?.length ?? 1,
