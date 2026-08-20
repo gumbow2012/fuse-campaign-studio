@@ -668,6 +668,9 @@ function buildJewelryPrompt(args: {
     CONTEXT_NEGATIVES,
     "",
     modeBlock(mode),
+    "",
+    coverageBlock(coverage, mode),
+
 
 
 
