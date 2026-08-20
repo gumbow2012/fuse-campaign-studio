@@ -477,7 +477,10 @@ type Piece = {
       needsConfirmation?: boolean;
       /** Its evidence statement, produced before the enum choice. */
       reason?: string | null;
+      /** Compositional wording from the fused map, e.g. "Galaxy Mosaic". */
+      label?: string | null;
     }[];
+
     /** Where a clarity grade was actually read from (visual_only → review). */
     qualityEvidenceSource?: string | null;
   } | null;
