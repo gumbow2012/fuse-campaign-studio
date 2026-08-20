@@ -420,18 +420,21 @@ type Piece = {
   /** "piece" (default) or "piece_chain". */
   scope: string;
   /**
-   * Set when this card came from a REPLACEMENT product VIDEO: its `urls` are the
-   * selected keyframes, extracted client-side. Never a source-video asset.
+   * Set when this card came from a REPLACEMENT product VIDEO. The COMPLETE clip
+   * is stored and analysed directly by Gemini — it is never reduced to keyframe
+   * image references, and it never reaches the image renderer. Such a card has
+   * NO `urls`: a video contributes analysis authority, not reference images.
+   * Never a source-video asset.
    */
   video?: {
     videoReferenceId: string;
     name: string;
     duration: number;
     aspectRatio?: string | null;
-    posterUrl: string;
-    /** Aligned by index with `urls`. */
-    keyframeTimes: number[];
+    /** Storage URL of the actual stored clip (analysis input only). */
+    videoUrl: string;
   } | null;
+
   /** Full structured controls open? Collapsed summary by default. */
   expanded?: boolean;
 
