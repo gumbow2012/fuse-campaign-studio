@@ -829,6 +829,8 @@ function buildJewelryPrompt(args: {
     NO_INVENT_NEGATIVES_LINE,
     "",
     SPEC_HIERARCHY_LINE,
+    "",
+
 
     "Do NOT redesign or simplify the jewelry. Do NOT invent, add, remove, or resize stones. Do NOT change stone shapes or randomize stone placement. Do NOT modify any jewelry that was not listed. Round stones stay round and individually seated; baguettes keep their long rectangular orientation; marquise keep pointed ends; princess stay square; emerald cuts keep the stepped rectangular form. Preserve mosaic / reverse-mosaic setting patterns — never flatten them into generic pavé.",
     "",
