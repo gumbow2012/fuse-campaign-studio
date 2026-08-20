@@ -156,10 +156,15 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         return true;
       } catch (error) {
         console.error("Failed to resolve auth access state:", error);
+        if (options?.background) {
+          // Background refresh must never blank or downgrade an already-resolved route.
+          return false;
+        }
         clearAccessState();
         setAuthStatus("access_load_failed");
         return false;
       }
+
     },
     [clearAccessState, fetchProfile, fetchRoles],
   );
