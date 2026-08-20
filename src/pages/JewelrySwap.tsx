@@ -109,21 +109,84 @@ const METAL_OPTIONS = [
 const AUTO_STONE = "Auto from reference";
 const STONE_OPTIONS = [
   AUTO_STONE,
+  "Diamond",
   "Natural Diamond",
   "Lab Diamond",
   "Moissanite",
   "CZ",
-  "Emerald",
   "Ruby",
   "Sapphire",
+  "Emerald",
   "Onyx",
   "Black Diamond",
   "Colored Diamond",
+  "Mixed Stones",
   "Gemstone",
   "No Stones",
+  "Other/Custom",
 ];
 
-const QUALITY_OPTIONS = ["", "D–F", "G–H", "VS", "VVS", "SI", "Custom/Notes"];
+/** Stone body color — deliberately independent of clarity/quality. */
+const AUTO_STONE_COLOR = "Auto from reference";
+const STONE_COLOR_OPTIONS = [
+  AUTO_STONE_COLOR,
+  "Colorless D–F",
+  "Near Colorless G–J",
+  "White/Colorless",
+  "Black",
+  "Fancy Yellow",
+  "Fancy Pink",
+  "Fancy Blue",
+  "Fancy Green",
+  "Champagne",
+  "Cognac",
+  "Mixed Colors",
+  "Custom",
+];
+
+const AUTO_QUALITY = "Auto from reference";
+const QUALITY_OPTIONS = [AUTO_QUALITY, "FL/IF", "VVS", "VS", "SI", "I", "Custom"];
+
+/** Stone-setting construction types — a piece can carry several by region. */
+const AUTO_SETTING = "Auto from reference";
+const SETTING_TYPE_OPTIONS = [
+  AUTO_SETTING,
+  "Mosaic",
+  "Reverse Mosaic",
+  "Micro Pavé",
+  "Pavé",
+  "Bead Set",
+  "Prong Set",
+  "Shared Prong",
+  "Channel Set",
+  "Baguette Channel",
+  "Invisible Set",
+  "Bezel Set",
+  "Flush/Burnish Set",
+  "Cluster",
+  "Tennis/Shared",
+  "Mixed/Multiple",
+  "Custom",
+];
+
+/** Setting regions are TYPE-aware — a bracelet has no bail, a ring has no dial. */
+const TYPE_SETTING_REGIONS: Record<string, string[]> = {
+  bracelet: ["Links", "Clasp", "Side Profile", "Underside", "Entire Piece", "Custom"],
+  pendant: ["Main Face", "Border", "Lettering", "Bail", "Sidewall", "Back", "Custom"],
+  ring: ["Center", "Halo", "Shank", "Side", "Gallery", "Custom"],
+  watch: ["Bezel", "Dial", "Case", "Bracelet", "Clasp", "Custom"],
+  generic: ["Entire Piece", "Custom"],
+};
+
+function settingRegionsForType(type: string | null | undefined): string[] {
+  const text = String(type ?? "").toLowerCase();
+  if (/bracelet|anklet/.test(text)) return TYPE_SETTING_REGIONS.bracelet;
+  if (/pendant|necklace|choker|chain|charm|brooch/.test(text)) return TYPE_SETTING_REGIONS.pendant;
+  if (/ring/.test(text)) return TYPE_SETTING_REGIONS.ring;
+  if (/watch/.test(text)) return TYPE_SETTING_REGIONS.watch;
+  return TYPE_SETTING_REGIONS.generic;
+}
+
 
 /**
  * A single physical piece only ever goes on ONE person, so the target is a
