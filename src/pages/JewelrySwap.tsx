@@ -1659,6 +1659,36 @@ export default function JewelrySwap() {
   const applyIntake = useCallback((urls: string[], result: JewelryIntake | null) => {
     const products = Array.isArray(result?.products) ? result!.products : [];
     if (!products.length) return;
+    const knowledgeMap = result?.knowledgeMap;
+
+    /**
+     * ONE CARD = ONE PHYSICAL PIECE. A card is only ever created by the user
+     * ("Add jewelry piece") or by the user answering a split question — the
+     * analysis may propose, never split. When the analysis reports more products
+     * than there are cards, the extra interpretations are FUSED into the card
+     * that owns those references and the proposal is surfaced as a question.
+     */
+    const suggestion =
+      knowledgeMap?.separatePieceSuggestion?.suspected === true
+        ? knowledgeMap.separatePieceSuggestion
+        : null;
+    setSplitSuggestion(
+      suggestion
+        ? {
+            question:
+              String(suggestion.question ?? "").trim() ||
+              "These files may contain more than one piece. Separate them?",
+            groups: (suggestion.groups ?? [])
+              .map((group) => ({
+                label: String(group.label ?? "").trim() || "Piece",
+                urls: (group.referenceIds ?? [])
+                  .map((id) => urls[referenceIdToIndex(id)])
+                  .filter((url): url is string => Boolean(url)),
+              }))
+              .filter((group) => group.urls.length),
+          }
+        : null,
+    );
 
     setPieces((prev) => {
       // Flat view of the references exactly as they were sent.
@@ -1670,17 +1700,57 @@ export default function JewelrySwap() {
         return { url, piece: null as Piece | null, angleIndex: -1 };
       });
 
-      const claimed = new Set<number>();
+      /**
+       * Groups are the USER'S cards — not the analysis's product count. Every
+       * reference stays on the card it was uploaded to, and the analysis result
+       * that best matches those references is fused into that one card.
+       */
+      const groups: { refIndices: number[]; base: Piece | null }[] = [];
+      prev.forEach((piece) => {
+        const refIndices = flat
+          .map((entry, index) => (entry.piece === piece ? index : -1))
+          .filter((index) => index !== -1);
+        if (refIndices.length) groups.push({ refIndices, base: piece });
+      });
+      const orphans = flat
+        .map((entry, index) => (entry.piece ? -1 : index))
+        .filter((index) => index !== -1);
+      if (!groups.length && orphans.length) groups.push({ refIndices: [], base: prev[0] ?? null });
+      if (groups.length) groups[0].refIndices.push(...orphans);
+      if (!groups.length) return prev;
+
       const next: Piece[] = [];
 
-      products.forEach((product, productIndex) => {
-        const refs = (product.references ?? [])
-          .filter((ref) => Number.isInteger(ref.referenceIndex) && flat[ref.referenceIndex!])
-          .filter((ref) => !claimed.has(ref.referenceIndex!));
-        if (!refs.length) return;
-        refs.forEach((ref) => claimed.add(ref.referenceIndex!));
+      groups.forEach((group, productIndex) => {
+        const refIndices = group.refIndices;
+        /**
+         * All of this card's product interpretations, merged: the analysis never
+         * gets to hand back two products for one physical piece.
+         */
+        const matches = products
+          .map((entry) => ({
+            entry,
+            refs: (entry.references ?? []).filter(
+              (ref) => Number.isInteger(ref.referenceIndex) && refIndices.includes(ref.referenceIndex!),
+            ),
+          }))
+          .filter((candidate) => candidate.refs.length)
+          .sort((a, b) => b.refs.length - a.refs.length);
+        if (!matches.length) {
+          if (group.base) next.push(group.base);
+          return;
+        }
+        const product = matches[0].entry;
+        // Reference rows for THIS card, in upload order, deduplicated.
+        const refs = refIndices
+          .map((index) => {
+            const ref = matches
+              .flatMap((candidate) => candidate.refs)
+              .find((candidate) => candidate.referenceIndex === index);
+            return { referenceIndex: index, ...(ref ?? {}) };
+          });
+        const base = group.base;
 
-        const base = flat[refs[0].referenceIndex!].piece ?? prev[0] ?? null;
         const baseSources = base?.sources ?? {};
         /**
          * "Auto from reference" is a user MODE, not the spec. When the analysis
