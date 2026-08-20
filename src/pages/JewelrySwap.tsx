@@ -1666,6 +1666,23 @@ export default function JewelrySwap() {
     [selectedFrames, swapCostPerFrameUsd],
   );
 
+  /**
+   * Macro hint only: a macro-mode/coverage frame or a Gemini
+   * `highDetailRecommended` flag surfaces a suggestion. Analysis never controls
+   * or auto-switches the resolution.
+   */
+  const macroQualityHint = useMemo(() => {
+    const indices = [...selectedFrames];
+    return indices.some((index) => {
+      if (frameMode[index] === "macro" || frameCoverage[index] === "macro") return true;
+      const advice = frameAnalysisFor(index) as (JewelryFrameAnalysis & {
+        highDetailRecommended?: boolean | null;
+      }) | null;
+      return advice?.highDetailRecommended === true || advice?.coverage === "MACRO_DETAIL";
+    });
+  }, [selectedFrames, frameMode, frameCoverage, frameAnalysisFor]);
+
+
 
   const videoCostUsd = useMemo(() => {
     const perSecond = VIDEO_MODELS.find((entry) => entry.key === videoModel)?.usdPerSecond ?? 0;
