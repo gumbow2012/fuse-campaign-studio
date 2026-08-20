@@ -474,7 +474,7 @@ export default function GenerationStudio() {
   const [confirmSingle, setConfirmSingle] = useState<Generation | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [favoritesOnly, setFavoritesOnly] = useState(false);
-  const composerRef = useRef<HTMLDivElement | null>(null);
+  const composerRef = useRef<HTMLElement | null>(null);
 
   const [deleting, setDeleting] = useState(false);
   const lastSelectedRef = useRef<string | null>(null);
@@ -1035,7 +1035,7 @@ export default function GenerationStudio() {
 
         <div className="grid gap-6 lg:grid-cols-[400px_minmax(0,1fr)] xl:grid-cols-[440px_minmax(0,1fr)]">
           {/* LEFT: control panel */}
-          <aside className="space-y-4 rounded-3xl border border-white/10 bg-white/[0.03] p-4 backdrop-blur-xl lg:sticky lg:top-6 lg:max-h-[calc(100vh-3rem)] lg:overflow-y-auto sm:p-5">
+          <aside ref={composerRef} className="space-y-4 rounded-3xl border border-white/10 bg-white/[0.03] p-4 backdrop-blur-xl lg:sticky lg:top-6 lg:max-h-[calc(100vh-3rem)] lg:overflow-y-auto sm:p-5">
             {/* Model */}
             <section>
               <SectionLabel>Model</SectionLabel>
