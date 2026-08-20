@@ -613,6 +613,18 @@ export default function JewelrySwap() {
 
   const [pieces, setPieces] = useState<Piece[]>([]);
   const [uploadingPiece, setUploadingPiece] = useState(false);
+  const [dropActive, setDropActive] = useState(false);
+  // Reference intake (recognition / grouping / extraction). Never blocking:
+  // the manual fields stay usable and a failure just falls back to them.
+  const [intake, setIntake] = useState<{
+    status: "idle" | "running" | "ready" | "failed";
+    stage: number;
+    productCount: number;
+    error?: string | null;
+  }>({ status: "idle", stage: 0, productCount: 0 });
+  const intakeAbort = useRef<AbortController | null>(null);
+  const intakeToken = useRef(0);
+
   const [extraPrompt, setExtraPrompt] = useState("");
 
   // STAGE A — still-image shot analysis. Advisory: the deterministic selector
