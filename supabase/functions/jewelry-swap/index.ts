@@ -160,6 +160,20 @@ type JewelryPiece = {
   notes?: string;
   /** "piece" (default, narrowest) or "piece_chain" — what the swap may replace. */
   scope?: string;
+  /**
+   * Values the intake analysis DETECTED for this piece. They are used ONLY to
+   * resolve a field the user left on "Auto" — a user value (user_override) is
+   * never replaced. Priority: user_override > CAD > gemini_detected.
+   */
+  detected?: {
+    type?: string | null;
+    metal?: string | null;
+    stone?: string | null;
+    stoneColor?: string | null;
+    quality?: string | null;
+    settings?: { type?: string | null; region?: string | null }[] | null;
+  } | null;
+
 
 };
 
@@ -396,6 +410,26 @@ type GeminiFrameAnalysis = {
   riskFlags?: string[] | null;
 };
 
+type GeminiSettingSignature = {
+  declaredSetting?: string | null;
+  region?: string | null;
+  stoneTypes?: string[] | null;
+  stoneColors?: string[] | null;
+  stoneShapes?: string[] | null;
+  stoneSizeDistribution?: string | null;
+  stoneOrientationPattern?: string | null;
+  settingDensity?: string | null;
+  layoutRegularity?: string | null;
+  prongOrMetalVisibility?: string | null;
+  spacingPattern?: string | null;
+  channelDirection?: string | null;
+  bezelGeometry?: string | null;
+  largeAnchorStonesVisible?: boolean | null;
+  smallFillerStonesVisible?: boolean | null;
+  referenceDefinedCharacteristics?: string[] | null;
+  conflictWarnings?: string[] | null;
+};
+
 type GeminiProductAnalysis = {
   jewelryType?: string | null;
   visibleComponents?: string[] | null;
@@ -403,9 +437,48 @@ type GeminiProductAnalysis = {
   geometryObservations?: string[] | null;
   materialObservations?: string[] | null;
   settingObservations?: string[] | null;
+  /** Universal, per-region setting signatures (setting-agnostic). */
+  settingSignatures?: GeminiSettingSignature[] | null;
+  /** Legacy single-object shape — still read, never required. */
   settingVisualSignature?: Record<string, unknown> | null;
   conflictWarnings?: string[] | null;
 };
+
+/** Universal signature list, from either the new array or the legacy object. */
+function settingSignatures(product: GeminiProductAnalysis | null): GeminiSettingSignature[] {
+  if (!product) return [];
+  if (Array.isArray(product.settingSignatures)) {
+    return product.settingSignatures.filter((entry) => entry && typeof entry === "object");
+  }
+  if (product.settingVisualSignature && typeof product.settingVisualSignature === "object") {
+    return [product.settingVisualSignature as GeminiSettingSignature];
+  }
+  return [];
+}
+
+/** Human-readable, setting-agnostic description of one observed signature. */
+function describeSignature(sig: GeminiSettingSignature): string {
+  const list = (value: unknown) =>
+    (Array.isArray(value) ? value : []).map((entry) => String(entry ?? "").trim()).filter(Boolean);
+  const parts = [
+    list(sig.stoneTypes).length ? `stone types: ${list(sig.stoneTypes).join(", ")}` : null,
+    list(sig.stoneColors).length ? `stone colors: ${list(sig.stoneColors).join(", ")}` : null,
+    list(sig.stoneShapes).length ? `stone shapes: ${list(sig.stoneShapes).join(", ")}` : null,
+    sig.stoneSizeDistribution ? `stone-size distribution: ${sig.stoneSizeDistribution}` : null,
+    sig.stoneOrientationPattern ? `stone orientation: ${sig.stoneOrientationPattern}` : null,
+    sig.settingDensity ? `density: ${sig.settingDensity}` : null,
+    sig.layoutRegularity ? `layout: ${sig.layoutRegularity}` : null,
+    sig.prongOrMetalVisibility ? `prong/metal visibility: ${sig.prongOrMetalVisibility}` : null,
+    sig.spacingPattern ? `spacing: ${sig.spacingPattern}` : null,
+    sig.channelDirection ? `channel direction: ${sig.channelDirection}` : null,
+    sig.bezelGeometry ? `bezel geometry: ${sig.bezelGeometry}` : null,
+    sig.largeAnchorStonesVisible === true ? "large anchor stones present" : null,
+    sig.smallFillerStonesVisible === true ? "small filler stones present" : null,
+    ...list(sig.referenceDefinedCharacteristics),
+  ].filter(Boolean);
+  return parts.join("; ");
+}
+
 
 /** Narrow, defensive normalization — anything unexpected becomes null. */
 function normalizeFrameAnalysis(value: unknown): GeminiFrameAnalysis | null {
@@ -514,24 +587,16 @@ function frameAnalysisBlock(
       }.`,
     );
   }
-  if (product?.settingVisualSignature) {
-    const sig = product.settingVisualSignature as Record<string, unknown>;
-    const parts = [
-      sig.declaredSetting ? `declared setting: ${sig.declaredSetting}` : null,
-      sig.stoneSizeDistribution ? `stone-size distribution: ${sig.stoneSizeDistribution}` : null,
-      sig.largeAnchorStonesVisible === true ? "large anchor stones present" : null,
-      sig.smallFillerStonesVisible === true ? "small filler stones present" : null,
-      sig.layoutRegularity ? `layout: ${sig.layoutRegularity}` : null,
-      sig.uniformRows === true ? "uniform rows observed" : "no uniform rows",
-      sig.metalSeparatorsVisible === true ? "metal separators visible" : null,
-      sig.dominantStoneColor ? `observed stone color: ${sig.dominantStoneColor}` : null,
-    ].filter(Boolean);
-    if (parts.length) {
-      lines.push(
-        `- OBSERVED SETTING SIGNATURE (reproduce this construction, do not regularize it): ${parts.join("; ")}.`,
-      );
-    }
+  for (const sig of settingSignatures(product ?? null)) {
+    const described = describeSignature(sig);
+    if (!described) continue;
+    const region = String(sig.region ?? "").trim() || "Entire Piece";
+    const setting = String(sig.declaredSetting ?? "").trim() || "the specified setting";
+    lines.push(
+      `- OBSERVED SETTING SIGNATURE — ${region} / ${setting} (reproduce this construction exactly; do not regularize or substitute it): ${described}.`,
+    );
   }
+
   if (product?.conflictWarnings?.length) {
     lines.push(
       `- Noted conflicts (the user's structured specification still wins): ${product.conflictWarnings.join("; ")}.`,
@@ -699,8 +764,16 @@ type TargetSpec = {
   quality: string | null;
   settings: { region: string | null; type: string; stone?: string | null; color?: string | null; quality?: string | null }[];
   dimensions: string | null;
+  /** Provenance per field: user_override | gemini_detected | unknown. */
+  sources: Record<string, string>;
 };
 
+/**
+ * Resolves every structured field to a REAL value before the prompt is built.
+ * A user value always wins (user_override). "Auto from reference" is replaced
+ * by the detected value when the intake analysis found one; if nothing was
+ * detected the field is simply omitted — "Auto" is never sent to the model.
+ */
 function resolveTargetSpec(piece: JewelryPiece): TargetSpec {
   const dims = piece.dimensions ?? null;
   const width = Number(dims?.width ?? NaN);
@@ -716,22 +789,66 @@ function resolveTargetSpec(piece: JewelryPiece): TargetSpec {
       ? `~${weight} g`
       : null;
 
-  return {
-    type: String(piece.type ?? "").trim() || null,
-    metal: isAuto(piece.metal) ? null : String(piece.metal).trim(),
-    stone: isAuto(piece.stone) ? null : String(piece.stone).trim(),
-    stoneColor: isAuto(piece.stoneColor) ? null : String(piece.stoneColor).trim(),
-    quality: isAuto(piece.quality) ? null : String(piece.quality ?? "").trim() || null,
-    settings: pieceSettings(piece).map((setting) => ({
+  const detected = piece.detected ?? null;
+  const sources: Record<string, string> = {};
+
+  /** user value → detected value → null, recording which one was used. */
+  const resolve = (field: string, userValue: unknown, detectedValue: unknown) => {
+    const user = String(userValue ?? "").trim();
+    if (user && !isAuto(user)) {
+      sources[field] = "user_override";
+      return user;
+    }
+    const auto = String(detectedValue ?? "").trim();
+    if (auto && !isAuto(auto)) {
+      sources[field] = "gemini_detected";
+      return auto;
+    }
+    sources[field] = "unknown";
+    return null;
+  };
+
+  const userSettings = pieceSettings(piece);
+  const detectedSettings = (Array.isArray(detected?.settings) ? detected!.settings! : [])
+    .map((setting) => ({
+      type: String(setting?.type ?? "").trim(),
+      region: String(setting?.region ?? "").trim() || null,
+    }))
+    .filter((setting) => setting.type && !isAuto(setting.type));
+
+  const settings = userSettings.length
+    ? userSettings.map((setting) => ({
       region: setting.region,
       type: String(setting.type),
       stone: setting.stone,
       color: setting.color,
       quality: setting.quality,
-    })),
+    }))
+    : detectedSettings.map((setting) => ({
+      region: setting.region,
+      type: setting.type,
+      stone: null,
+      color: null,
+      quality: null,
+    }));
+  sources.settings = userSettings.length
+    ? "user_override"
+    : detectedSettings.length
+      ? "gemini_detected"
+      : "unknown";
+
+  return {
+    type: resolve("type", piece.type, detected?.type),
+    metal: resolve("metal", piece.metal, detected?.metal),
+    stone: resolve("stone", piece.stone, detected?.stone),
+    stoneColor: resolve("stoneColor", piece.stoneColor, detected?.stoneColor),
+    quality: resolve("quality", piece.quality, detected?.quality),
+    settings,
     dimensions: dimText,
+    sources,
   };
 }
+
 
 /** The mandatory TARGET JEWELRY SPECIFICATION line, or null when everything is Auto. */
 function targetSpecLine(spec: TargetSpec) {
@@ -757,10 +874,7 @@ function targetSpecLine(spec: TargetSpec) {
 }
 
 const SETTING_AUTHORITY_LINE =
-  "SETTING AUTHORITY: Reproduce the replacement jewelry's actual stone-setting construction. Do NOT convert mosaic-set stones into generic pavé, do not convert baguettes into rounds, do not add a large center stone unless the design contains one, and do not invent halo rows, bezels, channels, prongs, clusters or decorative stones not supported by the CAD, product references, or the Setting specification.";
-
-const MOSAIC_MEANING_LINE =
-  "MOSAIC MEANING: MOSAIC is a deliberate multi-stone composition of differently sized/shaped stones arranged tightly into a continuous iced surface — preserve the reference/CAD's stone size and shape variation, orientation, grouping, spacing, metal separation and overall mosaic pattern. Never regularize it into uniform round micro-pavé. Reverse Mosaic: preserve the reverse orientation shown by the design authority.";
+  "SETTING AUTHORITY: Reproduce the replacement jewelry's actual stone-setting construction exactly as the declared setting appears on the references. Do NOT convert the declared setting into a different or easier setting style, do not convert baguettes into rounds, do not add a large center stone unless the design contains one, and do not invent halo rows, bezels, channels, prongs, clusters or decorative stones not supported by the CAD, product references, or the Setting specification.";
 
 const STONE_COLOR_LOCK_LINE =
   "STONE COLOR LOCK: Maintain the specified gemstone/diamond body color consistently across the whole object. Metal reflections and source lighting may alter perceived highlights, but the physical stone color must not change.";
@@ -771,18 +885,21 @@ const OPTICS_VS_COLOR_LINE =
   "OPTICS vs COLOR: Spectral fire (white, blue, cyan, green, yellow, orange, restrained red/violet flashes from dispersion) is ALLOWED and does NOT change body color. Do not render colored diamonds (pink/champagne/yellow/blue) unless Stone Color specifies them.";
 
 const NO_INVENT_NEGATIVES_LINE =
-  "NO-INVENT NEGATIVES: No invented center stones, no added oversized diamonds, no random baguettes or marquise, no added halos or extra stone rows, no changing round↔fancy cuts, no arbitrary stone-size variation, no generic pavé substitution, no setting-style drift, no stone-color drift. No generic pavé substitution. No uniform same-size stone field when the reference uses mixed sizes. No invented center stones. No invented fancy cuts. No setting-style drift. No stone-color drift. No arbitrary stone-size changes. No regularized grid layout.";
+  "NO-INVENT NEGATIVES: No invented center stones, no added oversized diamonds, no random baguettes or marquise, no added halos or extra stone rows, no changing round↔fancy cuts, no arbitrary stone-size variation, no substituting a different setting style for the declared one, no setting-style drift, no stone-color drift. No uniform same-size stone field when the reference uses mixed sizes. No regularized grid layout when the reference layout is irregular. No invented fancy cuts.";
 
 const SPEC_HIERARCHY_LINE =
   "SPECIFICATION HIERARCHY: CAD / design-authority references (geometry) > structured product fields (material, stone, stone color, quality, setting) > labeled product references (appearance) > Notes > model inference. If Notes conflict with the structured fields, the structured fields win unless the Notes explicitly state that they override them.";
 
 const AUTHORITY_HIERARCHY_LINE =
-  "AUTHORITY HIERARCHY (strict, highest first): 1) the user's structured product specification (type, metal, stone, stone color, quality, setting) — MANDATORY; 2) CAD / design-authority reference(s) — engineering truth for geometry, stone-size distribution, placement and construction; 3) the relevant product photographs — real material truth (metal alloy and color, polish, stone appearance, scintillation, micro-texture); 4) automated visual analysis — ANALYSIS ONLY, it may describe but may NEVER override an explicit setting, stone color, metal or quality; 5) Notes; 6) model inference (lowest). A structured setting such as Mosaic or Reverse Mosaic can NEVER be silently replaced with pavé, micro-pavé or a uniform round stone field because those are easier or faster to render. If a lower authority disagrees with a higher one, the higher one wins without exception.";
+  "AUTHORITY HIERARCHY (strict, highest first): 1) the user's structured product specification (type, metal, stone, stone color, quality, setting) — MANDATORY; 2) CAD / design-authority reference(s) — engineering truth for geometry, stone-size distribution, placement and construction; 3) the relevant product photographs — real material truth (metal alloy and color, polish, stone appearance, scintillation, micro-texture); 4) automated visual analysis — ANALYSIS ONLY, it may describe but may NEVER override an explicit setting, stone color, metal or quality; 5) Notes; 6) model inference (lowest). Whatever setting the user declared can NEVER be silently replaced with a different setting style or a uniform stone field because that is easier or faster to render. If a lower authority disagrees with a higher one, the higher one wins without exception.";
 
-/** True when any setting on any piece is a mosaic variant. */
-function hasMosaicSetting(specs: TargetSpec[]) {
-  return specs.some((spec) => spec.settings.some((setting) => /mosaic/i.test(setting.type)));
+/** All settings the user declared, e.g. ["Entire Piece: Reverse Mosaic"]. */
+function declaredSettingList(specs: TargetSpec[]) {
+  return uniqueValues(
+    resolvedSettings(specs).map((setting) => `${setting.region}: ${setting.type}`),
+  );
 }
+
 
 /** True when a single stone-color value is a colorless/white option. */
 function isColorlessValue(color?: string | null) {
@@ -838,20 +955,41 @@ function uniqueValues(values: (string | null | undefined)[]) {
 }
 
 /**
- * Hard STONE ENGINEERING LOCK — emitted only when a Setting is specified.
- * Ties the setting's visual interpretation to the CAD / product references
- * instead of the generic setting name, so "Reverse Mosaic" cannot collapse
- * into uniform micro-pavé.
+ * Hard STONE ENGINEERING LOCK — fully SETTING-AGNOSTIC.
+ *
+ * One dynamic block per setting REGION:
+ *   SETTING: {selected_setting}. REGION: {region}.
+ *   VISUAL CONSTRUCTION: {gemini settingVisualSignature for that region}.
+ * followed by the same generic enforcement for every setting family. No
+ * setting name is hardcoded anywhere in this builder — Mosaic, Reverse Mosaic,
+ * Channel, Bezel, Invisible, Tennis, Custom and any future setting all flow
+ * through the identical mechanism, and a name only appears here because the
+ * USER selected it.
  */
-function stoneEngineeringLockBlock(specs: TargetSpec[]): string | null {
+function stoneEngineeringLockBlock(
+  specs: TargetSpec[],
+  product?: GeminiProductAnalysis | null,
+): string | null {
   const settings = resolvedSettings(specs);
   if (!settings.length) return null;
 
-  const settingText = uniqueValues(settings.map((s) => `${s.region}: ${s.type}`)).join("; ");
+  const signatures = settingSignatures(product ?? null);
+  /** Match a signature to a region/setting; fall back to the only signature. */
+  const signatureFor = (region: string, type: string) => {
+    const norm = (value: unknown) => String(value ?? "").trim().toLowerCase();
+    return (
+      signatures.find(
+        (sig) => norm(sig.region) === norm(region) && norm(sig.declaredSetting) === norm(type),
+      ) ??
+      signatures.find((sig) => norm(sig.region) === norm(region)) ??
+      signatures.find((sig) => norm(sig.declaredSetting) === norm(type)) ??
+      (signatures.length === 1 && settings.length === 1 ? signatures[0] : null)
+    );
+  };
+
   const stones = uniqueValues(settings.map((s) => s.stone));
   const colors = uniqueValues(settings.map((s) => s.color));
   const qualities = uniqueValues(settings.map((s) => s.quality));
-
   const stoneText = stones.length ? stones.join(" / ") : "as shown in the references";
   const colorText = colors.length ? colors.join(" / ") : "as shown in the references";
   const qualityText = qualities.length ? qualities.join(" / ") : "as shown in the references";
@@ -861,25 +999,32 @@ function stoneEngineeringLockBlock(specs: TargetSpec[]): string | null {
       : colors.join(" / ")
     : "the specified body color";
 
-  const parts = [
-    `STONE ENGINEERING LOCK — Setting: ${settingText}. The exact visual interpretation of this setting is DEFINED BY the uploaded CAD / design-authority reference and the real product photographs — not by the generic name. Reproduce the reference-defined mixed stone-size distribution: larger anchor stones interspersed among smaller filler stones, the reference's irregular-but-engineered placement, orientation, density, spacing and metal separation, link by link. Do NOT convert this construction into generic pavé or micro-pavé. Do NOT regularize the stones into uniform rows or a repeated grid. Do NOT substitute same-size round stones across the link. If the CAD shows stone-size, placement, link geometry, width, clasp construction or setting distribution, that CAD information is authoritative — treat CAD as engineering truth, not inspiration.`,
-    `STONE: ${stoneText}. STONE COLOR: ${colorText}. QUALITY: ${qualityText}. The stones remain physically ${bodyColorText}. Rainbow blue/cyan/green/yellow/orange/red flashes may appear only as spectral dispersion from real diamond facets; they do NOT indicate a colored diamond body color.`,
+  const blocks: string[] = [
+    "STONE ENGINEERING LOCK — the setting(s) below are the user's declared construction. The exact visual interpretation of each one is DEFINED BY the uploaded CAD / design-authority reference and the real product photographs, never by the generic setting name and never by a default house style.",
   ];
 
-  if (settings.some((s) => /mosaic/i.test(s.type))) {
-    const reverse = settings.some((s) => /reverse\s*mosaic/i.test(s.type));
-    parts.push(
-      `MOSAIC ENGINEERING EMPHASIS: this piece is explicitly ${
-        reverse ? "REVERSE MOSAIC" : "MOSAIC"
-      }-set. A mosaic is an engineered composition of DIFFERENTLY sized and shaped stones tightly fitted into a continuous iced surface with deliberate metal separators — never a uniform field. Preserve the design authority's exact stone-size mix, groupings, orientations, spacing and separator metal, link by link.${
-        reverse
-          ? " Reverse Mosaic = preserve the reverse orientation the design authority shows; do not flip it to a conventional mosaic and do not normalize it."
-          : ""
-      }`,
+  for (const setting of settings) {
+    const sig = signatureFor(setting.region, setting.type);
+    const described = sig ? describeSignature(sig) : "";
+    blocks.push(
+      [
+        `SETTING: ${setting.type}. REGION: ${setting.region}.`,
+        `VISUAL CONSTRUCTION: ${
+          described || "as defined by the CAD / design-authority reference and the product photographs for this region"
+        }.`,
+        "Reproduce this exact reference/CAD-defined setting construction. Do not substitute another setting style, regularize the layout, change stone cuts/sizes/colors, or invent unsupported stones. Preserve the reference's stone placement, orientation, spacing, density and metal work for this region exactly as shown.",
+      ].join(" "),
     );
   }
 
-  return parts.join("\n");
+  blocks.push(
+    `STONE: ${stoneText}. STONE COLOR: ${colorText}. QUALITY: ${qualityText}. The stones remain physically ${bodyColorText}. Rainbow blue/cyan/green/yellow/orange/red flashes may appear only as spectral dispersion from real diamond facets; they do NOT indicate a colored diamond body color.`,
+  );
+  blocks.push(
+    "If the CAD shows stone size, stone placement, component geometry, width, closure/clasp construction or setting distribution, that CAD information is authoritative — treat CAD as engineering truth, not inspiration.",
+  );
+
+  return blocks.join("\n");
 }
 
 /** Per-region setting breakdown, emitted when more than one setting exists. */
@@ -1105,10 +1250,11 @@ function buildJewelryPrompt(args: {
   // lines and before the negatives. Only non-Auto values are emitted.
   const specs = args.pieces.map((piece) => resolveTargetSpec(piece));
   const specLines = specs.map((spec) => targetSpecLine(spec)).filter(Boolean) as string[];
-  const mosaic = hasMosaicSetting(specs);
+  const declaredSettings = declaredSettingList(specs);
   const colorless = isColorlessSpec(specs);
-  const stoneLock = stoneEngineeringLockBlock(specs);
+  const stoneLock = stoneEngineeringLockBlock(specs, productAnalysis);
   const settingMap = multiSettingBlock(specs);
+
 
 
 
@@ -1173,8 +1319,11 @@ function buildJewelryPrompt(args: {
     settingMap ? "" : null,
     SETTING_AUTHORITY_LINE,
     "",
-    mosaic ? MOSAIC_MEANING_LINE : null,
-    mosaic ? "" : null,
+    declaredSettings.length
+      ? `DECLARED SETTINGS (exact, user-selected — reproduce each one as constructed on the references; never swap one for another setting family): ${declaredSettings.join("; ")}.`
+      : null,
+    declaredSettings.length ? "" : null,
+
     colorless ? `${STONE_COLOR_LOCK_LINE} ${COLORLESS_LINE}` : STONE_COLOR_LOCK_LINE,
     "",
     OPTICS_VS_COLOR_LINE,
@@ -1188,7 +1337,7 @@ function buildJewelryPrompt(args: {
 
 
 
-    "Do NOT redesign or simplify the jewelry. Do NOT invent, add, remove, or resize stones. Do NOT change stone shapes or randomize stone placement. Do NOT modify any jewelry that was not listed. Round stones stay round and individually seated; baguettes keep their long rectangular orientation; marquise keep pointed ends; princess stay square; emerald cuts keep the stepped rectangular form. Preserve mosaic / reverse-mosaic setting patterns — never flatten them into generic pavé.",
+    "Do NOT redesign or simplify the jewelry. Do NOT invent, add, remove, or resize stones. Do NOT change stone shapes or randomize stone placement. Do NOT modify any jewelry that was not listed. Round stones stay round and individually seated; baguettes keep their long rectangular orientation; marquise keep pointed ends; princess stay square; emerald cuts keep the stepped rectangular form. Preserve the declared setting pattern exactly as the references construct it — never flatten or regularize it into a different setting.",
     "",
     "If a piece is a pendant only, replace only the pendant and keep the existing chain. If a chain only, replace only the chain and keep the existing pendant. If \"Pendant + Chain\", replace both.",
     "",
@@ -1527,7 +1676,7 @@ function buildShotPlan(
 }
 
 const DIRECTOR_HARD_NEGATIVES =
-  "HARD NEGATIVES: no object morphing, no link/letter/pattern redesign, no changing link or stone count, no mosaic converted to generic pave, no stone drift, no changed stone cuts, no invented center stones, no melted or disappearing prongs, no fused clasp or joints, no geometry wobble, no fake glitter overlays, no static starburst or sparkle filter (any flare must originate from a physically plausible reflection and track with the camera or light), no excessive bloom, no uniform blur gradient, no plastic metal, no invented back, side, gallery or hinge construction not shown by the references, no random rotation.";
+  "HARD NEGATIVES: no object morphing, no link/letter/pattern redesign, no changing link or stone count, no substituting a different setting style for the declared one, no stone drift, no changed stone cuts, no invented center stones, no melted or disappearing prongs, no fused clasp or joints, no geometry wobble, no fake glitter overlays, no static starburst or sparkle filter (any flare must originate from a physically plausible reflection and track with the camera or light), no excessive bloom, no uniform blur gradient, no plastic metal, no invented back, side, gallery or hinge construction not shown by the references, no random rotation.";
 
 const DIRECTOR_PHYSICS =
   "GLOBAL PHYSICS: The jewelry remains physically rigid and locked in its existing world position; primary motion is produced by the camera, optical focus and moving studio lights.";
@@ -1552,8 +1701,10 @@ const DIRECTOR_METAL =
 const DIRECTOR_TRANSITIONS =
   "TRANSITIONS: physical camera moves only — no editorial wipes, dissolves or graphic effects.";
 
-const DIRECTOR_MOSAIC =
-  "MOSAIC: preserve the engineered stone size and shape variation, orientation, tight interlock, spacing and metal separation — never regularize it into uniform round pave.";
+/** Setting-agnostic construction lock for the video director. */
+function directorSettingLine(settings: string[]) {
+  return `SETTING CONSTRUCTION (${settings.join("; ")}): preserve the engineered stone size and shape variation, orientation, interlock, spacing and metal work exactly as constructed — never regularize or substitute it for another setting style.`;
+}
 
 const DIRECTOR_MAX_CHARS = 2400;
 
@@ -1577,7 +1728,7 @@ function buildSeedanceDirectorPrompt(args: {
   const productType = args.specs.find((spec) => spec.type)?.type ?? "jewelry piece";
   const hasStones = args.specs.some((spec) => spec.stone && !/no stones/i.test(spec.stone)) ||
     geometry.macro;
-  const mosaic = hasMosaicSetting(args.specs);
+  const directorSettings = declaredSettingList(args.specs);
   const colorless = isColorlessSpec(args.specs);
   const aspect = String(args.aspectRatio ?? "").trim();
 
@@ -1606,7 +1757,7 @@ function buildSeedanceDirectorPrompt(args: {
       timelineText,
       whipUsed && !timelineText.includes(WHIP_WORDING) ? WHIP_WORDING : null,
       safeCameraLine(geometry),
-      mosaic ? DIRECTOR_MOSAIC : null,
+      directorSettings.length ? directorSettingLine(directorSettings) : null,
     ].filter(Boolean) as string[];
 
 
