@@ -20,6 +20,7 @@ import {
   submitFalJob,
   videoFallbackUsdPerSecond,
 } from "../_shared/fal.ts";
+import { conditionImageForKling } from "./animateInput.ts";
 
 /**
  * Jewelry Swap: sibling of Outfit Swap. Per-frame nano-banana jewelry
@@ -2838,12 +2839,16 @@ async function startAnimateFrame(admin: AdminClient, args: {
       fallbackUsdPerSecond: videoFallbackUsdPerSecond(videoModel, false) ?? null,
     });
 
+    // Kling rejects input images over 10 MB; condition the approved frame first.
+    const conditioned = await conditionImageForKling(admin as any, imageUrl, args.userId);
+
     const falInput = buildVideoModelInput(ANIMATE_MODEL_KEY, {
-      imageUrl,
+      imageUrl: conditioned.url,
       prompt,
       duration: ANIMATE_DURATION,
       generateAudio: false,
     });
+
 
     const webhookUrl = `${args.webhookBase}${encodeURIComponent(inserted.id)}`;
     const requestId = await submitFalJob(endpointId, falInput, webhookUrl);
@@ -2863,6 +2868,9 @@ async function startAnimateFrame(admin: AdminClient, args: {
           video_model: ANIMATE_MODEL_KEY,
           resolution: "1080p",
           source_frame_url: imageUrl,
+          animate_input_url: conditioned.url,
+          animate_input_conditioned: conditioned.conditioned,
+          animate_input_note: conditioned.note ?? null,
           frame_index: Number(args.frameIndex ?? 0),
           frame_time: Number(args.frameTime ?? 0),
           camera_direction: direction,
