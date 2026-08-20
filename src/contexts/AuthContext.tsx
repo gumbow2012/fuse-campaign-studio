@@ -18,11 +18,19 @@ interface Profile {
   subscription_cycle_credits: number;
 }
 
+export type AuthStatus =
+  | "initializing_session"
+  | "loading_access"
+  | "authorized"
+  | "unauthorized"
+  | "access_load_failed";
+
 interface AuthContextType {
   user: User | null;
   session: Session | null;
   profile: Profile | null;
   loading: boolean;
+  authStatus: AuthStatus;
   roles: string[];
   isAdmin: boolean;
   isCreator: boolean;
@@ -39,6 +47,7 @@ const AuthContext = createContext<AuthContextType>({
   session: null,
   profile: null,
   loading: true,
+  authStatus: "initializing_session",
   roles: [],
   isAdmin: false,
   isCreator: false,
@@ -52,15 +61,30 @@ const AuthContext = createContext<AuthContextType>({
 
 export const useAuth = () => useContext(AuthContext);
 
+const ACCESS_RESOLUTION_TIMEOUT_MS = 8000;
+
+class AccessTimeoutError extends Error {}
+
+const withTimeout = async <T,>(promise: Promise<T>, ms: number): Promise<T> => {
+  let timer: ReturnType<typeof setTimeout>;
+  return await Promise.race([
+    promise,
+    new Promise<never>((_, reject) => {
+      timer = setTimeout(() => reject(new AccessTimeoutError("Access resolution timed out")), ms);
+    }),
+  ]).finally(() => clearTimeout(timer!)) as T;
+};
+
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [authStatus, setAuthStatus] = useState<AuthStatus>("initializing_session");
   const [roles, setRoles] = useState<string[]>([]);
   const [isAdmin, setIsAdmin] = useState(false);
   const [isCreator, setIsCreator] = useState(false);
   const [hasAppAccess, setHasAppAccess] = useState(false);
+
 
   const clearAccessState = useCallback(() => {
     setProfile(null);
