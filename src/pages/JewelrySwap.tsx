@@ -579,6 +579,17 @@ function pieceSummary(piece: Piece, frameCount: number) {
 const SELECT_CLASS =
   "w-full rounded-lg border border-white/12 bg-black/40 px-2.5 py-1.5 text-xs text-foreground outline-none transition-colors hover:border-cyan-200/40 focus:border-cyan-200/60";
 
+/** SELECT_CLASS, outlined in amber when this control still needs confirming. */
+function selectClass(piece: Piece, control: string) {
+  return reviewControls(piece).has(control) ? SELECT_CLASS + REVIEW_RING : SELECT_CLASS;
+}
+
+/** " · Needs confirmation" suffix for a label the user must resolve. */
+function reviewTag(piece: Piece, control: string) {
+  return reviewControls(piece).has(control) ? " · Needs confirmation" : "";
+}
+
+
 function SectionCard({
   step,
   title,
