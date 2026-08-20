@@ -81,7 +81,7 @@ async function seekTo(video: HTMLVideoElement, time: number) {
   });
 }
 
-/** Seek helper shared with the replacement-video keyframe selector. */
+/** Seek helper shared with the SOURCE-video frame extraction path. */
 export const seekVideoTo = seekTo;
 
 /** Draw the current video frame to a JPEG file, downscaled to a sane long edge. */
@@ -114,4 +114,36 @@ export async function extractFrames(
     onProgress?.(frames.length, times.length);
   }
   return frames;
+}
+
+/* ------------------------------------------------------------------ *
+ * Replacement-VIDEO helpers
+ * ------------------------------------------------------------------ *
+ * Replacement product videos are NEVER reduced to keyframes: the whole clip
+ * is stored and analysed directly by Gemini. These helpers only classify an
+ * upload and read its metadata for the intake payload / UI label.
+ */
+
+export const VIDEO_MIME = /^video\/(mp4|quicktime|x-m4v|webm)$/i;
+export const VIDEO_EXTENSION = /\.(mp4|mov|m4v|webm)$/i;
+
+export function isVideoAsset(file: File) {
+  return VIDEO_MIME.test(file.type) || VIDEO_EXTENSION.test(file.name);
+}
+
+/** "0:07" style duration for the compact VIDEO REFERENCE card. */
+export function formatDuration(seconds: number) {
+  const whole = Math.max(0, Math.round(seconds));
+  return `${Math.floor(whole / 60)}:${String(whole % 60).padStart(2, "0")}`;
+}
+
+/** Duration + aspect ratio of an uploaded clip, without touching its frames. */
+export async function readVideoFileMeta(file: File): Promise<VideoMeta> {
+  const url = URL.createObjectURL(file);
+  try {
+    const video = await loadVideo(url);
+    return readMeta(video);
+  } finally {
+    URL.revokeObjectURL(url);
+  }
 }
