@@ -1615,7 +1615,12 @@ export default function JewelrySwap() {
                             }
                             className="w-full rounded-md border border-white/12 bg-black/40 px-1 py-1 text-[9px] text-foreground outline-none transition-colors hover:border-cyan-200/40 focus:border-cyan-200/60"
                           >
-                            {ANGLE_ROLE_OPTIONS.map((option) => (
+                            {Array.from(
+                              new Set([
+                                ...roleOptionsForType(piece.type),
+                                piece.roles[angleIndex] ?? "",
+                              ]),
+                            ).map((option) => (
                               <option key={option || "unlabeled"} value={option}>
                                 {option || "Role (optional)"}
                               </option>
