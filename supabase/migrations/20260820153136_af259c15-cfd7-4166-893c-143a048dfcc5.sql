@@ -1,0 +1,1 @@
+ALTER TABLE public.studio_generations ADD COLUMN IF NOT EXISTS favorited BOOLEAN NOT NULL DEFAULT false;

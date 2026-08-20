@@ -118,6 +118,7 @@ function serializeGeneration(row: any) {
     providerModel: row.provider_model ?? null,
     requestId: row.provider_request_id ?? null,
     inputPayload: row.input_payload ?? null,
+    favorited: row.favorited === true,
     createdAt: row.created_at ?? null,
     completedAt: row.completed_at ?? null,
   };
@@ -487,6 +488,23 @@ Deno.serve(async (req) => {
         ),
       );
       return json({ generations });
+    }
+
+    if (action === "set_favorite") {
+      const generationId = String(body.generationId ?? "").trim();
+      if (!generationId) throw new Error("generationId is required");
+      const favorited = (body as { favorited?: unknown }).favorited === true;
+
+      const { data: row, error } = await admin
+        .from("studio_generations")
+        .update({ favorited })
+        .eq("id", generationId)
+        .eq("user_id", user.id)
+        .select("*")
+        .maybeSingle();
+      if (error) throw new Error(error.message);
+      if (!row) return json({ error: "Generation not found" }, 404);
+      return json({ generation: serializeGeneration(row) });
     }
 
     if (action === "delete") {
