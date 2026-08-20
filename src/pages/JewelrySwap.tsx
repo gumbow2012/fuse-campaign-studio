@@ -651,13 +651,25 @@ export default function JewelrySwap() {
   // Reference intake (recognition / grouping / extraction). Never blocking:
   // the manual fields stay usable and a failure just falls back to them.
   const [intake, setIntake] = useState<{
-    status: "idle" | "running" | "ready" | "failed";
+    status: "idle" | "collecting" | "running" | "ready" | "stale" | "failed";
     stage: number;
     productCount: number;
+    referenceCount: number;
     error?: string | null;
-  }>({ status: "idle", stage: 0, productCount: 0 });
+  }>({ status: "idle", stage: 0, productCount: 0, referenceCount: 0 });
   const intakeAbort = useRef<AbortController | null>(null);
   const intakeToken = useRef(0);
+  /**
+   * STALE GUARD: the version of the reference set (urls + roles + authority
+   * flags) that the UI is currently showing. A response whose version differs
+   * from this is stale by definition and is discarded.
+   */
+  const intakeSetVersion = useRef<string>("");
+  /** Set by applyIntake so its own writes never retrigger the analysis. */
+  const intakeJustApplied = useRef(false);
+  /** Bumped by "Analyze now" to bypass the debounce for the current set. */
+  const [intakeNow, setIntakeNow] = useState(0);
+
 
   const [extraPrompt, setExtraPrompt] = useState("");
 
