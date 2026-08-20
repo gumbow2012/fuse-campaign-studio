@@ -1498,7 +1498,7 @@ export default function JewelrySwap() {
           person: piece.person,
           metal: piece.metal === AUTO_METAL ? null : piece.metal,
           stone: piece.stone === AUTO_STONE ? null : piece.stone,
-          quality: piece.quality || null,
+          quality: !piece.quality || piece.quality === AUTO_QUALITY ? null : piece.quality,
           cad: authorityCount(piece) > 0,
           notes: piece.notes || null,
         })),
