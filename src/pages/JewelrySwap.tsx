@@ -1505,16 +1505,19 @@ export default function JewelrySwap() {
     }
 
     const urls = pieces.flatMap((piece) => piece.urls);
+    // A video-only set still has something to analyse (the complete clip).
+    const clipCount = pieces.filter((piece) => piece.video?.videoUrl).length;
     intakeSetVersion.current = referenceSetVersion;
     // Any in-flight request now answers an older set — drop it.
     intakeAbort.current?.abort();
     intakeToken.current += 1;
     const token = intakeToken.current;
 
-    if (!urls.length) {
+    if (!urls.length && !clipCount) {
       setIntake({ status: "idle", stage: 0, productCount: 0, referenceCount: 0 });
       return;
     }
+
 
     // While the set is still settling we never apply conclusions.
     setIntake((prev) => ({
