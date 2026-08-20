@@ -1161,7 +1161,7 @@ function buildShotPlan(
   for (let i = 0; i < windows.length; i += 1) {
     // Energy curve derived from position in the clip, not a hard-coded order.
     const progress = windows.length === 1 ? 0 : i / (windows.length - 1);
-    const targetBand = i === windows.length - 1 ? 6 : Math.max(1, Math.round(1 + progress * 4));
+    const targetBand = i === windows.length - 1 ? 6 : Math.max(1, Math.round(1 + progress * 5));
     const ranked = usable
       .slice()
       .sort((a, b) => {
