@@ -2859,29 +2859,17 @@ export default function JewelrySwap() {
                 </div>
               </div>
 
-              {/* Replacement VIDEO → keyframes, all client-side. */}
-              {keyframeWork ? (
+              {/* Replacement VIDEO → stored whole for full-clip understanding. */}
+              {videoWork ? (
                 <div className="mb-2.5 rounded-2xl border border-white/10 bg-black/30 px-3 py-2.5 text-[11px] text-foreground/85">
                   <p className="flex items-center gap-2 font-medium">
                     <Loader2 size={12} className="animate-spin text-cyan-200" />
-                    {keyframeWork.phase === "inspecting"
-                      ? "Reading your video reference…"
-                      : "Selecting the clearest views…"}
+                    Adding your video reference…
                   </p>
-                  <p className="mt-1 text-[10px] text-foreground/60">
-                    {keyframeWork.name}
-                    {keyframeWork.total
-                      ? ` — ${keyframeWork.done}/${keyframeWork.total}`
-                      : ""}
-                  </p>
-                  {keyframeWork.total ? (
-                    <Progress
-                      value={Math.round((keyframeWork.done / keyframeWork.total) * 100)}
-                      className="mt-1.5 h-1.5"
-                    />
-                  ) : null}
+                  <p className="mt-1 text-[10px] text-foreground/60">{videoWork.name}</p>
                 </div>
               ) : null}
+
 
 
 
