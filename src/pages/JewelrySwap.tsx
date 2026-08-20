@@ -1575,6 +1575,9 @@ export default function JewelrySwap() {
               options: intakeOptions,
               setVersion: version,
               requestId: token,
+              // USER_CONFIRMED layer — analysis can never override these.
+              userConfirmedFacts: userLocks,
+
             },
             controller.signal,
           );
