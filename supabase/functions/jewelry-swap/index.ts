@@ -2316,6 +2316,105 @@ async function syncRow(admin: AdminClient, row: any) {
   }
 }
 
+type LibraryAssetRow = {
+  id: string;
+  outputUrl: string;
+  outputType: "image" | "video";
+  kind: string | null;
+  prompt: string | null;
+  feature: string | null;
+  createdAt: string | null;
+  source: "generated" | "upload";
+};
+
+/** Auto-extracted source frames (frame-45-00.jpg) are noise, not user uploads. */
+function isExtractedFrame(name: string) {
+  return /frame-\d/i.test(name);
+}
+
+function guessTypeFromName(name: string): "image" | "video" | null {
+  const ext = name.split(".").pop()?.toLowerCase() ?? "";
+  if (["jpg", "jpeg", "png", "webp", "gif", "avif", "heic"].includes(ext)) return "image";
+  if (["mp4", "mov", "webm", "m4v", "quicktime"].includes(ext)) return "video";
+  return null;
+}
+
+/**
+ * Enumerate the caller's OWN uploaded media in the `fuse-assets` bucket.
+ * Every listing prefix embeds the caller's user id (system/<feature>/<userId>/...),
+ * so another user's objects can never be reached.
+ */
+async function listUserUploads(
+  admin: any,
+  userId: string,
+  typeFilter: string,
+): Promise<LibraryAssetRow[]> {
+  const base = `${Deno.env.get("SUPABASE_URL")}/storage/v1/object/public/fuse-assets/`;
+  const bucket = admin.storage.from("fuse-assets");
+  const results: LibraryAssetRow[] = [];
+
+  const listAt = async (prefix: string) => {
+    const { data, error } = await bucket.list(prefix, {
+      limit: 200,
+      sortBy: { column: "created_at", order: "desc" },
+    });
+    if (error) return [] as any[];
+    return data ?? [];
+  };
+
+  try {
+    const features = (await listAt("system")).filter((entry: any) => !entry.id);
+
+    for (const feature of features) {
+      // user-scoped prefix — never lists outside the caller's own folder
+      const userPrefix = `system/${feature.name}/${userId}`;
+      const level1 = await listAt(userPrefix);
+
+      const pending: { prefix: string; entries: any[] }[] = [{ prefix: userPrefix, entries: level1 }];
+      const subfolders = level1.filter((entry: any) => !entry.id).slice(0, 40);
+      for (const folder of subfolders) {
+        const prefix = `${userPrefix}/${folder.name}`;
+        pending.push({ prefix, entries: await listAt(prefix) });
+      }
+
+      for (const group of pending) {
+        for (const entry of group.entries) {
+          if (!entry.id) continue; // folder
+          const name = entry.name as string;
+          if (name === ".emptyFolderPlaceholder") continue;
+          if (isExtractedFrame(name)) continue;
+
+          const mime = String(entry.metadata?.mimetype ?? "");
+          const outputType = mime.startsWith("video/")
+            ? "video"
+            : mime.startsWith("image/")
+            ? "image"
+            : guessTypeFromName(name);
+          if (!outputType) continue;
+          if ((typeFilter === "image" || typeFilter === "video") && outputType !== typeFilter) continue;
+
+          const path = `${group.prefix}/${name}`;
+          results.push({
+            id: `upload:${path}`,
+            outputUrl: `${base}${path.split("/").map(encodeURIComponent).join("/")}`,
+            outputType,
+            kind: "upload",
+            prompt: null,
+            feature: "upload",
+            createdAt: entry.created_at ?? entry.updated_at ?? null,
+            source: "upload",
+          });
+        }
+      }
+    }
+  } catch {
+    // Uploads are a bonus source — never break the library on a storage hiccup.
+  }
+
+  return results;
+}
+
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: corsHeaders });
 
@@ -2470,7 +2569,8 @@ Deno.serve(async (req) => {
       return json({ generations });
     }
 
-    // Read-only asset library: the caller's completed generations, newest first.
+    // Read-only asset library: the caller's completed generations + their own
+    // previously uploaded media from storage, newest first.
     if (action === "list_assets") {
       const typeFilter = String(body.type ?? "all");
       const limit = Math.min(60, Math.max(1, Number(body.limit ?? 60)));
@@ -2491,7 +2591,7 @@ Deno.serve(async (req) => {
       const { data: rows, error } = await query;
       if (error) throw new Error(error.message);
 
-      const assets = (rows ?? []).map((row: any) => {
+      const generated = (rows ?? []).map((row: any) => {
         const payload = (row.input_payload ?? {}) as Record<string, unknown>;
         return {
           id: row.id,
@@ -2501,11 +2601,25 @@ Deno.serve(async (req) => {
           prompt: typeof payload.prompt === "string" ? payload.prompt.slice(0, 240) : null,
           feature: typeof payload.feature === "string" ? payload.feature : (row.kind ?? "studio"),
           createdAt: row.created_at,
+          source: "generated" as const,
         };
       });
 
+      const uploads = await listUserUploads(admin, user.id, typeFilter);
+
+      const seen = new Set<string>();
+      const assets = [...generated, ...uploads]
+        .filter((asset) => {
+          if (!asset.outputUrl || seen.has(asset.outputUrl)) return false;
+          seen.add(asset.outputUrl);
+          return true;
+        })
+        .sort((a, b) => String(b.createdAt ?? "").localeCompare(String(a.createdAt ?? "")))
+        .slice(0, limit);
+
       return json({ assets });
     }
+
 
     if (action === "status") {
 
