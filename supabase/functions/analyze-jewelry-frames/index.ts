@@ -2121,7 +2121,7 @@ const PKM_SCHEMA = {
             type: Type.STRING,
             enum: [
               "other_still",
-              "other_video_keyframe",
+              "product_video",
               "repeated_module",
               "cad",
               "symmetry",
