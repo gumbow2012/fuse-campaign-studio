@@ -1962,8 +1962,8 @@ export default function GenerationStudio() {
                   <aside className="flex max-h-[85vh] flex-col gap-4 overflow-y-auto border-t border-white/10 p-5 lg:border-l lg:border-t-0">
                     <div className="space-y-1">
                       <div className="flex items-center justify-between gap-2">
-                        <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-cyan-200/70">
-                          Result
+                        <p className="font-display text-[14px] font-semibold uppercase tracking-[0.07em] text-[hsl(var(--electric-cyan))]">
+                          RESULT
                         </p>
                         <FavoriteButton
                           favorited={lightbox.favorited === true}
@@ -1977,17 +1977,17 @@ export default function GenerationStudio() {
                       </p>
                       <div className="flex flex-wrap gap-1.5 pt-1">
                         {recipe.aspect ? (
-                          <span className="rounded-full border border-white/12 bg-white/[0.04] px-2 py-0.5 text-[11px] text-foreground/80">
+                          <span className="rounded-full border border-white/12 bg-white/[0.04] px-2.5 py-0.5 text-[12px] text-foreground/85">
                             {recipe.aspect}
                           </span>
                         ) : null}
                         {recipe.resolution ? (
-                          <span className="rounded-full border border-white/12 bg-white/[0.04] px-2 py-0.5 text-[11px] text-foreground/80">
+                          <span className="rounded-full border border-white/12 bg-white/[0.04] px-2.5 py-0.5 text-[12px] text-foreground/85">
                             {recipe.resolution}
                           </span>
                         ) : null}
                         {lightbox.estimatedCredits ? (
-                          <span className="rounded-full border border-white/12 bg-white/[0.04] px-2 py-0.5 text-[11px] text-cyan-200/80">
+                          <span className="rounded-full border border-white/12 bg-white/[0.04] px-2.5 py-0.5 text-[12px] text-[hsl(var(--electric-cyan))]">
                             {costPreview(lightbox.estimatedCredits, lightbox.estimatedCostUsd)}
                           </span>
                         ) : null}
@@ -1999,7 +1999,7 @@ export default function GenerationStudio() {
                         onClick={() => animateImage(lightbox.outputUrl as string)}
                         className="w-full rounded-xl bg-blue-600 text-white hover:bg-blue-500"
                       >
-                        <Film size={15} className="mr-2" /> Animate
+                        <Film size={15} className="mr-2" /> <span className="font-display text-[14px] font-semibold tracking-[0.06em]">ANIMATE</span>
                       </Button>
                     ) : null}
 
@@ -2008,14 +2008,14 @@ export default function GenerationStudio() {
                         onClick={() => useAsReference(lightbox.outputUrl as string)}
                         className="w-full rounded-xl bg-[hsl(var(--primary))] text-primary-foreground hover:bg-[hsl(var(--primary))]/90"
                       >
-                        <Wand2 size={15} className="mr-2" /> Use as reference
+                        <Wand2 size={15} className="mr-2" /> <span className="font-display text-[14px] font-semibold tracking-[0.06em]">USE AS REFERENCE</span>
                       </Button>
                     ) : null}
 
                     <div className="space-y-2">
                       <div className="flex items-center justify-between gap-2">
-                        <span className="text-[11px] font-semibold uppercase tracking-[0.2em] text-cyan-200/70">
-                          Prompt
+                        <span className="font-display text-[13px] font-semibold uppercase tracking-[0.07em] text-[hsl(var(--electric-cyan))]">
+                          DIRECTION
                         </span>
                         <button
                           type="button"
@@ -2026,15 +2026,15 @@ export default function GenerationStudio() {
                           <Copy size={12} /> Copy
                         </button>
                       </div>
-                      <p className="max-h-48 overflow-y-auto whitespace-pre-wrap rounded-xl border border-white/10 bg-black/30 p-3 text-xs leading-relaxed text-foreground/90">
+                      <p className="max-h-48 overflow-y-auto whitespace-pre-wrap rounded-xl border border-white/10 bg-black/30 p-3 text-[13px] leading-relaxed text-foreground/90">
                         {recipe.prompt || "No prompt stored for this generation."}
                       </p>
                     </div>
 
                     {recipe.urls.length ? (
                       <div className="space-y-2">
-                        <span className="text-[11px] font-semibold uppercase tracking-[0.2em] text-cyan-200/70">
-                          References used
+                        <span className="font-display text-[13px] font-semibold uppercase tracking-[0.07em] text-[hsl(var(--electric-cyan))]">
+                          REFERENCES USED
                         </span>
                         <div className="flex flex-wrap gap-2">
                           {recipe.urls.map((url, index) => (
@@ -2049,7 +2049,7 @@ export default function GenerationStudio() {
                               <span className="absolute inset-0 hidden items-center justify-center bg-black/70 text-[10px] font-semibold text-cyan-100 group-hover/ref:flex">
                                 + Add
                               </span>
-                              <span className="absolute inset-x-0 bottom-0 bg-black/75 text-center text-[9px] font-semibold uppercase text-cyan-100 group-hover/ref:hidden">
+                              <span className="absolute inset-x-0 bottom-0 bg-black/75 text-center font-display text-[11px] font-semibold uppercase text-cyan-100 group-hover/ref:hidden">
                                 Ref {index + 1}
                               </span>
                             </button>
