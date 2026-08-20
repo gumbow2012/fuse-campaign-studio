@@ -1933,7 +1933,13 @@ async function startSwapFrame(admin: AdminClient, args: {
           stage: "frame_swap",
           image_model: imageModelKey,
           image_endpoint: endpointId,
+          // Quality is an API parameter (never prompt text) and only the Pro
+          // endpoint accepts it — the nb2 path never carries a resolution.
+          nano_quality: imageModelKey === "pro" && ["2K", "4K"].includes(resolution)
+            ? resolution.toLowerCase()
+            : null,
           geometry_fidelity: "strict",
+
           // Structured product authority resolved for this run (verification hook).
           target_spec: routedPieces.map((piece) => resolveTargetSpec(piece)),
 
