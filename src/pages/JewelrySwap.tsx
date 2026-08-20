@@ -313,6 +313,30 @@ const IMAGE_MODEL_LABELS: Record<JewelryImageModel, string> = {
   nb2: "Nano Banana 2",
 };
 
+/**
+ * Nano Banana Pro image quality. The Pro edit endpoint natively accepts
+ * `resolution: "1K" | "2K" | "4K"`; the alternate nb2 endpoint does NOT, so this
+ * control only ever affects the Pro path. Resolution travels in the API request,
+ * never in the prompt.
+ */
+const NANO_QUALITY_OPTIONS = [
+  { value: "2k" as const, label: "2K", hint: "Fast", resolution: "2K" },
+  { value: "4k" as const, label: "4K", hint: "Max detail", resolution: "4K" },
+];
+
+type NanoQuality = (typeof NANO_QUALITY_OPTIONS)[number]["value"];
+
+/**
+ * The backend prices this image endpoint per request (fal unit price × 1), so the
+ * real estimate does not change between 2K and 4K — no multiplier is applied.
+ */
+const NANO_COST_MULTIPLIER = 1;
+
+function resolutionForQuality(quality: NanoQuality) {
+  return NANO_QUALITY_OPTIONS.find((option) => option.value === quality)?.resolution ?? "2K";
+}
+
+
 const VIDEO_MODELS = [
   { key: "seedance-2.0", label: "Seedance 2.0", usdPerSecond: 0.3024 },
   { key: "seedance-2.0-fast", label: "Seedance 2.0 Fast", usdPerSecond: 0.2419 },
