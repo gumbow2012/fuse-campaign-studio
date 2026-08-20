@@ -80,8 +80,17 @@ import {
   type SwapGeneration,
 } from "@/services/jewelrySwap";
 
-import { extractFrames, frameTimestamps, loadVideo, readMeta, type VideoMeta } from "@/lib/videoFrames";
-import { selectVideoKeyframes } from "@/lib/videoKeyframes";
+import {
+  extractFrames,
+  formatDuration,
+  frameTimestamps,
+  isVideoAsset,
+  loadVideo,
+  readMeta,
+  readVideoFileMeta,
+  type VideoMeta,
+} from "@/lib/videoFrames";
+
 import { compressImageFile } from "@/lib/imageCompress";
 
 
@@ -411,18 +420,21 @@ type Piece = {
   /** "piece" (default) or "piece_chain". */
   scope: string;
   /**
-   * Set when this card came from a REPLACEMENT product VIDEO: its `urls` are the
-   * selected keyframes, extracted client-side. Never a source-video asset.
+   * Set when this card came from a REPLACEMENT product VIDEO. The COMPLETE clip
+   * is stored and analysed directly by Gemini — it is never reduced to keyframe
+   * image references, and it never reaches the image renderer. Such a card has
+   * NO `urls`: a video contributes analysis authority, not reference images.
+   * Never a source-video asset.
    */
   video?: {
     videoReferenceId: string;
     name: string;
     duration: number;
     aspectRatio?: string | null;
-    posterUrl: string;
-    /** Aligned by index with `urls`. */
-    keyframeTimes: number[];
+    /** Storage URL of the actual stored clip (analysis input only). */
+    videoUrl: string;
   } | null;
+
   /** Full structured controls open? Collapsed summary by default. */
   expanded?: boolean;
 
@@ -768,13 +780,9 @@ export default function JewelrySwap() {
 
   const [pieces, setPieces] = useState<Piece[]>([]);
   const [uploadingPiece, setUploadingPiece] = useState(false);
-  /** Live progress while a replacement VIDEO is reduced to keyframes. */
-  const [keyframeWork, setKeyframeWork] = useState<{
-    name: string;
-    phase: "inspecting" | "extracting";
-    done: number;
-    total: number;
-  } | null>(null);
+  /** Live progress while a replacement VIDEO is stored for full-clip analysis. */
+  const [videoWork, setVideoWork] = useState<{ name: string } | null>(null);
+
   /** The fused engineering understanding from the last intake pass. */
   const [knowledgeMap, setKnowledgeMap] = useState<ProductKnowledgeMap | null>(null);
   const [engineeringOpen, setEngineeringOpen] = useState(false);
@@ -1155,10 +1163,11 @@ export default function JewelrySwap() {
 
   /**
    * Each selected asset becomes its own piece card. The zone is mixed-media:
-   * images upload as stills, replacement VIDEOS are reduced client-side to a
-   * small diverse keyframe set which becomes that card's reference angles.
-   * FUSE types every asset itself — the user never labels anything.
+   * images upload as stills; replacement VIDEOS are stored whole and sent to
+   * Gemini's multimodal video path as complete clips — never split into
+   * keyframe image references. FUSE types every asset itself.
    */
+
   const addPieces = useCallback(async (files: File[]) => {
     if (!files.length) return;
     setUploadingPiece(true);
@@ -1187,31 +1196,24 @@ export default function JewelrySwap() {
       });
 
       for (const file of files) {
-        const isVideo = file.type.startsWith("video/") || /\.(mp4|mov|m4v|webm)$/i.test(file.name);
-
-        if (isVideo) {
-          setKeyframeWork({ name: file.name, phase: "inspecting", done: 0, total: 0 });
-          const selection = await selectVideoKeyframes(file, (done, total, phase) =>
-            setKeyframeWork({ name: file.name, phase, done, total }),
-          );
-          const stored = await uploadWithConcurrency(
-            selection.keyframes,
-            3,
-            async (frame) => await uploadToStorage(folder, frame.file, frame.file.name),
-          );
-          setKeyframeWork(null);
+        if (isVideoAsset(file)) {
+          // The ACTUAL clip is stored and analysed end-to-end by Gemini. No
+          // keyframes are extracted and no image reference is created from it.
+          setVideoWork({ name: file.name });
+          const meta = await readVideoFileMeta(file).catch(() => null);
+          const stored = await uploadToStorage(folder, file, file.name);
+          setVideoWork(null);
           uploaded.push({
             ...blank(file.name),
-            urls: stored.map((item) => item.url),
-            roles: selection.keyframes.map(() => ""),
-            cads: selection.keyframes.map(() => null),
+            urls: [],
+            roles: [],
+            cads: [],
             video: {
               videoReferenceId: `vid-${crypto.randomUUID().slice(0, 8)}`,
               name: file.name,
-              duration: selection.meta.duration,
-              aspectRatio: selection.meta.aspectRatio,
-              posterUrl: stored[0]?.url ?? "",
-              keyframeTimes: selection.keyframes.map((frame) => frame.time),
+              duration: meta?.duration ?? 0,
+              aspectRatio: meta?.aspectRatio ?? null,
+              videoUrl: stored.url,
             },
           });
           continue;
@@ -1233,10 +1235,11 @@ export default function JewelrySwap() {
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Could not upload that reference");
     } finally {
-      setKeyframeWork(null);
+      setVideoWork(null);
       setUploadingPiece(false);
     }
   }, []);
+
 
 
   /** Extra angles of the SAME physical piece land on the targeted card. */
@@ -1288,18 +1291,22 @@ export default function JewelrySwap() {
   const referenceSetVersion = useMemo(
     () =>
       JSON.stringify([
-        pieces.map((piece) =>
+        pieces.map((piece) => [
           piece.urls.map((url, angleIndex) => [
             url,
             piece.roles?.[angleIndex] ?? "",
             piece.cads?.[angleIndex] ?? null,
           ]),
-        ),
+          // A replacement clip is part of the analysed set even though it
+          // contributes no image references.
+          piece.video?.videoUrl ?? "",
+        ]),
         // A newly locked fact must re-run the analysis with that fact enforced.
         userLocks.map((lock) => [lock.attribute, lock.value, lock.appliesTo ?? ""]),
       ]),
     [pieces, userLocks],
   );
+
 
   const referenceCount = pieces.reduce((total, piece) => total + piece.urls.length, 0);
   /** Unresolved product-spec concerns across all pieces (user overrides clear them). */
@@ -1498,16 +1505,19 @@ export default function JewelrySwap() {
     }
 
     const urls = pieces.flatMap((piece) => piece.urls);
+    // A video-only set still has something to analyse (the complete clip).
+    const clipCount = pieces.filter((piece) => piece.video?.videoUrl).length;
     intakeSetVersion.current = referenceSetVersion;
     // Any in-flight request now answers an older set — drop it.
     intakeAbort.current?.abort();
     intakeToken.current += 1;
     const token = intakeToken.current;
 
-    if (!urls.length) {
+    if (!urls.length && !clipCount) {
       setIntake({ status: "idle", stage: 0, productCount: 0, referenceCount: 0 });
       return;
     }
+
 
     // While the set is still settling we never apply conclusions.
     setIntake((prev) => ({
@@ -1545,24 +1555,22 @@ export default function JewelrySwap() {
             cad: isGeometryAuthority(piece, angleIndex),
             // Explicit purpose typing — the source video can never be mixed in.
             assetPurpose: "REPLACEMENT_PRODUCT_REFERENCE" as const,
-            kind: piece.video
-              ? ("product_reference_video" as const)
-              : isGeometryAuthority(piece, angleIndex)
-                ? ("cad" as const)
-                : ("photographic_still" as const),
-            videoReferenceId: piece.video?.videoReferenceId ?? null,
-            timestamp: piece.video?.keyframeTimes?.[angleIndex] ?? null,
+            kind: isGeometryAuthority(piece, angleIndex)
+              ? ("cad" as const)
+              : ("photographic_still" as const),
           })),
         );
+        // The COMPLETE clips — analysed directly, never keyframed, never rendered.
         const videoReferences: JewelryVideoReferenceInput[] = pieces
-          .filter((piece) => piece.video)
+          .filter((piece) => piece.video?.videoUrl)
           .map((piece) => ({
             videoReferenceId: piece.video!.videoReferenceId,
+            videoUrl: piece.video!.videoUrl,
+            name: piece.video!.name,
             duration: piece.video!.duration,
             aspectRatio: piece.video!.aspectRatio ?? null,
-            keyframeCount: piece.urls.length,
-            keyframeTimestamps: piece.video!.keyframeTimes ?? [],
           }));
+
         const clientStarted = performance.now();
         try {
           const result = await analyzeJewelryIntake(
@@ -1956,13 +1964,12 @@ export default function JewelrySwap() {
           // Explicit backend typing — these are replacement-product references,
           // never source cinematography.
           assetPurpose: "REPLACEMENT_PRODUCT_REFERENCE" as const,
-          kind: piece.video
-            ? ("product_reference_video" as const)
-            : isGeometryAuthority(piece, angleIndex)
-              ? ("cad" as const)
-              : ("photographic_still" as const),
-          videoReferenceId: piece.video?.videoReferenceId ?? null,
-          timestamp: piece.video?.keyframeTimes?.[angleIndex] ?? null,
+          // Only IMAGE references ever reach generation — a replacement video is
+          // analysis authority and is never sent to the image renderer.
+          kind: isGeometryAuthority(piece, angleIndex)
+            ? ("cad" as const)
+            : ("photographic_still" as const),
+
         })),
 
         type: piece.type,
@@ -2852,29 +2859,17 @@ export default function JewelrySwap() {
                 </div>
               </div>
 
-              {/* Replacement VIDEO → keyframes, all client-side. */}
-              {keyframeWork ? (
+              {/* Replacement VIDEO → stored whole for full-clip understanding. */}
+              {videoWork ? (
                 <div className="mb-2.5 rounded-2xl border border-white/10 bg-black/30 px-3 py-2.5 text-[11px] text-foreground/85">
                   <p className="flex items-center gap-2 font-medium">
                     <Loader2 size={12} className="animate-spin text-cyan-200" />
-                    {keyframeWork.phase === "inspecting"
-                      ? "Reading your video reference…"
-                      : "Selecting the clearest views…"}
+                    Adding your video reference…
                   </p>
-                  <p className="mt-1 text-[10px] text-foreground/60">
-                    {keyframeWork.name}
-                    {keyframeWork.total
-                      ? ` — ${keyframeWork.done}/${keyframeWork.total}`
-                      : ""}
-                  </p>
-                  {keyframeWork.total ? (
-                    <Progress
-                      value={Math.round((keyframeWork.done / keyframeWork.total) * 100)}
-                      className="mt-1.5 h-1.5"
-                    />
-                  ) : null}
+                  <p className="mt-1 text-[10px] text-foreground/60">{videoWork.name}</p>
                 </div>
               ) : null}
+
 
 
 
@@ -3145,10 +3140,11 @@ export default function JewelrySwap() {
                       <span className="flex shrink-0 items-center gap-1.5">
                         {piece.video ? (
                           <span className="rounded-full border border-cyan-200/40 bg-cyan-200/10 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.14em] text-cyan-100">
-                            Video reference · {piece.video.duration.toFixed(1)}s ·{" "}
-                            {piece.urls.length} views
+                            Video reference · {formatDuration(piece.video.duration)} · full clip
+                            analysed
                           </span>
                         ) : null}
+
 
                         {/* No authority read-out in the normal UI — FUSE assigns it.
                             The full ranking lives in Engineering details. */}
