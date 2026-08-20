@@ -337,21 +337,69 @@ async function inputFingerprint(args: {
  * Image fetching (still images only)
  * ------------------------------------------------------------------ */
 
+/** Independent image downloads run in parallel, bounded so we never flood. */
+const FETCH_CONCURRENCY = 5;
+/** No single auxiliary image may stall the whole analysis. */
+const IMAGE_FETCH_TIMEOUT_MS = 15_000;
+
 async function inlineImage(url: string) {
-  const response = await fetch(url);
-  if (!response.ok) throw new Error(`Could not read an image (${response.status})`);
-  const mimeType = (response.headers.get("content-type") ?? "image/jpeg").split(";")[0].trim();
-  if (!/^image\//.test(mimeType)) {
-    // Hard boundary: video/other media is never sent to the analysis model.
-    throw new Error("Only still images can be analysed");
+  const abort = new AbortController();
+  const timer = setTimeout(() => abort.abort(), IMAGE_FETCH_TIMEOUT_MS);
+  try {
+    const response = await fetch(url, { signal: abort.signal });
+    if (!response.ok) throw new Error(`Could not read an image (${response.status})`);
+    const mimeType = (response.headers.get("content-type") ?? "image/jpeg").split(";")[0].trim();
+    if (!/^image\//.test(mimeType)) {
+      // Hard boundary: video/other media is never sent to the analysis model.
+      throw new Error("Only still images can be analysed");
+    }
+    const buffer = new Uint8Array(await response.arrayBuffer());
+    let binary = "";
+    for (let i = 0; i < buffer.length; i += 8192) {
+      binary += String.fromCharCode(...buffer.subarray(i, i + 8192));
+    }
+    return { inlineData: { mimeType, data: btoa(binary) } };
+  } finally {
+    clearTimeout(timer);
   }
-  const buffer = new Uint8Array(await response.arrayBuffer());
-  let binary = "";
-  for (let i = 0; i < buffer.length; i += 8192) {
-    binary += String.fromCharCode(...buffer.subarray(i, i + 8192));
-  }
-  return { inlineData: { mimeType, data: btoa(binary) } };
 }
+
+type Settled<T> = { ok: true; value: T } | { ok: false; error: string };
+
+/**
+ * Bounded-concurrency map that never rejects: every task settles, so one bad
+ * auxiliary image is reported and skipped instead of failing (or hanging) the
+ * whole operation. Results keep the INPUT ORDER — reference ordering and REF
+ * ids are order-sensitive downstream.
+ */
+async function mapPool<T, R>(
+  items: T[],
+  limit: number,
+  task: (item: T, index: number) => Promise<R>,
+): Promise<Settled<R>[]> {
+  const results: Settled<R>[] = new Array(items.length);
+  let cursor = 0;
+  const workerCount = Math.max(1, Math.min(limit, items.length));
+  const worker = async () => {
+    while (true) {
+      const index = cursor++;
+      if (index >= items.length) return;
+      try {
+        results[index] = { ok: true, value: await task(items[index], index) };
+      } catch (error) {
+        results[index] = { ok: false, error: errorMessage(error) };
+      }
+    }
+  };
+  await Promise.all(Array.from({ length: workerCount }, worker));
+  return results;
+}
+
+/** Parallel image inlining. Failures are labelled, never thrown. */
+async function inlineImages(urls: string[]) {
+  return await mapPool(urls, FETCH_CONCURRENCY, (url) => inlineImage(url));
+}
+
 
 /* ------------------------------------------------------------------ *
  * Prompt
