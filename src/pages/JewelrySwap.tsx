@@ -1172,6 +1172,8 @@ export default function JewelrySwap() {
         failureReason?: string | null;
         mode?: ReplacementMode;
         coverage?: Coverage;
+        frameAnalysis?: JewelryFrameAnalysis | null;
+        productAnalysis?: unknown;
       },
     ) => {
       const frame = frames[frameIndex];
@@ -1200,6 +1202,16 @@ export default function JewelrySwap() {
         coverage,
         // Back-compat with the previous per-frame Macro toggle.
         macro: mode === "macro",
+        // Stage-A advice for THIS frame — advisory only, and only if we already
+        // have it. Never triggers a fresh analysis call.
+        frameAnalysis:
+          options?.frameAnalysis !== undefined
+            ? options.frameAnalysis
+            : frameAnalysisFor(frameIndex),
+        productAnalysis:
+          options?.productAnalysis !== undefined
+            ? options.productAnalysis
+            : analysis?.productAnalysis ?? null,
       });
       if (imageModel === "nb2") {
         setAltSwaps((prev) => ({ ...prev, [frameIndex]: data.generation }));
@@ -1212,8 +1224,17 @@ export default function JewelrySwap() {
         });
       }
     },
-    [frames, piecePayload, meta, extraPrompt, framePreferredRole, frameMode, frameCoverage],
-
+    [
+      frames,
+      piecePayload,
+      meta,
+      extraPrompt,
+      framePreferredRole,
+      frameMode,
+      frameCoverage,
+      frameAnalysisFor,
+      analysis,
+    ],
   );
 
   /**
@@ -1245,9 +1266,18 @@ export default function JewelrySwap() {
     }
     setSwapping(true);
     try {
+      // STAGE A runs once here — after frames are selected and references exist,
+      // and before the first swap. Never per frame, per refresh or per approve.
+      const project = await ensureAnalysis(indices);
+      if (project) toast.success("Shot analysis ready");
       for (const index of indices) {
         // Initial generation is always Nano Banana Pro only — never two models.
-        await swapFrame(index, { imageModel: "pro" });
+        await swapFrame(index, {
+          imageModel: "pro",
+          frameAnalysis:
+            project?.frames?.find((entry) => entry.frameId === frameIdFor(index)) ?? null,
+          productAnalysis: project?.productAnalysis ?? null,
+        });
       }
       toast.success(`${indices.length} frame swap(s) queued`);
     } catch (error) {
@@ -1255,7 +1285,8 @@ export default function JewelrySwap() {
     } finally {
       setSwapping(false);
     }
-  }, [selectedFrames, pieces, swapFrame]);
+  }, [selectedFrames, pieces, swapFrame, ensureAnalysis, frameIdFor]);
+
 
 
   const removeSwap = useCallback(async (frameIndex: number) => {
