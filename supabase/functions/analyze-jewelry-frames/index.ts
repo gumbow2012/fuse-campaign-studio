@@ -1211,7 +1211,9 @@ function stampSources(intake: any, options: IntakeOptions) {
 
 
 async function handleIntake(req: Request, body: any, user: { id: string }, apiKey?: string) {
+  const startedAt = Date.now();
   const references: JewelryReferenceInput[] =
+
     (Array.isArray(body?.jewelryReferences) ? body.jewelryReferences : [])
       .map((ref: any) => ({
         url: String(ref?.url ?? "").trim(),
