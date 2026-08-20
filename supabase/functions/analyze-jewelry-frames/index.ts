@@ -359,14 +359,18 @@ const FORBIDDEN_KEY = /(image|video|url|uri|bytes|base64|blob|media|data_?url)/i
 
 /**
  * Analysis-only field names that legitimately contain a forbidden word but can
- * only ever hold plain analysis text (a keyframe's parent id, the per-clip
- * evidence blocks). Their values are still checked for anything media-shaped.
+ * only ever hold plain analysis text (a clip's id, the per-clip evidence
+ * blocks). Their values are still checked for anything media-shaped, so a stored
+ * clip URL can never ride along inside the analysis.
  */
 const ANALYSIS_ONLY_KEYS = new Set([
   "videoReferenceId",
   "videoAnalyses",
+  "videoAnalysisIssues",
   "videoEvidence",
+  "temporalObservations",
 ]);
+
 
 const MEDIA_SHAPED = /(^data:|;base64,|https?:\/\/)/i;
 
