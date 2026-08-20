@@ -1324,7 +1324,9 @@ async function referenceFingerprint(
       model: GEMINI_ANALYSIS_MODEL,
       references: references.map(normalizeRefKey).sort(),
       clips: videoReferences
-        .map((clip) => `${clip.videoReferenceId}|${clip.duration}|${clip.keyframeTimestamps.join(",")}`)
+        // The clip URL + duration identify the expensive full-video analysis, so
+        // adding or removing unrelated source frames never re-triggers it.
+        .map((clip) => `${clip.videoReferenceId}|${normalizeUrlKey(clip.videoUrl)}|${clip.duration}`)
         .sort(),
       // A new user confirmation is a new understanding — cache key changes.
       confirmed: userConfirmedFacts
@@ -1337,22 +1339,13 @@ async function referenceFingerprint(
 
 
 /**
- * The Gemini batch is capped, so CAD and photographic stills are kept first and
- * the remaining slots are filled with EVENLY SPACED video keyframes — a long
- * clip can never crowd out the product photography.
+ * The Gemini batch is capped. Only CAD and photographic stills are image
+ * references now, so the cap simply keeps the first `limit` of them.
  */
 function selectIntakeBatch(references: JewelryReferenceInput[], limit: number) {
-  if (references.length <= limit) return references;
-  const stills = references.filter((ref) => ref.kind !== "product_reference_video");
-  const keyframes = references.filter((ref) => ref.kind === "product_reference_video");
-  const kept = stills.slice(0, limit);
-  const slots = Math.max(0, limit - kept.length);
-  if (!slots || !keyframes.length) return kept;
-  const step = keyframes.length / slots;
-  const picked = Array.from(
-    { length: slots },
-    (_, index) => keyframes[Math.min(keyframes.length - 1, Math.floor(index * step))],
-  );
+  return references.length <= limit ? references : references.slice(0, limit);
+}
+
   // Preserve the caller's original ordering so referenceIdAt stays meaningful.
   const chosen = new Set([...kept, ...picked]);
   return references.filter((ref) => chosen.has(ref));
