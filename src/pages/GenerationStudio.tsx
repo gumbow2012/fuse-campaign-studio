@@ -518,9 +518,10 @@ function GenerationCard({
         ) : (
           <div className="w-full space-y-3 px-6 text-center">
             <Loader2 size={20} className="mx-auto animate-spin text-cyan-200" />
-            <p className="text-[11px] uppercase tracking-[0.18em] text-cyan-200/70">
-              {generation.status === "queued" ? "Queued" : "Generating"}
+            <p className="font-display text-[12px] font-semibold tracking-[0.08em] text-[hsl(var(--electric-cyan))]">
+              {statusLabel(generation.status, progress)}
             </p>
+
             <Progress value={progress} className="h-1.5" />
           </div>
         )}
