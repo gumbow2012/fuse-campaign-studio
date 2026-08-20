@@ -1368,14 +1368,19 @@ export default function JewelrySwap() {
         const resolvedQuality = resolve("quality", base?.quality, AUTO_QUALITY, product.stoneQuality);
 
         // Canonical, per-region settings — the existing multi-setting rows are
-        // auto-populated without the user pressing "+ Add setting".
+        // auto-populated without the user pressing "+ Add setting". A region the
+        // classifier declined is kept (type "") so it can be surfaced for review.
         const detectedSettings = (product.settings ?? [])
           .map((setting) => ({
-            type: String(setting.resolvedSetting ?? setting.setting ?? "").trim(),
+            type: String(setting.resolvedSetting ?? "").trim(),
             region: String(setting.resolvedRegion ?? setting.region ?? "").trim() || null,
             tier: setting.confidenceTier ?? "low",
+            needsConfirmation:
+              setting.needsConfirmation === true || !String(setting.resolvedSetting ?? "").trim(),
+            reason: String(setting.settingClassificationReason ?? "").trim() || null,
           }))
-          .filter((setting) => setting.type);
+          .filter((setting) => setting.type || setting.region);
+
         const userSetSettings =
           baseSources.settings === "user_override" &&
           realSettings(base ?? ({ settings: [] } as unknown as Piece)).length > 0;
