@@ -1337,6 +1337,10 @@ export default function JewelrySwap() {
         person: piece.person,
         notes: piece.notes || null,
         scope: piece.scope || DEFAULT_SCOPE,
+        // Detected values — used ONLY to resolve fields left on "Auto" so the
+        // prompt never carries the literal word "Auto".
+        detected: piece.detected ?? null,
+
       })),
     [pieces],
   );
