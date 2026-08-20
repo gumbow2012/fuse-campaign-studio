@@ -2210,7 +2210,37 @@ const HIP_HOP_TERMS: JewelryTerm[] = [
       compatibleGeometry: ["flat", "convex", "letter/plaque", "linear run"],
     },
   },
+  /**
+   * STONE-FIELD TOPOLOGY term. Deliberately NOT over-specified: Galaxy names a
+   * size topology, so its retention mechanics must be observed, never assumed.
+   * New hip_hop_custom terms are added here alone — no schema change needed.
+   */
+  {
+    canonicalName: "Galaxy Setting",
+    vocabularyDomain: "hip_hop_custom",
+    aliases: ["galaxy", "galaxy set", "galaxy setting"],
+    definition:
+      "Modern custom/hip-hop jewelry term for a stone field characterized primarily by deliberate variation in physical stone size across a surface. Exact packing and retention mechanics may vary by jeweler and piece, so Galaxy must be identified from the observed stone-size topology and overall construction rather than a single assumed prong pattern.",
+    termKind: "setting",
+    relatedTerms: ["Mosaic Setting (custom)"],
+    engineeringSignature: {
+      stoneSizePattern:
+        "multiple deliberate physical stone-size classes; size variation is structural and must remain after perspective normalization",
+      packingPattern:
+        "typically non-uniform / organic / irregular compared with regimented uniform pavé; exact packing must be derived from the references",
+      expectedStoneCuts: ["round_brilliant", "mixed", "custom"],
+      retentionMechanics:
+        "VARIABLE — determine from observed construction; Galaxy describes the stone-field topology and must not imply one universal retention system",
+      prongBehavior: "VARIABLE — observe rather than assume",
+      metalVisibility: "derive from references",
+      rowBehavior:
+        "generally not dependent on one repeated uniform-size row system; derive actual topology from evidence",
+      orientationBehavior: "derive from physical stone map",
+      compatibleGeometry: ["flat", "convex", "curved", "irregular", "plaque", "link", "tooth"],
+    },
+  },
 ];
+
 
 /** ONE ontology, two clearly labelled vocabulary layers. */
 const JEWELRY_TERMS: JewelryTerm[] = [...CLASSICAL_TERMS, ...HIP_HOP_TERMS];
