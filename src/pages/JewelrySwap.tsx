@@ -236,6 +236,28 @@ const SCOPE_OPTIONS = [
 ];
 const DEFAULT_SCOPE = SCOPE_OPTIONS[0].value;
 
+/** "REF_3" → index 2, as emitted by the analysis. */
+function referenceIdToIndex(referenceId?: string) {
+  return Number(String(referenceId ?? "").replace(/\D+/g, "")) - 1;
+}
+
+/**
+ * A card is a PHYSICAL PIECE, so its name is a plain product name — never an
+ * asset/render title like "Two-Tone Inverted Cuban Chain/Bracelet Render".
+ */
+function cleanCaseName(raw?: string | null) {
+  return String(raw ?? "")
+    .replace(/\.(png|jpe?g|webp|mp4|mov)$/i, "")
+    .replace(/\b(render(ing)?s?|mockups?|designs?|previews?|studies?|concepts?|3d|cad|untitled|final|v\d+)\b/gi, " ")
+    .replace(/[_\-]+/g, " ")
+    .replace(/\s{2,}/g, " ")
+    .replace(/^[\s/,.-]+|[\s/,.-]+$/g, "")
+    .slice(0, 48)
+    .trim();
+}
+
+
+
 const ANGLE_ROLE_OPTIONS = [
   "",
   "Front",
@@ -786,6 +808,15 @@ export default function JewelrySwap() {
   /** The fused engineering understanding from the last intake pass. */
   const [knowledgeMap, setKnowledgeMap] = useState<ProductKnowledgeMap | null>(null);
   const [engineeringOpen, setEngineeringOpen] = useState(false);
+  /**
+   * A PROPOSAL only. FUSE never splits a card by itself — the user answers this
+   * question, and only their answer creates a second piece.
+   */
+  const [splitSuggestion, setSplitSuggestion] = useState<{
+    question: string;
+    groups: { label: string; urls: string[] }[];
+  } | null>(null);
+
   /**
    * Facts the USER settled (answers to genuine conflicts). These are sent as
    * USER_CONFIRMED and the analysis may never override them.
@@ -1412,6 +1443,26 @@ export default function JewelrySwap() {
   }, [pieces]);
 
   /**
+   * The EVIDENCE ROLE of one thumbnail (CAD FRONT / MACRO / SIDE / CLASP …).
+   * Deliberately never a product name: a thumbnail is an observation, not a piece.
+   */
+  const evidenceRoleByUrl = useMemo(() => {
+    const roles = new Map<string, string>();
+    for (const entry of knowledgeMap?.perReferenceObservations ?? []) {
+      const id = String(entry?.referenceId ?? "").trim();
+      const role = String(entry?.evidenceRole ?? "").trim();
+      if (id && role) roles.set(id, role.toUpperCase().slice(0, 18));
+    }
+    return roles;
+  }, [knowledgeMap]);
+
+  const evidenceRoleFor = useCallback(
+    (url: string) => evidenceRoleByUrl.get(refIdByUrl.get(url) ?? "") ?? "",
+    [evidenceRoleByUrl, refIdByUrl],
+  );
+
+
+  /**
    * AUTO authority labels. The user assigns nothing: we read the attribute-level
    * authority FUSE already computed (authorityFor + evidenceStrength) and show at
    * most one plain badge per reference. No score, no checkbox, and nothing at all
@@ -1419,6 +1470,7 @@ export default function JewelrySwap() {
    */
   const autoAuthorityLabelByUrl = useMemo(() => {
     const labels = new Map<string, string>();
+
     const catalog = knowledgeMap?.referenceCatalog ?? [];
     if (!catalog.length) return labels;
 
@@ -1659,6 +1711,36 @@ export default function JewelrySwap() {
   const applyIntake = useCallback((urls: string[], result: JewelryIntake | null) => {
     const products = Array.isArray(result?.products) ? result!.products : [];
     if (!products.length) return;
+    const knowledgeMap = result?.knowledgeMap;
+
+    /**
+     * ONE CARD = ONE PHYSICAL PIECE. A card is only ever created by the user
+     * ("Add jewelry piece") or by the user answering a split question — the
+     * analysis may propose, never split. When the analysis reports more products
+     * than there are cards, the extra interpretations are FUSED into the card
+     * that owns those references and the proposal is surfaced as a question.
+     */
+    const suggestion =
+      knowledgeMap?.separatePieceSuggestion?.suspected === true
+        ? knowledgeMap.separatePieceSuggestion
+        : null;
+    setSplitSuggestion(
+      suggestion
+        ? {
+            question:
+              String(suggestion.question ?? "").trim() ||
+              "These files may contain more than one piece. Separate them?",
+            groups: (suggestion.groups ?? [])
+              .map((group) => ({
+                label: String(group.label ?? "").trim() || "Piece",
+                urls: (group.referenceIds ?? [])
+                  .map((id) => urls[referenceIdToIndex(id)])
+                  .filter((url): url is string => Boolean(url)),
+              }))
+              .filter((group) => group.urls.length),
+          }
+        : null,
+    );
 
     setPieces((prev) => {
       // Flat view of the references exactly as they were sent.
@@ -1670,17 +1752,57 @@ export default function JewelrySwap() {
         return { url, piece: null as Piece | null, angleIndex: -1 };
       });
 
-      const claimed = new Set<number>();
+      /**
+       * Groups are the USER'S cards — not the analysis's product count. Every
+       * reference stays on the card it was uploaded to, and the analysis result
+       * that best matches those references is fused into that one card.
+       */
+      const groups: { refIndices: number[]; base: Piece | null }[] = [];
+      prev.forEach((piece) => {
+        const refIndices = flat
+          .map((entry, index) => (entry.piece === piece ? index : -1))
+          .filter((index) => index !== -1);
+        if (refIndices.length) groups.push({ refIndices, base: piece });
+      });
+      const orphans = flat
+        .map((entry, index) => (entry.piece ? -1 : index))
+        .filter((index) => index !== -1);
+      if (!groups.length && orphans.length) groups.push({ refIndices: [], base: prev[0] ?? null });
+      if (groups.length) groups[0].refIndices.push(...orphans);
+      if (!groups.length) return prev;
+
       const next: Piece[] = [];
 
-      products.forEach((product, productIndex) => {
-        const refs = (product.references ?? [])
-          .filter((ref) => Number.isInteger(ref.referenceIndex) && flat[ref.referenceIndex!])
-          .filter((ref) => !claimed.has(ref.referenceIndex!));
-        if (!refs.length) return;
-        refs.forEach((ref) => claimed.add(ref.referenceIndex!));
+      groups.forEach((group, productIndex) => {
+        const refIndices = group.refIndices;
+        /**
+         * All of this card's product interpretations, merged: the analysis never
+         * gets to hand back two products for one physical piece.
+         */
+        const matches = products
+          .map((entry) => ({
+            entry,
+            refs: (entry.references ?? []).filter(
+              (ref) => Number.isInteger(ref.referenceIndex) && refIndices.includes(ref.referenceIndex!),
+            ),
+          }))
+          .filter((candidate) => candidate.refs.length)
+          .sort((a, b) => b.refs.length - a.refs.length);
+        if (!matches.length) {
+          if (group.base) next.push(group.base);
+          return;
+        }
+        const product = matches[0].entry;
+        // Reference rows for THIS card, in upload order, deduplicated.
+        const refs = refIndices
+          .map((index) => {
+            const ref = matches
+              .flatMap((candidate) => candidate.refs)
+              .find((candidate) => candidate.referenceIndex === index);
+            return { referenceIndex: index, ...(ref ?? {}) };
+          });
+        const base = group.base;
 
-        const base = flat[refs[0].referenceIndex!].piece ?? prev[0] ?? null;
         const baseSources = base?.sources ?? {};
         /**
          * "Auto from reference" is a user MODE, not the spec. When the analysis
@@ -1767,7 +1889,13 @@ export default function JewelrySwap() {
                 : null;
             })
             .slice(0, 6),
-          name: String(product.label ?? "").trim() || base?.name || `Piece ${productIndex + 1}`,
+          // The CARD is named once, AFTER fusion — never per asset, and never
+          // with AI-render language ("… Chain/Bracelet Render").
+          name:
+            productIndex === 0 && cleanCaseName(knowledgeMap?.productCaseName)
+              ? cleanCaseName(knowledgeMap?.productCaseName)
+              : cleanCaseName(product.label) || base?.name || `Piece ${productIndex + 1}`,
+
           type: resolvedType.value,
           metal: resolvedMetal.value,
           stone: resolvedStone.value,
@@ -1816,17 +1944,9 @@ export default function JewelrySwap() {
         });
       });
 
-      if (!next.length) return prev;
+      // Cards are never added or removed here: the count can only stay the same.
+      if (!next.length || next.length > prev.length) return prev;
 
-      // References the analysis did not assign stay with the first card —
-      // never silently dropped.
-      const leftovers = flat.filter((_, index) => !claimed.has(index));
-      for (const item of leftovers) {
-        if (next[0].urls.length >= 6) break;
-        next[0].urls.push(item.url);
-        next[0].roles.push(item.piece?.roles?.[item.angleIndex] ?? "");
-        next[0].cads.push(item.piece?.cads?.[item.angleIndex] ?? null);
-      }
 
       // These writes come from the analysis itself — they must not retrigger it.
       intakeJustApplied.current = true;
@@ -1836,7 +1956,62 @@ export default function JewelrySwap() {
 
 
 
+  /**
+   * The ONLY automatic path to a second card, and it runs on the USER'S answer:
+   * each suggested group's references move onto their own piece.
+   */
+  const separateSuggestedPieces = useCallback(() => {
+    const groups = splitSuggestion?.groups ?? [];
+    setSplitSuggestion(null);
+    if (groups.length < 2) return;
+
+    setPieces((prev) => {
+      if (!prev.length) return prev;
+      const byUrl = new Map<string, { piece: Piece; angleIndex: number }>();
+      prev.forEach((piece) =>
+        piece.urls.forEach((url, angleIndex) => byUrl.set(url, { piece, angleIndex })),
+      );
+
+      const assigned = new Set<string>();
+      const next: Piece[] = [];
+      groups.forEach((group, groupIndex) => {
+        const urls = group.urls.filter((url) => byUrl.has(url) && !assigned.has(url));
+        if (!urls.length) return;
+        urls.forEach((url) => assigned.add(url));
+        const base = byUrl.get(urls[0])!.piece;
+        next.push({
+          ...base,
+          urls,
+          roles: urls.map((url) => byUrl.get(url)!.piece.roles?.[byUrl.get(url)!.angleIndex] ?? ""),
+          cads: urls.map((url) => byUrl.get(url)!.piece.cads?.[byUrl.get(url)!.angleIndex] ?? null),
+          name: cleanCaseName(group.label) || `Piece ${groupIndex + 1}`,
+          // A fresh piece is re-analysed from scratch, not handed old verdicts.
+          detected: undefined,
+          expanded: false,
+        });
+      });
+      // Anything the split did not mention keeps its own card untouched.
+      prev.forEach((piece) => {
+        const rest = piece.urls.filter((url) => !assigned.has(url));
+        if (!rest.length) return;
+        if (rest.length === piece.urls.length && !piece.urls.some((url) => assigned.has(url))) {
+          next.push(piece);
+          return;
+        }
+        next.push({
+          ...piece,
+          urls: rest,
+          roles: rest.map((url) => piece.roles?.[piece.urls.indexOf(url)] ?? ""),
+          cads: rest.map((url) => piece.cads?.[piece.urls.indexOf(url)] ?? null),
+        });
+      });
+      return next.length ? next.slice(0, 8) : prev;
+    });
+  }, [splitSuggestion]);
+
+
   /* ------------------------------ 4. Frame swaps ---------------------------- */
+
 
   /** Merge a fresh generation record into whichever collection owns it. */
   const applyGeneration = useCallback((generation: JewelryGeneration) => {
@@ -3131,7 +3306,36 @@ export default function JewelrySwap() {
               ) : null}
 
 
+              {/* A QUESTION, never an action: FUSE never splits a card itself. */}
+              {splitSuggestion && splitSuggestion.groups.length > 1 ? (
+                <div className="mb-2.5 rounded-2xl border border-amber-200/40 bg-amber-200/[0.06] p-3">
+                  <p className="text-[11px] text-foreground/85">{splitSuggestion.question}</p>
+                  <p className="mt-1 text-[10px] text-foreground/55">
+                    {splitSuggestion.groups
+                      .map((group) => `${group.label} (${group.urls.length})`)
+                      .join(" · ")}
+                  </p>
+                  <div className="mt-2 flex gap-2">
+                    <button
+                      type="button"
+                      onClick={separateSuggestedPieces}
+                      className="rounded-lg border border-amber-200/50 bg-amber-200/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-amber-100"
+                    >
+                      Separate them
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setSplitSuggestion(null)}
+                      className="rounded-lg border border-white/15 bg-black/40 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-foreground/70"
+                    >
+                      Keep as one piece
+                    </button>
+                  </div>
+                </div>
+              ) : null}
+
               <div className="space-y-2.5">
+
                 {pieces.map((piece, index) => (
 
                   <div
@@ -3142,10 +3346,20 @@ export default function JewelrySwap() {
                     )}
                   >
                     <div className="flex items-start justify-between gap-2">
-                      <p className="truncate text-[11px] font-medium text-foreground" title={piece.name}>
-                        {piece.name || `Piece ${index + 1}`}
-                      </p>
+                      <span className="min-w-0">
+                        <p className="truncate text-[11px] font-medium text-foreground" title={piece.name}>
+                          {piece.name || `Piece ${index + 1}`}
+                        </p>
+                        {/* ONE physical piece, described by several observations. */}
+                        <p className="mt-0.5 text-[9px] font-semibold uppercase tracking-[0.14em] text-foreground/45">
+                          One product ·{" "}
+                          {piece.urls.length + (piece.video ? 1 : 0)}{" "}
+                          {piece.urls.length + (piece.video ? 1 : 0) === 1 ? "reference" : "references"}
+                          {piece.urls.length + (piece.video ? 1 : 0) > 1 ? " combined" : ""}
+                        </p>
+                      </span>
                       <span className="flex shrink-0 items-center gap-1.5">
+
                         {piece.video ? (
                           <span className="rounded-full border border-cyan-200/40 bg-cyan-200/10 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.14em] text-cyan-100">
                             Video reference · {formatDuration(piece.video.duration)} · full clip
@@ -3199,7 +3413,14 @@ export default function JewelrySwap() {
                                 <X size={9} />
                               </button>
                             ) : null}
+                            {/* EVIDENCE ROLE only — never a per-asset product name. */}
+                            {evidenceRoleFor(url) ? (
+                              <span className="absolute bottom-0.5 left-0.5 max-w-[72px] truncate rounded bg-black/75 px-1 py-0.5 text-[8px] font-semibold uppercase tracking-[0.1em] text-foreground/75">
+                                {evidenceRoleFor(url)}
+                              </span>
+                            ) : null}
                           </div>
+
                           {/* Optional role label — helps the model match the source view. */}
                           <select
                             aria-label={`Role for angle ${angleIndex + 1}`}

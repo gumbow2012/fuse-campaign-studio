@@ -46,6 +46,30 @@ type AssetPurpose = "SOURCE_CINEMATOGRAPHY" | "REPLACEMENT_PRODUCT_REFERENCE";
 /** How FUSE auto-classified an uploaded replacement IMAGE (user never labels). */
 type ReferenceKind = "cad" | "photographic_still";
 
+/**
+ * ONE CARD = ONE PHYSICAL PIECE. Every asset that shares a productCaseId is a
+ * DIFFERENT OBSERVATION of the SAME physical object (CAD front + front/side/
+ * macro/clasp stills + the replacement product video), never a product of its
+ * own. A second case exists ONLY when the user explicitly adds a piece, or when
+ * the user answers a separation question — never because one reference looked
+ * different.
+ */
+type JewelryProductCase = {
+  productCaseId: string;
+  /** Image observations of this one piece (CAD + stills). */
+  references: JewelryReferenceInput[];
+  /** Full-clip video observations of the SAME piece. */
+  videoReferences: VideoReferenceInput[];
+  /** Per-reference observations: what each asset can and cannot see. */
+  observations: any[];
+  /** The single fused reconstruction of the piece. */
+  productKnowledgeMap: any;
+  /** The canonical spec the app renders from, after fusion. */
+  resolvedJewelrySpec: any;
+};
+
+const DEFAULT_PRODUCT_CASE_ID = "CASE_1";
+
 type JewelryReferenceInput = {
   url: string;
   role?: string | null;
@@ -53,6 +77,8 @@ type JewelryReferenceInput = {
   /** Always REPLACEMENT_PRODUCT_REFERENCE on this path. */
   assetPurpose?: AssetPurpose;
   kind?: ReferenceKind;
+  /** The ONE physical piece this observation belongs to. */
+  productCaseId?: string;
 };
 
 /** One replacement product VIDEO — the whole clip is the analysis unit. */
@@ -63,7 +89,10 @@ type VideoReferenceInput = {
   name?: string | null;
   duration: number;
   aspectRatio?: string | null;
+  /** The ONE physical piece this clip observes. */
+  productCaseId?: string;
 };
+
 
 /**
  * Every reference on this path is REPLACEMENT_PRODUCT_REFERENCE, typed
@@ -79,6 +108,8 @@ function readReferences(raw: unknown): JewelryReferenceInput[] {
         cad,
         assetPurpose: "REPLACEMENT_PRODUCT_REFERENCE" as AssetPurpose,
         kind: (cad ? "cad" : "photographic_still") as ReferenceKind,
+        // Absent client id ⇒ everything in this request observes ONE piece.
+        productCaseId: String(ref?.productCaseId ?? "").trim() || DEFAULT_PRODUCT_CASE_ID,
       };
     })
     .filter((ref: JewelryReferenceInput) => /^https?:\/\//.test(ref.url));
@@ -92,12 +123,30 @@ function readVideoReferences(raw: unknown): VideoReferenceInput[] {
       name: entry?.name ? String(entry.name).trim() : null,
       duration: Number(entry?.duration ?? 0) || 0,
       aspectRatio: entry?.aspectRatio ? String(entry.aspectRatio).trim() : null,
+      productCaseId: String(entry?.productCaseId ?? "").trim() || DEFAULT_PRODUCT_CASE_ID,
     }))
     .filter(
       (entry: VideoReferenceInput) =>
         entry.videoReferenceId && /^https?:\/\//.test(entry.videoUrl),
     );
 }
+
+/**
+ * The ONE case this request reconstructs. Mixed client ids never silently
+ * become several products here: the first id wins as the case identity, and the
+ * whole settled asset set is fused into a single ProductKnowledgeMap.
+ */
+function resolveProductCaseId(
+  references: JewelryReferenceInput[],
+  videoReferences: VideoReferenceInput[],
+) {
+  return (
+    references.find((ref) => ref.productCaseId)?.productCaseId ??
+      videoReferences.find((clip) => clip.productCaseId)?.productCaseId ??
+      DEFAULT_PRODUCT_CASE_ID
+  );
+}
+
 
 
 /** Stable, order-independent handle for a reference inside one analysis batch. */
@@ -2583,6 +2632,102 @@ const PKM_SCHEMA = {
       },
     },
 
+    /**
+     * ONE PHYSICAL PRODUCT, MANY OBSERVATIONS. Each reference reports ONLY what
+     * IT can see plus what it CANNOT — never its own product interpretation.
+     */
+    perReferenceObservations: {
+      type: Type.ARRAY,
+      items: {
+        type: Type.OBJECT,
+        properties: {
+          referenceId: { type: Type.STRING },
+          /** CAD FRONT / MACRO / SIDE / CLASP / VIDEO … evidence role only. */
+          evidenceRole: { type: Type.STRING },
+          observations: STRING_ARRAY,
+          /** What this asset physically cannot answer (occluded/out of frame). */
+          unknown: STRING_ARRAY,
+          componentIds: STRING_ARRAY,
+          /** Never a product verdict — only whether it fits the one case. */
+          consistentWithCase: { type: Type.BOOLEAN },
+          confidence: CONFIDENCE,
+        },
+        required: ["referenceId", "observations", "unknown"],
+      },
+    },
+    /**
+     * Component-level merges ACROSS references: same clasp / same master link /
+     * same border / same bail / same stone cluster from another angle. A merge
+     * NEVER duplicates a component just because several assets show it.
+     */
+    crossReferenceMatches: {
+      type: Type.ARRAY,
+      items: {
+        type: Type.OBJECT,
+        properties: {
+          matchId: { type: Type.STRING },
+          feature: { type: Type.STRING },
+          componentId: { type: Type.STRING },
+          physicalStoneIds: STRING_ARRAY,
+          repeatModuleId: { type: Type.STRING },
+          matchedReferenceIds: STRING_ARRAY,
+          matchBasis: STRING_ARRAY,
+          merged: { type: Type.BOOLEAN },
+          agreementCount: { type: Type.NUMBER },
+          provenance: PROVENANCE,
+          confidence: CONFIDENCE,
+        },
+        required: ["feature", "matchedReferenceIds", "merged", "confidence"],
+      },
+    },
+    /**
+     * NON-STICKY early reads. Anything not USER_CONFIRMED is a preliminary
+     * observation that MUST be revised when later macro/video evidence
+     * establishes different construction.
+     */
+    fusionState: {
+      type: Type.OBJECT,
+      properties: {
+        modelVersion: { type: Type.NUMBER },
+        referenceCount: { type: Type.NUMBER },
+        classificationStatus: {
+          type: Type.STRING,
+          enum: ["PRELIMINARY_OBSERVATION", "CROSS_VIEW_CONFIRMED", "USER_CONFIRMED"],
+        },
+        revisedFromPreliminary: STRING_ARRAY,
+        stillPreliminary: STRING_ARRAY,
+      },
+      required: ["classificationStatus"],
+    },
+    /**
+     * ASKS, never splits. Set only with very strong evidence that unrelated
+     * objects were uploaded together — the user answers, FUSE never decides.
+     */
+    separatePieceSuggestion: {
+      type: Type.OBJECT,
+      properties: {
+        suspected: { type: Type.BOOLEAN },
+        question: { type: Type.STRING },
+        confidence: CONFIDENCE,
+        groups: {
+          type: Type.ARRAY,
+          items: {
+            type: Type.OBJECT,
+            properties: {
+              label: { type: Type.STRING },
+              referenceIds: STRING_ARRAY,
+              reason: { type: Type.STRING },
+            },
+            required: ["label", "referenceIds"],
+          },
+        },
+      },
+      required: ["suspected"],
+    },
+    /** ONE post-fusion name for the whole card (e.g. "Cuban Bracelet"). */
+    productCaseName: { type: Type.STRING },
+
+
     coverage: {
       type: Type.OBJECT,
       properties: {
@@ -2860,7 +3005,10 @@ function buildKnowledgeMapPrompt(args: {
   unavailable: Set<number>;
   /** USER_CONFIRMED facts — Gemini may never override these. */
   userConfirmedFacts?: UserConfirmedFact[];
+  /** The ONE physical piece all of these assets observe. */
+  productCaseId?: string;
 }) {
+
 
   const refLines = args.references.map((ref, index) => {
     const id = referenceIdAt(index);
@@ -2883,12 +3031,29 @@ function buildKnowledgeMapPrompt(args: {
     }`
   );
 
+  /**
+   * ONE CARD = ONE PHYSICAL PIECE. Stated up front so no reference is ever
+   * classified as a product of its own.
+   */
+  const observationCount = args.references.length + (args.videoReferences?.length ?? 0);
+  const onePhysicalProductLine =
+    "ONE PHYSICAL PRODUCT (case " +
+    (args.productCaseId ?? DEFAULT_PRODUCT_CASE_ID) +
+    ") · " +
+    observationCount +
+    " OBSERVATIONS. Every asset listed below — CAD, front, side, macro, clasp still and the full product video — is a DIFFERENT OBSERVATION OF THE SAME PHYSICAL PIECE (one bracelet, pendant, ring, watch, earring, grill or custom object). RECONSTRUCT THE SINGLE OBJECT by combining complementary evidence. Do NOT produce one product interpretation per reference, do NOT finalise productType, metal, stone, setting, geometry, clasp, bail or stone layout from a single reference while other evidence for this case exists, and do NOT treat a reference that shows only a fragment (a tight CAD crop, a macro of three stones, a clasp close-up) as a different product. Return exactly ONE fused ProductKnowledgeMap plus perReferenceObservations, crossReferenceMatches and conflicts.";
+
+
   return [
     "You are a jewelry ENGINEERING analyst. This is ANALYSIS ONLY: return JSON only, never an image, never a video, never a URL, never bytes. You never generate or modify jewelry.",
     "",
     "ASSET FIREWALL: every image below is a REPLACEMENT_PRODUCT_REFERENCE — evidence of the ACTUAL replacement piece (geometry / material / stone / setting / component authority). None of them is source cinematography, and you are given NO source footage: never describe camera work of a shoot, only the physical product.",
     "",
+    onePhysicalProductLine,
+
+    "",
     "REPLACEMENT EVIDENCE, in this exact order (images follow this text):",
+
     ...refLines,
     clipLines.length
       ? "\nFULL-CLIP PRODUCT VIDEO UNDERSTANDING — already extracted by watching the ENTIRE clip end to end (no video is attached here; these findings ARE the video evidence and are authoritative for depth, physical relationships, setting behaviour, repeated geometry and clasp construction):"
@@ -2957,7 +3122,14 @@ function buildKnowledgeMapPrompt(args: {
     "21. AGENTIC EVIDENCE-SEEKING. After forming the map, list every attribute that is still unresolved or low-confidence in evidenceGaps and FIRST try to resolve each one from the EXISTING evidence (other stills, the full-clip product video understanding, repeated modules, CAD, symmetry) — set resolvedFromExistingEvidence and resolutionMethod accordingly. Only when the existing evidence is genuinely exhausted set requestedUserReference to a specific, actionable ask (e.g. \"a clasp-side reference would improve accuracy\").",
     "22. AUTOMATIC ATTRIBUTE AUTHORITY (the user never assigns authority — you do). For EVERY reference in referenceCatalog fill evidenceStrength 0-1 for each attribute (silhouette, overallGeometry, dimensions, componentTopology, stoneSeatLayout, stoneCut, stoneSize, stonePlacement, settingMechanics, prongConstruction, thicknessDepth, claspBailConnector, metalColor, materialAppearance, manufacturedFinish) using occlusion, blur, glare, scintillation, compression, angle, distance, scale, visible region and disposable context. Then set authorityFor to ONLY the attributes where that reference is among the strongest, and notAuthorityFor where it must not be trusted. NEVER a single global score, and NEVER assume CAD is authority for everything: CAD/render → geometry, proportions, topology, stone seats; macro → stone size, cut, setting mechanics, prongs; side profile → thickness/depth/sidewall; product front → manufactured finish, metal appearance, stone realism. Different references may each be authoritative for different attributes.",
     "23. GENUINE CONFLICTS → ONE PLAIN QUESTION. When two HIGH-confidence references disagree on an attribute (e.g. CAD and product photos show different clasps), add a constructionConflicts entry with attribute, needsUserDecision true, a short plain-language question a non-technical owner can answer (\"CAD and the product photos show different clasp designs — which one is the final piece?\") and 2-3 concrete options. If either side is low-confidence, set needsUserDecision false and resolve it yourself by attribute authority — never nag on weak differences.",
+    "24. REFERENCES PRODUCE OBSERVATIONS, NOT PRODUCTS. For EVERY reference emit one perReferenceObservations entry with what it CAN see (observations), what it CANNOT (unknown), the componentIds it contributes, and a short evidenceRole describing its role as evidence ONLY (e.g. CAD FRONT, MACRO, SIDE PROFILE, CLASP, FULL VIDEO). Never give a reference its own productType, metal, setting or stone verdict, never write a per-reference product title, and never describe an asset as a render or a design of its own — it is one observation of this case.",
+    "25. CROSS-REFERENCE RECONCILIATION IS MANDATORY. Explicitly attempt, for every candidate feature, to match it across references: is this the SAME clasp, the SAME master link, the SAME border, the SAME bail, the SAME stone cluster from another angle? Record each attempt in crossReferenceMatches with feature, componentId, matchedReferenceIds, matchBasis, merged and agreementCount, and MERGE the evidence onto the one componentId / physicalStoneId / repeatModuleId when it matches (reuse the cross-view registration rules 12-13). Never duplicate a component, stone or module just because it appears in several references, and never inflate counts across views.",
+    "26. THE MODEL IS REVISED, NOT REPLACED — EARLY READS ARE NOT STICKY. The whole settled asset set yields ONE consolidated result: one reference gives a preliminary model, adding a second gives version 2 of the SAME model (never a second interpretation beside the first), a third gives version 3. Mark any classification that rests on limited evidence with fusionState.classificationStatus PRELIMINARY_OBSERVATION and list it in stillPreliminary; when later macro, side or full-video evidence establishes a different construction you MUST change it and list the attribute in revisedFromPreliminary — never defend an earlier read because you made it first. Only USER_CONFIRMED values are permanently locked. Set fusionState.referenceCount to the number of assets fused and modelVersion to that same count.",
+    "27. CONFLICTS ARE ATTRIBUTE-SPECIFIC, NEVER 'TWO PRODUCTS'. If two references disagree, NEVER conclude they show separate pieces. First investigate the mundane causes — perspective, distance, lighting and white balance, glare and scintillation, compression artefacts, occlusion, CAD versus manufactured piece, prototype versus final production, or a contaminated reference (a stock or lookalike image) — and record the disagreement against THAT attribute only (constructionConflicts / conflictingEvidence). Everything else about the piece stays fused. Only for a genuine HIGH-confidence conflict ask the plain question per rule 23.",
+    "28. A SECOND PIECE ONLY WHEN THE USER SAYS SO. You may NEVER split this case. If — and only if — you have very strong evidence that unrelated objects were uploaded together, set separatePieceSuggestion.suspected true with the candidate groups (label + referenceIds + reason) and a plain question (\"These files appear to contain two different pieces: A — Cuban Bracelet, B — Pendant. Separate them?\"). The user answers; you never act on it, and everything stays in ONE fused map until they do. Different angles, crops, fragments, CAD renders, lighting or finishes are NOT evidence of a second piece.",
+    "29. NAME THE CASE AFTER FUSION. Set productCaseName to ONE short, plain post-fusion name for the whole piece derived from the fused reconstruction (e.g. \"Cuban Bracelet\", \"Diamond Cross Pendant\"). Never an asset-style or render-style title (no \"Render\", \"Design\", \"Mockup\", \"Untitled\", file names, resolutions or per-image descriptions), and never one name per reference.",
     "NO PRODUCT-TYPE SHORTCUTS: never infer a setting, component list, stone count or module from the product type or from the piece's name. Everything must come from what the references physically show.",
+
 
     "Short phrases only. No prose paragraphs. Never output URLs, file names, base64 or media of any kind.",
 
@@ -2975,6 +3147,9 @@ async function runKnowledgeMap(args: {
   options: IntakeOptions;
   unavailable: Set<number>;
   userConfirmedFacts?: UserConfirmedFact[];
+  /** The ONE physical piece this whole asset set observes. */
+  productCaseId?: string;
+
 }) {
   const started = Date.now();
   const response = await args.ai.models.generateContent({
@@ -3001,10 +3176,32 @@ async function runKnowledgeMap(args: {
   map.version = PKM_VERSION;
   // The full-clip understanding is persisted alongside the fused map.
   map.videoAnalyses = args.videoAnalyses ?? [];
+  // ONE CASE. Every asset in this request fused into this single map.
+  const caseId = args.productCaseId ?? DEFAULT_PRODUCT_CASE_ID;
+  const referenceCount = args.references.length + args.videoReferences.length;
+  map.productCaseId = caseId;
+  map.perReferenceObservations = arrayOf(map.perReferenceObservations);
+  map.crossReferenceMatches = arrayOf(map.crossReferenceMatches);
+  map.fusionState = {
+    ...(map.fusionState ?? {}),
+    // Non-sticky by default: only the USER_CONFIRMED layer is permanent.
+    classificationStatus: map?.fusionState?.classificationStatus ?? "PRELIMINARY_OBSERVATION",
+    referenceCount,
+    modelVersion: Number(map?.fusionState?.modelVersion ?? referenceCount) || referenceCount,
+  };
+  // A suggestion only — the split never happens without the user's answer.
+  map.separatePieceSuggestion = {
+    suspected: map?.separatePieceSuggestion?.suspected === true,
+    question: map?.separatePieceSuggestion?.question ?? null,
+    confidence: map?.separatePieceSuggestion?.confidence ?? null,
+    groups: arrayOf(map?.separatePieceSuggestion?.groups),
+  };
   // The user's confirmations are persisted with the map and win forever.
   map.userConfirmedFacts = args.userConfirmedFacts ?? [];
   // The ontology travels with the map so the admin panel and any later
   // classification compare against the SAME signatures, with the two vocabulary
+  // layers kept distinguishable (domain + which decision each term can answer).
+
   // layers kept distinguishable (domain + which decision each term can answer).
   map.settingOntology = SETTING_ONTOLOGY.map((entry) => entry.canonicalName);
   map.terminologyOntology = {
@@ -3025,8 +3222,14 @@ async function runKnowledgeMap(args: {
     );
   }
   console.log(
+    `[analyze-jewelry-frames] ONE PRODUCT FUSION case=${caseId} name=${map?.productCaseName ?? "?"} references=${referenceCount} observations=${map.perReferenceObservations.length} crossRefMerges=${
+      map.crossReferenceMatches.filter((match: any) => match?.merged).length
+    }/${map.crossReferenceMatches.length} status=${map.fusionState.classificationStatus} v${map.fusionState.modelVersion} splitSuggested=${map.separatePieceSuggestion.suspected}`,
+  );
+  console.log(
     `[analyze-jewelry-frames] FINAL SETTING CLASSIFICATION setting=${detectedValue(map?.setting) || map?.setting?.canonical || "?"} reason=${String(map?.settingClassificationReason ?? "").slice(0, 300)}`,
   );
+
 
   return { knowledgeMap: applyUserConfirmedFacts(map, args.userConfirmedFacts ?? []), geminiMs: Date.now() - started };
 }
@@ -3255,6 +3458,8 @@ async function handleIntake(req: Request, body: any, user: { id: string }, apiKe
       options,
       unavailable: run.unavailable,
       userConfirmedFacts,
+      productCaseId: resolveProductCaseId(batch, videoReferences),
+
     });
 
     knowledgeMapMs = fused.geminiMs;
