@@ -2442,8 +2442,11 @@ function buildKnowledgeMapPrompt(args: {
     "",
     "REPLACEMENT EVIDENCE, in this exact order (images follow this text):",
     ...refLines,
-    clipLines.length ? "" : "",
+    clipLines.length
+      ? "\nFULL-CLIP PRODUCT VIDEO UNDERSTANDING — already extracted by watching the ENTIRE clip end to end (no video is attached here; these findings ARE the video evidence and are authoritative for depth, physical relationships, setting behaviour, repeated geometry and clasp construction):"
+      : "",
     ...clipLines,
+
     "",
     "ALREADY-RECOGNISED INTAKE (reconcile with it, do not contradict it without stating a conflict):",
     ...(confirmedSpec.length ? confirmedSpec : ["(none)"]),
