@@ -62,6 +62,8 @@ import {
   callJewelrySwap,
   createTemplateFromJewelrySwap,
   listAssets,
+  invalidateAssetCache,
+
   persistTemplateLayout,
   CAMERA_DIRECTIONS,
   type JewelryFrameAnalysis,
