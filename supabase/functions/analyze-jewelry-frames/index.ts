@@ -337,21 +337,69 @@ async function inputFingerprint(args: {
  * Image fetching (still images only)
  * ------------------------------------------------------------------ */
 
+/** Independent image downloads run in parallel, bounded so we never flood. */
+const FETCH_CONCURRENCY = 5;
+/** No single auxiliary image may stall the whole analysis. */
+const IMAGE_FETCH_TIMEOUT_MS = 15_000;
+
 async function inlineImage(url: string) {
-  const response = await fetch(url);
-  if (!response.ok) throw new Error(`Could not read an image (${response.status})`);
-  const mimeType = (response.headers.get("content-type") ?? "image/jpeg").split(";")[0].trim();
-  if (!/^image\//.test(mimeType)) {
-    // Hard boundary: video/other media is never sent to the analysis model.
-    throw new Error("Only still images can be analysed");
+  const abort = new AbortController();
+  const timer = setTimeout(() => abort.abort(), IMAGE_FETCH_TIMEOUT_MS);
+  try {
+    const response = await fetch(url, { signal: abort.signal });
+    if (!response.ok) throw new Error(`Could not read an image (${response.status})`);
+    const mimeType = (response.headers.get("content-type") ?? "image/jpeg").split(";")[0].trim();
+    if (!/^image\//.test(mimeType)) {
+      // Hard boundary: video/other media is never sent to the analysis model.
+      throw new Error("Only still images can be analysed");
+    }
+    const buffer = new Uint8Array(await response.arrayBuffer());
+    let binary = "";
+    for (let i = 0; i < buffer.length; i += 8192) {
+      binary += String.fromCharCode(...buffer.subarray(i, i + 8192));
+    }
+    return { inlineData: { mimeType, data: btoa(binary) } };
+  } finally {
+    clearTimeout(timer);
   }
-  const buffer = new Uint8Array(await response.arrayBuffer());
-  let binary = "";
-  for (let i = 0; i < buffer.length; i += 8192) {
-    binary += String.fromCharCode(...buffer.subarray(i, i + 8192));
-  }
-  return { inlineData: { mimeType, data: btoa(binary) } };
 }
+
+type Settled<T> = { ok: true; value: T } | { ok: false; error: string };
+
+/**
+ * Bounded-concurrency map that never rejects: every task settles, so one bad
+ * auxiliary image is reported and skipped instead of failing (or hanging) the
+ * whole operation. Results keep the INPUT ORDER — reference ordering and REF
+ * ids are order-sensitive downstream.
+ */
+async function mapPool<T, R>(
+  items: T[],
+  limit: number,
+  task: (item: T, index: number) => Promise<R>,
+): Promise<Settled<R>[]> {
+  const results: Settled<R>[] = new Array(items.length);
+  let cursor = 0;
+  const workerCount = Math.max(1, Math.min(limit, items.length));
+  const worker = async () => {
+    while (true) {
+      const index = cursor++;
+      if (index >= items.length) return;
+      try {
+        results[index] = { ok: true, value: await task(items[index], index) };
+      } catch (error) {
+        results[index] = { ok: false, error: errorMessage(error) };
+      }
+    }
+  };
+  await Promise.all(Array.from({ length: workerCount }, worker));
+  return results;
+}
+
+/** Parallel image inlining. Failures are labelled, never thrown. */
+async function inlineImages(urls: string[]) {
+  return await mapPool(urls, FETCH_CONCURRENCY, (url) => inlineImage(url));
+}
+
 
 /* ------------------------------------------------------------------ *
  * Prompt
@@ -385,12 +433,14 @@ function buildAnalysisPrompt(args: {
   references: JewelryReferenceInput[];
   frames: SourceFrame[];
   specs: any[];
+  unavailable?: Set<number>;
 }) {
   const refLines = args.references.map((ref, index) =>
     `${referenceIdAt(index)}: user label "${ref.role || "Unlabeled view"}"${
       ref.cad === true ? " [CAD / DESIGN AUTHORITY]" : ""
-    }`
+    }${args.unavailable?.has(index) ? " [IMAGE UNAVAILABLE — no image was provided for this id; do not classify it and never recommend it]" : ""}`
   );
+
   const frameLines = args.frames.map((frame, index) =>
     `FRAME ${index + 1}: frameId "${frame.frameId}" (timestamp ${frame.timestamp}s)`
   );
@@ -430,13 +480,11 @@ function buildAnalysisPrompt(args: {
 async function analyseBatch(args: {
   ai: GoogleGenAI;
   referenceParts: unknown[];
+  frameParts: unknown[];
   references: JewelryReferenceInput[];
   frames: SourceFrame[];
   specs: any[];
 }) {
-  const frameParts = [];
-  for (const frame of args.frames) frameParts.push(await inlineImage(frame.imageUrl));
-
   const response = await args.ai.models.generateContent({
     model: GEMINI_ANALYSIS_MODEL,
     contents: [
@@ -445,7 +493,7 @@ async function analyseBatch(args: {
         parts: [
           { text: buildAnalysisPrompt({ references: args.references, frames: args.frames, specs: args.specs }) },
           ...args.referenceParts,
-          ...frameParts,
+          ...args.frameParts,
         ],
       },
     ] as any,
@@ -461,6 +509,258 @@ async function analyseBatch(args: {
   const parsed = JSON.parse(text);
   return parsed;
 }
+
+/* ------------------------------------------------------------------ *
+ * PRODUCT KNOWLEDGE MAP reuse (shot analysis fast path)
+ * ------------------------------------------------------------------ *
+ * Intake already VISUALLY analysed the whole replacement-reference library and
+ * persisted the result. When the reference set has not changed, shot analysis
+ * must not pay for that work again: Gemini receives the SOURCE FRAMES as images
+ * plus the persisted knowledge map as TEXT, and answers only "what shot is this
+ * frame?" and "which already-understood references (by REF id) best recreate
+ * it?". The product itself is never re-derived.
+ */
+
+/** frames-only structured output — identical per-frame shape, no productAnalysis. */
+const FRAMES_ONLY_SCHEMA = {
+  type: Type.OBJECT,
+  properties: { frames: (RESPONSE_SCHEMA as any).properties.frames },
+  required: ["frames"],
+} as const;
+
+function normalizeRefKey(ref: JewelryReferenceInput) {
+  return `${ref.url}|${ref.role ?? ""}|${ref.cad ? 1 : 0}`;
+}
+
+/** True when the two reference sets are the same images with the same labels. */
+function sameReferenceSet(a: JewelryReferenceInput[], b: JewelryReferenceInput[]) {
+  if (a.length !== b.length || !a.length) return false;
+  const left = a.map(normalizeRefKey).sort();
+  const right = b.map(normalizeRefKey).sort();
+  return left.every((entry, index) => entry === right[index]);
+}
+
+const listOf = (value: unknown) =>
+  (Array.isArray(value) ? value : []).map((entry) => String(entry ?? "").trim()).filter(Boolean);
+
+const detectedValue = (field: any) =>
+  String(field?.resolvedValue ?? field?.value ?? "").trim();
+
+/**
+ * Turns the persisted intake into (a) a productAnalysis object in EXACTLY the
+ * shape the downstream prompt builder already consumes and (b) the text map +
+ * reference catalog handed to the ranking call.
+ */
+function buildKnowledgeMap(args: {
+  intake: any;
+  intakeReferences: JewelryReferenceInput[];
+  references: JewelryReferenceInput[];
+}) {
+  const products = Array.isArray(args.intake?.products) ? args.intake.products : [];
+  if (!products.length) return null;
+
+  const idByUrl = new Map<string, string>();
+  args.references.forEach((ref, index) => idByUrl.set(ref.url, referenceIdAt(index)));
+
+  const visibleComponents = new Set<string>();
+  const geometryObservations: string[] = [];
+  const materialObservations: string[] = [];
+  const settingObservations: string[] = [];
+  const settingSignatures: any[] = [];
+  const referenceMeta: any[] = [];
+  const mapLines: string[] = [];
+  const catalogLines: string[] = [];
+
+  products.forEach((product: any, productIndex: number) => {
+    const label = String(product?.label ?? `PIECE ${productIndex + 1}`);
+    const type = detectedValue(product?.jewelryType);
+    const metal = detectedValue(product?.metal);
+    const stone = detectedValue(product?.stoneType);
+    const stoneColor = detectedValue(product?.stoneColor);
+    const quality = detectedValue(product?.stoneQuality);
+    const dimensions = detectedValue(product?.dimensions);
+    const weight = detectedValue(product?.weight);
+
+    for (const component of listOf(product?.visibleComponents)) visibleComponents.add(component);
+    if (dimensions) geometryObservations.push(`${label} dimensions: ${dimensions}`);
+    if (weight) geometryObservations.push(`${label} weight: ${weight}`);
+    for (const component of listOf(product?.connectedComponents)) {
+      geometryObservations.push(`${label} connected component: ${component}`);
+    }
+    if (metal) materialObservations.push(`${label} metal: ${metal}`);
+    if (stone) materialObservations.push(`${label} stone: ${stone}`);
+    if (stoneColor) materialObservations.push(`${label} stone color: ${stoneColor}`);
+    if (quality) materialObservations.push(`${label} stone quality: ${quality}`);
+
+    mapLines.push(
+      `${label}${type ? ` — type: ${type}` : ""}${metal ? `; metal: ${metal}` : ""}${
+        stone ? `; stone: ${stone}` : ""
+      }${stoneColor ? `; stone color: ${stoneColor}` : ""}${quality ? `; quality: ${quality}` : ""}`,
+    );
+    const components = listOf(product?.visibleComponents);
+    if (components.length) mapLines.push(`  components/regions: ${components.join(", ")}`);
+
+    for (const setting of Array.isArray(product?.settings) ? product.settings : []) {
+      const region = String(setting?.resolvedRegion ?? setting?.region ?? "Entire Piece").trim();
+      const name = String(setting?.resolvedSetting ?? "").trim();
+      const state = name || "needs confirmation";
+      const signature = String(setting?.settingVisualSignature ?? "").trim();
+      settingObservations.push(`${region}: ${state}${signature ? ` — ${signature}` : ""}`);
+      mapLines.push(
+        `  setting @ ${region}: ${state}${
+          Number.isFinite(Number(setting?.confidence)) ? ` (confidence ${Number(setting.confidence).toFixed(2)})` : ""
+        }${signature ? ` — visual construction: ${signature}` : ""}`,
+      );
+    }
+
+    for (const signature of Array.isArray(product?.settingSignatures) ? product.settingSignatures : []) {
+      if (signature && typeof signature === "object") settingSignatures.push(signature);
+    }
+
+    for (const ref of Array.isArray(product?.references) ? product.references : []) {
+      const index = Number(ref?.referenceIndex);
+      const url = args.intakeReferences[index]?.url ?? "";
+      const referenceId = idByUrl.get(url);
+      if (!referenceId) continue;
+      const role = String(ref?.role ?? "").trim() || "Uncertain";
+      const cad = ref?.designAuthorityLikely === true ||
+        args.references.find((entry) => entry.url === url)?.cad === true;
+      const confidence = Number(ref?.roleConfidence ?? 0) || 0;
+      referenceMeta.push({
+        referenceId,
+        detectedRole: role,
+        view: role,
+        coverage: "unclear",
+        physicalRegionsVisible: listOf(product?.visibleComponents),
+        geometryValue: cad ? "high" : "medium",
+        materialValue: cad ? "medium" : "high",
+        settingValue: "medium",
+        usableFor: [],
+        disposableContext: [],
+        qualityNotes: "",
+        designAuthoritySuggested: cad,
+        confidence,
+      });
+      catalogLines.push(
+        `${referenceId}: ${label} — understood as "${role}"${cad ? " [CAD / DESIGN AUTHORITY]" : ""}${
+          confidence ? ` (confidence ${confidence.toFixed(2)})` : ""
+        }`,
+      );
+    }
+
+    const notes = String(product?.notes ?? "").trim();
+    if (notes) mapLines.push(`  notes: ${notes.slice(0, 400)}`);
+  });
+
+  // Any reference the intake did not itemise is still catalogued so it can rank.
+  for (const [url, referenceId] of idByUrl) {
+    if (catalogLines.some((line) => line.startsWith(`${referenceId}:`))) continue;
+    const ref = args.references.find((entry) => entry.url === url);
+    catalogLines.push(
+      `${referenceId}: user label "${ref?.role || "Unlabeled view"}"${ref?.cad ? " [CAD / DESIGN AUTHORITY]" : ""}`,
+    );
+  }
+
+  const productAnalysis = {
+    jewelryType: detectedValue(products[0]?.jewelryType),
+    references: referenceMeta,
+    visibleComponents: [...visibleComponents],
+    disposableReferenceContext: [],
+    geometryObservations,
+    materialObservations,
+    settingObservations,
+    settingSignatures,
+    conflictWarnings: listOf(args.intake?.conflictWarnings),
+    referenceIds: args.references.map((_, index) => referenceIdAt(index)),
+    /** Provenance: this map was reused, not re-derived. */
+    knowledgeMapReused: true,
+  };
+
+  return {
+    productAnalysis,
+    catalogLines: catalogLines.sort(),
+    mapLines,
+  };
+}
+
+function buildCachedShotPrompt(args: {
+  frames: SourceFrame[];
+  catalogLines: string[];
+  mapLines: string[];
+  specs: any[];
+}) {
+  const frameLines = args.frames.map((frame, index) =>
+    `FRAME ${index + 1}: frameId "${frame.frameId}" (timestamp ${frame.timestamp}s)`
+  );
+  return [
+    "You are a luxury-jewelry SHOT analyst. Return JSON only. You never generate images or video.",
+    "The replacement product has ALREADY been analysed and is described below as text. Do NOT re-derive, re-guess or re-describe the product. Your only two jobs are: (1) classify each SOURCE FRAME as a shot, and (2) rank which already-understood replacement references (by REF id) are the best evidence for recreating THAT frame.",
+    "",
+    "SOURCE DESIGN FIREWALL (absolute): the jewelry visible in the SOURCE FRAMES has ZERO design authority. From a source frame you may read ONLY photographic facts: camera angle, perspective, coverage (full / partial / macro), crop, magnification, orientation, placement, visible percentage, occlusion, focus and depth of field, and lighting. You may NEVER read product type, silhouette, setting, stones, metal, geometry, lettering, bail, clasp, link design or proportions from a source frame. All replacement design comes exclusively from the references, the CAD/design authority and the structured specification below.",
+    "",
+    "PRODUCT KNOWLEDGE MAP (already established from the replacement references — authoritative, do not contradict, do not restate):",
+    ...args.mapLines,
+    "",
+    "REFERENCE CATALOG (images NOT re-sent — rank by these REF ids only):",
+    ...args.catalogLines,
+    "",
+    "USER STRUCTURED SPECIFICATION (authoritative):",
+    specSummary(args.specs) || "(none provided)",
+    "",
+    "SOURCE FRAMES the user selected to swap (images provided after this text, in this order):",
+    ...frameLines,
+    "",
+    "TASKS — return EXACTLY one frames entry per SOURCE FRAME, in the same order, echoing the given frameId:",
+    "1. Classify each frame ONLY on its own photographic content (never by neighbouring frames or any temporal assumption): view, coverage (full_object | partial_object | macro_detail), detailType, magnification, composition (whether the full product should be visible, whether an intentional crop must be preserved, negative space), orientation, camera angle + depth of field, replacementBehavior, riskFlags.",
+    "2. PER-FRAME RANKED REFERENCE RECOMMENDATIONS: recommendedReferences — REF ids RANKED BEST-FIRST for reconstructing THAT frame; avoidReferences — REF ids that would mislead this frame; rankingReasons — one short reason per ranked reference, in the same order. Also give recommendedReferenceRoles / avoidReferenceRoles as role names.",
+    "Rank on: the source frame's view and orientation, its coverage, its magnification, which physical region of the piece is actually visible in it, whether a CAD view relevant to THAT view exists, setting/detail relevance, material relevance, context-contamination risk, and the user's preferred reference when one is declared.",
+    "Frame-type rules: an extreme-macro / macro_detail frame must prioritise macro, detail and setting references and SUPPRESS full hero product photos; a full-object hero frame must prioritise full / front / three-quarter references; a component close-up (clasp, link, hinge, bail, crown, shank, gallery) must prioritise references showing that component or its mechanics.",
+    "Cleanliness tie-break: when two references carry equivalent product information, prefer the cleaner one; a contaminated reference may still be recommended when it holds unique physical information. Do not recommend every reference: 2 to 4 strong ones per frame is right.",
+    "Be concise: short phrases, no prose paragraphs. Never output URLs, file names, base64 or media of any kind.",
+  ].join("\n");
+}
+
+/** Frame classification + ranking only — ONE batch call for ALL frames. */
+async function rankFramesWithKnowledgeMap(args: {
+  ai: GoogleGenAI;
+  frameParts: unknown[];
+  frames: SourceFrame[];
+  catalogLines: string[];
+  mapLines: string[];
+  specs: any[];
+}) {
+  const response = await args.ai.models.generateContent({
+    model: GEMINI_ANALYSIS_MODEL,
+    contents: [
+      {
+        role: "user",
+        parts: [
+          {
+            text: buildCachedShotPrompt({
+              frames: args.frames,
+              catalogLines: args.catalogLines,
+              mapLines: args.mapLines,
+              specs: args.specs,
+            }),
+          },
+          ...args.frameParts,
+        ],
+      },
+    ] as any,
+    config: {
+      responseMimeType: "application/json",
+      responseSchema: FRAMES_ONLY_SCHEMA as any,
+      // Classification + ranking only — sized to the schema, not to prose.
+      maxOutputTokens: Math.min(8192, 900 * args.frames.length + 1200),
+      temperature: 0.1,
+      // No product reasoning left to do, so keep thinking minimal.
+      thinkingConfig: { thinkingLevel: "low" },
+    },
+  });
+
+  return JSON.parse((response.text ?? "").trim());
+}
+
 
 
 /* ------------------------------------------------------------------ *
@@ -698,12 +998,14 @@ function buildIntakePrompt(args: {
   references: JewelryReferenceInput[];
   roleVocabulary: string[];
   options: IntakeOptions;
+  unavailable?: Set<number>;
 }) {
   const refLines = args.references.map((ref, index) =>
     `REFERENCE ${index} (referenceIndex ${index})${ref.role ? ` — user label "${ref.role}"` : ""}${
       ref.cad ? " — user marked as design authority" : ""
-    }`
+    }${args.unavailable?.has(index) ? " — IMAGE UNAVAILABLE (no image supplied for this index; skip it entirely and do not invent findings for it)" : ""}`
   );
+
   const options = args.options;
   const vocabulary = (label: string, values: string[]) =>
     values.length ? `${label}: ${values.join(" | ")}` : "";
@@ -772,17 +1074,35 @@ async function runIntake(args: {
   roleVocabulary: string[];
   options: IntakeOptions;
 }) {
+  // Independent downloads run concurrently. An image that cannot be read is
+  // labelled unavailable and skipped — referenceIndex numbering is preserved so
+  // the client's index → file mapping never shifts.
+  const fetchStarted = Date.now();
+  const settled = await inlineImages(args.references.map((ref) => ref.url));
+  const referenceFetchMs = Date.now() - fetchStarted;
+  const unavailable = new Set<number>();
+  const imageParts: unknown[] = [];
+  settled.forEach((result, index) => {
+    if (result.ok) imageParts.push(result.value);
+    else {
+      unavailable.add(index);
+      console.warn(`[intake] reference ${index} unavailable: ${result.error}`);
+    }
+  });
+
   const parts: unknown[] = [
     {
       text: buildIntakePrompt({
         references: args.references,
         roleVocabulary: args.roleVocabulary,
         options: args.options,
+        unavailable,
       }),
     },
+    ...imageParts,
   ];
-  for (const ref of args.references) parts.push(await inlineImage(ref.url));
 
+  const geminiStarted = Date.now();
   const response = await args.ai.models.generateContent({
     model: GEMINI_ANALYSIS_MODEL,
     contents: [{ role: "user", parts }] as any,
@@ -795,9 +1115,14 @@ async function runIntake(args: {
       thinkingConfig: { thinkingLevel: "low" },
     },
   });
+  const geminiMs = Date.now() - geminiStarted;
 
-  return JSON.parse((response.text ?? "").trim());
+  return {
+    intake: JSON.parse((response.text ?? "").trim()),
+    timings: { referenceFetchMs, geminiMs, unavailableReferences: [...unavailable] },
+  };
 }
+
 
 /**
  * Stamps provenance AND resolves every detected field onto the app's canonical
@@ -886,7 +1211,9 @@ function stampSources(intake: any, options: IntakeOptions) {
 
 
 async function handleIntake(req: Request, body: any, user: { id: string }, apiKey?: string) {
+  const startedAt = Date.now();
   const references: JewelryReferenceInput[] =
+
     (Array.isArray(body?.jewelryReferences) ? body.jewelryReferences : [])
       .map((ref: any) => ({
         url: String(ref?.url ?? "").trim(),
@@ -926,6 +1253,7 @@ async function handleIntake(req: Request, body: any, user: { id: string }, apiKe
       version: cached.version ?? INTAKE_VERSION,
       analyzedAt: cached.analyzed_at,
       intake: cached.analysis,
+      timings: { cacheHit: true, totalMs: Date.now() - startedAt },
     });
   }
 
@@ -934,15 +1262,24 @@ async function handleIntake(req: Request, body: any, user: { id: string }, apiKe
   const ai = new GoogleGenAI({ apiKey });
   // ONE call for the whole settled reference set — never one call per image.
   const batch = references.slice(0, MAX_IMAGES_PER_CALL);
-  const intake = stampSources(
-    await runIntake({ ai, references: batch, roleVocabulary, options }),
-    options,
-  );
+  const run = await runIntake({ ai, references: batch, roleVocabulary, options });
+  const intake = stampSources(run.intake, options);
   intake.version = INTAKE_VERSION;
   intake.referenceCount = batch.length;
 
+  const timings = {
+    cacheHit: false,
+    referenceFetchMs: run.timings.referenceFetchMs,
+    geminiMs: run.timings.geminiMs,
+    unavailableReferences: run.timings.unavailableReferences,
+    totalMs: Date.now() - startedAt,
+  };
+  // DEV-ONLY telemetry: server logs, never surfaced to normal users.
+  console.log("[intake] timings", JSON.stringify(timings));
+
   const stripped = assertAnalysisOnly(intake, "intake");
   if (stripped.length) console.warn("intake guard stripped:", stripped.join(", "));
+
 
   await admin.from("jewelry_still_analyses").upsert(
     {
@@ -964,13 +1301,17 @@ async function handleIntake(req: Request, body: any, user: { id: string }, apiKe
     analyzedAt: new Date().toISOString(),
     intake,
     guardStripped: stripped,
+    timings,
   });
+
 
 }
 
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
+  const startedAt = Date.now();
+
 
   let user;
   try {
@@ -1022,6 +1363,17 @@ Deno.serve(async (req) => {
 
     const jewelrySpecs: any[] = Array.isArray(body?.jewelrySpecs) ? body.jewelrySpecs : [];
 
+    // The persisted intake this reference set was already understood through.
+    const intakeFingerprint = String(body?.intakeFingerprint ?? "").trim() || null;
+    const intakeReferences: JewelryReferenceInput[] =
+      (Array.isArray(body?.intakeReferences) ? body.intakeReferences : [])
+        .map((ref: any) => ({
+          url: String(ref?.url ?? "").trim(),
+          role: ref?.role ? String(ref.role).trim() : null,
+          cad: ref?.cad === true,
+        }))
+        .filter((ref: JewelryReferenceInput) => /^https?:\/\//.test(ref.url));
+
     if (!sourceFrames.length) return json({ error: "Select at least one source frame" }, 400);
     if (!jewelryReferences.length) return json({ error: "Add at least one jewelry reference" }, 400);
 
@@ -1044,6 +1396,7 @@ Deno.serve(async (req) => {
         version: cached.version ?? ANALYSIS_VERSION,
         analyzedAt: cached.analyzed_at,
         analysis: cached.analysis,
+        timings: { analysisCacheHit: true, totalAnalysisMs: Date.now() - startedAt },
       });
     }
 
@@ -1052,24 +1405,96 @@ Deno.serve(async (req) => {
     }
 
     const ai = new GoogleGenAI({ apiKey });
-    // ONE batch call: EVERY reference and EVERY selected source frame are
-    // analysed together so the per-frame ranking can compare the whole library.
     const references = jewelryReferences.slice(0, MAX_REFERENCE_IMAGES);
+
+    /* ---- Can we reuse the persisted PRODUCT KNOWLEDGE MAP? -------------- */
+    let knowledge: ReturnType<typeof buildKnowledgeMap> = null;
+    if (intakeFingerprint && sameReferenceSet(intakeReferences, jewelryReferences)) {
+      const { data: intakeRow } = await admin
+        .from("jewelry_still_analyses")
+        .select("analysis, version")
+        .eq("user_id", user.id)
+        .eq("fingerprint", intakeFingerprint)
+        .maybeSingle();
+      if (intakeRow?.analysis && intakeRow.version === INTAKE_VERSION) {
+        knowledge = buildKnowledgeMap({
+          intake: intakeRow.analysis,
+          intakeReferences,
+          references,
+        });
+      }
+    }
+    const knowledgeMapReused = Boolean(knowledge);
+
+    // Source frames always come from the wire; references only when the map
+    // could NOT be reused. Both fetch with bounded concurrency.
+    const frameBudget = knowledgeMapReused
+      ? MAX_IMAGES_PER_CALL
+      : Math.max(1, MAX_IMAGES_PER_CALL - references.length);
+    const wantedFrames = sourceFrames.slice(0, frameBudget);
+
+    const referenceFetchStarted = Date.now();
+    const referenceSettled = knowledgeMapReused
+      ? []
+      : await inlineImages(references.map((ref) => ref.url));
+    const referenceFetchMs = knowledgeMapReused ? 0 : Date.now() - referenceFetchStarted;
+
+    const unavailableReferences = new Set<number>();
     const referenceParts: unknown[] = [];
-    for (const ref of references) referenceParts.push(await inlineImage(ref.url));
-
-    const frameBudget = Math.max(1, MAX_IMAGES_PER_CALL - references.length);
-    const batchFramesInput = sourceFrames.slice(0, frameBudget);
-
-    const parsed = await analyseBatch({
-      ai,
-      referenceParts,
-      references,
-      frames: batchFramesInput,
-      specs: jewelrySpecs,
+    referenceSettled.forEach((result, index) => {
+      if (result.ok) referenceParts.push(result.value);
+      else {
+        unavailableReferences.add(index);
+        console.warn(`[shot-analysis] reference ${index} unavailable: ${result.error}`);
+      }
     });
+    if (!knowledgeMapReused && !referenceParts.length) {
+      throw new Error("None of the jewelry references could be read");
+    }
 
-    const productAnalysis: any = parsed?.productAnalysis ?? null;
+    const frameFetchStarted = Date.now();
+    const frameSettled = await inlineImages(wantedFrames.map((frame) => frame.imageUrl));
+    const sourceFrameFetchMs = Date.now() - frameFetchStarted;
+
+    // A frame whose image cannot be read is dropped from the batch — never
+    // allowed to stall or fail the other frames.
+    const batchFramesInput: SourceFrame[] = [];
+    const frameParts: unknown[] = [];
+    frameSettled.forEach((result, index) => {
+      if (result.ok) {
+        batchFramesInput.push(wantedFrames[index]);
+        frameParts.push(result.value);
+      } else {
+        console.warn(`[shot-analysis] source frame ${index} unavailable: ${result.error}`);
+      }
+    });
+    if (!batchFramesInput.length) throw new Error("None of the selected frames could be read");
+
+    const geminiStarted = Date.now();
+    const parsed = knowledge
+      ? await rankFramesWithKnowledgeMap({
+        ai,
+        frameParts,
+        frames: batchFramesInput,
+        catalogLines: knowledge.catalogLines,
+        mapLines: knowledge.mapLines,
+        specs: jewelrySpecs,
+      })
+      : await analyseBatch({
+        ai,
+        referenceParts,
+        frameParts,
+        references,
+        frames: batchFramesInput,
+        specs: jewelrySpecs,
+      });
+    const geminiMs = Date.now() - geminiStarted;
+
+    // Reused map → the product half of the answer comes from the persisted
+    // intake, so the output shape is identical without re-analysing anything.
+    const productAnalysis: any = knowledge
+      ? knowledge.productAnalysis
+      : parsed?.productAnalysis ?? null;
     const returnedFrames = Array.isArray(parsed?.frames) ? parsed.frames : [];
     const frames: any[] = [];
     batchFramesInput.forEach((frame, index) => {
@@ -1092,13 +1517,25 @@ Deno.serve(async (req) => {
 
     if (!productAnalysis || !frames.length) throw new Error("The analysis returned no usable result");
 
-
-
     const analysis = { version: ANALYSIS_VERSION, productAnalysis, frames };
     const stripped = assertAnalysisOnly(analysis);
     if (stripped.length) {
       console.warn("analysis-only guard stripped non-analysis fields:", stripped.join(", "));
     }
+
+    const timings = {
+      analysisCacheHit: false,
+      knowledgeMapReused,
+      referenceImagesSent: knowledgeMapReused ? 0 : referenceParts.length,
+      sourceFramesSent: frameParts.length,
+      geminiCalls: 1,
+      referenceFetchMs,
+      sourceFrameFetchMs,
+      geminiMs,
+      totalAnalysisMs: Date.now() - startedAt,
+    };
+    // DEV-ONLY telemetry: server logs + response field, never customer UI.
+    console.log("[shot-analysis] timings", JSON.stringify(timings));
 
     await admin
       .from("jewelry_still_analyses")
@@ -1120,7 +1557,9 @@ Deno.serve(async (req) => {
       analyzedAt: new Date().toISOString(),
       analysis,
       guardStripped: stripped,
+      timings,
     });
+
   } catch (error) {
     const raw = errorMessage(error);
     const safe = apiKey ? raw.split(apiKey).join("[redacted]") : raw;

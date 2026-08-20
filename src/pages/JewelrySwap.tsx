@@ -51,8 +51,11 @@ import {
 import {
   analyzeJewelryFrames,
   analyzeJewelryIntake,
+  recordJewelryTiming,
+  submitWithConcurrency,
   type JewelryIntake,
   type DetectedField,
+
 
 
   animateJewelryFrame,
@@ -473,6 +476,9 @@ const INTAKE_STAGES = [
  * files is one call, not six. Every change restarts this timer.
  */
 const INTAKE_DEBOUNCE_MS = 1800;
+/** Provider job submissions kept in flight at once (avoids rate limits). */
+const SWAP_SUBMIT_CONCURRENCY = 3;
+
 
 /**
  * Any manual edit is PERMANENT: it stamps `user_override` on that field so a
@@ -745,6 +751,15 @@ export default function JewelrySwap() {
   }>({ status: "idle", stage: 0, productCount: 0, referenceCount: 0 });
   const intakeAbort = useRef<AbortController | null>(null);
   const intakeToken = useRef(0);
+  /**
+   * The persisted intake (fingerprint + exact reference set) the shot analysis
+   * can reuse. Cleared implicitly whenever a new intake overwrites it.
+   */
+  const intakeProvenance = useRef<{
+    fingerprint: string | null;
+    references: { url: string; role?: string | null; cad?: boolean }[];
+  }>({ fingerprint: null, references: [] });
+
   /**
    * STALE GUARD: the version of the reference set (urls + roles + authority
    * flags) that the UI is currently showing. A response whose version differs
@@ -1263,16 +1278,18 @@ export default function JewelrySwap() {
       }, 1200);
 
       const run = async (attempt: number): Promise<void> => {
+        const intakeReferences = pieces.flatMap((piece) =>
+          piece.urls.map((url, angleIndex) => ({
+            url,
+            role: piece.roles?.[angleIndex] || null,
+            cad: isGeometryAuthority(piece, angleIndex),
+          })),
+        );
+        const clientStarted = performance.now();
         try {
           const result = await analyzeJewelryIntake(
             {
-              jewelryReferences: pieces.flatMap((piece) =>
-                piece.urls.map((url, angleIndex) => ({
-                  url,
-                  role: piece.roles?.[angleIndex] || null,
-                  cad: isGeometryAuthority(piece, angleIndex),
-                })),
-              ),
+              jewelryReferences: intakeReferences,
               roleVocabulary: Array.from(
                 new Set(pieces.flatMap((piece) => roleOptionsForType(piece.type))),
               ).filter(Boolean),
@@ -1287,6 +1304,17 @@ export default function JewelrySwap() {
           if (token !== intakeToken.current) return;
           if (version !== intakeSetVersion.current) return;
           if (result.setVersion && result.setVersion !== intakeSetVersion.current) return;
+          // Remember WHICH reference set this intake understood, so the shot
+          // analysis can reuse the Product Knowledge Map instead of re-reading
+          // every reference image.
+          intakeProvenance.current = {
+            fingerprint: result.fingerprint ?? null,
+            references: intakeReferences,
+          };
+          recordJewelryTiming("intake", performance.now() - clientStarted, {
+            cached: result.cached,
+            server: result.timings,
+          });
           applyIntake(urls, result.intake);
           setIntake({
             status: "ready",
@@ -1294,6 +1322,7 @@ export default function JewelrySwap() {
             productCount: result.intake?.products?.length ?? 1,
             referenceCount: urls.length,
           });
+
         } catch (error) {
           if (controller.signal.aborted || token !== intakeToken.current) return;
           if (version !== intakeSetVersion.current) return;
@@ -1682,11 +1711,21 @@ export default function JewelrySwap() {
 
       setAnalysisState("running");
       for (let attempt = 0; attempt < 2; attempt += 1) {
+        const clientStarted = performance.now();
         try {
           const result = await analyzeJewelryFrames({
             sourceFrames,
             jewelryReferences: references,
             jewelrySpecs: specs as any,
+            // Lets the backend skip re-analysing the reference IMAGES when the
+            // intake already understood this exact set.
+            intakeFingerprint: intakeProvenance.current.fingerprint,
+            intakeReferences: intakeProvenance.current.references,
+          });
+          recordJewelryTiming("shot-analysis", performance.now() - clientStarted, {
+            cached: result.cached,
+            frames: sourceFrames.length,
+            server: result.timings,
           });
           setAnalysis(result.analysis);
           setAnalysisKey(key);
@@ -1700,6 +1739,7 @@ export default function JewelrySwap() {
           }
         }
       }
+
       return null;
     },
     [analysis, analysisKey, analysisInputKey, frameIdFor, frames, piecePayload],
@@ -1828,16 +1868,35 @@ export default function JewelrySwap() {
       // and before the first swap. Never per frame, per refresh or per approve.
       const project = await ensureAnalysis(indices);
       if (project) toast.success("Shot analysis ready");
-      for (const index of indices) {
+      // Submissions go out a few at a time instead of strictly one-by-one, so
+      // the user is not waiting on a serial chain. One failed submission is
+      // isolated and never blocks the remaining frames.
+      const submitStarted = performance.now();
+      const outcomes = await submitWithConcurrency(indices, SWAP_SUBMIT_CONCURRENCY, (index) =>
         // Initial generation is always Nano Banana Pro only — never two models.
-        await swapFrame(index, {
+        swapFrame(index, {
           imageModel: "pro",
           frameAnalysis:
             project?.frames?.find((entry) => entry.frameId === frameIdFor(index)) ?? null,
           productAnalysis: project?.productAnalysis ?? null,
-        });
+        }),
+      );
+      const failed = outcomes.filter((outcome) => !outcome.ok);
+      recordJewelryTiming("swap-submit", performance.now() - submitStarted, {
+        frames: indices.length,
+        failed: failed.length,
+        concurrency: SWAP_SUBMIT_CONCURRENCY,
+      });
+      const queued = indices.length - failed.length;
+      if (queued) toast.success(`${queued} frame swap(s) queued`);
+      if (failed.length) {
+        toast.error(
+          failed.length === indices.length
+            ? "Could not queue the swaps"
+            : `${failed.length} frame(s) could not be queued`,
+        );
       }
-      toast.success(`${indices.length} frame swap(s) queued`);
+
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Could not queue the swaps");
     } finally {
