@@ -35,14 +35,16 @@ type SourceFrame = { frameId: string; timestamp: number; imageUrl: string };
  *   framing, crop, focus, lighting, placement, perspective and motion
  *   authority ONLY. ZERO jewelry-design authority. (Source frames arrive as
  *   `sourceFrames` and are never reference assets.)
- * REPLACEMENT_PRODUCT_REFERENCE → CAD, product photos and product VIDEO
- *   keyframes of the ACTUAL replacement piece. Geometry, material, stone,
- *   setting and component authority.
+ * REPLACEMENT_PRODUCT_REFERENCE → CAD and product photos of the ACTUAL
+ *   replacement piece, plus replacement product VIDEOS. Geometry, material,
+ *   stone, setting and component authority. A replacement video is analysed as
+ *   a COMPLETE clip by Gemini's multimodal video path — it is never reduced to
+ *   keyframe image references, and it is never sent to the image renderer.
  */
 type AssetPurpose = "SOURCE_CINEMATOGRAPHY" | "REPLACEMENT_PRODUCT_REFERENCE";
 
-/** How FUSE auto-classified an uploaded replacement asset (user never labels). */
-type ReferenceKind = "cad" | "photographic_still" | "product_reference_video";
+/** How FUSE auto-classified an uploaded replacement IMAGE (user never labels). */
+type ReferenceKind = "cad" | "photographic_still";
 
 type JewelryReferenceInput = {
   url: string;
@@ -51,18 +53,16 @@ type JewelryReferenceInput = {
   /** Always REPLACEMENT_PRODUCT_REFERENCE on this path. */
   assetPurpose?: AssetPurpose;
   kind?: ReferenceKind;
-  /** Set when this image is a keyframe extracted from a replacement video. */
-  videoReferenceId?: string | null;
-  timestamp?: number | null;
 };
 
-/** Metadata for one replacement VIDEO whose keyframes are in the set. */
+/** One replacement product VIDEO — the whole clip is the analysis unit. */
 type VideoReferenceInput = {
   videoReferenceId: string;
+  /** Storage URL of the actual stored clip, fetched here for Gemini. */
+  videoUrl: string;
+  name?: string | null;
   duration: number;
   aspectRatio?: string | null;
-  keyframeCount: number;
-  keyframeTimestamps: number[];
 };
 
 /**
@@ -72,22 +72,13 @@ type VideoReferenceInput = {
 function readReferences(raw: unknown): JewelryReferenceInput[] {
   return (Array.isArray(raw) ? raw : [])
     .map((ref: any) => {
-      const videoReferenceId = ref?.videoReferenceId ? String(ref.videoReferenceId).trim() : null;
       const cad = ref?.cad === true;
-      const kind: ReferenceKind = videoReferenceId
-        ? "product_reference_video"
-        : cad
-          ? "cad"
-          : "photographic_still";
-      const timestamp = Number(ref?.timestamp);
       return {
         url: String(ref?.url ?? "").trim(),
         role: ref?.role ? String(ref.role).trim() : null,
         cad,
         assetPurpose: "REPLACEMENT_PRODUCT_REFERENCE" as AssetPurpose,
-        kind,
-        videoReferenceId,
-        timestamp: Number.isFinite(timestamp) ? timestamp : null,
+        kind: (cad ? "cad" : "photographic_still") as ReferenceKind,
       };
     })
     .filter((ref: JewelryReferenceInput) => /^https?:\/\//.test(ref.url));
@@ -97,15 +88,17 @@ function readVideoReferences(raw: unknown): VideoReferenceInput[] {
   return (Array.isArray(raw) ? raw : [])
     .map((entry: any) => ({
       videoReferenceId: String(entry?.videoReferenceId ?? "").trim(),
+      videoUrl: String(entry?.videoUrl ?? "").trim(),
+      name: entry?.name ? String(entry.name).trim() : null,
       duration: Number(entry?.duration ?? 0) || 0,
       aspectRatio: entry?.aspectRatio ? String(entry.aspectRatio).trim() : null,
-      keyframeCount: Number(entry?.keyframeCount ?? 0) || 0,
-      keyframeTimestamps: (Array.isArray(entry?.keyframeTimestamps) ? entry.keyframeTimestamps : [])
-        .map((value: any) => Number(value))
-        .filter((value: number) => Number.isFinite(value)),
     }))
-    .filter((entry: VideoReferenceInput) => entry.videoReferenceId);
+    .filter(
+      (entry: VideoReferenceInput) =>
+        entry.videoReferenceId && /^https?:\/\//.test(entry.videoUrl),
+    );
 }
+
 
 /** Stable, order-independent handle for a reference inside one analysis batch. */
 function referenceIdAt(index: number) {
