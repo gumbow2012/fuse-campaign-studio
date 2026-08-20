@@ -882,8 +882,10 @@ function buildKnowledgeMap(args: {
     : null;
   const lock = pkm ? engineeringLockLines(pkm) : [];
   if (lock.length) {
+    console.log(`[analyze-jewelry-frames] PKM ENGINEERING LOCK ${JSON.stringify(lock).slice(0, 4000)}`);
     mapLines.push("  ENGINEERING LOCK (fused from CAD + photos + full-clip product video):");
     for (const line of lock) mapLines.push(`    ${line}`);
+
     // The image model already renders `referenceDefinedCharacteristics` verbatim,
     // so the lock reaches Nano through the EXISTING prompt path unchanged.
     for (const signature of settingSignatures) {
