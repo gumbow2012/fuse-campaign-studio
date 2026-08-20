@@ -1685,9 +1685,11 @@ export default function GenerationStudio() {
             <Tabs defaultValue="gallery">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <TabsList>
-                  <TabsTrigger value="gallery">Gallery</TabsTrigger>
-                  <TabsTrigger value="library">
-                    <Images size={14} className="mr-1.5" /> Asset library
+                  <TabsTrigger value="gallery" className="font-display text-[13px] font-semibold tracking-[0.06em]">
+                    GALLERY
+                  </TabsTrigger>
+                  <TabsTrigger value="library" className="font-display text-[13px] font-semibold tracking-[0.06em]">
+                    <Images size={14} className="mr-1.5" /> ASSET LIBRARY
                   </TabsTrigger>
                 </TabsList>
                 <button
@@ -1695,17 +1697,18 @@ export default function GenerationStudio() {
                   onClick={() => setFavoritesOnly((prev) => !prev)}
                   aria-pressed={favoritesOnly}
                   className={cn(
-                    "flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.14em] transition-colors",
+                    "flex items-center gap-1.5 rounded-xl border px-3 py-1.5 font-display text-[12px] font-semibold uppercase tracking-[0.08em] transition-all duration-200",
                     favoritesOnly
                       ? "border-red-400/50 bg-red-500/15 text-red-200"
                       : "border-white/12 bg-black/30 text-muted-foreground hover:text-foreground",
                   )}
                 >
-                  <Heart size={13} className={favoritesOnly ? "fill-current" : undefined} /> Favorites
+                  <Heart size={13} className={favoritesOnly ? "fill-current" : undefined} /> FAVORITES
                 </button>
                 {selected.length ? (
                   <div className="flex items-center gap-2">
-                    <span className="text-[11px] text-cyan-200/70">{selected.length} selected</span>
+                    <span className="text-[12px] text-[hsl(var(--electric-cyan))]">{selected.length} selected</span>
+
                     <Button
                       size="sm"
                       variant="outline"
