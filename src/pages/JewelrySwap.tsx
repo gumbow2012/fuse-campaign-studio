@@ -3241,10 +3241,20 @@ export default function JewelrySwap() {
                     )}
                   >
                     <div className="flex items-start justify-between gap-2">
-                      <p className="truncate text-[11px] font-medium text-foreground" title={piece.name}>
-                        {piece.name || `Piece ${index + 1}`}
-                      </p>
+                      <span className="min-w-0">
+                        <p className="truncate text-[11px] font-medium text-foreground" title={piece.name}>
+                          {piece.name || `Piece ${index + 1}`}
+                        </p>
+                        {/* ONE physical piece, described by several observations. */}
+                        <p className="mt-0.5 text-[9px] font-semibold uppercase tracking-[0.14em] text-foreground/45">
+                          One product ·{" "}
+                          {piece.urls.length + (piece.video ? 1 : 0)}{" "}
+                          {piece.urls.length + (piece.video ? 1 : 0) === 1 ? "reference" : "references"}
+                          {piece.urls.length + (piece.video ? 1 : 0) > 1 ? " combined" : ""}
+                        </p>
+                      </span>
                       <span className="flex shrink-0 items-center gap-1.5">
+
                         {piece.video ? (
                           <span className="rounded-full border border-cyan-200/40 bg-cyan-200/10 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.14em] text-cyan-100">
                             Video reference · {formatDuration(piece.video.duration)} · full clip
