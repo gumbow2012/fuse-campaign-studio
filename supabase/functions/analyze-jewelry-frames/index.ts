@@ -3292,6 +3292,9 @@ async function runKnowledgeMap(args: {
       map.crossReferenceMatches.filter((match: any) => match?.merged).length
     }/${map.crossReferenceMatches.length} status=${map.fusionState.classificationStatus} v${map.fusionState.modelVersion} splitSuggested=${map.separatePieceSuggestion.suspected}`,
   );
+  // COMPOSITIONAL SETTING MODEL + the Galaxy perspective gate, enforced in code.
+  normalizeSettingAnalysis(map);
+  logSettingAcceptance(map);
   console.log(
     `[analyze-jewelry-frames] FINAL SETTING CLASSIFICATION setting=${detectedValue(map?.setting) || map?.setting?.canonical || "?"} reason=${String(map?.settingClassificationReason ?? "").slice(0, 300)}`,
   );
@@ -3299,6 +3302,142 @@ async function runKnowledgeMap(args: {
 
   return { knowledgeMap: applyUserConfirmedFacts(map, args.userConfirmedFacts ?? []), geminiMs: Date.now() - started };
 }
+
+/** Every term whose signature is a stone-field TOPOLOGY rather than retention. */
+const TOPOLOGY_TERMS = SETTING_ONTOLOGY.filter((term) =>
+  /VARIABLE/i.test(term.engineeringSignature.retentionMechanics)
+).map((term) => term.canonicalName);
+
+function termByName(name: string) {
+  const lower = String(name ?? "").trim().toLowerCase();
+  if (!lower) return null;
+  return (
+    JEWELRY_TERMS.find((term) =>
+      term.canonicalName.toLowerCase() === lower ||
+      term.aliases.some((alias) => alias.toLowerCase() === lower)
+    ) ??
+    JEWELRY_TERMS.find((term) =>
+      lower.includes(term.canonicalName.toLowerCase()) ||
+      term.aliases.some((alias) => lower.includes(alias.toLowerCase()))
+    ) ?? null
+  );
+}
+
+/**
+ * Guarantees the compositional shape exists, and enforces the ONE structural
+ * rule in code: a stone-field topology that depends on real physical size
+ * variation (Galaxy and any future term like it) may not survive when the
+ * apparent size differences did not survive perspective normalization.
+ * Retention construction is untouched — the axes are independent.
+ */
+function normalizeSettingAnalysis(map: any) {
+  const raw = map?.settingAnalysis && typeof map.settingAnalysis === "object" ? map.settingAnalysis : {};
+  const groups = arrayOf(map?.stoneGroups);
+  const physicalVariation = raw.physicalSizeVariationConfirmed === true ||
+    groups.some((group: any) =>
+      group?.physicalSizeDifference === true ||
+      ["mixed", "graduated"].includes(String(group?.sizeUniformity ?? ""))
+    );
+
+  const analysis = {
+    stoneFieldTopology: String(raw.stoneFieldTopology ?? "").trim() || null,
+    retentionConstruction: String(raw.retentionConstruction ?? "").trim() || null,
+    coverageStyle: String(raw.coverageStyle ?? "").trim() || null,
+    customTerminology: arrayOf(raw.customTerminology).map((entry: any) => String(entry).trim()).filter(Boolean),
+    topologyEvidence: arrayOf(raw.topologyEvidence),
+    retentionEvidence: arrayOf(raw.retentionEvidence),
+    conflictingSignals: arrayOf(raw.conflictingSignals),
+    apparentSizeClasses: arrayOf(raw.apparentSizeClasses),
+    physicalSizeClasses: arrayOf(raw.physicalSizeClasses),
+    perspectiveNormalizationBasis: String(raw.perspectiveNormalizationBasis ?? "").trim() || null,
+    physicalSizeVariationConfirmed: physicalVariation,
+    repeatedModuleSizeComparison: String(raw.repeatedModuleSizeComparison ?? "").trim() || null,
+    videoSizeEvidence: String(raw.videoSizeEvidence ?? "").trim() || null,
+    vocabularyDomain: String(raw.vocabularyDomain ?? "").trim() || null,
+    provenance: raw.provenance ?? "LOW_CONFIDENCE_INFERENCE",
+    confidence: Number.isFinite(Number(raw.confidence)) ? Number(raw.confidence) : 0,
+    needsConfirmation: raw.needsConfirmation === true,
+    /** Set when the perspective gate removed a size-variation topology claim. */
+    perspectiveGateApplied: false,
+  };
+
+  // HARD GATE — universal, driven by the ontology signature, never hardcoded to
+  // one product or one term name.
+  const topologyTerm = analysis.stoneFieldTopology ? termByName(analysis.stoneFieldTopology) : null;
+  const dependsOnSizeVariation = Boolean(
+    topologyTerm && /size/i.test(topologyTerm.engineeringSignature.stoneSizePattern) &&
+      /variation|classes|mixed/i.test(topologyTerm.engineeringSignature.stoneSizePattern),
+  );
+  if (dependsOnSizeVariation && !physicalVariation) {
+    analysis.conflictingSignals = [
+      ...analysis.conflictingSignals,
+      `apparent stone-size variation did not survive perspective normalization — "${analysis.stoneFieldTopology}" topology not supported`,
+    ];
+    analysis.stoneFieldTopology = null;
+    analysis.customTerminology = analysis.customTerminology.filter(
+      (term: string) => termByName(term)?.canonicalName !== topologyTerm?.canonicalName,
+    );
+    analysis.needsConfirmation = true;
+    analysis.perspectiveGateApplied = true;
+  }
+
+  map.settingAnalysis = analysis;
+  // The compositional axes ARE the user-facing terminology.
+  map.resolvedSettingTerminology = [
+    analysis.stoneFieldTopology,
+    analysis.retentionConstruction,
+  ].filter(Boolean).join(" ") || null;
+  map.settingTopologyTerms = TOPOLOGY_TERMS;
+  return map;
+}
+
+/** ACCEPTANCE LOG — one line per required signal, no product hardcoding. */
+function logSettingAcceptance(map: any) {
+  const analysis = map?.settingAnalysis ?? {};
+  const groups = arrayOf(map?.stoneGroups);
+  const settings = arrayOf(map?.settings);
+  const signalsFor = (name: string) => {
+    const term = termByName(name);
+    const match = settings.find((setting: any) =>
+      termByName(setting?.detectedSetting ?? setting?.canonicalSetting ?? "")?.canonicalName ===
+        term?.canonicalName
+    );
+    return {
+      matched: arrayOf(match?.matchedSignals),
+      conflicting: arrayOf(match?.conflictingSignals),
+    };
+  };
+  const line = (label: string, value: unknown) =>
+    console.log(`[analyze-jewelry-frames] ${label}: ${
+      typeof value === "string" ? value : JSON.stringify(value ?? null)
+    }`);
+
+  line("RAW APPARENT STONE SIZE CLASSES", arrayOf(analysis.apparentSizeClasses));
+  line("PERSPECTIVE-NORMALIZED PHYSICAL SIZE CLASSES", arrayOf(analysis.physicalSizeClasses));
+  line("PERSPECTIVE NORMALIZATION BASIS", analysis.perspectiveNormalizationBasis ?? "none");
+  line("REPEATED MODULE SIZE COMPARISON", analysis.repeatedModuleSizeComparison ?? "none");
+  line("FULL-VIDEO SIZE EVIDENCE", analysis.videoSizeEvidence ?? "none");
+  line(
+    "STONE GROUP UNIFORMITY",
+    groups.map((group: any) => ({
+      region: group?.regionId ?? null,
+      uniformity: group?.sizeUniformity ?? null,
+      physicalSizeDifference: group?.physicalSizeDifference ?? null,
+      apparentSizeDifference: group?.apparentSizeDifference ?? null,
+    })),
+  );
+  for (const candidate of ["Galaxy Setting", "Mosaic Setting (custom)"]) {
+    const { matched, conflicting } = signalsFor(candidate);
+    line(`${candidate.toUpperCase()} MATCH SIGNALS`, matched);
+    line(`${candidate.toUpperCase()} CONFLICTING SIGNALS`, conflicting);
+  }
+  line("PERSPECTIVE GATE APPLIED", analysis.perspectiveGateApplied === true);
+  line("FINAL STONE FIELD TOPOLOGY", analysis.stoneFieldTopology ?? "needs_confirmation");
+  line("FINAL RETENTION CONSTRUCTION", analysis.retentionConstruction ?? "needs_confirmation");
+  line("FINAL COVERAGE STYLE", analysis.coverageStyle ?? "none");
+  line("FINAL USER-FACING TERMINOLOGY", map?.resolvedSettingTerminology ?? "needs_confirmation");
+}
+
 
 
 /**
