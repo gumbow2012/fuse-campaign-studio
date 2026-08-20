@@ -2470,7 +2470,8 @@ Deno.serve(async (req) => {
       return json({ generations });
     }
 
-    // Read-only asset library: the caller's completed generations, newest first.
+    // Read-only asset library: the caller's completed generations + their own
+    // previously uploaded media from storage, newest first.
     if (action === "list_assets") {
       const typeFilter = String(body.type ?? "all");
       const limit = Math.min(60, Math.max(1, Number(body.limit ?? 60)));
@@ -2491,7 +2492,7 @@ Deno.serve(async (req) => {
       const { data: rows, error } = await query;
       if (error) throw new Error(error.message);
 
-      const assets = (rows ?? []).map((row: any) => {
+      const generated = (rows ?? []).map((row: any) => {
         const payload = (row.input_payload ?? {}) as Record<string, unknown>;
         return {
           id: row.id,
@@ -2501,11 +2502,25 @@ Deno.serve(async (req) => {
           prompt: typeof payload.prompt === "string" ? payload.prompt.slice(0, 240) : null,
           feature: typeof payload.feature === "string" ? payload.feature : (row.kind ?? "studio"),
           createdAt: row.created_at,
+          source: "generated" as const,
         };
       });
 
+      const uploads = await listUserUploads(admin, user.id, typeFilter);
+
+      const seen = new Set<string>();
+      const assets = [...generated, ...uploads]
+        .filter((asset) => {
+          if (!asset.outputUrl || seen.has(asset.outputUrl)) return false;
+          seen.add(asset.outputUrl);
+          return true;
+        })
+        .sort((a, b) => String(b.createdAt ?? "").localeCompare(String(a.createdAt ?? "")))
+        .slice(0, limit);
+
       return json({ assets });
     }
+
 
     if (action === "status") {
 
