@@ -1195,31 +1195,24 @@ export default function JewelrySwap() {
       });
 
       for (const file of files) {
-        const isVideo = file.type.startsWith("video/") || /\.(mp4|mov|m4v|webm)$/i.test(file.name);
-
-        if (isVideo) {
-          setKeyframeWork({ name: file.name, phase: "inspecting", done: 0, total: 0 });
-          const selection = await selectVideoKeyframes(file, (done, total, phase) =>
-            setKeyframeWork({ name: file.name, phase, done, total }),
-          );
-          const stored = await uploadWithConcurrency(
-            selection.keyframes,
-            3,
-            async (frame) => await uploadToStorage(folder, frame.file, frame.file.name),
-          );
-          setKeyframeWork(null);
+        if (isVideoAsset(file)) {
+          // The ACTUAL clip is stored and analysed end-to-end by Gemini. No
+          // keyframes are extracted and no image reference is created from it.
+          setVideoWork({ name: file.name });
+          const meta = await readVideoFileMeta(file).catch(() => null);
+          const stored = await uploadToStorage(folder, file, file.name);
+          setVideoWork(null);
           uploaded.push({
             ...blank(file.name),
-            urls: stored.map((item) => item.url),
-            roles: selection.keyframes.map(() => ""),
-            cads: selection.keyframes.map(() => null),
+            urls: [],
+            roles: [],
+            cads: [],
             video: {
               videoReferenceId: `vid-${crypto.randomUUID().slice(0, 8)}`,
               name: file.name,
-              duration: selection.meta.duration,
-              aspectRatio: selection.meta.aspectRatio,
-              posterUrl: stored[0]?.url ?? "",
-              keyframeTimes: selection.keyframes.map((frame) => frame.time),
+              duration: meta?.duration ?? 0,
+              aspectRatio: meta?.aspectRatio ?? null,
+              videoUrl: stored.url,
             },
           });
           continue;
@@ -1241,10 +1234,11 @@ export default function JewelrySwap() {
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Could not upload that reference");
     } finally {
-      setKeyframeWork(null);
+      setVideoWork(null);
       setUploadingPiece(false);
     }
   }, []);
+
 
 
   /** Extra angles of the SAME physical piece land on the targeted card. */
