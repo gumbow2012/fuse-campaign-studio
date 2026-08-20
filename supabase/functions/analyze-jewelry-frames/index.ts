@@ -1608,7 +1608,7 @@ async function runIntake(args: {
  * references are routed to the image model.
  */
 
-const PKM_VERSION = "jewelry-knowledge-map-v2";
+const PKM_VERSION = "jewelry-knowledge-map-v3";
 
 const CONFIDENCE = { type: Type.NUMBER } as const;
 
