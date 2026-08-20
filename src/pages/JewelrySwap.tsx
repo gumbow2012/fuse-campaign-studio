@@ -2700,10 +2700,16 @@ export default function JewelrySwap() {
                           ? `${authorityCount(piece)} reference${authorityCount(piece) === 1 ? "" : "s"}`
                           : "None selected"}
                       </p>
-                      {piece.needsConfirmation?.length ? (
+                      {reviewControls(piece).size ? (
                         <p className="text-[10px] text-amber-200/90">
-                          Review {piece.needsConfirmation.length} detail
-                          {piece.needsConfirmation.length === 1 ? "" : "s"}: {piece.needsConfirmation.join(", ")}
+                          Review {reviewControls(piece).size} detail
+                          {reviewControls(piece).size === 1 ? "" : "s"}:{" "}
+                          {[...reviewControls(piece)].join(", ")}
+                        </p>
+                      ) : null}
+                      {piece.detected?.qualityEvidenceSource === "visual_only" ? (
+                        <p className="text-[10px] text-foreground/60">
+                          Stone quality can't be graded from photography — confirm it yourself.
                         </p>
                       ) : null}
                       <button
@@ -2715,8 +2721,13 @@ export default function JewelrySwap() {
                         }
                         className="mt-1 text-[10px] uppercase tracking-[0.14em] text-cyan-200/80 transition-colors hover:text-cyan-100"
                       >
-                        {piece.expanded ? "Hide analysis" : piece.needsConfirmation?.length ? `Review ${piece.needsConfirmation.length} details` : "Edit analysis"}
+                        {piece.expanded
+                          ? "Hide analysis"
+                          : reviewControls(piece).size
+                            ? `Review ${reviewControls(piece).size} details`
+                            : "Edit analysis"}
                       </button>
+
                     </div>
 
                     {piece.expanded === true ? (
