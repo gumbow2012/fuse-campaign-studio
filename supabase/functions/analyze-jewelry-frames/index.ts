@@ -2728,10 +2728,24 @@ async function handleIntake(req: Request, body: any, user: { id: string }, apiKe
   const ai = new GoogleGenAI({ apiKey });
   // ONE call for the whole settled reference set — never one call per image.
   const batch = selectIntakeBatch(references, MAX_IMAGES_PER_CALL);
-  const run = await runIntake({ ai, references: batch, roleVocabulary, options });
+  const run = batch.length
+    ? await runIntake({ ai, references: batch, roleVocabulary, options })
+    : {
+      intake: { products: [] } as any,
+      imageParts: [] as unknown[],
+      unavailable: new Set<number>(),
+      timings: { referenceFetchMs: 0, geminiMs: 0, unavailableReferences: 0 },
+    };
   const intake = stampSources(run.intake, options);
   intake.version = INTAKE_VERSION;
   intake.referenceCount = batch.length;
+
+  /* ---- FULL-CLIP video understanding: the whole video, once per clip ------ */
+  const video = videoReferences.length
+    ? await runVideoAnalysis({ ai, videoReferences, options })
+    : { videoAnalyses: [], videoFailures: [], geminiMs: 0 };
+  intake.videoAnalyses = video.videoAnalyses;
+  if (video.videoFailures.length) intake.videoAnalysisIssues = video.videoFailures;
 
   /* ---- ONE fused engineering pass, reusing the already-fetched images ---- */
   let knowledgeMapMs = 0;
@@ -2741,6 +2755,7 @@ async function handleIntake(req: Request, body: any, user: { id: string }, apiKe
       imageParts: run.imageParts,
       references: batch,
       videoReferences,
+      videoAnalyses: video.videoAnalyses,
       intake,
       options,
       unavailable: run.unavailable,
@@ -2749,9 +2764,6 @@ async function handleIntake(req: Request, body: any, user: { id: string }, apiKe
 
     knowledgeMapMs = fused.geminiMs;
     intake.knowledgeMap = fused.knowledgeMap;
-    intake.videoAnalyses = Array.isArray(fused.knowledgeMap?.videoAnalyses)
-      ? fused.knowledgeMap.videoAnalyses
-      : [];
   } catch (error) {
     // The engineering map is an ENHANCEMENT: intake must still succeed without it.
     console.warn("[intake] knowledge map unavailable:", errorMessage(error));
@@ -2762,11 +2774,12 @@ async function handleIntake(req: Request, body: any, user: { id: string }, apiKe
     referenceFetchMs: run.timings.referenceFetchMs,
     geminiMs: run.timings.geminiMs,
     knowledgeMapMs,
+    videoAnalysisMs: video.geminiMs,
     videoReferenceCount: videoReferences.length,
-    keyframeReferenceCount: batch.filter((ref) => ref.kind === "product_reference_video").length,
     unavailableReferences: run.timings.unavailableReferences,
     totalMs: Date.now() - startedAt,
   };
+
   // DEV-ONLY telemetry: server logs, never surfaced to normal users.
   console.log("[intake] timings", JSON.stringify(timings));
 
