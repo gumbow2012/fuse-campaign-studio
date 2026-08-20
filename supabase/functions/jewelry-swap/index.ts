@@ -889,6 +889,8 @@ function buildJewelryPrompt(args: {
   const specLines = specs.map((spec) => targetSpecLine(spec)).filter(Boolean) as string[];
   const mosaic = hasMosaicSetting(specs);
   const colorless = isColorlessSpec(specs);
+  const stoneLock = stoneEngineeringLockBlock(specs);
+  const settingMap = multiSettingBlock(specs);
 
 
   const prompt = [
