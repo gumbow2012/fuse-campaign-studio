@@ -2455,6 +2455,19 @@ const PKM_SCHEMA = {
           regionId: { type: Type.STRING },
           settingClassificationReason: { type: Type.STRING },
           canonicalSetting: { type: Type.STRING },
+          /** The ontology term the OBSERVED construction actually satisfies. */
+          detectedSetting: { type: Type.STRING },
+          /** Which vocabulary layer that term belongs to — never blended. */
+          vocabularyDomain: {
+            type: Type.STRING,
+            enum: ["classical", "gemological", "manufacturing", "hip_hop_custom"],
+          },
+          /** Observed signature elements that MATCH the chosen term. */
+          matchedSignals: STRING_ARRAY,
+          /** Observed elements that CONTRADICT the chosen term. */
+          conflictingSignals: STRING_ARRAY,
+          /** True when the label came from the user and may not be renamed. */
+          userConfirmedTerm: { type: Type.BOOLEAN },
           settingVisualSignature: { type: Type.STRING },
           evidenceReferenceIds: STRING_ARRAY,
           provenance: PROVENANCE,
@@ -2463,6 +2476,7 @@ const PKM_SCHEMA = {
             type: Type.OBJECT,
             properties: {
               canonicalName: { type: Type.STRING },
+              vocabularyDomain: { type: Type.STRING },
               matchedSignals: STRING_ARRAY,
               deviatingSignals: STRING_ARRAY,
               score: CONFIDENCE,
@@ -2475,9 +2489,13 @@ const PKM_SCHEMA = {
           "regionId",
           "settingClassificationReason",
           "canonicalSetting",
+          "detectedSetting",
+          "vocabularyDomain",
+          "matchedSignals",
           "settingVisualSignature",
           "confidence",
         ],
+
       },
     },
     materialRegions: {
