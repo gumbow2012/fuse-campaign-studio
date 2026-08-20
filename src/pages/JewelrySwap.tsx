@@ -1466,6 +1466,7 @@ export default function JewelrySwap() {
       frameIndex: number,
       options?: {
         imageModel?: JewelryImageModel;
+        quality?: NanoQuality;
         preferredRole?: string | null;
         failureReason?: string | null;
         mode?: ReplacementMode;
@@ -1479,6 +1480,7 @@ export default function JewelrySwap() {
       const imageModel: JewelryImageModel = options?.imageModel ?? "pro";
       const mode: ReplacementMode = options?.mode ?? frameMode[frameIndex] ?? "auto";
       const coverage: Coverage = options?.coverage ?? frameCoverage[frameIndex] ?? "auto";
+      const quality: NanoQuality = options?.quality ?? nanoQuality;
       const data = await callJewelrySwap<{ generation: JewelryGeneration }>({
         action: "swap_frame",
         sourceFrameUrl: frame.url,
@@ -1489,8 +1491,10 @@ export default function JewelrySwap() {
         frameTime: frame.time,
         aspectRatio: meta?.aspectRatio,
         extraPrompt,
-        resolution: "2K",
+        // Pro-only API parameter — the nb2 endpoint 422s on `resolution`.
+        resolution: imageModel === "pro" ? resolutionForQuality(quality) : undefined,
         imageModel,
+
         preferredRole:
           options?.preferredRole !== undefined
             ? options.preferredRole
