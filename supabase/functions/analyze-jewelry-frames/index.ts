@@ -1361,6 +1361,17 @@ Deno.serve(async (req) => {
 
     const jewelrySpecs: any[] = Array.isArray(body?.jewelrySpecs) ? body.jewelrySpecs : [];
 
+    // The persisted intake this reference set was already understood through.
+    const intakeFingerprint = String(body?.intakeFingerprint ?? "").trim() || null;
+    const intakeReferences: JewelryReferenceInput[] =
+      (Array.isArray(body?.intakeReferences) ? body.intakeReferences : [])
+        .map((ref: any) => ({
+          url: String(ref?.url ?? "").trim(),
+          role: ref?.role ? String(ref.role).trim() : null,
+          cad: ref?.cad === true,
+        }))
+        .filter((ref: JewelryReferenceInput) => /^https?:\/\//.test(ref.url));
+
     if (!sourceFrames.length) return json({ error: "Select at least one source frame" }, 400);
     if (!jewelryReferences.length) return json({ error: "Add at least one jewelry reference" }, 400);
 
@@ -1383,6 +1394,7 @@ Deno.serve(async (req) => {
         version: cached.version ?? ANALYSIS_VERSION,
         analyzedAt: cached.analyzed_at,
         analysis: cached.analysis,
+        timings: { analysisCacheHit: true, totalAnalysisMs: Date.now() - startedAt },
       });
     }
 
@@ -1391,24 +1403,96 @@ Deno.serve(async (req) => {
     }
 
     const ai = new GoogleGenAI({ apiKey });
-    // ONE batch call: EVERY reference and EVERY selected source frame are
-    // analysed together so the per-frame ranking can compare the whole library.
     const references = jewelryReferences.slice(0, MAX_REFERENCE_IMAGES);
+
+    /* ---- Can we reuse the persisted PRODUCT KNOWLEDGE MAP? -------------- */
+    let knowledge: ReturnType<typeof buildKnowledgeMap> = null;
+    if (intakeFingerprint && sameReferenceSet(intakeReferences, jewelryReferences)) {
+      const { data: intakeRow } = await admin
+        .from("jewelry_still_analyses")
+        .select("analysis, version")
+        .eq("user_id", user.id)
+        .eq("fingerprint", intakeFingerprint)
+        .maybeSingle();
+      if (intakeRow?.analysis && intakeRow.version === INTAKE_VERSION) {
+        knowledge = buildKnowledgeMap({
+          intake: intakeRow.analysis,
+          intakeReferences,
+          references,
+        });
+      }
+    }
+    const knowledgeMapReused = Boolean(knowledge);
+
+    // Source frames always come from the wire; references only when the map
+    // could NOT be reused. Both fetch with bounded concurrency.
+    const frameBudget = knowledgeMapReused
+      ? MAX_IMAGES_PER_CALL
+      : Math.max(1, MAX_IMAGES_PER_CALL - references.length);
+    const wantedFrames = sourceFrames.slice(0, frameBudget);
+
+    const referenceFetchStarted = Date.now();
+    const referenceSettled = knowledgeMapReused
+      ? []
+      : await inlineImages(references.map((ref) => ref.url));
+    const referenceFetchMs = knowledgeMapReused ? 0 : Date.now() - referenceFetchStarted;
+
+    const unavailableReferences = new Set<number>();
     const referenceParts: unknown[] = [];
-    for (const ref of references) referenceParts.push(await inlineImage(ref.url));
-
-    const frameBudget = Math.max(1, MAX_IMAGES_PER_CALL - references.length);
-    const batchFramesInput = sourceFrames.slice(0, frameBudget);
-
-    const parsed = await analyseBatch({
-      ai,
-      referenceParts,
-      references,
-      frames: batchFramesInput,
-      specs: jewelrySpecs,
+    referenceSettled.forEach((result, index) => {
+      if (result.ok) referenceParts.push(result.value);
+      else {
+        unavailableReferences.add(index);
+        console.warn(`[shot-analysis] reference ${index} unavailable: ${result.error}`);
+      }
     });
+    if (!knowledgeMapReused && !referenceParts.length) {
+      throw new Error("None of the jewelry references could be read");
+    }
 
-    const productAnalysis: any = parsed?.productAnalysis ?? null;
+    const frameFetchStarted = Date.now();
+    const frameSettled = await inlineImages(wantedFrames.map((frame) => frame.imageUrl));
+    const sourceFrameFetchMs = Date.now() - frameFetchStarted;
+
+    // A frame whose image cannot be read is dropped from the batch — never
+    // allowed to stall or fail the other frames.
+    const batchFramesInput: SourceFrame[] = [];
+    const frameParts: unknown[] = [];
+    frameSettled.forEach((result, index) => {
+      if (result.ok) {
+        batchFramesInput.push(wantedFrames[index]);
+        frameParts.push(result.value);
+      } else {
+        console.warn(`[shot-analysis] source frame ${index} unavailable: ${result.error}`);
+      }
+    });
+    if (!batchFramesInput.length) throw new Error("None of the selected frames could be read");
+
+    const geminiStarted = Date.now();
+    const parsed = knowledge
+      ? await rankFramesWithKnowledgeMap({
+        ai,
+        frameParts,
+        frames: batchFramesInput,
+        catalogLines: knowledge.catalogLines,
+        mapLines: knowledge.mapLines,
+        specs: jewelrySpecs,
+      })
+      : await analyseBatch({
+        ai,
+        referenceParts,
+        frameParts,
+        references,
+        frames: batchFramesInput,
+        specs: jewelrySpecs,
+      });
+    const geminiMs = Date.now() - geminiStarted;
+
+    // Reused map → the product half of the answer comes from the persisted
+    // intake, so the output shape is identical without re-analysing anything.
+    const productAnalysis: any = knowledge
+      ? knowledge.productAnalysis
+      : parsed?.productAnalysis ?? null;
     const returnedFrames = Array.isArray(parsed?.frames) ? parsed.frames : [];
     const frames: any[] = [];
     batchFramesInput.forEach((frame, index) => {
@@ -1431,13 +1515,25 @@ Deno.serve(async (req) => {
 
     if (!productAnalysis || !frames.length) throw new Error("The analysis returned no usable result");
 
-
-
     const analysis = { version: ANALYSIS_VERSION, productAnalysis, frames };
     const stripped = assertAnalysisOnly(analysis);
     if (stripped.length) {
       console.warn("analysis-only guard stripped non-analysis fields:", stripped.join(", "));
     }
+
+    const timings = {
+      analysisCacheHit: false,
+      knowledgeMapReused,
+      referenceImagesSent: knowledgeMapReused ? 0 : referenceParts.length,
+      sourceFramesSent: frameParts.length,
+      geminiCalls: 1,
+      referenceFetchMs,
+      sourceFrameFetchMs,
+      geminiMs,
+      totalAnalysisMs: Date.now() - startedAt,
+    };
+    // DEV-ONLY telemetry: server logs + response field, never customer UI.
+    console.log("[shot-analysis] timings", JSON.stringify(timings));
 
     await admin
       .from("jewelry_still_analyses")
@@ -1459,7 +1555,9 @@ Deno.serve(async (req) => {
       analyzedAt: new Date().toISOString(),
       analysis,
       guardStripped: stripped,
+      timings,
     });
+
   } catch (error) {
     const raw = errorMessage(error);
     const safe = apiKey ? raw.split(apiKey).join("[redacted]") : raw;
