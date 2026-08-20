@@ -1485,16 +1485,25 @@ const EVIDENCE_STRENGTH = {
   type: Type.OBJECT,
   properties: {
     silhouette: CONFIDENCE,
+    overallGeometry: CONFIDENCE,
     dimensions: CONFIDENCE,
+    componentTopology: CONFIDENCE,
+    stoneSeatLayout: CONFIDENCE,
     stoneCut: CONFIDENCE,
     stoneSize: CONFIDENCE,
     stonePlacement: CONFIDENCE,
     settingMechanics: CONFIDENCE,
+    prongConstruction: CONFIDENCE,
+    thicknessDepth: CONFIDENCE,
+    claspBailConnector: CONFIDENCE,
     metalColor: CONFIDENCE,
+    materialAppearance: CONFIDENCE,
     componentGeometry: CONFIDENCE,
     manufacturedAppearance: CONFIDENCE,
+    manufacturedFinish: CONFIDENCE,
   },
 } as const;
+
 
 /**
  * SETTING ONTOLOGY — engineering signatures, not prose. Classification compares
