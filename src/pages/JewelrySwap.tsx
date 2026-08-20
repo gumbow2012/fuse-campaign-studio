@@ -1548,24 +1548,22 @@ export default function JewelrySwap() {
             cad: isGeometryAuthority(piece, angleIndex),
             // Explicit purpose typing — the source video can never be mixed in.
             assetPurpose: "REPLACEMENT_PRODUCT_REFERENCE" as const,
-            kind: piece.video
-              ? ("product_reference_video" as const)
-              : isGeometryAuthority(piece, angleIndex)
-                ? ("cad" as const)
-                : ("photographic_still" as const),
-            videoReferenceId: piece.video?.videoReferenceId ?? null,
-            timestamp: piece.video?.keyframeTimes?.[angleIndex] ?? null,
+            kind: isGeometryAuthority(piece, angleIndex)
+              ? ("cad" as const)
+              : ("photographic_still" as const),
           })),
         );
+        // The COMPLETE clips — analysed directly, never keyframed, never rendered.
         const videoReferences: JewelryVideoReferenceInput[] = pieces
-          .filter((piece) => piece.video)
+          .filter((piece) => piece.video?.videoUrl)
           .map((piece) => ({
             videoReferenceId: piece.video!.videoReferenceId,
+            videoUrl: piece.video!.videoUrl,
+            name: piece.video!.name,
             duration: piece.video!.duration,
             aspectRatio: piece.video!.aspectRatio ?? null,
-            keyframeCount: piece.urls.length,
-            keyframeTimestamps: piece.video!.keyframeTimes ?? [],
           }));
+
         const clientStarted = performance.now();
         try {
           const result = await analyzeJewelryIntake(
