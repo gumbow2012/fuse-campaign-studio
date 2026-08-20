@@ -145,3 +145,6 @@ verify_jwt = false
 [functions.gemini-check]
 verify_jwt = false
 
+
+[functions.analyze-jewelry-frames]
+verify_jwt = false
