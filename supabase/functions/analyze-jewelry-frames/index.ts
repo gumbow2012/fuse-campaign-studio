@@ -2461,7 +2461,7 @@ function buildKnowledgeMapPrompt(args: {
     "AUTHORITY ORDER (attribute-specific — one asset can be authority for some attributes and not others):",
     "USER_CONFIRMED > CONFIRMED STRUCTURED SPEC > relevant CAD / design geometry > high-confidence product-video evidence > photographic analysis > weak inference.",
 
-    "Use CAD for silhouette, dimensions, placement, seat depth and topology. Use photos and video keyframes for real stone sizes, prong/bead reality, polish, finish and packing density. When CAD and photography genuinely disagree, record a constructionConflict with a resolution — NEVER silently average them.",
+    "Attribute authority is per attribute — no source is globally authoritative. CAD → silhouette, proportions, stone seats, topology. FULL VIDEO UNDERSTANDING → depth, physical relationships, setting behaviour, repeated module geometry, clasp construction. Macro stills → prongs, cut, packing density. Hero product photo → manufactured finish, metal appearance, stone realism. When two sources genuinely disagree, record a constructionConflict with a resolution — NEVER silently average them.",
     "",
     "TASKS — build ONE fused Product Knowledge Map for the replacement piece(s):",
     "1. TOPOLOGY FIRST. Discover the components that actually exist and give each a persistent componentId (C1, C2, …). Evidence from different views must attach to the SAME componentId. Never assume a piece type or a component that is not visible: this must work for pendants, rings, watches, Cuban chains, tennis chains, bracelets, earrings, grillz, charms and complex mechanical jewelry alike. Then define regions (R1, R2, …) on those components.",
