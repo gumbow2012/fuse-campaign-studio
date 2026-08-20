@@ -2757,6 +2757,38 @@ const PKM_SCHEMA = {
     /** ONE post-fusion name for the whole card (e.g. "Cuban Bracelet"). */
     productCaseName: { type: Type.STRING },
 
+    /**
+     * COMPOSITIONAL SETTING MODEL. One mutually-exclusive dropdown value is too
+     * lossy: stone-field TOPOLOGY (e.g. Galaxy) and RETENTION/packing
+     * CONSTRUCTION (e.g. Mosaic, Prong, Bead) are independent axes and may both
+     * be true at once. Coverage is a third, separate axis.
+     */
+    settingAnalysis: {
+      type: Type.OBJECT,
+      properties: {
+        stoneFieldTopology: { type: Type.STRING },
+        retentionConstruction: { type: Type.STRING },
+        coverageStyle: { type: Type.STRING },
+        customTerminology: STRING_ARRAY,
+        /** How the topology decision was reached — evidence, not a name. */
+        topologyEvidence: STRING_ARRAY,
+        retentionEvidence: STRING_ARRAY,
+        conflictingSignals: STRING_ARRAY,
+        /** Raw (pre-normalization) vs surviving PHYSICAL size classes. */
+        apparentSizeClasses: STRING_ARRAY,
+        physicalSizeClasses: STRING_ARRAY,
+        perspectiveNormalizationBasis: { type: Type.STRING },
+        physicalSizeVariationConfirmed: { type: Type.BOOLEAN },
+        repeatedModuleSizeComparison: { type: Type.STRING },
+        videoSizeEvidence: { type: Type.STRING },
+        vocabularyDomain: { type: Type.STRING },
+        provenance: PROVENANCE,
+        confidence: CONFIDENCE,
+        needsConfirmation: { type: Type.BOOLEAN },
+      },
+    },
+
+
 
     coverage: {
       type: Type.OBJECT,
