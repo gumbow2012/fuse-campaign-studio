@@ -2515,7 +2515,7 @@ export default function JewelrySwap() {
                           onClick={() =>
                             setPieces((prev) =>
                               prev.map((item) =>
-                                item.needsConfirmation?.length ? { ...item, expanded: true } : item,
+                                reviewControls(item).size ? { ...item, expanded: true } : item,
                               ),
                             )
                           }
