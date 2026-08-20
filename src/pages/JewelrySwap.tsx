@@ -1287,7 +1287,7 @@ export default function JewelrySwap() {
    */
   const referenceSetVersion = useMemo(
     () =>
-      JSON.stringify(
+      JSON.stringify([
         pieces.map((piece) =>
           piece.urls.map((url, angleIndex) => [
             url,
@@ -1295,9 +1295,12 @@ export default function JewelrySwap() {
             piece.cads?.[angleIndex] ?? null,
           ]),
         ),
-      ),
-    [pieces],
+        // A newly locked fact must re-run the analysis with that fact enforced.
+        userLocks.map((lock) => [lock.attribute, lock.value, lock.appliesTo ?? ""]),
+      ]),
+    [pieces, userLocks],
   );
+
   const referenceCount = pieces.reduce((total, piece) => total + piece.urls.length, 0);
   /** Unresolved product-spec concerns across all pieces (user overrides clear them). */
   const uncertainCount = reviewCount(pieces);
