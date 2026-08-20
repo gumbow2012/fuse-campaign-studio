@@ -20,6 +20,7 @@ import {
   submitFalJob,
   videoFallbackUsdPerSecond,
 } from "../_shared/fal.ts";
+import { conditionImageForKling } from "./animateInput.ts";
 
 /**
  * Jewelry Swap: sibling of Outfit Swap. Per-frame nano-banana jewelry
@@ -2867,6 +2868,9 @@ async function startAnimateFrame(admin: AdminClient, args: {
           video_model: ANIMATE_MODEL_KEY,
           resolution: "1080p",
           source_frame_url: imageUrl,
+          animate_input_url: conditioned.url,
+          animate_input_conditioned: conditioned.conditioned,
+          animate_input_note: conditioned.note ?? null,
           frame_index: Number(args.frameIndex ?? 0),
           frame_time: Number(args.frameTime ?? 0),
           camera_direction: direction,
