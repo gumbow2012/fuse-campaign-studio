@@ -685,7 +685,11 @@ export default function GenerationStudio() {
   const [modelKey, setModelKey] = useState<StudioModelKey>("nano-banana-pro");
   const [modelOpen, setModelOpen] = useState(false);
   const [prompt, setPrompt] = useState("");
+  /** Shot plan read from a loaded generation (never regenerated here). */
+  const [shotPlan, setShotPlan] = useState<ShotPlanEntry[]>([]);
+  const [directionExpanded, setDirectionExpanded] = useState(true);
   const [references, setReferences] = useState<Reference[]>([]);
+
   const [uploading, setUploading] = useState(false);
   const [dragActive, setDragActive] = useState(false);
   const [aspectRatio, setAspectRatio] = useState<string>("auto");
