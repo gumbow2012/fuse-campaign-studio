@@ -2807,6 +2807,44 @@ export default function JewelrySwap() {
                 </div>
               ) : null}
 
+              {/* What FUSE understood — plain summary, engineering detail opt-in. */}
+              {knowledgeMap ? (
+                <div className="mb-2.5 rounded-2xl border border-cyan-200/25 bg-cyan-200/5 px-3 py-2.5 text-[11px]">
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-cyan-100">
+                    FUSE understood
+                  </p>
+                  <p className="mt-1 text-foreground/85">{understoodSummary}</p>
+                  <div className="mt-1.5 flex flex-wrap gap-1.5">
+                    {coverageBadges.map((badge) => (
+                      <span
+                        key={badge.label}
+                        className="rounded-full border border-white/12 bg-black/40 px-2 py-0.5 text-[9px] uppercase tracking-[0.14em] text-foreground/70"
+                      >
+                        {badge.label}: {badge.level}
+                      </span>
+                    ))}
+                  </div>
+                  {(knowledgeMap.unresolvedFeatures?.length ?? 0) > 0 ? (
+                    <p className="mt-1.5 text-[10px] text-amber-100/85">
+                      {knowledgeMap.unresolvedFeatures!.length} detail
+                      {knowledgeMap.unresolvedFeatures!.length === 1 ? "" : "s"} need confirmation
+                    </p>
+                  ) : null}
+                  <button
+                    type="button"
+                    onClick={() => setEngineeringOpen((open) => !open)}
+                    className="mt-1.5 text-[10px] uppercase tracking-[0.14em] text-foreground/55 transition-colors hover:text-foreground"
+                  >
+                    {engineeringOpen ? "Hide engineering details" : "Engineering details"}
+                  </button>
+                  {engineeringOpen ? (
+                    <pre className="mt-1.5 max-h-64 overflow-auto rounded-xl border border-white/10 bg-black/50 p-2 text-[9px] leading-relaxed text-foreground/70">
+                      {JSON.stringify(knowledgeMap, null, 2)}
+                    </pre>
+                  ) : null}
+                </div>
+              ) : null}
+
 
               <div className="space-y-2.5">
                 {pieces.map((piece, index) => (
