@@ -1851,11 +1851,39 @@ export default function JewelrySwap() {
             type: String(setting.resolvedSetting ?? "").trim(),
             region: String(setting.resolvedRegion ?? setting.region ?? "").trim() || null,
             tier: setting.confidenceTier ?? "low",
+        // Canonical, per-region settings — the existing multi-setting rows are
+        // auto-populated without the user pressing "+ Add setting". A region the
+        // analysis declined is kept (type "") so it can be surfaced for review.
+        // The FUSED spec wins; the preliminary per-image classifier is ignored
+        // for the visible field and only fills the region list as a fallback.
+        const useResolved = productIndex === 0 && resolvedSettingRows.length > 0;
+        const detectedSettings = useResolved
+          ? resolvedSettingRows.map((setting) => ({
+            type: String(setting.setting ?? "").trim(),
+            region: String(setting.region ?? "").trim() || null,
+            tier: (Number(setting.confidence ?? 0) >= 0.7
+              ? "high"
+              : Number(setting.confidence ?? 0) >= 0.45
+                ? "medium"
+                : "low") as "high" | "medium" | "low",
             needsConfirmation:
-              setting.needsConfirmation === true || !String(setting.resolvedSetting ?? "").trim(),
-            reason: String(setting.settingClassificationReason ?? "").trim() || null,
+              setting.needsConfirmation === true || !String(setting.setting ?? "").trim(),
+            reason: String(setting.reason ?? "").trim() || null,
+            // Compositional wording ("Galaxy Mosaic") shown as-is, even when it
+            // is not one of the canonical dropdown values.
+            label: String(setting.displayLabel ?? "").trim() || null,
           }))
-          .filter((setting) => setting.type || setting.region);
+          : (product.settings ?? [])
+            .map((setting) => ({
+              type: "",
+              region: String(setting.resolvedRegion ?? setting.region ?? "").trim() || null,
+              tier: "low" as const,
+              // Preliminary observations always await the fused result.
+              needsConfirmation: true,
+              reason: String(setting.settingClassificationReason ?? "").trim() || null,
+              label: null as string | null,
+            }))
+            .filter((setting) => setting.region);
 
         const userSetSettings =
           baseSources.settings === "user_override" &&
@@ -1866,6 +1894,7 @@ export default function JewelrySwap() {
             ...EMPTY_SETTING,
             // A declined / low-confidence region stays on Auto for the user.
             type: setting.needsConfirmation || setting.tier === "low" ? "" : setting.type,
+
             region: setting.region ?? "",
           }));
 
