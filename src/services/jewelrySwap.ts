@@ -562,6 +562,34 @@ export type PkmSetting = {
   };
 };
 
+/**
+ * COMPOSITIONAL setting model. Stone-field topology (e.g. "Galaxy") and
+ * retention/packing construction (e.g. "Mosaic", "Prong", "Bead") are
+ * independent axes: "Galaxy Mosaic" and "Galaxy + Bead" are valid results.
+ */
+export type PkmSettingAnalysis = {
+  stoneFieldTopology?: string | null;
+  retentionConstruction?: string | null;
+  coverageStyle?: string | null;
+  customTerminology?: string[];
+  topologyEvidence?: string[];
+  retentionEvidence?: string[];
+  conflictingSignals?: string[];
+  /** Raw apparent classes vs the classes that survived normalization. */
+  apparentSizeClasses?: string[];
+  physicalSizeClasses?: string[];
+  perspectiveNormalizationBasis?: string | null;
+  physicalSizeVariationConfirmed?: boolean;
+  repeatedModuleSizeComparison?: string | null;
+  videoSizeEvidence?: string | null;
+  vocabularyDomain?: VocabularyDomain | null;
+  provenance?: Provenance;
+  confidence?: number;
+  needsConfirmation?: boolean;
+  /** True when a size-variation topology failed the perspective gate. */
+  perspectiveGateApplied?: boolean;
+};
+
 
 export type PkmMaterialRegion = {
   regionId?: string;
