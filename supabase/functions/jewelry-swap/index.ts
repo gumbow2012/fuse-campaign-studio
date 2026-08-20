@@ -2873,6 +2873,8 @@ Deno.serve(async (req) => {
         mode: typeof body.mode === "string" ? body.mode : null,
         coverage: typeof body.coverage === "string" ? body.coverage : null,
         macro: body.macro === true,
+        frameAnalysis: body.frameAnalysis ?? null,
+        productAnalysis: body.productAnalysis ?? null,
         webhookBase,
       });
       return json({ generation });
