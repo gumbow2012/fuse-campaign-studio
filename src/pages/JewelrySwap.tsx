@@ -424,6 +424,13 @@ const INTAKE_STAGES = [
   "Detecting stones & settings",
 ];
 
+/**
+ * The reference set must SETTLE before it is analyzed: a bulk upload of six
+ * files is one call, not six. Every change restarts this timer.
+ */
+const INTAKE_DEBOUNCE_MS = 1800;
+
+
 /** Non-Auto user value wins; otherwise fall back to the detected value. */
 function effectiveValue(userValue: string, autoValue: string, detected?: string | null) {
   if (userValue && userValue !== autoValue) return userValue;
