@@ -274,6 +274,10 @@ export async function analyzeJewelryIntake(
   args: {
     jewelryReferences: { url: string; role?: string | null; cad?: boolean }[];
     roleVocabulary?: string[];
+    options?: IntakeOptions;
+    /** Reference-set version + monotonic id, echoed back for stale detection. */
+    setVersion?: string;
+    requestId?: number;
     force?: boolean;
   },
   signal?: AbortSignal,
@@ -293,10 +297,14 @@ export async function analyzeJewelryIntake(
       mode: "intake",
       jewelryReferences: args.jewelryReferences,
       roleVocabulary: args.roleVocabulary ?? [],
+      options: args.options ?? null,
+      setVersion: args.setVersion ?? null,
+      requestId: args.requestId ?? null,
       force: args.force === true,
     }),
     signal,
   });
+
 
   const data = await response.json().catch(() => null);
   if (!response.ok || data?.error) {
