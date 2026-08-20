@@ -3164,10 +3164,32 @@ async function runKnowledgeMap(args: {
   map.version = PKM_VERSION;
   // The full-clip understanding is persisted alongside the fused map.
   map.videoAnalyses = args.videoAnalyses ?? [];
+  // ONE CASE. Every asset in this request fused into this single map.
+  const caseId = args.productCaseId ?? DEFAULT_PRODUCT_CASE_ID;
+  const referenceCount = args.references.length + args.videoReferences.length;
+  map.productCaseId = caseId;
+  map.perReferenceObservations = arrayOf(map.perReferenceObservations);
+  map.crossReferenceMatches = arrayOf(map.crossReferenceMatches);
+  map.fusionState = {
+    ...(map.fusionState ?? {}),
+    // Non-sticky by default: only the USER_CONFIRMED layer is permanent.
+    classificationStatus: map?.fusionState?.classificationStatus ?? "PRELIMINARY_OBSERVATION",
+    referenceCount,
+    modelVersion: Number(map?.fusionState?.modelVersion ?? referenceCount) || referenceCount,
+  };
+  // A suggestion only — the split never happens without the user's answer.
+  map.separatePieceSuggestion = {
+    suspected: map?.separatePieceSuggestion?.suspected === true,
+    question: map?.separatePieceSuggestion?.question ?? null,
+    confidence: map?.separatePieceSuggestion?.confidence ?? null,
+    groups: arrayOf(map?.separatePieceSuggestion?.groups),
+  };
   // The user's confirmations are persisted with the map and win forever.
   map.userConfirmedFacts = args.userConfirmedFacts ?? [];
   // The ontology travels with the map so the admin panel and any later
   // classification compare against the SAME signatures, with the two vocabulary
+  // layers kept distinguishable (domain + which decision each term can answer).
+
   // layers kept distinguishable (domain + which decision each term can answer).
   map.settingOntology = SETTING_ONTOLOGY.map((entry) => entry.canonicalName);
   map.terminologyOntology = {
