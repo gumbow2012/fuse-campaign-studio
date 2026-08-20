@@ -19,6 +19,11 @@ export type AnimationDirectionSummary = {
 export type JewelryGeneration = SwapGeneration & {
   imageModel?: JewelryImageModel | null;
   preferredRole?: string | null;
+  /** Resolution sent to the Nano Banana Pro endpoint ("2K" | "4K"). */
+  resolution?: string | null;
+  /** Same value in UI form: "2k" | "4k". Absent on the nb2 path. */
+  nanoQuality?: "2k" | "4k" | string | null;
+
   /** True when MACRO REPLACEMENT MODE was applied for this frame. */
   macroMode?: boolean | null;
   /** Per-frame replacement strategy used: "auto" | "standard" | "macro". */
