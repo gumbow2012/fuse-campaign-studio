@@ -650,7 +650,18 @@ const FAILURE_CORRECTIONS: Record<string, string> = {
     "CORRECTION: The source is a full-product composition but the previous replacement was cropped. Preserve the replacement's true proportions and scale the ENTIRE product to fit inside the source frame (fit: contain). Keep all meaningful ends, edges, clasp/closure and overall silhouette visible with natural negative space. Do not crop the replacement.",
   "possiblereferencecontextleak":
     "CORRECTION: The previous generation incorrectly copied environmental/contextual elements from a jewelry product reference (background, hands, gloves, props, surfaces or lighting). Remove ALL such contamination. The jewelry reference controls ONLY the target jewelry object's physical construction. Restore every non-jewelry region from SOURCE_FRAME exactly.",
+  "wrongsetting":
+    "CORRECTION: The previous generation used an incorrect stone-setting method. Follow the structured Setting specification and the relevant CAD/product references exactly. Do not substitute generic pavé or another setting style.",
+  "wrongstonecolor":
+    "CORRECTION: The previous generation changed the physical stone color. Restore the exact specified Stone Color. Spectral flashes are optical dispersion only and must not alter the gemstones' actual body color.",
+  "wrongstoneshape":
+    "CORRECTION: Preserve the exact stone cuts and shapes represented by the design authority and product references. Do not replace fancy-cut stones with rounds or invent other cuts.",
+  "wrongstonesize/layout":
+    "CORRECTION: Preserve the reference/CAD-supported relative stone sizes, spacing, orientation and arrangement. Do not regularize the design into uniform rows unless the target design actually uses uniform rows.",
+  "wrongstonesizelayout":
+    "CORRECTION: Preserve the reference/CAD-supported relative stone sizes, spacing, orientation and arrangement. Do not regularize the design into uniform rows unless the target design actually uses uniform rows.",
   other:
+
 
 
     "CORRECTION: the previous attempt was inaccurate. Re-read SOURCE_FRAME for the shot and the references for the object's construction, and follow both strictly.",
