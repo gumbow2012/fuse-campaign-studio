@@ -3299,6 +3299,37 @@ export default function JewelrySwap() {
                                 </option>
                               ))}
                             </select>
+                            {/* Defaults to the quality this frame last ran at. */}
+                            <div className="flex items-center gap-2">
+                              <span className="text-[9px] uppercase tracking-[0.14em] text-muted-foreground">
+                                Quality
+                              </span>
+                              <div className="inline-flex rounded-lg border border-white/12 bg-black/50 p-0.5">
+                                {NANO_QUALITY_OPTIONS.map((option) => {
+                                  const current =
+                                    frameQuality[index] ?? qualityFromGeneration(swap) ?? nanoQuality;
+                                  const active = current === option.value;
+                                  return (
+                                    <button
+                                      key={option.value}
+                                      type="button"
+                                      onClick={() =>
+                                        setFrameQuality((prev) => ({ ...prev, [index]: option.value }))
+                                      }
+                                      className={cn(
+                                        "rounded-md px-2 py-1 text-[10px] font-semibold transition-all",
+                                        active
+                                          ? "border border-cyan-200/50 bg-cyan-200/12 text-cyan-100 shadow-[0_0_12px_-4px_hsl(190_90%_60%/0.55)]"
+                                          : "border border-transparent text-foreground/60 hover:text-foreground",
+                                      )}
+                                    >
+                                      {option.label}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            </div>
+
                             <details className="rounded-lg border border-white/10 bg-black/30 px-2 py-1.5">
                               <summary className="cursor-pointer text-[10px] text-muted-foreground">
                                 Advanced
