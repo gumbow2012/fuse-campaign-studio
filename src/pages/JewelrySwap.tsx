@@ -56,6 +56,8 @@ import {
   type JewelryIntake,
   type DetectedField,
   type ProductKnowledgeMap,
+  type UserConfirmedFact,
+
   type JewelryVideoReferenceInput,
 
 
