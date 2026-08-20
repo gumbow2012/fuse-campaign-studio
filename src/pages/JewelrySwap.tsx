@@ -1291,18 +1291,22 @@ export default function JewelrySwap() {
   const referenceSetVersion = useMemo(
     () =>
       JSON.stringify([
-        pieces.map((piece) =>
+        pieces.map((piece) => [
           piece.urls.map((url, angleIndex) => [
             url,
             piece.roles?.[angleIndex] ?? "",
             piece.cads?.[angleIndex] ?? null,
           ]),
-        ),
+          // A replacement clip is part of the analysed set even though it
+          // contributes no image references.
+          piece.video?.videoUrl ?? "",
+        ]),
         // A newly locked fact must re-run the analysis with that fact enforced.
         userLocks.map((lock) => [lock.attribute, lock.value, lock.appliesTo ?? ""]),
       ]),
     [pieces, userLocks],
   );
+
 
   const referenceCount = pieces.reduce((total, piece) => total + piece.urls.length, 0);
   /** Unresolved product-spec concerns across all pieces (user overrides clear them). */
