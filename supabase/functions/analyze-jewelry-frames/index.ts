@@ -3048,7 +3048,27 @@ function applyUserConfirmedFacts(map: any, facts: UserConfirmedFact[]) {
     entry.needsConfirmation = false;
   };
 
+  // TERMINOLOGY LOCK: when the user named the setting, that WORDING is final.
+  // Gemini may describe the construction underneath it, but never rename it.
+  const settingTerm = facts.find((fact) =>
+    ["setting", "setting_name", "setting_terminology", "terminology"].includes(fact.attribute.toLowerCase())
+  );
+  if (settingTerm?.value) {
+    const label = String(settingTerm.value).trim();
+    const scope = settingTerm.appliesTo ? String(settingTerm.appliesTo).trim() : "";
+    for (const setting of arrayOf(map.settings)) {
+      // A scoped confirmation only locks the region/component it names.
+      if (scope && ![setting?.regionId, setting?.componentId].includes(scope)) continue;
+      setting.detectedSetting = label;
+      setting.canonicalSetting = label;
+      setting.userConfirmedTerm = true;
+      // The observed construction is kept — only the LABEL is locked.
+      lock(setting);
+    }
+  }
+
   if (locked.has("setting")) for (const setting of arrayOf(map.settings)) lock(setting);
+
   if (locked.has("stone_size") || locked.has("stone_sizes")) {
     for (const group of arrayOf(map.stoneGroups)) lock(group);
   }
