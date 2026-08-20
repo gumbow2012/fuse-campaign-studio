@@ -556,6 +556,17 @@ export default function JewelrySwap() {
   const [uploadingPiece, setUploadingPiece] = useState(false);
   const [extraPrompt, setExtraPrompt] = useState("");
 
+  // STAGE A — still-image shot analysis. Advisory: the deterministic selector
+  // and every manual choice still decide. Recomputed ONLY when its inputs
+  // change (references/roles/CAD, specs, selected frames) — never on reload,
+  // modal open or approve.
+  const [analysis, setAnalysis] = useState<JewelryProjectAnalysis | null>(null);
+  const [analysisKey, setAnalysisKey] = useState<string | null>(null);
+  const [analysisState, setAnalysisState] = useState<"idle" | "running" | "ready" | "failed">(
+    "idle",
+  );
+
+
   // Nano Banana Pro results (the default) and the opt-in Nano Banana 2 runs live
   // side by side so a frame can be compared before one is approved.
   const [swaps, setSwaps] = useState<Record<number, JewelryGeneration>>({});
