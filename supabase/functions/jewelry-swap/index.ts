@@ -1246,6 +1246,9 @@ function buildSeedanceDirectorPrompt(args: {
     ? ["SHOT TIMELINE:", ...plan.map((shot) => `${shot.start}-${shot.end}s — ${shot.key} (${shot.role}); product rigid`)].join("\n")
     : timeline;
 
+  // The exact whip wording must survive even the compact timeline.
+  const whipUsed = plan.some((shot) => shot.key === "Hero-Whip Transition");
+
   const buildCore = (timelineText: string) =>
     [
       `OBJECTIVE: Direct a ${duration}s luxury product film of ONE ${productType}${aspect ? ` framed ${aspect}` : ""}, built strictly from the approved reference views.`,
@@ -1253,9 +1256,11 @@ function buildSeedanceDirectorPrompt(args: {
       DIRECTOR_PHYSICS,
       DIRECTOR_TEMPORAL_LOCK,
       timelineText,
+      whipUsed && !timelineText.includes(WHIP_WORDING) ? WHIP_WORDING : null,
       safeCameraLine(geometry),
       mosaic ? DIRECTOR_MOSAIC : null,
     ].filter(Boolean) as string[];
+
 
   // Always protected: PRODUCT LOCK + GLOBAL PHYSICS + timeline + HARD NEGATIVES.
   const negatives = DIRECTOR_HARD_NEGATIVES;
