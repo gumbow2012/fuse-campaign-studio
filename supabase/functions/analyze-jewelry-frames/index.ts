@@ -998,12 +998,14 @@ function buildIntakePrompt(args: {
   references: JewelryReferenceInput[];
   roleVocabulary: string[];
   options: IntakeOptions;
+  unavailable?: Set<number>;
 }) {
   const refLines = args.references.map((ref, index) =>
     `REFERENCE ${index} (referenceIndex ${index})${ref.role ? ` — user label "${ref.role}"` : ""}${
       ref.cad ? " — user marked as design authority" : ""
-    }`
+    }${args.unavailable?.has(index) ? " — IMAGE UNAVAILABLE (no image supplied for this index; skip it entirely and do not invent findings for it)" : ""}`
   );
+
   const options = args.options;
   const vocabulary = (label: string, values: string[]) =>
     values.length ? `${label}: ${values.join(" | ")}` : "";
