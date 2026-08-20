@@ -141,3 +141,7 @@ verify_jwt = false
 
 [functions.jewelry-swap]
 verify_jwt = false
+
+[functions.gemini-check]
+verify_jwt = false
+
