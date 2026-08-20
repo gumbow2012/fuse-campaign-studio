@@ -1022,8 +1022,36 @@ function engineeringLockLines(pkm: any): string[] {
     );
   }
 
-  return lines.filter(Boolean).slice(0, 20);
+  // VIDEO-DERIVED physical facts: the full-clip analysis is evidence of the real
+  // object, so its temporal reconciliations become explicit constraints.
+  for (const analysis of (Array.isArray(pkm?.videoAnalyses) ? pkm.videoAnalyses : []).slice(0, 2)) {
+    const master = (Array.isArray(analysis?.repeatedModules) ? analysis.repeatedModules : [])[0];
+    if (master?.masterGeometry) {
+      lines.push(
+        `preserve the master ${String(master?.label ?? "module")} geometry observed continuously in the product video: ${String(master.masterGeometry).slice(0, 160)}`,
+      );
+    }
+    const normalized = (Array.isArray(analysis?.temporalComponentTracking) ? analysis.temporalComponentTracking : [])
+      .some((entry: any) => entry?.apparentSizeDifference === true && entry?.physicalSizeDifference === false);
+    if (normalized) {
+      lines.push(
+        "maintain one perspective-normalized physical stone-size class where cross-angle video evidence confirms uniformity; do NOT read smaller apparent stones on receding surfaces as smaller physical stones",
+      );
+    }
+    const retention = analysis?.settingEvidence?.observedRetentionMechanics;
+    if (retention) lines.push(`retention as observed across the clip: ${String(retention).slice(0, 140)}`);
+    const exposed = analysis?.stoneEvidence?.exposedMetalPattern;
+    if (exposed) lines.push(`preserve the observed exposed-metal pattern: ${String(exposed).slice(0, 140)}`);
+    if (analysis?.claspEvidence) {
+      lines.push(
+        `reproduce the clasp as its own component per the construction established when it becomes fully visible: ${String(analysis.claspEvidence).slice(0, 140)}`,
+      );
+    }
+  }
+
+  return lines.filter(Boolean).slice(0, 24);
 }
+
 
 
 
