@@ -490,6 +490,23 @@ Deno.serve(async (req) => {
       return json({ generations });
     }
 
+    if (action === "set_favorite") {
+      const generationId = String(body.generationId ?? "").trim();
+      if (!generationId) throw new Error("generationId is required");
+      const favorited = (body as { favorited?: unknown }).favorited === true;
+
+      const { data: row, error } = await admin
+        .from("studio_generations")
+        .update({ favorited })
+        .eq("id", generationId)
+        .eq("user_id", user.id)
+        .select("*")
+        .maybeSingle();
+      if (error) throw new Error(error.message);
+      if (!row) return json({ error: "Generation not found" }, 404);
+      return json({ generation: serializeGeneration(row) });
+    }
+
     if (action === "delete") {
       const ids = (Array.isArray(body.generationIds) ? body.generationIds : [body.generationId])
         .map((id) => String(id ?? "").trim())
