@@ -164,6 +164,33 @@ const ANGLE_ROLE_OPTIONS = [
   "Other",
 ];
 
+/**
+ * Product-TYPE-aware reference labels — the routing in the function keys off these
+ * labels, so a bracelet never offers "Bail" and a ring never offers "Clasp".
+ */
+const TYPE_ROLE_OPTIONS: Record<string, string[]> = {
+  bracelet: ["Front", "Back", "Left Side", "Right Side", "Clasp", "Link Detail", "Macro Detail", "Side Profile", "CAD Front", "CAD Back", "CAD Side", "Other"],
+  pendant: ["Front", "Back", "Side", "Bail", "Connector/Hinge", "Macro Detail", "CAD Front", "CAD Back", "CAD Side", "CAD 3/4", "Other"],
+  ring: ["Face/Crown", "Side", "Shank", "Under-gallery", "Setting", "Macro Detail", "CAD Front", "CAD Side", "Other"],
+  watch: ["Dial", "Bezel", "Case", "Side", "Crown", "Bracelet", "Clasp", "Caseback", "Macro Detail", "CAD Front", "CAD Side", "Other"],
+  earrings: ["Front", "Back", "Side", "Macro Detail", "CAD Front", "CAD Side", "Other"],
+  generic: ["Front", "Back", "Side", "Macro Detail", "CAD Front", "CAD Side", "Other"],
+};
+
+/** Reference role options for a piece type (always includes the blank option). */
+function roleOptionsForType(type: string | null | undefined): string[] {
+  const text = String(type ?? "").toLowerCase();
+  let key = "generic";
+  if (/bracelet|anklet/.test(text)) key = "bracelet";
+  else if (/pendant|necklace|choker|chain|charm|brooch/.test(text)) key = "pendant";
+  else if (/ring/.test(text)) key = "ring";
+  else if (/watch/.test(text)) key = "watch";
+  else if (/earring|stud|hoop/.test(text)) key = "earrings";
+  else if (/grill/.test(text)) key = "earrings";
+  return ["", ...TYPE_ROLE_OPTIONS[key]];
+}
+
+
 /** Per-frame replacement strategy. Auto lets the model self-classify the frame. */
 const REPLACEMENT_MODES = [
   { value: "auto", label: "Auto" },
