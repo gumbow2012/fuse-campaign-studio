@@ -838,7 +838,12 @@ async function handleIntake(req: Request, body: any, user: { id: string }, apiKe
     .filter(Boolean)
     .slice(0, 60);
 
-  const fingerprint = await referenceFingerprint(references);
+  const options = readOptions(body?.options ?? {});
+  // Echoed back untouched so the client can discard a stale response.
+  const setVersion = body?.setVersion ? String(body.setVersion) : null;
+  const requestId = Number.isFinite(Number(body?.requestId)) ? Number(body.requestId) : null;
+
+  const fingerprint = await referenceFingerprint(references, options);
   const admin = createAdminClient();
 
   const { data: cached } = await admin
@@ -852,6 +857,8 @@ async function handleIntake(req: Request, body: any, user: { id: string }, apiKe
     return json({
       cached: true,
       fingerprint,
+      setVersion,
+      requestId,
       version: cached.version ?? INTAKE_VERSION,
       analyzedAt: cached.analyzed_at,
       intake: cached.analysis,
@@ -861,8 +868,12 @@ async function handleIntake(req: Request, body: any, user: { id: string }, apiKe
   if (!apiKey) return json({ error: "Jewelry analysis is unavailable (analysis key not configured)" }, 503);
 
   const ai = new GoogleGenAI({ apiKey });
+  // ONE call for the whole settled reference set — never one call per image.
   const batch = references.slice(0, MAX_IMAGES_PER_CALL);
-  const intake = stampSources(await runIntake({ ai, references: batch, roleVocabulary }));
+  const intake = stampSources(
+    await runIntake({ ai, references: batch, roleVocabulary, options }),
+    options,
+  );
   intake.version = INTAKE_VERSION;
   intake.referenceCount = batch.length;
 
@@ -883,11 +894,14 @@ async function handleIntake(req: Request, body: any, user: { id: string }, apiKe
   return json({
     cached: false,
     fingerprint,
+    setVersion,
+    requestId,
     version: INTAKE_VERSION,
     analyzedAt: new Date().toISOString(),
     intake,
     guardStripped: stripped,
   });
+
 }
 
 
