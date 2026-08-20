@@ -3210,8 +3210,14 @@ async function runKnowledgeMap(args: {
     );
   }
   console.log(
+    `[analyze-jewelry-frames] ONE PRODUCT FUSION case=${caseId} name=${map?.productCaseName ?? "?"} references=${referenceCount} observations=${map.perReferenceObservations.length} crossRefMerges=${
+      map.crossReferenceMatches.filter((match: any) => match?.merged).length
+    }/${map.crossReferenceMatches.length} status=${map.fusionState.classificationStatus} v${map.fusionState.modelVersion} splitSuggested=${map.separatePieceSuggestion.suspected}`,
+  );
+  console.log(
     `[analyze-jewelry-frames] FINAL SETTING CLASSIFICATION setting=${detectedValue(map?.setting) || map?.setting?.canonical || "?"} reason=${String(map?.settingClassificationReason ?? "").slice(0, 300)}`,
   );
+
 
   return { knowledgeMap: applyUserConfirmedFacts(map, args.userConfirmedFacts ?? []), geminiMs: Date.now() - started };
 }
