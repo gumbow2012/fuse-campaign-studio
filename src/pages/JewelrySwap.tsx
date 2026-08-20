@@ -79,7 +79,7 @@ import {
 } from "@/services/jewelrySwap";
 
 import { extractFrames, frameTimestamps, loadVideo, readMeta, type VideoMeta } from "@/lib/videoFrames";
-import { compressImageFile } from "@/lib/imageCompress";
+import { selectVideoKeyframes } from "@/lib/videoKeyframes";
 
 const JEWELRY_TYPES = [
   "Pendant",
