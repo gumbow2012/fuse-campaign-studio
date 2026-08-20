@@ -3473,7 +3473,27 @@ function applyUserConfirmedFacts(map: any, facts: UserConfirmedFact[]) {
       // The observed construction is kept — only the LABEL is locked.
       lock(setting);
     }
+    // The compositional axes carry the user's wording too: a user-supplied
+    // topology term lands on topology, anything else on retention.
+    const analysis = map.settingAnalysis && typeof map.settingAnalysis === "object"
+      ? map.settingAnalysis
+      : (map.settingAnalysis = {});
+    const isTopology = (TOPOLOGY_TERMS as string[]).some((term) =>
+      term.toLowerCase().includes(label.toLowerCase()) || label.toLowerCase().includes(term.toLowerCase())
+    );
+    if (isTopology) analysis.stoneFieldTopology = label;
+    else analysis.retentionConstruction = label;
+    analysis.customTerminology = [
+      ...new Set([...(Array.isArray(analysis.customTerminology) ? analysis.customTerminology : []), label]),
+    ];
+    analysis.provenance = "USER_CONFIRMED";
+    analysis.confidence = 1;
+    analysis.needsConfirmation = false;
+    analysis.perspectiveGateApplied = false;
+    map.resolvedSettingTerminology = [analysis.stoneFieldTopology, analysis.retentionConstruction]
+      .filter(Boolean).join(" ") || label;
   }
+
 
   if (locked.has("setting")) for (const setting of arrayOf(map.settings)) lock(setting);
 
