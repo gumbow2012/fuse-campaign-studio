@@ -899,7 +899,36 @@ export type JewelryIntake = {
   /** The fused engineering understanding of the replacement piece(s). */
   knowledgeMap?: ProductKnowledgeMap;
   videoAnalyses?: JewelryVideoAnalysis[];
+  /** THE authority for the visible setting field and the Nano engineering lock. */
+  resolvedJewelrySpec?: ResolvedJewelrySpec;
 };
+
+export type ResolvedSettingSpec = {
+  region?: string | null;
+  /** Composed compositional wording, e.g. "Galaxy Mosaic". */
+  displayLabel?: string;
+  /** Canonical app enum value, empty when the fused map needs confirmation. */
+  setting?: string;
+  detectedSetting?: string | null;
+  vocabularyDomain?: VocabularyDomain | null;
+  matchedSignals?: string[];
+  conflictingSignals?: string[];
+  reason?: string | null;
+  provenance?: Provenance | null;
+  userConfirmedTerm?: boolean;
+  confidence?: number;
+  needsConfirmation?: boolean;
+};
+
+export type ResolvedJewelrySpec = {
+  source?: string;
+  version?: string | null;
+  productCaseId?: string | null;
+  userFacingTerminology?: string | null;
+  settingAnalysis?: PkmSettingAnalysis | null;
+  settings: ResolvedSettingSpec[];
+};
+
 
 export type JewelryIntakeResult = {
   cached: boolean;
