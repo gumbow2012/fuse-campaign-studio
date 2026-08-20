@@ -2725,7 +2725,7 @@ export default function JewelrySwap() {
 
                       <div>
                         <label className="mb-1 block text-[10px] uppercase tracking-[0.14em] text-cyan-200/70">
-                          Type{detectedTag(piece.sources, "type")}
+                          Type{detectedTag(piece.sources, "type")}{reviewTag(piece, "type")}
                         </label>
                         <select
                           value={piece.type}
@@ -2748,7 +2748,7 @@ export default function JewelrySwap() {
                       </div>
                       <div>
                         <label className="mb-1 block text-[10px] uppercase tracking-[0.14em] text-cyan-200/70">
-                          Metal{detectedTag(piece.sources, "metal")}
+                          Metal{detectedTag(piece.sources, "metal")}{reviewTag(piece, "metal")}
                         </label>
                         <select
                           value={piece.metal}
@@ -2771,7 +2771,7 @@ export default function JewelrySwap() {
                       </div>
                       <div>
                         <label className="mb-1 block text-[10px] uppercase tracking-[0.14em] text-cyan-200/70">
-                          Stone{detectedTag(piece.sources, "stone")}
+                          Stone{detectedTag(piece.sources, "stone")}{reviewTag(piece, "stone")}
                         </label>
                         <select
                           value={piece.stone}
@@ -2793,7 +2793,7 @@ export default function JewelrySwap() {
                       </div>
                       <div>
                         <label className="mb-1 block text-[10px] uppercase tracking-[0.14em] text-cyan-200/70">
-                          Stone color{detectedTag(piece.sources, "stoneColor")}
+                          Stone color{detectedTag(piece.sources, "stoneColor")}{reviewTag(piece, "stoneColor")}
                         </label>
                         <select
                           value={piece.stoneColor || AUTO_STONE_COLOR}
@@ -2817,7 +2817,7 @@ export default function JewelrySwap() {
                       </div>
                       <div>
                         <label className="mb-1 block text-[10px] uppercase tracking-[0.14em] text-cyan-200/70">
-                          Quality{detectedTag(piece.sources, "quality")}
+                          Quality{detectedTag(piece.sources, "quality")}{reviewTag(piece, "quality")}
                         </label>
                         <select
                           value={piece.quality || AUTO_QUALITY}
@@ -2851,7 +2851,7 @@ export default function JewelrySwap() {
                               <div>
                                 {settingIndex === 0 ? (
                                   <label className="mb-1 block text-[10px] uppercase tracking-[0.14em] text-cyan-200/70">
-                                    Setting{detectedTag(piece.sources, "settings")}
+                                    Setting{detectedTag(piece.sources, "settings")}{reviewTag(piece, "settings")}
                                   </label>
                                 ) : null}
                                 <select
