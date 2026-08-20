@@ -267,7 +267,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       const now = Date.now();
       if (now - lastRefreshAt < 15_000) return;
       lastRefreshAt = now;
-      void fetchProfile(user.id);
+      void fetchProfile(user.id).catch((error) => {
+        console.error("Background profile refresh failed:", error);
+      });
     };
 
     window.addEventListener("focus", refreshVisibleProfile);
@@ -279,7 +281,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     };
   }, [fetchProfile, user]);
 
+  const loading = authStatus === "initializing_session" || authStatus === "loading_access";
+
   return (
+
     <AuthContext.Provider value={{ user, session, profile, loading, authStatus, roles, isAdmin, isCreator, hasAppAccess, canUseBuilder: hasAppAccess || isCreator, signOut, refreshAccess, refreshProfile, refreshSubscription }}>
       {children}
     </AuthContext.Provider>
