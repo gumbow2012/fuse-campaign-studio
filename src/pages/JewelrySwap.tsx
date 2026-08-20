@@ -3251,7 +3251,36 @@ export default function JewelrySwap() {
               ) : null}
 
 
+              {/* A QUESTION, never an action: FUSE never splits a card itself. */}
+              {splitSuggestion && splitSuggestion.groups.length > 1 ? (
+                <div className="mb-2.5 rounded-2xl border border-amber-200/40 bg-amber-200/[0.06] p-3">
+                  <p className="text-[11px] text-foreground/85">{splitSuggestion.question}</p>
+                  <p className="mt-1 text-[10px] text-foreground/55">
+                    {splitSuggestion.groups
+                      .map((group) => `${group.label} (${group.urls.length})`)
+                      .join(" · ")}
+                  </p>
+                  <div className="mt-2 flex gap-2">
+                    <button
+                      type="button"
+                      onClick={separateSuggestedPieces}
+                      className="rounded-lg border border-amber-200/50 bg-amber-200/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-amber-100"
+                    >
+                      Separate them
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setSplitSuggestion(null)}
+                      className="rounded-lg border border-white/15 bg-black/40 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-foreground/70"
+                    >
+                      Keep as one piece
+                    </button>
+                  </div>
+                </div>
+              ) : null}
+
               <div className="space-y-2.5">
+
                 {pieces.map((piece, index) => (
 
                   <div
