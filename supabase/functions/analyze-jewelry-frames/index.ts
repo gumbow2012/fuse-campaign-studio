@@ -3005,7 +3005,10 @@ function buildKnowledgeMapPrompt(args: {
   unavailable: Set<number>;
   /** USER_CONFIRMED facts — Gemini may never override these. */
   userConfirmedFacts?: UserConfirmedFact[];
+  /** The ONE physical piece all of these assets observe. */
+  productCaseId?: string;
 }) {
+
 
   const refLines = args.references.map((ref, index) => {
     const id = referenceIdAt(index);
