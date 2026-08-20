@@ -354,14 +354,15 @@ function AspectGlyph({ ratio }: { ratio: string }) {
 
 function SectionLabel({ children, hint }: { children: React.ReactNode; hint?: string }) {
   return (
-    <div className="mb-2 flex items-baseline justify-between gap-3">
-      <span className="text-[11px] font-semibold uppercase tracking-[0.2em] text-cyan-200/70">
+    <div className="mb-2.5 flex items-baseline justify-between gap-3">
+      <span className="font-display text-[13px] font-semibold uppercase tracking-[0.08em] text-[hsl(var(--electric-cyan))]">
         {children}
       </span>
-      {hint ? <span className="text-[11px] text-muted-foreground">{hint}</span> : null}
+      {hint ? <span className="text-[12px] text-muted-foreground">{hint}</span> : null}
     </div>
   );
 }
+
 
 const ICON_ACTION_CLASS =
   "flex h-7 w-7 items-center justify-center rounded-lg border border-white/15 bg-black/60 text-foreground/80 backdrop-blur-md transition-colors hover:border-cyan-200/60 hover:text-cyan-100";
@@ -1684,9 +1685,11 @@ export default function GenerationStudio() {
             <Tabs defaultValue="gallery">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <TabsList>
-                  <TabsTrigger value="gallery">Gallery</TabsTrigger>
-                  <TabsTrigger value="library">
-                    <Images size={14} className="mr-1.5" /> Asset library
+                  <TabsTrigger value="gallery" className="font-display text-[13px] font-semibold tracking-[0.06em]">
+                    GALLERY
+                  </TabsTrigger>
+                  <TabsTrigger value="library" className="font-display text-[13px] font-semibold tracking-[0.06em]">
+                    <Images size={14} className="mr-1.5" /> ASSET LIBRARY
                   </TabsTrigger>
                 </TabsList>
                 <button
@@ -1694,17 +1697,18 @@ export default function GenerationStudio() {
                   onClick={() => setFavoritesOnly((prev) => !prev)}
                   aria-pressed={favoritesOnly}
                   className={cn(
-                    "flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.14em] transition-colors",
+                    "flex items-center gap-1.5 rounded-xl border px-3 py-1.5 font-display text-[12px] font-semibold uppercase tracking-[0.08em] transition-all duration-200",
                     favoritesOnly
                       ? "border-red-400/50 bg-red-500/15 text-red-200"
                       : "border-white/12 bg-black/30 text-muted-foreground hover:text-foreground",
                   )}
                 >
-                  <Heart size={13} className={favoritesOnly ? "fill-current" : undefined} /> Favorites
+                  <Heart size={13} className={favoritesOnly ? "fill-current" : undefined} /> FAVORITES
                 </button>
                 {selected.length ? (
                   <div className="flex items-center gap-2">
-                    <span className="text-[11px] text-cyan-200/70">{selected.length} selected</span>
+                    <span className="text-[12px] text-[hsl(var(--electric-cyan))]">{selected.length} selected</span>
+
                     <Button
                       size="sm"
                       variant="outline"
@@ -1812,7 +1816,7 @@ export default function GenerationStudio() {
                         type="button"
                         onClick={() => setAssetTypeFilter(option)}
                         className={cn(
-                          "rounded-lg px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] transition-colors",
+                          "rounded-lg px-3 py-1.5 font-display text-[12px] font-semibold uppercase tracking-[0.07em] transition-colors",
                           assetTypeFilter === option
                             ? "bg-cyan-300/20 text-cyan-100"
                             : "text-muted-foreground hover:text-foreground",
@@ -1832,7 +1836,7 @@ export default function GenerationStudio() {
                         type="button"
                         onClick={() => setAssetSort(option.value)}
                         className={cn(
-                          "rounded-lg px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] transition-colors",
+                          "rounded-lg px-3 py-1.5 font-display text-[12px] font-semibold uppercase tracking-[0.07em] transition-colors",
                           assetSort === option.value
                             ? "bg-cyan-300/20 text-cyan-100"
                             : "text-muted-foreground hover:text-foreground",
@@ -1958,8 +1962,8 @@ export default function GenerationStudio() {
                   <aside className="flex max-h-[85vh] flex-col gap-4 overflow-y-auto border-t border-white/10 p-5 lg:border-l lg:border-t-0">
                     <div className="space-y-1">
                       <div className="flex items-center justify-between gap-2">
-                        <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-cyan-200/70">
-                          Result
+                        <p className="font-display text-[14px] font-semibold uppercase tracking-[0.07em] text-[hsl(var(--electric-cyan))]">
+                          RESULT
                         </p>
                         <FavoriteButton
                           favorited={lightbox.favorited === true}
@@ -1973,17 +1977,17 @@ export default function GenerationStudio() {
                       </p>
                       <div className="flex flex-wrap gap-1.5 pt-1">
                         {recipe.aspect ? (
-                          <span className="rounded-full border border-white/12 bg-white/[0.04] px-2 py-0.5 text-[11px] text-foreground/80">
+                          <span className="rounded-full border border-white/12 bg-white/[0.04] px-2.5 py-0.5 text-[12px] text-foreground/85">
                             {recipe.aspect}
                           </span>
                         ) : null}
                         {recipe.resolution ? (
-                          <span className="rounded-full border border-white/12 bg-white/[0.04] px-2 py-0.5 text-[11px] text-foreground/80">
+                          <span className="rounded-full border border-white/12 bg-white/[0.04] px-2.5 py-0.5 text-[12px] text-foreground/85">
                             {recipe.resolution}
                           </span>
                         ) : null}
                         {lightbox.estimatedCredits ? (
-                          <span className="rounded-full border border-white/12 bg-white/[0.04] px-2 py-0.5 text-[11px] text-cyan-200/80">
+                          <span className="rounded-full border border-white/12 bg-white/[0.04] px-2.5 py-0.5 text-[12px] text-[hsl(var(--electric-cyan))]">
                             {costPreview(lightbox.estimatedCredits, lightbox.estimatedCostUsd)}
                           </span>
                         ) : null}
@@ -1995,7 +1999,7 @@ export default function GenerationStudio() {
                         onClick={() => animateImage(lightbox.outputUrl as string)}
                         className="w-full rounded-xl bg-blue-600 text-white hover:bg-blue-500"
                       >
-                        <Film size={15} className="mr-2" /> Animate
+                        <Film size={15} className="mr-2" /> <span className="font-display text-[14px] font-semibold tracking-[0.06em]">ANIMATE</span>
                       </Button>
                     ) : null}
 
@@ -2004,14 +2008,14 @@ export default function GenerationStudio() {
                         onClick={() => useAsReference(lightbox.outputUrl as string)}
                         className="w-full rounded-xl bg-[hsl(var(--primary))] text-primary-foreground hover:bg-[hsl(var(--primary))]/90"
                       >
-                        <Wand2 size={15} className="mr-2" /> Use as reference
+                        <Wand2 size={15} className="mr-2" /> <span className="font-display text-[14px] font-semibold tracking-[0.06em]">USE AS REFERENCE</span>
                       </Button>
                     ) : null}
 
                     <div className="space-y-2">
                       <div className="flex items-center justify-between gap-2">
-                        <span className="text-[11px] font-semibold uppercase tracking-[0.2em] text-cyan-200/70">
-                          Prompt
+                        <span className="font-display text-[13px] font-semibold uppercase tracking-[0.07em] text-[hsl(var(--electric-cyan))]">
+                          DIRECTION
                         </span>
                         <button
                           type="button"
@@ -2022,15 +2026,15 @@ export default function GenerationStudio() {
                           <Copy size={12} /> Copy
                         </button>
                       </div>
-                      <p className="max-h-48 overflow-y-auto whitespace-pre-wrap rounded-xl border border-white/10 bg-black/30 p-3 text-xs leading-relaxed text-foreground/90">
+                      <p className="max-h-48 overflow-y-auto whitespace-pre-wrap rounded-xl border border-white/10 bg-black/30 p-3 text-[13px] leading-relaxed text-foreground/90">
                         {recipe.prompt || "No prompt stored for this generation."}
                       </p>
                     </div>
 
                     {recipe.urls.length ? (
                       <div className="space-y-2">
-                        <span className="text-[11px] font-semibold uppercase tracking-[0.2em] text-cyan-200/70">
-                          References used
+                        <span className="font-display text-[13px] font-semibold uppercase tracking-[0.07em] text-[hsl(var(--electric-cyan))]">
+                          REFERENCES USED
                         </span>
                         <div className="flex flex-wrap gap-2">
                           {recipe.urls.map((url, index) => (
@@ -2045,7 +2049,7 @@ export default function GenerationStudio() {
                               <span className="absolute inset-0 hidden items-center justify-center bg-black/70 text-[10px] font-semibold text-cyan-100 group-hover/ref:flex">
                                 + Add
                               </span>
-                              <span className="absolute inset-x-0 bottom-0 bg-black/75 text-center text-[9px] font-semibold uppercase text-cyan-100 group-hover/ref:hidden">
+                              <span className="absolute inset-x-0 bottom-0 bg-black/75 text-center font-display text-[11px] font-semibold uppercase text-cyan-100 group-hover/ref:hidden">
                                 Ref {index + 1}
                               </span>
                             </button>
