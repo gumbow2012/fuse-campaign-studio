@@ -1163,10 +1163,11 @@ export default function JewelrySwap() {
 
   /**
    * Each selected asset becomes its own piece card. The zone is mixed-media:
-   * images upload as stills, replacement VIDEOS are reduced client-side to a
-   * small diverse keyframe set which becomes that card's reference angles.
-   * FUSE types every asset itself — the user never labels anything.
+   * images upload as stills; replacement VIDEOS are stored whole and sent to
+   * Gemini's multimodal video path as complete clips — never split into
+   * keyframe image references. FUSE types every asset itself.
    */
+
   const addPieces = useCallback(async (files: File[]) => {
     if (!files.length) return;
     setUploadingPiece(true);
