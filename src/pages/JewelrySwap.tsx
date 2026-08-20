@@ -1297,7 +1297,7 @@ export default function JewelrySwap() {
   /** One plain sentence describing the fused understanding. */
   const understoodSummary = useMemo(() => {
     if (!knowledgeMap) return "";
-    const metal = knowledgeMap.materialRegions?.[0]?.metal ?? null;
+    const metal = knowledgeMap.materialRegions?.[0]?.metalColor ?? null;
     const stoneCount = knowledgeMap.stones?.length ?? 0;
     const parts = [
       knowledgeMap.productType || "Jewelry piece",
