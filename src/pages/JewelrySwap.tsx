@@ -1845,14 +1845,6 @@ export default function JewelrySwap() {
 
         // Canonical, per-region settings — the existing multi-setting rows are
         // auto-populated without the user pressing "+ Add setting". A region the
-        // classifier declined is kept (type "") so it can be surfaced for review.
-        const detectedSettings = (product.settings ?? [])
-          .map((setting) => ({
-            type: String(setting.resolvedSetting ?? "").trim(),
-            region: String(setting.resolvedRegion ?? setting.region ?? "").trim() || null,
-            tier: setting.confidenceTier ?? "low",
-        // Canonical, per-region settings — the existing multi-setting rows are
-        // auto-populated without the user pressing "+ Add setting". A region the
         // analysis declined is kept (type "") so it can be surfaced for review.
         // The FUSED spec wins; the preliminary per-image classifier is ignored
         // for the visible field and only fills the region list as a fallback.
