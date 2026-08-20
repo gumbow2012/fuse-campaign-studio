@@ -127,6 +127,11 @@ export type JewelryFrameAnalysis = {
   camera?: { angleDescription?: string; depthOfField?: string };
   recommendedReferenceRoles?: string[];
   avoidReferenceRoles?: string[];
+  /** Ranked referenceIds ("REF_1"...) for THIS frame, best-first. */
+  recommendedReferences?: string[];
+  avoidReferences?: string[];
+  rankingReasons?: string[];
+
   replacementBehavior?: string;
   riskFlags?: string[];
 };
