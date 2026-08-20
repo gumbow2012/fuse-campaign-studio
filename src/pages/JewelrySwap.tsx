@@ -478,6 +478,12 @@ const INTAKE_STAGES = [
 const INTAKE_DEBOUNCE_MS = 1800;
 /** Provider job submissions kept in flight at once (avoids rate limits). */
 const SWAP_SUBMIT_CONCURRENCY = 3;
+/** Clip (video) submissions kept in flight at once. */
+const CLIP_SUBMIT_CONCURRENCY = 2;
+/** Adaptive status-poll window: tight right after submit, widens when idle. */
+const POLL_MIN_MS = 2000;
+const POLL_MAX_MS = 8000;
+
 
 
 /**
