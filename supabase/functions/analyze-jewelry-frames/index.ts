@@ -736,9 +736,16 @@ async function runIntake(args: {
   ai: GoogleGenAI;
   references: JewelryReferenceInput[];
   roleVocabulary: string[];
+  options: IntakeOptions;
 }) {
   const parts: unknown[] = [
-    { text: buildIntakePrompt({ references: args.references, roleVocabulary: args.roleVocabulary }) },
+    {
+      text: buildIntakePrompt({
+        references: args.references,
+        roleVocabulary: args.roleVocabulary,
+        options: args.options,
+      }),
+    },
   ];
   for (const ref of args.references) parts.push(await inlineImage(ref.url));
 
@@ -758,26 +765,53 @@ async function runIntake(args: {
   return JSON.parse((response.text ?? "").trim());
 }
 
-/** Every detected field is stamped with its provenance for the app's priority rules. */
-function stampSources(intake: any) {
-  const fields = [
-    "jewelryType",
-    "metal",
-    "stoneType",
-    "stoneColor",
-    "stoneQuality",
-    "dimensions",
-    "weight",
+/**
+ * Stamps provenance AND resolves every detected field onto the app's canonical
+ * enums, so "Auto from reference" can become a real value downstream. Each
+ * field gets: resolvedValue (canonical or ""), confidenceTier and source.
+ */
+function stampSources(intake: any, options: IntakeOptions) {
+  const fields: [string, string[]][] = [
+    ["jewelryType", options.jewelryTypes],
+    ["metal", options.metals],
+    ["stoneType", options.stones],
+    ["stoneColor", options.stoneColors],
+    ["stoneQuality", options.qualities],
+    ["dimensions", []],
+    ["weight", []],
   ];
   for (const product of Array.isArray(intake?.products) ? intake.products : []) {
-    for (const field of fields) {
+    for (const [field, vocabulary] of fields) {
       const entry = product?.[field];
-      if (entry && typeof entry === "object") {
-        entry.source = String(entry.value ?? "").trim() ? "gemini_detected" : "unknown";
+      if (!entry || typeof entry !== "object") continue;
+      const canonical = toCanonical(entry.value, vocabulary);
+      const tier = confidenceTier(entry.confidence);
+      // Low confidence never auto-populates a control — it only suggests.
+      entry.resolvedValue = tier === "low" ? "" : canonical;
+      entry.confidenceTier = tier;
+      entry.source = canonical ? "gemini_detected" : "unknown";
+      if (!entry.resolvedValue) {
+        const list: string[] = Array.isArray(product.needsConfirmation)
+          ? product.needsConfirmation
+          : (product.needsConfirmation = []);
+        if (String(entry.value ?? "").trim() && !list.includes(field)) list.push(field);
       }
     }
+
+    // Regions are type-aware: use the list for the resolved product type when
+    // one exists, otherwise validate against every region the app knows.
+    const resolvedType = String(product?.jewelryType?.resolvedValue ?? "").toLowerCase();
+    const regionKey = Object.keys(options.settingRegions).find((key) =>
+      resolvedType.includes(key) || key.includes(resolvedType),
+    );
+    const regionVocabulary = (regionKey && options.settingRegions[regionKey]) || allRegions(options);
+
     for (const setting of Array.isArray(product?.settings) ? product.settings : []) {
-      setting.source = "gemini_detected";
+      const tier = confidenceTier(setting.confidence);
+      setting.resolvedSetting = tier === "low" ? "" : toCanonical(setting.setting, options.settingTypes);
+      setting.resolvedRegion = toCanonical(setting.region, regionVocabulary);
+      setting.confidenceTier = tier;
+      setting.source = setting.resolvedSetting ? "gemini_detected" : "unknown";
     }
     for (const ref of Array.isArray(product?.references) ? product.references : []) {
       ref.source = ref?.designAuthorityLikely === true ? "cad" : "reference_inference";
@@ -785,6 +819,7 @@ function stampSources(intake: any) {
   }
   return intake;
 }
+
 
 async function handleIntake(req: Request, body: any, user: { id: string }, apiKey?: string) {
   const references: JewelryReferenceInput[] =
