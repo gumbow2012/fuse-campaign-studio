@@ -766,6 +766,17 @@ export default function JewelrySwap() {
 
   const [pieces, setPieces] = useState<Piece[]>([]);
   const [uploadingPiece, setUploadingPiece] = useState(false);
+  /** Live progress while a replacement VIDEO is reduced to keyframes. */
+  const [keyframeWork, setKeyframeWork] = useState<{
+    name: string;
+    phase: "inspecting" | "extracting";
+    done: number;
+    total: number;
+  } | null>(null);
+  /** The fused engineering understanding from the last intake pass. */
+  const [knowledgeMap, setKnowledgeMap] = useState<ProductKnowledgeMap | null>(null);
+  const [engineeringOpen, setEngineeringOpen] = useState(false);
+
   const [dropActive, setDropActive] = useState(false);
   // Reference intake (recognition / grouping / extraction). Never blocking:
   // the manual fields stay usable and a failure just falls back to them.
