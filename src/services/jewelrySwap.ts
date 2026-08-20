@@ -285,9 +285,9 @@ export function jewelryTimings() {
 export type AssetPurpose = "SOURCE_CINEMATOGRAPHY" | "REPLACEMENT_PRODUCT_REFERENCE";
 
 /** How FUSE auto-classified an uploaded replacement asset (user never labels). */
-export type ReferenceKind = "cad" | "photographic_still" | "product_reference_video";
+export type ReferenceKind = "cad" | "photographic_still";
 
-/** One replacement reference handed to the analysis (image or video keyframe). */
+/** One replacement IMAGE reference handed to the analysis. */
 export type JewelryReferenceAsset = {
   url: string;
   role?: string | null;
@@ -295,42 +295,95 @@ export type JewelryReferenceAsset = {
   /** Always REPLACEMENT_PRODUCT_REFERENCE on this path. */
   assetPurpose?: AssetPurpose;
   kind?: ReferenceKind;
-  /** Set when this image was extracted from a replacement-product video. */
-  videoReferenceId?: string | null;
-  timestamp?: number | null;
 };
 
-/** Per replacement VIDEO: what the clip is and what its keyframes carry. */
+/**
+ * One uploaded replacement product VIDEO. The COMPLETE clip is analysed by
+ * Gemini's multimodal video path — it is never turned into image references and
+ * never reaches the image renderer.
+ */
 export type JewelryVideoReferenceInput = {
   videoReferenceId: string;
+  /** Storage URL of the actual stored clip. */
+  videoUrl: string;
+  name?: string | null;
   duration: number;
   aspectRatio?: string | null;
-  keyframeCount: number;
-  keyframeTimestamps: number[];
 };
 
-export type JewelryVideoKeyframeAnalysis = {
-  referenceId?: string;
+/** One timestamped observation — INTERNAL evidence only, never a reference image. */
+export type JewelryTemporalObservation = {
   timestamp?: number;
-  detectedView?: string;
-  coverage?: string;
-  regionsVisible?: string[];
-  usableFor?: string[];
-  contextRisk?: string[];
-  disposableContext?: string[];
+  observation?: string;
+  resolves?: string;
   confidence?: number;
 };
 
-export type JewelryVideoReferenceAnalysis = {
-  referenceId: string;
-  duration?: number;
-  productIdentityEvidence?: string;
-  geometryEvidence?: string;
-  materialEvidence?: string;
-  stoneEvidence?: string;
-  settingEvidence?: string;
-  keyframes?: JewelryVideoKeyframeAnalysis[];
+export type JewelryTemporalComponentTracking = {
+  componentId?: string;
+  label?: string;
+  observedFrom?: string[];
+  apparentSizeDifference?: boolean;
+  physicalSizeDifference?: boolean;
+  reconciliation?: string;
+  confidence?: number;
 };
+
+/** Full-clip video understanding (Gemini multimodal video, analysis only). */
+export type JewelryVideoAnalysis = {
+  videoReferenceId: string;
+  duration?: number;
+  productIdentity?: string;
+  components?: { componentId?: string; label?: string; construction?: string; confidence?: number }[];
+  temporalComponentTracking?: JewelryTemporalComponentTracking[];
+  geometryEvidence?: {
+    silhouette?: string;
+    linkGeometry?: string;
+    curvature?: string;
+    thickness?: string;
+    depth?: string;
+    sidewalls?: string;
+    rearConstruction?: string;
+  };
+  stoneEvidence?: {
+    dominantCuts?: string[];
+    physicalSizeClasses?: string[];
+    sizeUniformity?: string;
+    packingPattern?: string;
+    stonePlacement?: string;
+    orientationPattern?: string;
+    exposedMetalPattern?: string;
+  };
+  settingEvidence?: {
+    observedRetentionMechanics?: string;
+    prongBehavior?: string;
+    beadBehavior?: string;
+    rails?: string;
+    channels?: string;
+    bezels?: string;
+    seatDepth?: string;
+    metalVisibility?: string;
+  };
+  repeatedModules?: {
+    moduleId?: string;
+    label?: string;
+    masterGeometry?: string;
+    stoneMap?: string;
+    memberCount?: number;
+    exceptions?: string[];
+    confidence?: number;
+  }[];
+  claspEvidence?: string;
+  bailEvidence?: string;
+  connectorEvidence?: string;
+  materialEvidence?: string;
+  manufacturedFinish?: string;
+  temporalObservations?: JewelryTemporalObservation[];
+  conflictingEvidence?: string[];
+  unresolvedFeatures?: string[];
+  evidenceStrength?: EvidenceStrength;
+};
+
 
 /* ------------------------------------------------------------------ *
  * PRODUCT KNOWLEDGE MAP — one fused, cacheable understanding
