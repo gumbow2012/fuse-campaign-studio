@@ -878,7 +878,7 @@ function buildKnowledgeMap(args: {
     : null;
   const lock = pkm ? engineeringLockLines(pkm) : [];
   if (lock.length) {
-    mapLines.push("  ENGINEERING LOCK (fused from CAD + photos + product-video keyframes):");
+    mapLines.push("  ENGINEERING LOCK (fused from CAD + photos + full-clip product video):");
     for (const line of lock) mapLines.push(`    ${line}`);
     // The image model already renders `referenceDefinedCharacteristics` verbatim,
     // so the lock reaches Nano through the EXISTING prompt path unchanged.
@@ -1494,7 +1494,7 @@ async function runIntake(args: {
  * ------------------------------------------------------------------ *
  * ANALYSIS ONLY. Forms a single reconciled understanding of the replacement
  * piece from ALL replacement evidence (CAD + product photos + macro shots +
- * product-video keyframes) instead of reading each asset independently.
+ * product video) instead of reading each asset independently.
  * Nothing here generates or modifies media, and nothing here changes how
  * references are routed to the image model.
  */
@@ -1863,7 +1863,7 @@ const PKM_SCHEMA = {
           referenceId: { type: Type.STRING },
           kind: {
             type: Type.STRING,
-            enum: ["cad", "photographic_still", "product_reference_video", "unclear"],
+            enum: ["cad", "photographic_still", "unclear"],
           },
           authorityFor: STRING_ARRAY,
           notAuthorityFor: STRING_ARRAY,
@@ -2951,7 +2951,7 @@ Deno.serve(async (req) => {
       }))
       .filter((frame: SourceFrame) => frame.frameId && /^https?:\/\//.test(frame.imageUrl));
 
-    // Replacement references (CAD, stills, product-video keyframes) — typed.
+    // Replacement references (CAD, stills) — typed.
     const jewelryReferences: JewelryReferenceInput[] = readReferences(body?.jewelryReferences);
 
     const jewelrySpecs: any[] = Array.isArray(body?.jewelrySpecs) ? body.jewelrySpecs : [];
