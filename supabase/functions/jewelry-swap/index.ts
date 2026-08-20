@@ -2838,12 +2838,16 @@ async function startAnimateFrame(admin: AdminClient, args: {
       fallbackUsdPerSecond: videoFallbackUsdPerSecond(videoModel, false) ?? null,
     });
 
+    // Kling rejects input images over 10 MB; condition the approved frame first.
+    const conditioned = await conditionImageForKling(admin as any, imageUrl, args.userId);
+
     const falInput = buildVideoModelInput(ANIMATE_MODEL_KEY, {
-      imageUrl,
+      imageUrl: conditioned.url,
       prompt,
       duration: ANIMATE_DURATION,
       generateAudio: false,
     });
+
 
     const webhookUrl = `${args.webhookBase}${encodeURIComponent(inserted.id)}`;
     const requestId = await submitFalJob(endpointId, falInput, webhookUrl);
