@@ -366,15 +366,24 @@ export function isLockableProvenance(provenance?: Provenance | string | null) {
 /** Per-attribute evidence strength (0..1) for ONE reference. */
 export type EvidenceStrength = {
   silhouette?: number;
+  overallGeometry?: number;
   dimensions?: number;
+  componentTopology?: number;
+  stoneSeatLayout?: number;
   stoneCut?: number;
   stoneSize?: number;
   stonePlacement?: number;
   settingMechanics?: number;
+  prongConstruction?: number;
+  thicknessDepth?: number;
+  claspBailConnector?: number;
   metalColor?: number;
+  materialAppearance?: number;
   componentGeometry?: number;
   manufacturedAppearance?: number;
+  manufacturedFinish?: number;
 };
+
 
 /** A fact the user locked; analysis may never override it. */
 export type UserConfirmedFact = {
