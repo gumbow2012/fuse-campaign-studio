@@ -1837,7 +1837,13 @@ export default function JewelrySwap() {
                 : null;
             })
             .slice(0, 6),
-          name: String(product.label ?? "").trim() || base?.name || `Piece ${productIndex + 1}`,
+          // The CARD is named once, AFTER fusion — never per asset, and never
+          // with AI-render language ("… Chain/Bracelet Render").
+          name:
+            productIndex === 0 && cleanCaseName(knowledgeMap?.productCaseName)
+              ? cleanCaseName(knowledgeMap?.productCaseName)
+              : cleanCaseName(product.label) || base?.name || `Piece ${productIndex + 1}`,
+
           type: resolvedType.value,
           metal: resolvedMetal.value,
           stone: resolvedStone.value,
