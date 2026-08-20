@@ -164,6 +164,33 @@ const ANGLE_ROLE_OPTIONS = [
   "Other",
 ];
 
+/**
+ * Product-TYPE-aware reference labels — the routing in the function keys off these
+ * labels, so a bracelet never offers "Bail" and a ring never offers "Clasp".
+ */
+const TYPE_ROLE_OPTIONS: Record<string, string[]> = {
+  bracelet: ["Front", "Back", "Left Side", "Right Side", "Clasp", "Link Detail", "Macro Detail", "Side Profile", "CAD Front", "CAD Back", "CAD Side", "Other"],
+  pendant: ["Front", "Back", "Side", "Bail", "Connector/Hinge", "Macro Detail", "CAD Front", "CAD Back", "CAD Side", "CAD 3/4", "Other"],
+  ring: ["Face/Crown", "Side", "Shank", "Under-gallery", "Setting", "Macro Detail", "CAD Front", "CAD Side", "Other"],
+  watch: ["Dial", "Bezel", "Case", "Side", "Crown", "Bracelet", "Clasp", "Caseback", "Macro Detail", "CAD Front", "CAD Side", "Other"],
+  earrings: ["Front", "Back", "Side", "Macro Detail", "CAD Front", "CAD Side", "Other"],
+  generic: ["Front", "Back", "Side", "Macro Detail", "CAD Front", "CAD Side", "Other"],
+};
+
+/** Reference role options for a piece type (always includes the blank option). */
+function roleOptionsForType(type: string | null | undefined): string[] {
+  const text = String(type ?? "").toLowerCase();
+  let key = "generic";
+  if (/bracelet|anklet/.test(text)) key = "bracelet";
+  else if (/pendant|necklace|choker|chain|charm|brooch/.test(text)) key = "pendant";
+  else if (/ring/.test(text)) key = "ring";
+  else if (/watch/.test(text)) key = "watch";
+  else if (/earring|stud|hoop/.test(text)) key = "earrings";
+  else if (/grill/.test(text)) key = "earrings";
+  return ["", ...TYPE_ROLE_OPTIONS[key]];
+}
+
+
 /** Per-frame replacement strategy. Auto lets the model self-classify the frame. */
 const REPLACEMENT_MODES = [
   { value: "auto", label: "Auto" },
@@ -1588,7 +1615,12 @@ export default function JewelrySwap() {
                             }
                             className="w-full rounded-md border border-white/12 bg-black/40 px-1 py-1 text-[9px] text-foreground outline-none transition-colors hover:border-cyan-200/40 focus:border-cyan-200/60"
                           >
-                            {ANGLE_ROLE_OPTIONS.map((option) => (
+                            {Array.from(
+                              new Set([
+                                ...roleOptionsForType(piece.type),
+                                piece.roles[angleIndex] ?? "",
+                              ]),
+                            ).map((option) => (
                               <option key={option || "unlabeled"} value={option}>
                                 {option || "Role (optional)"}
                               </option>
@@ -2319,7 +2351,16 @@ export default function JewelrySwap() {
                                 className="mt-2 w-full rounded-lg border border-white/12 bg-black/50 px-2 py-1.5 text-[10px] text-foreground outline-none focus:border-cyan-200/60"
                               >
                                 <option value="">Preferred reference: Auto</option>
-                                {ANGLE_ROLE_OPTIONS.filter(Boolean).map((role) => (
+                                {Array.from(
+                                  new Set(
+                                    pieces.flatMap((item) => [
+                                      ...item.roles.filter(Boolean),
+                                      ...roleOptionsForType(item.type),
+                                    ]),
+                                  ),
+                                )
+                                  .filter(Boolean)
+                                  .map((role) => (
                                   <option key={role} value={role}>
                                     Preferred reference: {role}
                                   </option>
