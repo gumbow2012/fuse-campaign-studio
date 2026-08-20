@@ -55,6 +55,9 @@ import {
   submitWithConcurrency,
   type JewelryIntake,
   type DetectedField,
+  type ProductKnowledgeMap,
+  type JewelryVideoReferenceInput,
+
 
 
 
