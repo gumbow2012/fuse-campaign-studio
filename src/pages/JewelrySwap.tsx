@@ -2682,15 +2682,18 @@ export default function JewelrySwap() {
                       </div>
                       <div>
                         <label className="mb-1 block text-[10px] uppercase tracking-[0.14em] text-cyan-200/70">
-                          Metal
+                          Metal{detectedTag(piece.sources, "metal")}
                         </label>
                         <select
                           value={piece.metal}
                           onChange={(event) =>
                             setPieces((prev) =>
-                              prev.map((item, i) => (i === index ? { ...item, metal: event.target.value } : item)),
+                              prev.map((item, i) =>
+                                i === index ? withOverride(item, "metal", { metal: event.target.value }) : item,
+                              ),
                             )
                           }
+
                           className={SELECT_CLASS}
                         >
                           {METAL_OPTIONS.map((option) => (
