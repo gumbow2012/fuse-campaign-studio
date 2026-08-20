@@ -1534,27 +1534,29 @@ export default function GenerationStudio() {
                 <SectionTitle>FORMAT</SectionTitle>
                 <SegmentedControl
                   ariaLabel="Format"
-                  value={PRIMARY_ASPECTS.includes(aspectRatio) ? aspectRatio : "more"}
-                  onChange={(value) => {
-                    if (value === "more") {
-                      setAspectOpen(true);
-                      return;
-                    }
-                    setAspectRatio(value);
-                  }}
+                  value={aspectRatio}
+                  onChange={setAspectRatio}
                   options={[
                     ...PRIMARY_ASPECTS.map((value) => ({
                       value,
                       label: value === "auto" ? "AUTO" : value,
                       glyph: <AspectGlyph ratio={value} />,
                     })),
-                    { value: "more", label: PRIMARY_ASPECTS.includes(aspectRatio) ? "MORE" : aspectRatio },
+                    ...(PRIMARY_ASPECTS.includes(aspectRatio)
+                      ? []
+                      : [{ value: aspectRatio, label: aspectRatio, glyph: <AspectGlyph ratio={aspectRatio} /> }]),
                   ]}
                 />
                 <Popover open={aspectOpen} onOpenChange={setAspectOpen}>
                   <PopoverTrigger asChild>
-                    <span className="sr-only" aria-hidden />
+                    <button
+                      type="button"
+                      className="mt-2.5 font-display text-[12px] font-semibold tracking-[0.08em] text-[hsl(var(--electric-cyan))] hover:underline"
+                    >
+                      MORE FORMATS
+                    </button>
                   </PopoverTrigger>
+
                   <PopoverContent
                     align="start"
                     className="max-h-80 w-64 overflow-y-auto border-white/12 bg-background/95 p-2 backdrop-blur-xl"
