@@ -3004,11 +3004,30 @@ async function runKnowledgeMap(args: {
   // The user's confirmations are persisted with the map and win forever.
   map.userConfirmedFacts = args.userConfirmedFacts ?? [];
   // The ontology travels with the map so the admin panel and any later
-  // classification compare against the SAME signatures.
+  // classification compare against the SAME signatures, with the two vocabulary
+  // layers kept distinguishable (domain + which decision each term can answer).
   map.settingOntology = SETTING_ONTOLOGY.map((entry) => entry.canonicalName);
+  map.terminologyOntology = {
+    version: PKM_VERSION,
+    terms: JEWELRY_TERMS.map((term) => ({
+      canonicalName: term.canonicalName,
+      vocabularyDomain: term.vocabularyDomain,
+      termKind: term.termKind,
+      aliases: term.aliases,
+      relatedTerms: term.relatedTerms ?? [],
+    })),
+  };
+  for (const setting of arrayOf(map.settings)) {
+    console.log(
+      `[analyze-jewelry-frames] SETTING TERM MATCH region=${setting?.regionId ?? "?"} detected=${setting?.detectedSetting ?? setting?.canonicalSetting ?? "?"} domain=${setting?.vocabularyDomain ?? "?"} matched=${
+        arrayOf(setting?.matchedSignals).length
+      } conflicting=${arrayOf(setting?.conflictingSignals).length} confidence=${setting?.confidence ?? "?"}`,
+    );
+  }
   console.log(
     `[analyze-jewelry-frames] FINAL SETTING CLASSIFICATION setting=${detectedValue(map?.setting) || map?.setting?.canonical || "?"} reason=${String(map?.settingClassificationReason ?? "").slice(0, 300)}`,
   );
+
   return { knowledgeMap: applyUserConfirmedFacts(map, args.userConfirmedFacts ?? []), geminiMs: Date.now() - started };
 }
 
