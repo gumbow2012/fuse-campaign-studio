@@ -1865,16 +1865,35 @@ export default function JewelrySwap() {
       // and before the first swap. Never per frame, per refresh or per approve.
       const project = await ensureAnalysis(indices);
       if (project) toast.success("Shot analysis ready");
-      for (const index of indices) {
+      // Submissions go out a few at a time instead of strictly one-by-one, so
+      // the user is not waiting on a serial chain. One failed submission is
+      // isolated and never blocks the remaining frames.
+      const submitStarted = performance.now();
+      const outcomes = await submitWithConcurrency(indices, SWAP_SUBMIT_CONCURRENCY, (index) =>
         // Initial generation is always Nano Banana Pro only — never two models.
-        await swapFrame(index, {
+        swapFrame(index, {
           imageModel: "pro",
           frameAnalysis:
             project?.frames?.find((entry) => entry.frameId === frameIdFor(index)) ?? null,
           productAnalysis: project?.productAnalysis ?? null,
-        });
+        }),
+      );
+      const failed = outcomes.filter((outcome) => !outcome.ok);
+      recordJewelryTiming("swap-submit", performance.now() - submitStarted, {
+        frames: indices.length,
+        failed: failed.length,
+        concurrency: SWAP_SUBMIT_CONCURRENCY,
+      });
+      const queued = indices.length - failed.length;
+      if (queued) toast.success(`${queued} frame swap(s) queued`);
+      if (failed.length) {
+        toast.error(
+          failed.length === indices.length
+            ? "Could not queue the swaps"
+            : `${failed.length} frame(s) could not be queued`,
+        );
       }
-      toast.success(`${indices.length} frame swap(s) queued`);
+
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Could not queue the swaps");
     } finally {
