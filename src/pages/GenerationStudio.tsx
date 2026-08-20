@@ -124,6 +124,16 @@ const ASPECT_OPTIONS: { value: string; note: string }[] = [
   { value: "21:9", note: "Ultra-wide cinematic" },
 ];
 
+/** Formats surfaced directly in the segmented control; the rest live behind "More formats". */
+const PRIMARY_ASPECTS = ["auto", "9:16", "4:5", "1:1", "16:9"];
+
+function formatDescriptor(ratio: string) {
+  const note = ASPECT_OPTIONS.find((option) => option.value === ratio)?.note;
+  return note ? note.toUpperCase() : "CUSTOM FORMAT";
+}
+
+
+
 const STUDIO_MODELS: StudioModel[] = [
   {
     key: "nano-banana-pro",
