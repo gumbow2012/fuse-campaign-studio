@@ -144,12 +144,26 @@ export type JewelryProjectAnalysis = {
   frames: JewelryFrameAnalysis[];
 };
 
+/** DEV-ONLY timing telemetry. Never rendered in the customer UI. */
+export type JewelryAnalysisTimings = {
+  analysisCacheHit?: boolean;
+  knowledgeMapReused?: boolean;
+  referenceImagesSent?: number;
+  sourceFramesSent?: number;
+  geminiCalls?: number;
+  referenceFetchMs?: number;
+  sourceFrameFetchMs?: number;
+  geminiMs?: number;
+  totalAnalysisMs?: number;
+};
+
 export type JewelryAnalysisResult = {
   cached: boolean;
   fingerprint: string;
   version: string;
   analyzedAt: string;
   analysis: JewelryProjectAnalysis;
+  timings?: JewelryAnalysisTimings;
 };
 
 /** Runs (or reuses) the still-image shot analysis for the selected frames. */
@@ -157,6 +171,13 @@ export async function analyzeJewelryFrames(args: {
   sourceFrames: { frameId: string; timestamp: number; imageUrl: string }[];
   jewelryReferences: { url: string; role?: string | null; cad?: boolean }[];
   jewelrySpecs: Record<string, unknown>[];
+  /**
+   * The persisted intake this reference set was already understood through.
+   * When it still matches the current references, the backend reuses the stored
+   * Product Knowledge Map instead of re-analysing the reference IMAGES.
+   */
+  intakeFingerprint?: string | null;
+  intakeReferences?: { url: string; role?: string | null; cad?: boolean }[] | null;
 }): Promise<JewelryAnalysisResult> {
   const {
     data: { session },
@@ -173,6 +194,8 @@ export async function analyzeJewelryFrames(args: {
       sourceFrames: args.sourceFrames,
       jewelryReferences: args.jewelryReferences,
       jewelrySpecs: args.jewelrySpecs,
+      intakeFingerprint: args.intakeFingerprint ?? null,
+      intakeReferences: args.intakeReferences ?? null,
     }),
   });
 
@@ -182,6 +205,46 @@ export async function analyzeJewelryFrames(args: {
   }
   return data as JewelryAnalysisResult;
 }
+
+/* ------------------------------------------------------------------ *
+ * DEV-ONLY performance telemetry
+ * ------------------------------------------------------------------ *
+ * Kept out of the customer UI entirely: timings are logged to the browser
+ * console in dev and buffered for the admin-only surface.
+ */
+
+export type JewelryTimingEntry = {
+  label: string;
+  ms: number;
+  at: string;
+  detail?: Record<string, unknown>;
+};
+
+const timingBuffer: JewelryTimingEntry[] = [];
+
+export function recordJewelryTiming(
+  label: string,
+  ms: number,
+  detail?: Record<string, unknown>,
+) {
+  const entry: JewelryTimingEntry = {
+    label,
+    ms: Math.round(ms),
+    at: new Date().toISOString(),
+    detail,
+  };
+  timingBuffer.push(entry);
+  if (timingBuffer.length > 100) timingBuffer.shift();
+  if (import.meta.env.DEV) {
+    console.info(`[jewelry-perf] ${label}: ${entry.ms}ms`, detail ?? "");
+  }
+}
+
+/** Admin-only surface reads the buffered timings from here. */
+export function jewelryTimings() {
+  return [...timingBuffer];
+}
+
 
 /* ------------------------------------------------------------------ *
  * INTAKE — fast batch recognition of the uploaded jewelry references
