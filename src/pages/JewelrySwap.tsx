@@ -1176,11 +1176,9 @@ export default function JewelrySwap() {
     [pieces],
   );
   const referenceCount = pieces.reduce((total, piece) => total + piece.urls.length, 0);
-  /** Uncertain fields across all pieces — only these are surfaced for review. */
-  const uncertainCount = pieces.reduce(
-    (total, piece) => total + (piece.needsConfirmation?.length ?? 0),
-    0,
-  );
+  /** Unresolved product-spec concerns across all pieces (user overrides clear them). */
+  const uncertainCount = reviewCount(pieces);
+
 
   /** The app's canonical vocabularies, handed to the analysis every call. */
   const intakeOptions = useMemo(
