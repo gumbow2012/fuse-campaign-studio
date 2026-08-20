@@ -1301,7 +1301,9 @@ async function handleIntake(req: Request, body: any, user: { id: string }, apiKe
     analyzedAt: new Date().toISOString(),
     intake,
     guardStripped: stripped,
+    timings,
   });
+
 
 }
 
