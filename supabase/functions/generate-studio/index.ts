@@ -253,12 +253,22 @@ async function startGeneration(admin: AdminClient, args: { input: StartInput; us
     const endFrameUrl = input.endImageUrl ? String(input.endImageUrl).trim() : undefined;
 
     const textToVideo = !startImageUrl;
-    const endpointId = textToVideo
+    /**
+     * Multi-reference Seedance must go to the reference-to-video endpoint —
+     * the image-to-video endpoint only accepts a single image_url, so REF 2..N
+     * were silently dropped. Reference order is preserved as given.
+     */
+    const multiReference =
+      !textToVideo && videoModel.supportsMultiReference === true && referenceUrls.length >= 2;
+
+    let endpointId = textToVideo
       ? textToVideoEndpoint(videoModel.endpointId)
+      : multiReference
+      ? referenceToVideoEndpoint(videoModel.key)
       : videoModel.endpointId;
 
     const estimatedCostUsd = await estimateUsd({
-      endpointId: videoModel.endpointId,
+      endpointId,
       seconds: duration,
       fallbackUsdPerSecond: videoFallbackUsdPerSecond(videoModel, generateAudio) ?? null,
     });
@@ -276,6 +286,20 @@ async function startGeneration(admin: AdminClient, args: { input: StartInput; us
         ...(videoModel.family === "kling3" ? { cfg_scale: 0.5 } : {}),
       };
       requestId = await submitFalJob(endpointId, payload, webhookUrl);
+    } else if (multiReference) {
+      const submitted = await submitSeedanceReferenceVideoJob({
+        modelKey: videoModel.key,
+        prompt,
+        imageUrls: referenceUrls,
+        duration,
+        ...(resolution ? { resolution } : {}),
+        ...(aspectRatio ? { aspectRatio } : {}),
+        ...(generateAudio === null ? {} : { generateAudio }),
+        webhookUrl,
+      });
+      requestId = submitted.requestId;
+      endpointId = submitted.endpointId;
+      payload = submitted.input;
     } else {
       payload = {
         prompt,
@@ -298,6 +322,7 @@ async function startGeneration(admin: AdminClient, args: { input: StartInput; us
         webhookUrl,
       });
     }
+
 
     const { data: updated } = await admin
       .from("studio_generations")
