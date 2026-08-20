@@ -95,13 +95,36 @@ export type LibraryAsset = {
 };
 
 /** The caller's completed generations, newest first. */
-export async function listAssets(type: "image" | "video" | "all" = "all") {
+/**
+ * Library listing, cached for the session. The picker is opened repeatedly
+ * (source, piece, extra angle) and the underlying set rarely changes mid-visit,
+ * so reopening it should not re-enumerate storage every time. Call
+ * `invalidateAssetCache()` after anything that adds a new asset.
+ */
+const assetCache = new Map<string, { at: number; assets: LibraryAsset[] }>();
+const ASSET_CACHE_TTL_MS = 5 * 60 * 1000;
+
+export function invalidateAssetCache() {
+  assetCache.clear();
+}
+
+export async function listAssets(
+  type: "image" | "video" | "all" = "all",
+  options?: { force?: boolean },
+) {
+  const cached = assetCache.get(type);
+  if (!options?.force && cached && Date.now() - cached.at < ASSET_CACHE_TTL_MS) {
+    return cached.assets;
+  }
   const data = await callJewelrySwap<{ assets: LibraryAsset[] }>({
     action: "list_assets",
     type,
   });
-  return data.assets ?? [];
+  const assets = data.assets ?? [];
+  assetCache.set(type, { at: Date.now(), assets });
+  return assets;
 }
+
 
 /* ------------------------------------------------------------------ *
  * STAGE A — still-image shot analysis (Jewelry Swap only)
