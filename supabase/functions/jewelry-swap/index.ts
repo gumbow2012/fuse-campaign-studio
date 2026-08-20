@@ -1673,6 +1673,10 @@ async function startSwapFrame(admin: AdminClient, args: {
   coverage?: string | null;
   /** Legacy per-frame Macro toggle (equivalent to mode = "macro"). */
   macro?: boolean;
+  /** Stage-A still analysis for THIS frame (advisory, optional). */
+  frameAnalysis?: unknown;
+  /** Stage-A product analysis of the references (advisory, optional). */
+  productAnalysis?: unknown;
   webhookBase: string;
 }) {
   const sourceFrameUrl = String(args.sourceFrameUrl ?? "").trim();
