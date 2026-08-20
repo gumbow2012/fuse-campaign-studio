@@ -1385,12 +1385,14 @@ export default function JewelrySwap() {
           baseSources.settings === "user_override" &&
           realSettings(base ?? ({ settings: [] } as unknown as Piece)).length > 0;
         const autoSettings = detectedSettings
-          .filter((setting) => setting.tier !== "low")
+          .filter((setting) => setting.type || setting.region)
           .map((setting) => ({
             ...EMPTY_SETTING,
-            type: setting.type,
+            // A declined / low-confidence region stays on Auto for the user.
+            type: setting.needsConfirmation || setting.tier === "low" ? "" : setting.type,
             region: setting.region ?? "",
           }));
+
         const settings = userSetSettings
           ? base!.settings
           : autoSettings.length
