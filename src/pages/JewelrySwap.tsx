@@ -2549,9 +2549,20 @@ export default function JewelrySwap() {
                       className="ml-auto rounded-xl bg-[hsl(var(--primary))] text-xs font-semibold text-primary-foreground hover:bg-[hsl(var(--primary))]/90"
                     >
                       {swapping ? <Loader2 size={13} className="animate-spin" /> : <Gem size={13} />}
-                      Swap {selectedFrames.size} frame(s)
+                      {swapping && analysisState === "running"
+                        ? "Analyzing jewelry shots…"
+                        : `Swap ${selectedFrames.size} frame(s)`}
                     </Button>
                   </div>
+                  {analysisState === "ready" ? (
+                    <p className="mt-2 text-[11px] font-medium text-emerald-200/90">
+                      Shot analysis ready
+                    </p>
+                  ) : analysisState === "failed" ? (
+                    <p className="mt-2 text-[11px] text-amber-200/90">
+                      Shot analysis unavailable — continuing with the standard reference rules.
+                    </p>
+                  ) : null}
                   <p className="mt-2 text-[11px] text-muted-foreground">
                     Only the frames you pick become generations — extraction itself is free.
                     {selectedFrames.size ? (
