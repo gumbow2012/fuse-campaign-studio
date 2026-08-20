@@ -69,12 +69,19 @@ import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { supabase } from "@/integrations/supabase/client";
 import { uploadRunInputFile } from "@/services/runInputUpload";
 import { cn } from "@/lib/utils";
+import {
+  FieldHelper,
+  FusePanel,
+  SectionTitle,
+  SegmentedControl,
+} from "@/components/fuse/FuseUI";
 
 import {
   IMAGE_FLAT_USD as IMAGE_FALLBACK_USD,
   costPreview,
   creditsFromUsd,
 } from "@/lib/costEstimate";
+
 
 const MAX_REFERENCES = 15;
 const REFERENCE_STORE_KEY = "fuse-studio-reference-library";
