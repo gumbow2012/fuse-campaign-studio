@@ -2350,7 +2350,7 @@ async function runVideoAnalysis(args: {
         videoReferenceId: clip.videoReferenceId,
         duration: clip.duration,
         transport,
-        bytes,
+
       });
       console.log(
         `[analyze-jewelry-frames] VIDEO ANALYSIS SUMMARY clip=${clip.videoReferenceId} transport=${transport} bytes=${bytes} identity=${String(parsed?.productIdentity ?? "?").slice(0, 160)}`,
