@@ -538,7 +538,150 @@ function GenerationCard({
 
 }
 
+/**
+ * One creative reference card in the stack. Drag handle uses dnd-kit; the arrow
+ * buttons remain as the keyboard/accessibility fallback.
+ */
+function ReferenceCard({
+  reference,
+  index,
+  total,
+  onLabelChange,
+  onRoleChange,
+  onMove,
+  onRemove,
+}: {
+  reference: Reference;
+  index: number;
+  total: number;
+  onLabelChange: (value: string) => void;
+  onRoleChange: (value: string | undefined) => void;
+  onMove: (delta: number) => void;
+  onRemove: () => void;
+}) {
+  const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } =
+    useSortable({ id: reference.url });
+  const [roleOpen, setRoleOpen] = useState(false);
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={{ transform: CSS.Transform.toString(transform), transition }}
+      className={cn(
+        "flex items-stretch gap-3 rounded-2xl border bg-black/35 p-3 transition-all duration-200",
+        isDragging
+          ? "z-20 scale-[1.02] border-[hsl(var(--electric-blue)/0.7)] shadow-[0_0_28px_-8px_hsl(var(--electric-blue)/0.9)]"
+          : "border-white/10 hover:-translate-y-[1px] hover:border-[hsl(var(--electric-blue)/0.35)]",
+      )}
+    >
+      <button
+        type="button"
+        ref={setActivatorNodeRef}
+        aria-label={`Reorder reference ${index + 1}`}
+        className="flex cursor-grab items-center rounded-lg px-1 text-foreground/45 transition-colors hover:text-[hsl(var(--electric-cyan))] active:cursor-grabbing"
+        {...attributes}
+        {...listeners}
+      >
+        <GripVertical size={18} />
+      </button>
+
+      <div className="relative h-[86px] w-[68px] shrink-0 overflow-hidden rounded-xl border border-white/12">
+        <img src={reference.url} alt={`Reference ${index + 1}`} className="h-full w-full object-cover" />
+      </div>
+
+      <div className="flex min-w-0 flex-1 flex-col justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <span className="font-display text-[13px] font-semibold tracking-[0.06em] text-[hsl(var(--electric-cyan))]">
+            REF {String(index + 1).padStart(2, "0")}
+          </span>
+          <Popover open={roleOpen} onOpenChange={setRoleOpen}>
+            <PopoverTrigger asChild>
+              <button
+                type="button"
+                className={cn(
+                  "rounded-full border px-2.5 py-0.5 font-display text-[11px] font-semibold tracking-[0.06em] transition-colors",
+                  reference.role
+                    ? "border-[hsl(var(--electric-blue)/0.5)] bg-[hsl(var(--electric-blue)/0.12)] text-[hsl(var(--electric-cyan))]"
+                    : "border-white/12 text-muted-foreground hover:text-foreground",
+                )}
+              >
+                {reference.role ?? "ROLE"}
+              </button>
+            </PopoverTrigger>
+            <PopoverContent align="start" className="w-44 border-white/12 bg-background/95 p-1.5 backdrop-blur-xl">
+              <button
+                type="button"
+                onClick={() => {
+                  onRoleChange(undefined);
+                  setRoleOpen(false);
+                }}
+                className="w-full rounded-lg px-2 py-1.5 text-left text-[13px] text-muted-foreground hover:bg-white/[0.06]"
+              >
+                No role
+              </button>
+              {REFERENCE_ROLES.map((role) => (
+                <button
+                  key={role}
+                  type="button"
+                  onClick={() => {
+                    onRoleChange(role);
+                    setRoleOpen(false);
+                  }}
+                  className={cn(
+                    "w-full rounded-lg px-2 py-1.5 text-left font-display text-[12px] font-semibold tracking-[0.05em] transition-colors",
+                    reference.role === role
+                      ? "bg-[hsl(var(--electric-blue)/0.15)] text-[hsl(var(--electric-cyan))]"
+                      : "text-foreground/85 hover:bg-white/[0.06]",
+                  )}
+                >
+                  {role}
+                </button>
+              ))}
+            </PopoverContent>
+          </Popover>
+          <div className="ml-auto flex shrink-0 items-center gap-0.5">
+            <button
+              type="button"
+              aria-label="Move reference earlier"
+              disabled={index === 0}
+              onClick={() => onMove(-1)}
+              className="rounded-md p-1 text-foreground/40 transition-colors hover:text-[hsl(var(--electric-cyan))] disabled:opacity-25"
+            >
+              <ArrowLeft size={13} />
+            </button>
+            <button
+              type="button"
+              aria-label="Move reference later"
+              disabled={index === total - 1}
+              onClick={() => onMove(1)}
+              className="rounded-md p-1 text-foreground/40 transition-colors hover:text-[hsl(var(--electric-cyan))] disabled:opacity-25"
+            >
+              <ArrowRight size={13} />
+            </button>
+            <button
+              type="button"
+              aria-label="Remove reference"
+              onClick={onRemove}
+              className="rounded-md p-1 text-foreground/50 transition-colors hover:text-red-300"
+            >
+              <X size={14} />
+            </button>
+          </div>
+        </div>
+
+        <Input
+          value={reference.label}
+          onChange={(event) => onLabelChange(event.target.value)}
+          placeholder="Shot name"
+          className="h-9 border-white/12 bg-black/30 text-[14px]"
+        />
+      </div>
+    </div>
+  );
+}
+
 export default function GenerationStudio() {
+
   const [modelKey, setModelKey] = useState<StudioModelKey>("nano-banana-pro");
   const [modelOpen, setModelOpen] = useState(false);
   const [prompt, setPrompt] = useState("");
