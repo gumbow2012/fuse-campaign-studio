@@ -877,13 +877,425 @@ function buildJewelryPrompt(args: {
 }
 
 
-/** Reconstruction prompt for the Seedance reference-to-video pass. */
-function buildJewelryReconstructionPrompt(args: { extra?: string }) {
-  return [
-    "Use the supplied reference images as the strict appearance authority for the jewelry. Maintain ONE physically identical jewelry piece throughout the entire video. Do not change metal, stone count, stone placement, stone cuts, bail, chain, setting, dimensions, proportions, lettering, logos or structural design. Preserve the source subject, movement, camera, lighting, environment and timing as closely as possible. Jewelry must stay temporally consistent — no flicker, morphing, stone drift, or redesign.",
-    String(args.extra ?? "").trim(),
-  ].filter(Boolean).join("\n\n");
+/* ------------------------------------------------------------------ *
+ * SEEDANCE DIRECTOR TIMELINE (reconstruct stage ONLY)
+ * ------------------------------------------------------------------ *
+ * The Seedance reference-to-video pass now gets a real luxury-jewelry
+ * director's TIMED SHOT PLAN generated per run from the approved frames'
+ * stored view/coverage/mode metadata + the structured product spec.
+ * This builder is used ONLY by startReconstruction — the per-frame image
+ * prompt (buildJewelryPrompt) and the Kling animate prompt are untouched.
+ */
+
+/** What one approved frame can be used for, cinematographically. */
+type FrameRole =
+  | "Full Hero"
+  | "Full Front"
+  | "Full 3-4"
+  | "Side"
+  | "Back"
+  | "Overhead"
+  | "Partial Detail"
+  | "Macro Stones"
+  | "Macro Setting"
+  | "Macro Link"
+  | "Macro Clasp"
+  | "Macro Engraving"
+  | "Chain-Link Track"
+  | "Surface Detail";
+
+/** One approved frame + the metadata the swap stage stored for it. */
+type ApprovedFrame = {
+  url: string;
+  coverage: string | null;
+  mode: string | null;
+  roles: string[];
+  index: number;
+};
+
+/** Classify a frame's cinematographic role from its stored view + coverage. */
+function classifyFrameRole(frame: ApprovedFrame): FrameRole {
+  const roleText = frame.roles.join(" ").toLowerCase();
+  const coverage = String(frame.coverage ?? "auto").toLowerCase();
+  const macro = coverage === "macro" || String(frame.mode ?? "").toLowerCase() === "macro";
+
+  if (macro) {
+    if (/clasp|closure|lock/.test(roleText)) return "Macro Clasp";
+    if (/link|chain/.test(roleText)) return "Macro Link";
+    if (/engrav|letter|logo|caseback/.test(roleText)) return "Macro Engraving";
+    if (/setting|prong|bezel|channel|pav|gallery/.test(roleText)) return "Macro Setting";
+    if (/stone|diamond|mosaic|ice|dial/.test(roleText)) return "Macro Stones";
+    return "Surface Detail";
+  }
+  if (coverage === "partial") {
+    if (/link|chain/.test(roleText)) return "Chain-Link Track";
+    return "Partial Detail";
+  }
+  if (/back|caseback|underside/.test(roleText)) return "Back";
+  if (/overhead|top/.test(roleText)) return "Overhead";
+  if (/3\/4|3-4|three quarter/.test(roleText)) return "Full 3-4";
+  if (/side|sidewall|profile|left|right|shank|bezel|case\b/.test(roleText)) return "Side";
+  if (/front|face|crown|dial|main/.test(roleText)) return "Full Front";
+  return "Full Hero";
 }
+
+/** Strongest-first ordering used when trimming the selected frame set. */
+const FRAME_ROLE_PRIORITY: FrameRole[] = [
+  "Full Hero",
+  "Full Front",
+  "Macro Stones",
+  "Full 3-4",
+  "Side",
+  "Macro Setting",
+  "Macro Link",
+  "Macro Clasp",
+  "Chain-Link Track",
+  "Partial Detail",
+  "Macro Engraving",
+  "Surface Detail",
+  "Back",
+  "Overhead",
+];
+
+/** Dedupe near-identical frames by role and keep the ~5–9 strongest. */
+function selectDirectorFrames(frames: ApprovedFrame[]) {
+  const byRole = new Map<FrameRole, ApprovedFrame>();
+  for (const frame of frames) {
+    const role = classifyFrameRole(frame);
+    if (!byRole.has(role)) byRole.set(role, frame);
+  }
+  const ordered = FRAME_ROLE_PRIORITY
+    .filter((role) => byRole.has(role))
+    .map((role) => ({ role, frame: byRole.get(role)! }));
+  return ordered.slice(0, 9);
+}
+
+/** What camera geometry the approved set actually supports. */
+type DirectorGeometry = {
+  front: boolean;
+  threeQuarter: boolean;
+  side: boolean;
+  back: boolean;
+  overhead: boolean;
+  macro: boolean;
+  clasp: boolean;
+  link: boolean;
+  engraving: boolean;
+  full: boolean;
+};
+
+function directorGeometry(selected: { role: FrameRole }[]): DirectorGeometry {
+  const has = (role: FrameRole) => selected.some((entry) => entry.role === role);
+  return {
+    front: has("Full Front") || has("Full Hero"),
+    threeQuarter: has("Full 3-4"),
+    side: has("Side"),
+    back: has("Back"),
+    overhead: has("Overhead"),
+    macro: has("Macro Stones") || has("Macro Setting") || has("Macro Link") ||
+      has("Macro Clasp") || has("Macro Engraving") || has("Surface Detail"),
+    clasp: has("Macro Clasp"),
+    link: has("Macro Link") || has("Chain-Link Track"),
+    engraving: has("Macro Engraving"),
+    full: has("Full Hero") || has("Full Front") || has("Full 3-4") || has("Side") || has("Back"),
+  };
+}
+
+/** One camera move + the geometry the approved references must support. */
+type MotionShot = {
+  key: string;
+  /** Camera move + what it reveals. */
+  text: (roleName: string) => string;
+  /** Frame role this shot draws its geometry from. */
+  needs: FrameRole[];
+  supported: (geometry: DirectorGeometry) => boolean;
+  /** Energy band: 1 = calm open, 2 = detail, 3 = dimensional, 4 = high energy, 5 = macro, 6 = hero end. */
+  band: number;
+};
+
+/** Exact required wording — the jewelry NEVER whips, only the camera does. */
+const WHIP_WORDING =
+  "The camera performs the rapid whip-pan while the jewelry remains completely stationary. Motion blur is produced exclusively by camera movement.";
+
+const MOTION_LIBRARY: MotionShot[] = [
+  {
+    key: "Hero Push",
+    band: 1,
+    needs: ["Full Hero", "Full Front"],
+    supported: (g) => g.front,
+    text: (role) => `slow hero push straight in on the ${role} view, revealing overall silhouette and proportion; product rigid`,
+  },
+  {
+    key: "Surface-Contour Track",
+    band: 2,
+    needs: ["Macro Stones", "Surface Detail", "Partial Detail"],
+    supported: (g) => g.macro,
+    text: (role) => `camera tracks along the surface contour of the ${role} reference, reading stone field texture and metal separation; product rigid`,
+  },
+  {
+    key: "Rack Focus",
+    band: 2,
+    needs: ["Macro Stones", "Macro Setting", "Full Front"],
+    supported: (g) => g.macro || g.front,
+    text: (role) => `static frame with a real optical rack focus across the ${role} detail, near plane sharpening as the far plane softens; product rigid`,
+  },
+  {
+    key: "Micro Orbit",
+    band: 3,
+    needs: ["Full 3-4", "Side"],
+    supported: (g) => g.threeQuarter || g.side,
+    text: (role) => `micro orbit of only 3-8 degrees toward the ${role} reference, revealing real dimensional thickness; product rigid`,
+  },
+  {
+    key: "Sidewall Glide",
+    band: 3,
+    needs: ["Side"],
+    supported: (g) => g.side,
+    text: (role) => `lateral glide along the ${role} reference, reading sidewall depth and machined edges; product rigid`,
+  },
+  {
+    key: "Diagonal Parallax Slide",
+    band: 3,
+    needs: ["Full 3-4", "Full Front"],
+    supported: (g) => g.threeQuarter || g.front,
+    text: (role) => `diagonal parallax slide across the ${role} view, lights sweeping to build dimension; product rigid`,
+  },
+  {
+    key: "Chain/Link Track",
+    band: 3,
+    needs: ["Chain-Link Track", "Macro Link"],
+    supported: (g) => g.link,
+    text: (role) => `camera tracks link to link along the ${role} reference, each link holding its exact engineered shape; product rigid`,
+  },
+  {
+    key: "Overhead Descent",
+    band: 3,
+    needs: ["Overhead"],
+    supported: (g) => g.overhead,
+    text: (role) => `slow overhead descent onto the ${role} reference; product rigid`,
+  },
+  {
+    key: "Hero-Whip Transition",
+    band: 4,
+    needs: ["Full Hero", "Full Front", "Side"],
+    supported: (g) => g.front && (g.side || g.threeQuarter),
+    text: (role) => `rapid whip-pan off the ${role} view into the next supported angle. ${WHIP_WORDING}`,
+  },
+  {
+    key: "Rapid Macro Pass",
+    band: 4,
+    needs: ["Macro Setting", "Macro Stones", "Macro Link"],
+    supported: (g) => g.macro,
+    text: (role) => `fast macro pass over the ${role} detail, glints firing as the light source travels; product rigid`,
+  },
+  {
+    key: "Extreme Macro Scan",
+    band: 5,
+    needs: ["Macro Stones", "Macro Setting", "Macro Engraving", "Macro Clasp", "Surface Detail"],
+    supported: (g) => g.macro,
+    text: (role) => `extreme macro scan at roughly 2-3cm across the ${role} detail — stay macro, never pull back; product rigid`,
+  },
+  {
+    key: "Low Surface Creep",
+    band: 5,
+    needs: ["Macro Clasp", "Macro Link", "Surface Detail", "Partial Detail"],
+    supported: (g) => g.macro,
+    text: (role) => `low creeping move barely above the ${role} surface, grazing light raking across the finish; product rigid`,
+  },
+  {
+    key: "Micro Pull-back",
+    band: 6,
+    needs: ["Full Hero", "Full Front", "Full 3-4"],
+    supported: (g) => g.full,
+    text: (role) => `restrained micro pull-back settling on the ${role} hero view as the final resting composition; product rigid`,
+  },
+];
+
+/** Max safe camera change, derived from the geometry the refs actually cover. */
+function safeCameraLine(geometry: DirectorGeometry) {
+  if (!geometry.full && geometry.macro) {
+    return "MAX SAFE CAMERA CHANGE: macro-only coverage — remain at local-detail scale for the entire clip, never pull back to a full product view and never orbit.";
+  }
+  if (geometry.back) {
+    return "MAX SAFE CAMERA CHANGE: front, side and rear coverage exist — rear and side detail may be revealed, but only construction visible in the references.";
+  }
+  if (geometry.side) {
+    return "MAX SAFE CAMERA CHANGE: front and side coverage exist — a stronger side reveal is allowed, but never rotate to unseen rear construction.";
+  }
+  if (geometry.threeQuarter) {
+    return "MAX SAFE CAMERA CHANGE: front and 3/4 coverage only — keep parallax within about 8 degrees; no full orbit.";
+  }
+  return "MAX SAFE CAMERA CHANGE: front coverage only — small push plus a 3-5 degree arc maximum. No orbit, no side or rear reveal, no invented sidewalls.";
+}
+
+/** Timestamps summing exactly to `duration`, ~2-3s per shot. */
+function shotWindows(duration: number, count: number) {
+  const windows: { start: number; end: number }[] = [];
+  let cursor = 0;
+  for (let i = 0; i < count; i += 1) {
+    const remaining = duration - cursor;
+    const left = count - i;
+    const span = i === count - 1 ? remaining : Math.max(1, Math.round(remaining / left));
+    windows.push({ start: cursor, end: Math.min(duration, cursor + span) });
+    cursor += span;
+  }
+  return windows;
+}
+
+/** Build the ordered shot plan across the energy curve, respecting geometry. */
+function buildShotPlan(
+  selected: { role: FrameRole; frame: ApprovedFrame }[],
+  geometry: DirectorGeometry,
+  duration: number,
+) {
+  const shotCount = Math.max(3, Math.min(7, Math.round(duration / 2.5) || 3));
+  const windows = shotWindows(duration, shotCount);
+  const available = new Set(selected.map((entry) => entry.role));
+  const usable = MOTION_LIBRARY.filter(
+    (shot) => shot.supported(geometry) && shot.needs.some((role) => available.has(role)),
+  );
+
+  const plan: { start: number; end: number; key: string; role: FrameRole; text: string }[] = [];
+  const usedKeys = new Set<string>();
+
+  for (let i = 0; i < windows.length; i += 1) {
+    // Energy curve derived from position in the clip, not a hard-coded order.
+    const progress = windows.length === 1 ? 0 : i / (windows.length - 1);
+    const targetBand = i === windows.length - 1 ? 6 : Math.max(1, Math.round(1 + progress * 4));
+    const ranked = usable
+      .slice()
+      .sort((a, b) => {
+        const fresh = Number(usedKeys.has(a.key)) - Number(usedKeys.has(b.key));
+        if (fresh !== 0) return fresh;
+        return Math.abs(a.band - targetBand) - Math.abs(b.band - targetBand);
+      });
+    const shot = ranked[0];
+    if (!shot) break;
+    usedKeys.add(shot.key);
+    const role = shot.needs.find((needed) => available.has(needed)) ?? selected[0]?.role ?? "Full Hero";
+    plan.push({ ...windows[i], key: shot.key, role, text: shot.text(role) });
+  }
+  return plan;
+}
+
+const DIRECTOR_HARD_NEGATIVES =
+  "HARD NEGATIVES: no object morphing, no link/letter/pattern redesign, no changing link or stone count, no mosaic converted to generic pave, no stone drift, no changed stone cuts, no invented center stones, no melted or disappearing prongs, no fused clasp or joints, no geometry wobble, no fake glitter overlays, no static starburst or sparkle filter (any flare must originate from a physically plausible reflection and track with the camera or light), no excessive bloom, no uniform blur gradient, no plastic metal, no invented back, side, gallery or hinge construction not shown by the references, no random rotation.";
+
+const DIRECTOR_PHYSICS =
+  "GLOBAL PHYSICS: The jewelry remains physically rigid and locked in its existing world position; primary motion is produced by the camera, optical focus and moving studio lights.";
+
+const DIRECTOR_TEMPORAL_LOCK =
+  "TEMPORAL GEOMETRY LOCK: Treat the approved references as multiple observations of ONE manufactured physical object — do not regenerate the object between shots; every view is the same object from a different supported camera position.";
+
+const DIRECTOR_OPTICS =
+  "OPTICS: 90-120mm macro character, an extremely shallow real focus plane, physical bokeh and natural focus breathing — never a uniform blur gradient.";
+
+const DIRECTOR_LIGHTING =
+  "LIGHTING: narrow diffused strip lights plus pinpoint sources that MOVE and sweep across the piece; every glint originates from a real surface.";
+
+const DIRECTOR_GEMSTONES =
+  "GEMSTONE RESPONSE: independent per-facet scintillation, white brilliance, internal refraction and spectral dispersion; different stones flash at different moments with no synchronized blinking. The specified stone body color never changes while spectral fire is allowed.";
+
+const DIRECTOR_COLORLESS = "Colorless stones stay visually colorless and white.";
+
+const DIRECTOR_METAL =
+  "METAL RESPONSE: crisp machined and beveled edges, real mirror polish with subtle microtexture and true dimensional thickness — never plastic, liquid or CGI-featureless metal.";
+
+const DIRECTOR_TRANSITIONS =
+  "TRANSITIONS: physical camera moves only — no editorial wipes, dissolves or graphic effects.";
+
+const DIRECTOR_MOSAIC =
+  "MOSAIC: preserve the engineered stone size and shape variation, orientation, tight interlock, spacing and metal separation — never regularize it into uniform round pave.";
+
+const DIRECTOR_MAX_CHARS = 2400;
+
+/**
+ * A dynamic luxury-jewelry-director shot plan for the Seedance
+ * reference-to-video reconstruction. Universal for any jewelry type.
+ */
+function buildSeedanceDirectorPrompt(args: {
+  frames: ApprovedFrame[];
+  specs: TargetSpec[];
+  notes?: string | null;
+  duration: number;
+  aspectRatio?: string | null;
+  extra?: string | null;
+}) {
+  const duration = Math.max(1, Math.round(Number(args.duration) || 5));
+  const selected = selectDirectorFrames(args.frames);
+  const geometry = directorGeometry(selected);
+  const plan = buildShotPlan(selected, geometry, duration);
+  const specLines = args.specs.map((spec) => targetSpecLine(spec)).filter(Boolean) as string[];
+  const productType = args.specs.find((spec) => spec.type)?.type ?? "jewelry piece";
+  const hasStones = args.specs.some((spec) => spec.stone && !/no stones/i.test(spec.stone)) ||
+    geometry.macro;
+  const mosaic = hasMosaicSetting(args.specs);
+  const colorless = isColorlessSpec(args.specs);
+  const aspect = String(args.aspectRatio ?? "").trim();
+
+  const timeline = plan.length
+    ? [
+      "SHOT TIMELINE:",
+      ...plan.map((shot) => `${shot.start}-${shot.end}s — ${shot.text}`),
+    ].join("\n")
+    : "SHOT TIMELINE:\n0-" + duration + "s — slow hero push on the approved view; product rigid";
+
+  // Priority-ordered: the tail entries are trimmed first when over the cap.
+  const core = [
+    `OBJECTIVE: Direct a ${duration}s luxury product film of ONE ${productType}${aspect ? ` framed ${aspect}` : ""}, built strictly from the approved reference views.`,
+    specLines.length ? `PRODUCT LOCK — ${specLines.join(" ")} These are HARD constraints.` : null,
+    DIRECTOR_PHYSICS,
+    DIRECTOR_TEMPORAL_LOCK,
+    timeline,
+    safeCameraLine(geometry),
+    mosaic ? DIRECTOR_MOSAIC : null,
+    DIRECTOR_HARD_NEGATIVES,
+  ].filter(Boolean) as string[];
+
+  const optional = [
+    DIRECTOR_OPTICS,
+    DIRECTOR_LIGHTING,
+    hasStones ? `${DIRECTOR_GEMSTONES}${colorless ? ` ${DIRECTOR_COLORLESS}` : ""}` : null,
+    DIRECTOR_METAL,
+    DIRECTOR_TRANSITIONS,
+    String(args.notes ?? "").trim() ? `NOTES: ${String(args.notes).trim()}` : null,
+    String(args.extra ?? "").trim() || null,
+  ].filter(Boolean) as string[];
+
+  // Insert optional sections before HARD NEGATIVES while the budget allows.
+  const negatives = core.pop() as string;
+  const kept: string[] = [];
+  let length = core.join("\n\n").length + negatives.length + 2;
+  for (const section of optional) {
+    if (length + section.length + 2 > DIRECTOR_MAX_CHARS) continue;
+    kept.push(section);
+    length += section.length + 2;
+  }
+
+  let prompt = [...core, ...kept, negatives].join("\n\n");
+  if (prompt.length > DIRECTOR_MAX_CHARS) {
+    // Last resort: shorten the timeline detail, never the locks or negatives.
+    const shortTimeline = plan.length
+      ? ["SHOT TIMELINE:", ...plan.map((shot) => `${shot.start}-${shot.end}s — ${shot.key} (${shot.role}); product rigid`)].join("\n")
+      : timeline;
+    prompt = [...core.map((section) => (section === timeline ? shortTimeline : section)), negatives]
+      .join("\n\n")
+      .slice(0, DIRECTOR_MAX_CHARS);
+  }
+
+  return {
+    prompt,
+    shotPlan: plan.map((shot) => ({
+      start: shot.start,
+      end: shot.end,
+      move: shot.key,
+      reference: shot.role,
+    })),
+    frameRoles: selected.map((entry) => entry.role),
+    geometry,
+  };
+}
+
 
 async function startSwapFrame(admin: AdminClient, args: {
   userId: string;
