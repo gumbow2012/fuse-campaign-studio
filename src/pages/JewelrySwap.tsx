@@ -1267,12 +1267,62 @@ export default function JewelrySwap() {
         refs.forEach((ref) => claimed.add(ref.referenceIndex!));
 
         const base = flat[refs[0].referenceIndex!].piece ?? prev[0] ?? null;
+        const baseSources = base?.sources ?? {};
+        /**
+         * "Auto from reference" is a user MODE, not the spec. When the analysis
+         * resolved a canonical value we write that real value into the control —
+         * unless the user set the field themselves (user_override is permanent).
+         */
+        const resolve = (
+          field: string,
+          current: string | undefined,
+          autoValue: string,
+          detected?: DetectedField | null,
+        ): { value: string; source: string } => {
+          const userValue = String(current ?? "").trim();
+          const isUserSet =
+            baseSources[field] === "user_override" && userValue && userValue !== autoValue;
+          if (isUserSet) return { value: userValue, source: "user_override" };
+          const canonical = String(detected?.resolvedValue ?? "").trim();
+          const tier = detected?.confidenceTier ?? "low";
+          if (canonical && (tier === "high" || tier === "medium")) {
+            return { value: canonical, source: tier === "high" ? "gemini_detected" : "gemini_suggested" };
+          }
+          return { value: userValue || autoValue, source: "unknown" };
+        };
+
+        const resolvedType = resolve("type", base?.type, JEWELRY_TYPES[0], product.jewelryType);
+        const resolvedMetal = resolve("metal", base?.metal, AUTO_METAL, product.metal);
+        const resolvedStone = resolve("stone", base?.stone, AUTO_STONE, product.stoneType);
+        const resolvedColor = resolve("stoneColor", base?.stoneColor, AUTO_STONE_COLOR, product.stoneColor);
+        const resolvedQuality = resolve("quality", base?.quality, AUTO_QUALITY, product.stoneQuality);
+
+        // Canonical, per-region settings — the existing multi-setting rows are
+        // auto-populated without the user pressing "+ Add setting".
         const detectedSettings = (product.settings ?? [])
           .map((setting) => ({
-            type: String(setting.setting ?? "").trim(),
-            region: String(setting.region ?? "").trim() || null,
+            type: String(setting.resolvedSetting ?? setting.setting ?? "").trim(),
+            region: String(setting.resolvedRegion ?? setting.region ?? "").trim() || null,
+            tier: setting.confidenceTier ?? "low",
           }))
           .filter((setting) => setting.type);
+        const userSetSettings =
+          baseSources.settings === "user_override" &&
+          realSettings(base ?? ({ settings: [] } as unknown as Piece)).length > 0;
+        const autoSettings = detectedSettings
+          .filter((setting) => setting.tier !== "low")
+          .map((setting) => ({
+            ...EMPTY_SETTING,
+            type: setting.type,
+            region: setting.region ?? "",
+          }));
+        const settings = userSetSettings
+          ? base!.settings
+          : autoSettings.length
+            ? autoSettings.slice(0, 6)
+            : base?.settings?.length
+              ? base.settings
+              : [{ ...EMPTY_SETTING }];
 
         next.push({
           urls: refs.map((ref) => flat[ref.referenceIndex!].url).slice(0, 6),
@@ -1297,12 +1347,12 @@ export default function JewelrySwap() {
             })
             .slice(0, 6),
           name: String(product.label ?? "").trim() || base?.name || `Piece ${productIndex + 1}`,
-          type: base?.type ?? JEWELRY_TYPES[0],
-          metal: base?.metal ?? AUTO_METAL,
-          stone: base?.stone ?? AUTO_STONE,
-          stoneColor: base?.stoneColor ?? AUTO_STONE_COLOR,
-          quality: base?.quality ?? AUTO_QUALITY,
-          settings: base?.settings?.length ? base.settings : [{ ...EMPTY_SETTING }],
+          type: resolvedType.value,
+          metal: resolvedMetal.value,
+          stone: resolvedStone.value,
+          stoneColor: resolvedColor.value,
+          quality: resolvedQuality.value,
+          settings,
           width: base?.width ?? "",
           height: base?.height ?? "",
           depth: base?.depth ?? "",
@@ -1311,27 +1361,30 @@ export default function JewelrySwap() {
           notes: base?.notes ?? "",
           scope: base?.scope ?? DEFAULT_SCOPE,
           expanded: base?.expanded ?? false,
-          // Detected values only RESOLVE fields left on Auto — see the backend.
+          // Kept for the summary line and for any field still left on Auto.
           detected: {
-            type: product.jewelryType?.value ?? null,
-            metal: product.metal?.value ?? null,
-            stone: product.stoneType?.value ?? null,
-            stoneColor: product.stoneColor?.value ?? null,
-            quality: product.stoneQuality?.value ?? null,
-            settings: detectedSettings,
+            type: product.jewelryType?.resolvedValue ?? product.jewelryType?.value ?? null,
+            metal: product.metal?.resolvedValue ?? product.metal?.value ?? null,
+            stone: product.stoneType?.resolvedValue ?? product.stoneType?.value ?? null,
+            stoneColor: product.stoneColor?.resolvedValue ?? product.stoneColor?.value ?? null,
+            quality: product.stoneQuality?.resolvedValue ?? product.stoneQuality?.value ?? null,
+            settings: detectedSettings.map((setting) => ({
+              type: setting.type,
+              region: setting.region,
+            })),
           },
           sources: {
-            type: base?.type && base.type !== JEWELRY_TYPES[0] ? "user_override" : "gemini_detected",
-            metal: base?.metal && base.metal !== AUTO_METAL ? "user_override" : "gemini_detected",
-            stone: base?.stone && base.stone !== AUTO_STONE ? "user_override" : "gemini_detected",
-            stoneColor:
-              base?.stoneColor && base.stoneColor !== AUTO_STONE_COLOR
-                ? "user_override"
-                : "gemini_detected",
-            quality: base?.quality && base.quality !== AUTO_QUALITY ? "user_override" : "gemini_detected",
-            settings: realSettings(base ?? ({ settings: [] } as unknown as Piece)).length
+            ...baseSources,
+            type: resolvedType.source,
+            metal: resolvedMetal.source,
+            stone: resolvedStone.source,
+            stoneColor: resolvedColor.source,
+            quality: resolvedQuality.source,
+            settings: userSetSettings
               ? "user_override"
-              : "gemini_detected",
+              : autoSettings.length
+                ? "gemini_detected"
+                : "unknown",
           },
           needsConfirmation: Array.isArray(product.needsConfirmation) ? product.needsConfirmation : [],
         });
@@ -1349,9 +1402,12 @@ export default function JewelrySwap() {
         next[0].cads.push(item.piece?.cads?.[item.angleIndex] ?? null);
       }
 
+      // These writes come from the analysis itself — they must not retrigger it.
+      intakeJustApplied.current = true;
       return next.slice(0, 8);
     });
   }, []);
+
 
 
   /* ------------------------------ 4. Frame swaps ---------------------------- */
