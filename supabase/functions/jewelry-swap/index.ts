@@ -368,25 +368,31 @@ function selectReferencesForFrame(args: {
     take(ref);
   }
 
-  // 4) Deterministic, mode-specific photographic priorities (validation layer:
-  //    it fills whatever the ranking left empty and guarantees a usable set).
-  if (mode === "macro") {
-    take(photos.find((ref) => isMacroRole(ref) && !isAvoided(ref)));
-    take(photos.find((ref) => isDetailRole(ref) && !isAvoided(ref)));
-    // At most ONE overall identity photo — avoid full-product hero photos.
-    take(photos.find((ref) => isOverallRole(ref) && !isAvoided(ref)));
-  } else {
-    take(
-      photos.find((ref) =>
-        /front/i.test(roleText(ref)) && !/3\/4/.test(roleText(ref)) && !isAvoided(ref)
-      ),
-    );
-    take(photos.find((ref) => isOverallRole(ref) && !isAvoided(ref)));
-    take(
-      photos.find((ref) => /3\/4|three quarter/i.test(roleText(ref)) && !isAvoided(ref)),
-    );
-    take(photos.find((ref) => isMacroRole(ref) && !isAvoided(ref)));
+  // 4) Deterministic, mode-specific photographic priorities. This is the
+  //    validation layer: it only tops the payload up when Gemini's ranking left
+  //    it too thin (or produced no ranking at all) — it never pads a payload the
+  //    ranking already answered.
+  const MIN_PRODUCT_REFERENCES = 2;
+  if (!hasRanking || picked.length < MIN_PRODUCT_REFERENCES) {
+    if (mode === "macro") {
+      take(photos.find((ref) => isMacroRole(ref) && !isAvoided(ref)));
+      take(photos.find((ref) => isDetailRole(ref) && !isAvoided(ref)));
+      // At most ONE overall identity photo — avoid full-product hero photos.
+      take(photos.find((ref) => isOverallRole(ref) && !isAvoided(ref)));
+    } else {
+      take(
+        photos.find((ref) =>
+          /front/i.test(roleText(ref)) && !/3\/4/.test(roleText(ref)) && !isAvoided(ref)
+        ),
+      );
+      take(photos.find((ref) => isOverallRole(ref) && !isAvoided(ref)));
+      take(
+        photos.find((ref) => /3\/4|three quarter/i.test(roleText(ref)) && !isAvoided(ref)),
+      );
+      take(photos.find((ref) => isMacroRole(ref) && !isAvoided(ref)));
+    }
   }
+
 
   // 5) Last resort only. Upload order has NO authority: when Gemini ranked this
   //    frame we stop here unless the payload is too thin to reconstruct from.
