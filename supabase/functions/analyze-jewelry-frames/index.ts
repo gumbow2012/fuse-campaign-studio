@@ -723,10 +723,19 @@ const FRAMES_ONLY_SCHEMA = {
 } as const;
 
 function normalizeRefKey(ref: JewelryReferenceInput) {
-  return `${ref.url}|${ref.role ?? ""}|${ref.cad ? 1 : 0}|${ref.kind ?? ""}|${
-    ref.videoReferenceId ?? ""
-  }`;
+  return `${ref.url}|${ref.role ?? ""}|${ref.cad ? 1 : 0}|${ref.kind ?? ""}`;
 }
+
+/** Storage URLs can carry volatile query strings — the path identifies the clip. */
+function normalizeUrlKey(url: string) {
+  try {
+    const parsed = new URL(url);
+    return `${parsed.origin}${parsed.pathname}`;
+  } catch {
+    return url;
+  }
+}
+
 
 
 /** True when the two reference sets are the same images with the same labels. */
