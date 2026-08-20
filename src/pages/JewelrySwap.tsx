@@ -1688,7 +1688,7 @@ export default function JewelrySwap() {
       const advice = frameAnalysisFor(index) as (JewelryFrameAnalysis & {
         highDetailRecommended?: boolean | null;
       }) | null;
-      return advice?.highDetailRecommended === true || advice?.coverage === "MACRO_DETAIL";
+      return advice?.highDetailRecommended === true || advice?.coverage === "macro_detail";
     });
   }, [selectedFrames, frameMode, frameCoverage, frameAnalysisFor]);
 
