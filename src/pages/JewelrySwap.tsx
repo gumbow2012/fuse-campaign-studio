@@ -1443,6 +1443,26 @@ export default function JewelrySwap() {
   }, [pieces]);
 
   /**
+   * The EVIDENCE ROLE of one thumbnail (CAD FRONT / MACRO / SIDE / CLASP …).
+   * Deliberately never a product name: a thumbnail is an observation, not a piece.
+   */
+  const evidenceRoleByUrl = useMemo(() => {
+    const roles = new Map<string, string>();
+    for (const entry of knowledgeMap?.perReferenceObservations ?? []) {
+      const id = String(entry?.referenceId ?? "").trim();
+      const role = String(entry?.evidenceRole ?? "").trim();
+      if (id && role) roles.set(id, role.toUpperCase().slice(0, 18));
+    }
+    return roles;
+  }, [knowledgeMap]);
+
+  const evidenceRoleFor = useCallback(
+    (url: string) => evidenceRoleByUrl.get(refIdByUrl.get(url) ?? "") ?? "",
+    [evidenceRoleByUrl, refIdByUrl],
+  );
+
+
+  /**
    * AUTO authority labels. The user assigns nothing: we read the attribute-level
    * authority FUSE already computed (authorityFor + evidenceStrength) and show at
    * most one plain badge per reference. No score, no checkbox, and nothing at all
