@@ -542,8 +542,11 @@ function buildJewelryPrompt(args: {
   failureReason?: string | null;
   /** Per-frame replacement mode: "auto" (self-classify), "standard", "macro". */
   mode?: ReplacementMode | string | null;
+  /** Per-frame coverage: "auto" (self-classify), "full", "partial", "macro". */
+  coverage?: Coverage | string | null;
   /** Legacy per-frame Macro toggle — equivalent to mode = "macro". */
   macro?: boolean;
+
 }) {
   let cursor = 2; // image 1 is the source frame
   const lines: string[] = [];
