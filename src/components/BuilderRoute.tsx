@@ -1,19 +1,20 @@
 import { useAuth } from "@/contexts/AuthContext";
 import { Navigate } from "react-router-dom";
+import { AuthRetry, AuthSpinner } from "@/components/AuthGuardStates";
 
 /** Allows admins, devs, and invited creators into the template builder surfaces. */
 const BuilderRoute = ({ children }: { children: React.ReactNode }) => {
-  const { user, loading, canUseBuilder } = useAuth();
+  const { authStatus, canUseBuilder, refreshAccess } = useAuth();
 
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-      </div>
-    );
+  if (authStatus === "initializing_session" || authStatus === "loading_access") {
+    return <AuthSpinner />;
   }
 
-  if (!user) {
+  if (authStatus === "access_load_failed") {
+    return <AuthRetry onRetry={() => void refreshAccess()} />;
+  }
+
+  if (authStatus === "unauthorized") {
     return <Navigate to="/auth" replace />;
   }
 
