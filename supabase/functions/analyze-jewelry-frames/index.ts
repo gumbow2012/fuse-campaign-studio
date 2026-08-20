@@ -663,6 +663,9 @@ Deno.serve(async (req) => {
   }
 
   const apiKey = Deno.env.get("GEMINI_API_KEY")?.trim();
+  // Non-sensitive binding check: presence only, never the value.
+  console.log("[analyze-jewelry-frames] gemini key present:", Boolean(apiKey));
+
 
   try {
     const body = await req.json().catch(() => ({}));
