@@ -1,4 +1,4 @@
-import { Image } from "https://esm.sh/imagescript@1.3.0";
+import { Image } from "https://deno.land/x/imagescript@1.3.0/mod.ts";
 
 /**
  * Kling's image-to-video endpoint rejects input images larger than 10 MB
