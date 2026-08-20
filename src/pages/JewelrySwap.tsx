@@ -1885,10 +1885,32 @@ export default function JewelrySwap() {
                       </div>
                       <div>
                         <label className="mb-1 block text-[10px] uppercase tracking-[0.14em] text-cyan-200/70">
-                          Stone quality
+                          Stone color
                         </label>
                         <select
-                          value={piece.quality}
+                          value={piece.stoneColor || AUTO_STONE_COLOR}
+                          onChange={(event) =>
+                            setPieces((prev) =>
+                              prev.map((item, i) =>
+                                i === index ? { ...item, stoneColor: event.target.value } : item,
+                              ),
+                            )
+                          }
+                          className={SELECT_CLASS}
+                        >
+                          {STONE_COLOR_OPTIONS.map((option) => (
+                            <option key={option} value={option}>
+                              {option}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="mb-1 block text-[10px] uppercase tracking-[0.14em] text-cyan-200/70">
+                          Quality
+                        </label>
+                        <select
+                          value={piece.quality || AUTO_QUALITY}
                           onChange={(event) =>
                             setPieces((prev) =>
                               prev.map((item, i) => (i === index ? { ...item, quality: event.target.value } : item)),
@@ -1898,12 +1920,135 @@ export default function JewelrySwap() {
                         >
                           {QUALITY_OPTIONS.map((option) => (
                             <option key={option} value={option}>
-                              {option || "Optional"}
+                              {option}
                             </option>
                           ))}
                         </select>
                       </div>
                     </div>
+
+                    {/* Structured setting construction. Region mapping only appears
+                        once a second setting exists — one setting needs no region. */}
+                    <div className="mt-2 space-y-1.5">
+                      {(piece.settings?.length ? piece.settings : [EMPTY_SETTING]).map(
+                        (setting, settingIndex) => {
+                          const multiple = (piece.settings?.length ?? 1) > 1;
+                          return (
+                            <div key={settingIndex} className="grid gap-1.5 sm:grid-cols-2">
+                              <div>
+                                {settingIndex === 0 ? (
+                                  <label className="mb-1 block text-[10px] uppercase tracking-[0.14em] text-cyan-200/70">
+                                    Setting
+                                  </label>
+                                ) : null}
+                                <select
+                                  value={setting.type || AUTO_SETTING}
+                                  onChange={(event) =>
+                                    setPieces((prev) =>
+                                      prev.map((item, i) =>
+                                        i === index
+                                          ? {
+                                            ...item,
+                                            settings: (item.settings?.length
+                                              ? item.settings
+                                              : [{ ...EMPTY_SETTING }]
+                                            ).map((entry, j) =>
+                                              j === settingIndex
+                                                ? { ...entry, type: event.target.value }
+                                                : entry,
+                                            ),
+                                          }
+                                          : item,
+                                      ),
+                                    )
+                                  }
+                                  className={SELECT_CLASS}
+                                >
+                                  {SETTING_TYPE_OPTIONS.map((option) => (
+                                    <option key={option} value={option}>
+                                      {option}
+                                    </option>
+                                  ))}
+                                </select>
+                              </div>
+                              {multiple ? (
+                                <div className="flex items-end gap-1.5">
+                                  <select
+                                    value={setting.region || ""}
+                                    onChange={(event) =>
+                                      setPieces((prev) =>
+                                        prev.map((item, i) =>
+                                          i === index
+                                            ? {
+                                              ...item,
+                                              settings: (item.settings ?? []).map((entry, j) =>
+                                                j === settingIndex
+                                                  ? { ...entry, region: event.target.value }
+                                                  : entry,
+                                              ),
+                                            }
+                                            : item,
+                                        ),
+                                      )
+                                    }
+                                    className={SELECT_CLASS}
+                                  >
+                                    <option value="">Region…</option>
+                                    {settingRegionsForType(piece.type).map((option) => (
+                                      <option key={option} value={option}>
+                                        {option}
+                                      </option>
+                                    ))}
+                                  </select>
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      setPieces((prev) =>
+                                        prev.map((item, i) =>
+                                          i === index
+                                            ? {
+                                              ...item,
+                                              settings: (item.settings ?? []).filter(
+                                                (_, j) => j !== settingIndex,
+                                              ),
+                                            }
+                                            : item,
+                                        ),
+                                      )
+                                    }
+                                    className="h-8 shrink-0 rounded-lg border border-white/12 px-2 text-[10px] uppercase tracking-[0.14em] text-white/45 transition-colors hover:border-white/25 hover:text-white/80"
+                                  >
+                                    Remove
+                                  </button>
+                                </div>
+                              ) : null}
+                            </div>
+                          );
+                        },
+                      )}
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setPieces((prev) =>
+                            prev.map((item, i) =>
+                              i === index
+                                ? {
+                                  ...item,
+                                  settings: [
+                                    ...(item.settings?.length ? item.settings : [{ ...EMPTY_SETTING }]),
+                                    { ...EMPTY_SETTING },
+                                  ].slice(0, 6),
+                                }
+                                : item,
+                            ),
+                          )
+                        }
+                        className="text-[10px] uppercase tracking-[0.14em] text-cyan-200/70 transition-colors hover:text-cyan-100"
+                      >
+                        + Add setting
+                      </button>
+                    </div>
+
 
                     <div className="mt-2 grid grid-cols-4 gap-1.5">
                       {(
