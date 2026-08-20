@@ -1265,14 +1265,15 @@ function buildSeedanceDirectorPrompt(args: {
   const core = coreLength(fullCore) <= DIRECTOR_MAX_CHARS ? fullCore : buildCore(shortTimeline);
 
   const optional = [
-    DIRECTOR_OPTICS,
-    DIRECTOR_LIGHTING,
     hasStones ? `${DIRECTOR_GEMSTONES}${colorless ? ` ${DIRECTOR_COLORLESS}` : ""}` : null,
     DIRECTOR_METAL,
+    DIRECTOR_OPTICS,
+    DIRECTOR_LIGHTING,
     DIRECTOR_TRANSITIONS,
     String(args.notes ?? "").trim() ? `NOTES: ${String(args.notes).trim()}` : null,
     String(args.extra ?? "").trim() || null,
   ].filter(Boolean) as string[];
+
 
   // Insert optional sections before HARD NEGATIVES while the budget allows.
   const kept: string[] = [];
