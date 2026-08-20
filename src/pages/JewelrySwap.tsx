@@ -749,6 +749,15 @@ export default function JewelrySwap() {
   const intakeAbort = useRef<AbortController | null>(null);
   const intakeToken = useRef(0);
   /**
+   * The persisted intake (fingerprint + exact reference set) the shot analysis
+   * can reuse. Cleared implicitly whenever a new intake overwrites it.
+   */
+  const intakeProvenance = useRef<{
+    fingerprint: string | null;
+    references: { url: string; role?: string | null; cad?: boolean }[];
+  }>({ fingerprint: null, references: [] });
+
+  /**
    * STALE GUARD: the version of the reference set (urls + roles + authority
    * flags) that the UI is currently showing. A response whose version differs
    * from this is stale by definition and is discarded.
