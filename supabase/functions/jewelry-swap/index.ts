@@ -457,6 +457,131 @@ const REFERENCE_IMAGE_CONTEXT_RULE =
 const REFERENCE_ROLE_PRIORITY_LINE =
   "REFERENCE ROLE PRIORITY: Use the CAD / design-authority (and otherwise cleanest) reference as the GEOMETRY authority. Use the photographic references — which may legitimately contain gloves, hands, wrists, boxes, trays or studio backdrops — ONLY for real material truth: metal alloy and rose-gold/white-gold/yellow-gold finish, polish, diamond and pavé appearance, scintillation and manufacturing micro-texture. Never use any photographic reference for environment, background, framing or composition.";
 
+/* ------------------------------------------------------------------ *
+ * STRUCTURED PRODUCT AUTHORITY
+ * ------------------------------------------------------------------ *
+ * The piece card now carries hard product facts (stone, stone color,
+ * quality, one or more regional settings). They are injected into the
+ * SAME prompt as a mandatory specification block — never a separate
+ * prompt — and they outrank the model's own aesthetic inference.
+ */
+
+/** Normalized structured settings for a piece, dropping empty/Auto entries. */
+function pieceSettings(piece: JewelryPiece): JewelrySetting[] {
+  const raw = Array.isArray(piece.settings) ? piece.settings : [];
+  const out: JewelrySetting[] = [];
+  for (const entry of raw) {
+    const type = String((entry as any)?.type ?? "").trim();
+    if (!type || isAuto(type)) continue;
+    out.push({
+      type,
+      region: String((entry as any)?.region ?? "").trim() || null,
+      stone: String((entry as any)?.stone ?? "").trim() || null,
+      color: String((entry as any)?.color ?? "").trim() || null,
+      quality: String((entry as any)?.quality ?? "").trim() || null,
+    });
+  }
+  return out;
+}
+
+/** Resolved, verifiable spec for one piece — also stored in input_payload. */
+type TargetSpec = {
+  type: string | null;
+  metal: string | null;
+  stone: string | null;
+  stoneColor: string | null;
+  quality: string | null;
+  settings: { region: string | null; type: string; stone?: string | null; color?: string | null; quality?: string | null }[];
+  dimensions: string | null;
+};
+
+function resolveTargetSpec(piece: JewelryPiece): TargetSpec {
+  const dims = piece.dimensions ?? null;
+  const width = Number(dims?.width ?? NaN);
+  const height = Number(dims?.height ?? NaN);
+  const depth = Number(dims?.depth ?? NaN);
+  const weight = Number(dims?.weight ?? NaN);
+  const hasDims = [width, height, depth].some((value) => Number.isFinite(value) && value > 0);
+  const dimText = hasDims
+    ? `${[width, height, depth]
+      .map((value) => (Number.isFinite(value) && value > 0 ? String(value) : "?"))
+      .join("×")} mm${Number.isFinite(weight) && weight > 0 ? `, ~${weight} g` : ""}`
+    : Number.isFinite(weight) && weight > 0
+      ? `~${weight} g`
+      : null;
+
+  return {
+    type: String(piece.type ?? "").trim() || null,
+    metal: isAuto(piece.metal) ? null : String(piece.metal).trim(),
+    stone: isAuto(piece.stone) ? null : String(piece.stone).trim(),
+    stoneColor: isAuto(piece.stoneColor) ? null : String(piece.stoneColor).trim(),
+    quality: isAuto(piece.quality) ? null : String(piece.quality ?? "").trim() || null,
+    settings: pieceSettings(piece).map((setting) => ({
+      region: setting.region,
+      type: String(setting.type),
+      stone: setting.stone,
+      color: setting.color,
+      quality: setting.quality,
+    })),
+    dimensions: dimText,
+  };
+}
+
+/** The mandatory TARGET JEWELRY SPECIFICATION line, or null when everything is Auto. */
+function targetSpecLine(spec: TargetSpec) {
+  const parts: string[] = [];
+  if (spec.type) parts.push(`TYPE: ${spec.type}`);
+  if (spec.metal) parts.push(`METAL: ${spec.metal}`);
+  if (spec.stone) parts.push(`STONE: ${spec.stone}`);
+  if (spec.stoneColor) parts.push(`STONE COLOR: ${spec.stoneColor}`);
+  if (spec.quality) parts.push(`QUALITY: ${spec.quality}`);
+  if (spec.settings.length) {
+    const settings = spec.settings
+      .map((setting) => {
+        const overrides = [setting.stone, setting.color, setting.quality].filter(Boolean).join(", ");
+        const base = setting.region ? `${setting.region}: ${setting.type}` : setting.type;
+        return overrides ? `${base} (${overrides})` : base;
+      })
+      .join("; ");
+    parts.push(`SETTINGS: ${settings}`);
+  }
+  if (spec.dimensions) parts.push(`DIMENSIONS/WEIGHT: ${spec.dimensions}`);
+  if (parts.length <= 1 && !spec.stone && !spec.settings.length && !spec.stoneColor) return null;
+  return `TARGET JEWELRY SPECIFICATION — ${parts.join("; ")}. These structured specifications are MANDATORY product constraints. Do not reinterpret them or substitute another setting style, stone color, stone shape, or stone layout for aesthetic reasons.`;
+}
+
+const SETTING_AUTHORITY_LINE =
+  "SETTING AUTHORITY: Reproduce the replacement jewelry's actual stone-setting construction. Do NOT convert mosaic-set stones into generic pavé, do not convert baguettes into rounds, do not add a large center stone unless the design contains one, and do not invent halo rows, bezels, channels, prongs, clusters or decorative stones not supported by the CAD, product references, or the Setting specification.";
+
+const MOSAIC_MEANING_LINE =
+  "MOSAIC MEANING: MOSAIC is a deliberate multi-stone composition of differently sized/shaped stones arranged tightly into a continuous iced surface — preserve the reference/CAD's stone size and shape variation, orientation, grouping, spacing, metal separation and overall mosaic pattern. Never regularize it into uniform round micro-pavé. Reverse Mosaic: preserve the reverse orientation shown by the design authority.";
+
+const STONE_COLOR_LOCK_LINE =
+  "STONE COLOR LOCK: Maintain the specified gemstone/diamond body color consistently across the whole object. Metal reflections and source lighting may alter perceived highlights, but the physical stone color must not change.";
+
+const COLORLESS_LINE = "The diamonds remain visually colorless/white.";
+
+const OPTICS_VS_COLOR_LINE =
+  "OPTICS vs COLOR: Spectral fire (white, blue, cyan, green, yellow, orange, restrained red/violet flashes from dispersion) is ALLOWED and does NOT change body color. Do not render colored diamonds (pink/champagne/yellow/blue) unless Stone Color specifies them.";
+
+const NO_INVENT_NEGATIVES_LINE =
+  "NO-INVENT NEGATIVES: No invented center stones, no added oversized diamonds, no random baguettes or marquise, no added halos or extra stone rows, no changing round↔fancy cuts, no arbitrary stone-size variation, no generic pavé substitution, no setting-style drift, no stone-color drift.";
+
+const SPEC_HIERARCHY_LINE =
+  "SPECIFICATION HIERARCHY: CAD / design-authority references (geometry) > structured product fields (material, stone, stone color, quality, setting) > labeled product references (appearance) > Notes > model inference. If Notes conflict with the structured fields, the structured fields win unless the Notes explicitly state that they override them.";
+
+/** True when any setting on any piece is a mosaic variant. */
+function hasMosaicSetting(specs: TargetSpec[]) {
+  return specs.some((spec) => spec.settings.some((setting) => /mosaic/i.test(setting.type)));
+}
+
+/** True when every specified stone color is a colorless/white option. */
+function isColorlessSpec(specs: TargetSpec[]) {
+  const colors = specs.map((spec) => spec.stoneColor).filter(Boolean) as string[];
+  if (!colors.length) return false;
+  return colors.every((color) => /colorless|white|d–f|d-f|g–j|g-j/i.test(color));
+}
+
 
 
 /** Targeted corrective lines appended when the user regenerates with a reason. */
