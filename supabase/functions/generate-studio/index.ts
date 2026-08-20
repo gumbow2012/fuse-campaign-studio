@@ -355,17 +355,77 @@ async function startGeneration(admin: AdminClient, args: { input: StartInput; us
   }
 }
 
+/**
+ * Stability guards for the reconciliation path (production incident):
+ * stuck `running` rows whose webhook never landed used to be re-checked on
+ * every poll, fanning out an ever-growing pile of hanging provider calls.
+ */
+const STUCK_AFTER_MS = 20 * 60 * 1000;
+const PROVIDER_CALL_TIMEOUT_MS = 10_000;
+const MAX_RECONCILE_PER_CALL = 6;
+
+class ProviderTimeout extends Error {}
+
+function withTimeout<T>(promise: Promise<T>, label: string): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((_resolve, reject) =>
+      setTimeout(
+        () => reject(new ProviderTimeout(`${label} timed out after ${PROVIDER_CALL_TIMEOUT_MS}ms`)),
+        PROVIDER_CALL_TIMEOUT_MS,
+      )
+    ),
+  ]);
+}
+
+function isInFlight(row: any) {
+  return row?.status === "queued" || row?.status === "running";
+}
+
+function ageMs(row: any) {
+  const created = Date.parse(String(row?.created_at ?? ""));
+  return Number.isFinite(created) ? Date.now() - created : 0;
+}
+
+function isStuck(row: any) {
+  return isInFlight(row) && ageMs(row) > STUCK_AFTER_MS;
+}
+
+/** Terminal-fail an in-flight row that never produced a provider result. */
+async function expireGeneration(admin: AdminClient, row: any) {
+  const { data: updated } = await admin
+    .from("studio_generations")
+    .update({
+      status: "failed",
+      error_log: "Generation timed out (no provider result within 20m)",
+      completed_at: new Date().toISOString(),
+    })
+    .eq("id", row.id)
+    .select("*")
+    .maybeSingle();
+  return serializeGeneration(updated ?? { ...row, status: "failed" });
+}
+
 /** Poll fal for a generation still in flight and persist any terminal result. */
 async function syncGeneration(admin: AdminClient, row: any) {
-  if (row.status !== "running" && row.status !== "queued") return serializeGeneration(row);
-  if (!row.provider_request_id || !row.provider_model) return serializeGeneration(row);
+  if (!isInFlight(row)) return serializeGeneration(row);
+  if (isStuck(row)) return await expireGeneration(admin, row);
+  if (!row.provider_request_id || !row.provider_model) {
+    return serializeGeneration(row);
+  }
 
   try {
-    const status = await getFalQueueStatus(row.provider_model, row.provider_request_id);
+    const status = await withTimeout(
+      getFalQueueStatus(row.provider_model, row.provider_request_id),
+      "queue status lookup",
+    );
     const normalized = String(status ?? "").toUpperCase();
     if (normalized !== "COMPLETED" && normalized !== "OK") return serializeGeneration(row);
 
-    const result = await getFalQueueResult(row.provider_model, row.provider_request_id);
+    const result = await withTimeout(
+      getFalQueueResult(row.provider_model, row.provider_request_id),
+      "queue result lookup",
+    );
     const output = extractOutput(result);
     if (!output) throw new Error("The provider finished without returning a file");
 
@@ -383,11 +443,14 @@ async function syncGeneration(admin: AdminClient, row: any) {
 
     return serializeGeneration(updated ?? row);
   } catch (error) {
+    // A hung/rate-limited provider call must never fail the row or the invocation.
+    if (error instanceof ProviderTimeout) return serializeGeneration(row);
+
     const message = errorMessage(error);
-    const isTransient = /queue status lookup failed|fetch|network/i.test(message);
+    const isTransient = /queue status lookup failed|fetch|network|timed out/i.test(message);
     if (isTransient) return serializeGeneration(row);
 
-    const detail = await providerFailureDetail(row);
+    const detail = await providerFailureDetail(row).catch(() => null);
 
     const { data: updated } = await admin
       .from("studio_generations")
@@ -403,6 +466,7 @@ async function syncGeneration(admin: AdminClient, row: any) {
     return serializeGeneration(updated ?? row);
   }
 }
+
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: corsHeaders });
