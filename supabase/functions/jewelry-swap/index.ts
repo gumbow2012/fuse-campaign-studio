@@ -305,20 +305,49 @@ function selectReferencesForFrame(args: {
     take(photos.find((ref) => rolesMatch(roleText(ref), preferred)));
   }
 
-  // 3) Mode-specific photographic priorities.
-  if (mode === "macro") {
-    take(photos.find(isMacroRole));
-    take(photos.find(isDetailRole));
-    // At most ONE overall identity photo — avoid full-product hero photos.
-    take(photos.find(isOverallRole));
-  } else {
-    take(photos.find((ref) => /front/i.test(roleText(ref)) && !/3\/4/.test(roleText(ref))));
-    take(photos.find(isOverallRole));
-    take(photos.find((ref) => /3\/4|three quarter/i.test(roleText(ref))));
-    take(photos.find(isMacroRole));
+  // 3) STAGE-A ADVICE (Gemini): recommended roles, in the order it ranked them,
+  //    minus anything it asked to avoid. It fills slots only AFTER CAD and the
+  //    user's explicit Preferred Reference, and can never displace them.
+  const advice = args.geminiFrameAnalysis ?? null;
+  const avoid = (advice?.avoidReferenceRoles ?? []).map((role) => String(role ?? "").trim())
+    .filter(Boolean);
+  const isAvoided = (ref: JewelryReference) =>
+    avoid.some((role) => rolesMatch(roleText(ref), role));
+
+  if (advice?.recommendedReferenceRoles?.length) {
+    for (const role of advice.recommendedReferenceRoles) {
+      const wanted = String(role ?? "").trim();
+      if (!wanted) continue;
+      take(photos.find((ref) => rolesMatch(roleText(ref), wanted) && !isAvoided(ref)));
+    }
   }
 
-  // 4) Fill remaining slots deterministically in upload order.
+  // 4) Deterministic, mode-specific photographic priorities.
+  if (mode === "macro") {
+    take(photos.find((ref) => isMacroRole(ref) && !isAvoided(ref)));
+    take(photos.find((ref) => isDetailRole(ref) && !isAvoided(ref)));
+    // At most ONE overall identity photo — avoid full-product hero photos.
+    take(photos.find((ref) => isOverallRole(ref) && !isAvoided(ref)));
+  } else {
+    take(
+      photos.find((ref) =>
+        /front/i.test(roleText(ref)) && !/3\/4/.test(roleText(ref)) && !isAvoided(ref)
+      ),
+    );
+    take(photos.find((ref) => isOverallRole(ref) && !isAvoided(ref)));
+    take(
+      photos.find((ref) => /3\/4|three quarter/i.test(roleText(ref)) && !isAvoided(ref)),
+    );
+    take(photos.find((ref) => isMacroRole(ref) && !isAvoided(ref)));
+  }
+
+  // 5) Optional material support: remaining photographic references in upload
+  //    order — Gemini-avoided roles are only used if nothing else is left.
+  for (const ref of photos) {
+    if (picked.length >= MAX_PRODUCT_REFERENCES) break;
+    if (isAvoided(ref)) continue;
+    take(ref);
+  }
   for (const ref of photos) {
     if (picked.length >= MAX_PRODUCT_REFERENCES) break;
     take(ref);
@@ -332,10 +361,12 @@ function routePiece(
   piece: JewelryPiece,
   mode?: ReplacementMode | string | null,
   preferredRole?: string | null,
+  geminiFrameAnalysis?: GeminiFrameAnalysis | null,
 ): { piece: JewelryPiece; refs: JewelryReference[] } {
-  const refs = selectReferencesForFrame({ piece, mode, preferredRole });
+  const refs = selectReferencesForFrame({ piece, mode, preferredRole, geminiFrameAnalysis });
   return { piece: { ...piece, references: refs, urls: refs.map((ref) => ref.url) }, refs };
 }
+
 
 
 function isAuto(value: unknown) {
