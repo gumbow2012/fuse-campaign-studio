@@ -3182,12 +3182,8 @@ export default function JewelrySwap() {
                       <p className="text-[11px] text-foreground/85">{detectedProductLine(piece)}</p>
                       <p className="text-[9px] uppercase tracking-[0.14em] text-cyan-200/70">Settings</p>
                       <p className="text-[11px] text-foreground/85">{detectedSettingsLine(piece)}</p>
-                      <p className="text-[9px] uppercase tracking-[0.14em] text-cyan-200/70">Design authority</p>
-                      <p className="text-[11px] text-foreground/85">
-                        {authorityCount(piece)
-                          ? `${authorityCount(piece)} reference${authorityCount(piece) === 1 ? "" : "s"}`
-                          : "None selected"}
-                      </p>
+                      {/* Authority is automatic and intentionally not shown here. */}
+
                       {reviewControls(piece).size ? (
                         <p className="text-[10px] text-amber-200/90">
                           Review {reviewControls(piece).size} detail
