@@ -1034,6 +1034,12 @@ export default function JewelrySwap() {
   /* ---------------------- Reference intake (auto-organize) ------------------ */
 
   const referenceKey = pieces.flatMap((piece) => piece.urls).join("|");
+  /** Uncertain fields across all pieces — only these are surfaced for review. */
+  const uncertainCount = pieces.reduce(
+    (total, piece) => total + (piece.needsConfirmation?.length ?? 0),
+    0,
+  );
+
 
   /**
    * One fast batch pass over ALL uploaded references: recognition, grouping,
@@ -2134,28 +2140,72 @@ export default function JewelrySwap() {
                         : "Analysis unavailable — the manual reference fields below still work"}
                   </p>
                   {intake.status === "running" ? (
-                    <ul className="mt-1.5 space-y-0.5 text-[10px] text-foreground/70">
-                      {INTAKE_STAGES.map((stage, stageIndex) => (
-                        <li key={stage} className="flex items-center gap-1.5">
-                          <span className={stageIndex <= intake.stage ? "text-cyan-200" : "text-white/25"}>
-                            {stageIndex < intake.stage ? "✓" : "•"}
-                          </span>
-                          {stage}
-                        </li>
-                      ))}
-                    </ul>
+                    <>
+                      <ul className="mt-1.5 space-y-0.5 text-[10px] text-foreground/70">
+                        {INTAKE_STAGES.map((stage, stageIndex) => (
+                          <li key={stage} className="flex items-center gap-1.5">
+                            <span className={stageIndex <= intake.stage ? "text-cyan-200" : "text-white/25"}>
+                              {stageIndex < intake.stage ? "✓" : "•"}
+                            </span>
+                            {stage}
+                          </li>
+                        ))}
+                      </ul>
+                      {/* File management stays live during analysis — this only
+                          drops the pending result, never the uploads. */}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          intakeToken.current += 1;
+                          intakeAbort.current?.abort();
+                          setIntake({ status: "idle", stage: 0, productCount: 0 });
+                        }}
+                        className="mt-1.5 text-[10px] uppercase tracking-[0.14em] text-foreground/60 transition-colors hover:text-foreground"
+                      >
+                        Cancel analysis
+                      </button>
+                    </>
                   ) : null}
                   {intake.status === "failed" && intake.error ? (
                     <p className="mt-1 text-[10px] opacity-80">{intake.error}</p>
                   ) : null}
-                  {intake.status === "ready" && intake.productCount > 1 ? (
-                    <p className="mt-1 text-[10px] text-cyan-100/85">
-                      We found {intake.productCount} products — confirm the grouping below, or move a reference with
-                      "Edit analysis".
-                    </p>
+                  {intake.status === "ready" ? (
+                    <div className="mt-1.5 space-y-1">
+                      {intake.productCount > 1 ? (
+                        <p className="text-[10px] text-cyan-100/85">
+                          We found {intake.productCount} products — confirm the grouping below, or reassign a
+                          reference from a card's "Edit analysis".
+                        </p>
+                      ) : null}
+                      {uncertainCount > 0 ? (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setPieces((prev) =>
+                              prev.map((item) =>
+                                item.needsConfirmation?.length ? { ...item, expanded: true } : item,
+                              ),
+                            )
+                          }
+                          className="rounded-lg border border-amber-300/30 bg-amber-300/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-amber-100"
+                        >
+                          Review {uncertainCount} detail{uncertainCount === 1 ? "" : "s"}
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => setIntake((prev) => ({ ...prev, status: "idle" }))}
+                          className="inline-flex items-center gap-1.5 rounded-lg border border-cyan-200/40 bg-cyan-200/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-cyan-100"
+                        >
+                          <Check size={11} />
+                          Looks right — Continue
+                        </button>
+                      )}
+                    </div>
                   ) : null}
                 </div>
               ) : null}
+
 
               <div className="space-y-2.5">
                 {pieces.map((piece, index) => (
