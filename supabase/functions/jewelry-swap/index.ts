@@ -394,6 +394,55 @@ function modeBlock(mode: ReplacementMode) {
   return `${AUTO_CLASSIFY_BLOCK}\n\n${MACRO_CONDITIONAL_PREFIX}\n${MACRO_REPLACEMENT_BLOCK}`;
 }
 
+/**
+ * COVERAGE — a SECOND classification, independent of VIEW (front/side/back) and
+ * of Mode. It expresses how MUCH of the product the source frame shows.
+ */
+export type Coverage = "auto" | "full" | "partial" | "macro";
+
+function normalizeCoverage(coverage: unknown, mode?: ReplacementMode): Coverage {
+  const raw = String(coverage ?? "").trim().toLowerCase();
+  if (raw === "full" || raw === "partial" || raw === "macro" || raw === "auto") {
+    return raw as Coverage;
+  }
+  // Mode = macro implies macro coverage when the user hasn't forced one.
+  return mode === "macro" ? "macro" : "auto";
+}
+
+const COVERAGE_FULL_BLOCK =
+  "COVERAGE: FULL_OBJECT. The source shows the COMPLETE original jewelry product, so show the COMPLETE replacement product. Preserve the replacement's true dimensions and aspect ratio, but SCALE and POSITION it so its entire physical extent is visible inside the frame — fit: contain, never cover. Do not crop either end. Do not cut off the clasp, terminal links, top, bottom or other meaningful extremities. Do not stretch or distort its aspect ratio, and do not force it into the original object's silhouette or dimensions. Keep approximately the same photographic breathing room and negative space as SOURCE_FRAME.";
+
+const COVERAGE_PARTIAL_BLOCK =
+  "COVERAGE: PARTIAL_OBJECT. The source intentionally crops the jewelry. Preserve that crop type. Do not reveal the complete replacement merely for product readability — only the portion physically appropriate to this exact source camera/framing should remain visible; the replacement may leave the frame as the original did.";
+
+const COVERAGE_MACRO_BLOCK =
+  "COVERAGE: MACRO_DETAIL. Remain at local-detail scale. Do not reveal the entire replacement. Rebuild the visible jewelry region using the closest corresponding target-product detail at comparable magnification (e.g. 1–3 links / clasp / pavé surface for a bracelet) — never the whole product.";
+
+const COVERAGE_AUTO_PREFIX =
+  "COVERAGE CLASSIFICATION (independent of the view side and of the Mode above): Before generating, silently classify the SOURCE_FRAME's COVERAGE as exactly one of FULL_OBJECT (the complete product is visible), PARTIAL_OBJECT (the product is intentionally cropped by the frame) or MACRO_DETAIL (only a local detail of the product is photographed). Do not output the classification. Then apply ONLY the matching coverage rule below and ignore the other two.";
+
+/** Coverage instructions: forced when the user picked one, self-classified on auto. */
+function coverageBlock(coverage: Coverage, mode: ReplacementMode) {
+  // Coherence with Mode: Mode = macro OR coverage = macro ⇒ treat as macro.
+  if (coverage === "macro" || (coverage === "auto" && mode === "macro")) return COVERAGE_MACRO_BLOCK;
+  if (coverage === "full") return COVERAGE_FULL_BLOCK;
+  if (coverage === "partial") return COVERAGE_PARTIAL_BLOCK;
+  return [
+    COVERAGE_AUTO_PREFIX,
+    COVERAGE_FULL_BLOCK,
+    COVERAGE_PARTIAL_BLOCK,
+    COVERAGE_MACRO_BLOCK,
+  ].join("\n\n");
+}
+
+/** Reference photography context can never transfer — gloves, hands, boxes, studio. */
+const REFERENCE_IMAGE_CONTEXT_RULE =
+  "REFERENCE IMAGE CONTEXT RULE: Only extract the physical jewelry product from the product references. The glove, hand, fingers, wrist, neck, display surface, box, velvet, background, shadows, studio environment and any unrelated objects visible in the product references are DISPOSABLE photographic context — never reproduce them. Every pixel outside the replacement jewelry region must derive from SOURCE_FRAME.";
+
+const REFERENCE_ROLE_PRIORITY_LINE =
+  "REFERENCE ROLE PRIORITY: Use the CAD / design-authority (and otherwise cleanest) reference as the GEOMETRY authority. Use the photographic references — which may legitimately contain gloves, hands, wrists, boxes, trays or studio backdrops — ONLY for real material truth: metal alloy and rose-gold/white-gold/yellow-gold finish, polish, diamond and pavé appearance, scintillation and manufacturing micro-texture. Never use any photographic reference for environment, background, framing or composition.";
+
+
 
 /** Targeted corrective lines appended when the user regenerates with a reason. */
 const FAILURE_CORRECTIONS: Record<string, string> = {
