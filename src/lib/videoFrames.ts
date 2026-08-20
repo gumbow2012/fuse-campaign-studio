@@ -81,6 +81,9 @@ async function seekTo(video: HTMLVideoElement, time: number) {
   });
 }
 
+/** Seek helper shared with the replacement-video keyframe selector. */
+export const seekVideoTo = seekTo;
+
 /** Draw the current video frame to a JPEG file, downscaled to a sane long edge. */
 async function captureFrame(video: HTMLVideoElement, time: number, maxEdge = 1280) {
   return await compressVideoFrame(
@@ -90,6 +93,13 @@ async function captureFrame(video: HTMLVideoElement, time: number, maxEdge = 128
     0.85,
   );
 }
+
+/** Seek to `time` and return that single frame as a compressed JPEG file. */
+export async function captureFrameAt(video: HTMLVideoElement, time: number, maxEdge = 1280) {
+  await seekTo(video, time);
+  return await captureFrame(video, time, maxEdge);
+}
+
 
 /** Extract one file per timestamp, reporting progress as it goes. */
 export async function extractFrames(

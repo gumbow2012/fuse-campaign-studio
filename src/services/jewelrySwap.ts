@@ -165,6 +165,8 @@ export type JewelryProjectAnalysis = {
   version?: string;
   productAnalysis: JewelryProductAnalysis;
   frames: JewelryFrameAnalysis[];
+  /** The reused / rebuilt fused understanding this analysis was retrieved from. */
+  knowledgeMap?: ProductKnowledgeMap;
 };
 
 /** DEV-ONLY timing telemetry. Never rendered in the customer UI. */
@@ -192,7 +194,7 @@ export type JewelryAnalysisResult = {
 /** Runs (or reuses) the still-image shot analysis for the selected frames. */
 export async function analyzeJewelryFrames(args: {
   sourceFrames: { frameId: string; timestamp: number; imageUrl: string }[];
-  jewelryReferences: { url: string; role?: string | null; cad?: boolean }[];
+  jewelryReferences: JewelryReferenceAsset[];
   jewelrySpecs: Record<string, unknown>[];
   /**
    * The persisted intake this reference set was already understood through.
@@ -200,7 +202,8 @@ export async function analyzeJewelryFrames(args: {
    * Product Knowledge Map instead of re-analysing the reference IMAGES.
    */
   intakeFingerprint?: string | null;
-  intakeReferences?: { url: string; role?: string | null; cad?: boolean }[] | null;
+  intakeReferences?: JewelryReferenceAsset[] | null;
+
 }): Promise<JewelryAnalysisResult> {
   const {
     data: { session },
@@ -270,6 +273,209 @@ export function jewelryTimings() {
 
 
 /* ------------------------------------------------------------------ *
+ * ASSET FIREWALL — explicit backend typing (never mixed)
+ * ------------------------------------------------------------------ *
+ * SOURCE_CINEMATOGRAPHY          → the source clip: camera / framing / crop /
+ *   focus / lighting / placement / perspective / motion authority ONLY, with
+ *   ZERO jewelry-design authority.
+ * REPLACEMENT_PRODUCT_REFERENCE  → CAD, photos and videos of the ACTUAL
+ *   replacement piece: geometry / material / stone / setting / component
+ *   authority.
+ */
+export type AssetPurpose = "SOURCE_CINEMATOGRAPHY" | "REPLACEMENT_PRODUCT_REFERENCE";
+
+/** How FUSE auto-classified an uploaded replacement asset (user never labels). */
+export type ReferenceKind = "cad" | "photographic_still" | "product_reference_video";
+
+/** One replacement reference handed to the analysis (image or video keyframe). */
+export type JewelryReferenceAsset = {
+  url: string;
+  role?: string | null;
+  cad?: boolean;
+  /** Always REPLACEMENT_PRODUCT_REFERENCE on this path. */
+  assetPurpose?: AssetPurpose;
+  kind?: ReferenceKind;
+  /** Set when this image was extracted from a replacement-product video. */
+  videoReferenceId?: string | null;
+  timestamp?: number | null;
+};
+
+/** Per replacement VIDEO: what the clip is and what its keyframes carry. */
+export type JewelryVideoReferenceInput = {
+  videoReferenceId: string;
+  duration: number;
+  aspectRatio?: string | null;
+  keyframeCount: number;
+  keyframeTimestamps: number[];
+};
+
+export type JewelryVideoKeyframeAnalysis = {
+  referenceId?: string;
+  timestamp?: number;
+  detectedView?: string;
+  coverage?: string;
+  regionsVisible?: string[];
+  usableFor?: string[];
+  contextRisk?: string[];
+  disposableContext?: string[];
+  confidence?: number;
+};
+
+export type JewelryVideoReferenceAnalysis = {
+  referenceId: string;
+  duration?: number;
+  productIdentityEvidence?: string;
+  geometryEvidence?: string;
+  materialEvidence?: string;
+  stoneEvidence?: string;
+  settingEvidence?: string;
+  keyframes?: JewelryVideoKeyframeAnalysis[];
+};
+
+/* ------------------------------------------------------------------ *
+ * PRODUCT KNOWLEDGE MAP — one fused, cacheable understanding
+ * ------------------------------------------------------------------ */
+
+export type ConfidenceTier = "high" | "medium" | "low";
+
+export type PkmComponent = {
+  componentId: string;
+  label?: string;
+  role?: string;
+  geometry?: string;
+  repeatModuleId?: string | null;
+  connectedTo?: string[];
+  confidence?: number;
+  evidenceReferenceIds?: string[];
+  inferredFromCAD?: boolean;
+  inferredFromSymmetry?: boolean;
+};
+
+export type PkmRegion = {
+  regionId: string;
+  componentId?: string;
+  label?: string;
+  surfaceType?: string;
+  confidence?: number;
+};
+
+export type StoneObservation = {
+  stoneId: string;
+  componentId?: string;
+  regionId?: string;
+  cut?: string;
+  relativeSizeClass?: string;
+  normalizedPosition?: { x?: number; y?: number };
+  orientation?: string;
+  seatDepthClass?: string;
+  neighbors?: string[];
+  apparentSettingType?: string;
+  confidence?: number;
+  evidenceReferenceIds?: string[];
+};
+
+export type PkmStoneGroup = {
+  regionId?: string;
+  componentId?: string;
+  count?: number;
+  sizeClasses?: string[];
+  minSizeClass?: string;
+  medianSizeClass?: string;
+  maxSizeClass?: string;
+  anchorToFillerRatio?: string;
+  repeatPattern?: string;
+  gradient?: string;
+  /** "estimated" (relative only) vs "measured_from_authority" (CAD/spec). */
+  measurementBasis?: "estimated" | "measured_from_authority";
+  confidence?: number;
+};
+
+export type PkmSetting = {
+  componentId?: string;
+  regionId?: string;
+  canonicalSetting?: string;
+  confidence?: number;
+  settingClassificationReason?: string;
+  evidenceReferenceIds?: string[];
+  settingVisualSignature?: string;
+  needsConfirmation?: boolean;
+};
+
+export type PkmMaterialRegion = {
+  regionId?: string;
+  componentId?: string;
+  metalColor?: string;
+  /** Karat is only ever asserted with explicit readable evidence. */
+  karat?: string | null;
+  karatEvidence?: string | null;
+  finish?: string;
+  capturedEnvironmentTint?: string | null;
+  confidence?: number;
+};
+
+export type PkmRepeatedModule = {
+  repeatModuleId: string;
+  componentIds?: string[];
+  masterGeometry?: string;
+  masterStoneMap?: string;
+  repeatCount?: number;
+  exceptions?: string[];
+  confidence?: number;
+};
+
+export type PkmDimensions = {
+  summary?: string;
+  scaleSource?:
+    | "cad_dimensions"
+    | "spec_sheet"
+    | "user_entered"
+    | "known_stone_size"
+    | "repeated_structural_dimension"
+    | "photographic_estimate"
+    | string;
+  measurementBasis?: "estimated" | "measured_from_authority";
+  relativeRatios?: string[];
+  confidence?: number;
+};
+
+export type ProductKnowledgeMap = {
+  version?: string;
+  productType?: string;
+  productTypeConfidence?: number;
+  dimensions?: PkmDimensions;
+  components?: PkmComponent[];
+  regions?: PkmRegion[];
+  referenceCatalog?: {
+    referenceId: string;
+    kind?: ReferenceKind;
+    authorityFor?: string[];
+    notAuthorityFor?: string[];
+    confidence?: number;
+  }[];
+  repeatedModules?: PkmRepeatedModule[];
+  stones?: StoneObservation[];
+  stoneGroups?: PkmStoneGroup[];
+  settings?: PkmSetting[];
+  materialRegions?: PkmMaterialRegion[];
+  constructionConflicts?: {
+    topic?: string;
+    cadClaim?: string;
+    photoClaim?: string;
+    resolution?: string;
+  }[];
+  inferredFeatures?: { feature?: string; basis?: string; confidence?: number }[];
+  unresolvedFeatures?: string[];
+  /** Coverage read-out for the compact "FUSE UNDERSTOOD" summary. */
+  coverage?: {
+    geometry?: string;
+    stoneLayout?: string;
+    setting?: string;
+    clasp?: string;
+  };
+  videoAnalyses?: JewelryVideoReferenceAnalysis[];
+};
+
+/* ------------------------------------------------------------------ *
  * INTAKE — fast batch recognition of the uploaded jewelry references
  * ------------------------------------------------------------------ *
  * Analysis only. References in, structured JSON out. Every detected
@@ -295,6 +501,7 @@ export type DetectedField = {
   /** True when the field must be confirmed by the user before it is trusted. */
   needsConfirmation?: boolean;
 };
+
 
 /** The canonical dropdown vocabularies handed to the intake analysis. */
 export type IntakeOptions = {
@@ -357,6 +564,9 @@ export type JewelryIntake = {
   referenceCount?: number;
   products: IntakeProduct[];
   conflictWarnings?: string[];
+  /** The fused engineering understanding of the replacement piece(s). */
+  knowledgeMap?: ProductKnowledgeMap;
+  videoAnalyses?: JewelryVideoReferenceAnalysis[];
 };
 
 export type JewelryIntakeResult = {
@@ -376,7 +586,9 @@ export type JewelryIntakeResult = {
 /** One fast batch pass over the uploaded references (recognition/grouping). */
 export async function analyzeJewelryIntake(
   args: {
-    jewelryReferences: { url: string; role?: string | null; cad?: boolean }[];
+    jewelryReferences: JewelryReferenceAsset[];
+    /** Metadata for each replacement VIDEO whose keyframes are in the set. */
+    videoReferences?: JewelryVideoReferenceInput[];
     roleVocabulary?: string[];
     options?: IntakeOptions;
     /** Reference-set version + monotonic id, echoed back for stale detection. */
@@ -400,6 +612,7 @@ export async function analyzeJewelryIntake(
     body: JSON.stringify({
       mode: "intake",
       jewelryReferences: args.jewelryReferences,
+      videoReferences: args.videoReferences ?? [],
       roleVocabulary: args.roleVocabulary ?? [],
       options: args.options ?? null,
       setVersion: args.setVersion ?? null,
@@ -408,6 +621,7 @@ export async function analyzeJewelryIntake(
     }),
     signal,
   });
+
 
 
   const data = await response.json().catch(() => null);

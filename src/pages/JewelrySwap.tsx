@@ -55,6 +55,9 @@ import {
   submitWithConcurrency,
   type JewelryIntake,
   type DetectedField,
+  type ProductKnowledgeMap,
+  type JewelryVideoReferenceInput,
+
 
 
 
@@ -76,7 +79,9 @@ import {
 } from "@/services/jewelrySwap";
 
 import { extractFrames, frameTimestamps, loadVideo, readMeta, type VideoMeta } from "@/lib/videoFrames";
+import { selectVideoKeyframes } from "@/lib/videoKeyframes";
 import { compressImageFile } from "@/lib/imageCompress";
+
 
 const JEWELRY_TYPES = [
   "Pendant",
@@ -403,8 +408,22 @@ type Piece = {
   notes: string;
   /** "piece" (default) or "piece_chain". */
   scope: string;
+  /**
+   * Set when this card came from a REPLACEMENT product VIDEO: its `urls` are the
+   * selected keyframes, extracted client-side. Never a source-video asset.
+   */
+  video?: {
+    videoReferenceId: string;
+    name: string;
+    duration: number;
+    aspectRatio?: string | null;
+    posterUrl: string;
+    /** Aligned by index with `urls`. */
+    keyframeTimes: number[];
+  } | null;
   /** Full structured controls open? Collapsed summary by default. */
   expanded?: boolean;
+
   /**
    * Values the intake analysis detected. Sent to the backend so a field left on
    * "Auto" resolves to the detected value; a user choice is never overwritten.
@@ -747,6 +766,17 @@ export default function JewelrySwap() {
 
   const [pieces, setPieces] = useState<Piece[]>([]);
   const [uploadingPiece, setUploadingPiece] = useState(false);
+  /** Live progress while a replacement VIDEO is reduced to keyframes. */
+  const [keyframeWork, setKeyframeWork] = useState<{
+    name: string;
+    phase: "inspecting" | "extracting";
+    done: number;
+    total: number;
+  } | null>(null);
+  /** The fused engineering understanding from the last intake pass. */
+  const [knowledgeMap, setKnowledgeMap] = useState<ProductKnowledgeMap | null>(null);
+  const [engineeringOpen, setEngineeringOpen] = useState(false);
+
   const [dropActive, setDropActive] = useState(false);
   // Reference intake (recognition / grouping / extraction). Never blocking:
   // the manual fields stay usable and a failure just falls back to them.
@@ -1115,35 +1145,77 @@ export default function JewelrySwap() {
 
   /* -------------------------- 3. Piece references ------------------------- */
 
-  /** Each selected file becomes its own piece card. */
+  /**
+   * Each selected asset becomes its own piece card. The zone is mixed-media:
+   * images upload as stills, replacement VIDEOS are reduced client-side to a
+   * small diverse keyframe set which becomes that card's reference angles.
+   * FUSE types every asset itself — the user never labels anything.
+   */
   const addPieces = useCallback(async (files: File[]) => {
     if (!files.length) return;
     setUploadingPiece(true);
     try {
       const folder = await createOutfitSwapFolder();
       const uploaded: Piece[] = [];
+
+      const blank = (name: string): Piece => ({
+        urls: [],
+        roles: [],
+        name,
+        type: JEWELRY_TYPES[0],
+        metal: AUTO_METAL,
+        stone: AUTO_STONE,
+        stoneColor: AUTO_STONE_COLOR,
+        quality: AUTO_QUALITY,
+        settings: [{ ...EMPTY_SETTING }],
+        width: "",
+        height: "",
+        depth: "",
+        weight: "",
+        cads: [],
+        person: DEFAULT_APPLY_TO,
+        notes: "",
+        scope: DEFAULT_SCOPE,
+      });
+
       for (const file of files) {
+        const isVideo = file.type.startsWith("video/") || /\.(mp4|mov|m4v|webm)$/i.test(file.name);
+
+        if (isVideo) {
+          setKeyframeWork({ name: file.name, phase: "inspecting", done: 0, total: 0 });
+          const selection = await selectVideoKeyframes(file, (done, total, phase) =>
+            setKeyframeWork({ name: file.name, phase, done, total }),
+          );
+          const stored = await uploadWithConcurrency(
+            selection.keyframes,
+            3,
+            async (frame) => await uploadToStorage(folder, frame.file, frame.file.name),
+          );
+          setKeyframeWork(null);
+          uploaded.push({
+            ...blank(file.name),
+            urls: stored.map((item) => item.url),
+            roles: selection.keyframes.map(() => ""),
+            cads: selection.keyframes.map(() => null),
+            video: {
+              videoReferenceId: `vid-${crypto.randomUUID().slice(0, 8)}`,
+              name: file.name,
+              duration: selection.meta.duration,
+              aspectRatio: selection.meta.aspectRatio,
+              posterUrl: stored[0]?.url ?? "",
+              keyframeTimes: selection.keyframes.map((frame) => frame.time),
+            },
+          });
+          continue;
+        }
+
         const compressed = await compressImageFile(file);
         const stored = await uploadToStorage(folder, compressed, compressed.name);
         uploaded.push({
+          ...blank(file.name),
           urls: [stored.url],
           roles: [""],
-          name: file.name,
-          type: JEWELRY_TYPES[0],
-          metal: AUTO_METAL,
-          stone: AUTO_STONE,
-          stoneColor: AUTO_STONE_COLOR,
-          quality: AUTO_QUALITY,
-          settings: [{ ...EMPTY_SETTING }],
-
-          width: "",
-          height: "",
-          depth: "",
-          weight: "",
           cads: [null],
-          person: DEFAULT_APPLY_TO,
-          notes: "",
-          scope: DEFAULT_SCOPE,
         });
       }
 
@@ -1153,9 +1225,11 @@ export default function JewelrySwap() {
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Could not upload that reference");
     } finally {
+      setKeyframeWork(null);
       setUploadingPiece(false);
     }
   }, []);
+
 
   /** Extra angles of the SAME physical piece land on the targeted card. */
   const addAngles = useCallback(
@@ -1219,6 +1293,36 @@ export default function JewelrySwap() {
   const referenceCount = pieces.reduce((total, piece) => total + piece.urls.length, 0);
   /** Unresolved product-spec concerns across all pieces (user overrides clear them). */
   const uncertainCount = reviewCount(pieces);
+
+  /** One plain sentence describing the fused understanding. */
+  const understoodSummary = useMemo(() => {
+    if (!knowledgeMap) return "";
+    const metal = knowledgeMap.materialRegions?.[0]?.metalColor ?? null;
+    const stoneCount = knowledgeMap.stones?.length ?? 0;
+    const parts = [
+      knowledgeMap.productType || "Jewelry piece",
+      metal || null,
+      stoneCount ? `${stoneCount} stone${stoneCount === 1 ? "" : "s"} mapped` : null,
+      knowledgeMap.repeatedModules?.length
+        ? `${knowledgeMap.repeatedModules.length} repeating module${
+            knowledgeMap.repeatedModules.length === 1 ? "" : "s"
+          }`
+        : null,
+    ].filter(Boolean);
+    return parts.join(" · ");
+  }, [knowledgeMap]);
+
+  /** Coverage read-out, one badge per area of the piece. */
+  const coverageBadges = useMemo(() => {
+    const coverage = knowledgeMap?.coverage ?? {};
+    return [
+      { label: "Geometry", level: coverage.geometry || "Unknown" },
+      { label: "Stone layout", level: coverage.stoneLayout || "Unknown" },
+      { label: "Setting", level: coverage.setting || "Unknown" },
+      { label: "Clasp", level: coverage.clasp || "Unknown" },
+    ];
+  }, [knowledgeMap]);
+
 
 
   /** The app's canonical vocabularies, handed to the analysis every call. */
@@ -1295,13 +1399,32 @@ export default function JewelrySwap() {
             url,
             role: piece.roles?.[angleIndex] || null,
             cad: isGeometryAuthority(piece, angleIndex),
+            // Explicit purpose typing — the source video can never be mixed in.
+            assetPurpose: "REPLACEMENT_PRODUCT_REFERENCE" as const,
+            kind: piece.video
+              ? ("product_reference_video" as const)
+              : isGeometryAuthority(piece, angleIndex)
+                ? ("cad" as const)
+                : ("photographic_still" as const),
+            videoReferenceId: piece.video?.videoReferenceId ?? null,
+            timestamp: piece.video?.keyframeTimes?.[angleIndex] ?? null,
           })),
         );
+        const videoReferences: JewelryVideoReferenceInput[] = pieces
+          .filter((piece) => piece.video)
+          .map((piece) => ({
+            videoReferenceId: piece.video!.videoReferenceId,
+            duration: piece.video!.duration,
+            aspectRatio: piece.video!.aspectRatio ?? null,
+            keyframeCount: piece.urls.length,
+            keyframeTimestamps: piece.video!.keyframeTimes ?? [],
+          }));
         const clientStarted = performance.now();
         try {
           const result = await analyzeJewelryIntake(
             {
               jewelryReferences: intakeReferences,
+              videoReferences,
               roleVocabulary: Array.from(
                 new Set(pieces.flatMap((piece) => roleOptionsForType(piece.type))),
               ).filter(Boolean),
@@ -1311,6 +1434,7 @@ export default function JewelrySwap() {
             },
             controller.signal,
           );
+
           // STALE GUARD — both the monotonic request id and the set version must
           // still match the set on screen, otherwise this answer is discarded.
           if (token !== intakeToken.current) return;
@@ -1328,8 +1452,10 @@ export default function JewelrySwap() {
             server: result.timings,
           });
           applyIntake(urls, result.intake);
+          setKnowledgeMap(result.intake?.knowledgeMap ?? null);
           setIntake({
             status: "ready",
+
             stage: INTAKE_STAGES.length,
             productCount: result.intake?.products?.length ?? 1,
             referenceCount: urls.length,
@@ -1680,7 +1806,18 @@ export default function JewelrySwap() {
           // Geometry authority is decided PER reference image (auto for CAD
           // labels, overridable per image).
           cad: isGeometryAuthority(piece, angleIndex),
+          // Explicit backend typing — these are replacement-product references,
+          // never source cinematography.
+          assetPurpose: "REPLACEMENT_PRODUCT_REFERENCE" as const,
+          kind: piece.video
+            ? ("product_reference_video" as const)
+            : isGeometryAuthority(piece, angleIndex)
+              ? ("cad" as const)
+              : ("photographic_still" as const),
+          videoReferenceId: piece.video?.videoReferenceId ?? null,
+          timestamp: piece.video?.keyframeTimes?.[angleIndex] ?? null,
         })),
+
         type: piece.type,
         metal: piece.metal === AUTO_METAL ? null : piece.metal,
         stone: piece.stone === AUTO_STONE ? null : piece.stone,
@@ -2493,7 +2630,7 @@ export default function JewelrySwap() {
               <input
                 ref={pieceInputRef}
                 type="file"
-                accept="image/*"
+                accept="image/*,video/mp4,video/quicktime,.mp4,.mov"
                 multiple
                 className="hidden"
                 onChange={(event) => {
@@ -2502,6 +2639,7 @@ export default function JewelrySwap() {
                   void addPieces(files);
                 }}
               />
+
               <input
                 ref={angleInputRef}
                 type="file"
@@ -2525,8 +2663,11 @@ export default function JewelrySwap() {
                 onDrop={(event) => {
                   event.preventDefault();
                   setDropActive(false);
-                  const files = Array.from(event.dataTransfer.files ?? []).filter((file) =>
-                    file.type.startsWith("image/"),
+                  const files = Array.from(event.dataTransfer.files ?? []).filter(
+                    (file) =>
+                      file.type.startsWith("image/") ||
+                      file.type.startsWith("video/") ||
+                      /\.(mp4|mov|m4v|webm)$/i.test(file.name),
                   );
                   if (files.length) void addPieces(files);
                 }}
@@ -2536,9 +2677,10 @@ export default function JewelrySwap() {
                 )}
               >
                 <p className="text-xs text-foreground/85">
-                  Upload jewelry references — drag &amp; drop product photos, CAD, front/back/side, macro &amp;
-                  close-ups together; FUSE organizes them.
+                  Upload jewelry references — drag &amp; drop product photos, CAD, video of the piece,
+                  front/back/side, macro &amp; close-ups together; FUSE organizes them.
                 </p>
+
                 <div className="mt-2.5 flex flex-wrap items-center justify-center gap-2">
                   <button
                     type="button"
@@ -2562,6 +2704,32 @@ export default function JewelrySwap() {
                   </button>
                 </div>
               </div>
+
+              {/* Replacement VIDEO → keyframes, all client-side. */}
+              {keyframeWork ? (
+                <div className="mb-2.5 rounded-2xl border border-white/10 bg-black/30 px-3 py-2.5 text-[11px] text-foreground/85">
+                  <p className="flex items-center gap-2 font-medium">
+                    <Loader2 size={12} className="animate-spin text-cyan-200" />
+                    {keyframeWork.phase === "inspecting"
+                      ? "Reading your video reference…"
+                      : "Selecting the clearest views…"}
+                  </p>
+                  <p className="mt-1 text-[10px] text-foreground/60">
+                    {keyframeWork.name}
+                    {keyframeWork.total
+                      ? ` — ${keyframeWork.done}/${keyframeWork.total}`
+                      : ""}
+                  </p>
+                  {keyframeWork.total ? (
+                    <Progress
+                      value={Math.round((keyframeWork.done / keyframeWork.total) * 100)}
+                      className="mt-1.5 h-1.5"
+                    />
+                  ) : null}
+                </div>
+              ) : null}
+
+
 
               {/* Compact analysis card — real progress only, never a fake delay. */}
               {intake.status !== "idle" ? (
@@ -2669,6 +2837,44 @@ export default function JewelrySwap() {
                 </div>
               ) : null}
 
+              {/* What FUSE understood — plain summary, engineering detail opt-in. */}
+              {knowledgeMap ? (
+                <div className="mb-2.5 rounded-2xl border border-cyan-200/25 bg-cyan-200/5 px-3 py-2.5 text-[11px]">
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-cyan-100">
+                    FUSE understood
+                  </p>
+                  <p className="mt-1 text-foreground/85">{understoodSummary}</p>
+                  <div className="mt-1.5 flex flex-wrap gap-1.5">
+                    {coverageBadges.map((badge) => (
+                      <span
+                        key={badge.label}
+                        className="rounded-full border border-white/12 bg-black/40 px-2 py-0.5 text-[9px] uppercase tracking-[0.14em] text-foreground/70"
+                      >
+                        {badge.label}: {badge.level}
+                      </span>
+                    ))}
+                  </div>
+                  {(knowledgeMap.unresolvedFeatures?.length ?? 0) > 0 ? (
+                    <p className="mt-1.5 text-[10px] text-amber-100/85">
+                      {knowledgeMap.unresolvedFeatures!.length} detail
+                      {knowledgeMap.unresolvedFeatures!.length === 1 ? "" : "s"} need confirmation
+                    </p>
+                  ) : null}
+                  <button
+                    type="button"
+                    onClick={() => setEngineeringOpen((open) => !open)}
+                    className="mt-1.5 text-[10px] uppercase tracking-[0.14em] text-foreground/55 transition-colors hover:text-foreground"
+                  >
+                    {engineeringOpen ? "Hide engineering details" : "Engineering details"}
+                  </button>
+                  {engineeringOpen ? (
+                    <pre className="mt-1.5 max-h-64 overflow-auto rounded-xl border border-white/10 bg-black/50 p-2 text-[9px] leading-relaxed text-foreground/70">
+                      {JSON.stringify(knowledgeMap, null, 2)}
+                    </pre>
+                  ) : null}
+                </div>
+              ) : null}
+
 
               <div className="space-y-2.5">
                 {pieces.map((piece, index) => (
@@ -2685,6 +2891,13 @@ export default function JewelrySwap() {
                         {piece.name || `Piece ${index + 1}`}
                       </p>
                       <span className="flex shrink-0 items-center gap-1.5">
+                        {piece.video ? (
+                          <span className="rounded-full border border-cyan-200/40 bg-cyan-200/10 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.14em] text-cyan-100">
+                            Video reference · {piece.video.duration.toFixed(1)}s ·{" "}
+                            {piece.urls.length} views
+                          </span>
+                        ) : null}
+
                         <span className="rounded-full border border-white/12 bg-black/40 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.14em] text-foreground/70">
                           Design authority:{" "}
                           {authorityCount(piece)

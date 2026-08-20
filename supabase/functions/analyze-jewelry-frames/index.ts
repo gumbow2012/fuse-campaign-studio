@@ -27,12 +27,91 @@ const MAX_IMAGES_PER_CALL = 20;
 const MAX_REFERENCE_IMAGES = 10;
 
 type SourceFrame = { frameId: string; timestamp: number; imageUrl: string };
-type JewelryReferenceInput = { url: string; role?: string | null; cad?: boolean };
+
+/* ------------------------------------------------------------------ *
+ * ASSET FIREWALL — explicit backend typing (the two can never be swapped)
+ * ------------------------------------------------------------------ *
+ * SOURCE_CINEMATOGRAPHY         → the source clip / its frames. Camera,
+ *   framing, crop, focus, lighting, placement, perspective and motion
+ *   authority ONLY. ZERO jewelry-design authority. (Source frames arrive as
+ *   `sourceFrames` and are never reference assets.)
+ * REPLACEMENT_PRODUCT_REFERENCE → CAD, product photos and product VIDEO
+ *   keyframes of the ACTUAL replacement piece. Geometry, material, stone,
+ *   setting and component authority.
+ */
+type AssetPurpose = "SOURCE_CINEMATOGRAPHY" | "REPLACEMENT_PRODUCT_REFERENCE";
+
+/** How FUSE auto-classified an uploaded replacement asset (user never labels). */
+type ReferenceKind = "cad" | "photographic_still" | "product_reference_video";
+
+type JewelryReferenceInput = {
+  url: string;
+  role?: string | null;
+  cad?: boolean;
+  /** Always REPLACEMENT_PRODUCT_REFERENCE on this path. */
+  assetPurpose?: AssetPurpose;
+  kind?: ReferenceKind;
+  /** Set when this image is a keyframe extracted from a replacement video. */
+  videoReferenceId?: string | null;
+  timestamp?: number | null;
+};
+
+/** Metadata for one replacement VIDEO whose keyframes are in the set. */
+type VideoReferenceInput = {
+  videoReferenceId: string;
+  duration: number;
+  aspectRatio?: string | null;
+  keyframeCount: number;
+  keyframeTimestamps: number[];
+};
+
+/**
+ * Every reference on this path is REPLACEMENT_PRODUCT_REFERENCE, typed
+ * explicitly so nothing downstream can mistake it for source cinematography.
+ */
+function readReferences(raw: unknown): JewelryReferenceInput[] {
+  return (Array.isArray(raw) ? raw : [])
+    .map((ref: any) => {
+      const videoReferenceId = ref?.videoReferenceId ? String(ref.videoReferenceId).trim() : null;
+      const cad = ref?.cad === true;
+      const kind: ReferenceKind = videoReferenceId
+        ? "product_reference_video"
+        : cad
+          ? "cad"
+          : "photographic_still";
+      const timestamp = Number(ref?.timestamp);
+      return {
+        url: String(ref?.url ?? "").trim(),
+        role: ref?.role ? String(ref.role).trim() : null,
+        cad,
+        assetPurpose: "REPLACEMENT_PRODUCT_REFERENCE" as AssetPurpose,
+        kind,
+        videoReferenceId,
+        timestamp: Number.isFinite(timestamp) ? timestamp : null,
+      };
+    })
+    .filter((ref: JewelryReferenceInput) => /^https?:\/\//.test(ref.url));
+}
+
+function readVideoReferences(raw: unknown): VideoReferenceInput[] {
+  return (Array.isArray(raw) ? raw : [])
+    .map((entry: any) => ({
+      videoReferenceId: String(entry?.videoReferenceId ?? "").trim(),
+      duration: Number(entry?.duration ?? 0) || 0,
+      aspectRatio: entry?.aspectRatio ? String(entry.aspectRatio).trim() : null,
+      keyframeCount: Number(entry?.keyframeCount ?? 0) || 0,
+      keyframeTimestamps: (Array.isArray(entry?.keyframeTimestamps) ? entry.keyframeTimestamps : [])
+        .map((value: any) => Number(value))
+        .filter((value: number) => Number.isFinite(value)),
+    }))
+    .filter((entry: VideoReferenceInput) => entry.videoReferenceId);
+}
 
 /** Stable, order-independent handle for a reference inside one analysis batch. */
 function referenceIdAt(index: number) {
   return `REF_${index + 1}`;
 }
+
 
 
 /* ------------------------------------------------------------------ *
@@ -263,6 +342,26 @@ const RESPONSE_SCHEMA = {
 const FORBIDDEN_KEY = /(image|video|url|uri|bytes|base64|blob|media|data_?url)/i;
 
 /**
+ * Analysis-only field names that legitimately contain a forbidden word but can
+ * only ever hold plain analysis text (a keyframe's parent id, the per-clip
+ * evidence blocks). Their values are still checked for anything media-shaped.
+ */
+const ANALYSIS_ONLY_KEYS = new Set([
+  "videoReferenceId",
+  "videoAnalyses",
+  "videoEvidence",
+]);
+
+const MEDIA_SHAPED = /(^data:|;base64,|https?:\/\/)/i;
+
+function looksLikeMedia(value: unknown): boolean {
+  if (typeof value === "string") return MEDIA_SHAPED.test(value);
+  if (Array.isArray(value)) return value.some(looksLikeMedia);
+  if (value && typeof value === "object") return Object.values(value).some(looksLikeMedia);
+  return false;
+}
+
+/**
  * Dev assertion: the analysis payload must never carry media of any kind.
  * Offending keys are stripped (defence in depth) and reported.
  */
@@ -275,16 +374,19 @@ function assertAnalysisOnly(value: unknown, path = "analysis", stripped: string[
   }
   if (value && typeof value === "object") {
     for (const key of Object.keys(value as Record<string, unknown>)) {
-      if (FORBIDDEN_KEY.test(key)) {
+      const entry = (value as Record<string, unknown>)[key];
+      const allowed = ANALYSIS_ONLY_KEYS.has(key) && !looksLikeMedia(entry);
+      if (!allowed && FORBIDDEN_KEY.test(key)) {
         delete (value as Record<string, unknown>)[key];
         stripped.push(`${path}.${key}`);
         continue;
       }
-      assertAnalysisOnly((value as Record<string, unknown>)[key], `${path}.${key}`, stripped);
+      assertAnalysisOnly(entry, `${path}.${key}`, stripped);
     }
   }
   return stripped;
 }
+
 
 /* ------------------------------------------------------------------ *
  * Fingerprint — hashes the analysis INPUTS only
@@ -326,7 +428,11 @@ async function inputFingerprint(args: {
       url: ref.url,
       role: ref.role ?? null,
       cad: ref.cad === true,
+      kind: ref.kind ?? null,
+      videoReferenceId: ref.videoReferenceId ?? null,
+      timestamp: ref.timestamp ?? null,
     })),
+
     specs: args.jewelrySpecs.map(stableSpec),
     frames: args.sourceFrames.map((frame) => frame.imageUrl).sort(),
   };
@@ -529,8 +635,11 @@ const FRAMES_ONLY_SCHEMA = {
 } as const;
 
 function normalizeRefKey(ref: JewelryReferenceInput) {
-  return `${ref.url}|${ref.role ?? ""}|${ref.cad ? 1 : 0}`;
+  return `${ref.url}|${ref.role ?? ""}|${ref.cad ? 1 : 0}|${ref.kind ?? ""}|${
+    ref.videoReferenceId ?? ""
+  }`;
 }
+
 
 /** True when the two reference sets are the same images with the same labels. */
 function sameReferenceSet(a: JewelryReferenceInput[], b: JewelryReferenceInput[]) {
@@ -661,8 +770,36 @@ function buildKnowledgeMap(args: {
     );
   }
 
+  // Keyframe provenance is part of the catalog so ranking knows a reference came
+  // from a replacement-product VIDEO (still an image reference, still eligible).
+  const annotatedCatalog = catalogLines.map((line) => {
+    const referenceId = line.split(":")[0];
+    const index = args.references.findIndex((_, i) => referenceIdAt(i) === referenceId);
+    const ref = index >= 0 ? args.references[index] : null;
+    if (!ref || ref.kind !== "product_reference_video") return line;
+    const at = Number.isFinite(Number(ref.timestamp)) ? ` @ ${Number(ref.timestamp).toFixed(2)}s` : "";
+    return `${line} [PRODUCT VIDEO KEYFRAME${at}]`;
+  });
+
+  /* ---- The fused engineering understanding, when one was persisted ------- */
+  const pkm = args.intake?.knowledgeMap && typeof args.intake.knowledgeMap === "object"
+    ? args.intake.knowledgeMap
+    : null;
+  const lock = pkm ? engineeringLockLines(pkm) : [];
+  if (lock.length) {
+    mapLines.push("  ENGINEERING LOCK (fused from CAD + photos + product-video keyframes):");
+    for (const line of lock) mapLines.push(`    ${line}`);
+    // The image model already renders `referenceDefinedCharacteristics` verbatim,
+    // so the lock reaches Nano through the EXISTING prompt path unchanged.
+    for (const signature of settingSignatures) {
+      const existing = listOf((signature as any).referenceDefinedCharacteristics);
+      (signature as any).referenceDefinedCharacteristics = [...existing, ...lock].slice(0, 24);
+    }
+  }
+
   const productAnalysis = {
-    jewelryType: detectedValue(products[0]?.jewelryType),
+    jewelryType: detectedValue(products[0]?.jewelryType) ||
+      String(pkm?.productType ?? "").trim(),
     references: referenceMeta,
     visibleComponents: [...visibleComponents],
     disposableReferenceContext: [],
@@ -678,10 +815,80 @@ function buildKnowledgeMap(args: {
 
   return {
     productAnalysis,
-    catalogLines: catalogLines.sort(),
+    catalogLines: annotatedCatalog.sort(),
     mapLines,
+    pkm,
   };
 }
+
+/**
+ * Turns the Product Knowledge Map into a SHORT engineering lock — stone-field
+ * ratios, placement pattern, master-module geometry, exposed-metal separators,
+ * edge boundaries. Concise physical constraints only: never a raw analysis dump,
+ * never a generic setting label, and never a low-confidence guess.
+ */
+function engineeringLockLines(pkm: any): string[] {
+  const lines: string[] = [];
+  const confident = (value: unknown, floor = 0.6) => Number(value ?? 0) >= floor;
+
+  const dimensions = pkm?.dimensions;
+  if (dimensions?.summary && confident(dimensions.confidence, 0.5)) {
+    const basis = dimensions.measurementBasis === "measured_from_authority"
+      ? "measured"
+      : "relative estimate";
+    lines.push(`Proportions (${basis}): ${String(dimensions.summary).slice(0, 200)}`);
+  }
+  for (const ratio of listOf(dimensions?.relativeRatios).slice(0, 3)) {
+    lines.push(`Size ratio: ${ratio}`);
+  }
+
+  for (const module of (Array.isArray(pkm?.repeatedModules) ? pkm.repeatedModules : []).slice(0, 2)) {
+    if (!confident(module?.confidence, 0.5)) continue;
+    const count = Number(module?.repeatCount ?? 0);
+    lines.push(
+      `Repeat module${count ? ` (x${count})` : ""}: ${String(module?.masterGeometry ?? "").slice(0, 180)}`,
+    );
+    if (module?.masterStoneMap) {
+      lines.push(`Master stone map: ${String(module.masterStoneMap).slice(0, 180)}`);
+    }
+    for (const exception of listOf(module?.exceptions).slice(0, 2)) {
+      lines.push(`Module exception: ${exception}`);
+    }
+  }
+
+  for (const group of (Array.isArray(pkm?.stoneGroups) ? pkm.stoneGroups : []).slice(0, 4)) {
+    if (!confident(group?.confidence, 0.5)) continue;
+    const region = String(group?.regionId ?? "region").trim();
+    const parts = [
+      group?.count ? `${group.count} stones` : "",
+      group?.repeatPattern ? `pattern: ${group.repeatPattern}` : "",
+      group?.anchorToFillerRatio ? `anchor:filler ≈ ${group.anchorToFillerRatio}` : "",
+      group?.gradient ? `gradient: ${group.gradient}` : "",
+    ].filter(Boolean);
+    if (parts.length) lines.push(`${region} stone field — ${parts.join("; ")}`);
+  }
+
+  for (const setting of (Array.isArray(pkm?.settings) ? pkm.settings : []).slice(0, 4)) {
+    if (setting?.needsConfirmation === true || !confident(setting?.confidence)) continue;
+    const signature = String(setting?.settingVisualSignature ?? "").trim();
+    if (!signature) continue;
+    lines.push(`${String(setting?.regionId ?? "region")} construction: ${signature.slice(0, 200)}`);
+  }
+
+  for (const material of (Array.isArray(pkm?.materialRegions) ? pkm.materialRegions : []).slice(0, 3)) {
+    if (!confident(material?.confidence, 0.5)) continue;
+    const facts = [
+      material?.metalColor ? `metal ${material.metalColor}` : "",
+      material?.finish ? `finish ${material.finish}` : "",
+    ].filter(Boolean);
+    if (facts.length) {
+      lines.push(`${String(material?.regionId ?? "region")}: ${facts.join(", ")}`);
+    }
+  }
+
+  return lines.filter(Boolean).slice(0, 16);
+}
+
 
 function buildCachedShotPrompt(args: {
   frames: SourceFrame[];
@@ -1054,18 +1261,46 @@ function buildIntakePrompt(args: {
  * flags + the canonical vocabularies. Any of them changing is a genuinely
  * different question, so it never serves a previous set's answer.
  */
-async function referenceFingerprint(references: JewelryReferenceInput[], options: IntakeOptions) {
+async function referenceFingerprint(
+  references: JewelryReferenceInput[],
+  options: IntakeOptions,
+  videoReferences: VideoReferenceInput[] = [],
+) {
   return await sha256Hex(
     JSON.stringify({
-      version: INTAKE_VERSION,
+      version: `${INTAKE_VERSION}+${PKM_VERSION}`,
       model: GEMINI_ANALYSIS_MODEL,
-      references: references
-        .map((ref) => `${ref.url}|${ref.role ?? ""}|${ref.cad ? 1 : 0}`)
+      references: references.map(normalizeRefKey).sort(),
+      clips: videoReferences
+        .map((clip) => `${clip.videoReferenceId}|${clip.duration}|${clip.keyframeTimestamps.join(",")}`)
         .sort(),
       options,
     }),
   );
 }
+
+/**
+ * The Gemini batch is capped, so CAD and photographic stills are kept first and
+ * the remaining slots are filled with EVENLY SPACED video keyframes — a long
+ * clip can never crowd out the product photography.
+ */
+function selectIntakeBatch(references: JewelryReferenceInput[], limit: number) {
+  if (references.length <= limit) return references;
+  const stills = references.filter((ref) => ref.kind !== "product_reference_video");
+  const keyframes = references.filter((ref) => ref.kind === "product_reference_video");
+  const kept = stills.slice(0, limit);
+  const slots = Math.max(0, limit - kept.length);
+  if (!slots || !keyframes.length) return kept;
+  const step = keyframes.length / slots;
+  const picked = Array.from(
+    { length: slots },
+    (_, index) => keyframes[Math.min(keyframes.length - 1, Math.floor(index * step))],
+  );
+  // Preserve the caller's original ordering so referenceIdAt stays meaningful.
+  const chosen = new Set([...kept, ...picked]);
+  return references.filter((ref) => chosen.has(ref));
+}
+
 
 
 async function runIntake(args: {
@@ -1119,9 +1354,414 @@ async function runIntake(args: {
 
   return {
     intake: JSON.parse((response.text ?? "").trim()),
+    // Re-used by the fused knowledge-map pass so references are fetched ONCE.
+    imageParts,
+    unavailable,
     timings: { referenceFetchMs, geminiMs, unavailableReferences: [...unavailable] },
   };
 }
+
+/* ------------------------------------------------------------------ *
+ * PRODUCT KNOWLEDGE MAP — one fused engineering understanding
+ * ------------------------------------------------------------------ *
+ * ANALYSIS ONLY. Forms a single reconciled understanding of the replacement
+ * piece from ALL replacement evidence (CAD + product photos + macro shots +
+ * product-video keyframes) instead of reading each asset independently.
+ * Nothing here generates or modifies media, and nothing here changes how
+ * references are routed to the image model.
+ */
+
+const PKM_VERSION = "jewelry-knowledge-map-v1";
+
+const CONFIDENCE = { type: Type.NUMBER } as const;
+
+const PKM_SCHEMA = {
+  type: Type.OBJECT,
+  properties: {
+    productType: { type: Type.STRING },
+    productTypeConfidence: CONFIDENCE,
+    dimensions: {
+      type: Type.OBJECT,
+      properties: {
+        summary: { type: Type.STRING },
+        scaleSource: {
+          type: Type.STRING,
+          enum: [
+            "cad_dimensions",
+            "spec_sheet",
+            "user_entered",
+            "known_stone_size",
+            "repeated_structural_dimension",
+            "photographic_estimate",
+            "none",
+          ],
+        },
+        measurementBasis: { type: Type.STRING, enum: ["estimated", "measured_from_authority"] },
+        relativeRatios: STRING_ARRAY,
+        confidence: CONFIDENCE,
+      },
+      required: ["scaleSource", "measurementBasis", "confidence"],
+    },
+    components: {
+      type: Type.ARRAY,
+      items: {
+        type: Type.OBJECT,
+        properties: {
+          componentId: { type: Type.STRING },
+          label: { type: Type.STRING },
+          role: { type: Type.STRING },
+          geometry: { type: Type.STRING },
+          repeatModuleId: { type: Type.STRING },
+          connectedTo: STRING_ARRAY,
+          confidence: CONFIDENCE,
+          evidenceReferenceIds: STRING_ARRAY,
+          inferredFromCAD: { type: Type.BOOLEAN },
+          inferredFromSymmetry: { type: Type.BOOLEAN },
+        },
+        required: ["componentId", "label", "geometry", "confidence", "evidenceReferenceIds"],
+      },
+    },
+    regions: {
+      type: Type.ARRAY,
+      items: {
+        type: Type.OBJECT,
+        properties: {
+          regionId: { type: Type.STRING },
+          componentId: { type: Type.STRING },
+          label: { type: Type.STRING },
+          surfaceType: { type: Type.STRING },
+          confidence: CONFIDENCE,
+        },
+        required: ["regionId", "componentId", "label", "confidence"],
+      },
+    },
+    referenceCatalog: {
+      type: Type.ARRAY,
+      items: {
+        type: Type.OBJECT,
+        properties: {
+          referenceId: { type: Type.STRING },
+          kind: {
+            type: Type.STRING,
+            enum: ["cad", "photographic_still", "product_reference_video", "unclear"],
+          },
+          authorityFor: STRING_ARRAY,
+          notAuthorityFor: STRING_ARRAY,
+          confidence: CONFIDENCE,
+        },
+        required: ["referenceId", "kind", "authorityFor", "confidence"],
+      },
+    },
+    repeatedModules: {
+      type: Type.ARRAY,
+      items: {
+        type: Type.OBJECT,
+        properties: {
+          repeatModuleId: { type: Type.STRING },
+          componentIds: STRING_ARRAY,
+          masterGeometry: { type: Type.STRING },
+          masterStoneMap: { type: Type.STRING },
+          repeatCount: { type: Type.NUMBER },
+          exceptions: STRING_ARRAY,
+          confidence: CONFIDENCE,
+        },
+        required: ["repeatModuleId", "masterGeometry", "confidence"],
+      },
+    },
+    stones: {
+      type: Type.ARRAY,
+      items: {
+        type: Type.OBJECT,
+        properties: {
+          stoneId: { type: Type.STRING },
+          componentId: { type: Type.STRING },
+          regionId: { type: Type.STRING },
+          cut: {
+            type: Type.STRING,
+            enum: [
+              "round_brilliant",
+              "baguette",
+              "emerald",
+              "princess",
+              "marquise",
+              "pear",
+              "oval",
+              "cushion",
+              "trillion",
+              "asscher",
+              "radiant",
+              "heart",
+              "rose_cut",
+              "cabochon",
+              "unclear",
+            ],
+          },
+          relativeSizeClass: {
+            type: Type.STRING,
+            enum: ["anchor", "large", "medium", "small", "filler", "unclear"],
+          },
+          normalizedPosition: {
+            type: Type.OBJECT,
+            properties: { x: { type: Type.NUMBER }, y: { type: Type.NUMBER } },
+          },
+          orientation: { type: Type.STRING },
+          seatDepthClass: {
+            type: Type.STRING,
+            enum: ["flush", "shallow", "medium", "deep", "unclear"],
+          },
+          neighbors: STRING_ARRAY,
+          apparentSettingType: { type: Type.STRING },
+          confidence: CONFIDENCE,
+          evidenceReferenceIds: STRING_ARRAY,
+        },
+        required: ["stoneId", "regionId", "cut", "relativeSizeClass", "confidence"],
+      },
+    },
+    stoneGroups: {
+      type: Type.ARRAY,
+      items: {
+        type: Type.OBJECT,
+        properties: {
+          regionId: { type: Type.STRING },
+          componentId: { type: Type.STRING },
+          count: { type: Type.NUMBER },
+          sizeClasses: STRING_ARRAY,
+          minSizeClass: { type: Type.STRING },
+          medianSizeClass: { type: Type.STRING },
+          maxSizeClass: { type: Type.STRING },
+          anchorToFillerRatio: { type: Type.STRING },
+          repeatPattern: { type: Type.STRING },
+          gradient: { type: Type.STRING },
+          measurementBasis: { type: Type.STRING, enum: ["estimated", "measured_from_authority"] },
+          confidence: CONFIDENCE,
+        },
+        required: ["regionId", "count", "measurementBasis", "confidence"],
+      },
+    },
+    settings: {
+      type: Type.ARRAY,
+      items: {
+        type: Type.OBJECT,
+        properties: {
+          componentId: { type: Type.STRING },
+          regionId: { type: Type.STRING },
+          settingClassificationReason: { type: Type.STRING },
+          canonicalSetting: { type: Type.STRING },
+          settingVisualSignature: { type: Type.STRING },
+          evidenceReferenceIds: STRING_ARRAY,
+          confidence: CONFIDENCE,
+        },
+        required: [
+          "regionId",
+          "settingClassificationReason",
+          "canonicalSetting",
+          "settingVisualSignature",
+          "confidence",
+        ],
+      },
+    },
+    materialRegions: {
+      type: Type.ARRAY,
+      items: {
+        type: Type.OBJECT,
+        properties: {
+          regionId: { type: Type.STRING },
+          componentId: { type: Type.STRING },
+          metalColor: { type: Type.STRING },
+          karat: { type: Type.STRING },
+          karatEvidence: { type: Type.STRING },
+          finish: { type: Type.STRING },
+          capturedEnvironmentTint: { type: Type.STRING },
+          confidence: CONFIDENCE,
+        },
+        required: ["regionId", "metalColor", "confidence"],
+      },
+    },
+    constructionConflicts: {
+      type: Type.ARRAY,
+      items: {
+        type: Type.OBJECT,
+        properties: {
+          topic: { type: Type.STRING },
+          cadClaim: { type: Type.STRING },
+          photoClaim: { type: Type.STRING },
+          resolution: { type: Type.STRING },
+        },
+        required: ["topic", "resolution"],
+      },
+    },
+    inferredFeatures: {
+      type: Type.ARRAY,
+      items: {
+        type: Type.OBJECT,
+        properties: {
+          feature: { type: Type.STRING },
+          basis: {
+            type: Type.STRING,
+            enum: ["inferredFromCAD", "inferredFromSymmetry", "inferredFromOtherView", "weak"],
+          },
+          confidence: CONFIDENCE,
+        },
+        required: ["feature", "basis", "confidence"],
+      },
+    },
+    unresolvedFeatures: STRING_ARRAY,
+    coverage: {
+      type: Type.OBJECT,
+      properties: {
+        geometry: { type: Type.STRING, enum: ["excellent", "good", "partial", "weak"] },
+        stoneLayout: { type: Type.STRING, enum: ["excellent", "good", "partial", "weak"] },
+        setting: { type: Type.STRING, enum: ["excellent", "good", "partial", "weak"] },
+        clasp: { type: Type.STRING, enum: ["excellent", "good", "partial", "weak", "not_applicable"] },
+      },
+      required: ["geometry", "stoneLayout", "setting", "clasp"],
+    },
+    videoAnalyses: {
+      type: Type.ARRAY,
+      items: {
+        type: Type.OBJECT,
+        properties: {
+          referenceId: { type: Type.STRING },
+          productIdentityEvidence: { type: Type.STRING },
+          geometryEvidence: { type: Type.STRING },
+          materialEvidence: { type: Type.STRING },
+          stoneEvidence: { type: Type.STRING },
+          settingEvidence: { type: Type.STRING },
+          keyframes: {
+            type: Type.ARRAY,
+            items: {
+              type: Type.OBJECT,
+              properties: {
+                referenceId: { type: Type.STRING },
+                detectedView: { type: Type.STRING },
+                coverage: {
+                  type: Type.STRING,
+                  enum: ["full_object", "partial_object", "macro_detail", "unclear"],
+                },
+                regionsVisible: STRING_ARRAY,
+                usableFor: STRING_ARRAY,
+                contextRisk: STRING_ARRAY,
+                disposableContext: STRING_ARRAY,
+                confidence: CONFIDENCE,
+              },
+              required: ["referenceId", "detectedView", "coverage", "confidence"],
+            },
+          },
+        },
+        required: ["referenceId", "productIdentityEvidence", "keyframes"],
+      },
+    },
+  },
+  required: ["productType", "components", "regions", "coverage"],
+} as const;
+
+function buildKnowledgeMapPrompt(args: {
+  references: JewelryReferenceInput[];
+  videoReferences: VideoReferenceInput[];
+  intake: any;
+  options: IntakeOptions;
+  unavailable: Set<number>;
+}) {
+  const refLines = args.references.map((ref, index) => {
+    const id = referenceIdAt(index);
+    const clip = ref.videoReferenceId
+      ? ` — PRODUCT VIDEO KEYFRAME from clip "${ref.videoReferenceId}"${
+        Number.isFinite(Number(ref.timestamp)) ? ` at ${Number(ref.timestamp).toFixed(2)}s` : ""
+      }`
+      : "";
+    return `${id} (index ${index}) — kind: ${ref.kind ?? "photographic_still"}${
+      ref.role ? `; user label "${ref.role}"` : ""
+    }${ref.cad ? "; user marked DESIGN AUTHORITY" : ""}${clip}${
+      args.unavailable.has(index) ? " — IMAGE UNAVAILABLE (skip entirely)" : ""
+    }`;
+  });
+
+  const clipLines = args.videoReferences.map((clip) =>
+    `CLIP "${clip.videoReferenceId}": ${clip.duration.toFixed(2)}s, ${clip.keyframeCount} keyframes sampled${
+      clip.aspectRatio ? `, ${clip.aspectRatio}` : ""
+    }`
+  );
+
+  const products = Array.isArray(args.intake?.products) ? args.intake.products : [];
+  const confirmedSpec = products.map((product: any, index: number) =>
+    `PIECE ${index + 1}: type ${detectedValue(product?.jewelryType) || "?"}; metal ${
+      detectedValue(product?.metal) || "?"
+    }; stone ${detectedValue(product?.stoneType) || "?"}; components ${
+      listOf(product?.visibleComponents).join(", ") || "?"
+    }`
+  );
+
+  return [
+    "You are a jewelry ENGINEERING analyst. This is ANALYSIS ONLY: return JSON only, never an image, never a video, never a URL, never bytes. You never generate or modify jewelry.",
+    "",
+    "ASSET FIREWALL: every image below is a REPLACEMENT_PRODUCT_REFERENCE — evidence of the ACTUAL replacement piece (geometry / material / stone / setting / component authority). None of them is source cinematography, and you are given NO source footage: never describe camera work of a shoot, only the physical product.",
+    "",
+    "REPLACEMENT EVIDENCE, in this exact order (images follow this text):",
+    ...refLines,
+    clipLines.length ? "" : "",
+    ...clipLines,
+    "",
+    "ALREADY-RECOGNISED INTAKE (reconcile with it, do not contradict it without stating a conflict):",
+    ...(confirmedSpec.length ? confirmedSpec : ["(none)"]),
+    "",
+    "AUTHORITY ORDER (attribute-specific — one asset can be authority for some attributes and not others):",
+    "USER OVERRIDE > CONFIRMED STRUCTURED SPEC > relevant CAD / design geometry > high-confidence product-video evidence > photographic analysis > weak inference.",
+    "Use CAD for silhouette, dimensions, placement, seat depth and topology. Use photos and video keyframes for real stone sizes, prong/bead reality, polish, finish and packing density. When CAD and photography genuinely disagree, record a constructionConflict with a resolution — NEVER silently average them.",
+    "",
+    "TASKS — build ONE fused Product Knowledge Map for the replacement piece(s):",
+    "1. TOPOLOGY FIRST. Discover the components that actually exist and give each a persistent componentId (C1, C2, …). Evidence from different views must attach to the SAME componentId. Never assume a piece type or a component that is not visible: this must work for pendants, rings, watches, Cuban chains, tennis chains, bracelets, earrings, grillz, charms and complex mechanical jewelry alike. Then define regions (R1, R2, …) on those components.",
+    "2. REPEAT MODULES. When a structure repeats (links, rows, segments), define ONE master module (geometry + master stone map + repeat count) and list only the genuine exceptions (terminal link, clasp, hinge). Do NOT re-describe every repetition independently.",
+    "3. STONE MAP. Where resolution supports it, emit stone-by-stone observations (stoneId S1…, componentId, regionId, cut, relativeSizeClass, normalizedPosition 0..1 within its region, orientation, seatDepthClass, neighbors, apparentSettingType, confidence, evidenceReferenceIds). Also emit per-region stoneGroups: count, size classes, min/median/max, anchor-vs-filler ratio, repeat pattern, gradient. If resolution does not support individual stones in a region, emit the group only.",
+    "4. MULTI-VIEW TRIANGULATION. A feature seen in several references is ONE physical feature — register it once and cite every reference as evidence. Never triple-count the same stone or seat across views.",
+    "5. OCCLUSION. Never invent hidden geometry. Infer a hidden feature only from CAD, another view, or genuine symmetry, and record it in inferredFeatures with basis inferredFromCAD / inferredFromSymmetry / inferredFromOtherView. Anything you cannot establish goes in unresolvedFeatures.",
+    "6. SCALE. Never state exact millimetres without scale evidence. Scale priority: explicit CAD dimensions > spec sheet > user-entered dimensions > known stone-size labels > repeated structural dimensions > photographic estimate. Prefer relative ratios (\"anchor stones ≈ 2.2x filler stones\") and set measurementBasis to measured_from_authority ONLY when a real dimension was readable; otherwise estimated.",
+    "7. SETTINGS AFTER THE STONE MAP. Classify construction from prong count, shared prongs, beads, rails, bezels, channels, seat depth, metal visibility and packing — never from visual density alone. Give settingClassificationReason FIRST, then map to one of the app's canonical settings: " +
+    (args.options.settingTypes.join(" | ") || "(none supplied)") +
+    ". If the construction does not clearly match exactly one canonical value, return \"needs_confirmation\" with confidence below 0.45. Dense small-stone coverage is NOT evidence for a pavé-family setting, and a reason describing mixed anchor+filler sizing FORBIDS any uniform-only setting.",
+    "8. MATERIALS. Separate the stone's real material from captured environment tint: colourless stones photographed under rose gold or warm light are still colourless — record the tint in capturedEnvironmentTint. Metal COLOUR is separate from karat: never claim 10K/14K/18K without explicitly readable evidence (leave karat empty and say so in karatEvidence). Never hallucinate a clarity grade (FL/VVS/VS/SI) — without a certificate or readable text it stays unresolved.",
+    "9. PRODUCT VIDEO EVIDENCE. For each CLIP, summarise what the clip establishes (product identity, geometry, material, stone, setting) and describe each of its keyframes: detectedView, coverage, regionsVisible, usableFor, contextRisk and disposableContext (hands, gloves, trays, busts, other jewelry, backgrounds — context that must NEVER enter a generated composition).",
+    "10. GRANULAR CONFIDENCE. Every entry carries its OWN confidence 0..1 — never one global score. Low-confidence details must stay low: they are advisory only and must never read like a hard instruction.",
+    "11. COVERAGE. Rate how well the evidence covers geometry, stoneLayout, setting and clasp (excellent | good | partial | weak; clasp may be not_applicable).",
+    "Short phrases only. No prose paragraphs. Never output URLs, file names, base64 or media of any kind.",
+  ].filter(Boolean).join("\n");
+}
+
+/** ONE extra analysis call, reusing the already-inlined reference images. */
+async function runKnowledgeMap(args: {
+  ai: GoogleGenAI;
+  imageParts: unknown[];
+  references: JewelryReferenceInput[];
+  videoReferences: VideoReferenceInput[];
+  intake: any;
+  options: IntakeOptions;
+  unavailable: Set<number>;
+}) {
+  const started = Date.now();
+  const response = await args.ai.models.generateContent({
+    model: GEMINI_ANALYSIS_MODEL,
+    contents: [
+      {
+        role: "user",
+        parts: [
+          { text: buildKnowledgeMapPrompt(args) },
+          ...args.imageParts,
+        ],
+      },
+    ] as any,
+    config: {
+      responseMimeType: "application/json",
+      responseSchema: PKM_SCHEMA as any,
+      maxOutputTokens: 16384,
+      temperature: 0,
+      // Engineering reconciliation genuinely needs reasoning budget.
+      thinkingConfig: { thinkingLevel: "medium" },
+    },
+  });
+  const map = JSON.parse((response.text ?? "").trim());
+  map.version = PKM_VERSION;
+  return { knowledgeMap: map, geminiMs: Date.now() - started };
+}
+
 
 
 /**
@@ -1212,15 +1852,10 @@ function stampSources(intake: any, options: IntakeOptions) {
 
 async function handleIntake(req: Request, body: any, user: { id: string }, apiKey?: string) {
   const startedAt = Date.now();
-  const references: JewelryReferenceInput[] =
+  // Every reference here is explicitly typed REPLACEMENT_PRODUCT_REFERENCE.
+  const references: JewelryReferenceInput[] = readReferences(body?.jewelryReferences);
+  const videoReferences = readVideoReferences(body?.videoReferences);
 
-    (Array.isArray(body?.jewelryReferences) ? body.jewelryReferences : [])
-      .map((ref: any) => ({
-        url: String(ref?.url ?? "").trim(),
-        role: ref?.role ? String(ref.role).trim() : null,
-        cad: ref?.cad === true,
-      }))
-      .filter((ref: JewelryReferenceInput) => /^https?:\/\//.test(ref.url));
 
   if (!references.length) return json({ error: "Add at least one jewelry reference" }, 400);
 
@@ -1234,7 +1869,7 @@ async function handleIntake(req: Request, body: any, user: { id: string }, apiKe
   const setVersion = body?.setVersion ? String(body.setVersion) : null;
   const requestId = Number.isFinite(Number(body?.requestId)) ? Number(body.requestId) : null;
 
-  const fingerprint = await referenceFingerprint(references, options);
+  const fingerprint = await referenceFingerprint(references, options, videoReferences);
   const admin = createAdminClient();
 
   const { data: cached } = await admin
@@ -1261,21 +1896,47 @@ async function handleIntake(req: Request, body: any, user: { id: string }, apiKe
 
   const ai = new GoogleGenAI({ apiKey });
   // ONE call for the whole settled reference set — never one call per image.
-  const batch = references.slice(0, MAX_IMAGES_PER_CALL);
+  const batch = selectIntakeBatch(references, MAX_IMAGES_PER_CALL);
   const run = await runIntake({ ai, references: batch, roleVocabulary, options });
   const intake = stampSources(run.intake, options);
   intake.version = INTAKE_VERSION;
   intake.referenceCount = batch.length;
 
+  /* ---- ONE fused engineering pass, reusing the already-fetched images ---- */
+  let knowledgeMapMs = 0;
+  try {
+    const fused = await runKnowledgeMap({
+      ai,
+      imageParts: run.imageParts,
+      references: batch,
+      videoReferences,
+      intake,
+      options,
+      unavailable: run.unavailable,
+    });
+    knowledgeMapMs = fused.geminiMs;
+    intake.knowledgeMap = fused.knowledgeMap;
+    intake.videoAnalyses = Array.isArray(fused.knowledgeMap?.videoAnalyses)
+      ? fused.knowledgeMap.videoAnalyses
+      : [];
+  } catch (error) {
+    // The engineering map is an ENHANCEMENT: intake must still succeed without it.
+    console.warn("[intake] knowledge map unavailable:", errorMessage(error));
+  }
+
   const timings = {
     cacheHit: false,
     referenceFetchMs: run.timings.referenceFetchMs,
     geminiMs: run.timings.geminiMs,
+    knowledgeMapMs,
+    videoReferenceCount: videoReferences.length,
+    keyframeReferenceCount: batch.filter((ref) => ref.kind === "product_reference_video").length,
     unavailableReferences: run.timings.unavailableReferences,
     totalMs: Date.now() - startedAt,
   };
   // DEV-ONLY telemetry: server logs, never surfaced to normal users.
   console.log("[intake] timings", JSON.stringify(timings));
+
 
   const stripped = assertAnalysisOnly(intake, "intake");
   if (stripped.length) console.warn("intake guard stripped:", stripped.join(", "));
@@ -1352,27 +2013,15 @@ Deno.serve(async (req) => {
       }))
       .filter((frame: SourceFrame) => frame.frameId && /^https?:\/\//.test(frame.imageUrl));
 
-    const jewelryReferences: JewelryReferenceInput[] =
-      (Array.isArray(body?.jewelryReferences) ? body.jewelryReferences : [])
-        .map((ref: any) => ({
-          url: String(ref?.url ?? "").trim(),
-          role: ref?.role ? String(ref.role).trim() : null,
-          cad: ref?.cad === true,
-        }))
-        .filter((ref: JewelryReferenceInput) => /^https?:\/\//.test(ref.url));
+    // Replacement references (CAD, stills, product-video keyframes) — typed.
+    const jewelryReferences: JewelryReferenceInput[] = readReferences(body?.jewelryReferences);
 
     const jewelrySpecs: any[] = Array.isArray(body?.jewelrySpecs) ? body.jewelrySpecs : [];
 
     // The persisted intake this reference set was already understood through.
     const intakeFingerprint = String(body?.intakeFingerprint ?? "").trim() || null;
-    const intakeReferences: JewelryReferenceInput[] =
-      (Array.isArray(body?.intakeReferences) ? body.intakeReferences : [])
-        .map((ref: any) => ({
-          url: String(ref?.url ?? "").trim(),
-          role: ref?.role ? String(ref.role).trim() : null,
-          cad: ref?.cad === true,
-        }))
-        .filter((ref: JewelryReferenceInput) => /^https?:\/\//.test(ref.url));
+    const intakeReferences: JewelryReferenceInput[] = readReferences(body?.intakeReferences);
+
 
     if (!sourceFrames.length) return json({ error: "Select at least one source frame" }, 400);
     if (!jewelryReferences.length) return json({ error: "Add at least one jewelry reference" }, 400);
@@ -1517,7 +2166,15 @@ Deno.serve(async (req) => {
 
     if (!productAnalysis || !frames.length) throw new Error("The analysis returned no usable result");
 
-    const analysis = { version: ANALYSIS_VERSION, productAnalysis, frames };
+    // The reused engineering map travels with the analysis for the admin panel;
+    // the routing-facing prompt still reads only productAnalysis / frames.
+    const analysis: Record<string, unknown> = {
+      version: ANALYSIS_VERSION,
+      productAnalysis,
+      frames,
+      ...(knowledge?.pkm ? { knowledgeMap: knowledge.pkm } : {}),
+    };
+
     const stripped = assertAnalysisOnly(analysis);
     if (stripped.length) {
       console.warn("analysis-only guard stripped non-analysis fields:", stripped.join(", "));
