@@ -1519,6 +1519,8 @@ export default function JewelrySwap() {
         setAltSwaps((prev) => ({ ...prev, [frameIndex]: data.generation }));
       } else {
         setSwaps((prev) => ({ ...prev, [frameIndex]: data.generation }));
+        // Remember the quality this frame actually ran at so Regenerate defaults to it.
+        setFrameQuality((prev) => ({ ...prev, [frameIndex]: quality }));
         setApproved((prev) => {
           const next = new Set(prev);
           next.delete(frameIndex);
@@ -1536,7 +1538,9 @@ export default function JewelrySwap() {
       frameCoverage,
       frameAnalysisFor,
       analysis,
+      nanoQuality,
     ],
+
   );
 
   /**
