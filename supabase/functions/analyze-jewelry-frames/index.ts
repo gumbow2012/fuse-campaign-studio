@@ -1346,10 +1346,7 @@ function selectIntakeBatch(references: JewelryReferenceInput[], limit: number) {
   return references.length <= limit ? references : references.slice(0, limit);
 }
 
-  // Preserve the caller's original ordering so referenceIdAt stays meaningful.
-  const chosen = new Set([...kept, ...picked]);
-  return references.filter((ref) => chosen.has(ref));
-}
+
 
 
 
