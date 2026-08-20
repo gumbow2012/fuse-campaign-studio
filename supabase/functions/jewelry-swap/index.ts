@@ -132,6 +132,15 @@ type JewelryDimensions = {
 /** A single labeled reference image of a piece. */
 type JewelryReference = { url: string; role?: string | null; cad?: boolean };
 
+/** One structured stone-setting entry on a piece. */
+type JewelrySetting = {
+  type?: string | null;
+  region?: string | null;
+  stone?: string | null;
+  color?: string | null;
+  quality?: string | null;
+};
+
 type JewelryPiece = {
   urls?: unknown;
   url?: string;
@@ -140,7 +149,11 @@ type JewelryPiece = {
   type?: string;
   metal?: string;
   stone?: string;
+  /** Structured stone body color, independent of clarity/quality. */
+  stoneColor?: string;
   quality?: string;
+  /** Structured stone-setting construction, one or more regions. */
+  settings?: unknown;
   dimensions?: JewelryDimensions | null;
   cad?: boolean;
   person?: string;
@@ -149,6 +162,7 @@ type JewelryPiece = {
   scope?: string;
 
 };
+
 
 /** Normalized labeled references for a piece, in supplied order. */
 function pieceReferences(piece: JewelryPiece): JewelryReference[] {
@@ -443,6 +457,131 @@ const REFERENCE_IMAGE_CONTEXT_RULE =
 const REFERENCE_ROLE_PRIORITY_LINE =
   "REFERENCE ROLE PRIORITY: Use the CAD / design-authority (and otherwise cleanest) reference as the GEOMETRY authority. Use the photographic references — which may legitimately contain gloves, hands, wrists, boxes, trays or studio backdrops — ONLY for real material truth: metal alloy and rose-gold/white-gold/yellow-gold finish, polish, diamond and pavé appearance, scintillation and manufacturing micro-texture. Never use any photographic reference for environment, background, framing or composition.";
 
+/* ------------------------------------------------------------------ *
+ * STRUCTURED PRODUCT AUTHORITY
+ * ------------------------------------------------------------------ *
+ * The piece card now carries hard product facts (stone, stone color,
+ * quality, one or more regional settings). They are injected into the
+ * SAME prompt as a mandatory specification block — never a separate
+ * prompt — and they outrank the model's own aesthetic inference.
+ */
+
+/** Normalized structured settings for a piece, dropping empty/Auto entries. */
+function pieceSettings(piece: JewelryPiece): JewelrySetting[] {
+  const raw = Array.isArray(piece.settings) ? piece.settings : [];
+  const out: JewelrySetting[] = [];
+  for (const entry of raw) {
+    const type = String((entry as any)?.type ?? "").trim();
+    if (!type || isAuto(type)) continue;
+    out.push({
+      type,
+      region: String((entry as any)?.region ?? "").trim() || null,
+      stone: String((entry as any)?.stone ?? "").trim() || null,
+      color: String((entry as any)?.color ?? "").trim() || null,
+      quality: String((entry as any)?.quality ?? "").trim() || null,
+    });
+  }
+  return out;
+}
+
+/** Resolved, verifiable spec for one piece — also stored in input_payload. */
+type TargetSpec = {
+  type: string | null;
+  metal: string | null;
+  stone: string | null;
+  stoneColor: string | null;
+  quality: string | null;
+  settings: { region: string | null; type: string; stone?: string | null; color?: string | null; quality?: string | null }[];
+  dimensions: string | null;
+};
+
+function resolveTargetSpec(piece: JewelryPiece): TargetSpec {
+  const dims = piece.dimensions ?? null;
+  const width = Number(dims?.width ?? NaN);
+  const height = Number(dims?.height ?? NaN);
+  const depth = Number(dims?.depth ?? NaN);
+  const weight = Number(dims?.weight ?? NaN);
+  const hasDims = [width, height, depth].some((value) => Number.isFinite(value) && value > 0);
+  const dimText = hasDims
+    ? `${[width, height, depth]
+      .map((value) => (Number.isFinite(value) && value > 0 ? String(value) : "?"))
+      .join("×")} mm${Number.isFinite(weight) && weight > 0 ? `, ~${weight} g` : ""}`
+    : Number.isFinite(weight) && weight > 0
+      ? `~${weight} g`
+      : null;
+
+  return {
+    type: String(piece.type ?? "").trim() || null,
+    metal: isAuto(piece.metal) ? null : String(piece.metal).trim(),
+    stone: isAuto(piece.stone) ? null : String(piece.stone).trim(),
+    stoneColor: isAuto(piece.stoneColor) ? null : String(piece.stoneColor).trim(),
+    quality: isAuto(piece.quality) ? null : String(piece.quality ?? "").trim() || null,
+    settings: pieceSettings(piece).map((setting) => ({
+      region: setting.region,
+      type: String(setting.type),
+      stone: setting.stone,
+      color: setting.color,
+      quality: setting.quality,
+    })),
+    dimensions: dimText,
+  };
+}
+
+/** The mandatory TARGET JEWELRY SPECIFICATION line, or null when everything is Auto. */
+function targetSpecLine(spec: TargetSpec) {
+  const parts: string[] = [];
+  if (spec.type) parts.push(`TYPE: ${spec.type}`);
+  if (spec.metal) parts.push(`METAL: ${spec.metal}`);
+  if (spec.stone) parts.push(`STONE: ${spec.stone}`);
+  if (spec.stoneColor) parts.push(`STONE COLOR: ${spec.stoneColor}`);
+  if (spec.quality) parts.push(`QUALITY: ${spec.quality}`);
+  if (spec.settings.length) {
+    const settings = spec.settings
+      .map((setting) => {
+        const overrides = [setting.stone, setting.color, setting.quality].filter(Boolean).join(", ");
+        const base = setting.region ? `${setting.region}: ${setting.type}` : setting.type;
+        return overrides ? `${base} (${overrides})` : base;
+      })
+      .join("; ");
+    parts.push(`SETTINGS: ${settings}`);
+  }
+  if (spec.dimensions) parts.push(`DIMENSIONS/WEIGHT: ${spec.dimensions}`);
+  if (parts.length <= 1 && !spec.stone && !spec.settings.length && !spec.stoneColor) return null;
+  return `TARGET JEWELRY SPECIFICATION — ${parts.join("; ")}. These structured specifications are MANDATORY product constraints. Do not reinterpret them or substitute another setting style, stone color, stone shape, or stone layout for aesthetic reasons.`;
+}
+
+const SETTING_AUTHORITY_LINE =
+  "SETTING AUTHORITY: Reproduce the replacement jewelry's actual stone-setting construction. Do NOT convert mosaic-set stones into generic pavé, do not convert baguettes into rounds, do not add a large center stone unless the design contains one, and do not invent halo rows, bezels, channels, prongs, clusters or decorative stones not supported by the CAD, product references, or the Setting specification.";
+
+const MOSAIC_MEANING_LINE =
+  "MOSAIC MEANING: MOSAIC is a deliberate multi-stone composition of differently sized/shaped stones arranged tightly into a continuous iced surface — preserve the reference/CAD's stone size and shape variation, orientation, grouping, spacing, metal separation and overall mosaic pattern. Never regularize it into uniform round micro-pavé. Reverse Mosaic: preserve the reverse orientation shown by the design authority.";
+
+const STONE_COLOR_LOCK_LINE =
+  "STONE COLOR LOCK: Maintain the specified gemstone/diamond body color consistently across the whole object. Metal reflections and source lighting may alter perceived highlights, but the physical stone color must not change.";
+
+const COLORLESS_LINE = "The diamonds remain visually colorless/white.";
+
+const OPTICS_VS_COLOR_LINE =
+  "OPTICS vs COLOR: Spectral fire (white, blue, cyan, green, yellow, orange, restrained red/violet flashes from dispersion) is ALLOWED and does NOT change body color. Do not render colored diamonds (pink/champagne/yellow/blue) unless Stone Color specifies them.";
+
+const NO_INVENT_NEGATIVES_LINE =
+  "NO-INVENT NEGATIVES: No invented center stones, no added oversized diamonds, no random baguettes or marquise, no added halos or extra stone rows, no changing round↔fancy cuts, no arbitrary stone-size variation, no generic pavé substitution, no setting-style drift, no stone-color drift.";
+
+const SPEC_HIERARCHY_LINE =
+  "SPECIFICATION HIERARCHY: CAD / design-authority references (geometry) > structured product fields (material, stone, stone color, quality, setting) > labeled product references (appearance) > Notes > model inference. If Notes conflict with the structured fields, the structured fields win unless the Notes explicitly state that they override them.";
+
+/** True when any setting on any piece is a mosaic variant. */
+function hasMosaicSetting(specs: TargetSpec[]) {
+  return specs.some((spec) => spec.settings.some((setting) => /mosaic/i.test(setting.type)));
+}
+
+/** True when every specified stone color is a colorless/white option. */
+function isColorlessSpec(specs: TargetSpec[]) {
+  const colors = specs.map((spec) => spec.stoneColor).filter(Boolean) as string[];
+  if (!colors.length) return false;
+  return colors.every((color) => /colorless|white|d–f|d-f|g–j|g-j/i.test(color));
+}
+
 
 
 /** Targeted corrective lines appended when the user regenerates with a reason. */
@@ -511,7 +650,18 @@ const FAILURE_CORRECTIONS: Record<string, string> = {
     "CORRECTION: The source is a full-product composition but the previous replacement was cropped. Preserve the replacement's true proportions and scale the ENTIRE product to fit inside the source frame (fit: contain). Keep all meaningful ends, edges, clasp/closure and overall silhouette visible with natural negative space. Do not crop the replacement.",
   "possiblereferencecontextleak":
     "CORRECTION: The previous generation incorrectly copied environmental/contextual elements from a jewelry product reference (background, hands, gloves, props, surfaces or lighting). Remove ALL such contamination. The jewelry reference controls ONLY the target jewelry object's physical construction. Restore every non-jewelry region from SOURCE_FRAME exactly.",
+  "wrongsetting":
+    "CORRECTION: The previous generation used an incorrect stone-setting method. Follow the structured Setting specification and the relevant CAD/product references exactly. Do not substitute generic pavé or another setting style.",
+  "wrongstonecolor":
+    "CORRECTION: The previous generation changed the physical stone color. Restore the exact specified Stone Color. Spectral flashes are optical dispersion only and must not alter the gemstones' actual body color.",
+  "wrongstoneshape":
+    "CORRECTION: Preserve the exact stone cuts and shapes represented by the design authority and product references. Do not replace fancy-cut stones with rounds or invent other cuts.",
+  "wrongstonesize/layout":
+    "CORRECTION: Preserve the reference/CAD-supported relative stone sizes, spacing, orientation and arrangement. Do not regularize the design into uniform rows unless the target design actually uses uniform rows.",
+  "wrongstonesizelayout":
+    "CORRECTION: Preserve the reference/CAD-supported relative stone sizes, spacing, orientation and arrangement. Do not regularize the design into uniform rows unless the target design actually uses uniform rows.",
   other:
+
 
 
     "CORRECTION: the previous attempt was inaccurate. Re-read SOURCE_FRAME for the shot and the references for the object's construction, and follow both strictly.",
@@ -617,6 +767,14 @@ function buildJewelryPrompt(args: {
   const mode = normalizeMode(args.mode, args.macro === true);
   const coverage = normalizeCoverage(args.coverage, mode);
 
+  // Structured product authority — injected into THIS prompt, after the PIECES
+  // lines and before the negatives. Only non-Auto values are emitted.
+  const specs = args.pieces.map((piece) => resolveTargetSpec(piece));
+  const specLines = specs.map((spec) => targetSpecLine(spec)).filter(Boolean) as string[];
+  const mosaic = hasMosaicSetting(specs);
+  const colorless = isColorlessSpec(specs);
+
+
   const prompt = [
     "Use SOURCE_FRAME (image 1) as the ABSOLUTE authority for the photograph. This is a precise jewelry replacement, not a redesign or a product shot. Do NOT reframe or recreate the photograph.",
     "",
@@ -669,6 +827,22 @@ function buildJewelryPrompt(args: {
       ? `PREFERRED ANGLE REFERENCE: prioritize the reference labeled "${preferred}" as the primary geometry match for this frame, while still obeying SOURCE_FRAME for camera, crop and placement.`
       : null,
     "",
+    specLines.length ? specLines.join("\n") : null,
+    specLines.length ? "" : null,
+    SETTING_AUTHORITY_LINE,
+    "",
+    mosaic ? MOSAIC_MEANING_LINE : null,
+    mosaic ? "" : null,
+    colorless ? `${STONE_COLOR_LOCK_LINE} ${COLORLESS_LINE}` : STONE_COLOR_LOCK_LINE,
+    "",
+    OPTICS_VS_COLOR_LINE,
+    "",
+    NO_INVENT_NEGATIVES_LINE,
+    "",
+    SPEC_HIERARCHY_LINE,
+    "",
+
+
     "Do NOT redesign or simplify the jewelry. Do NOT invent, add, remove, or resize stones. Do NOT change stone shapes or randomize stone placement. Do NOT modify any jewelry that was not listed. Round stones stay round and individually seated; baguettes keep their long rectangular orientation; marquise keep pointed ends; princess stay square; emerald cuts keep the stepped rectangular form. Preserve mosaic / reverse-mosaic setting patterns — never flatten them into generic pavé.",
     "",
     "If a piece is a pendant only, replace only the pendant and keep the existing chain. If a chain only, replace only the chain and keep the existing pendant. If \"Pendant + Chain\", replace both.",
@@ -823,6 +997,9 @@ async function startSwapFrame(admin: AdminClient, args: {
           image_model: imageModelKey,
           image_endpoint: endpointId,
           geometry_fidelity: "strict",
+          // Structured product authority resolved for this run (verification hook).
+          target_spec: routedPieces.map((piece) => resolveTargetSpec(piece)),
+
           preferred_role: args.preferredRole ?? null,
           failure_reason: args.failureReason ?? null,
           replacement_mode: normalizeMode(args.mode, args.macro === true),

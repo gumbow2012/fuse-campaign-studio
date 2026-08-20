@@ -109,21 +109,84 @@ const METAL_OPTIONS = [
 const AUTO_STONE = "Auto from reference";
 const STONE_OPTIONS = [
   AUTO_STONE,
+  "Diamond",
   "Natural Diamond",
   "Lab Diamond",
   "Moissanite",
   "CZ",
-  "Emerald",
   "Ruby",
   "Sapphire",
+  "Emerald",
   "Onyx",
   "Black Diamond",
   "Colored Diamond",
+  "Mixed Stones",
   "Gemstone",
   "No Stones",
+  "Other/Custom",
 ];
 
-const QUALITY_OPTIONS = ["", "D–F", "G–H", "VS", "VVS", "SI", "Custom/Notes"];
+/** Stone body color — deliberately independent of clarity/quality. */
+const AUTO_STONE_COLOR = "Auto from reference";
+const STONE_COLOR_OPTIONS = [
+  AUTO_STONE_COLOR,
+  "Colorless D–F",
+  "Near Colorless G–J",
+  "White/Colorless",
+  "Black",
+  "Fancy Yellow",
+  "Fancy Pink",
+  "Fancy Blue",
+  "Fancy Green",
+  "Champagne",
+  "Cognac",
+  "Mixed Colors",
+  "Custom",
+];
+
+const AUTO_QUALITY = "Auto from reference";
+const QUALITY_OPTIONS = [AUTO_QUALITY, "FL/IF", "VVS", "VS", "SI", "I", "Custom"];
+
+/** Stone-setting construction types — a piece can carry several by region. */
+const AUTO_SETTING = "Auto from reference";
+const SETTING_TYPE_OPTIONS = [
+  AUTO_SETTING,
+  "Mosaic",
+  "Reverse Mosaic",
+  "Micro Pavé",
+  "Pavé",
+  "Bead Set",
+  "Prong Set",
+  "Shared Prong",
+  "Channel Set",
+  "Baguette Channel",
+  "Invisible Set",
+  "Bezel Set",
+  "Flush/Burnish Set",
+  "Cluster",
+  "Tennis/Shared",
+  "Mixed/Multiple",
+  "Custom",
+];
+
+/** Setting regions are TYPE-aware — a bracelet has no bail, a ring has no dial. */
+const TYPE_SETTING_REGIONS: Record<string, string[]> = {
+  bracelet: ["Links", "Clasp", "Side Profile", "Underside", "Entire Piece", "Custom"],
+  pendant: ["Main Face", "Border", "Lettering", "Bail", "Sidewall", "Back", "Custom"],
+  ring: ["Center", "Halo", "Shank", "Side", "Gallery", "Custom"],
+  watch: ["Bezel", "Dial", "Case", "Bracelet", "Clasp", "Custom"],
+  generic: ["Entire Piece", "Custom"],
+};
+
+function settingRegionsForType(type: string | null | undefined): string[] {
+  const text = String(type ?? "").toLowerCase();
+  if (/bracelet|anklet/.test(text)) return TYPE_SETTING_REGIONS.bracelet;
+  if (/pendant|necklace|choker|chain|charm|brooch/.test(text)) return TYPE_SETTING_REGIONS.pendant;
+  if (/ring/.test(text)) return TYPE_SETTING_REGIONS.ring;
+  if (/watch/.test(text)) return TYPE_SETTING_REGIONS.watch;
+  return TYPE_SETTING_REGIONS.generic;
+}
+
 
 /**
  * A single physical piece only ever goes on ONE person, so the target is a
@@ -222,6 +285,11 @@ const FAILURE_REASONS = [
   "Wrong jewelry geometry",
   "Wrong bail / connector",
   "Wrong stones / setting",
+  "Wrong setting",
+  "Wrong stone color",
+  "Wrong stone shape",
+  "Wrong stone size/layout",
+
   "Wrong lettering / logo",
   "Wrong scale",
   "Wrong rotation",
@@ -246,6 +314,24 @@ const VIDEO_MODELS = [
 
 
 type Frame = { time: number; url: string };
+
+/** One structured stone-setting entry. Stone/color/quality are optional overrides. */
+type PieceSetting = {
+  type: string;
+  region: string;
+  stone: string;
+  color: string;
+  quality: string;
+};
+
+const EMPTY_SETTING: PieceSetting = {
+  type: AUTO_SETTING,
+  region: "",
+  stone: "",
+  color: "",
+  quality: "",
+};
+
 /** One card = ONE physical piece, described by one or more reference angles. */
 type Piece = {
   urls: string[];
@@ -255,7 +341,11 @@ type Piece = {
   type: string;
   metal: string;
   stone: string;
+  /** Stone body color, independent of quality/clarity. */
+  stoneColor: string;
   quality: string;
+  /** Structured settings; blank stone/color/quality inherit the piece-level values. */
+  settings: PieceSetting[];
   width: string;
   height: string;
   depth: string;
@@ -267,6 +357,14 @@ type Piece = {
   /** "piece" (default) or "piece_chain". */
   scope: string;
 };
+
+/** Structured settings, dropping the Auto/blank rows the function ignores anyway. */
+function realSettings(piece: Piece): PieceSetting[] {
+  return (piece.settings ?? []).filter(
+    (setting) => setting.type && setting.type !== AUTO_SETTING,
+  );
+}
+
 
 /** Geometry authority is auto-on for CAD-labeled angles, overridable per image. */
 function isGeometryAuthority(piece: Piece, angleIndex: number) {
@@ -288,8 +386,20 @@ function pieceSummary(piece: Piece, frameCount: number) {
     `Metal: ${piece.metal === AUTO_METAL ? "Auto" : piece.metal}`,
     `Stone: ${piece.stone === AUTO_STONE ? "Auto" : piece.stone}`,
   ];
-  if (piece.quality) parts.push(`Quality: ${piece.quality}`);
+  if (piece.stoneColor && piece.stoneColor !== AUTO_STONE_COLOR) {
+    parts.push(`Color: ${piece.stoneColor}`);
+  }
+  if (piece.quality && piece.quality !== AUTO_QUALITY) parts.push(`Quality: ${piece.quality}`);
+  const settings = realSettings(piece);
+  if (settings.length) {
+    parts.push(
+      `Setting: ${settings
+        .map((setting) => (setting.region ? `${setting.region}: ${setting.type}` : setting.type))
+        .join(" / ")}`,
+    );
+  }
   parts.push(`References: ${piece.urls.length}`);
+
   parts.push(`Source Frames: ${frameCount}`);
   parts.push(piece.urls.length && frameCount ? "Ready to generate" : "Waiting on inputs");
   return parts.join(" · ");
@@ -688,7 +798,10 @@ export default function JewelrySwap() {
           type: JEWELRY_TYPES[0],
           metal: AUTO_METAL,
           stone: AUTO_STONE,
-          quality: "",
+          stoneColor: AUTO_STONE_COLOR,
+          quality: AUTO_QUALITY,
+          settings: [{ ...EMPTY_SETTING }],
+
           width: "",
           height: "",
           depth: "",
@@ -774,7 +887,10 @@ export default function JewelrySwap() {
           type: JEWELRY_TYPES[0],
           metal: AUTO_METAL,
           stone: AUTO_STONE,
-          quality: "",
+          stoneColor: AUTO_STONE_COLOR,
+          quality: AUTO_QUALITY,
+          settings: [{ ...EMPTY_SETTING }],
+
           width: "",
           height: "",
           depth: "",
@@ -927,7 +1043,17 @@ export default function JewelrySwap() {
         type: piece.type,
         metal: piece.metal === AUTO_METAL ? null : piece.metal,
         stone: piece.stone === AUTO_STONE ? null : piece.stone,
-        quality: piece.quality || null,
+        stoneColor: piece.stoneColor === AUTO_STONE_COLOR ? null : piece.stoneColor || null,
+        quality: !piece.quality || piece.quality === AUTO_QUALITY ? null : piece.quality,
+        // Structured stone-setting construction — hard product constraints.
+        settings: realSettings(piece).map((setting) => ({
+          type: setting.type,
+          region: setting.region || null,
+          stone: setting.stone || null,
+          color: setting.color || null,
+          quality: setting.quality || null,
+        })),
+
         dimensions: {
           width: piece.width || null,
           height: piece.height || null,
@@ -1372,7 +1498,7 @@ export default function JewelrySwap() {
           person: piece.person,
           metal: piece.metal === AUTO_METAL ? null : piece.metal,
           stone: piece.stone === AUTO_STONE ? null : piece.stone,
-          quality: piece.quality || null,
+          quality: !piece.quality || piece.quality === AUTO_QUALITY ? null : piece.quality,
           cad: authorityCount(piece) > 0,
           notes: piece.notes || null,
         })),
@@ -1759,10 +1885,32 @@ export default function JewelrySwap() {
                       </div>
                       <div>
                         <label className="mb-1 block text-[10px] uppercase tracking-[0.14em] text-cyan-200/70">
-                          Stone quality
+                          Stone color
                         </label>
                         <select
-                          value={piece.quality}
+                          value={piece.stoneColor || AUTO_STONE_COLOR}
+                          onChange={(event) =>
+                            setPieces((prev) =>
+                              prev.map((item, i) =>
+                                i === index ? { ...item, stoneColor: event.target.value } : item,
+                              ),
+                            )
+                          }
+                          className={SELECT_CLASS}
+                        >
+                          {STONE_COLOR_OPTIONS.map((option) => (
+                            <option key={option} value={option}>
+                              {option}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="mb-1 block text-[10px] uppercase tracking-[0.14em] text-cyan-200/70">
+                          Quality
+                        </label>
+                        <select
+                          value={piece.quality || AUTO_QUALITY}
                           onChange={(event) =>
                             setPieces((prev) =>
                               prev.map((item, i) => (i === index ? { ...item, quality: event.target.value } : item)),
@@ -1772,12 +1920,135 @@ export default function JewelrySwap() {
                         >
                           {QUALITY_OPTIONS.map((option) => (
                             <option key={option} value={option}>
-                              {option || "Optional"}
+                              {option}
                             </option>
                           ))}
                         </select>
                       </div>
                     </div>
+
+                    {/* Structured setting construction. Region mapping only appears
+                        once a second setting exists — one setting needs no region. */}
+                    <div className="mt-2 space-y-1.5">
+                      {(piece.settings?.length ? piece.settings : [EMPTY_SETTING]).map(
+                        (setting, settingIndex) => {
+                          const multiple = (piece.settings?.length ?? 1) > 1;
+                          return (
+                            <div key={settingIndex} className="grid gap-1.5 sm:grid-cols-2">
+                              <div>
+                                {settingIndex === 0 ? (
+                                  <label className="mb-1 block text-[10px] uppercase tracking-[0.14em] text-cyan-200/70">
+                                    Setting
+                                  </label>
+                                ) : null}
+                                <select
+                                  value={setting.type || AUTO_SETTING}
+                                  onChange={(event) =>
+                                    setPieces((prev) =>
+                                      prev.map((item, i) =>
+                                        i === index
+                                          ? {
+                                            ...item,
+                                            settings: (item.settings?.length
+                                              ? item.settings
+                                              : [{ ...EMPTY_SETTING }]
+                                            ).map((entry, j) =>
+                                              j === settingIndex
+                                                ? { ...entry, type: event.target.value }
+                                                : entry,
+                                            ),
+                                          }
+                                          : item,
+                                      ),
+                                    )
+                                  }
+                                  className={SELECT_CLASS}
+                                >
+                                  {SETTING_TYPE_OPTIONS.map((option) => (
+                                    <option key={option} value={option}>
+                                      {option}
+                                    </option>
+                                  ))}
+                                </select>
+                              </div>
+                              {multiple ? (
+                                <div className="flex items-end gap-1.5">
+                                  <select
+                                    value={setting.region || ""}
+                                    onChange={(event) =>
+                                      setPieces((prev) =>
+                                        prev.map((item, i) =>
+                                          i === index
+                                            ? {
+                                              ...item,
+                                              settings: (item.settings ?? []).map((entry, j) =>
+                                                j === settingIndex
+                                                  ? { ...entry, region: event.target.value }
+                                                  : entry,
+                                              ),
+                                            }
+                                            : item,
+                                        ),
+                                      )
+                                    }
+                                    className={SELECT_CLASS}
+                                  >
+                                    <option value="">Region…</option>
+                                    {settingRegionsForType(piece.type).map((option) => (
+                                      <option key={option} value={option}>
+                                        {option}
+                                      </option>
+                                    ))}
+                                  </select>
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      setPieces((prev) =>
+                                        prev.map((item, i) =>
+                                          i === index
+                                            ? {
+                                              ...item,
+                                              settings: (item.settings ?? []).filter(
+                                                (_, j) => j !== settingIndex,
+                                              ),
+                                            }
+                                            : item,
+                                        ),
+                                      )
+                                    }
+                                    className="h-8 shrink-0 rounded-lg border border-white/12 px-2 text-[10px] uppercase tracking-[0.14em] text-white/45 transition-colors hover:border-white/25 hover:text-white/80"
+                                  >
+                                    Remove
+                                  </button>
+                                </div>
+                              ) : null}
+                            </div>
+                          );
+                        },
+                      )}
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setPieces((prev) =>
+                            prev.map((item, i) =>
+                              i === index
+                                ? {
+                                  ...item,
+                                  settings: [
+                                    ...(item.settings?.length ? item.settings : [{ ...EMPTY_SETTING }]),
+                                    { ...EMPTY_SETTING },
+                                  ].slice(0, 6),
+                                }
+                                : item,
+                            ),
+                          )
+                        }
+                        className="text-[10px] uppercase tracking-[0.14em] text-cyan-200/70 transition-colors hover:text-cyan-100"
+                      >
+                        + Add setting
+                      </button>
+                    </div>
+
 
                     <div className="mt-2 grid grid-cols-4 gap-1.5">
                       {(
