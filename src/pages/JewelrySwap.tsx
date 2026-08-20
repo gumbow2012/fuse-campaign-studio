@@ -1043,7 +1043,17 @@ export default function JewelrySwap() {
         type: piece.type,
         metal: piece.metal === AUTO_METAL ? null : piece.metal,
         stone: piece.stone === AUTO_STONE ? null : piece.stone,
-        quality: piece.quality || null,
+        stoneColor: piece.stoneColor === AUTO_STONE_COLOR ? null : piece.stoneColor || null,
+        quality: !piece.quality || piece.quality === AUTO_QUALITY ? null : piece.quality,
+        // Structured stone-setting construction — hard product constraints.
+        settings: realSettings(piece).map((setting) => ({
+          type: setting.type,
+          region: setting.region || null,
+          stone: setting.stone || null,
+          color: setting.color || null,
+          quality: setting.quality || null,
+        })),
+
         dimensions: {
           width: piece.width || null,
           height: piece.height || null,
