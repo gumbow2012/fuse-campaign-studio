@@ -1199,6 +1199,9 @@ function buildJewelryPrompt(args: {
     modeBlock(mode),
     "",
     coverageBlock(coverage, mode),
+    analysisBlock ? "" : null,
+    analysisBlock,
+
 
 
 
