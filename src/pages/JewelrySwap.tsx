@@ -180,8 +180,12 @@ const QUALITY_OPTIONS = [AUTO_QUALITY, "FL/IF", "VVS", "VS", "SI", "I", "Custom"
 const AUTO_SETTING = "Auto from reference";
 const SETTING_TYPE_OPTIONS = [
   AUTO_SETTING,
+  // Stone-field topology terms compose with retention terms ("Galaxy Mosaic").
+  "Galaxy",
+  "Galaxy Mosaic",
   "Mosaic",
   "Reverse Mosaic",
+
   "Micro Pavé",
   "Pavé",
   "Bead Set",
