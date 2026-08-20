@@ -2351,7 +2351,16 @@ export default function JewelrySwap() {
                                 className="mt-2 w-full rounded-lg border border-white/12 bg-black/50 px-2 py-1.5 text-[10px] text-foreground outline-none focus:border-cyan-200/60"
                               >
                                 <option value="">Preferred reference: Auto</option>
-                                {ANGLE_ROLE_OPTIONS.filter(Boolean).map((role) => (
+                                {Array.from(
+                                  new Set(
+                                    pieces.flatMap((item) => [
+                                      ...item.roles.filter(Boolean),
+                                      ...roleOptionsForType(item.type),
+                                    ]),
+                                  ),
+                                )
+                                  .filter(Boolean)
+                                  .map((role) => (
                                   <option key={role} value={role}>
                                     Preferred reference: {role}
                                   </option>
