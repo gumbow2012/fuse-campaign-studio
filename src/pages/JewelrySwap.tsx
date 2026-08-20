@@ -3035,10 +3035,95 @@ export default function JewelrySwap() {
                     {engineeringOpen ? "Hide engineering details" : "Engineering details"}
                   </button>
                   {engineeringOpen ? (
-                    <pre className="mt-1.5 max-h-64 overflow-auto rounded-xl border border-white/10 bg-black/50 p-2 text-[9px] leading-relaxed text-foreground/70">
-                      {JSON.stringify(knowledgeMap, null, 2)}
-                    </pre>
+                    <div className="mt-1.5 space-y-2">
+                      {/* MANUAL override — advanced only. The normal UI has no
+                          authority control at all; FUSE assigns it per attribute. */}
+                      <div className="rounded-xl border border-white/10 bg-black/40 p-2">
+                        <p className="text-[9px] uppercase tracking-[0.14em] text-cyan-200/70">
+                          Manual geometry-authority override
+                        </p>
+                        <p className="mb-1 text-[9px] text-foreground/50">
+                          Only for exceptional cases — leave alone to let FUSE decide.
+                        </p>
+                        <div className="space-y-1">
+                          {pieces.map((piece, pieceIndex) =>
+                            piece.urls.map((url, angleIndex) => (
+                              <label
+                                key={`override-${url}-${angleIndex}`}
+                                className="flex items-center gap-1.5 text-[9px] text-foreground/70"
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={isGeometryAuthority(piece, angleIndex)}
+                                  onChange={(event) =>
+                                    setPieces((prev) =>
+                                      prev.map((item, i) =>
+                                        i === pieceIndex
+                                          ? {
+                                              ...item,
+                                              cads: item.urls.map((_, a) =>
+                                                a === angleIndex
+                                                  ? event.target.checked
+                                                  : item.cads?.[a] ?? null,
+                                              ),
+                                            }
+                                          : item,
+                                      ),
+                                    )
+                                  }
+                                  className="h-2.5 w-2.5 accent-cyan-300"
+                                />
+                                {refIdByUrl.get(url) ?? `REF ${angleIndex + 1}`} ·{" "}
+                                {piece.roles?.[angleIndex] || "unlabeled"}
+                                {autoAuthorityLabelByUrl.get(url)
+                                  ? ` · auto: ${autoAuthorityLabelByUrl.get(url)}`
+                                  : ""}
+                              </label>
+                            )),
+                          )}
+                        </div>
+                      </div>
+                      <pre className="max-h-64 overflow-auto rounded-xl border border-white/10 bg-black/50 p-2 text-[9px] leading-relaxed text-foreground/70">
+                        {JSON.stringify({ knowledgeMap, userConfirmedFacts: userLocks }, null, 2)}
+                      </pre>
+                    </div>
                   ) : null}
+                  {/* GENUINE conflicts only — one plain question, answer becomes USER_CONFIRMED. */}
+                  {authorityQuestions.length ? (
+                    <div className="mt-2 space-y-2">
+                      {authorityQuestions.map((question) => (
+                        <div
+                          key={question.id}
+                          className="rounded-xl border border-amber-300/40 bg-amber-300/5 p-2"
+                        >
+                          <p className="text-[10px] text-amber-100/90">{question.question}</p>
+                          <div className="mt-1.5 flex flex-wrap gap-1.5">
+                            {question.options.map((option) => (
+                              <button
+                                key={option}
+                                type="button"
+                                onClick={() =>
+                                  setUserLocks((prev) => [
+                                    ...prev.filter((lock) => lock.attribute !== question.attribute),
+                                    { attribute: question.attribute, value: option },
+                                  ])
+                                }
+                                className="rounded-lg border border-amber-300/40 bg-black/40 px-2 py-1 text-[10px] text-amber-100 transition-colors hover:border-amber-200 hover:text-amber-50"
+                              >
+                                {option}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : null}
+                  {userLocks.length ? (
+                    <p className="mt-1.5 text-[9px] text-foreground/55">
+                      {userLocks.length} detail{userLocks.length === 1 ? "" : "s"} locked by you
+                    </p>
+                  ) : null}
+
                 </div>
               ) : null}
 
