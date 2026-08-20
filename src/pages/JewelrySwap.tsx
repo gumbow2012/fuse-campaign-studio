@@ -336,6 +336,16 @@ function resolutionForQuality(quality: NanoQuality) {
   return NANO_QUALITY_OPTIONS.find((option) => option.value === quality)?.resolution ?? "2K";
 }
 
+/** Reads back the resolution a generation actually ran at, if it was persisted. */
+function qualityFromGeneration(
+  generation?: { resolution?: string | null; nanoQuality?: string | null } | null,
+): NanoQuality | null {
+  const raw = String(generation?.nanoQuality ?? generation?.resolution ?? "").toLowerCase();
+  if (raw.includes("4k")) return "4k";
+  if (raw.includes("2k")) return "2k";
+  return null;
+}
+
 
 const VIDEO_MODELS = [
   { key: "seedance-2.0", label: "Seedance 2.0", usdPerSecond: 0.3024 },
@@ -3386,6 +3396,8 @@ export default function JewelrySwap() {
                                 void swapFrame(index, {
                                   imageModel: "pro",
                                   failureReason: frameReason[index] || null,
+                                  quality:
+                                    frameQuality[index] ?? qualityFromGeneration(swap) ?? nanoQuality,
                                 });
                               }}
                               className="w-full rounded-lg bg-[hsl(var(--primary))] text-[11px] text-primary-foreground hover:bg-[hsl(var(--primary))]/90"
