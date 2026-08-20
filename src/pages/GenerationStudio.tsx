@@ -876,9 +876,13 @@ export default function GenerationStudio() {
     setPrompt(recipe.prompt);
     setReferences(recipe.urls.slice(0, MAX_REFERENCES).map((url) => ({ url, label: "" })));
     if (recipe.aspect) setAspectRatio(recipe.aspect);
+    const plan = readShotPlan(generation.inputPayload);
+    setShotPlan(plan);
+    setDirectionExpanded(!(plan.length > 0 || recipe.prompt.length > 1200));
     setLightboxId(null);
     toast.success("Loaded into the composer");
   }, []);
+
 
   const deleteGeneration = useCallback(async (generation: Generation) => {
     try {
