@@ -52,6 +52,8 @@ import {
   analyzeJewelryFrames,
   analyzeJewelryIntake,
   type JewelryIntake,
+  type DetectedField,
+
 
   animateJewelryFrame,
   callJewelrySwap,
