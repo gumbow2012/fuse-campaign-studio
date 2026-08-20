@@ -112,6 +112,29 @@ function referenceIdAt(index: number) {
   return `REF_${index + 1}`;
 }
 
+/**
+ * USER_CONFIRMED override layer — universal across every jewelry type. Once the
+ * user confirms a fact (setting, stone sizes, metal, dimensions, component
+ * count, clasp identity …) the analysis may never override it.
+ */
+type UserConfirmedFact = {
+  attribute: string;
+  value: string;
+  appliesTo?: string | null;
+};
+
+function readUserConfirmedFacts(raw: unknown): UserConfirmedFact[] {
+  return (Array.isArray(raw) ? raw : [])
+    .map((entry: any) => ({
+      attribute: String(entry?.attribute ?? "").trim(),
+      value: String(entry?.value ?? "").trim(),
+      appliesTo: entry?.appliesTo ? String(entry.appliesTo).trim() : null,
+    }))
+    .filter((fact: UserConfirmedFact) => fact.attribute && fact.value)
+    .slice(0, 40);
+}
+
+
 
 
 /* ------------------------------------------------------------------ *
@@ -830,9 +853,13 @@ function buildKnowledgeMap(args: {
 function engineeringLockLines(pkm: any): string[] {
   const lines: string[] = [];
   const confident = (value: unknown, floor = 0.6) => Number(value ?? 0) >= floor;
+  // A claim only becomes a physical CONSTRAINT when its provenance is strong
+  // enough; low-confidence inference stays out of the image model entirely.
+  const hard = (entry: any, floor = 0.6) =>
+    confident(entry?.confidence, floor) && lockable(entry?.provenance);
 
   const dimensions = pkm?.dimensions;
-  if (dimensions?.summary && confident(dimensions.confidence, 0.5)) {
+  if (dimensions?.summary && hard(dimensions, 0.5)) {
     const basis = dimensions.measurementBasis === "measured_from_authority"
       ? "measured"
       : "relative estimate";
@@ -841,12 +868,20 @@ function engineeringLockLines(pkm: any): string[] {
   for (const ratio of listOf(dimensions?.relativeRatios).slice(0, 3)) {
     lines.push(`Size ratio: ${ratio}`);
   }
+  // Only claims the analysis could actually back become millimetre locks.
+  for (const claim of (Array.isArray(dimensions?.scaleClaims) ? dimensions.scaleClaims : []).slice(0, 3)) {
+    if (!lockable(claim?.provenance) || claim?.basis === "visually_estimated") continue;
+    if (!claim?.claim) continue;
+    lines.push(`Scale: ${String(claim.claim).slice(0, 120)}`);
+  }
 
   for (const module of (Array.isArray(pkm?.repeatedModules) ? pkm.repeatedModules : []).slice(0, 2)) {
-    if (!confident(module?.confidence, 0.5)) continue;
+    if (!hard(module, 0.5)) continue;
     const count = Number(module?.repeatCount ?? 0);
     lines.push(
-      `Repeat module${count ? ` (x${count})` : ""}: ${String(module?.masterGeometry ?? "").slice(0, 180)}`,
+      `Master module${count ? ` (repeats x${count}, every instance identical)` : ""}: ${
+        String(module?.masterGeometry ?? "").slice(0, 180)
+      }`,
     );
     if (module?.masterStoneMap) {
       lines.push(`Master stone map: ${String(module.masterStoneMap).slice(0, 180)}`);
@@ -857,10 +892,19 @@ function engineeringLockLines(pkm: any): string[] {
   }
 
   for (const group of (Array.isArray(pkm?.stoneGroups) ? pkm.stoneGroups : []).slice(0, 4)) {
-    if (!confident(group?.confidence, 0.5)) continue;
+    if (!hard(group, 0.5)) continue;
     const region = String(group?.regionId ?? "region").trim();
+    // PHYSICAL size behaviour only — apparent (perspective) size never leaks in.
+    const uniformity = group?.sizeUniformity === "uniform"
+      ? "physically uniform stone size"
+      : group?.sizeUniformity === "mixed"
+      ? `physically mixed stone sizes${
+        group?.physicalSizeDifference ? ` (${String(group.physicalSizeDifference).slice(0, 90)})` : ""
+      }`
+      : "";
     const parts = [
       group?.count ? `${group.count} stones` : "",
+      uniformity,
       group?.repeatPattern ? `pattern: ${group.repeatPattern}` : "",
       group?.anchorToFillerRatio ? `anchor:filler ≈ ${group.anchorToFillerRatio}` : "",
       group?.gradient ? `gradient: ${group.gradient}` : "",
@@ -869,14 +913,14 @@ function engineeringLockLines(pkm: any): string[] {
   }
 
   for (const setting of (Array.isArray(pkm?.settings) ? pkm.settings : []).slice(0, 4)) {
-    if (setting?.needsConfirmation === true || !confident(setting?.confidence)) continue;
+    if (setting?.needsConfirmation === true || !hard(setting)) continue;
     const signature = String(setting?.settingVisualSignature ?? "").trim();
     if (!signature) continue;
     lines.push(`${String(setting?.regionId ?? "region")} construction: ${signature.slice(0, 200)}`);
   }
 
   for (const material of (Array.isArray(pkm?.materialRegions) ? pkm.materialRegions : []).slice(0, 3)) {
-    if (!confident(material?.confidence, 0.5)) continue;
+    if (!hard(material, 0.5)) continue;
     const facts = [
       material?.metalColor ? `metal ${material.metalColor}` : "",
       material?.finish ? `finish ${material.finish}` : "",
@@ -886,8 +930,9 @@ function engineeringLockLines(pkm: any): string[] {
     }
   }
 
-  return lines.filter(Boolean).slice(0, 16);
+  return lines.filter(Boolean).slice(0, 18);
 }
+
 
 
 function buildCachedShotPrompt(args: {
@@ -1265,6 +1310,7 @@ async function referenceFingerprint(
   references: JewelryReferenceInput[],
   options: IntakeOptions,
   videoReferences: VideoReferenceInput[] = [],
+  userConfirmedFacts: UserConfirmedFact[] = [],
 ) {
   return await sha256Hex(
     JSON.stringify({
@@ -1274,10 +1320,15 @@ async function referenceFingerprint(
       clips: videoReferences
         .map((clip) => `${clip.videoReferenceId}|${clip.duration}|${clip.keyframeTimestamps.join(",")}`)
         .sort(),
+      // A new user confirmation is a new understanding — cache key changes.
+      confirmed: userConfirmedFacts
+        .map((fact) => `${fact.attribute}=${fact.value}@${fact.appliesTo ?? "*"}`)
+        .sort(),
       options,
     }),
   );
 }
+
 
 /**
  * The Gemini batch is capped, so CAD and photographic stills are kept first and
@@ -1371,9 +1422,260 @@ async function runIntake(args: {
  * references are routed to the image model.
  */
 
-const PKM_VERSION = "jewelry-knowledge-map-v1";
+const PKM_VERSION = "jewelry-knowledge-map-v2";
 
 const CONFIDENCE = { type: Type.NUMBER } as const;
+
+/**
+ * PROVENANCE — how a geometry / stone / setting claim was established.
+ * Only the first five may ever become a HARD Nano constraint;
+ * LOW_CONFIDENCE_INFERENCE is advisory-only, forever.
+ */
+const PROVENANCE_VALUES = [
+  "DIRECTLY_OBSERVED",
+  "CROSS_VIEW_CONFIRMED",
+  "CAD_CONFIRMED",
+  "REPEATED_MODULE_INFERRED",
+  "USER_CONFIRMED",
+  "LOW_CONFIDENCE_INFERENCE",
+] as const;
+
+const HARD_LOCK_PROVENANCE = new Set<string>([
+  "DIRECTLY_OBSERVED",
+  "CROSS_VIEW_CONFIRMED",
+  "CAD_CONFIRMED",
+  "REPEATED_MODULE_INFERRED",
+  "USER_CONFIRMED",
+]);
+
+const PROVENANCE = { type: Type.STRING, enum: [...PROVENANCE_VALUES] } as const;
+
+/**
+ * True only when a claim may be stated to the image model as a hard fact.
+ * Maps produced before provenance existed carry none, and stay lockable so
+ * cached v1 analyses keep behaving exactly as they do today.
+ */
+function lockable(provenance: unknown) {
+  if (provenance === undefined || provenance === null || provenance === "") return true;
+  return HARD_LOCK_PROVENANCE.has(String(provenance));
+}
+
+
+/** Per-attribute evidence strength (0..1) — replaces any global "good photo" score. */
+const EVIDENCE_STRENGTH = {
+  type: Type.OBJECT,
+  properties: {
+    silhouette: CONFIDENCE,
+    dimensions: CONFIDENCE,
+    stoneCut: CONFIDENCE,
+    stoneSize: CONFIDENCE,
+    stonePlacement: CONFIDENCE,
+    settingMechanics: CONFIDENCE,
+    metalColor: CONFIDENCE,
+    componentGeometry: CONFIDENCE,
+    manufacturedAppearance: CONFIDENCE,
+  },
+} as const;
+
+/**
+ * SETTING ONTOLOGY — engineering signatures, not prose. Classification compares
+ * OBSERVED construction against these; the ontology is data, extensible, and
+ * contains no product-type branching whatsoever.
+ */
+type SettingOntologyEntry = {
+  canonicalName: string;
+  aliases: string[];
+  expectedStoneSizePattern: string;
+  expectedCuts: string[];
+  expectedPackingPattern: string;
+  expectedProngBehavior: string;
+  expectedMetalVisibility: string;
+  expectedRows: string;
+  expectedOrientationBehavior: string;
+  compatibleSurfaceGeometry: string[];
+};
+
+const SETTING_ONTOLOGY: SettingOntologyEntry[] = [
+  {
+    canonicalName: "Mosaic",
+    aliases: ["mosaic set", "cluster mosaic", "puzzle set"],
+    expectedStoneSizePattern: "mixed sizes fitted to a tiled field, or one repeated size tiled edge-to-edge",
+    expectedCuts: ["round_brilliant", "baguette", "princess", "custom", "mixed"],
+    expectedPackingPattern: "tiled/interlocking fill following the surface outline, minimal gaps, no straight repeating rows",
+    expectedProngBehavior: "few or no visible prongs; stones retained by shared metal walls or beads at junctions",
+    expectedMetalVisibility: "very low between stones, visible only at field boundaries",
+    expectedRows: "no regular row structure",
+    expectedOrientationBehavior: "orientation varies per tile to close gaps",
+    compatibleSurfaceGeometry: ["flat", "convex", "curved", "irregular", "letter/plaque"],
+  },
+  {
+    canonicalName: "Reverse Mosaic",
+    aliases: ["inverted mosaic", "negative mosaic"],
+    expectedStoneSizePattern: "tiled field with the metal forming the figure and stones the ground (or vice versa)",
+    expectedCuts: ["round_brilliant", "baguette", "custom", "mixed"],
+    expectedPackingPattern: "tiled fill with deliberate metal negative-space motif",
+    expectedProngBehavior: "shared walls; beads at junctions",
+    expectedMetalVisibility: "moderate — the metal pattern is intentional",
+    expectedRows: "no regular row structure",
+    expectedOrientationBehavior: "orientation follows the negative-space motif",
+    compatibleSurfaceGeometry: ["flat", "convex", "letter/plaque"],
+  },
+  {
+    canonicalName: "Micro Pavé",
+    aliases: ["micropave", "micro pave"],
+    expectedStoneSizePattern: "uniform, very small stones (physically uniform after perspective normalization)",
+    expectedCuts: ["round_brilliant"],
+    expectedPackingPattern: "dense honeycomb of tiny stones, regular spacing",
+    expectedProngBehavior: "tiny shared beads between stones",
+    expectedMetalVisibility: "minimal, thin bead walls",
+    expectedRows: "regular multi-row or honeycomb",
+    expectedOrientationBehavior: "table-up, uniform",
+    compatibleSurfaceGeometry: ["flat", "convex", "curved"],
+  },
+  {
+    canonicalName: "Pavé",
+    aliases: ["pave", "bright cut pave"],
+    expectedStoneSizePattern: "uniform small stones",
+    expectedCuts: ["round_brilliant"],
+    expectedPackingPattern: "regular dense rows or honeycomb",
+    expectedProngBehavior: "shared beads, 2–4 per stone",
+    expectedMetalVisibility: "low",
+    expectedRows: "regular rows",
+    expectedOrientationBehavior: "table-up, uniform",
+    compatibleSurfaceGeometry: ["flat", "convex", "curved"],
+  },
+  {
+    canonicalName: "Bead Set",
+    aliases: ["bead setting", "grain set"],
+    expectedStoneSizePattern: "uniform or lightly graduated",
+    expectedCuts: ["round_brilliant"],
+    expectedPackingPattern: "individually beaded seats with visible metal between stones",
+    expectedProngBehavior: "discrete raised beads per stone, not shared",
+    expectedMetalVisibility: "moderate",
+    expectedRows: "single or multi row",
+    expectedOrientationBehavior: "table-up",
+    compatibleSurfaceGeometry: ["flat", "convex"],
+  },
+  {
+    canonicalName: "Prong Set",
+    aliases: ["claw set", "basket set"],
+    expectedStoneSizePattern: "individual larger stones, sizes may differ",
+    expectedCuts: ["round_brilliant", "oval", "pear", "emerald", "cushion", "marquise", "princess"],
+    expectedPackingPattern: "discrete stones with open metal between them",
+    expectedProngBehavior: "3–6 distinct prongs per stone, tips over the crown",
+    expectedMetalVisibility: "high; open gallery underneath",
+    expectedRows: "none required",
+    expectedOrientationBehavior: "per-stone, aligned to its seat",
+    compatibleSurfaceGeometry: ["flat", "convex", "open gallery"],
+  },
+  {
+    canonicalName: "Shared Prong",
+    aliases: ["common prong", "shared claw"],
+    expectedStoneSizePattern: "uniform along a run",
+    expectedCuts: ["round_brilliant", "princess"],
+    expectedPackingPattern: "continuous line of stones sharing prongs between neighbours",
+    expectedProngBehavior: "one prong retains two adjacent stones",
+    expectedMetalVisibility: "low between stones, visible prong tips",
+    expectedRows: "single continuous row",
+    expectedOrientationBehavior: "aligned along the run",
+    compatibleSurfaceGeometry: ["curved", "linear run"],
+  },
+  {
+    canonicalName: "Channel Set",
+    aliases: ["channel setting"],
+    expectedStoneSizePattern: "uniform within the channel",
+    expectedCuts: ["round_brilliant", "princess", "baguette"],
+    expectedPackingPattern: "stones held between two continuous metal rails, touching, no prongs",
+    expectedProngBehavior: "no prongs; rails compress the girdles",
+    expectedMetalVisibility: "two parallel rails only",
+    expectedRows: "one row per channel",
+    expectedOrientationBehavior: "uniform along the channel axis",
+    compatibleSurfaceGeometry: ["linear run", "curved", "flat"],
+  },
+  {
+    canonicalName: "Baguette Channel",
+    aliases: ["baguette channel set", "step channel"],
+    expectedStoneSizePattern: "uniform or tapered baguettes",
+    expectedCuts: ["baguette", "tapered_baguette", "emerald"],
+    expectedPackingPattern: "rectangular stones abutting inside rails, long edges parallel",
+    expectedProngBehavior: "no prongs; rails only",
+    expectedMetalVisibility: "rails plus end walls",
+    expectedRows: "one row per channel",
+    expectedOrientationBehavior: "long axis perpendicular or parallel to the run, consistently",
+    compatibleSurfaceGeometry: ["linear run", "curved"],
+  },
+  {
+    canonicalName: "Bezel",
+    aliases: ["bezel set", "rub over"],
+    expectedStoneSizePattern: "individual stones",
+    expectedCuts: ["round_brilliant", "oval", "emerald", "cushion", "cabochon", "custom"],
+    expectedPackingPattern: "each stone fully surrounded by a continuous metal collar",
+    expectedProngBehavior: "no prongs; collar rubbed over the girdle",
+    expectedMetalVisibility: "high — continuous rim per stone",
+    expectedRows: "none required",
+    expectedOrientationBehavior: "per-stone",
+    compatibleSurfaceGeometry: ["flat", "convex", "irregular"],
+  },
+  {
+    canonicalName: "Invisible Set",
+    aliases: ["invisible setting", "mystery set"],
+    expectedStoneSizePattern: "uniform squares/rectangles",
+    expectedCuts: ["princess", "baguette"],
+    expectedPackingPattern: "stones abutting with NO visible metal between them, grooved girdles on a hidden rail",
+    expectedProngBehavior: "none visible",
+    expectedMetalVisibility: "none between stones; only outer frame",
+    expectedRows: "grid",
+    expectedOrientationBehavior: "grid-aligned",
+    compatibleSurfaceGeometry: ["flat", "convex"],
+  },
+  {
+    canonicalName: "Flush/Gypsy",
+    aliases: ["flush set", "gypsy set", "burnish set"],
+    expectedStoneSizePattern: "individual or scattered",
+    expectedCuts: ["round_brilliant"],
+    expectedPackingPattern: "stones sunk level with the metal surface, no raised metal",
+    expectedProngBehavior: "burnished metal edge, no prongs or beads",
+    expectedMetalVisibility: "the whole surface is metal",
+    expectedRows: "none required",
+    expectedOrientationBehavior: "table flush with the surface",
+    compatibleSurfaceGeometry: ["flat", "convex", "curved"],
+  },
+  {
+    canonicalName: "Custom/Unknown",
+    aliases: ["custom", "hybrid", "unclear"],
+    expectedStoneSizePattern: "as observed",
+    expectedCuts: ["custom", "mixed", "unclear"],
+    expectedPackingPattern: "as observed — use when construction matches no single signature",
+    expectedProngBehavior: "as observed",
+    expectedMetalVisibility: "as observed",
+    expectedRows: "as observed",
+    expectedOrientationBehavior: "as observed",
+    compatibleSurfaceGeometry: ["any"],
+  },
+];
+
+/** Extensible cut vocabulary — a low-confidence custom stone stays custom. */
+const CUT_VALUES = [
+  "round_brilliant",
+  "baguette",
+  "tapered_baguette",
+  "emerald",
+  "princess",
+  "cushion",
+  "pear",
+  "marquise",
+  "oval",
+  "heart",
+  "trillion",
+  "kite",
+  "asscher",
+  "radiant",
+  "rose_cut",
+  "cabochon",
+  "custom",
+  "unclear",
+] as const;
+
 
 const PKM_SCHEMA = {
   type: Type.OBJECT,
@@ -1398,10 +1700,40 @@ const PKM_SCHEMA = {
         },
         measurementBasis: { type: Type.STRING, enum: ["estimated", "measured_from_authority"] },
         relativeRatios: STRING_ARRAY,
+        /**
+         * SCALE PROVENANCE: an exact millimetre claim and a "uniform size"
+         * claim are DIFFERENT claims and are stored separately.
+         */
+        scaleClaims: {
+          type: Type.ARRAY,
+          items: {
+            type: Type.OBJECT,
+            properties: {
+              claim: { type: Type.STRING },
+              appliesTo: { type: Type.STRING },
+              basis: {
+                type: Type.STRING,
+                enum: [
+                  "measured_from_spec",
+                  "measured_from_cad",
+                  "user_specified",
+                  "derived_from_known_stone",
+                  "derived_from_repeated_geometry",
+                  "visually_estimated",
+                ],
+              },
+              provenance: PROVENANCE,
+              confidence: CONFIDENCE,
+            },
+            required: ["claim", "basis", "provenance", "confidence"],
+          },
+        },
+        provenance: PROVENANCE,
         confidence: CONFIDENCE,
       },
       required: ["scaleSource", "measurementBasis", "confidence"],
     },
+
     components: {
       type: Type.ARRAY,
       items: {
@@ -1417,6 +1749,8 @@ const PKM_SCHEMA = {
           evidenceReferenceIds: STRING_ARRAY,
           inferredFromCAD: { type: Type.BOOLEAN },
           inferredFromSymmetry: { type: Type.BOOLEAN },
+          provenance: PROVENANCE,
+
         },
         required: ["componentId", "label", "geometry", "confidence", "evidenceReferenceIds"],
       },
@@ -1447,9 +1781,12 @@ const PKM_SCHEMA = {
           },
           authorityFor: STRING_ARRAY,
           notAuthorityFor: STRING_ARRAY,
+          /** ATTRIBUTE-SPECIFIC strength 0..1 — never one global rating. */
+          evidenceStrength: EVIDENCE_STRENGTH,
+          captureIssues: STRING_ARRAY,
           confidence: CONFIDENCE,
         },
-        required: ["referenceId", "kind", "authorityFor", "confidence"],
+        required: ["referenceId", "kind", "authorityFor", "evidenceStrength", "confidence"],
       },
     },
     repeatedModules: {
@@ -1458,45 +1795,85 @@ const PKM_SCHEMA = {
         type: Type.OBJECT,
         properties: {
           repeatModuleId: { type: Type.STRING },
+          /** The reconstructed MASTER instance every matching module inherits. */
+          masterModuleId: { type: Type.STRING },
           componentIds: STRING_ARRAY,
+          memberComponentIds: STRING_ARRAY,
           masterGeometry: { type: Type.STRING },
           masterStoneMap: { type: Type.STRING },
+          /** Where the master was reconstructed from (clearest instances/CAD). */
+          masterEvidenceReferenceIds: STRING_ARRAY,
           repeatCount: { type: Type.NUMBER },
           exceptions: STRING_ARRAY,
+          exceptionComponentIds: STRING_ARRAY,
+          provenance: PROVENANCE,
           confidence: CONFIDENCE,
         },
-        required: ["repeatModuleId", "masterGeometry", "confidence"],
+        required: ["repeatModuleId", "masterModuleId", "masterGeometry", "provenance", "confidence"],
       },
     },
+
     stones: {
       type: Type.ARRAY,
       items: {
         type: Type.OBJECT,
         properties: {
           stoneId: { type: Type.STRING },
+          /**
+           * CROSS-VIEW REGISTRATION: several per-reference observations of the
+           * SAME real stone share one physicalStoneId. One physical stone is
+           * NEVER counted once per photo.
+           */
+          physicalStoneId: { type: Type.STRING },
+          observedInReferenceId: { type: Type.STRING },
           componentId: { type: Type.STRING },
           regionId: { type: Type.STRING },
-          cut: {
-            type: Type.STRING,
-            enum: [
-              "round_brilliant",
-              "baguette",
-              "emerald",
-              "princess",
-              "marquise",
-              "pear",
-              "oval",
-              "cushion",
-              "trillion",
-              "asscher",
-              "radiant",
-              "heart",
-              "rose_cut",
-              "cabochon",
-              "unclear",
-            ],
-          },
+          cut: { type: Type.STRING, enum: [...CUT_VALUES] },
+          /** Physical class AFTER perspective normalization. */
           relativeSizeClass: {
+            type: Type.STRING,
+            enum: ["anchor", "large", "medium", "small", "filler", "unclear"],
+          },
+          /** Raw on-image class BEFORE normalization (perspective artefact). */
+          apparentSizeClass: {
+            type: Type.STRING,
+            enum: ["anchor", "large", "medium", "small", "filler", "unclear"],
+          },
+          perspectiveNormalized: { type: Type.BOOLEAN },
+          normalizedPosition: {
+            type: Type.OBJECT,
+            properties: { x: { type: Type.NUMBER }, y: { type: Type.NUMBER } },
+          },
+          orientation: { type: Type.STRING },
+          seatDepthClass: {
+            type: Type.STRING,
+            enum: ["flush", "shallow", "medium", "deep", "unclear"],
+          },
+          neighbors: STRING_ARRAY,
+          apparentSettingType: { type: Type.STRING },
+          provenance: PROVENANCE,
+          confidence: CONFIDENCE,
+          evidenceReferenceIds: STRING_ARRAY,
+        },
+        required: ["stoneId", "regionId", "cut", "relativeSizeClass", "confidence"],
+      },
+    },
+    /**
+     * One entry per RECONCILED physical stone — the cross-view fusion of the
+     * per-reference `stones[]` observations that share its physicalStoneId.
+     * Confidence RISES with the number of independently agreeing views.
+     */
+    physicalStones: {
+      type: Type.ARRAY,
+      items: {
+        type: Type.OBJECT,
+        properties: {
+          physicalStoneId: { type: Type.STRING },
+          componentId: { type: Type.STRING },
+          regionId: { type: Type.STRING },
+          repeatModuleId: { type: Type.STRING },
+          cut: { type: Type.STRING, enum: [...CUT_VALUES] },
+          physicalSizeClass: {
             type: Type.STRING,
             enum: ["anchor", "large", "medium", "small", "filler", "unclear"],
           },
@@ -1510,13 +1887,18 @@ const PKM_SCHEMA = {
             enum: ["flush", "shallow", "medium", "deep", "unclear"],
           },
           neighbors: STRING_ARRAY,
-          apparentSettingType: { type: Type.STRING },
-          confidence: CONFIDENCE,
+          observationIds: STRING_ARRAY,
           evidenceReferenceIds: STRING_ARRAY,
+          /** How many independent references agree on this reconciliation. */
+          agreementCount: { type: Type.NUMBER },
+          conflictingEvidence: STRING_ARRAY,
+          provenance: PROVENANCE,
+          confidence: CONFIDENCE,
         },
-        required: ["stoneId", "regionId", "cut", "relativeSizeClass", "confidence"],
+        required: ["physicalStoneId", "regionId", "cut", "physicalSizeClass", "provenance", "confidence"],
       },
     },
+
     stoneGroups: {
       type: Type.ARRAY,
       items: {
@@ -1533,7 +1915,17 @@ const PKM_SCHEMA = {
           repeatPattern: { type: Type.STRING },
           gradient: { type: Type.STRING },
           measurementBasis: { type: Type.STRING, enum: ["estimated", "measured_from_authority"] },
+          /** PERSPECTIVE-NORMALIZED sizing — apparent ≠ physical. */
+          sizeUniformity: {
+            type: Type.STRING,
+            enum: ["uniform", "mixed", "graduated", "unclear"],
+          },
+          physicalSizeDifference: { type: Type.BOOLEAN },
+          apparentSizeDifference: { type: Type.BOOLEAN },
+          perspectiveNormalizationBasis: { type: Type.STRING },
+          provenance: PROVENANCE,
           confidence: CONFIDENCE,
+
         },
         required: ["regionId", "count", "measurementBasis", "confidence"],
       },
@@ -1549,8 +1941,20 @@ const PKM_SCHEMA = {
           canonicalSetting: { type: Type.STRING },
           settingVisualSignature: { type: Type.STRING },
           evidenceReferenceIds: STRING_ARRAY,
+          provenance: PROVENANCE,
+          /** How the OBSERVED construction scored against the ontology entry. */
+          ontologyMatch: {
+            type: Type.OBJECT,
+            properties: {
+              canonicalName: { type: Type.STRING },
+              matchedSignals: STRING_ARRAY,
+              deviatingSignals: STRING_ARRAY,
+              score: CONFIDENCE,
+            },
+          },
           confidence: CONFIDENCE,
         },
+
         required: [
           "regionId",
           "settingClassificationReason",
@@ -1606,6 +2010,38 @@ const PKM_SCHEMA = {
       },
     },
     unresolvedFeatures: STRING_ARRAY,
+    /** Jeweler STYLE slang only — never engineering, never a setting name. */
+    styleDescriptors: STRING_ARRAY,
+    /**
+     * AGENTIC EVIDENCE-SEEKING: what was still open after the first pass, and
+     * whether the EXISTING reference set already answered it.
+     */
+    evidenceGaps: {
+      type: Type.ARRAY,
+      items: {
+        type: Type.OBJECT,
+        properties: {
+          attribute: { type: Type.STRING },
+          resolvedFromExistingEvidence: { type: Type.BOOLEAN },
+          resolutionEvidenceReferenceIds: STRING_ARRAY,
+          resolutionMethod: {
+            type: Type.STRING,
+            enum: [
+              "other_still",
+              "other_video_keyframe",
+              "repeated_module",
+              "cad",
+              "symmetry",
+              "not_resolved",
+            ],
+          },
+          requestedUserReference: { type: Type.STRING },
+          note: { type: Type.STRING },
+        },
+        required: ["attribute", "resolvedFromExistingEvidence", "resolutionMethod"],
+      },
+    },
+
     coverage: {
       type: Type.OBJECT,
       properties: {
@@ -1661,7 +2097,10 @@ function buildKnowledgeMapPrompt(args: {
   intake: any;
   options: IntakeOptions;
   unavailable: Set<number>;
+  /** USER_CONFIRMED facts — Gemini may never override these. */
+  userConfirmedFacts?: UserConfirmedFact[];
 }) {
+
   const refLines = args.references.map((ref, index) => {
     const id = referenceIdAt(index);
     const clip = ref.videoReferenceId
@@ -1704,8 +2143,16 @@ function buildKnowledgeMapPrompt(args: {
     "ALREADY-RECOGNISED INTAKE (reconcile with it, do not contradict it without stating a conflict):",
     ...(confirmedSpec.length ? confirmedSpec : ["(none)"]),
     "",
+    "USER_CONFIRMED FACTS — these are FINAL. Never contradict, soften, re-derive or override them; every claim that depends on one carries provenance USER_CONFIRMED. They apply to ANY jewelry type:",
+    ...((args.userConfirmedFacts ?? []).length
+      ? (args.userConfirmedFacts ?? []).map((fact) =>
+        `- ${fact.attribute}: ${fact.value}${fact.appliesTo ? ` (applies to ${fact.appliesTo})` : ""}`
+      )
+      : ["(none)"]),
+    "",
     "AUTHORITY ORDER (attribute-specific — one asset can be authority for some attributes and not others):",
-    "USER OVERRIDE > CONFIRMED STRUCTURED SPEC > relevant CAD / design geometry > high-confidence product-video evidence > photographic analysis > weak inference.",
+    "USER_CONFIRMED > CONFIRMED STRUCTURED SPEC > relevant CAD / design geometry > high-confidence product-video evidence > photographic analysis > weak inference.",
+
     "Use CAD for silhouette, dimensions, placement, seat depth and topology. Use photos and video keyframes for real stone sizes, prong/bead reality, polish, finish and packing density. When CAD and photography genuinely disagree, record a constructionConflict with a resolution — NEVER silently average them.",
     "",
     "TASKS — build ONE fused Product Knowledge Map for the replacement piece(s):",
@@ -1722,7 +2169,31 @@ function buildKnowledgeMapPrompt(args: {
     "9. PRODUCT VIDEO EVIDENCE. For each CLIP, summarise what the clip establishes (product identity, geometry, material, stone, setting) and describe each of its keyframes: detectedView, coverage, regionsVisible, usableFor, contextRisk and disposableContext (hands, gloves, trays, busts, other jewelry, backgrounds — context that must NEVER enter a generated composition).",
     "10. GRANULAR CONFIDENCE. Every entry carries its OWN confidence 0..1 — never one global score. Low-confidence details must stay low: they are advisory only and must never read like a hard instruction.",
     "11. COVERAGE. Rate how well the evidence covers geometry, stoneLayout, setting and clasp (excellent | good | partial | weak; clasp may be not_applicable).",
+    "",
+    "RECONSTRUCTION ORDER — the setting NAME is the OUTPUT of physical reconstruction, never the starting question. Observe all evidence -> identify components -> register the same component/stone across views -> map stones -> estimate relative size, cut and position -> find repeating patterns -> infer how stones are physically RETAINED -> only THEN classify the setting.",
+    "These references are typically high-detail custom / hip-hop jewelry shot under bad conditions: phone video, messaging-app compression, scintillation, blown highlights, shallow depth of field, black gloves, motion blur, partial and overlapping views. Never trust a single hero photo — the point of multiple references is to recover what any one of them leaves ambiguous. Deterministic crop, resize and contrast reasoning is fine; never treat invented or upscaled detail as ground truth — the original reference is the authority.",
+    "",
+    "12. CROSS-VIEW REGISTRATION (most important). The same physical stone or component usually appears in several references. Register those observations into ONE hypothesis using component location, neighbours, cut, relative size, orientation, edge distances, repeated geometry and CAD seats. Emit stones[] as PER-REFERENCE observations (each with observedInReferenceId) and give every observation of the same real stone the SAME physicalStoneId, then emit ONE physicalStones[] entry per real stone with observationIds, evidenceReferenceIds and agreementCount. Confidence RISES as independent views agree. Never count one physical stone once per photo; never report a total stone count inflated by multiple views.",
+    "13. REPEATED-MODULE RECOVERY. Identify master modules (Cuban link, tennis link, chain link, watch link, repeated letter border, halo section). Reconstruct the MASTER geometry and master stone map from the CLEAREST instances across ALL references (and CAD), record masterModuleId, masterEvidenceReferenceIds, memberComponentIds and repeatCount, then treat that master as the authority for every matching module — a stone obscured on link 4 is RECOVERED from the clearly visible identical link 8 or from CAD (provenance REPEATED_MODULE_INFERRED). Identical modules are never unrelated, and never hallucinate each one independently. List genuine exceptions (terminal link, clasp link, hinge) with exceptionComponentIds.",
+    "14. PERSPECTIVE-NORMALIZED SIZING. NEVER classify stone-size distribution from raw pixel diameter. A stone farther from the camera, on a turned link, or near a curved edge LOOKS smaller — that is perspective, not a new size class. Normalize apparent size using local component perspective, known CAD geometry, repeated calibrated modules, relative depth and agreement across views. Record apparentSizeClass (raw) separately from relativeSizeClass / physicalSizeClass (normalized), set perspectiveNormalized, and on each stoneGroup set sizeUniformity, physicalSizeDifference, apparentSizeDifference and perspectiveNormalizationBasis. Report multiple size classes ONLY when they survive normalization; otherwise report uniform size and state the evidence.",
+    "15. ATTRIBUTE-SPECIFIC EVIDENCE STRENGTH. For every referenceCatalog entry score evidenceStrength 0..1 per attribute: silhouette, dimensions, stoneCut, stoneSize, stonePlacement, settingMechanics, metalColor, componentGeometry, manufacturedAppearance. A blurry full shot can be strong for silhouette and useless for prongs; a macro can be strong for stone distribution and useless for overall dimensions. Answer each physical question from the reference(s) strongest for THAT attribute, and cite them in evidenceReferenceIds.",
+    "16. PROVENANCE. Every important geometry, stone, setting, scale and module claim carries provenance: DIRECTLY_OBSERVED | CROSS_VIEW_CONFIRMED | CAD_CONFIRMED | REPEATED_MODULE_INFERRED | USER_CONFIRMED | LOW_CONFIDENCE_INFERENCE. Mark anything you could not actually establish as LOW_CONFIDENCE_INFERENCE — it will be treated as advisory only and can never become a hard physical constraint.",
+    "17. SETTING ONTOLOGY. Compare the OBSERVED construction against the engineering signatures below and fill ontologyMatch with the best-matching canonicalName, matchedSignals, deviatingSignals and a score. Give settingClassificationReason FIRST, and keep it consistent with the enum you choose. A uniform, perspective-explained field must NOT be classified as a mixed-size setting, and a mixed-size field must NOT be classified as a uniform pavé-family setting. If no single signature matches, use Custom/Unknown or needs_confirmation with confidence below 0.45.",
+    "SETTING SIGNATURES:",
+    ...SETTING_ONTOLOGY.map((entry) =>
+      `- ${entry.canonicalName} (aliases: ${entry.aliases.join(", ")}): sizes ${entry.expectedStoneSizePattern}; cuts ${
+        entry.expectedCuts.join("/")
+      }; packing ${entry.expectedPackingPattern}; prongs ${entry.expectedProngBehavior}; metal ${entry.expectedMetalVisibility}; rows ${entry.expectedRows}; orientation ${entry.expectedOrientationBehavior}; surfaces ${
+        entry.compatibleSurfaceGeometry.join("/")
+      }`
+    ),
+    "18. STYLE SLANG SEPARATION. Jeweler style language (\"iced out\", \"fully flooded\", \"VVS look\", \"buster\", \"custom Cuban\") goes ONLY in styleDescriptors. It must never appear in the engineering map, a setting name, a settingClassificationReason or a signature.",
+    "19. SCALE CLAIMS. Exact millimetres only with real evidence, priority: explicit user dimensions > CAD / spec > known stone dimensions > repeated calibrated geometry > photographic estimate. Store each claim separately in dimensions.scaleClaims with its basis, e.g. \"1.25mm\" basis measured_from_spec versus \"~1.2-1.5mm\" basis visually_estimated versus \"uniform stone size\" (a uniformity claim is NOT a millimetre claim).",
+    "20. CONTRADICTIONS. Never silently merge disagreeing evidence: record it in constructionConflicts (or a physicalStone's conflictingEvidence) and resolve it by ATTRIBUTE authority, stating which reference won for which attribute.",
+    "21. AGENTIC EVIDENCE-SEEKING. After forming the map, list every attribute that is still unresolved or low-confidence in evidenceGaps and FIRST try to resolve each one from the EXISTING reference set (other stills, other video keyframes, repeated modules, CAD, symmetry) — set resolvedFromExistingEvidence and resolutionMethod accordingly. Only when the existing evidence is genuinely exhausted set requestedUserReference to a specific, actionable ask (e.g. \"a clasp-side reference would improve accuracy\").",
+    "NO PRODUCT-TYPE SHORTCUTS: never infer a setting, component list, stone count or module from the product type or from the piece's name. Everything must come from what the references physically show.",
     "Short phrases only. No prose paragraphs. Never output URLs, file names, base64 or media of any kind.",
+
   ].filter(Boolean).join("\n");
 }
 
@@ -1735,6 +2206,7 @@ async function runKnowledgeMap(args: {
   intake: any;
   options: IntakeOptions;
   unavailable: Set<number>;
+  userConfirmedFacts?: UserConfirmedFact[];
 }) {
   const started = Date.now();
   const response = await args.ai.models.generateContent({
@@ -1751,7 +2223,7 @@ async function runKnowledgeMap(args: {
     config: {
       responseMimeType: "application/json",
       responseSchema: PKM_SCHEMA as any,
-      maxOutputTokens: 16384,
+      maxOutputTokens: 24576,
       temperature: 0,
       // Engineering reconciliation genuinely needs reasoning budget.
       thinkingConfig: { thinkingLevel: "medium" },
@@ -1759,8 +2231,43 @@ async function runKnowledgeMap(args: {
   });
   const map = JSON.parse((response.text ?? "").trim());
   map.version = PKM_VERSION;
-  return { knowledgeMap: map, geminiMs: Date.now() - started };
+  // The user's confirmations are persisted with the map and win forever.
+  map.userConfirmedFacts = args.userConfirmedFacts ?? [];
+  // The ontology travels with the map so the admin panel and any later
+  // classification compare against the SAME signatures.
+  map.settingOntology = SETTING_ONTOLOGY.map((entry) => entry.canonicalName);
+  return { knowledgeMap: applyUserConfirmedFacts(map, args.userConfirmedFacts ?? []), geminiMs: Date.now() - started };
 }
+
+/**
+ * Enforces the USER_CONFIRMED layer after the fact: any map entry whose
+ * attribute the user has locked is re-stamped USER_CONFIRMED at full
+ * confidence, so no Gemini pass can quietly demote it.
+ */
+function applyUserConfirmedFacts(map: any, facts: UserConfirmedFact[]) {
+  if (!facts.length || !map || typeof map !== "object") return map;
+  const locked = new Set(facts.map((fact) => fact.attribute.toLowerCase()));
+
+  const lock = (entry: any) => {
+    if (!entry || typeof entry !== "object") return;
+    entry.provenance = "USER_CONFIRMED";
+    entry.confidence = 1;
+    entry.needsConfirmation = false;
+  };
+
+  if (locked.has("setting")) for (const setting of arrayOf(map.settings)) lock(setting);
+  if (locked.has("stone_size") || locked.has("stone_sizes")) {
+    for (const group of arrayOf(map.stoneGroups)) lock(group);
+  }
+  if (locked.has("metal")) for (const region of arrayOf(map.materialRegions)) lock(region);
+  if (locked.has("dimensions") && map.dimensions) lock(map.dimensions);
+  return map;
+}
+
+function arrayOf(value: unknown): any[] {
+  return Array.isArray(value) ? value : [];
+}
+
 
 
 
@@ -1865,11 +2372,13 @@ async function handleIntake(req: Request, body: any, user: { id: string }, apiKe
     .slice(0, 60);
 
   const options = readOptions(body?.options ?? {});
+  const userConfirmedFacts = readUserConfirmedFacts(body?.userConfirmedFacts);
   // Echoed back untouched so the client can discard a stale response.
   const setVersion = body?.setVersion ? String(body.setVersion) : null;
   const requestId = Number.isFinite(Number(body?.requestId)) ? Number(body.requestId) : null;
 
-  const fingerprint = await referenceFingerprint(references, options, videoReferences);
+  const fingerprint = await referenceFingerprint(references, options, videoReferences, userConfirmedFacts);
+
   const admin = createAdminClient();
 
   const { data: cached } = await admin
@@ -1913,7 +2422,9 @@ async function handleIntake(req: Request, body: any, user: { id: string }, apiKe
       intake,
       options,
       unavailable: run.unavailable,
+      userConfirmedFacts,
     });
+
     knowledgeMapMs = fused.geminiMs;
     intake.knowledgeMap = fused.knowledgeMap;
     intake.videoAnalyses = Array.isArray(fused.knowledgeMap?.videoAnalyses)
@@ -1969,6 +2480,92 @@ async function handleIntake(req: Request, body: any, user: { id: string }, apiKe
 }
 
 
+/** Physical-fidelity report for one generated still — ANALYSIS ONLY. */
+const VALIDATION_SCHEMA = {
+  type: Type.OBJECT,
+  properties: {
+    verdict: { type: Type.STRING, enum: ["consistent", "minor_deviation", "violation"] },
+    confidence: CONFIDENCE,
+    summary: { type: Type.STRING },
+    violations: {
+      type: Type.ARRAY,
+      items: {
+        type: Type.OBJECT,
+        properties: {
+          attribute: { type: Type.STRING },
+          expected: { type: Type.STRING },
+          observed: { type: Type.STRING },
+          severity: { type: Type.STRING, enum: ["low", "medium", "high"] },
+          regionId: { type: Type.STRING },
+        },
+        required: ["attribute", "expected", "observed", "severity"],
+      },
+    },
+    matchedConstraints: { type: Type.ARRAY, items: { type: Type.STRING } },
+  },
+  required: ["verdict", "confidence", "summary", "violations"],
+} as const;
+
+/**
+ * POST-GENERATION VALIDATION. Compares a finished image against the locked
+ * physical constraints of the knowledge map and reports deviations. It never
+ * generates, re-renders or edits anything — the caller decides what to do.
+ */
+async function handleValidate(body: any, apiKey?: string) {
+  if (!apiKey) return json({ error: "Jewelry analysis is unavailable (analysis key not configured)" }, 503);
+
+  const imageUrl = String(body?.imageUrl ?? "").trim();
+  if (!/^https?:\/\//.test(imageUrl)) return json({ error: "A generated image URL is required" }, 400);
+
+  const pkm = body?.knowledgeMap ?? null;
+  const lockLines = pkm ? engineeringLockLines(pkm) : [];
+  if (!lockLines.length) {
+    return json({ validation: null, skipped: "no_locked_constraints" });
+  }
+
+  const part = await inlineImage(imageUrl);
+  const ai = new GoogleGenAI({ apiKey });
+  const response = await ai.models.generateContent({
+    model: GEMINI_ANALYSIS_MODEL,
+    contents: [
+      {
+        role: "user",
+        parts: [
+          {
+            text: [
+              "You are a jewelry physical-fidelity auditor. Return JSON only: never an image, never a URL, never bytes.",
+              "The image below was GENERATED. Judge ONLY whether the jewelry in it obeys the established physical constraints of the real replacement piece.",
+              "",
+              "LOCKED PHYSICAL CONSTRAINTS (established from the real references):",
+              ...lockLines.map((line) => `- ${line}`),
+              "",
+              "Report each genuine physical deviation: stone size distribution that contradicts the locked uniformity, wrong stone count in a repeated module, invented components, wrong setting mechanics, wrong metal, wrong proportions or ratios.",
+              "Never flag lighting, pose, background, crop, camera angle, exposure or styling — those are free.",
+              "Never flag a difference you cannot actually see. Judge apparent size ONLY after accounting for perspective: a stone farther from the camera looks smaller and that is NOT a violation.",
+              "verdict: consistent (no real deviation), minor_deviation (cosmetic only), violation (a locked physical constraint is broken).",
+            ].join("\n"),
+          },
+          part,
+        ],
+      },
+    ] as any,
+    config: {
+      responseMimeType: "application/json",
+      responseSchema: VALIDATION_SCHEMA as any,
+      maxOutputTokens: 2048,
+      temperature: 0,
+    },
+  });
+
+  const validation = JSON.parse((response.text ?? "").trim());
+  const stripped = assertAnalysisOnly(validation, "validate");
+  if (stripped.length) console.warn("validate guard stripped:", stripped.join(", "));
+  return json({ validation, checkedConstraints: lockLines.length, guardStripped: stripped });
+}
+
+
+
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
   const startedAt = Date.now();
@@ -2003,6 +2600,12 @@ Deno.serve(async (req) => {
     if (String(body?.mode ?? "").trim() === "intake") {
       return await handleIntake(req, body, user, apiKey);
     }
+
+    // VALIDATE: compare a finished still against the established knowledge map.
+    if (String(body?.mode ?? "").trim() === "validate") {
+      return await handleValidate(body, apiKey);
+    }
+
 
 
     const sourceFrames: SourceFrame[] = (Array.isArray(body?.sourceFrames) ? body.sourceFrames : [])

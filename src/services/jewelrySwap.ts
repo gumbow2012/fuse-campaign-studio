@@ -338,6 +338,51 @@ export type JewelryVideoReferenceAnalysis = {
 
 export type ConfidenceTier = "high" | "medium" | "low";
 
+/**
+ * How a physical claim was established. Only the first five may become a hard
+ * constraint for image synthesis; LOW_CONFIDENCE_INFERENCE stays advisory.
+ */
+export type Provenance =
+  | "DIRECTLY_OBSERVED"
+  | "CROSS_VIEW_CONFIRMED"
+  | "CAD_CONFIRMED"
+  | "REPEATED_MODULE_INFERRED"
+  | "USER_CONFIRMED"
+  | "LOW_CONFIDENCE_INFERENCE";
+
+export const HARD_LOCK_PROVENANCE: Provenance[] = [
+  "DIRECTLY_OBSERVED",
+  "CROSS_VIEW_CONFIRMED",
+  "CAD_CONFIRMED",
+  "REPEATED_MODULE_INFERRED",
+  "USER_CONFIRMED",
+];
+
+export function isLockableProvenance(provenance?: Provenance | string | null) {
+  if (!provenance) return true;
+  return (HARD_LOCK_PROVENANCE as string[]).includes(provenance);
+}
+
+/** Per-attribute evidence strength (0..1) for ONE reference. */
+export type EvidenceStrength = {
+  silhouette?: number;
+  dimensions?: number;
+  stoneCut?: number;
+  stoneSize?: number;
+  stonePlacement?: number;
+  settingMechanics?: number;
+  metalColor?: number;
+  componentGeometry?: number;
+  manufacturedAppearance?: number;
+};
+
+/** A fact the user locked; analysis may never override it. */
+export type UserConfirmedFact = {
+  attribute: string;
+  value: string;
+  appliesTo?: string | null;
+};
+
 export type PkmComponent = {
   componentId: string;
   label?: string;
@@ -349,6 +394,7 @@ export type PkmComponent = {
   evidenceReferenceIds?: string[];
   inferredFromCAD?: boolean;
   inferredFromSymmetry?: boolean;
+  provenance?: Provenance;
 };
 
 export type PkmRegion = {
@@ -372,6 +418,32 @@ export type StoneObservation = {
   apparentSettingType?: string;
   confidence?: number;
   evidenceReferenceIds?: string[];
+  /** Which reference this single observation came from. */
+  observedInReferenceId?: string;
+  /** Links every view of the SAME real stone together. */
+  physicalStoneId?: string;
+  /** Raw on-image size before perspective is accounted for. */
+  apparentSizeClass?: string;
+  /** True once size was normalized for camera distance / surface angle. */
+  perspectiveNormalized?: boolean;
+  provenance?: Provenance;
+};
+
+/** One REAL stone, reconciled from all of its per-reference observations. */
+export type PkmPhysicalStone = {
+  physicalStoneId: string;
+  componentId?: string;
+  regionId?: string;
+  observationIds?: string[];
+  evidenceReferenceIds?: string[];
+  /** Independent views that agree — confidence rises with this number. */
+  agreementCount?: number;
+  cut?: string;
+  physicalSizeClass?: string;
+  seatDepthClass?: string;
+  conflictingEvidence?: string[];
+  confidence?: number;
+  provenance?: Provenance;
 };
 
 export type PkmStoneGroup = {
@@ -387,7 +459,14 @@ export type PkmStoneGroup = {
   gradient?: string;
   /** "estimated" (relative only) vs "measured_from_authority" (CAD/spec). */
   measurementBasis?: "estimated" | "measured_from_authority";
+  /** PHYSICAL uniformity — never a raw pixel-size read. */
+  sizeUniformity?: "uniform" | "mixed" | "unknown";
+  physicalSizeDifference?: string;
+  /** Size differences explained purely by camera distance / angle. */
+  apparentSizeDifference?: string;
+  perspectiveNormalizationBasis?: string;
   confidence?: number;
+  provenance?: Provenance;
 };
 
 export type PkmSetting = {
@@ -399,6 +478,14 @@ export type PkmSetting = {
   evidenceReferenceIds?: string[];
   settingVisualSignature?: string;
   needsConfirmation?: boolean;
+  provenance?: Provenance;
+  /** Best match against the engineering setting ontology. */
+  ontologyMatch?: {
+    canonicalName?: string;
+    score?: number;
+    matchedSignals?: string[];
+    deviatingSignals?: string[];
+  };
 };
 
 export type PkmMaterialRegion = {
@@ -411,6 +498,7 @@ export type PkmMaterialRegion = {
   finish?: string;
   capturedEnvironmentTint?: string | null;
   confidence?: number;
+  provenance?: Provenance;
 };
 
 export type PkmRepeatedModule = {
@@ -421,6 +509,29 @@ export type PkmRepeatedModule = {
   repeatCount?: number;
   exceptions?: string[];
   confidence?: number;
+  /** The single reconstructed master every instance inherits from. */
+  masterModuleId?: string;
+  /** Clearest instances used to recover the master. */
+  masterEvidenceReferenceIds?: string[];
+  memberComponentIds?: string[];
+  exceptionComponentIds?: string[];
+  provenance?: Provenance;
+};
+
+/** One scale statement, kept separate so estimates never read as measurements. */
+export type PkmScaleClaim = {
+  claim?: string;
+  basis?:
+    | "measured_from_cad"
+    | "measured_from_spec"
+    | "user_provided"
+    | "derived_from_known_stone"
+    | "derived_from_repeated_geometry"
+    | "visually_estimated"
+    | string;
+  appliesTo?: string;
+  confidence?: number;
+  provenance?: Provenance;
 };
 
 export type PkmDimensions = {
@@ -435,7 +546,18 @@ export type PkmDimensions = {
     | string;
   measurementBasis?: "estimated" | "measured_from_authority";
   relativeRatios?: string[];
+  scaleClaims?: PkmScaleClaim[];
   confidence?: number;
+  provenance?: Provenance;
+};
+
+/** An attribute still unresolved — resolved from evidence first, user last. */
+export type PkmEvidenceGap = {
+  attribute?: string;
+  why?: string;
+  resolvedFromExistingEvidence?: boolean;
+  resolutionMethod?: string;
+  requestedUserReference?: string | null;
 };
 
 export type ProductKnowledgeMap = {
@@ -451,9 +573,12 @@ export type ProductKnowledgeMap = {
     authorityFor?: string[];
     notAuthorityFor?: string[];
     confidence?: number;
+    /** Attribute-level authority: strong for silhouette, weak for prongs, etc. */
+    evidenceStrength?: EvidenceStrength;
   }[];
   repeatedModules?: PkmRepeatedModule[];
   stones?: StoneObservation[];
+  physicalStones?: PkmPhysicalStone[];
   stoneGroups?: PkmStoneGroup[];
   settings?: PkmSetting[];
   materialRegions?: PkmMaterialRegion[];
@@ -465,6 +590,11 @@ export type ProductKnowledgeMap = {
   }[];
   inferredFeatures?: { feature?: string; basis?: string; confidence?: number }[];
   unresolvedFeatures?: string[];
+  /** Jeweler slang, kept strictly out of the engineering map. */
+  styleDescriptors?: string[];
+  evidenceGaps?: PkmEvidenceGap[];
+  userConfirmedFacts?: UserConfirmedFact[];
+  settingOntology?: string[];
   /** Coverage read-out for the compact "FUSE UNDERSTOOD" summary. */
   coverage?: {
     geometry?: string;
@@ -474,6 +604,22 @@ export type ProductKnowledgeMap = {
   };
   videoAnalyses?: JewelryVideoReferenceAnalysis[];
 };
+
+/** Post-generation physical-fidelity report (analysis only). */
+export type JewelryValidationReport = {
+  verdict: "consistent" | "minor_deviation" | "violation";
+  confidence?: number;
+  summary?: string;
+  violations?: {
+    attribute: string;
+    expected: string;
+    observed: string;
+    severity: "low" | "medium" | "high";
+    regionId?: string;
+  }[];
+  matchedConstraints?: string[];
+};
+
 
 /* ------------------------------------------------------------------ *
  * INTAKE — fast batch recognition of the uploaded jewelry references
@@ -595,6 +741,8 @@ export async function analyzeJewelryIntake(
     setVersion?: string;
     requestId?: number;
     force?: boolean;
+    /** Facts the user locked — analysis may never override them. */
+    userConfirmedFacts?: UserConfirmedFact[];
   },
   signal?: AbortSignal,
 ): Promise<JewelryIntakeResult> {
@@ -618,6 +766,7 @@ export async function analyzeJewelryIntake(
       setVersion: args.setVersion ?? null,
       requestId: args.requestId ?? null,
       force: args.force === true,
+      userConfirmedFacts: args.userConfirmedFacts ?? [],
     }),
     signal,
   });
@@ -630,6 +779,42 @@ export async function analyzeJewelryIntake(
   }
   return data as JewelryIntakeResult;
 }
+
+
+/**
+ * Post-generation check: does a finished still obey the locked physical
+ * constraints of the knowledge map? Analysis only — nothing is regenerated.
+ */
+export async function validateAgainstKnowledgeMap(
+  args: { imageUrl: string; knowledgeMap: ProductKnowledgeMap },
+  signal?: AbortSignal,
+): Promise<JewelryValidationReport | null> {
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+
+  const response = await fetch(`${SUPABASE_URL}/functions/v1/analyze-jewelry-frames`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      apikey: SUPABASE_PUBLISHABLE_KEY,
+      Authorization: `Bearer ${session?.access_token ?? SUPABASE_PUBLISHABLE_KEY}`,
+    },
+    body: JSON.stringify({
+      mode: "validate",
+      imageUrl: args.imageUrl,
+      knowledgeMap: args.knowledgeMap,
+    }),
+    signal,
+  });
+
+  const data = await response.json().catch(() => null);
+  if (!response.ok || data?.error) {
+    throw new Error(data?.error ?? `Validation failed (${response.status})`);
+  }
+  return (data?.validation ?? null) as JewelryValidationReport | null;
+}
+
 
 
 /** Call the jewelry-swap edge function with a just-in-time session token. */
