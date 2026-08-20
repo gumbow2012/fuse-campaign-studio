@@ -627,7 +627,7 @@ const INTAKE_SCHEMA = {
           metal: DETECTED_FIELD,
           stoneType: DETECTED_FIELD,
           stoneColor: DETECTED_FIELD,
-          stoneQuality: DETECTED_FIELD,
+          stoneQuality: QUALITY_FIELD,
           dimensions: DETECTED_FIELD,
           weight: DETECTED_FIELD,
           visibleComponents: STRING_ARRAY,
@@ -637,15 +637,18 @@ const INTAKE_SCHEMA = {
             items: {
               type: Type.OBJECT,
               properties: {
+                // Reasoning FIRST, then the canonical enum (or needs_confirmation).
+                settingClassificationReason: { type: Type.STRING },
                 setting: { type: Type.STRING },
                 region: { type: Type.STRING },
                 confidence: { type: Type.NUMBER },
                 settingVisualSignature: { type: Type.STRING },
                 evidenceReferenceIndexes: { type: Type.ARRAY, items: { type: Type.NUMBER } },
               },
-              required: ["setting", "region", "confidence"],
+              required: ["settingClassificationReason", "setting", "region", "confidence"],
             },
           },
+
 
           settingSignatures: { type: Type.ARRAY, items: SETTING_SIGNATURE_SCHEMA as any },
           references: {
