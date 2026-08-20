@@ -200,10 +200,22 @@ const REPLACEMENT_MODES = [
 
 type ReplacementMode = (typeof REPLACEMENT_MODES)[number]["value"];
 
+/** Framing / COVERAGE override — a second classification, independent of Mode. */
+const COVERAGE_OPTIONS = [
+  { value: "auto", label: "Auto" },
+  { value: "full", label: "Full Product" },
+  { value: "partial", label: "Partial Product" },
+  { value: "macro", label: "Macro Detail" },
+] as const;
+
+type Coverage = (typeof COVERAGE_OPTIONS)[number]["value"];
+
 /** Optional regenerate reasons — each appends a targeted corrective sentence. */
 const FAILURE_REASONS = [
   "Wrong angle",
   "Wrong crop / zoom",
+  "Replacement cut off",
+  "Possible reference context leak",
   "Incomplete replacement",
   "Original jewelry still visible",
   "Hybrid old + new",
@@ -440,6 +452,8 @@ export default function JewelrySwap() {
   const [frameReason, setFrameReason] = useState<Record<number, string>>({});
   /** Per-frame replacement mode — persists so later regenerations reuse it. */
   const [frameMode, setFrameMode] = useState<Record<number, ReplacementMode>>({});
+  /** Per-frame COVERAGE (framing) override — persists across regenerations. */
+  const [frameCoverage, setFrameCoverage] = useState<Record<number, Coverage>>({});
   /** Manual, user-set review flags only — no automatic similarity detection. */
   // Which frame's Regenerate menu is expanded, and which frame is being compared
   // against the opt-in alternate model.
@@ -936,12 +950,14 @@ export default function JewelrySwap() {
         preferredRole?: string | null;
         failureReason?: string | null;
         mode?: ReplacementMode;
+        coverage?: Coverage;
       },
     ) => {
       const frame = frames[frameIndex];
       if (!frame) return;
       const imageModel: JewelryImageModel = options?.imageModel ?? "pro";
       const mode: ReplacementMode = options?.mode ?? frameMode[frameIndex] ?? "auto";
+      const coverage: Coverage = options?.coverage ?? frameCoverage[frameIndex] ?? "auto";
       const data = await callJewelrySwap<{ generation: JewelryGeneration }>({
         action: "swap_frame",
         sourceFrameUrl: frame.url,
@@ -960,6 +976,7 @@ export default function JewelrySwap() {
             : framePreferredRole[frameIndex] || null,
         failureReason: options?.failureReason ?? null,
         mode,
+        coverage,
         // Back-compat with the previous per-frame Macro toggle.
         macro: mode === "macro",
       });
@@ -974,7 +991,7 @@ export default function JewelrySwap() {
         });
       }
     },
-    [frames, piecePayload, meta, extraPrompt, framePreferredRole, frameMode],
+    [frames, piecePayload, meta, extraPrompt, framePreferredRole, frameMode, frameCoverage],
 
   );
 
@@ -2363,6 +2380,23 @@ export default function JewelrySwap() {
                                   .map((role) => (
                                   <option key={role} value={role}>
                                     Preferred reference: {role}
+                                  </option>
+                                ))}
+                              </select>
+                              <select
+                                aria-label="Framing"
+                                value={frameCoverage[index] ?? "auto"}
+                                onChange={(event) =>
+                                  setFrameCoverage((prev) => ({
+                                    ...prev,
+                                    [index]: event.target.value as Coverage,
+                                  }))
+                                }
+                                className="mt-2 w-full rounded-lg border border-white/12 bg-black/50 px-2 py-1.5 text-[10px] text-foreground outline-none focus:border-cyan-200/60"
+                              >
+                                {COVERAGE_OPTIONS.map((option) => (
+                                  <option key={option.value} value={option.value}>
+                                    Framing: {option.label}
                                   </option>
                                 ))}
                               </select>

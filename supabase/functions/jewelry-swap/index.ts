@@ -95,6 +95,7 @@ function serialize(row: any) {
     sourceFrameUrl: typeof payload.source_frame_url === "string" ? payload.source_frame_url : null,
     imageModel: payload.image_model === "nb2" ? "nb2" : payload.image_model === "pro" ? "pro" : null,
     preferredRole: typeof payload.preferred_role === "string" ? payload.preferred_role : null,
+    coverage: typeof payload.coverage === "string" ? payload.coverage : null,
     shotKey: typeof payload.shot_key === "string" ? payload.shot_key : null,
     shotLabel: typeof payload.shot_label === "string" ? payload.shot_label : null,
     cameraDirection: typeof payload.camera_direction === "string" ? payload.camera_direction : null,
@@ -394,6 +395,55 @@ function modeBlock(mode: ReplacementMode) {
   return `${AUTO_CLASSIFY_BLOCK}\n\n${MACRO_CONDITIONAL_PREFIX}\n${MACRO_REPLACEMENT_BLOCK}`;
 }
 
+/**
+ * COVERAGE — a SECOND classification, independent of VIEW (front/side/back) and
+ * of Mode. It expresses how MUCH of the product the source frame shows.
+ */
+export type Coverage = "auto" | "full" | "partial" | "macro";
+
+function normalizeCoverage(coverage: unknown, mode?: ReplacementMode): Coverage {
+  const raw = String(coverage ?? "").trim().toLowerCase();
+  if (raw === "full" || raw === "partial" || raw === "macro" || raw === "auto") {
+    return raw as Coverage;
+  }
+  // Mode = macro implies macro coverage when the user hasn't forced one.
+  return mode === "macro" ? "macro" : "auto";
+}
+
+const COVERAGE_FULL_BLOCK =
+  "COVERAGE: FULL_OBJECT. The source shows the COMPLETE original jewelry product, so show the COMPLETE replacement product. Preserve the replacement's true dimensions and aspect ratio, but SCALE and POSITION it so its entire physical extent is visible inside the frame — fit: contain, never cover. Do not crop either end. Do not cut off the clasp, terminal links, top, bottom or other meaningful extremities. Do not stretch or distort its aspect ratio, and do not force it into the original object's silhouette or dimensions. Keep approximately the same photographic breathing room and negative space as SOURCE_FRAME.";
+
+const COVERAGE_PARTIAL_BLOCK =
+  "COVERAGE: PARTIAL_OBJECT. The source intentionally crops the jewelry. Preserve that crop type. Do not reveal the complete replacement merely for product readability — only the portion physically appropriate to this exact source camera/framing should remain visible; the replacement may leave the frame as the original did.";
+
+const COVERAGE_MACRO_BLOCK =
+  "COVERAGE: MACRO_DETAIL. Remain at local-detail scale. Do not reveal the entire replacement. Rebuild the visible jewelry region using the closest corresponding target-product detail at comparable magnification (e.g. 1–3 links / clasp / pavé surface for a bracelet) — never the whole product.";
+
+const COVERAGE_AUTO_PREFIX =
+  "COVERAGE CLASSIFICATION (independent of the view side and of the Mode above): Before generating, silently classify the SOURCE_FRAME's COVERAGE as exactly one of FULL_OBJECT (the complete product is visible), PARTIAL_OBJECT (the product is intentionally cropped by the frame) or MACRO_DETAIL (only a local detail of the product is photographed). Do not output the classification. Then apply ONLY the matching coverage rule below and ignore the other two.";
+
+/** Coverage instructions: forced when the user picked one, self-classified on auto. */
+function coverageBlock(coverage: Coverage, mode: ReplacementMode) {
+  // Coherence with Mode: Mode = macro OR coverage = macro ⇒ treat as macro.
+  if (coverage === "macro" || (coverage === "auto" && mode === "macro")) return COVERAGE_MACRO_BLOCK;
+  if (coverage === "full") return COVERAGE_FULL_BLOCK;
+  if (coverage === "partial") return COVERAGE_PARTIAL_BLOCK;
+  return [
+    COVERAGE_AUTO_PREFIX,
+    COVERAGE_FULL_BLOCK,
+    COVERAGE_PARTIAL_BLOCK,
+    COVERAGE_MACRO_BLOCK,
+  ].join("\n\n");
+}
+
+/** Reference photography context can never transfer — gloves, hands, boxes, studio. */
+const REFERENCE_IMAGE_CONTEXT_RULE =
+  "REFERENCE IMAGE CONTEXT RULE: Only extract the physical jewelry product from the product references. The glove, hand, fingers, wrist, neck, display surface, box, velvet, background, shadows, studio environment and any unrelated objects visible in the product references are DISPOSABLE photographic context — never reproduce them. Every pixel outside the replacement jewelry region must derive from SOURCE_FRAME.";
+
+const REFERENCE_ROLE_PRIORITY_LINE =
+  "REFERENCE ROLE PRIORITY: Use the CAD / design-authority (and otherwise cleanest) reference as the GEOMETRY authority. Use the photographic references — which may legitimately contain gloves, hands, wrists, boxes, trays or studio backdrops — ONLY for real material truth: metal alloy and rose-gold/white-gold/yellow-gold finish, polish, diamond and pavé appearance, scintillation and manufacturing micro-texture. Never use any photographic reference for environment, background, framing or composition.";
+
+
 
 /** Targeted corrective lines appended when the user regenerates with a reason. */
 const FAILURE_CORRECTIONS: Record<string, string> = {
@@ -457,7 +507,12 @@ const FAILURE_CORRECTIONS: Record<string, string> = {
     "CORRECTION: Match the source's viewing side and prioritize the correspondingly-labeled reference (Back/Side/CAD); do not switch to a front hero view.",
   "wrongfrontbackside":
     "CORRECTION: Match the source's viewing side and prioritize the correspondingly-labeled reference (Back/Side/CAD); do not switch to a front hero view.",
+  "replacementcutoff":
+    "CORRECTION: The source is a full-product composition but the previous replacement was cropped. Preserve the replacement's true proportions and scale the ENTIRE product to fit inside the source frame (fit: contain). Keep all meaningful ends, edges, clasp/closure and overall silhouette visible with natural negative space. Do not crop the replacement.",
+  "possiblereferencecontextleak":
+    "CORRECTION: The previous generation incorrectly copied environmental/contextual elements from a jewelry product reference (background, hands, gloves, props, surfaces or lighting). Remove ALL such contamination. The jewelry reference controls ONLY the target jewelry object's physical construction. Restore every non-jewelry region from SOURCE_FRAME exactly.",
   other:
+
 
     "CORRECTION: the previous attempt was inaccurate. Re-read SOURCE_FRAME for the shot and the references for the object's construction, and follow both strictly.",
 };
@@ -488,8 +543,11 @@ function buildJewelryPrompt(args: {
   failureReason?: string | null;
   /** Per-frame replacement mode: "auto" (self-classify), "standard", "macro". */
   mode?: ReplacementMode | string | null;
+  /** Per-frame coverage: "auto" (self-classify), "full", "partial", "macro". */
+  coverage?: Coverage | string | null;
   /** Legacy per-frame Macro toggle — equivalent to mode = "macro". */
   macro?: boolean;
+
 }) {
   let cursor = 2; // image 1 is the source frame
   const lines: string[] = [];
@@ -557,16 +615,22 @@ function buildJewelryPrompt(args: {
   const preferred = String(args.preferredRole ?? "").trim();
   const correction = failureCorrection(args.failureReason);
   const mode = normalizeMode(args.mode, args.macro === true);
+  const coverage = normalizeCoverage(args.coverage, mode);
 
   const prompt = [
     "Use SOURCE_FRAME (image 1) as the ABSOLUTE authority for the photograph. This is a precise jewelry replacement, not a redesign or a product shot. Do NOT reframe or recreate the photograph.",
     "",
     "Preserve EXACTLY from SOURCE_FRAME: camera position, camera angle, perspective, crop, zoom level, composition, depth of field, focus plane, lighting, background, chain placement, and the jewelry's position, orientation, rotation, tilt, visible percentage, occlusion and scale.",
     "",
+    REFERENCE_IMAGE_CONTEXT_RULE,
+    "",
+    REFERENCE_ROLE_PRIORITY_LINE,
+    "",
     REFERENCE_CONTEXT_EXCLUSION,
     "",
     ANTI_HYBRID_BLOCK,
     "",
+
     SURGICAL_REPLACEMENT_CORE,
     "",
     NO_INVENTION_BLOCK,
@@ -614,6 +678,9 @@ function buildJewelryPrompt(args: {
     CONTEXT_NEGATIVES,
     "",
     modeBlock(mode),
+    "",
+    coverageBlock(coverage, mode),
+
 
 
 
@@ -659,6 +726,8 @@ async function startSwapFrame(admin: AdminClient, args: {
   failureReason?: string | null;
   /** Per-frame replacement mode: "auto" | "standard" | "macro". */
   mode?: string | null;
+  /** Per-frame coverage/framing: "auto" | "full" | "partial" | "macro". */
+  coverage?: string | null;
   /** Legacy per-frame Macro toggle (equivalent to mode = "macro"). */
   macro?: boolean;
   webhookBase: string;
@@ -692,6 +761,7 @@ async function startSwapFrame(admin: AdminClient, args: {
     preferredRole: args.preferredRole ?? null,
     failureReason: args.failureReason ?? null,
     mode: args.mode ?? null,
+    coverage: args.coverage ?? null,
     macro: args.macro === true,
   });
 
@@ -756,6 +826,7 @@ async function startSwapFrame(admin: AdminClient, args: {
           preferred_role: args.preferredRole ?? null,
           failure_reason: args.failureReason ?? null,
           replacement_mode: normalizeMode(args.mode, args.macro === true),
+          coverage: normalizeCoverage(args.coverage, normalizeMode(args.mode, args.macro === true)),
           macro_mode: normalizeMode(args.mode, args.macro === true) === "macro",
           source_frame_url: sourceFrameUrl,
           frame_index: Number(args.frameIndex ?? 0),
@@ -1665,6 +1736,7 @@ Deno.serve(async (req) => {
         preferredRole: body.preferredRole ?? null,
         failureReason: body.failureReason ?? null,
         mode: typeof body.mode === "string" ? body.mode : null,
+        coverage: typeof body.coverage === "string" ? body.coverage : null,
         macro: body.macro === true,
         webhookBase,
       });
