@@ -486,6 +486,78 @@ async function inlineImage(url: string) {
   }
 }
 
+/* ------------------------------------------------------------------ *
+ * REPLACEMENT VIDEO → Gemini multimodal video input
+ * ------------------------------------------------------------------ *
+ * The COMPLETE clip is handed to Gemini. Small clips travel inline; anything
+ * larger goes through the Files API, because inline request bodies are capped.
+ * A clip is NEVER decomposed into keyframe image references, and it is never
+ * forwarded to the image renderer.
+ */
+
+/** Above this, inline bytes are unsafe for a single request — use the Files API. */
+const INLINE_VIDEO_MAX_BYTES = 16 * 1024 * 1024;
+const VIDEO_FETCH_TIMEOUT_MS = 60_000;
+const VIDEO_ACTIVE_TIMEOUT_MS = 90_000;
+
+function videoMimeFor(url: string, headerMime: string | null) {
+  const mime = (headerMime ?? "").split(";")[0].trim();
+  if (/^video\//.test(mime)) return mime;
+  if (/\.mov($|\?)/i.test(url)) return "video/quicktime";
+  if (/\.webm($|\?)/i.test(url)) return "video/webm";
+  return "video/mp4";
+}
+
+function base64Of(buffer: Uint8Array) {
+  let binary = "";
+  for (let i = 0; i < buffer.length; i += 8192) {
+    binary += String.fromCharCode(...buffer.subarray(i, i + 8192));
+  }
+  return btoa(binary);
+}
+
+/**
+ * Fetches the stored clip and returns the Gemini part carrying the WHOLE video.
+ */
+async function videoPartFor(ai: GoogleGenAI, clip: VideoReferenceInput) {
+  const abort = new AbortController();
+  const timer = setTimeout(() => abort.abort(), VIDEO_FETCH_TIMEOUT_MS);
+  let bytes: Uint8Array;
+  let mimeType: string;
+  try {
+    const response = await fetch(clip.videoUrl, { signal: abort.signal });
+    if (!response.ok) throw new Error(`Could not read the product video (${response.status})`);
+    mimeType = videoMimeFor(clip.videoUrl, response.headers.get("content-type"));
+    bytes = new Uint8Array(await response.arrayBuffer());
+  } finally {
+    clearTimeout(timer);
+  }
+  if (!bytes.length) throw new Error("The product video was empty");
+
+  if (bytes.length <= INLINE_VIDEO_MAX_BYTES) {
+    return { part: { inlineData: { mimeType, data: base64Of(bytes) } }, transport: "inline" as const, bytes: bytes.length };
+  }
+
+  // Files API: upload, then wait until the clip is ACTIVE before referencing it.
+  const uploaded = await ai.files.upload({
+    file: new Blob([bytes], { type: mimeType }),
+    config: { mimeType, displayName: clip.name ?? clip.videoReferenceId },
+  });
+  const deadline = Date.now() + VIDEO_ACTIVE_TIMEOUT_MS;
+  let file: any = uploaded;
+  while (file?.state === "PROCESSING" && Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, 2000));
+    file = await ai.files.get({ name: String(uploaded.name) });
+  }
+  if (file?.state !== "ACTIVE") throw new Error("The product video could not be prepared for analysis");
+  return {
+    part: { fileData: { mimeType: file.mimeType ?? mimeType, fileUri: file.uri } },
+    transport: "files_api" as const,
+    bytes: bytes.length,
+  };
+}
+
+
 type Settled<T> = { ok: true; value: T } | { ok: false; error: string };
 
 /**
