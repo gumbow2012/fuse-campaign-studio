@@ -1892,17 +1892,9 @@ export default function JewelrySwap() {
         });
       });
 
-      if (!next.length) return prev;
+      // Cards are never added or removed here: the count can only stay the same.
+      if (!next.length || next.length > prev.length) return prev;
 
-      // References the analysis did not assign stay with the first card —
-      // never silently dropped.
-      const leftovers = flat.filter((_, index) => !claimed.has(index));
-      for (const item of leftovers) {
-        if (next[0].urls.length >= 6) break;
-        next[0].urls.push(item.url);
-        next[0].roles.push(item.piece?.roles?.[item.angleIndex] ?? "");
-        next[0].cads.push(item.piece?.cads?.[item.angleIndex] ?? null);
-      }
 
       // These writes come from the analysis itself — they must not retrigger it.
       intakeJustApplied.current = true;
