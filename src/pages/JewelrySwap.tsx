@@ -1712,6 +1712,16 @@ export default function JewelrySwap() {
     const products = Array.isArray(result?.products) ? result!.products : [];
     if (!products.length) return;
     const knowledgeMap = result?.knowledgeMap;
+    /**
+     * THE visible setting authority: complete reference set + complete product
+     * video -> PKM -> terminology ontology -> resolvedJewelrySpec. The old
+     * first-image classifier (`product.settings`) is PRELIMINARY evidence only.
+     */
+    const resolvedSpec = result?.resolvedJewelrySpec ?? null;
+    const resolvedSettingRows = (resolvedSpec?.settings ?? []).filter(
+      (setting) => setting.displayLabel || setting.setting || setting.region,
+    );
+
 
     /**
      * ONE CARD = ONE PHYSICAL PIECE. A card is only ever created by the user
