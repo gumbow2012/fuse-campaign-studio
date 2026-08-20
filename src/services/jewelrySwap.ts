@@ -854,7 +854,14 @@ export type IntakeSetting = {
   needsConfirmation?: boolean;
   evidenceReferenceIndexes?: number[];
   source?: string;
+  /**
+   * First-pass, single-image classifications are PRELIMINARY evidence only and
+   * never drive the visible field — `JewelryIntake.resolvedJewelrySpec` does.
+   */
+  preliminary?: boolean;
+  provenance?: Provenance | "PRELIMINARY_OBSERVATION";
 };
+
 
 
 export type IntakeProduct = {
