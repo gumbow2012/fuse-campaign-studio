@@ -1035,7 +1035,33 @@ function engineeringLockLines(pkm: any): string[] {
     if (parts.length) lines.push(`${region} stone field — ${parts.join("; ")}`);
   }
 
+  // COMPOSITIONAL SETTING FACTS — the Nano engineering lock reads the fused
+  // PKM axes, never the first-pass single-image classifier.
+  const settingAnalysis = pkm?.settingAnalysis;
+  if (settingAnalysis && typeof settingAnalysis === "object" && settingAnalysis.needsConfirmation !== true) {
+    if (settingAnalysis.stoneFieldTopology) {
+      lines.push(
+        `preserve the observed ${String(settingAnalysis.stoneFieldTopology).slice(0, 60)} stone-field topology: ${
+          (listOf(settingAnalysis.physicalSizeClasses).join(", ") || "as mapped").slice(0, 160)
+        } (perspective-normalized physical size classes, not apparent size)`,
+      );
+    }
+    if (settingAnalysis.retentionConstruction) {
+      lines.push(
+        `retain the stones by the observed ${String(settingAnalysis.retentionConstruction).slice(0, 60)} construction${
+          listOf(settingAnalysis.retentionEvidence).length
+            ? `: ${listOf(settingAnalysis.retentionEvidence).slice(0, 2).join("; ").slice(0, 160)}`
+            : ""
+        }`,
+      );
+    }
+    if (settingAnalysis.coverageStyle) {
+      lines.push(`coverage: ${String(settingAnalysis.coverageStyle).slice(0, 60)} — coverage only, never a retention method`);
+    }
+  }
+
   for (const setting of (Array.isArray(pkm?.settings) ? pkm.settings : []).slice(0, 4)) {
+
     if (setting?.needsConfirmation === true || !hard(setting)) continue;
     const signature = String(setting?.settingVisualSignature ?? "").trim();
     if (!signature) continue;
