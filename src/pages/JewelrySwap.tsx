@@ -1956,7 +1956,62 @@ export default function JewelrySwap() {
 
 
 
+  /**
+   * The ONLY automatic path to a second card, and it runs on the USER'S answer:
+   * each suggested group's references move onto their own piece.
+   */
+  const separateSuggestedPieces = useCallback(() => {
+    const groups = splitSuggestion?.groups ?? [];
+    setSplitSuggestion(null);
+    if (groups.length < 2) return;
+
+    setPieces((prev) => {
+      if (!prev.length) return prev;
+      const byUrl = new Map<string, { piece: Piece; angleIndex: number }>();
+      prev.forEach((piece) =>
+        piece.urls.forEach((url, angleIndex) => byUrl.set(url, { piece, angleIndex })),
+      );
+
+      const assigned = new Set<string>();
+      const next: Piece[] = [];
+      groups.forEach((group, groupIndex) => {
+        const urls = group.urls.filter((url) => byUrl.has(url) && !assigned.has(url));
+        if (!urls.length) return;
+        urls.forEach((url) => assigned.add(url));
+        const base = byUrl.get(urls[0])!.piece;
+        next.push({
+          ...base,
+          urls,
+          roles: urls.map((url) => byUrl.get(url)!.piece.roles?.[byUrl.get(url)!.angleIndex] ?? ""),
+          cads: urls.map((url) => byUrl.get(url)!.piece.cads?.[byUrl.get(url)!.angleIndex] ?? null),
+          name: cleanCaseName(group.label) || `Piece ${groupIndex + 1}`,
+          // A fresh piece is re-analysed from scratch, not handed old verdicts.
+          detected: undefined,
+          expanded: false,
+        });
+      });
+      // Anything the split did not mention keeps its own card untouched.
+      prev.forEach((piece) => {
+        const rest = piece.urls.filter((url) => !assigned.has(url));
+        if (!rest.length) return;
+        if (rest.length === piece.urls.length && !piece.urls.some((url) => assigned.has(url))) {
+          next.push(piece);
+          return;
+        }
+        next.push({
+          ...piece,
+          urls: rest,
+          roles: rest.map((url) => piece.roles?.[piece.urls.indexOf(url)] ?? ""),
+          cads: rest.map((url) => piece.cads?.[piece.urls.indexOf(url)] ?? null),
+        });
+      });
+      return next.length ? next.slice(0, 8) : prev;
+    });
+  }, [splitSuggestion]);
+
+
   /* ------------------------------ 4. Frame swaps ---------------------------- */
+
 
   /** Merge a fresh generation record into whichever collection owns it. */
   const applyGeneration = useCallback((generation: JewelryGeneration) => {
