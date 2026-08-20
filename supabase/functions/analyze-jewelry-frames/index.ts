@@ -3135,6 +3135,9 @@ async function runKnowledgeMap(args: {
   options: IntakeOptions;
   unavailable: Set<number>;
   userConfirmedFacts?: UserConfirmedFact[];
+  /** The ONE physical piece this whole asset set observes. */
+  productCaseId?: string;
+
 }) {
   const started = Date.now();
   const response = await args.ai.models.generateContent({
