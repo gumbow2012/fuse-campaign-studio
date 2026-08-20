@@ -1278,91 +1278,93 @@ export default function GenerationStudio() {
         path="/app/lab/studio"
       />
 
-      <div className="mx-auto w-full max-w-[1600px] px-4 py-8 sm:px-6">
-        <header className="mb-6 space-y-1">
-          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-cyan-200/70">FUSE Lab</p>
-          <h1 className="font-heading text-2xl font-semibold text-foreground sm:text-3xl">
+      <div className="mx-auto w-full max-w-[1600px] px-4 py-10 sm:px-6">
+        <header className="mb-9 space-y-3">
+          <p className="font-display text-[12px] font-semibold tracking-[0.16em] text-[hsl(var(--electric-cyan))]">
+            FUSE LAB / GENERATION STUDIO
+          </p>
+          <h1 className="font-display text-[36px] font-bold leading-[1.05] tracking-[0.01em] text-foreground sm:text-[44px]">
             Generation Studio
           </h1>
-          <p className="max-w-xl text-sm text-muted-foreground">
-            Set your model, stack references in order, and queue as many generations as you want.
+          <p className="max-w-2xl text-[16px] leading-relaxed text-muted-foreground">
+            {isVideo
+              ? "Build cinematic motion from your references."
+              : "Build the shot. Stack your references. Generate."}
           </p>
         </header>
 
-        <div className="grid gap-6 lg:grid-cols-[400px_minmax(0,1fr)] xl:grid-cols-[440px_minmax(0,1fr)]">
+        <div className="grid gap-8 lg:grid-cols-[420px_minmax(0,1fr)] xl:grid-cols-[460px_minmax(0,1fr)]">
           {/* LEFT: control panel */}
-          <aside ref={composerRef} className="space-y-4 rounded-3xl border border-white/10 bg-white/[0.03] p-4 backdrop-blur-xl lg:sticky lg:top-6 lg:max-h-[calc(100vh-3rem)] lg:overflow-y-auto sm:p-5">
-            {/* Model */}
-            <section>
-              <SectionLabel>Model</SectionLabel>
+          <aside
+            ref={composerRef}
+            className="space-y-6 lg:sticky lg:top-6 lg:max-h-[calc(100vh-3rem)] lg:overflow-y-auto lg:pr-1"
+          >
+            {/* Engine selector */}
+            <FusePanel>
+              <SectionTitle>ENGINE</SectionTitle>
               <Popover open={modelOpen} onOpenChange={setModelOpen}>
                 <PopoverTrigger asChild>
                   <button
                     type="button"
-                    className="flex w-full items-center gap-3 rounded-xl border border-white/12 bg-black/30 px-3 py-2.5 text-left transition-colors hover:border-cyan-200/40"
+                    className="flex w-full items-center gap-3 rounded-xl border border-white/12 bg-black/35 px-4 py-3.5 text-left transition-all duration-200 hover:-translate-y-[1px] hover:border-[hsl(var(--electric-blue)/0.45)]"
                   >
-                    <span className="rounded-lg border border-white/12 bg-black/40 p-1.5 text-cyan-200">
-                      {isVideo ? <Video size={15} /> : <ImageIcon size={15} />}
+                    <span className="rounded-lg border border-white/12 bg-black/50 p-2 text-[hsl(var(--electric-cyan))]">
+                      {isVideo ? <Video size={17} /> : <ImageIcon size={17} />}
                     </span>
                     <span className="min-w-0 flex-1">
-                      <span className="block truncate text-sm font-medium text-foreground">
+                      <span className="block truncate font-display text-[16px] font-semibold tracking-[0.02em] text-foreground">
                         {model.label}
                       </span>
-                      <span className="block truncate text-[11px] text-muted-foreground">
+                      <span className="block truncate text-[13px] text-muted-foreground">
                         {model.blurb}
                       </span>
                     </span>
-                    <ChevronDown size={14} className="shrink-0 opacity-60" />
+                    <ChevronDown size={16} className="shrink-0 opacity-60" />
                   </button>
                 </PopoverTrigger>
                 <PopoverContent
                   align="start"
                   className="w-[--radix-popover-trigger-width] border-white/12 bg-background/95 p-2 backdrop-blur-xl"
                 >
-                  <p className="px-2 pb-2 text-xs font-semibold text-foreground">
-                    {isVideo ? "Choose Video Model" : "Choose Image Model"}
-                  </p>
-                  <p className="px-2 pb-1 text-[10px] uppercase tracking-[0.18em] text-cyan-200/60">
-                    Recommended
+                  <p className="px-2 pb-2 font-display text-[13px] font-semibold tracking-[0.05em] text-foreground">
+                    CHOOSE AN ENGINE
                   </p>
                   <div className="max-h-80 space-y-1 overflow-y-auto">
-                    {[...STUDIO_MODELS].sort((a, b) => Number(!!b.recommended) - Number(!!a.recommended)).map((entry, index, sorted) => (
-                      <div key={entry.key}>
-                        {index > 0 && sorted[index - 1].recommended && !entry.recommended ? (
-                          <p className="px-2 pb-1 pt-2 text-[10px] uppercase tracking-[0.18em] text-cyan-200/60">
-                            All models
-                          </p>
-                        ) : null}
+                    {[...STUDIO_MODELS]
+                      .sort((a, b) => Number(!!b.recommended) - Number(!!a.recommended))
+                      .map((entry) => (
                         <button
+                          key={entry.key}
                           type="button"
                           onClick={() => {
                             setModelKey(entry.key);
                             setModelOpen(false);
                           }}
                           className={cn(
-                            "flex w-full items-start gap-3 rounded-xl border px-3 py-2 text-left transition-colors",
+                            "flex w-full items-start gap-3 rounded-xl border px-3 py-2.5 text-left transition-colors",
                             entry.key === modelKey
-                              ? "border-cyan-200/40 bg-cyan-400/10"
+                              ? "border-[hsl(var(--electric-blue)/0.45)] bg-[hsl(var(--electric-blue)/0.1)]"
                               : "border-transparent hover:border-white/15 hover:bg-white/[0.04]",
                           )}
                         >
-                          <span className="mt-0.5 rounded-lg border border-white/12 bg-black/40 p-1.5 text-cyan-200">
-                            {entry.kind === "image" ? <ImageIcon size={14} /> : <Video size={14} />}
+                          <span className="mt-0.5 rounded-lg border border-white/12 bg-black/40 p-1.5 text-[hsl(var(--electric-cyan))]">
+                            {entry.kind === "image" ? <ImageIcon size={15} /> : <Video size={15} />}
                           </span>
                           <span className="min-w-0">
-                            <span className="block text-sm font-medium text-foreground">{entry.label}</span>
-                            <span className="block text-[11px] text-muted-foreground">{entry.blurb}</span>
+                            <span className="block font-display text-[15px] font-semibold tracking-[0.02em] text-foreground">
+                              {entry.label}
+                            </span>
+                            <span className="block text-[13px] text-muted-foreground">{entry.blurb}</span>
                           </span>
                         </button>
-                      </div>
-                    ))}
+                      ))}
                   </div>
                 </PopoverContent>
               </Popover>
-            </section>
+            </FusePanel>
 
-            {/* References */}
-            <section
+            {/* Reference stack */}
+            <FusePanel
               onDragOver={(event) => {
                 event.preventDefault();
                 setDragActive(true);
@@ -1376,18 +1378,18 @@ export default function GenerationStudio() {
                   void addFiles(files);
                   return;
                 }
-                const url = event.dataTransfer.getData("text/uri-list") ||
+                const url =
+                  event.dataTransfer.getData("text/uri-list") ||
                   event.dataTransfer.getData("text/plain");
                 if (url) addReference(url);
               }}
               className={cn(
-                "rounded-2xl border p-3 transition-colors",
-                dragActive ? "border-cyan-300/60 bg-cyan-400/5" : "border-white/10 bg-black/20",
+                dragActive && "border-[hsl(var(--electric-blue)/0.6)] bg-[hsl(var(--electric-blue)/0.06)]",
               )}
             >
-              <SectionLabel hint={`Optional · ${references.length}/${MAX_REFERENCES}`}>
-                References
-              </SectionLabel>
+              <SectionTitle hint={`${references.length} / ${MAX_REFERENCES} references`}>
+                REFERENCE STACK
+              </SectionTitle>
               <input
                 ref={fileInputRef}
                 type="file"
@@ -1400,184 +1402,222 @@ export default function GenerationStudio() {
                   void addFiles(files);
                 }}
               />
-              <div className="space-y-2">
-                <button
-                  type="button"
-                  onClick={() => fileInputRef.current?.click()}
-                  className="flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-white/20 bg-white/[0.02] py-3 text-xs text-foreground/85 transition-colors hover:border-cyan-200/50 hover:text-cyan-100"
-                >
-                  {uploading ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
-                  Add image
-                </button>
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                className="flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-white/20 bg-white/[0.02] py-4 font-display text-[14px] font-semibold tracking-[0.05em] text-foreground/85 transition-all duration-200 hover:border-[hsl(var(--electric-blue)/0.5)] hover:text-[hsl(var(--electric-cyan))]"
+              >
+                {uploading ? <Loader2 size={15} className="animate-spin" /> : <Plus size={15} />}
+                ADD REFERENCE
+              </button>
 
-                {references.map((reference, index) => (
-                  <div
-                    key={`${reference.url}-${index}`}
-                    className="flex items-center gap-2 rounded-xl border border-white/10 bg-black/30 p-2"
-                  >
-                    <div className="relative h-14 w-14 shrink-0 overflow-hidden rounded-lg border border-white/12">
-                      <img src={reference.url} alt={`Reference ${index + 1}`} className="h-full w-full object-cover" />
-                      <span className="absolute inset-x-0 bottom-0 bg-black/75 text-center text-[9px] font-semibold uppercase tracking-wide text-cyan-100">
-                        Ref {index + 1}
-                      </span>
-                    </div>
-                    <Input
-                      value={reference.label}
-                      onChange={(event) =>
-                        setReferences((prev) =>
-                          prev.map((entry, i) =>
-                            i === index ? { ...entry, label: event.target.value } : entry
-                          )
-                        )}
-                      placeholder="Label (optional)"
-                      className="h-8 border-white/12 bg-black/30 text-xs"
-                    />
-                    <div className="flex shrink-0 items-center gap-0.5">
-                      <button
-                        type="button"
-                        aria-label="Move earlier"
-                        disabled={index === 0}
-                        onClick={() => moveReference(index, -1)}
-                        className="rounded-md p-1 text-foreground/70 transition-colors hover:text-cyan-100 disabled:opacity-30"
-                      >
-                        <ArrowLeft size={13} />
-                      </button>
-                      <button
-                        type="button"
-                        aria-label="Move later"
-                        disabled={index === references.length - 1}
-                        onClick={() => moveReference(index, 1)}
-                        className="rounded-md p-1 text-foreground/70 transition-colors hover:text-cyan-100 disabled:opacity-30"
-                      >
-                        <ArrowRight size={13} />
-                      </button>
-                      <button
-                        type="button"
-                        aria-label="Remove reference"
-                        onClick={() => setReferences((prev) => prev.filter((_, i) => i !== index))}
-                        className="rounded-md p-1 text-foreground/70 transition-colors hover:text-red-300"
-                      >
-                        <X size={13} />
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </section>
-
-            {/* Prompt */}
-            <section>
-              <SectionLabel hint="Sent verbatim">Prompt</SectionLabel>
-              <Textarea
-                value={prompt}
-                onChange={(event) => setPrompt(event.target.value)}
-                placeholder="Describe the scene you imagine"
-                rows={8}
-                className="min-h-[170px] resize-y border-white/12 bg-black/30 text-sm leading-relaxed"
-              />
-            </section>
-
-            {/* Aspect ratio */}
-            <section>
-              <SectionLabel>Aspect ratio</SectionLabel>
-              <Popover open={aspectOpen} onOpenChange={setAspectOpen}>
-                <PopoverTrigger asChild>
-                  <button
-                    type="button"
-                    className="flex w-full items-center gap-3 rounded-xl border border-white/12 bg-black/30 px-3 py-2.5 text-left transition-colors hover:border-cyan-200/40"
-                  >
-                    <AspectGlyph ratio={aspectRatio} />
-                    <span className="min-w-0 flex-1">
-                      <span className="block text-sm text-foreground">
-                        {aspectRatio === "auto" ? "Auto" : aspectRatio}
-                      </span>
-                      <span className="block truncate text-[11px] text-muted-foreground">
-                        {ASPECT_OPTIONS.find((entry) => entry.value === aspectRatio)?.note}
-                      </span>
-                    </span>
-                    <ChevronDown size={14} className="shrink-0 opacity-60" />
-                  </button>
-                </PopoverTrigger>
-                <PopoverContent
-                  align="start"
-                  className="max-h-80 w-[--radix-popover-trigger-width] overflow-y-auto border-white/12 bg-background/95 p-2 backdrop-blur-xl"
-                >
-                  {ASPECT_OPTIONS.map((option) => (
-                    <button
-                      key={option.value}
-                      type="button"
-                      onClick={() => {
-                        setAspectRatio(option.value);
-                        setAspectOpen(false);
-                      }}
-                      className={cn(
-                        "flex w-full items-center gap-3 rounded-lg px-2 py-2 text-left text-xs transition-colors",
-                        option.value === aspectRatio
-                          ? "bg-cyan-400/15 text-cyan-100"
-                          : "text-foreground/85 hover:bg-white/[0.06]",
-                      )}
+              {references.length ? (
+                <>
+                  <div className="mt-4">
+                    <DndContext
+                      sensors={dndSensors}
+                      collisionDetection={closestCenter}
+                      modifiers={[restrictToVerticalAxis]}
+                      onDragEnd={handleReferenceDragEnd}
                     >
-                      <AspectGlyph ratio={option.value} />
-                      <span className="font-medium">{option.value === "auto" ? "Auto" : option.value}</span>
-                      <span className="ml-auto truncate text-[11px] text-muted-foreground">{option.note}</span>
-                    </button>
-                  ))}
-                </PopoverContent>
-              </Popover>
-            </section>
-
-            {/* Resolution */}
-            <section>
-              <SectionLabel>Resolution</SectionLabel>
-              <div className="flex flex-wrap gap-2">
-                {model.resolutions.map((option) => (
-                  <button
-                    key={option}
-                    type="button"
-                    onClick={() => setQuality(option)}
-                    className={cn(
-                      "rounded-full border px-3.5 py-1.5 text-xs font-medium transition-colors",
-                      option === quality
-                        ? "border-cyan-200/60 bg-cyan-400/15 text-cyan-100"
-                        : "border-white/12 bg-white/[0.03] text-foreground/85 hover:border-cyan-200/40",
-                    )}
-                  >
-                    {option}
-                  </button>
-                ))}
-              </div>
-            </section>
-
-            {/* Sound */}
-            {isVideo && model.supportsAudio ? (
-              <section>
-                <SectionLabel>Sound</SectionLabel>
-                <button
-                  type="button"
-                  aria-pressed={generateAudio}
-                  onClick={() => setGenerateAudio((prev) => !prev)}
-                  className={cn(
-                    "flex w-full items-center justify-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-medium transition-colors",
-                    generateAudio
-                      ? "border-cyan-200/60 bg-cyan-400/15 text-cyan-100"
-                      : "border-white/12 bg-white/[0.03] text-foreground/70 hover:border-cyan-200/40",
-                  )}
-                >
-                  {generateAudio ? <Volume2 size={15} /> : <VolumeX size={15} />}
-                  {generateAudio ? "Sound on" : "Sound off"}
-                </button>
-              </section>
-            ) : null}
-
-            {/* Motion */}
-            {isVideo ? (
-              <section className="space-y-3 rounded-2xl border border-white/10 bg-black/20 p-3">
-                <SectionLabel>Motion</SectionLabel>
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between text-xs">
-                    <Label className="text-cyan-100/70">Duration</Label>
-                    <span className="font-medium text-foreground">{duration}s</span>
+                      <SortableContext
+                        items={references.map((entry) => entry.url)}
+                        strategy={verticalListSortingStrategy}
+                      >
+                        <div className="space-y-2.5">
+                          {references.map((reference, index) => (
+                            <ReferenceCard
+                              key={reference.url}
+                              reference={reference}
+                              index={index}
+                              total={references.length}
+                              onLabelChange={(value) =>
+                                setReferences((prev) =>
+                                  prev.map((entry, i) => (i === index ? { ...entry, label: value } : entry)),
+                                )
+                              }
+                              onRoleChange={(value) =>
+                                setReferences((prev) =>
+                                  prev.map((entry, i) => (i === index ? { ...entry, role: value } : entry)),
+                                )
+                              }
+                              onMove={(delta) => moveReference(index, delta)}
+                              onRemove={() =>
+                                setReferences((prev) => prev.filter((_, i) => i !== index))
+                              }
+                            />
+                          ))}
+                        </div>
+                      </SortableContext>
+                    </DndContext>
                   </div>
+                  <FieldHelper>
+                    {isVideo
+                      ? "Reference order defines the visual progression."
+                      : "Drag references into the order the model reads them."}
+                  </FieldHelper>
+                </>
+              ) : (
+                <FieldHelper>
+                  Drop images here or add a reference to start your stack.
+                </FieldHelper>
+              )}
+            </FusePanel>
+
+            {/* Creative direction */}
+            <FusePanel>
+              <SectionTitle>{isVideo ? "VIDEO DIRECTION" : "CREATIVE DIRECTION"}</SectionTitle>
+              {!directionExpanded ? (
+                <div className="rounded-xl border border-[hsl(var(--electric-blue)/0.3)] bg-[hsl(var(--electric-blue)/0.06)] p-4">
+                  <p className="font-display text-[13px] font-semibold tracking-[0.07em] text-[hsl(var(--electric-cyan))]">
+                    AI DIRECTED SEQUENCE
+                  </p>
+                  {shotPlan.length ? (
+                    <ul className="mt-3 space-y-1.5">
+                      {shotPlan.map((entry) => (
+                        <li key={entry.index} className="flex items-baseline gap-3 text-[14px]">
+                          <span className="font-display text-[13px] font-semibold text-[hsl(var(--electric-cyan))]">
+                            {String(entry.index).padStart(2, "0")}
+                          </span>
+                          <span className="font-display text-[13px] font-semibold tracking-[0.04em] text-foreground">
+                            {entry.shot.toUpperCase()}
+                          </span>
+                          {entry.start != null && entry.end != null ? (
+                            <span className="ml-auto text-[12px] text-muted-foreground">
+                              {entry.start}–{entry.end}s
+                            </span>
+                          ) : null}
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="mt-2 text-[14px] leading-relaxed text-muted-foreground">
+                      A full direction has been prepared for this sequence.
+                    </p>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => setDirectionExpanded(true)}
+                    className="mt-4 font-display text-[13px] font-semibold tracking-[0.05em] text-[hsl(var(--electric-cyan))] hover:underline"
+                  >
+                    View full direction
+                  </button>
+                </div>
+              ) : (
+                <>
+                  <Textarea
+                    value={prompt}
+                    onChange={(event) => setPrompt(event.target.value)}
+                    placeholder="Describe the shot, motion, lighting, atmosphere, transitions."
+                    rows={8}
+                    className="min-h-[180px] resize-y border-white/12 bg-black/35 text-[15px] leading-relaxed focus-visible:ring-[hsl(var(--electric-blue)/0.5)]"
+                  />
+                  <FieldHelper>
+                    Describe the shot, motion, lighting, atmosphere, transitions.
+                  </FieldHelper>
+                  {shotPlan.length ? (
+                    <button
+                      type="button"
+                      onClick={() => setDirectionExpanded(false)}
+                      className="mt-2 font-display text-[13px] font-semibold tracking-[0.05em] text-[hsl(var(--electric-cyan))] hover:underline"
+                    >
+                      Hide full direction
+                    </button>
+                  ) : null}
+                </>
+              )}
+            </FusePanel>
+
+            {/* Format + quality */}
+            <FusePanel className="space-y-6">
+              <div>
+                <SectionTitle>FORMAT</SectionTitle>
+                <SegmentedControl
+                  ariaLabel="Format"
+                  value={PRIMARY_ASPECTS.includes(aspectRatio) ? aspectRatio : "more"}
+                  onChange={(value) => {
+                    if (value === "more") {
+                      setAspectOpen(true);
+                      return;
+                    }
+                    setAspectRatio(value);
+                  }}
+                  options={[
+                    ...PRIMARY_ASPECTS.map((value) => ({
+                      value,
+                      label: value === "auto" ? "AUTO" : value,
+                      glyph: <AspectGlyph ratio={value} />,
+                    })),
+                    { value: "more", label: PRIMARY_ASPECTS.includes(aspectRatio) ? "MORE" : aspectRatio },
+                  ]}
+                />
+                <Popover open={aspectOpen} onOpenChange={setAspectOpen}>
+                  <PopoverTrigger asChild>
+                    <span className="sr-only" aria-hidden />
+                  </PopoverTrigger>
+                  <PopoverContent
+                    align="start"
+                    className="max-h-80 w-64 overflow-y-auto border-white/12 bg-background/95 p-2 backdrop-blur-xl"
+                  >
+                    {ASPECT_OPTIONS.map((option) => (
+                      <button
+                        key={option.value}
+                        type="button"
+                        onClick={() => {
+                          setAspectRatio(option.value);
+                          setAspectOpen(false);
+                        }}
+                        className={cn(
+                          "flex w-full items-center gap-3 rounded-lg px-2 py-2 text-left text-[13px] transition-colors",
+                          option.value === aspectRatio
+                            ? "bg-[hsl(var(--electric-blue)/0.15)] text-[hsl(var(--electric-cyan))]"
+                            : "text-foreground/85 hover:bg-white/[0.06]",
+                        )}
+                      >
+                        <AspectGlyph ratio={option.value} />
+                        <span className="font-display font-semibold">
+                          {option.value === "auto" ? "AUTO" : option.value}
+                        </span>
+                        <span className="ml-auto truncate text-[12px] text-muted-foreground">
+                          {option.note}
+                        </span>
+                      </button>
+                    ))}
+                  </PopoverContent>
+                </Popover>
+                <p className="mt-2.5 font-display text-[12px] font-semibold tracking-[0.08em] text-muted-foreground">
+                  {formatDescriptor(aspectRatio)}
+                </p>
+              </div>
+
+              <div>
+                <SectionTitle>QUALITY</SectionTitle>
+                <SegmentedControl
+                  ariaLabel="Quality"
+                  value={quality}
+                  onChange={setQuality}
+                  options={model.resolutions.map((option) => ({ value: option, label: option }))}
+                />
+              </div>
+
+              {isVideo && model.supportsAudio ? (
+                <div>
+                  <SectionTitle>SOUND</SectionTitle>
+                  <SegmentedControl
+                    ariaLabel="Sound"
+                    value={generateAudio ? "on" : "off"}
+                    onChange={(value) => setGenerateAudio(value === "on")}
+                    options={[
+                      { value: "on", label: "ON", glyph: <Volume2 size={14} /> },
+                      { value: "off", label: "OFF", glyph: <VolumeX size={14} /> },
+                    ]}
+                  />
+                </div>
+              ) : null}
+
+              {isVideo ? (
+                <div>
+                  <SectionTitle hint={`${duration}s`}>MOTION</SectionTitle>
                   <Slider
                     value={[duration]}
                     min={model.durationRange?.min ?? 3}
@@ -1585,25 +1625,46 @@ export default function GenerationStudio() {
                     step={1}
                     onValueChange={([value]) => setDuration(value)}
                   />
+                  <FieldHelper>Clip length in seconds.</FieldHelper>
                 </div>
-              </section>
-            ) : null}
+              ) : null}
+            </FusePanel>
 
             {/* Generate */}
-            <div className="space-y-2 border-t border-white/10 pt-4">
-              <div className="flex items-center justify-between text-[11px] text-cyan-200/70">
-                <span className="font-medium text-cyan-100">
-                  {costPreview(estimatedCredits, estimatedCostUsd)}
-                </span>
-                <span>{references.length ? `${references.length} reference(s)` : "No references"}</span>
-              </div>
+            <div className="space-y-3">
               <Button
                 onClick={handleGenerate}
-                className="w-full rounded-xl bg-[hsl(var(--primary))] py-6 text-base font-semibold text-primary-foreground hover:bg-[hsl(var(--primary))]/90"
+                disabled={!prompt.trim()}
+                className="h-auto w-full rounded-xl bg-[hsl(var(--electric-blue))] py-5 font-display text-[16px] font-bold tracking-[0.06em] text-[hsl(var(--primary-foreground))] shadow-[0_0_36px_-12px_hsl(var(--electric-blue))] transition-all duration-200 hover:-translate-y-[1px] hover:bg-[hsl(var(--electric-cyan))] disabled:translate-y-0 disabled:opacity-40 disabled:shadow-none"
               >
-                <Sparkles size={17} className="mr-2" /> Generate
+                <Sparkles size={18} className="mr-2" />
+                {isVideo ? "GENERATE VIDEO" : "GENERATE"}
               </Button>
+              <div className="flex items-center justify-between text-[13px]">
+                <span className="text-[hsl(var(--electric-cyan))]">
+                  {costPreview(estimatedCredits, estimatedCostUsd)}
+                </span>
+                <span className="text-muted-foreground">
+                  {model.label}
+                  {isVideo ? ` · ${duration} sec` : ""}
+                </span>
+              </div>
+              <details className="rounded-xl border border-white/10 bg-black/25 px-4 py-2.5">
+                <summary className="cursor-pointer font-display text-[12px] font-semibold tracking-[0.08em] text-muted-foreground">
+                  ADVANCED · DEBUG
+                </summary>
+                <div className="mt-3 space-y-1 text-[12px] leading-relaxed text-muted-foreground">
+                  <p>Direction is sent verbatim to the provider.</p>
+                  <p>provider model: {model.key}</p>
+                  <p>kind: {model.kind}</p>
+                  <p>resolution: {quality}</p>
+                  <p>aspect_ratio: {aspectRatio}</p>
+                  {isVideo ? <p>duration: {duration}s · audio: {String(generateAudio)}</p> : null}
+                  <p>reference order: {references.map((_, index) => index + 1).join(" → ") || "—"}</p>
+                </div>
+              </details>
             </div>
+
           </aside>
 
           {/* RIGHT: output canvas */}
