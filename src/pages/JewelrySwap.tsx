@@ -1369,13 +1369,32 @@ export default function JewelrySwap() {
             url,
             role: piece.roles?.[angleIndex] || null,
             cad: isGeometryAuthority(piece, angleIndex),
+            // Explicit purpose typing — the source video can never be mixed in.
+            assetPurpose: "REPLACEMENT_PRODUCT_REFERENCE" as const,
+            kind: piece.video
+              ? ("product_reference_video" as const)
+              : isGeometryAuthority(piece, angleIndex)
+                ? ("cad" as const)
+                : ("photographic_still" as const),
+            videoReferenceId: piece.video?.videoReferenceId ?? null,
+            timestamp: piece.video?.keyframeTimes?.[angleIndex] ?? null,
           })),
         );
+        const videoReferences: JewelryVideoReferenceInput[] = pieces
+          .filter((piece) => piece.video)
+          .map((piece) => ({
+            videoReferenceId: piece.video!.videoReferenceId,
+            duration: piece.video!.duration,
+            aspectRatio: piece.video!.aspectRatio ?? null,
+            keyframeCount: piece.urls.length,
+            keyframeTimestamps: piece.video!.keyframeTimes ?? [],
+          }));
         const clientStarted = performance.now();
         try {
           const result = await analyzeJewelryIntake(
             {
               jewelryReferences: intakeReferences,
+              videoReferences,
               roleVocabulary: Array.from(
                 new Set(pieces.flatMap((piece) => roleOptionsForType(piece.type))),
               ).filter(Boolean),
@@ -1385,6 +1404,7 @@ export default function JewelrySwap() {
             },
             controller.signal,
           );
+
           // STALE GUARD — both the monotonic request id and the set version must
           // still match the set on screen, otherwise this answer is discarded.
           if (token !== intakeToken.current) return;
