@@ -637,6 +637,53 @@ export type PkmEvidenceGap = {
 
 export type ProductKnowledgeMap = {
   version?: string;
+  /** ONE card = ONE physical piece; every reference observes this case. */
+  productCaseId?: string;
+  /** Short post-fusion name for the whole card (never a per-asset title). */
+  productCaseName?: string;
+  /** What each reference could and could not see — never a product verdict. */
+  perReferenceObservations?: {
+    referenceId?: string;
+    /** CAD FRONT / MACRO / SIDE / CLASP / VIDEO — evidence role only. */
+    evidenceRole?: string;
+    observations?: string[];
+    unknown?: string[];
+    componentIds?: string[];
+    consistentWithCase?: boolean;
+    confidence?: number;
+  }[];
+  /** Components merged across references instead of duplicated per view. */
+  crossReferenceMatches?: {
+    matchId?: string;
+    feature?: string;
+    componentId?: string;
+    physicalStoneIds?: string[];
+    repeatModuleId?: string;
+    matchedReferenceIds?: string[];
+    matchBasis?: string[];
+    merged?: boolean;
+    agreementCount?: number;
+    confidence?: number;
+  }[];
+  /** Non-sticky classification state: revised as references are added. */
+  fusionState?: {
+    modelVersion?: number;
+    referenceCount?: number;
+    classificationStatus?:
+      | "PRELIMINARY_OBSERVATION"
+      | "CROSS_VIEW_CONFIRMED"
+      | "USER_CONFIRMED";
+    revisedFromPreliminary?: string[];
+    stillPreliminary?: string[];
+  };
+  /** A QUESTION only — FUSE never splits a card on its own. */
+  separatePieceSuggestion?: {
+    suspected?: boolean;
+    question?: string;
+    confidence?: number;
+    groups?: { label?: string; referenceIds?: string[]; reason?: string }[];
+  };
+
   productType?: string;
   productTypeConfidence?: number;
   dimensions?: PkmDimensions;
