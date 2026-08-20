@@ -2316,6 +2316,105 @@ async function syncRow(admin: AdminClient, row: any) {
   }
 }
 
+type LibraryAssetRow = {
+  id: string;
+  outputUrl: string;
+  outputType: "image" | "video";
+  kind: string | null;
+  prompt: string | null;
+  feature: string | null;
+  createdAt: string | null;
+  source: "generated" | "upload";
+};
+
+/** Auto-extracted source frames (frame-45-00.jpg) are noise, not user uploads. */
+function isExtractedFrame(name: string) {
+  return /frame-\d/i.test(name);
+}
+
+function guessTypeFromName(name: string): "image" | "video" | null {
+  const ext = name.split(".").pop()?.toLowerCase() ?? "";
+  if (["jpg", "jpeg", "png", "webp", "gif", "avif", "heic"].includes(ext)) return "image";
+  if (["mp4", "mov", "webm", "m4v", "quicktime"].includes(ext)) return "video";
+  return null;
+}
+
+/**
+ * Enumerate the caller's OWN uploaded media in the `fuse-assets` bucket.
+ * Every listing prefix embeds the caller's user id (system/<feature>/<userId>/...),
+ * so another user's objects can never be reached.
+ */
+async function listUserUploads(
+  admin: any,
+  userId: string,
+  typeFilter: string,
+): Promise<LibraryAssetRow[]> {
+  const base = `${Deno.env.get("SUPABASE_URL")}/storage/v1/object/public/fuse-assets/`;
+  const bucket = admin.storage.from("fuse-assets");
+  const results: LibraryAssetRow[] = [];
+
+  const listAt = async (prefix: string) => {
+    const { data, error } = await bucket.list(prefix, {
+      limit: 200,
+      sortBy: { column: "created_at", order: "desc" },
+    });
+    if (error) return [] as any[];
+    return data ?? [];
+  };
+
+  try {
+    const features = (await listAt("system")).filter((entry: any) => !entry.id);
+
+    for (const feature of features) {
+      // user-scoped prefix — never lists outside the caller's own folder
+      const userPrefix = `system/${feature.name}/${userId}`;
+      const level1 = await listAt(userPrefix);
+
+      const pending: { prefix: string; entries: any[] }[] = [{ prefix: userPrefix, entries: level1 }];
+      const subfolders = level1.filter((entry: any) => !entry.id).slice(0, 40);
+      for (const folder of subfolders) {
+        const prefix = `${userPrefix}/${folder.name}`;
+        pending.push({ prefix, entries: await listAt(prefix) });
+      }
+
+      for (const group of pending) {
+        for (const entry of group.entries) {
+          if (!entry.id) continue; // folder
+          const name = entry.name as string;
+          if (name === ".emptyFolderPlaceholder") continue;
+          if (isExtractedFrame(name)) continue;
+
+          const mime = String(entry.metadata?.mimetype ?? "");
+          const outputType = mime.startsWith("video/")
+            ? "video"
+            : mime.startsWith("image/")
+            ? "image"
+            : guessTypeFromName(name);
+          if (!outputType) continue;
+          if ((typeFilter === "image" || typeFilter === "video") && outputType !== typeFilter) continue;
+
+          const path = `${group.prefix}/${name}`;
+          results.push({
+            id: `upload:${path}`,
+            outputUrl: `${base}${path.split("/").map(encodeURIComponent).join("/")}`,
+            outputType,
+            kind: "upload",
+            prompt: null,
+            feature: "upload",
+            createdAt: entry.created_at ?? entry.updated_at ?? null,
+            source: "upload",
+          });
+        }
+      }
+    }
+  } catch {
+    // Uploads are a bonus source — never break the library on a storage hiccup.
+  }
+
+  return results;
+}
+
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: corsHeaders });
 
