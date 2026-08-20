@@ -6,6 +6,8 @@ import {
   ChevronDown,
   Copy,
   Download,
+  Film,
+  Heart,
   ImageIcon,
   Images,
   Loader2,
@@ -171,6 +173,7 @@ type Generation = {
   estimatedCostUsd: number | null;
   providerModel: string | null;
   inputPayload: Record<string, unknown> | null;
+  favorited?: boolean;
   createdAt: string | null;
   completedAt: string | null;
 };
@@ -269,16 +272,47 @@ function SectionLabel({ children, hint }: { children: React.ReactNode; hint?: st
 const ICON_ACTION_CLASS =
   "flex h-7 w-7 items-center justify-center rounded-lg border border-white/15 bg-black/60 text-foreground/80 backdrop-blur-md transition-colors hover:border-cyan-200/60 hover:text-cyan-100";
 
+function FavoriteButton({
+  favorited,
+  onToggle,
+  className,
+  size = 13,
+}: {
+  favorited: boolean;
+  onToggle: () => void;
+  className?: string;
+  size?: number;
+}) {
+  return (
+    <button
+      type="button"
+      aria-label={favorited ? "Remove from favorites" : "Add to favorites"}
+      title={favorited ? "Remove from favorites" : "Add to favorites"}
+      aria-pressed={favorited}
+      onClick={(event) => {
+        event.stopPropagation();
+        event.preventDefault();
+        onToggle();
+      }}
+      className={cn(ICON_ACTION_CLASS, favorited && "text-red-400 hover:text-red-300", className)}
+    >
+      <Heart size={size} className={favorited ? "fill-current" : undefined} />
+    </button>
+  );
+}
+
 function GenerationCard({
   generation,
   onUseAsReference,
   onExpand,
   onDelete,
+  onToggleFavorite,
 }: {
   generation: Generation;
   onUseAsReference: (url: string) => void;
   onExpand: (generation: Generation) => void;
   onDelete: (generation: Generation) => void;
+  onToggleFavorite: (generation: Generation) => void;
 }) {
   const inFlight = generation.status === "queued" || generation.status === "running";
   const [progress, setProgress] = useState(generation.status === "running" ? 25 : 8);
@@ -343,6 +377,10 @@ function GenerationCard({
                   <Wand2 size={13} />
                 </button>
               ) : null}
+              <FavoriteButton
+                favorited={generation.favorited === true}
+                onToggle={() => onToggleFavorite(generation)}
+              />
               <button
                 type="button"
                 onClick={() =>
@@ -369,6 +407,11 @@ function GenerationCard({
                 <Trash2 size={13} />
               </button>
             </div>
+            {generation.favorited ? (
+              <span className="pointer-events-none absolute left-2 top-2 rounded-lg border border-red-400/40 bg-black/60 p-1.5 text-red-400 backdrop-blur-md group-hover:opacity-0">
+                <Heart size={12} className="fill-current" />
+              </span>
+            ) : null}
           </>
         ) : generation.status === "failed" ? (
           <>
@@ -430,6 +473,8 @@ export default function GenerationStudio() {
   const [lightboxId, setLightboxId] = useState<string | null>(null);
   const [confirmSingle, setConfirmSingle] = useState<Generation | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [favoritesOnly, setFavoritesOnly] = useState(false);
+  const composerRef = useRef<HTMLDivElement | null>(null);
 
   const [deleting, setDeleting] = useState(false);
   const lastSelectedRef = useRef<string | null>(null);
@@ -538,6 +583,36 @@ export default function GenerationStudio() {
     [addReference],
   );
 
+  /** Optimistic heart toggle; reverts if the backend rejects it. */
+  const toggleFavorite = useCallback(async (generation: Generation) => {
+    const next = !(generation.favorited === true);
+    setGenerations((prev) =>
+      prev.map((entry) => (entry.id === generation.id ? { ...entry, favorited: next } : entry)),
+    );
+    try {
+      await callStudio({ action: "set_favorite", generationId: generation.id, favorited: next });
+    } catch (error) {
+      setGenerations((prev) =>
+        prev.map((entry) => (entry.id === generation.id ? { ...entry, favorited: !next } : entry)),
+      );
+      toast.error(error instanceof Error ? error.message : "Could not update the favorite");
+    }
+  }, []);
+
+  /** Animate: add the image as a reference and switch the composer to Kling 3.0. */
+  const animateImage = useCallback(
+    (url: string) => {
+      addReference(url);
+      setModelKey("kling-3.0-pro");
+      setLightboxId(null);
+      toast.success("Added to Kling 3.0 — ready to animate");
+      requestAnimationFrame(() => {
+        composerRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      });
+    },
+    [addReference],
+  );
+
   /** Adds one of the SOURCE references shown in the lightbox; keeps the lightbox open. */
   const addSourceReference = useCallback(
     (url: string) => {
@@ -596,8 +671,11 @@ export default function GenerationStudio() {
     [generations],
   );
   const visibleGenerations = useMemo(
-    () => generations.filter((entry) => entry.status !== "failed"),
-    [generations],
+    () =>
+      generations.filter(
+        (entry) => entry.status !== "failed" && (!favoritesOnly || entry.favorited === true),
+      ),
+    [generations, favoritesOnly],
   );
   const [clearingFailed, setClearingFailed] = useState(false);
 
@@ -742,6 +820,7 @@ export default function GenerationStudio() {
         type: entry.outputType === "video" ? "video" : "image",
         generationId: entry.id,
         createdAt: entry.createdAt,
+        favorited: entry.favorited === true,
       }));
     const uploads = library.map((url, index) => ({
       id: `upload:${url}`,
@@ -750,6 +829,7 @@ export default function GenerationStudio() {
       generationId: null as string | null,
       // Uploads have no timestamp — the store is newest-first, so use its order.
       createdAt: null as string | null,
+      favorited: false,
       order: index,
     }));
     return { outputs, uploads };
@@ -857,9 +937,10 @@ export default function GenerationStudio() {
   };
 
   const assetGrid = (
-    items: { id: string; url: string; type: string; generationId: string | null }[],
+    rawItems: { id: string; url: string; type: string; generationId: string | null; favorited?: boolean }[],
     empty: string,
   ) => {
+    const items = favoritesOnly ? rawItems.filter((item) => item.favorited) : rawItems;
     const ids = items.map((item) => item.id);
     if (!items.length) return <p className="text-xs text-muted-foreground">{empty}</p>;
     return (
@@ -904,6 +985,18 @@ export default function GenerationStudio() {
               >
                 {isSelected ? <CheckSquare size={13} /> : <Square size={13} />}
               </button>
+
+              {item.generationId ? (
+                <FavoriteButton
+                  favorited={item.favorited === true}
+                  size={12}
+                  className="absolute right-1 top-1 z-10 h-6 w-6"
+                  onToggle={() => {
+                    const target = generations.find((entry) => entry.id === item.generationId);
+                    if (target) void toggleFavorite(target);
+                  }}
+                />
+              ) : null}
 
               {item.type === "image" ? (
                 <button
@@ -1267,6 +1360,19 @@ export default function GenerationStudio() {
                     <Images size={14} className="mr-1.5" /> Asset library
                   </TabsTrigger>
                 </TabsList>
+                <button
+                  type="button"
+                  onClick={() => setFavoritesOnly((prev) => !prev)}
+                  aria-pressed={favoritesOnly}
+                  className={cn(
+                    "flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.14em] transition-colors",
+                    favoritesOnly
+                      ? "border-red-400/50 bg-red-500/15 text-red-200"
+                      : "border-white/12 bg-black/30 text-muted-foreground hover:text-foreground",
+                  )}
+                >
+                  <Heart size={13} className={favoritesOnly ? "fill-current" : undefined} /> Favorites
+                </button>
                 {selected.length ? (
                   <div className="flex items-center gap-2">
                     <span className="text-[11px] text-cyan-200/70">{selected.length} selected</span>
@@ -1339,6 +1445,7 @@ export default function GenerationStudio() {
                           onUseAsReference={useAsReference}
                           onExpand={(entry) => setLightboxId(entry.id)}
                           onDelete={(entry) => setConfirmSingle(entry)}
+                          onToggleFavorite={(entry) => void toggleFavorite(entry)}
                         />
                       ))}
                     </div>
@@ -1521,9 +1628,17 @@ export default function GenerationStudio() {
 
                   <aside className="flex max-h-[85vh] flex-col gap-4 overflow-y-auto border-t border-white/10 p-5 lg:border-l lg:border-t-0">
                     <div className="space-y-1">
-                      <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-cyan-200/70">
-                        Result
-                      </p>
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-cyan-200/70">
+                          Result
+                        </p>
+                        <FavoriteButton
+                          favorited={lightbox.favorited === true}
+                          size={15}
+                          className="h-8 w-8"
+                          onToggle={() => void toggleFavorite(lightbox)}
+                        />
+                      </div>
                       <p className="text-xs text-muted-foreground">
                         {lightbox.providerModel ?? "—"}
                       </p>
@@ -1545,6 +1660,15 @@ export default function GenerationStudio() {
                         ) : null}
                       </div>
                     </div>
+
+                    {isImage && lightbox.outputUrl ? (
+                      <Button
+                        onClick={() => animateImage(lightbox.outputUrl as string)}
+                        className="w-full rounded-xl bg-blue-600 text-white hover:bg-blue-500"
+                      >
+                        <Film size={15} className="mr-2" /> Animate
+                      </Button>
+                    ) : null}
 
                     {isImage && lightbox.outputUrl ? (
                       <Button
