@@ -285,6 +285,11 @@ const FAILURE_REASONS = [
   "Wrong jewelry geometry",
   "Wrong bail / connector",
   "Wrong stones / setting",
+  "Wrong setting",
+  "Wrong stone color",
+  "Wrong stone shape",
+  "Wrong stone size/layout",
+
   "Wrong lettering / logo",
   "Wrong scale",
   "Wrong rotation",
