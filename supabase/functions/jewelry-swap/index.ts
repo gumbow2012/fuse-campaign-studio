@@ -1606,6 +1606,13 @@ async function startReconstruction(admin: AdminClient, args: {
           video_model: videoModel.key,
           references_used: referenceUrls.length,
           references_available: availableUrls.length,
+          // Director-timeline verification hooks.
+          director_prompt: prompt,
+          shot_plan: director.shotPlan,
+          frame_roles: director.frameRoles,
+          available_geometry: director.geometry,
+          target_spec: specs,
+
         },
       })
       .eq("id", inserted.id)
