@@ -394,20 +394,20 @@ function selectReferencesForFrame(args: {
   }
 
 
-  // 5) Last resort only. Upload order has NO authority: when Gemini ranked this
-  //    frame we stop here unless the payload is too thin to reconstruct from.
-  const minProductRefs = 2;
-  if (!hasRanking || picked.length < minProductRefs) {
+  // 5) Last resort only. Upload order has NO authority: it is consulted purely
+  //    to keep a frame reconstructable when nothing above produced enough refs.
+  if (!hasRanking || picked.length < MIN_PRODUCT_REFERENCES) {
     for (const ref of photos) {
-      if (picked.length >= (hasRanking ? minProductRefs : MAX_PRODUCT_REFERENCES)) break;
+      if (picked.length >= (hasRanking ? MIN_PRODUCT_REFERENCES : MAX_PRODUCT_REFERENCES)) break;
       if (isAvoided(ref)) continue;
       take(ref);
     }
     for (const ref of photos) {
-      if (picked.length >= minProductRefs) break;
+      if (picked.length >= MIN_PRODUCT_REFERENCES) break;
       take(ref);
     }
   }
+
 
   return picked;
 }
