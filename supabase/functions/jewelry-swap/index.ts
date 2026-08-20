@@ -756,6 +756,14 @@ function buildJewelryPrompt(args: {
   const mode = normalizeMode(args.mode, args.macro === true);
   const coverage = normalizeCoverage(args.coverage, mode);
 
+  // Structured product authority — injected into THIS prompt, after the PIECES
+  // lines and before the negatives. Only non-Auto values are emitted.
+  const specs = args.pieces.map((piece) => resolveTargetSpec(piece));
+  const specLines = specs.map((spec) => targetSpecLine(spec)).filter(Boolean) as string[];
+  const mosaic = hasMosaicSetting(specs);
+  const colorless = isColorlessSpec(specs);
+
+
   const prompt = [
     "Use SOURCE_FRAME (image 1) as the ABSOLUTE authority for the photograph. This is a precise jewelry replacement, not a redesign or a product shot. Do NOT reframe or recreate the photograph.",
     "",
