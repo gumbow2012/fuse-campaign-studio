@@ -2632,6 +2632,102 @@ const PKM_SCHEMA = {
       },
     },
 
+    /**
+     * ONE PHYSICAL PRODUCT, MANY OBSERVATIONS. Each reference reports ONLY what
+     * IT can see plus what it CANNOT — never its own product interpretation.
+     */
+    perReferenceObservations: {
+      type: Type.ARRAY,
+      items: {
+        type: Type.OBJECT,
+        properties: {
+          referenceId: { type: Type.STRING },
+          /** CAD FRONT / MACRO / SIDE / CLASP / VIDEO … evidence role only. */
+          evidenceRole: { type: Type.STRING },
+          observations: STRING_ARRAY,
+          /** What this asset physically cannot answer (occluded/out of frame). */
+          unknown: STRING_ARRAY,
+          componentIds: STRING_ARRAY,
+          /** Never a product verdict — only whether it fits the one case. */
+          consistentWithCase: { type: Type.BOOLEAN },
+          confidence: CONFIDENCE,
+        },
+        required: ["referenceId", "observations", "unknown"],
+      },
+    },
+    /**
+     * Component-level merges ACROSS references: same clasp / same master link /
+     * same border / same bail / same stone cluster from another angle. A merge
+     * NEVER duplicates a component just because several assets show it.
+     */
+    crossReferenceMatches: {
+      type: Type.ARRAY,
+      items: {
+        type: Type.OBJECT,
+        properties: {
+          matchId: { type: Type.STRING },
+          feature: { type: Type.STRING },
+          componentId: { type: Type.STRING },
+          physicalStoneIds: STRING_ARRAY,
+          repeatModuleId: { type: Type.STRING },
+          matchedReferenceIds: STRING_ARRAY,
+          matchBasis: STRING_ARRAY,
+          merged: { type: Type.BOOLEAN },
+          agreementCount: { type: Type.NUMBER },
+          provenance: PROVENANCE,
+          confidence: CONFIDENCE,
+        },
+        required: ["feature", "matchedReferenceIds", "merged", "confidence"],
+      },
+    },
+    /**
+     * NON-STICKY early reads. Anything not USER_CONFIRMED is a preliminary
+     * observation that MUST be revised when later macro/video evidence
+     * establishes different construction.
+     */
+    fusionState: {
+      type: Type.OBJECT,
+      properties: {
+        modelVersion: { type: Type.NUMBER },
+        referenceCount: { type: Type.NUMBER },
+        classificationStatus: {
+          type: Type.STRING,
+          enum: ["PRELIMINARY_OBSERVATION", "CROSS_VIEW_CONFIRMED", "USER_CONFIRMED"],
+        },
+        revisedFromPreliminary: STRING_ARRAY,
+        stillPreliminary: STRING_ARRAY,
+      },
+      required: ["classificationStatus"],
+    },
+    /**
+     * ASKS, never splits. Set only with very strong evidence that unrelated
+     * objects were uploaded together — the user answers, FUSE never decides.
+     */
+    separatePieceSuggestion: {
+      type: Type.OBJECT,
+      properties: {
+        suspected: { type: Type.BOOLEAN },
+        question: { type: Type.STRING },
+        confidence: CONFIDENCE,
+        groups: {
+          type: Type.ARRAY,
+          items: {
+            type: Type.OBJECT,
+            properties: {
+              label: { type: Type.STRING },
+              referenceIds: STRING_ARRAY,
+              reason: { type: Type.STRING },
+            },
+            required: ["label", "referenceIds"],
+          },
+        },
+      },
+      required: ["suspected"],
+    },
+    /** ONE post-fusion name for the whole card (e.g. "Cuban Bracelet"). */
+    productCaseName: { type: Type.STRING },
+
+
     coverage: {
       type: Type.OBJECT,
       properties: {
