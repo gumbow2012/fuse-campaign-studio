@@ -531,24 +531,37 @@ export type PkmStoneGroup = {
   provenance?: Provenance;
 };
 
+/** Which vocabulary layer a term belongs to — the layers never blend. */
+export type VocabularyDomain = "classical" | "gemological" | "manufacturing" | "hip_hop_custom";
+
 export type PkmSetting = {
   componentId?: string;
   regionId?: string;
   canonicalSetting?: string;
+  /** The ontology term whose engineering signature the evidence satisfies. */
+  detectedSetting?: string;
+  vocabularyDomain?: VocabularyDomain;
+  /** Observed signature elements that match / contradict the chosen term. */
+  matchedSignals?: string[];
+  conflictingSignals?: string[];
+  /** True when the user supplied the wording — analysis may not rename it. */
+  userConfirmedTerm?: boolean;
   confidence?: number;
   settingClassificationReason?: string;
   evidenceReferenceIds?: string[];
   settingVisualSignature?: string;
   needsConfirmation?: boolean;
   provenance?: Provenance;
-  /** Best match against the engineering setting ontology. */
+  /** Best match against the engineering terminology ontology. */
   ontologyMatch?: {
     canonicalName?: string;
+    vocabularyDomain?: VocabularyDomain;
     score?: number;
     matchedSignals?: string[];
     deviatingSignals?: string[];
   };
 };
+
 
 export type PkmMaterialRegion = {
   regionId?: string;
