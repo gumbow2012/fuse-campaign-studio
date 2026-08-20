@@ -988,15 +988,35 @@ export default function GenerationStudio() {
     [references.length, rememberReferences],
   );
 
+  /** Keyboard/accessibility fallback reorder — mutates the real references array. */
   const moveReference = (index: number, delta: number) => {
     setReferences((prev) => {
       const target = index + delta;
       if (target < 0 || target >= prev.length) return prev;
-      const next = [...prev];
-      [next[index], next[target]] = [next[target], next[index]];
-      return next;
+      return arrayMove(prev, index, target);
     });
   };
+
+  const dndSensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
+
+  /**
+   * DRAG REORDER — this is the single source of truth for reference order and
+   * writes straight into the `references` state that `handleGenerate` sends.
+   */
+  const handleReferenceDragEnd = useCallback((event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    setReferences((prev) => {
+      const from = prev.findIndex((entry) => entry.url === active.id);
+      const to = prev.findIndex((entry) => entry.url === over.id);
+      if (from === -1 || to === -1) return prev;
+      return arrayMove(prev, from, to);
+    });
+  }, []);
+
 
   const handleGenerate = () => {
     const text = prompt.trim();
