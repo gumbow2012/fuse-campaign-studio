@@ -2633,8 +2633,11 @@ export default function JewelrySwap() {
                 onDrop={(event) => {
                   event.preventDefault();
                   setDropActive(false);
-                  const files = Array.from(event.dataTransfer.files ?? []).filter((file) =>
-                    file.type.startsWith("image/"),
+                  const files = Array.from(event.dataTransfer.files ?? []).filter(
+                    (file) =>
+                      file.type.startsWith("image/") ||
+                      file.type.startsWith("video/") ||
+                      /\.(mp4|mov|m4v|webm)$/i.test(file.name),
                   );
                   if (files.length) void addPieces(files);
                 }}
@@ -2644,9 +2647,10 @@ export default function JewelrySwap() {
                 )}
               >
                 <p className="text-xs text-foreground/85">
-                  Upload jewelry references — drag &amp; drop product photos, CAD, front/back/side, macro &amp;
-                  close-ups together; FUSE organizes them.
+                  Upload jewelry references — drag &amp; drop product photos, CAD, video of the piece,
+                  front/back/side, macro &amp; close-ups together; FUSE organizes them.
                 </p>
+
                 <div className="mt-2.5 flex flex-wrap items-center justify-center gap-2">
                   <button
                     type="button"
