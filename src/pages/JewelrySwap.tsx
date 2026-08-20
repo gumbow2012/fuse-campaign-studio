@@ -2600,7 +2600,7 @@ export default function JewelrySwap() {
               <input
                 ref={pieceInputRef}
                 type="file"
-                accept="image/*"
+                accept="image/*,video/mp4,video/quicktime,.mp4,.mov"
                 multiple
                 className="hidden"
                 onChange={(event) => {
@@ -2609,6 +2609,7 @@ export default function JewelrySwap() {
                   void addPieces(files);
                 }}
               />
+
               <input
                 ref={angleInputRef}
                 type="file"
