@@ -674,7 +674,7 @@ export type ProductKnowledgeMap = {
     setting?: string;
     clasp?: string;
   };
-  videoAnalyses?: JewelryVideoReferenceAnalysis[];
+  videoAnalyses?: JewelryVideoAnalysis[];
 };
 
 /** Post-generation physical-fidelity report (analysis only). */
@@ -784,7 +784,7 @@ export type JewelryIntake = {
   conflictWarnings?: string[];
   /** The fused engineering understanding of the replacement piece(s). */
   knowledgeMap?: ProductKnowledgeMap;
-  videoAnalyses?: JewelryVideoReferenceAnalysis[];
+  videoAnalyses?: JewelryVideoAnalysis[];
 };
 
 export type JewelryIntakeResult = {
