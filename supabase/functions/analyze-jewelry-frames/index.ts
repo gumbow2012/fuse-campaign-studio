@@ -3446,6 +3446,8 @@ async function handleIntake(req: Request, body: any, user: { id: string }, apiKe
       options,
       unavailable: run.unavailable,
       userConfirmedFacts,
+      productCaseId: resolveProductCaseId(batch, videoReferences),
+
     });
 
     knowledgeMapMs = fused.geminiMs;
