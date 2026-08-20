@@ -345,7 +345,9 @@ export type JewelryIntakeResult = {
   /** Echoed straight back so the caller can discard a stale response. */
   setVersion?: string | null;
   requestId?: number | null;
+  timings?: { cacheHit?: boolean; referenceFetchMs?: number; geminiMs?: number; totalMs?: number };
 };
+
 
 
 /** One fast batch pass over the uploaded references (recognition/grouping). */
