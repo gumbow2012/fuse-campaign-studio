@@ -611,16 +611,22 @@ function buildJewelryPrompt(args: {
   const preferred = String(args.preferredRole ?? "").trim();
   const correction = failureCorrection(args.failureReason);
   const mode = normalizeMode(args.mode, args.macro === true);
+  const coverage = normalizeCoverage(args.coverage, mode);
 
   const prompt = [
     "Use SOURCE_FRAME (image 1) as the ABSOLUTE authority for the photograph. This is a precise jewelry replacement, not a redesign or a product shot. Do NOT reframe or recreate the photograph.",
     "",
     "Preserve EXACTLY from SOURCE_FRAME: camera position, camera angle, perspective, crop, zoom level, composition, depth of field, focus plane, lighting, background, chain placement, and the jewelry's position, orientation, rotation, tilt, visible percentage, occlusion and scale.",
     "",
+    REFERENCE_IMAGE_CONTEXT_RULE,
+    "",
+    REFERENCE_ROLE_PRIORITY_LINE,
+    "",
     REFERENCE_CONTEXT_EXCLUSION,
     "",
     ANTI_HYBRID_BLOCK,
     "",
+
     SURGICAL_REPLACEMENT_CORE,
     "",
     NO_INVENTION_BLOCK,
