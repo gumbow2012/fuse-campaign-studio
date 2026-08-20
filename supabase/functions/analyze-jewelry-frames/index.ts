@@ -1070,17 +1070,35 @@ async function runIntake(args: {
   roleVocabulary: string[];
   options: IntakeOptions;
 }) {
+  // Independent downloads run concurrently. An image that cannot be read is
+  // labelled unavailable and skipped — referenceIndex numbering is preserved so
+  // the client's index → file mapping never shifts.
+  const fetchStarted = Date.now();
+  const settled = await inlineImages(args.references.map((ref) => ref.url));
+  const referenceFetchMs = Date.now() - fetchStarted;
+  const unavailable = new Set<number>();
+  const imageParts: unknown[] = [];
+  settled.forEach((result, index) => {
+    if (result.ok) imageParts.push(result.value);
+    else {
+      unavailable.add(index);
+      console.warn(`[intake] reference ${index} unavailable: ${result.error}`);
+    }
+  });
+
   const parts: unknown[] = [
     {
       text: buildIntakePrompt({
         references: args.references,
         roleVocabulary: args.roleVocabulary,
         options: args.options,
+        unavailable,
       }),
     },
+    ...imageParts,
   ];
-  for (const ref of args.references) parts.push(await inlineImage(ref.url));
 
+  const geminiStarted = Date.now();
   const response = await args.ai.models.generateContent({
     model: GEMINI_ANALYSIS_MODEL,
     contents: [{ role: "user", parts }] as any,
@@ -1093,9 +1111,14 @@ async function runIntake(args: {
       thinkingConfig: { thinkingLevel: "low" },
     },
   });
+  const geminiMs = Date.now() - geminiStarted;
 
-  return JSON.parse((response.text ?? "").trim());
+  return {
+    intake: JSON.parse((response.text ?? "").trim()),
+    timings: { referenceFetchMs, geminiMs, unavailableReferences: [...unavailable] },
+  };
 }
+
 
 /**
  * Stamps provenance AND resolves every detected field onto the app's canonical
