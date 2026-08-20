@@ -1618,10 +1618,17 @@ export default function JewelrySwap() {
 
   /* ------------------------- Live dollar/credit preview --------------------- */
 
+  /**
+   * REAL estimate only. The backend prices this endpoint per image (fal pricing
+   * unit price × 1), so the figure is resolution-independent — 2K and 4K show
+   * the same true number rather than an invented multiplier.
+   */
+  const swapCostPerFrameUsd = IMAGE_FLAT_USD * NANO_COST_MULTIPLIER;
   const swapCostUsd = useMemo(
-    () => IMAGE_FLAT_USD * resolutionMultiplier("2K") * Math.max(0, selectedFrames.size),
-    [selectedFrames],
+    () => swapCostPerFrameUsd * Math.max(0, selectedFrames.size),
+    [selectedFrames, swapCostPerFrameUsd],
   );
+
 
   const videoCostUsd = useMemo(() => {
     const perSecond = VIDEO_MODELS.find((entry) => entry.key === videoModel)?.usdPerSecond ?? 0;
