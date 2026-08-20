@@ -680,6 +680,18 @@ export type ProductKnowledgeMap = {
   evidenceGaps?: PkmEvidenceGap[];
   userConfirmedFacts?: UserConfirmedFact[];
   settingOntology?: string[];
+  /** The seeded terminology ontology that this map was classified against. */
+  terminologyOntology?: {
+    version?: string;
+    terms?: {
+      canonicalName?: string;
+      vocabularyDomain?: VocabularyDomain;
+      termKind?: "setting" | "component" | "cut" | "construction";
+      aliases?: string[];
+      relatedTerms?: string[];
+    }[];
+  };
+
   /** Coverage read-out for the compact "FUSE UNDERSTOOD" summary. */
   coverage?: {
     geometry?: string;
