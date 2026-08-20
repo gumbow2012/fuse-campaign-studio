@@ -814,6 +814,32 @@ function stampSources(intake: any, options: IntakeOptions) {
     ["weight", []],
   ];
   for (const product of Array.isArray(intake?.products) ? intake.products : []) {
+    const needs = (): string[] =>
+      Array.isArray(product.needsConfirmation)
+        ? product.needsConfirmation
+        : (product.needsConfirmation = []);
+    const flag = (field: string) => {
+      const list = needs();
+      if (!list.includes(field)) list.push(field);
+    };
+
+    /**
+     * Clarity grades are only trustworthy with explicit readable evidence.
+     * Photograph-only reads are demoted to "needs confirmation" and never
+     * auto-populate a grade.
+     */
+    const quality = product?.stoneQuality;
+    if (quality && typeof quality === "object") {
+      const evidence = String(quality.qualityEvidenceSource ?? "visual_only").trim();
+      quality.qualityEvidenceSource = evidence || "visual_only";
+      if (!EXPLICIT_QUALITY_EVIDENCE.has(quality.qualityEvidenceSource)) {
+        quality.value = "";
+        quality.confidence = Math.min(Number(quality.confidence ?? 0), 0.3);
+        quality.needsConfirmation = true;
+        flag("stoneQuality");
+      }
+    }
+
     for (const [field, vocabulary] of fields) {
       const entry = product?.[field];
       if (!entry || typeof entry !== "object") continue;
@@ -824,10 +850,7 @@ function stampSources(intake: any, options: IntakeOptions) {
       entry.confidenceTier = tier;
       entry.source = canonical ? "gemini_detected" : "unknown";
       if (!entry.resolvedValue) {
-        const list: string[] = Array.isArray(product.needsConfirmation)
-          ? product.needsConfirmation
-          : (product.needsConfirmation = []);
-        if (String(entry.value ?? "").trim() && !list.includes(field)) list.push(field);
+        if (String(entry.value ?? "").trim()) flag(field);
       }
     }
 
@@ -841,11 +864,18 @@ function stampSources(intake: any, options: IntakeOptions) {
 
     for (const setting of Array.isArray(product?.settings) ? product.settings : []) {
       const tier = confidenceTier(setting.confidence);
-      setting.resolvedSetting = tier === "low" ? "" : toCanonical(setting.setting, options.settingTypes);
+      const raw = String(setting.setting ?? "").trim();
+      // The classifier may explicitly decline; that is a valid, honest answer.
+      const declined = /needs?[_\s-]?confirmation/i.test(raw) || !raw;
       setting.resolvedRegion = toCanonical(setting.region, regionVocabulary);
+      setting.resolvedSetting =
+        declined || tier === "low" ? "" : toCanonical(setting.setting, options.settingTypes);
       setting.confidenceTier = tier;
+      setting.needsConfirmation = !setting.resolvedSetting;
       setting.source = setting.resolvedSetting ? "gemini_detected" : "unknown";
+      if (setting.needsConfirmation) flag("settings");
     }
+
     for (const ref of Array.isArray(product?.references) ? product.references : []) {
       ref.source = ref?.designAuthorityLikely === true ? "cad" : "reference_inference";
     }
