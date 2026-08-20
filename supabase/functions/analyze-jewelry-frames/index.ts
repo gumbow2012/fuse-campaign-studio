@@ -584,6 +584,33 @@ const DETECTED_FIELD = {
   required: ["value", "confidence"],
 } as const;
 
+/**
+ * Stone quality can only be auto-resolved from EXPLICIT readable evidence, so
+ * the model must always declare where the grade came from.
+ */
+const QUALITY_FIELD = {
+  type: Type.OBJECT,
+  properties: {
+    value: { type: Type.STRING },
+    confidence: { type: Type.NUMBER },
+    qualityEvidenceSource: {
+      type: Type.STRING,
+      enum: ["cad_text", "certification", "product_text", "user_input", "visual_only"],
+    },
+    qualityEvidenceNote: { type: Type.STRING },
+  },
+  required: ["value", "confidence", "qualityEvidenceSource"],
+} as const;
+
+/** Evidence sources that may auto-populate a clarity grade. */
+const EXPLICIT_QUALITY_EVIDENCE = new Set([
+  "cad_text",
+  "certification",
+  "product_text",
+  "user_input",
+]);
+
+
 
 const INTAKE_SCHEMA = {
   type: Type.OBJECT,
