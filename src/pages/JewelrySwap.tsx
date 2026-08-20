@@ -1708,11 +1708,21 @@ export default function JewelrySwap() {
 
       setAnalysisState("running");
       for (let attempt = 0; attempt < 2; attempt += 1) {
+        const clientStarted = performance.now();
         try {
           const result = await analyzeJewelryFrames({
             sourceFrames,
             jewelryReferences: references,
             jewelrySpecs: specs as any,
+            // Lets the backend skip re-analysing the reference IMAGES when the
+            // intake already understood this exact set.
+            intakeFingerprint: intakeProvenance.current.fingerprint,
+            intakeReferences: intakeProvenance.current.references,
+          });
+          recordJewelryTiming("shot-analysis", performance.now() - clientStarted, {
+            cached: result.cached,
+            frames: sourceFrames.length,
+            server: result.timings,
           });
           setAnalysis(result.analysis);
           setAnalysisKey(key);
@@ -1726,6 +1736,7 @@ export default function JewelrySwap() {
           }
         }
       }
+
       return null;
     },
     [analysis, analysisKey, analysisInputKey, frameIdFor, frames, piecePayload],
