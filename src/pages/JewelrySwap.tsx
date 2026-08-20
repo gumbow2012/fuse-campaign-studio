@@ -2127,18 +2127,38 @@ export default function JewelrySwap() {
     }
     setAnimating(true);
     try {
-      let setIndex = 0;
-      for (const frame of approvedFrames) {
-        await animateFrame(frame, { setIndex, setSize: approvedFrames.length });
-        setIndex += 1;
+      // Bounded concurrency instead of a serial chain. setIndex stays the
+      // frame's own position in the approved set, so clip ordering/continuity
+      // is unchanged regardless of which submission finishes first.
+      const submitStarted = performance.now();
+      const outcomes = await submitWithConcurrency(
+        approvedFrames,
+        CLIP_SUBMIT_CONCURRENCY,
+        (frame, index) =>
+          animateFrame(frame, { setIndex: index, setSize: approvedFrames.length }),
+      );
+      const failed = outcomes.filter((outcome) => !outcome.ok);
+      recordJewelryTiming("clip-submit", performance.now() - submitStarted, {
+        clips: approvedFrames.length,
+        failed: failed.length,
+        concurrency: CLIP_SUBMIT_CONCURRENCY,
+      });
+      const queued = approvedFrames.length - failed.length;
+      if (queued) toast.success(`${queued} clip${queued === 1 ? "" : "s"} queued`);
+      if (failed.length) {
+        toast.error(
+          failed.length === approvedFrames.length
+            ? "Could not start the clips"
+            : `${failed.length} clip${failed.length === 1 ? "" : "s"} could not be started`,
+        );
       }
-      toast.success(`${approvedFrames.length} clip${approvedFrames.length === 1 ? "" : "s"} queued`);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Could not start the clips");
     } finally {
       setAnimating(false);
     }
   }, [approvedFrames, animateFrame, cameraDirection, customCameraPrompt]);
+
 
   const regenerateClip = useCallback(
     async (clip: JewelryGeneration) => {
