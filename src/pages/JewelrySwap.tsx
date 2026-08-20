@@ -1298,7 +1298,8 @@ export default function JewelrySwap() {
   const understoodSummary = useMemo(() => {
     if (!knowledgeMap) return "";
     const metal = knowledgeMap.materialRegions?.[0]?.metalColor ?? null;
-    const stoneCount = knowledgeMap.stones?.length ?? 0;
+    // REAL stones, not per-view observations (the same stone appears in many refs).
+    const stoneCount = knowledgeMap.physicalStones?.length ?? knowledgeMap.stones?.length ?? 0;
     const parts = [
       knowledgeMap.productType || "Jewelry piece",
       metal || null,
@@ -1322,6 +1323,58 @@ export default function JewelrySwap() {
       { label: "Clasp", level: coverage.clasp || "Unknown" },
     ];
   }, [knowledgeMap]);
+
+  /**
+   * Plain-language read-out of HOW the piece was reconstructed: cross-view
+   * agreement, recovered master modules, and physical vs apparent stone size.
+   */
+  const reconstructionNotes = useMemo(() => {
+    if (!knowledgeMap) return [] as string[];
+    const notes: string[] = [];
+
+    const confirmed = (knowledgeMap.physicalStones ?? []).filter(
+      (stone) => (stone.agreementCount ?? 0) > 1,
+    ).length;
+    if (confirmed) notes.push(`${confirmed} stone${confirmed === 1 ? "" : "s"} confirmed across multiple views`);
+
+    const master = (knowledgeMap.repeatedModules ?? []).filter((module) => module.masterModuleId).length;
+    if (master) {
+      notes.push(
+        `${master} master module${master === 1 ? "" : "s"} reconstructed and applied to every matching link`,
+      );
+    }
+
+    const uniform = (knowledgeMap.stoneGroups ?? []).filter(
+      (group) => group.sizeUniformity === "uniform",
+    ).length;
+    const mixed = (knowledgeMap.stoneGroups ?? []).filter(
+      (group) => group.sizeUniformity === "mixed",
+    ).length;
+    if (uniform) notes.push(`${uniform} stone field${uniform === 1 ? "" : "s"} physically uniform in size`);
+    if (mixed) notes.push(`${mixed} stone field${mixed === 1 ? "" : "s"} genuinely mixed in size`);
+
+    const perspective = (knowledgeMap.stoneGroups ?? []).filter(
+      (group) => group.apparentSizeDifference,
+    ).length;
+    if (perspective) notes.push("Size differences caused by camera angle were discounted");
+
+    const setting = knowledgeMap.settings?.[0]?.ontologyMatch?.canonicalName;
+    if (setting) notes.push(`Construction matched to ${setting}`);
+
+    const locked = knowledgeMap.userConfirmedFacts?.length ?? 0;
+    if (locked) notes.push(`${locked} detail${locked === 1 ? "" : "s"} you confirmed are locked`);
+
+    return notes;
+  }, [knowledgeMap]);
+
+  /** What still needs a real answer — evidence first, a new photo only last. */
+  const evidenceRequests = useMemo(() => {
+    return (knowledgeMap?.evidenceGaps ?? [])
+      .filter((gap) => !gap.resolvedFromExistingEvidence && gap.requestedUserReference)
+      .map((gap) => gap.requestedUserReference as string)
+      .slice(0, 3);
+  }, [knowledgeMap]);
+
 
 
 
