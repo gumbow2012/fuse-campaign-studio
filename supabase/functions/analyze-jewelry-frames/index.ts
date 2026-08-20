@@ -3031,6 +3031,19 @@ function buildKnowledgeMapPrompt(args: {
     }`
   );
 
+  /**
+   * ONE CARD = ONE PHYSICAL PIECE. Stated up front so no reference is ever
+   * classified as a product of its own.
+   */
+  const observationCount = args.references.length + (args.videoReferences?.length ?? 0);
+  const onePhysicalProductLine =
+    "ONE PHYSICAL PRODUCT (case " +
+    (args.productCaseId ?? DEFAULT_PRODUCT_CASE_ID) +
+    ") · " +
+    observationCount +
+    " OBSERVATIONS. Every asset listed below — CAD, front, side, macro, clasp still and the full product video — is a DIFFERENT OBSERVATION OF THE SAME PHYSICAL PIECE (one bracelet, pendant, ring, watch, earring, grill or custom object). RECONSTRUCT THE SINGLE OBJECT by combining complementary evidence. Do NOT produce one product interpretation per reference, do NOT finalise productType, metal, stone, setting, geometry, clasp, bail or stone layout from a single reference while other evidence for this case exists, and do NOT treat a reference that shows only a fragment (a tight CAD crop, a macro of three stones, a clasp close-up) as a different product. Return exactly ONE fused ProductKnowledgeMap plus perReferenceObservations, crossReferenceMatches and conflicts.";
+
+
   return [
     "You are a jewelry ENGINEERING analyst. This is ANALYSIS ONLY: return JSON only, never an image, never a video, never a URL, never bytes. You never generate or modify jewelry.",
     "",
