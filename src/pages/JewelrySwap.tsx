@@ -49,14 +49,17 @@ import {
 
 
 import {
+  analyzeJewelryFrames,
   animateJewelryFrame,
   callJewelrySwap,
   createTemplateFromJewelrySwap,
   listAssets,
   persistTemplateLayout,
   CAMERA_DIRECTIONS,
+  type JewelryFrameAnalysis,
   type JewelryGeneration,
   type JewelryImageModel,
+  type JewelryProjectAnalysis,
   type JewelrySwapTemplateResult,
   type LibraryAsset,
   type SwapGeneration,
@@ -552,6 +555,17 @@ export default function JewelrySwap() {
   const [pieces, setPieces] = useState<Piece[]>([]);
   const [uploadingPiece, setUploadingPiece] = useState(false);
   const [extraPrompt, setExtraPrompt] = useState("");
+
+  // STAGE A — still-image shot analysis. Advisory: the deterministic selector
+  // and every manual choice still decide. Recomputed ONLY when its inputs
+  // change (references/roles/CAD, specs, selected frames) — never on reload,
+  // modal open or approve.
+  const [analysis, setAnalysis] = useState<JewelryProjectAnalysis | null>(null);
+  const [analysisKey, setAnalysisKey] = useState<string | null>(null);
+  const [analysisState, setAnalysisState] = useState<"idle" | "running" | "ready" | "failed">(
+    "idle",
+  );
+
 
   // Nano Banana Pro results (the default) and the opt-in Nano Banana 2 runs live
   // side by side so a frame can be compared before one is approved.
@@ -1068,6 +1082,87 @@ export default function JewelrySwap() {
     [pieces],
   );
 
+  /** Stable id for a selected frame — used to match analysis back to frames. */
+  const frameIdFor = useCallback(
+    (index: number) => `frame-${index}-${(frames[index]?.time ?? 0).toFixed(3)}`,
+    [frames],
+  );
+
+  /** The analysis INPUTS, serialized. A change here (and only here) invalidates. */
+  const analysisInputKey = useCallback(
+    (indices: number[]) =>
+      JSON.stringify({
+        frames: indices.map((index) => frames[index]?.url ?? "").filter(Boolean).sort(),
+        specs: piecePayload().map((piece: any) => ({
+          references: piece.references,
+          type: piece.type,
+          metal: piece.metal,
+          stone: piece.stone,
+          stoneColor: piece.stoneColor,
+          quality: piece.quality,
+          settings: piece.settings,
+          dimensions: piece.dimensions,
+          notes: piece.notes,
+        })),
+      }),
+    [frames, piecePayload],
+  );
+
+  /**
+   * Runs the still analysis at most once per input fingerprint, with a single
+   * automatic retry. Failure is never fatal — the deterministic selector and
+   * the existing strict prompt take over untouched.
+   */
+  const ensureAnalysis = useCallback(
+    async (indices: number[]): Promise<JewelryProjectAnalysis | null> => {
+      const specs = piecePayload();
+      const references = specs.flatMap((piece: any) => piece.references ?? []);
+      if (!indices.length || !references.length) return null;
+
+      const key = analysisInputKey(indices);
+      if (analysisKey === key && analysis) return analysis;
+
+      const sourceFrames = indices
+        .map((index) => ({
+          frameId: frameIdFor(index),
+          timestamp: frames[index]?.time ?? 0,
+          imageUrl: frames[index]?.url ?? "",
+        }))
+        .filter((frame) => frame.imageUrl);
+
+      setAnalysisState("running");
+      for (let attempt = 0; attempt < 2; attempt += 1) {
+        try {
+          const result = await analyzeJewelryFrames({
+            sourceFrames,
+            jewelryReferences: references,
+            jewelrySpecs: specs as any,
+          });
+          setAnalysis(result.analysis);
+          setAnalysisKey(key);
+          setAnalysisState("ready");
+          return result.analysis;
+        } catch {
+          if (attempt === 1) {
+            setAnalysisState("failed");
+            setAnalysis(null);
+            setAnalysisKey(null);
+          }
+        }
+      }
+      return null;
+    },
+    [analysis, analysisKey, analysisInputKey, frameIdFor, frames, piecePayload],
+  );
+
+  /** This frame's advisory analysis, if the current analysis covers it. */
+  const frameAnalysisFor = useCallback(
+    (frameIndex: number): JewelryFrameAnalysis | null =>
+      analysis?.frames?.find((entry) => entry.frameId === frameIdFor(frameIndex)) ?? null,
+    [analysis, frameIdFor],
+  );
+
+
   const swapFrame = useCallback(
     async (
       frameIndex: number,
@@ -1077,6 +1172,8 @@ export default function JewelrySwap() {
         failureReason?: string | null;
         mode?: ReplacementMode;
         coverage?: Coverage;
+        frameAnalysis?: JewelryFrameAnalysis | null;
+        productAnalysis?: unknown;
       },
     ) => {
       const frame = frames[frameIndex];
@@ -1105,6 +1202,16 @@ export default function JewelrySwap() {
         coverage,
         // Back-compat with the previous per-frame Macro toggle.
         macro: mode === "macro",
+        // Stage-A advice for THIS frame — advisory only, and only if we already
+        // have it. Never triggers a fresh analysis call.
+        frameAnalysis:
+          options?.frameAnalysis !== undefined
+            ? options.frameAnalysis
+            : frameAnalysisFor(frameIndex),
+        productAnalysis:
+          options?.productAnalysis !== undefined
+            ? options.productAnalysis
+            : analysis?.productAnalysis ?? null,
       });
       if (imageModel === "nb2") {
         setAltSwaps((prev) => ({ ...prev, [frameIndex]: data.generation }));
@@ -1117,8 +1224,17 @@ export default function JewelrySwap() {
         });
       }
     },
-    [frames, piecePayload, meta, extraPrompt, framePreferredRole, frameMode, frameCoverage],
-
+    [
+      frames,
+      piecePayload,
+      meta,
+      extraPrompt,
+      framePreferredRole,
+      frameMode,
+      frameCoverage,
+      frameAnalysisFor,
+      analysis,
+    ],
   );
 
   /**
@@ -1150,9 +1266,18 @@ export default function JewelrySwap() {
     }
     setSwapping(true);
     try {
+      // STAGE A runs once here — after frames are selected and references exist,
+      // and before the first swap. Never per frame, per refresh or per approve.
+      const project = await ensureAnalysis(indices);
+      if (project) toast.success("Shot analysis ready");
       for (const index of indices) {
         // Initial generation is always Nano Banana Pro only — never two models.
-        await swapFrame(index, { imageModel: "pro" });
+        await swapFrame(index, {
+          imageModel: "pro",
+          frameAnalysis:
+            project?.frames?.find((entry) => entry.frameId === frameIdFor(index)) ?? null,
+          productAnalysis: project?.productAnalysis ?? null,
+        });
       }
       toast.success(`${indices.length} frame swap(s) queued`);
     } catch (error) {
@@ -1160,7 +1285,8 @@ export default function JewelrySwap() {
     } finally {
       setSwapping(false);
     }
-  }, [selectedFrames, pieces, swapFrame]);
+  }, [selectedFrames, pieces, swapFrame, ensureAnalysis, frameIdFor]);
+
 
 
   const removeSwap = useCallback(async (frameIndex: number) => {
@@ -2423,9 +2549,20 @@ export default function JewelrySwap() {
                       className="ml-auto rounded-xl bg-[hsl(var(--primary))] text-xs font-semibold text-primary-foreground hover:bg-[hsl(var(--primary))]/90"
                     >
                       {swapping ? <Loader2 size={13} className="animate-spin" /> : <Gem size={13} />}
-                      Swap {selectedFrames.size} frame(s)
+                      {swapping && analysisState === "running"
+                        ? "Analyzing jewelry shots…"
+                        : `Swap ${selectedFrames.size} frame(s)`}
                     </Button>
                   </div>
+                  {analysisState === "ready" ? (
+                    <p className="mt-2 text-[11px] font-medium text-emerald-200/90">
+                      Shot analysis ready
+                    </p>
+                  ) : analysisState === "failed" ? (
+                    <p className="mt-2 text-[11px] text-amber-200/90">
+                      Shot analysis unavailable — continuing with the standard reference rules.
+                    </p>
+                  ) : null}
                   <p className="mt-2 text-[11px] text-muted-foreground">
                     Only the frames you pick become generations — extraction itself is free.
                     {selectedFrames.size ? (

@@ -98,6 +98,83 @@ export async function listAssets(type: "image" | "video" | "all" = "all") {
   return data.assets ?? [];
 }
 
+/* ------------------------------------------------------------------ *
+ * STAGE A — still-image shot analysis (Jewelry Swap only)
+ * ------------------------------------------------------------------ *
+ * Analysis only: JSON in, JSON out. The source VIDEO is never sent —
+ * only the still frames the user selected, plus product references and
+ * the structured specification.
+ */
+
+export type JewelryFrameAnalysis = {
+  frameId: string;
+  timestamp?: number;
+  view?: string;
+  coverage?: "full_object" | "partial_object" | "macro_detail";
+  detailType?: string;
+  magnification?: string;
+  composition?: {
+    fullProductShouldBeVisible?: boolean;
+    preserveIntentionalCrop?: boolean;
+    negativeSpace?: string;
+  };
+  orientation?: string;
+  camera?: { angleDescription?: string; depthOfField?: string };
+  recommendedReferenceRoles?: string[];
+  avoidReferenceRoles?: string[];
+  replacementBehavior?: string;
+  riskFlags?: string[];
+};
+
+export type JewelryProductAnalysis = Record<string, unknown>;
+
+export type JewelryProjectAnalysis = {
+  version?: string;
+  productAnalysis: JewelryProductAnalysis;
+  frames: JewelryFrameAnalysis[];
+};
+
+export type JewelryAnalysisResult = {
+  cached: boolean;
+  fingerprint: string;
+  version: string;
+  analyzedAt: string;
+  analysis: JewelryProjectAnalysis;
+};
+
+/** Runs (or reuses) the still-image shot analysis for the selected frames. */
+export async function analyzeJewelryFrames(args: {
+  sourceFrames: { frameId: string; timestamp: number; imageUrl: string }[];
+  jewelryReferences: { url: string; role?: string | null; cad?: boolean }[];
+  jewelrySpecs: Record<string, unknown>[];
+}): Promise<JewelryAnalysisResult> {
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+
+  const response = await fetch(`${SUPABASE_URL}/functions/v1/analyze-jewelry-frames`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      apikey: SUPABASE_PUBLISHABLE_KEY,
+      Authorization: `Bearer ${session?.access_token ?? SUPABASE_PUBLISHABLE_KEY}`,
+    },
+    body: JSON.stringify({
+      sourceFrames: args.sourceFrames,
+      jewelryReferences: args.jewelryReferences,
+      jewelrySpecs: args.jewelrySpecs,
+    }),
+  });
+
+  const data = await response.json().catch(() => null);
+  if (!response.ok || data?.error) {
+    throw new Error(data?.error ?? `Shot analysis failed (${response.status})`);
+  }
+  return data as JewelryAnalysisResult;
+}
+
+
+
 
 /** Call the jewelry-swap edge function with a just-in-time session token. */
 export async function callJewelrySwap<T = any>(body: Record<string, unknown>): Promise<T> {

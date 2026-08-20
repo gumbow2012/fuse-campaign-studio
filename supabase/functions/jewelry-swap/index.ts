@@ -255,6 +255,8 @@ function selectReferencesForFrame(args: {
   piece: JewelryPiece;
   mode?: ReplacementMode | string | null;
   preferredRole?: string | null;
+  /** Stage-A still analysis for THIS frame. Advisory only — never authoritative. */
+  geminiFrameAnalysis?: GeminiFrameAnalysis | null;
 }): JewelryReference[] {
   const all = pieceReferences(args.piece);
   if (all.length <= 1) return all;
@@ -303,20 +305,49 @@ function selectReferencesForFrame(args: {
     take(photos.find((ref) => rolesMatch(roleText(ref), preferred)));
   }
 
-  // 3) Mode-specific photographic priorities.
-  if (mode === "macro") {
-    take(photos.find(isMacroRole));
-    take(photos.find(isDetailRole));
-    // At most ONE overall identity photo — avoid full-product hero photos.
-    take(photos.find(isOverallRole));
-  } else {
-    take(photos.find((ref) => /front/i.test(roleText(ref)) && !/3\/4/.test(roleText(ref))));
-    take(photos.find(isOverallRole));
-    take(photos.find((ref) => /3\/4|three quarter/i.test(roleText(ref))));
-    take(photos.find(isMacroRole));
+  // 3) STAGE-A ADVICE (Gemini): recommended roles, in the order it ranked them,
+  //    minus anything it asked to avoid. It fills slots only AFTER CAD and the
+  //    user's explicit Preferred Reference, and can never displace them.
+  const advice = args.geminiFrameAnalysis ?? null;
+  const avoid = (advice?.avoidReferenceRoles ?? []).map((role) => String(role ?? "").trim())
+    .filter(Boolean);
+  const isAvoided = (ref: JewelryReference) =>
+    avoid.some((role) => rolesMatch(roleText(ref), role));
+
+  if (advice?.recommendedReferenceRoles?.length) {
+    for (const role of advice.recommendedReferenceRoles) {
+      const wanted = String(role ?? "").trim();
+      if (!wanted) continue;
+      take(photos.find((ref) => rolesMatch(roleText(ref), wanted) && !isAvoided(ref)));
+    }
   }
 
-  // 4) Fill remaining slots deterministically in upload order.
+  // 4) Deterministic, mode-specific photographic priorities.
+  if (mode === "macro") {
+    take(photos.find((ref) => isMacroRole(ref) && !isAvoided(ref)));
+    take(photos.find((ref) => isDetailRole(ref) && !isAvoided(ref)));
+    // At most ONE overall identity photo — avoid full-product hero photos.
+    take(photos.find((ref) => isOverallRole(ref) && !isAvoided(ref)));
+  } else {
+    take(
+      photos.find((ref) =>
+        /front/i.test(roleText(ref)) && !/3\/4/.test(roleText(ref)) && !isAvoided(ref)
+      ),
+    );
+    take(photos.find((ref) => isOverallRole(ref) && !isAvoided(ref)));
+    take(
+      photos.find((ref) => /3\/4|three quarter/i.test(roleText(ref)) && !isAvoided(ref)),
+    );
+    take(photos.find((ref) => isMacroRole(ref) && !isAvoided(ref)));
+  }
+
+  // 5) Optional material support: remaining photographic references in upload
+  //    order — Gemini-avoided roles are only used if nothing else is left.
+  for (const ref of photos) {
+    if (picked.length >= MAX_PRODUCT_REFERENCES) break;
+    if (isAvoided(ref)) continue;
+    take(ref);
+  }
   for (const ref of photos) {
     if (picked.length >= MAX_PRODUCT_REFERENCES) break;
     take(ref);
@@ -330,9 +361,184 @@ function routePiece(
   piece: JewelryPiece,
   mode?: ReplacementMode | string | null,
   preferredRole?: string | null,
+  geminiFrameAnalysis?: GeminiFrameAnalysis | null,
 ): { piece: JewelryPiece; refs: JewelryReference[] } {
-  const refs = selectReferencesForFrame({ piece, mode, preferredRole });
+  const refs = selectReferencesForFrame({ piece, mode, preferredRole, geminiFrameAnalysis });
   return { piece: { ...piece, references: refs, urls: refs.map((ref) => ref.url) }, refs };
+}
+
+/* ------------------------------------------------------------------ *
+ * STAGE A — GEMINI STILL-IMAGE ANALYSIS (advisory)
+ * ------------------------------------------------------------------ *
+ * Produced by the analyze-jewelry-frames function from STILL IMAGES ONLY
+ * (never the source video). It ADVISES reference routing and appends a
+ * concise FRAME ANALYSIS section to the existing strict prompt. It may
+ * never override the structured spec, CAD authority, or any manual
+ * Mode / Framing / Preferred-Reference choice.
+ */
+
+type GeminiFrameAnalysis = {
+  frameId?: string;
+  view?: string | null;
+  coverage?: "full_object" | "partial_object" | "macro_detail" | string | null;
+  detailType?: string | null;
+  magnification?: string | null;
+  composition?: {
+    fullProductShouldBeVisible?: boolean;
+    preserveIntentionalCrop?: boolean;
+    negativeSpace?: string | null;
+  } | null;
+  orientation?: string | null;
+  camera?: { angleDescription?: string | null; depthOfField?: string | null } | null;
+  recommendedReferenceRoles?: string[] | null;
+  avoidReferenceRoles?: string[] | null;
+  replacementBehavior?: string | null;
+  riskFlags?: string[] | null;
+};
+
+type GeminiProductAnalysis = {
+  jewelryType?: string | null;
+  visibleComponents?: string[] | null;
+  disposableReferenceContext?: string[] | null;
+  geometryObservations?: string[] | null;
+  materialObservations?: string[] | null;
+  settingObservations?: string[] | null;
+  settingVisualSignature?: Record<string, unknown> | null;
+  conflictWarnings?: string[] | null;
+};
+
+/** Narrow, defensive normalization — anything unexpected becomes null. */
+function normalizeFrameAnalysis(value: unknown): GeminiFrameAnalysis | null {
+  if (!value || typeof value !== "object") return null;
+  const raw = value as Record<string, any>;
+  const list = (input: unknown) =>
+    (Array.isArray(input) ? input : []).map((entry) => String(entry ?? "").trim()).filter(Boolean);
+  return {
+    frameId: raw.frameId ? String(raw.frameId) : undefined,
+    view: raw.view ? String(raw.view) : null,
+    coverage: raw.coverage ? String(raw.coverage) : null,
+    detailType: raw.detailType ? String(raw.detailType) : null,
+    magnification: raw.magnification ? String(raw.magnification) : null,
+    composition: raw.composition && typeof raw.composition === "object"
+      ? {
+        fullProductShouldBeVisible: raw.composition.fullProductShouldBeVisible === true,
+        preserveIntentionalCrop: raw.composition.preserveIntentionalCrop === true,
+        negativeSpace: raw.composition.negativeSpace ? String(raw.composition.negativeSpace) : null,
+      }
+      : null,
+    orientation: raw.orientation ? String(raw.orientation) : null,
+    camera: raw.camera && typeof raw.camera === "object"
+      ? {
+        angleDescription: raw.camera.angleDescription ? String(raw.camera.angleDescription) : null,
+        depthOfField: raw.camera.depthOfField ? String(raw.camera.depthOfField) : null,
+      }
+      : null,
+    recommendedReferenceRoles: list(raw.recommendedReferenceRoles),
+    avoidReferenceRoles: list(raw.avoidReferenceRoles),
+    replacementBehavior: raw.replacementBehavior ? String(raw.replacementBehavior) : null,
+    riskFlags: list(raw.riskFlags),
+  };
+}
+
+function normalizeProductAnalysis(value: unknown): GeminiProductAnalysis | null {
+  if (!value || typeof value !== "object") return null;
+  return value as GeminiProductAnalysis;
+}
+
+/** Gemini's coverage vocabulary → FUSE coverage. Only used when Framing = Auto. */
+function coverageFromAnalysis(analysis: GeminiFrameAnalysis | null): Coverage | null {
+  const raw = String(analysis?.coverage ?? "").trim().toLowerCase();
+  if (raw === "full_object") return "full";
+  if (raw === "partial_object") return "partial";
+  if (raw === "macro_detail") return "macro";
+  return null;
+}
+
+/** Gemini's coverage/magnification → standard vs macro reconstruct. Auto only. */
+function modeFromAnalysis(analysis: GeminiFrameAnalysis | null): ReplacementMode | null {
+  const coverage = coverageFromAnalysis(analysis);
+  const magnification = String(analysis?.magnification ?? "").trim().toLowerCase();
+  if (coverage === "macro" || magnification === "macro" || magnification === "extreme_macro") {
+    return "macro";
+  }
+  if (coverage === "full" || coverage === "partial") return "standard";
+  return null;
+}
+
+/**
+ * The concise FRAME ANALYSIS section appended to the existing strict prompt.
+ * Explicitly labelled advisory so it can never outrank the locked blocks.
+ */
+function frameAnalysisBlock(
+  frame: GeminiFrameAnalysis | null,
+  product: GeminiProductAnalysis | null,
+): string | null {
+  if (!frame && !product) return null;
+  const lines: string[] = [
+    "FRAME ANALYSIS (automated still-image analysis — ADVISORY CONTEXT ONLY. It describes this source frame and the product references. It may NEVER override SOURCE_FRAME, the structured product specification, the CAD/design authority, the forced Mode/Coverage, or the Preferred Angle Reference above):",
+  ];
+
+  if (frame) {
+    const parts = [
+      frame.view ? `view: ${frame.view}` : null,
+      frame.coverage ? `coverage: ${frame.coverage}` : null,
+      frame.detailType ? `detail: ${frame.detailType}` : null,
+      frame.magnification ? `magnification: ${frame.magnification}` : null,
+      frame.orientation ? `orientation: ${frame.orientation}` : null,
+      frame.camera?.angleDescription ? `camera: ${frame.camera.angleDescription}` : null,
+      frame.camera?.depthOfField ? `depth of field: ${frame.camera.depthOfField}` : null,
+    ].filter(Boolean);
+    if (parts.length) lines.push(`- Source frame: ${parts.join("; ")}.`);
+    if (frame.composition) {
+      lines.push(
+        `- Composition: full product ${
+          frame.composition.fullProductShouldBeVisible ? "should" : "should NOT"
+        } be visible; intentional crop ${
+          frame.composition.preserveIntentionalCrop ? "MUST be preserved" : "not crop-critical"
+        }${frame.composition.negativeSpace ? `; negative space: ${frame.composition.negativeSpace}` : ""}.`,
+      );
+    }
+    if (frame.replacementBehavior) lines.push(`- Suggested replacement behaviour: ${frame.replacementBehavior}.`);
+    if (frame.recommendedReferenceRoles?.length) {
+      lines.push(`- Most relevant reference views for this frame: ${frame.recommendedReferenceRoles.join(", ")}.`);
+    }
+    if (frame.riskFlags?.length) {
+      lines.push(`- Watch out for: ${frame.riskFlags.join("; ")}.`);
+    }
+  }
+
+  if (product?.disposableReferenceContext?.length) {
+    lines.push(
+      `- DISPOSABLE REFERENCE CONTEXT detected in the product references — EXCLUDE all of it from the output: ${
+        product.disposableReferenceContext.join(", ")
+      }.`,
+    );
+  }
+  if (product?.settingVisualSignature) {
+    const sig = product.settingVisualSignature as Record<string, unknown>;
+    const parts = [
+      sig.declaredSetting ? `declared setting: ${sig.declaredSetting}` : null,
+      sig.stoneSizeDistribution ? `stone-size distribution: ${sig.stoneSizeDistribution}` : null,
+      sig.largeAnchorStonesVisible === true ? "large anchor stones present" : null,
+      sig.smallFillerStonesVisible === true ? "small filler stones present" : null,
+      sig.layoutRegularity ? `layout: ${sig.layoutRegularity}` : null,
+      sig.uniformRows === true ? "uniform rows observed" : "no uniform rows",
+      sig.metalSeparatorsVisible === true ? "metal separators visible" : null,
+      sig.dominantStoneColor ? `observed stone color: ${sig.dominantStoneColor}` : null,
+    ].filter(Boolean);
+    if (parts.length) {
+      lines.push(
+        `- OBSERVED SETTING SIGNATURE (reproduce this construction, do not regularize it): ${parts.join("; ")}.`,
+      );
+    }
+  }
+  if (product?.conflictWarnings?.length) {
+    lines.push(
+      `- Noted conflicts (the user's structured specification still wins): ${product.conflictWarnings.join("; ")}.`,
+    );
+  }
+
+  return lines.length > 1 ? lines.join("\n") : null;
 }
 
 
@@ -813,7 +1019,10 @@ function buildJewelryPrompt(args: {
   coverage?: Coverage | string | null;
   /** Legacy per-frame Macro toggle — equivalent to mode = "macro". */
   macro?: boolean;
-
+  /** Stage-A still analysis for this frame (advisory). */
+  frameAnalysis?: GeminiFrameAnalysis | null;
+  /** Stage-A product-level analysis of the references (advisory). */
+  productAnalysis?: GeminiProductAnalysis | null;
 }) {
   let cursor = 2; // image 1 is the source frame
   const lines: string[] = [];
@@ -880,8 +1089,17 @@ function buildJewelryPrompt(args: {
 
   const preferred = String(args.preferredRole ?? "").trim();
   const correction = failureCorrection(args.failureReason);
-  const mode = normalizeMode(args.mode, args.macro === true);
-  const coverage = normalizeCoverage(args.coverage, mode);
+  const manualMode = normalizeMode(args.mode, args.macro === true);
+  const manualCoverage = normalizeCoverage(args.coverage, manualMode);
+  const frameAnalysis = normalizeFrameAnalysis(args.frameAnalysis ?? null);
+  const productAnalysis = normalizeProductAnalysis(args.productAnalysis ?? null);
+  // Auto ONLY: Stage-A analysis resolves standard vs macro reconstruct and the
+  // framing. Any manual selection wins outright.
+  const mode = manualMode === "auto" ? (modeFromAnalysis(frameAnalysis) ?? "auto") : manualMode;
+  const coverage = manualCoverage === "auto"
+    ? (coverageFromAnalysis(frameAnalysis) ?? normalizeCoverage(null, mode))
+    : manualCoverage;
+  const analysisBlock = frameAnalysisBlock(frameAnalysis, productAnalysis);
 
   // Structured product authority — injected into THIS prompt, after the PIECES
   // lines and before the negatives. Only non-Auto values are emitted.
@@ -891,6 +1109,8 @@ function buildJewelryPrompt(args: {
   const colorless = isColorlessSpec(specs);
   const stoneLock = stoneEngineeringLockBlock(specs);
   const settingMap = multiSettingBlock(specs);
+
+
 
 
   const prompt = [
@@ -979,6 +1199,9 @@ function buildJewelryPrompt(args: {
     modeBlock(mode),
     "",
     coverageBlock(coverage, mode),
+    analysisBlock ? "" : null,
+    analysisBlock,
+
 
 
 
@@ -1450,6 +1673,10 @@ async function startSwapFrame(admin: AdminClient, args: {
   coverage?: string | null;
   /** Legacy per-frame Macro toggle (equivalent to mode = "macro"). */
   macro?: boolean;
+  /** Stage-A still analysis for THIS frame (advisory, optional). */
+  frameAnalysis?: unknown;
+  /** Stage-A product analysis of the references (advisory, optional). */
+  productAnalysis?: unknown;
   webhookBase: string;
 }) {
   const sourceFrameUrl = String(args.sourceFrameUrl ?? "").trim();
@@ -1464,10 +1691,16 @@ async function startSwapFrame(admin: AdminClient, args: {
     : "pro";
   const endpointId = imageModelKey === "nb2" ? IMAGE_MODEL_ALT : IMAGE_MODEL;
 
+  // Stage-A still analysis (advisory). Absent or malformed → deterministic path.
+  const frameAnalysis = normalizeFrameAnalysis(args.frameAnalysis ?? null);
+  const productAnalysis = normalizeProductAnalysis(args.productAnalysis ?? null);
+
   // Deterministic image-payload routing: computed ONCE and used for BOTH the
   // payload order and the prompt's "reference image N = role" numbering so the
   // two can never drift. SOURCE_FRAME is always image 1.
-  const routed = pieces.map((piece) => routePiece(piece, args.mode ?? null, args.preferredRole ?? null));
+  const routed = pieces.map((piece) =>
+    routePiece(piece, args.mode ?? null, args.preferredRole ?? null, frameAnalysis)
+  );
   const routedPieces = routed.map((entry) => entry.piece);
   const selectedRefs = routed.flatMap((entry) => entry.refs);
 
@@ -1483,7 +1716,10 @@ async function startSwapFrame(admin: AdminClient, args: {
     mode: args.mode ?? null,
     coverage: args.coverage ?? null,
     macro: args.macro === true,
+    frameAnalysis,
+    productAnalysis,
   });
+
 
   const { data: inserted, error: insertError } = await admin
     .from("studio_generations")
@@ -1559,7 +1795,17 @@ async function startSwapFrame(admin: AdminClient, args: {
           selected_reference_cad: selectedRefs.map((ref) => isCadRef(ref)),
           references_sent: selectedRefs.length,
           references_available: pieces.reduce((sum, piece) => sum + pieceReferences(piece).length, 0),
+          // Stage-A debug trail (never contains any API key).
+          gemini_analysis_used: !!frameAnalysis,
+          gemini_view: frameAnalysis?.view ?? null,
+          gemini_coverage: frameAnalysis?.coverage ?? null,
+          gemini_detailType: frameAnalysis?.detailType ?? null,
+          gemini_magnification: frameAnalysis?.magnification ?? null,
+          gemini_recommended_roles: frameAnalysis?.recommendedReferenceRoles ?? null,
+          gemini_avoid_roles: frameAnalysis?.avoidReferenceRoles ?? null,
+          gemini_risk_flags: frameAnalysis?.riskFlags ?? null,
           pieces,
+
         },
       })
       .eq("id", inserted.id)
@@ -2627,6 +2873,8 @@ Deno.serve(async (req) => {
         mode: typeof body.mode === "string" ? body.mode : null,
         coverage: typeof body.coverage === "string" ? body.coverage : null,
         macro: body.macro === true,
+        frameAnalysis: body.frameAnalysis ?? null,
+        productAnalysis: body.productAnalysis ?? null,
         webhookBase,
       });
       return json({ generation });
