@@ -1691,10 +1691,16 @@ async function startSwapFrame(admin: AdminClient, args: {
     : "pro";
   const endpointId = imageModelKey === "nb2" ? IMAGE_MODEL_ALT : IMAGE_MODEL;
 
+  // Stage-A still analysis (advisory). Absent or malformed → deterministic path.
+  const frameAnalysis = normalizeFrameAnalysis(args.frameAnalysis ?? null);
+  const productAnalysis = normalizeProductAnalysis(args.productAnalysis ?? null);
+
   // Deterministic image-payload routing: computed ONCE and used for BOTH the
   // payload order and the prompt's "reference image N = role" numbering so the
   // two can never drift. SOURCE_FRAME is always image 1.
-  const routed = pieces.map((piece) => routePiece(piece, args.mode ?? null, args.preferredRole ?? null));
+  const routed = pieces.map((piece) =>
+    routePiece(piece, args.mode ?? null, args.preferredRole ?? null, frameAnalysis)
+  );
   const routedPieces = routed.map((entry) => entry.piece);
   const selectedRefs = routed.flatMap((entry) => entry.refs);
 
@@ -1710,7 +1716,10 @@ async function startSwapFrame(admin: AdminClient, args: {
     mode: args.mode ?? null,
     coverage: args.coverage ?? null,
     macro: args.macro === true,
+    frameAnalysis,
+    productAnalysis,
   });
+
 
   const { data: inserted, error: insertError } = await admin
     .from("studio_generations")
