@@ -2705,13 +2705,15 @@ export default function JewelrySwap() {
                       </div>
                       <div>
                         <label className="mb-1 block text-[10px] uppercase tracking-[0.14em] text-cyan-200/70">
-                          Stone
+                          Stone{detectedTag(piece.sources, "stone")}
                         </label>
                         <select
                           value={piece.stone}
                           onChange={(event) =>
                             setPieces((prev) =>
-                              prev.map((item, i) => (i === index ? { ...item, stone: event.target.value } : item)),
+                              prev.map((item, i) =>
+                                i === index ? withOverride(item, "stone", { stone: event.target.value }) : item,
+                              ),
                             )
                           }
                           className={SELECT_CLASS}
@@ -2725,14 +2727,16 @@ export default function JewelrySwap() {
                       </div>
                       <div>
                         <label className="mb-1 block text-[10px] uppercase tracking-[0.14em] text-cyan-200/70">
-                          Stone color
+                          Stone color{detectedTag(piece.sources, "stoneColor")}
                         </label>
                         <select
                           value={piece.stoneColor || AUTO_STONE_COLOR}
                           onChange={(event) =>
                             setPieces((prev) =>
                               prev.map((item, i) =>
-                                i === index ? { ...item, stoneColor: event.target.value } : item,
+                                i === index
+                                  ? withOverride(item, "stoneColor", { stoneColor: event.target.value })
+                                  : item,
                               ),
                             )
                           }
@@ -2747,15 +2751,18 @@ export default function JewelrySwap() {
                       </div>
                       <div>
                         <label className="mb-1 block text-[10px] uppercase tracking-[0.14em] text-cyan-200/70">
-                          Quality
+                          Quality{detectedTag(piece.sources, "quality")}
                         </label>
                         <select
                           value={piece.quality || AUTO_QUALITY}
                           onChange={(event) =>
                             setPieces((prev) =>
-                              prev.map((item, i) => (i === index ? { ...item, quality: event.target.value } : item)),
+                              prev.map((item, i) =>
+                                i === index ? withOverride(item, "quality", { quality: event.target.value }) : item,
+                              ),
                             )
                           }
+
                           className={SELECT_CLASS}
                         >
                           {QUALITY_OPTIONS.map((option) => (
