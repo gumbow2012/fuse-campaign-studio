@@ -805,7 +805,7 @@ export type JewelryIntakeResult = {
 export async function analyzeJewelryIntake(
   args: {
     jewelryReferences: JewelryReferenceAsset[];
-    /** Metadata for each replacement VIDEO whose keyframes are in the set. */
+    /** The COMPLETE replacement videos to analyse directly (never keyframed). */
     videoReferences?: JewelryVideoReferenceInput[];
     roleVocabulary?: string[];
     options?: IntakeOptions;
