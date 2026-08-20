@@ -80,6 +80,8 @@ import {
 
 import { extractFrames, frameTimestamps, loadVideo, readMeta, type VideoMeta } from "@/lib/videoFrames";
 import { selectVideoKeyframes } from "@/lib/videoKeyframes";
+import { compressImageFile } from "@/lib/imageCompress";
+
 
 const JEWELRY_TYPES = [
   "Pendant",
