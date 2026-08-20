@@ -386,8 +386,20 @@ function pieceSummary(piece: Piece, frameCount: number) {
     `Metal: ${piece.metal === AUTO_METAL ? "Auto" : piece.metal}`,
     `Stone: ${piece.stone === AUTO_STONE ? "Auto" : piece.stone}`,
   ];
-  if (piece.quality) parts.push(`Quality: ${piece.quality}`);
+  if (piece.stoneColor && piece.stoneColor !== AUTO_STONE_COLOR) {
+    parts.push(`Color: ${piece.stoneColor}`);
+  }
+  if (piece.quality && piece.quality !== AUTO_QUALITY) parts.push(`Quality: ${piece.quality}`);
+  const settings = realSettings(piece);
+  if (settings.length) {
+    parts.push(
+      `Setting: ${settings
+        .map((setting) => (setting.region ? `${setting.region}: ${setting.type}` : setting.type))
+        .join(" / ")}`,
+    );
+  }
   parts.push(`References: ${piece.urls.length}`);
+
   parts.push(`Source Frames: ${frameCount}`);
   parts.push(piece.urls.length && frameCount ? "Ready to generate" : "Waiting on inputs");
   return parts.join(" · ");
