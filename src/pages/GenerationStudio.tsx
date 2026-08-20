@@ -354,14 +354,15 @@ function AspectGlyph({ ratio }: { ratio: string }) {
 
 function SectionLabel({ children, hint }: { children: React.ReactNode; hint?: string }) {
   return (
-    <div className="mb-2 flex items-baseline justify-between gap-3">
-      <span className="text-[11px] font-semibold uppercase tracking-[0.2em] text-cyan-200/70">
+    <div className="mb-2.5 flex items-baseline justify-between gap-3">
+      <span className="font-display text-[13px] font-semibold uppercase tracking-[0.08em] text-[hsl(var(--electric-cyan))]">
         {children}
       </span>
-      {hint ? <span className="text-[11px] text-muted-foreground">{hint}</span> : null}
+      {hint ? <span className="text-[12px] text-muted-foreground">{hint}</span> : null}
     </div>
   );
 }
+
 
 const ICON_ACTION_CLASS =
   "flex h-7 w-7 items-center justify-center rounded-lg border border-white/15 bg-black/60 text-foreground/80 backdrop-blur-md transition-colors hover:border-cyan-200/60 hover:text-cyan-100";
