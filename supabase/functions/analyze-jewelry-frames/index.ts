@@ -2682,7 +2682,11 @@ async function handleIntake(req: Request, body: any, user: { id: string }, apiKe
   const videoReferences = readVideoReferences(body?.videoReferences);
 
 
-  if (!references.length) return json({ error: "Add at least one jewelry reference" }, 400);
+  // A video-only set is valid: the complete clip is itself the evidence.
+  if (!references.length && !videoReferences.length) {
+    return json({ error: "Add at least one jewelry reference" }, 400);
+  }
+
 
   const roleVocabulary: string[] = (Array.isArray(body?.roleVocabulary) ? body.roleVocabulary : [])
     .map((entry: any) => String(entry ?? "").trim())
