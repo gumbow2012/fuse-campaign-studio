@@ -7,6 +7,7 @@ import {
   Copy,
   Download,
   Film,
+  GripVertical,
   Heart,
   ImageIcon,
   Images,
@@ -22,6 +23,25 @@ import {
   Wand2,
   X,
 } from "lucide-react";
+import {
+  DndContext,
+  DragEndEvent,
+  KeyboardSensor,
+  PointerSensor,
+  closestCenter,
+  useSensor,
+  useSensors,
+} from "@dnd-kit/core";
+import { restrictToVerticalAxis } from "@dnd-kit/modifiers";
+import {
+  SortableContext,
+  arrayMove,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
+
 
 import { toast } from "sonner";
 import SiteShell from "@/components/mvp/SiteShell";
