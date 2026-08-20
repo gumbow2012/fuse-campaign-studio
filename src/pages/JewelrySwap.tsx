@@ -887,7 +887,10 @@ export default function JewelrySwap() {
           type: JEWELRY_TYPES[0],
           metal: AUTO_METAL,
           stone: AUTO_STONE,
-          quality: "",
+          stoneColor: AUTO_STONE_COLOR,
+          quality: AUTO_QUALITY,
+          settings: [{ ...EMPTY_SETTING }],
+
           width: "",
           height: "",
           depth: "",
