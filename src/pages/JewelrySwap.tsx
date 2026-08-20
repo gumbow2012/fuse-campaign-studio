@@ -1034,6 +1034,12 @@ export default function JewelrySwap() {
   /* ---------------------- Reference intake (auto-organize) ------------------ */
 
   const referenceKey = pieces.flatMap((piece) => piece.urls).join("|");
+  /** Uncertain fields across all pieces — only these are surfaced for review. */
+  const uncertainCount = pieces.reduce(
+    (total, piece) => total + (piece.needsConfirmation?.length ?? 0),
+    0,
+  );
+
 
   /**
    * One fast batch pass over ALL uploaded references: recognition, grouping,
