@@ -3065,12 +3065,9 @@ export default function JewelrySwap() {
                           </span>
                         ) : null}
 
-                        <span className="rounded-full border border-white/12 bg-black/40 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.14em] text-foreground/70">
-                          Design authority:{" "}
-                          {authorityCount(piece)
-                            ? `${authorityCount(piece)} reference${authorityCount(piece) === 1 ? "" : "s"}`
-                            : "none"}
-                        </span>
+                        {/* No authority read-out in the normal UI — FUSE assigns it.
+                            The full ranking lives in Engineering details. */}
+
                         <button
                           type="button"
                           aria-label="Remove piece"
