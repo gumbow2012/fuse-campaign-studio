@@ -786,16 +786,10 @@ function buildKnowledgeMap(args: {
     );
   }
 
-  // Keyframe provenance is part of the catalog so ranking knows a reference came
-  // from a replacement-product VIDEO (still an image reference, still eligible).
-  const annotatedCatalog = catalogLines.map((line) => {
-    const referenceId = line.split(":")[0];
-    const index = args.references.findIndex((_, i) => referenceIdAt(i) === referenceId);
-    const ref = index >= 0 ? args.references[index] : null;
-    if (!ref || ref.kind !== "product_reference_video") return line;
-    const at = Number.isFinite(Number(ref.timestamp)) ? ` @ ${Number(ref.timestamp).toFixed(2)}s` : "";
-    return `${line} [PRODUCT VIDEO KEYFRAME${at}]`;
-  });
+  // Every catalogued reference is a genuine still or CAD view: replacement
+  // videos never enter the image reference set.
+  const annotatedCatalog = catalogLines;
+
 
   /* ---- The fused engineering understanding, when one was persisted ------- */
   const pkm = args.intake?.knowledgeMap && typeof args.intake.knowledgeMap === "object"
