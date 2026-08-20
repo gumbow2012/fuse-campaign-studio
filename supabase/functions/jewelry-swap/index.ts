@@ -132,6 +132,15 @@ type JewelryDimensions = {
 /** A single labeled reference image of a piece. */
 type JewelryReference = { url: string; role?: string | null; cad?: boolean };
 
+/** One structured stone-setting entry on a piece. */
+type JewelrySetting = {
+  type?: string | null;
+  region?: string | null;
+  stone?: string | null;
+  color?: string | null;
+  quality?: string | null;
+};
+
 type JewelryPiece = {
   urls?: unknown;
   url?: string;
@@ -140,7 +149,11 @@ type JewelryPiece = {
   type?: string;
   metal?: string;
   stone?: string;
+  /** Structured stone body color, independent of clarity/quality. */
+  stoneColor?: string;
   quality?: string;
+  /** Structured stone-setting construction, one or more regions. */
+  settings?: unknown;
   dimensions?: JewelryDimensions | null;
   cad?: boolean;
   person?: string;
@@ -149,6 +162,7 @@ type JewelryPiece = {
   scope?: string;
 
 };
+
 
 /** Normalized labeled references for a piece, in supplied order. */
 function pieceReferences(piece: JewelryPiece): JewelryReference[] {
