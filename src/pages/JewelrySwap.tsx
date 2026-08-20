@@ -776,6 +776,12 @@ export default function JewelrySwap() {
   /** The fused engineering understanding from the last intake pass. */
   const [knowledgeMap, setKnowledgeMap] = useState<ProductKnowledgeMap | null>(null);
   const [engineeringOpen, setEngineeringOpen] = useState(false);
+  /**
+   * Facts the USER settled (answers to genuine conflicts). These are sent as
+   * USER_CONFIRMED and the analysis may never override them.
+   */
+  const [userLocks, setUserLocks] = useState<UserConfirmedFact[]>([]);
+
 
   const [dropActive, setDropActive] = useState(false);
   // Reference intake (recognition / grouping / extraction). Never blocking:
