@@ -2785,7 +2785,7 @@ export default function JewelrySwap() {
                               <div>
                                 {settingIndex === 0 ? (
                                   <label className="mb-1 block text-[10px] uppercase tracking-[0.14em] text-cyan-200/70">
-                                    Setting
+                                    Setting{detectedTag(piece.sources, "settings")}
                                   </label>
                                 ) : null}
                                 <select
@@ -2794,8 +2794,7 @@ export default function JewelrySwap() {
                                     setPieces((prev) =>
                                       prev.map((item, i) =>
                                         i === index
-                                          ? {
-                                            ...item,
+                                          ? withOverride(item, "settings", {
                                             settings: (item.settings?.length
                                               ? item.settings
                                               : [{ ...EMPTY_SETTING }]
@@ -2804,7 +2803,7 @@ export default function JewelrySwap() {
                                                 ? { ...entry, type: event.target.value }
                                                 : entry,
                                             ),
-                                          }
+                                          })
                                           : item,
                                       ),
                                     )
@@ -2826,18 +2825,18 @@ export default function JewelrySwap() {
                                       setPieces((prev) =>
                                         prev.map((item, i) =>
                                           i === index
-                                            ? {
-                                              ...item,
+                                            ? withOverride(item, "settings", {
                                               settings: (item.settings ?? []).map((entry, j) =>
                                                 j === settingIndex
                                                   ? { ...entry, region: event.target.value }
                                                   : entry,
                                               ),
-                                            }
+                                            })
                                             : item,
                                         ),
                                       )
                                     }
+
                                     className={SELECT_CLASS}
                                   >
                                     <option value="">Region…</option>
