@@ -18,16 +18,22 @@ import {
   requireUser,
 } from "../_shared/supabase-admin.ts";
 
-const ANALYSIS_VERSION = "jewelry-still-analysis-v1";
+const ANALYSIS_VERSION = "jewelry-still-analysis-v2";
 const GEMINI_ANALYSIS_MODEL = Deno.env.get("GEMINI_ANALYSIS_MODEL")?.trim() || "gemini-3.6-flash";
 
-/** Gemini call ceiling per request (references + frames). */
-const MAX_IMAGES_PER_CALL = 15;
-/** Product references included in every batch so classification stays anchored. */
-const MAX_REFERENCE_IMAGES = 5;
+/** Gemini call ceiling per request (references + frames) — ONE batch call. */
+const MAX_IMAGES_PER_CALL = 20;
+/** Product references included in the batch so classification stays anchored. */
+const MAX_REFERENCE_IMAGES = 10;
 
 type SourceFrame = { frameId: string; timestamp: number; imageUrl: string };
 type JewelryReferenceInput = { url: string; role?: string | null; cad?: boolean };
+
+/** Stable, order-independent handle for a reference inside one analysis batch. */
+function referenceIdAt(index: number) {
+  return `REF_${index + 1}`;
+}
+
 
 /* ------------------------------------------------------------------ *
  * responseSchema — strict structured output (JewelryProjectAnalysis)
@@ -82,6 +88,48 @@ const SETTING_SIGNATURE_SCHEMA = {
   ],
 } as const;
 
+/**
+
+ * Per-REFERENCE metadata. Gemini inspects EVERY valid uploaded reference — even
+ * ones that will not be routed to the image model — so the whole library informs
+ * ranking and the setting signatures.
+ */
+const REFERENCE_META_SCHEMA = {
+  type: Type.OBJECT,
+  properties: {
+    referenceId: { type: Type.STRING },
+    detectedRole: { type: Type.STRING },
+    view: { type: Type.STRING },
+    coverage: {
+      type: Type.STRING,
+      enum: ["full_object", "partial_object", "macro_detail", "unclear"],
+    },
+    physicalRegionsVisible: STRING_ARRAY,
+    geometryValue: { type: Type.STRING, enum: ["high", "medium", "low"] },
+    materialValue: { type: Type.STRING, enum: ["high", "medium", "low"] },
+    settingValue: { type: Type.STRING, enum: ["high", "medium", "low"] },
+    usableFor: STRING_ARRAY,
+    disposableContext: STRING_ARRAY,
+    qualityNotes: { type: Type.STRING },
+    designAuthoritySuggested: { type: Type.BOOLEAN },
+    confidence: { type: Type.NUMBER },
+  },
+  required: [
+    "referenceId",
+    "detectedRole",
+    "view",
+    "coverage",
+    "physicalRegionsVisible",
+    "geometryValue",
+    "materialValue",
+    "settingValue",
+    "usableFor",
+    "disposableContext",
+    "qualityNotes",
+    "designAuthoritySuggested",
+    "confidence",
+  ],
+} as const;
 
 const RESPONSE_SCHEMA = {
   type: Type.OBJECT,
@@ -90,6 +138,9 @@ const RESPONSE_SCHEMA = {
       type: Type.OBJECT,
       properties: {
         jewelryType: { type: Type.STRING },
+        // Metadata for EVERY analysed reference (order carries no authority).
+        references: { type: Type.ARRAY, items: REFERENCE_META_SCHEMA as any },
+
         visibleComponents: STRING_ARRAY,
         disposableReferenceContext: {
           type: Type.ARRAY,
@@ -123,6 +174,7 @@ const RESPONSE_SCHEMA = {
       },
       required: [
         "jewelryType",
+        "references",
         "visibleComponents",
         "disposableReferenceContext",
         "geometryObservations",
@@ -131,6 +183,7 @@ const RESPONSE_SCHEMA = {
         "settingSignatures",
         "conflictWarnings",
       ],
+
     },
     frames: {
       type: Type.ARRAY,
@@ -172,6 +225,10 @@ const RESPONSE_SCHEMA = {
           },
           recommendedReferenceRoles: STRING_ARRAY,
           avoidReferenceRoles: STRING_ARRAY,
+          // PER-FRAME RANKED reference recommendations (referenceIds, best-first).
+          recommendedReferences: STRING_ARRAY,
+          avoidReferences: STRING_ARRAY,
+          rankingReasons: STRING_ARRAY,
           replacementBehavior: { type: Type.STRING },
           riskFlags: STRING_ARRAY,
         },
@@ -186,11 +243,15 @@ const RESPONSE_SCHEMA = {
           "camera",
           "recommendedReferenceRoles",
           "avoidReferenceRoles",
+          "recommendedReferences",
+          "avoidReferences",
+          "rankingReasons",
           "replacementBehavior",
           "riskFlags",
         ],
       },
     },
+
   },
   required: ["productAnalysis", "frames"],
 } as const;
@@ -326,7 +387,7 @@ function buildAnalysisPrompt(args: {
   specs: any[];
 }) {
   const refLines = args.references.map((ref, index) =>
-    `REFERENCE ${index + 1}: role "${ref.role || "Unlabeled view"}"${
+    `${referenceIdAt(index)}: user label "${ref.role || "Unlabeled view"}"${
       ref.cad === true ? " [CAD / DESIGN AUTHORITY]" : ""
     }`
   );
@@ -339,7 +400,7 @@ function buildAnalysisPrompt(args: {
     "You analyse STILL IMAGES ONLY. You never generate images or video. Return JSON only.",
     "You are ADVISORY: your output may never override the user's structured specification (metal, stone, stone color, quality, setting), the CAD/design authority, or any manual mode/framing/preferred-reference choice. Describe what you see; do not prescribe replacements for those locked fields.",
     "",
-    "PRODUCT REFERENCES (images provided first, in this order):",
+    "PRODUCT REFERENCES (images provided first, in this order). The order they were uploaded carries NO authority — judge every reference purely on its visual content:",
     ...refLines,
     "",
     "SOURCE FRAMES the user selected to swap (images provided after the references, in this order):",
@@ -350,11 +411,17 @@ function buildAnalysisPrompt(args: {
     "",
     "TASKS:",
     "1. productAnalysis — from the PRODUCT REFERENCES only: jewelry type, visible components, incidental/disposable context present in the references that must be excluded from any output (gloves, hands, fingers, wrists, necks, mannequins, boxes, velvet, tables, studio backgrounds, other jewelry, stands), geometry observations, material observations, setting observations, and settingSignatures — ONE entry per setting REGION.",
+    "1b. productAnalysis.references — EXACTLY one entry per PRODUCT REFERENCE listed above, echoing its referenceId. Inspect EVERY reference, including ones you would not recommend for any frame, and use the ENTIRE reference library when writing the settingSignatures. Per reference report: detectedRole (what view it actually is, regardless of its user label), view, coverage, physicalRegionsVisible (the physical regions/components of the piece that are legible in it), geometryValue / materialValue / settingValue (high | medium | low — how much trustworthy information it carries for each), usableFor (short phrases: e.g. 'overall silhouette', 'clasp mechanics', 'stone layout', 'metal finish'), disposableContext (gloves, hands, fingers, wrists, necks, mannequins, boxes, velvet, tables, studio backgrounds, other jewelry, stands present in THAT reference), qualityNotes (blur, glare, low resolution, heavy retouching, occlusion), designAuthoritySuggested (true when it reads as CAD / render / technical drawing), and confidence 0-1.",
     "2. settingSignatures is UNIVERSAL and setting-agnostic. For each region, echo the user's declared setting verbatim in declaredSetting (never change which setting the user chose) and then describe what that setting PHYSICALLY looks like on these references: stone types, colors and shapes, stone-size distribution, stone orientation pattern, setting density, layout regularity, prong/metal visibility, spacing pattern, channel direction, bezel geometry, whether large anchor stones and small filler stones coexist, and referenceDefinedCharacteristics (short concrete phrases). Populate only the fields that physically apply to that setting and leave the rest empty — a channel setting fills channelDirection, a bezel fills bezelGeometry, a mixed multi-size composition fills stoneSizeDistribution, and so on. If what you observe disagrees with the declared setting, do NOT change the declared value — record the disagreement in conflictWarnings.",
-    "3. frames — EXACTLY one entry per SOURCE FRAME, in the same order, echoing the given frameId. Classify each frame ONLY on its own visual content (never by neighbouring frames or any temporal assumption): view, coverage (full_object | partial_object | macro_detail), detailType, magnification, composition (whether the full product should be visible, whether an intentional crop must be preserved, negative space), orientation, camera angle + depth of field, recommendedReferenceRoles (choose from the reference roles listed above), avoidReferenceRoles, replacementBehavior, and riskFlags.",
+    "3. frames — EXACTLY one entry per SOURCE FRAME, in the same order, echoing the given frameId. Classify each frame ONLY on its own visual content (never by neighbouring frames or any temporal assumption): view, coverage (full_object | partial_object | macro_detail), detailType, magnification, composition (whether the full product should be visible, whether an intentional crop must be preserved, negative space), orientation, camera angle + depth of field, replacementBehavior, and riskFlags.",
+    "4. PER-FRAME RANKED REFERENCE RECOMMENDATIONS (the important part). For each frame also return: recommendedReferences — referenceIds RANKED BEST-FIRST for reconstructing THAT frame; avoidReferences — referenceIds that would mislead this frame; rankingReasons — one short reason per ranked reference, in the same order, naming why it won or lost.",
+    "Rank on: the source frame's view and orientation, its coverage (full / partial / macro), its magnification, which physical region of the piece is actually visible in it, whether a CAD view relevant to THAT view exists, setting/detail relevance, material relevance, context-contamination risk, and the user's preferred reference when one is declared.",
+    "Frame-type rules: an extreme-macro / macro_detail frame must prioritise macro, detail and setting references and SUPPRESS full hero product photos; a full-object hero frame must prioritise full / front / three-quarter references; a component close-up (clasp, link, hinge, bail, crown, shank, gallery) must prioritise references showing that component or its mechanics.",
+    "Cleanliness tie-break: when two references carry equivalent product information, rank the CLEANER one higher and push the one with glove / hand / mannequin / busy background contamination lower. A contaminated reference may still be recommended when it holds unique physical information — its context is disposable and will be excluded downstream. Do not recommend every reference: 2 to 4 strong ones per frame is right.",
     "Be concise: short phrases, no prose paragraphs. Never output URLs, file names, base64 or media of any kind.",
   ].join("\n");
 }
+
 
 /* ------------------------------------------------------------------ *
  * Gemini batches
@@ -735,31 +802,47 @@ Deno.serve(async (req) => {
     }
 
     const ai = new GoogleGenAI({ apiKey });
+    // ONE batch call: EVERY reference and EVERY selected source frame are
+    // analysed together so the per-frame ranking can compare the whole library.
     const references = jewelryReferences.slice(0, MAX_REFERENCE_IMAGES);
     const referenceParts: unknown[] = [];
     for (const ref of references) referenceParts.push(await inlineImage(ref.url));
 
-    const framesPerCall = Math.max(1, MAX_IMAGES_PER_CALL - references.length);
-    const batches: SourceFrame[][] = [];
-    for (let i = 0; i < sourceFrames.length; i += framesPerCall) {
-      batches.push(sourceFrames.slice(i, i + framesPerCall));
-    }
+    const frameBudget = Math.max(1, MAX_IMAGES_PER_CALL - references.length);
+    const batchFramesInput = sourceFrames.slice(0, frameBudget);
 
-    let productAnalysis: any = null;
+    const parsed = await analyseBatch({
+      ai,
+      referenceParts,
+      references,
+      frames: batchFramesInput,
+      specs: jewelrySpecs,
+    });
+
+    const productAnalysis: any = parsed?.productAnalysis ?? null;
+    const returnedFrames = Array.isArray(parsed?.frames) ? parsed.frames : [];
     const frames: any[] = [];
+    batchFramesInput.forEach((frame, index) => {
+      const entry = returnedFrames.find((item: any) => item?.frameId === frame.frameId) ??
+        returnedFrames[index];
+      if (entry) frames.push({ ...entry, frameId: frame.frameId, timestamp: frame.timestamp });
+    });
 
-    for (const batch of batches) {
-      const parsed = await analyseBatch({ ai, referenceParts, references, frames: batch, specs: jewelrySpecs });
-      if (!productAnalysis && parsed?.productAnalysis) productAnalysis = parsed.productAnalysis;
-      const batchFrames = Array.isArray(parsed?.frames) ? parsed.frames : [];
-      batch.forEach((frame, index) => {
-        const entry = batchFrames.find((item: any) => item?.frameId === frame.frameId) ??
-          batchFrames[index];
-        if (entry) frames.push({ ...entry, frameId: frame.frameId, timestamp: frame.timestamp });
-      });
+    // Reference metadata is keyed by referenceId; keep the id → label mapping
+    // stable so the deterministic selector can resolve the ranking.
+    if (productAnalysis && Array.isArray(productAnalysis.references)) {
+      productAnalysis.references = productAnalysis.references
+        .filter((entry: any) => entry && typeof entry === "object")
+        .map((entry: any, index: number) => ({
+          ...entry,
+          referenceId: String(entry.referenceId ?? "").trim() || referenceIdAt(index),
+        }));
     }
+    if (productAnalysis) productAnalysis.referenceIds = references.map((_, i) => referenceIdAt(i));
 
     if (!productAnalysis || !frames.length) throw new Error("The analysis returned no usable result");
+
+
 
     const analysis = { version: ANALYSIS_VERSION, productAnalysis, frames };
     const stripped = assertAnalysisOnly(analysis);

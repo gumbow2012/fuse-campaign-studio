@@ -257,24 +257,27 @@ function rolesMatch(role: string, target: string) {
  * Ordered, capped, role-deduped product references for one frame.
  * SOURCE_FRAME is image 1 and is added by the CALLER, never by this selector.
  *
- * Ordering:
- *   1. CAD / design-authority reference(s)  (best role match, else CAD Front, max 2)
- *   2. Preferred-role photographic reference (top photographic slot, if set)
- *   3. Mode-specific photographic references
- *        macro    → Macro Detail, then closest detail view, then at most ONE overall photo
- *        standard → strongest Front/overall, then a 3/4, then optional Macro Detail
- *   4. Remaining photographic references in upload order (until the cap)
- * Total product references capped at MAX_PRODUCT_REFERENCES. Duplicate roles are
- * dropped (never "Front, Front"). Truncation protects, in order: CAD authority,
- * then preferred/strongest match, then secondary views — CAD is never dropped
- * first just because it was uploaded last.
+ * Authority order (FUSE is the final authority, Gemini is advisory):
+ *   1. explicit user override (Preferred Reference / Mode / Framing)
+ *   2. RELEVANT CAD / design authority for this view (never forced when none fits)
+ *   3. Gemini's per-frame ranking (best-first), minus anything it flagged avoid
+ *   4. deterministic role match for the mode (only tops up a thin payload)
+ *   5. remaining photos (last resort only — upload order has NO authority)
+ * Aim: 2-4 PRODUCT references + the source frame. Duplicate roles are dropped
+ * (never "Front, Front") and the total is capped at MAX_PRODUCT_REFERENCES.
  */
+
 function selectReferencesForFrame(args: {
   piece: JewelryPiece;
   mode?: ReplacementMode | string | null;
   preferredRole?: string | null;
   /** Stage-A still analysis for THIS frame. Advisory only — never authoritative. */
   geminiFrameAnalysis?: GeminiFrameAnalysis | null;
+  /**
+   * url → referenceId ("REF_1"...) using the SAME flatten order the analysis
+   * batch saw, so Gemini's per-frame ranking can be resolved back to refs.
+   */
+  referenceIds?: Map<string, string>;
 }): JewelryReference[] {
   const all = pieceReferences(args.piece);
   if (all.length <= 1) return all;
@@ -302,74 +305,107 @@ function selectReferencesForFrame(args: {
     return true;
   };
 
-  // 1) CAD authority first — best role match, else CAD Front, else first CAD.
+  /* --- Gemini per-frame ranking (advisory), resolved by referenceId ------- */
+  const advice = args.geminiFrameAnalysis ?? null;
+  const idOf = (ref: JewelryReference) => args.referenceIds?.get(ref.url) ?? null;
+  const norm = (value: unknown) => String(value ?? "").trim().toUpperCase();
+
+  const rankedIds = (advice?.recommendedReferences ?? []).map(norm).filter(Boolean);
+  const avoidIds = (advice?.avoidReferences ?? []).map(norm).filter(Boolean);
+  const hasRanking = rankedIds.length > 0;
+
+  const byId = (id: string) => all.find((ref) => norm(idOf(ref)) === id) ?? null;
+  /** Refs Gemini ranked, best-first, avoided entries removed. */
+  const rankedRefs = rankedIds
+    .filter((id) => !avoidIds.includes(id))
+    .map(byId)
+    .filter(Boolean) as JewelryReference[];
+
+  const avoidRoles = (advice?.avoidReferenceRoles ?? []).map((role) => String(role ?? "").trim())
+    .filter(Boolean);
+  const isAvoided = (ref: JewelryReference) => {
+    const id = norm(idOf(ref));
+    if (id && avoidIds.includes(id)) return true;
+    return avoidRoles.some((role) => rolesMatch(roleText(ref), role));
+  };
+
+  // 1) CAD / design authority — only when a RELEVANT one exists. CAD is never
+  //    forced into the payload just because the piece happens to have one.
   if (cads.length) {
-    const ordered = [
-      hasPreferred ? cads.find((ref) => rolesMatch(roleText(ref), `CAD ${preferred}`)) : null,
-      hasPreferred ? cads.find((ref) => rolesMatch(roleText(ref), preferred)) : null,
-      cads.find((ref) => /cad\s*front/i.test(roleText(ref))),
-      cads[0],
-      cads[1],
-    ].filter(Boolean) as JewelryReference[];
+    const relevant: JewelryReference[] = [];
+    if (hasPreferred) {
+      const match = cads.find((ref) => rolesMatch(roleText(ref), `CAD ${preferred}`)) ??
+        cads.find((ref) => rolesMatch(roleText(ref), preferred));
+      if (match) relevant.push(match);
+    }
+    // Gemini ranked a CAD view as relevant for THIS frame.
+    for (const ref of rankedRefs) if (isCadRef(ref)) relevant.push(ref);
+    // No ranking at all (fallback path) → previous deterministic behaviour.
+    if (!hasRanking) {
+      const front = cads.find((ref) => /cad\s*front/i.test(roleText(ref)));
+      if (front) relevant.push(front);
+      relevant.push(cads[0]);
+    }
     let cadCount = 0;
-    for (const ref of ordered) {
+    for (const ref of relevant) {
       if (cadCount >= MAX_CAD_REFERENCES) break;
+      if (isAvoided(ref) && hasRanking) continue;
       if (take(ref)) cadCount++;
     }
   }
 
-  // 2) Preferred role takes the top PHOTOGRAPHIC slot.
+  // 2) The user's explicit Preferred Reference outranks Gemini and actually
+  //    enters the payload (it is never prompt-only).
   if (hasPreferred) {
     take(photos.find((ref) => rolesMatch(roleText(ref), preferred)));
   }
 
-  // 3) STAGE-A ADVICE (Gemini): recommended roles, in the order it ranked them,
-  //    minus anything it asked to avoid. It fills slots only AFTER CAD and the
-  //    user's explicit Preferred Reference, and can never displace them.
-  const advice = args.geminiFrameAnalysis ?? null;
-  const avoid = (advice?.avoidReferenceRoles ?? []).map((role) => String(role ?? "").trim())
-    .filter(Boolean);
-  const isAvoided = (ref: JewelryReference) =>
-    avoid.some((role) => rolesMatch(roleText(ref), role));
+  // 3) GEMINI RANKING — strongest product photos first, in its ranked order.
+  for (const ref of rankedRefs) {
+    if (isCadRef(ref)) continue;
+    take(ref);
+  }
 
-  if (advice?.recommendedReferenceRoles?.length) {
-    for (const role of advice.recommendedReferenceRoles) {
-      const wanted = String(role ?? "").trim();
-      if (!wanted) continue;
-      take(photos.find((ref) => rolesMatch(roleText(ref), wanted) && !isAvoided(ref)));
+  // 4) Deterministic, mode-specific photographic priorities. This is the
+  //    validation layer: it only tops the payload up when Gemini's ranking left
+  //    it too thin (or produced no ranking at all) — it never pads a payload the
+  //    ranking already answered.
+  const MIN_PRODUCT_REFERENCES = 2;
+  if (!hasRanking || picked.length < MIN_PRODUCT_REFERENCES) {
+    if (mode === "macro") {
+      take(photos.find((ref) => isMacroRole(ref) && !isAvoided(ref)));
+      take(photos.find((ref) => isDetailRole(ref) && !isAvoided(ref)));
+      // At most ONE overall identity photo — avoid full-product hero photos.
+      take(photos.find((ref) => isOverallRole(ref) && !isAvoided(ref)));
+    } else {
+      take(
+        photos.find((ref) =>
+          /front/i.test(roleText(ref)) && !/3\/4/.test(roleText(ref)) && !isAvoided(ref)
+        ),
+      );
+      take(photos.find((ref) => isOverallRole(ref) && !isAvoided(ref)));
+      take(
+        photos.find((ref) => /3\/4|three quarter/i.test(roleText(ref)) && !isAvoided(ref)),
+      );
+      take(photos.find((ref) => isMacroRole(ref) && !isAvoided(ref)));
     }
   }
 
-  // 4) Deterministic, mode-specific photographic priorities.
-  if (mode === "macro") {
-    take(photos.find((ref) => isMacroRole(ref) && !isAvoided(ref)));
-    take(photos.find((ref) => isDetailRole(ref) && !isAvoided(ref)));
-    // At most ONE overall identity photo — avoid full-product hero photos.
-    take(photos.find((ref) => isOverallRole(ref) && !isAvoided(ref)));
-  } else {
-    take(
-      photos.find((ref) =>
-        /front/i.test(roleText(ref)) && !/3\/4/.test(roleText(ref)) && !isAvoided(ref)
-      ),
-    );
-    take(photos.find((ref) => isOverallRole(ref) && !isAvoided(ref)));
-    take(
-      photos.find((ref) => /3\/4|three quarter/i.test(roleText(ref)) && !isAvoided(ref)),
-    );
-    take(photos.find((ref) => isMacroRole(ref) && !isAvoided(ref)));
+
+  // 5) Last resort only. Upload order has NO authority: it is consulted purely
+  //    to keep a frame reconstructable when nothing above produced enough refs.
+  if (!hasRanking || picked.length < MIN_PRODUCT_REFERENCES) {
+    for (const ref of photos) {
+      if (picked.length >= (hasRanking ? MIN_PRODUCT_REFERENCES : MAX_PRODUCT_REFERENCES)) break;
+      if (isAvoided(ref)) continue;
+      take(ref);
+    }
+    for (const ref of photos) {
+      if (picked.length >= MIN_PRODUCT_REFERENCES) break;
+      take(ref);
+    }
   }
 
-  // 5) Optional material support: remaining photographic references in upload
-  //    order — Gemini-avoided roles are only used if nothing else is left.
-  for (const ref of photos) {
-    if (picked.length >= MAX_PRODUCT_REFERENCES) break;
-    if (isAvoided(ref)) continue;
-    take(ref);
-  }
-  for (const ref of photos) {
-    if (picked.length >= MAX_PRODUCT_REFERENCES) break;
-    take(ref);
-  }
 
   return picked;
 }
@@ -380,10 +416,34 @@ function routePiece(
   mode?: ReplacementMode | string | null,
   preferredRole?: string | null,
   geminiFrameAnalysis?: GeminiFrameAnalysis | null,
+  referenceIds?: Map<string, string>,
 ): { piece: JewelryPiece; refs: JewelryReference[] } {
-  const refs = selectReferencesForFrame({ piece, mode, preferredRole, geminiFrameAnalysis });
+  const refs = selectReferencesForFrame({
+    piece,
+    mode,
+    preferredRole,
+    geminiFrameAnalysis,
+    referenceIds,
+  });
   return { piece: { ...piece, references: refs, urls: refs.map((ref) => ref.url) }, refs };
 }
+
+/**
+ * url → referenceId map over ALL pieces, in the exact flatten order the
+ * analysis batch received (pieces in card order, refs in card order).
+ */
+function buildReferenceIdMap(pieces: JewelryPiece[]): Map<string, string> {
+  const map = new Map<string, string>();
+  let index = 0;
+  for (const piece of pieces) {
+    for (const ref of pieceReferences(piece)) {
+      index += 1;
+      if (!map.has(ref.url)) map.set(ref.url, `REF_${index}`);
+    }
+  }
+  return map;
+}
+
 
 /* ------------------------------------------------------------------ *
  * STAGE A — GEMINI STILL-IMAGE ANALYSIS (advisory)
@@ -410,6 +470,11 @@ type GeminiFrameAnalysis = {
   camera?: { angleDescription?: string | null; depthOfField?: string | null } | null;
   recommendedReferenceRoles?: string[] | null;
   avoidReferenceRoles?: string[] | null;
+  /** Per-frame RANKED referenceIds ("REF_1"...), best-first. Advisory. */
+  recommendedReferences?: string[] | null;
+  avoidReferences?: string[] | null;
+  rankingReasons?: string[] | null;
+
   replacementBehavior?: string | null;
   riskFlags?: string[] | null;
 };
@@ -512,6 +577,10 @@ function normalizeFrameAnalysis(value: unknown): GeminiFrameAnalysis | null {
       : null,
     recommendedReferenceRoles: list(raw.recommendedReferenceRoles),
     avoidReferenceRoles: list(raw.avoidReferenceRoles),
+    recommendedReferences: list(raw.recommendedReferences),
+    avoidReferences: list(raw.avoidReferences),
+    rankingReasons: list(raw.rankingReasons),
+
     replacementBehavior: raw.replacementBehavior ? String(raw.replacementBehavior) : null,
     riskFlags: list(raw.riskFlags),
   };
@@ -1853,11 +1922,13 @@ async function startSwapFrame(admin: AdminClient, args: {
   // Deterministic image-payload routing: computed ONCE and used for BOTH the
   // payload order and the prompt's "reference image N = role" numbering so the
   // two can never drift. SOURCE_FRAME is always image 1.
+  const referenceIds = buildReferenceIdMap(pieces);
   const routed = pieces.map((piece) =>
-    routePiece(piece, args.mode ?? null, args.preferredRole ?? null, frameAnalysis)
+    routePiece(piece, args.mode ?? null, args.preferredRole ?? null, frameAnalysis, referenceIds)
   );
   const routedPieces = routed.map((entry) => entry.piece);
   const selectedRefs = routed.flatMap((entry) => entry.refs);
+
 
   const imageUrls = cleanUrls([
     sourceFrameUrl,
@@ -1965,6 +2036,26 @@ async function startSwapFrame(admin: AdminClient, args: {
           gemini_recommended_roles: frameAnalysis?.recommendedReferenceRoles ?? null,
           gemini_avoid_roles: frameAnalysis?.avoidReferenceRoles ?? null,
           gemini_risk_flags: frameAnalysis?.riskFlags ?? null,
+
+          // REFERENCE-ROUTING AUDIT TRAIL (upload order carries no authority).
+          all_reference_ids_analyzed: [...referenceIds.values()],
+          gemini_ranked_reference_ids: frameAnalysis?.recommendedReferences ?? null,
+          gemini_rank_reasons: frameAnalysis?.rankingReasons ?? null,
+          gemini_avoid_reference_ids: frameAnalysis?.avoidReferences ?? null,
+          user_preferred_reference: args.preferredRole ?? null,
+          final_selected_reference_ids: selectedRefs.map((ref) =>
+            referenceIds.get(ref.url) ?? "REF_?"
+          ),
+          final_selected_reference_roles: selectedRefs.map((ref) => ref.role || "Unlabeled view"),
+          final_payload_order: [
+            "SOURCE_FRAME",
+            ...selectedRefs.map((ref) =>
+              `${referenceIds.get(ref.url) ?? "REF_?"}${isCadRef(ref) ? " [CAD]" : ""} · ${
+                ref.role || "Unlabeled view"
+              }`
+            ),
+          ],
+
           pieces,
 
         },

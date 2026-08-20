@@ -1,0 +1,1 @@
+DELETE FROM auth.users WHERE email LIKE 'jewelry.rank.verify.%@example.com';
