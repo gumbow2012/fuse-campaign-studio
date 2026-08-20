@@ -52,6 +52,8 @@ import {
   analyzeJewelryFrames,
   analyzeJewelryIntake,
   type JewelryIntake,
+  type DetectedField,
+
 
   animateJewelryFrame,
   callJewelrySwap,
@@ -424,6 +426,34 @@ const INTAKE_STAGES = [
   "Detecting stones & settings",
 ];
 
+/**
+ * The reference set must SETTLE before it is analyzed: a bulk upload of six
+ * files is one call, not six. Every change restarts this timer.
+ */
+const INTAKE_DEBOUNCE_MS = 1800;
+
+/**
+ * Any manual edit is PERMANENT: it stamps `user_override` on that field so a
+ * later reanalysis can flag a conflict but never silently overwrites it.
+ */
+function withOverride<T extends { sources?: Record<string, string> }>(
+  item: T,
+  field: string,
+  patch: Partial<T>,
+): T {
+  return { ...item, ...patch, sources: { ...(item.sources ?? {}), [field]: "user_override" } };
+}
+
+/** Small "Detected" marker so a resolved value never looks hand-picked. */
+function detectedTag(sources: Record<string, string> | undefined, field: string) {
+  const source = sources?.[field];
+  if (source === "gemini_detected") return " · Detected";
+  if (source === "gemini_suggested") return " · Suggested";
+  return "";
+}
+
+
+
 /** Non-Auto user value wins; otherwise fall back to the detected value. */
 function effectiveValue(userValue: string, autoValue: string, detected?: string | null) {
   if (userValue && userValue !== autoValue) return userValue;
@@ -651,13 +681,25 @@ export default function JewelrySwap() {
   // Reference intake (recognition / grouping / extraction). Never blocking:
   // the manual fields stay usable and a failure just falls back to them.
   const [intake, setIntake] = useState<{
-    status: "idle" | "running" | "ready" | "failed";
+    status: "idle" | "collecting" | "running" | "ready" | "stale" | "failed";
     stage: number;
     productCount: number;
+    referenceCount: number;
     error?: string | null;
-  }>({ status: "idle", stage: 0, productCount: 0 });
+  }>({ status: "idle", stage: 0, productCount: 0, referenceCount: 0 });
   const intakeAbort = useRef<AbortController | null>(null);
   const intakeToken = useRef(0);
+  /**
+   * STALE GUARD: the version of the reference set (urls + roles + authority
+   * flags) that the UI is currently showing. A response whose version differs
+   * from this is stale by definition and is discarded.
+   */
+  const intakeSetVersion = useRef<string>("");
+  /** Set by applyIntake so its own writes never retrigger the analysis. */
+  const intakeJustApplied = useRef(false);
+  /** Bumped by "Analyze now" to bypass the debounce for the current set. */
+  const [intakeNow, setIntakeNow] = useState(0);
+
 
   const [extraPrompt, setExtraPrompt] = useState("");
 
@@ -1073,85 +1115,163 @@ export default function JewelrySwap() {
   /* ---------------------- Reference intake (auto-organize) ------------------ */
 
   const referenceKey = pieces.flatMap((piece) => piece.urls).join("|");
+  /**
+   * The reference-set VERSION: every url plus the role and authority flag the
+   * user has attached to it. This single string is both the debounce trigger and
+   * the stale guard — anything that materially changes the analysis changes it.
+   */
+  const referenceSetVersion = useMemo(
+    () =>
+      JSON.stringify(
+        pieces.map((piece) =>
+          piece.urls.map((url, angleIndex) => [
+            url,
+            piece.roles?.[angleIndex] ?? "",
+            piece.cads?.[angleIndex] ?? null,
+          ]),
+        ),
+      ),
+    [pieces],
+  );
+  const referenceCount = pieces.reduce((total, piece) => total + piece.urls.length, 0);
   /** Uncertain fields across all pieces — only these are surfaced for review. */
   const uncertainCount = pieces.reduce(
     (total, piece) => total + (piece.needsConfirmation?.length ?? 0),
     0,
   );
 
+  /** The app's canonical vocabularies, handed to the analysis every call. */
+  const intakeOptions = useMemo(
+    () => ({
+      jewelryTypes: JEWELRY_TYPES,
+      metals: METAL_OPTIONS.filter((option) => option !== AUTO_METAL),
+      stones: STONE_OPTIONS.filter((option) => option !== AUTO_STONE),
+      stoneColors: STONE_COLOR_OPTIONS.filter((option) => option !== AUTO_STONE_COLOR),
+      qualities: QUALITY_OPTIONS.filter((option) => option !== AUTO_QUALITY),
+      settingTypes: SETTING_TYPE_OPTIONS.filter((option) => option !== AUTO_SETTING),
+      settingRegions: TYPE_SETTING_REGIONS,
+    }),
+    [],
+  );
 
   /**
-   * One fast batch pass over ALL uploaded references: recognition, grouping,
-   * role + design-authority proposals and spec extraction. Any user override is
-   * preserved; on failure the manual reference UI stays fully functional.
+   * One DEBOUNCED batch pass over ALL current references: recognition, grouping,
+   * role + design-authority proposals and spec extraction. A 6-file bulk upload
+   * is one call, because every change to the set restarts the timer. Any user
+   * override is preserved; on failure the manual reference UI stays functional.
    */
   useEffect(() => {
-    const urls = referenceKey ? referenceKey.split("|").filter(Boolean) : [];
-    // References changed → cancel the stale result before re-analyzing.
-    intakeAbort.current?.abort();
-    intakeToken.current += 1;
-    const token = intakeToken.current;
-    if (!urls.length) {
-      setIntake({ status: "idle", stage: 0, productCount: 0 });
+    // The analysis writing back roles/grouping is not a user change.
+    if (intakeJustApplied.current) {
+      intakeJustApplied.current = false;
+      intakeSetVersion.current = referenceSetVersion;
       return;
     }
 
-    const controller = new AbortController();
-    intakeAbort.current = controller;
-    setIntake({ status: "running", stage: 0, productCount: 0 });
-    // Staged ticks reflect the real request; they never delay the result.
-    const ticker = setInterval(() => {
-      setIntake((prev) =>
-        prev.status === "running"
-          ? { ...prev, stage: Math.min(prev.stage + 1, INTAKE_STAGES.length - 1) }
-          : prev,
-      );
-    }, 1200);
+    const urls = pieces.flatMap((piece) => piece.urls);
+    intakeSetVersion.current = referenceSetVersion;
+    // Any in-flight request now answers an older set — drop it.
+    intakeAbort.current?.abort();
+    intakeToken.current += 1;
+    const token = intakeToken.current;
 
-    const run = async (attempt: number): Promise<void> => {
-      try {
-        const result = await analyzeJewelryIntake(
-          {
-            jewelryReferences: urls.map((url) => ({ url })),
-            roleVocabulary: Array.from(
-              new Set(pieces.flatMap((piece) => roleOptionsForType(piece.type))),
-            ).filter(Boolean),
-          },
-          controller.signal,
+    if (!urls.length) {
+      setIntake({ status: "idle", stage: 0, productCount: 0, referenceCount: 0 });
+      return;
+    }
+
+    // While the set is still settling we never apply conclusions.
+    setIntake((prev) => ({
+      status: prev.status === "ready" ? "stale" : "collecting",
+      stage: 0,
+      productCount: prev.productCount,
+      referenceCount: urls.length,
+    }));
+
+    const version = referenceSetVersion;
+    let ticker: number | undefined;
+
+    const start = window.setTimeout(() => {
+      const controller = new AbortController();
+      intakeAbort.current = controller;
+      setIntake({
+        status: "running",
+        stage: 0,
+        productCount: 0,
+        referenceCount: urls.length,
+      });
+      ticker = window.setInterval(() => {
+        setIntake((prev) =>
+          prev.status === "running"
+            ? { ...prev, stage: Math.min(prev.stage + 1, INTAKE_STAGES.length - 1) }
+            : prev,
         );
-        if (token !== intakeToken.current) return;
-        applyIntake(urls, result.intake);
-        setIntake({
-          status: "ready",
-          stage: INTAKE_STAGES.length,
-          productCount: result.intake?.products?.length ?? 1,
-        });
-      } catch (error) {
-        if (controller.signal.aborted || token !== intakeToken.current) return;
-        if (attempt === 0) return run(1); // one retry max
-        setIntake({
-          status: "failed",
-          stage: 0,
-          productCount: 0,
-          error: error instanceof Error ? error.message : "Analysis failed",
-        });
-      }
-    };
+      }, 1200);
 
-    void run(0).finally(() => clearInterval(ticker));
+      const run = async (attempt: number): Promise<void> => {
+        try {
+          const result = await analyzeJewelryIntake(
+            {
+              jewelryReferences: pieces.flatMap((piece) =>
+                piece.urls.map((url, angleIndex) => ({
+                  url,
+                  role: piece.roles?.[angleIndex] || null,
+                  cad: isGeometryAuthority(piece, angleIndex),
+                })),
+              ),
+              roleVocabulary: Array.from(
+                new Set(pieces.flatMap((piece) => roleOptionsForType(piece.type))),
+              ).filter(Boolean),
+              options: intakeOptions,
+              setVersion: version,
+              requestId: token,
+            },
+            controller.signal,
+          );
+          // STALE GUARD — both the monotonic request id and the set version must
+          // still match the set on screen, otherwise this answer is discarded.
+          if (token !== intakeToken.current) return;
+          if (version !== intakeSetVersion.current) return;
+          if (result.setVersion && result.setVersion !== intakeSetVersion.current) return;
+          applyIntake(urls, result.intake);
+          setIntake({
+            status: "ready",
+            stage: INTAKE_STAGES.length,
+            productCount: result.intake?.products?.length ?? 1,
+            referenceCount: urls.length,
+          });
+        } catch (error) {
+          if (controller.signal.aborted || token !== intakeToken.current) return;
+          if (version !== intakeSetVersion.current) return;
+          if (attempt === 0) return run(1); // one retry max
+          setIntake({
+            status: "failed",
+            stage: 0,
+            productCount: 0,
+            referenceCount: urls.length,
+            error: error instanceof Error ? error.message : "Analysis failed",
+          });
+        }
+      };
+
+      void run(0).finally(() => {
+        if (ticker) clearInterval(ticker);
+      });
+    }, INTAKE_DEBOUNCE_MS);
 
     return () => {
-      clearInterval(ticker);
-      controller.abort();
+      clearTimeout(start);
+      if (ticker) clearInterval(ticker);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [referenceKey]);
+  }, [referenceSetVersion, intakeNow]);
 
   /**
    * Applies the intake result: regroups the references into one card per
-   * detected physical piece, pre-fills roles / design authority / specs, and
-   * NEVER overwrites a value the user set (user_override always wins).
+   * detected physical piece, RESOLVES every "Auto from reference" field to the
+   * detected canonical value, and NEVER overwrites a user_override.
    */
+
   const applyIntake = useCallback((urls: string[], result: JewelryIntake | null) => {
     const products = Array.isArray(result?.products) ? result!.products : [];
     if (!products.length) return;
@@ -1177,12 +1297,62 @@ export default function JewelrySwap() {
         refs.forEach((ref) => claimed.add(ref.referenceIndex!));
 
         const base = flat[refs[0].referenceIndex!].piece ?? prev[0] ?? null;
+        const baseSources = base?.sources ?? {};
+        /**
+         * "Auto from reference" is a user MODE, not the spec. When the analysis
+         * resolved a canonical value we write that real value into the control —
+         * unless the user set the field themselves (user_override is permanent).
+         */
+        const resolve = (
+          field: string,
+          current: string | undefined,
+          autoValue: string,
+          detected?: DetectedField | null,
+        ): { value: string; source: string } => {
+          const userValue = String(current ?? "").trim();
+          const isUserSet =
+            baseSources[field] === "user_override" && userValue && userValue !== autoValue;
+          if (isUserSet) return { value: userValue, source: "user_override" };
+          const canonical = String(detected?.resolvedValue ?? "").trim();
+          const tier = detected?.confidenceTier ?? "low";
+          if (canonical && (tier === "high" || tier === "medium")) {
+            return { value: canonical, source: tier === "high" ? "gemini_detected" : "gemini_suggested" };
+          }
+          return { value: userValue || autoValue, source: "unknown" };
+        };
+
+        const resolvedType = resolve("type", base?.type, JEWELRY_TYPES[0], product.jewelryType);
+        const resolvedMetal = resolve("metal", base?.metal, AUTO_METAL, product.metal);
+        const resolvedStone = resolve("stone", base?.stone, AUTO_STONE, product.stoneType);
+        const resolvedColor = resolve("stoneColor", base?.stoneColor, AUTO_STONE_COLOR, product.stoneColor);
+        const resolvedQuality = resolve("quality", base?.quality, AUTO_QUALITY, product.stoneQuality);
+
+        // Canonical, per-region settings — the existing multi-setting rows are
+        // auto-populated without the user pressing "+ Add setting".
         const detectedSettings = (product.settings ?? [])
           .map((setting) => ({
-            type: String(setting.setting ?? "").trim(),
-            region: String(setting.region ?? "").trim() || null,
+            type: String(setting.resolvedSetting ?? setting.setting ?? "").trim(),
+            region: String(setting.resolvedRegion ?? setting.region ?? "").trim() || null,
+            tier: setting.confidenceTier ?? "low",
           }))
           .filter((setting) => setting.type);
+        const userSetSettings =
+          baseSources.settings === "user_override" &&
+          realSettings(base ?? ({ settings: [] } as unknown as Piece)).length > 0;
+        const autoSettings = detectedSettings
+          .filter((setting) => setting.tier !== "low")
+          .map((setting) => ({
+            ...EMPTY_SETTING,
+            type: setting.type,
+            region: setting.region ?? "",
+          }));
+        const settings = userSetSettings
+          ? base!.settings
+          : autoSettings.length
+            ? autoSettings.slice(0, 6)
+            : base?.settings?.length
+              ? base.settings
+              : [{ ...EMPTY_SETTING }];
 
         next.push({
           urls: refs.map((ref) => flat[ref.referenceIndex!].url).slice(0, 6),
@@ -1207,12 +1377,12 @@ export default function JewelrySwap() {
             })
             .slice(0, 6),
           name: String(product.label ?? "").trim() || base?.name || `Piece ${productIndex + 1}`,
-          type: base?.type ?? JEWELRY_TYPES[0],
-          metal: base?.metal ?? AUTO_METAL,
-          stone: base?.stone ?? AUTO_STONE,
-          stoneColor: base?.stoneColor ?? AUTO_STONE_COLOR,
-          quality: base?.quality ?? AUTO_QUALITY,
-          settings: base?.settings?.length ? base.settings : [{ ...EMPTY_SETTING }],
+          type: resolvedType.value,
+          metal: resolvedMetal.value,
+          stone: resolvedStone.value,
+          stoneColor: resolvedColor.value,
+          quality: resolvedQuality.value,
+          settings,
           width: base?.width ?? "",
           height: base?.height ?? "",
           depth: base?.depth ?? "",
@@ -1221,27 +1391,30 @@ export default function JewelrySwap() {
           notes: base?.notes ?? "",
           scope: base?.scope ?? DEFAULT_SCOPE,
           expanded: base?.expanded ?? false,
-          // Detected values only RESOLVE fields left on Auto — see the backend.
+          // Kept for the summary line and for any field still left on Auto.
           detected: {
-            type: product.jewelryType?.value ?? null,
-            metal: product.metal?.value ?? null,
-            stone: product.stoneType?.value ?? null,
-            stoneColor: product.stoneColor?.value ?? null,
-            quality: product.stoneQuality?.value ?? null,
-            settings: detectedSettings,
+            type: product.jewelryType?.resolvedValue ?? product.jewelryType?.value ?? null,
+            metal: product.metal?.resolvedValue ?? product.metal?.value ?? null,
+            stone: product.stoneType?.resolvedValue ?? product.stoneType?.value ?? null,
+            stoneColor: product.stoneColor?.resolvedValue ?? product.stoneColor?.value ?? null,
+            quality: product.stoneQuality?.resolvedValue ?? product.stoneQuality?.value ?? null,
+            settings: detectedSettings.map((setting) => ({
+              type: setting.type,
+              region: setting.region,
+            })),
           },
           sources: {
-            type: base?.type && base.type !== JEWELRY_TYPES[0] ? "user_override" : "gemini_detected",
-            metal: base?.metal && base.metal !== AUTO_METAL ? "user_override" : "gemini_detected",
-            stone: base?.stone && base.stone !== AUTO_STONE ? "user_override" : "gemini_detected",
-            stoneColor:
-              base?.stoneColor && base.stoneColor !== AUTO_STONE_COLOR
-                ? "user_override"
-                : "gemini_detected",
-            quality: base?.quality && base.quality !== AUTO_QUALITY ? "user_override" : "gemini_detected",
-            settings: realSettings(base ?? ({ settings: [] } as unknown as Piece)).length
+            ...baseSources,
+            type: resolvedType.source,
+            metal: resolvedMetal.source,
+            stone: resolvedStone.source,
+            stoneColor: resolvedColor.source,
+            quality: resolvedQuality.source,
+            settings: userSetSettings
               ? "user_override"
-              : "gemini_detected",
+              : autoSettings.length
+                ? "gemini_detected"
+                : "unknown",
           },
           needsConfirmation: Array.isArray(product.needsConfirmation) ? product.needsConfirmation : [],
         });
@@ -1259,9 +1432,12 @@ export default function JewelrySwap() {
         next[0].cads.push(item.piece?.cads?.[item.angleIndex] ?? null);
       }
 
+      // These writes come from the analysis itself — they must not retrigger it.
+      intakeJustApplied.current = true;
       return next.slice(0, 8);
     });
   }, []);
+
 
 
   /* ------------------------------ 4. Frame swaps ---------------------------- */
@@ -2204,12 +2380,30 @@ export default function JewelrySwap() {
                     {intake.status === "running" ? (
                       <Loader2 size={12} className="animate-spin text-cyan-200" />
                     ) : null}
-                    {intake.status === "running"
-                      ? "Analyzing jewelry…"
-                      : intake.status === "ready"
-                        ? "Analysis ready"
-                        : "Analysis unavailable — the manual reference fields below still work"}
+                    {intake.status === "collecting"
+                      ? `${intake.referenceCount} reference${intake.referenceCount === 1 ? "" : "s"} ready`
+                      : intake.status === "running"
+                        ? "Understanding your jewelry…"
+                        : intake.status === "stale"
+                          ? "References changed"
+                          : intake.status === "ready"
+                            ? "Analysis ready"
+                            : "Analysis unavailable — the manual reference fields below still work"}
                   </p>
+                  {intake.status === "collecting" || intake.status === "stale" ? (
+                    <div className="mt-1.5 flex items-center gap-2">
+                      <span className="text-[10px] text-foreground/60">
+                        Waiting for the set to settle — all references are read in one pass.
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setIntakeNow((value) => value + 1)}
+                        className="text-[10px] uppercase tracking-[0.14em] text-cyan-200 transition-opacity hover:opacity-80"
+                      >
+                        {intake.status === "stale" ? "Reanalyze" : "Analyze now"}
+                      </button>
+                    </div>
+                  ) : null}
                   {intake.status === "running" ? (
                     <>
                       <ul className="mt-1.5 space-y-0.5 text-[10px] text-foreground/70">
@@ -2229,7 +2423,7 @@ export default function JewelrySwap() {
                         onClick={() => {
                           intakeToken.current += 1;
                           intakeAbort.current?.abort();
-                          setIntake({ status: "idle", stage: 0, productCount: 0 });
+                          setIntake({ status: "idle", stage: 0, productCount: 0, referenceCount: 0 });
                         }}
                         className="mt-1.5 text-[10px] uppercase tracking-[0.14em] text-foreground/60 transition-colors hover:text-foreground"
                       >
@@ -2237,6 +2431,7 @@ export default function JewelrySwap() {
                       </button>
                     </>
                   ) : null}
+
                   {intake.status === "failed" && intake.error ? (
                     <p className="mt-1 text-[10px] opacity-80">{intake.error}</p>
                   ) : null}
@@ -2464,15 +2659,18 @@ export default function JewelrySwap() {
 
                       <div>
                         <label className="mb-1 block text-[10px] uppercase tracking-[0.14em] text-cyan-200/70">
-                          Type
+                          Type{detectedTag(piece.sources, "type")}
                         </label>
                         <select
                           value={piece.type}
                           onChange={(event) =>
                             setPieces((prev) =>
-                              prev.map((item, i) => (i === index ? { ...item, type: event.target.value } : item)),
+                              prev.map((item, i) =>
+                                i === index ? withOverride(item, "type", { type: event.target.value }) : item,
+                              ),
                             )
                           }
+
                           className={SELECT_CLASS}
                         >
                           {JEWELRY_TYPES.map((type) => (
@@ -2484,15 +2682,18 @@ export default function JewelrySwap() {
                       </div>
                       <div>
                         <label className="mb-1 block text-[10px] uppercase tracking-[0.14em] text-cyan-200/70">
-                          Metal
+                          Metal{detectedTag(piece.sources, "metal")}
                         </label>
                         <select
                           value={piece.metal}
                           onChange={(event) =>
                             setPieces((prev) =>
-                              prev.map((item, i) => (i === index ? { ...item, metal: event.target.value } : item)),
+                              prev.map((item, i) =>
+                                i === index ? withOverride(item, "metal", { metal: event.target.value }) : item,
+                              ),
                             )
                           }
+
                           className={SELECT_CLASS}
                         >
                           {METAL_OPTIONS.map((option) => (
@@ -2504,13 +2705,15 @@ export default function JewelrySwap() {
                       </div>
                       <div>
                         <label className="mb-1 block text-[10px] uppercase tracking-[0.14em] text-cyan-200/70">
-                          Stone
+                          Stone{detectedTag(piece.sources, "stone")}
                         </label>
                         <select
                           value={piece.stone}
                           onChange={(event) =>
                             setPieces((prev) =>
-                              prev.map((item, i) => (i === index ? { ...item, stone: event.target.value } : item)),
+                              prev.map((item, i) =>
+                                i === index ? withOverride(item, "stone", { stone: event.target.value }) : item,
+                              ),
                             )
                           }
                           className={SELECT_CLASS}
@@ -2524,14 +2727,16 @@ export default function JewelrySwap() {
                       </div>
                       <div>
                         <label className="mb-1 block text-[10px] uppercase tracking-[0.14em] text-cyan-200/70">
-                          Stone color
+                          Stone color{detectedTag(piece.sources, "stoneColor")}
                         </label>
                         <select
                           value={piece.stoneColor || AUTO_STONE_COLOR}
                           onChange={(event) =>
                             setPieces((prev) =>
                               prev.map((item, i) =>
-                                i === index ? { ...item, stoneColor: event.target.value } : item,
+                                i === index
+                                  ? withOverride(item, "stoneColor", { stoneColor: event.target.value })
+                                  : item,
                               ),
                             )
                           }
@@ -2546,15 +2751,18 @@ export default function JewelrySwap() {
                       </div>
                       <div>
                         <label className="mb-1 block text-[10px] uppercase tracking-[0.14em] text-cyan-200/70">
-                          Quality
+                          Quality{detectedTag(piece.sources, "quality")}
                         </label>
                         <select
                           value={piece.quality || AUTO_QUALITY}
                           onChange={(event) =>
                             setPieces((prev) =>
-                              prev.map((item, i) => (i === index ? { ...item, quality: event.target.value } : item)),
+                              prev.map((item, i) =>
+                                i === index ? withOverride(item, "quality", { quality: event.target.value }) : item,
+                              ),
                             )
                           }
+
                           className={SELECT_CLASS}
                         >
                           {QUALITY_OPTIONS.map((option) => (
@@ -2577,7 +2785,7 @@ export default function JewelrySwap() {
                               <div>
                                 {settingIndex === 0 ? (
                                   <label className="mb-1 block text-[10px] uppercase tracking-[0.14em] text-cyan-200/70">
-                                    Setting
+                                    Setting{detectedTag(piece.sources, "settings")}
                                   </label>
                                 ) : null}
                                 <select
@@ -2586,8 +2794,7 @@ export default function JewelrySwap() {
                                     setPieces((prev) =>
                                       prev.map((item, i) =>
                                         i === index
-                                          ? {
-                                            ...item,
+                                          ? withOverride(item, "settings", {
                                             settings: (item.settings?.length
                                               ? item.settings
                                               : [{ ...EMPTY_SETTING }]
@@ -2596,7 +2803,7 @@ export default function JewelrySwap() {
                                                 ? { ...entry, type: event.target.value }
                                                 : entry,
                                             ),
-                                          }
+                                          })
                                           : item,
                                       ),
                                     )
@@ -2618,18 +2825,18 @@ export default function JewelrySwap() {
                                       setPieces((prev) =>
                                         prev.map((item, i) =>
                                           i === index
-                                            ? {
-                                              ...item,
+                                            ? withOverride(item, "settings", {
                                               settings: (item.settings ?? []).map((entry, j) =>
                                                 j === settingIndex
                                                   ? { ...entry, region: event.target.value }
                                                   : entry,
                                               ),
-                                            }
+                                            })
                                             : item,
                                         ),
                                       )
                                     }
+
                                     className={SELECT_CLASS}
                                   >
                                     <option value="">Region…</option>

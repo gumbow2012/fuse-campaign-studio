@@ -192,8 +192,35 @@ export async function analyzeJewelryFrames(args: {
 
 export type DetectedField = {
   value?: string | null;
+  /** Canonical value mapped onto the app's dropdowns ("" when unusable). */
+  resolvedValue?: string | null;
   confidence?: number | null;
+  confidenceTier?: "high" | "medium" | "low";
   source?: "user_override" | "cad" | "gemini_detected" | "reference_inference" | "unknown";
+};
+
+/** The canonical dropdown vocabularies handed to the intake analysis. */
+export type IntakeOptions = {
+  jewelryTypes: string[];
+  metals: string[];
+  stones: string[];
+  stoneColors: string[];
+  qualities: string[];
+  settingTypes: string[];
+  settingRegions: Record<string, string[]>;
+};
+
+export type IntakeSetting = {
+  setting: string;
+  region: string;
+  /** Canonical setting / region, resolved server-side against the app's enums. */
+  resolvedSetting?: string | null;
+  resolvedRegion?: string | null;
+  confidence?: number;
+  confidenceTier?: "high" | "medium" | "low";
+  settingVisualSignature?: string | null;
+  evidenceReferenceIndexes?: number[];
+  source?: string;
 };
 
 export type IntakeProduct = {
@@ -208,7 +235,7 @@ export type IntakeProduct = {
   weight?: DetectedField;
   visibleComponents?: string[];
   connectedComponents?: string[];
-  settings?: { setting: string; region: string; confidence?: number; source?: string }[];
+  settings?: IntakeSetting[];
   settingSignatures?: Record<string, unknown>[];
   references?: {
     referenceIndex: number;
@@ -236,13 +263,21 @@ export type JewelryIntakeResult = {
   version: string;
   analyzedAt: string;
   intake: JewelryIntake;
+  /** Echoed straight back so the caller can discard a stale response. */
+  setVersion?: string | null;
+  requestId?: number | null;
 };
+
 
 /** One fast batch pass over the uploaded references (recognition/grouping). */
 export async function analyzeJewelryIntake(
   args: {
     jewelryReferences: { url: string; role?: string | null; cad?: boolean }[];
     roleVocabulary?: string[];
+    options?: IntakeOptions;
+    /** Reference-set version + monotonic id, echoed back for stale detection. */
+    setVersion?: string;
+    requestId?: number;
     force?: boolean;
   },
   signal?: AbortSignal,
@@ -262,10 +297,14 @@ export async function analyzeJewelryIntake(
       mode: "intake",
       jewelryReferences: args.jewelryReferences,
       roleVocabulary: args.roleVocabulary ?? [],
+      options: args.options ?? null,
+      setVersion: args.setVersion ?? null,
+      requestId: args.requestId ?? null,
       force: args.force === true,
     }),
     signal,
   });
+
 
   const data = await response.json().catch(() => null);
   if (!response.ok || data?.error) {

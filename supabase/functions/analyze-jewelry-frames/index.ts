@@ -474,7 +474,105 @@ async function analyseBatch(args: {
  * carrying its own confidence so the app can mark uncertain values.
  */
 
-const INTAKE_VERSION = "jewelry-intake-analysis-v1";
+const INTAKE_VERSION = "jewelry-intake-analysis-v2";
+
+/**
+ * The app's canonical dropdown vocabularies, handed in by the client so the
+ * intake answer maps 1:1 onto the existing controls. Nothing here is invented
+ * or hardcoded in this function: an empty list simply means "free text".
+ */
+type IntakeOptions = {
+  jewelryTypes: string[];
+  metals: string[];
+  stones: string[];
+  stoneColors: string[];
+  qualities: string[];
+  settingTypes: string[];
+  /** jewelry-type keyword -> allowed region labels (type-aware). */
+  settingRegions: Record<string, string[]>;
+};
+
+const EMPTY_OPTIONS: IntakeOptions = {
+  jewelryTypes: [],
+  metals: [],
+  stones: [],
+  stoneColors: [],
+  qualities: [],
+  settingTypes: [],
+  settingRegions: {},
+};
+
+function readOptions(raw: any): IntakeOptions {
+  const list = (value: any) =>
+    (Array.isArray(value) ? value : [])
+      .map((entry: any) => String(entry ?? "").trim())
+      .filter(Boolean)
+      .slice(0, 80);
+  const regions: Record<string, string[]> = {};
+  const rawRegions = raw?.settingRegions;
+  if (rawRegions && typeof rawRegions === "object" && !Array.isArray(rawRegions)) {
+    for (const [key, value] of Object.entries(rawRegions)) {
+      const normalized = list(value);
+      if (normalized.length) regions[String(key).trim().toLowerCase()] = normalized;
+    }
+  }
+  return {
+    jewelryTypes: list(raw?.jewelryTypes),
+    metals: list(raw?.metals),
+    stones: list(raw?.stones),
+    stoneColors: list(raw?.stoneColors),
+    qualities: list(raw?.qualities),
+    settingTypes: list(raw?.settingTypes),
+    settingRegions: regions,
+  };
+}
+
+/** Every canonical region label the app knows about, across all types. */
+function allRegions(options: IntakeOptions) {
+  return [...new Set(Object.values(options.settingRegions).flat())];
+}
+
+/**
+ * Maps a detected free-text value onto the app's canonical enum. Exact match
+ * first, then containment, then token overlap. No match → "" (the app keeps
+ * "Auto from reference" and the field is surfaced for confirmation) — a value
+ * is never bent into an unrelated option just to fill the slot.
+ */
+function toCanonical(value: unknown, options: string[]): string {
+  const raw = String(value ?? "").trim();
+  if (!raw || !options.length) return raw;
+  const lower = raw.toLowerCase();
+  const exact = options.find((option) => option.toLowerCase() === lower);
+  if (exact) return exact;
+  const contained = options.filter(
+    (option) =>
+      option.toLowerCase().includes(lower) || lower.includes(option.toLowerCase()),
+  );
+  if (contained.length) {
+    // Prefer the most specific (longest) canonical label that still matches.
+    return contained.sort((a, b) => b.length - a.length)[0];
+  }
+  const tokens = new Set(lower.split(/[^a-z0-9]+/).filter((token) => token.length > 2));
+  let best = "";
+  let bestScore = 0;
+  for (const option of options) {
+    const optionTokens = option.toLowerCase().split(/[^a-z0-9]+/).filter((t) => t.length > 2);
+    const score = optionTokens.filter((token) => tokens.has(token)).length;
+    if (score > bestScore) {
+      bestScore = score;
+      best = option;
+    }
+  }
+  return bestScore > 0 ? best : "";
+}
+
+/** high → auto-populate, medium → suggested, low → needs confirmation. */
+function confidenceTier(confidence: unknown): "high" | "medium" | "low" {
+  const value = Number(confidence ?? 0);
+  if (value >= 0.7) return "high";
+  if (value >= 0.45) return "medium";
+  return "low";
+}
 
 /** value + confidence; the app attaches the `source` (gemini_detected). */
 const DETECTED_FIELD = {
@@ -485,6 +583,7 @@ const DETECTED_FIELD = {
   },
   required: ["value", "confidence"],
 } as const;
+
 
 const INTAKE_SCHEMA = {
   type: Type.OBJECT,
@@ -514,10 +613,13 @@ const INTAKE_SCHEMA = {
                 setting: { type: Type.STRING },
                 region: { type: Type.STRING },
                 confidence: { type: Type.NUMBER },
+                settingVisualSignature: { type: Type.STRING },
+                evidenceReferenceIndexes: { type: Type.ARRAY, items: { type: Type.NUMBER } },
               },
               required: ["setting", "region", "confidence"],
             },
           },
+
           settingSignatures: { type: Type.ARRAY, items: SETTING_SIGNATURE_SCHEMA as any },
           references: {
             type: Type.ARRAY,
@@ -562,46 +664,88 @@ const INTAKE_SCHEMA = {
   required: ["productCount", "products"],
 } as const;
 
-function buildIntakePrompt(args: { references: JewelryReferenceInput[]; roleVocabulary: string[] }) {
+function buildIntakePrompt(args: {
+  references: JewelryReferenceInput[];
+  roleVocabulary: string[];
+  options: IntakeOptions;
+}) {
   const refLines = args.references.map((ref, index) =>
-    `REFERENCE ${index} (referenceIndex ${index})${ref.role ? ` — user label "${ref.role}"` : ""}`
+    `REFERENCE ${index} (referenceIndex ${index})${ref.role ? ` — user label "${ref.role}"` : ""}${
+      ref.cad ? " — user marked as design authority" : ""
+    }`
+  );
+  const options = args.options;
+  const vocabulary = (label: string, values: string[]) =>
+    values.length ? `${label}: ${values.join(" | ")}` : "";
+  const regionLines = Object.entries(options.settingRegions).map(
+    ([type, regions]) => `  ${type} → ${regions.join(" | ")}`,
   );
   return [
-    "You are a jewelry intake classifier. This is RECOGNITION, CLASSIFICATION and EXTRACTION — not deep reasoning and not generation. Be fast and literal. Return JSON only.",
+    "You are a jewelry intake classifier. This is RECOGNITION, CLASSIFICATION and EXTRACTION — not generation. Return JSON only.",
     "You never generate images or video, and you never invent facts.",
     "",
     "UPLOADED REFERENCE IMAGES, in this exact order (images follow this text):",
     ...refLines,
+    "",
+    "COMPLETE-SET REASONING (mandatory): every image above belongs to the SAME intake batch. Resolve every field by reasoning across the WHOLE set, not image by image and not from the first image. A CAD / technical render alone must NEVER lock the product class when photographs make the real product obvious: if the photographs show a wrist-worn Cuban link bracelet, the answer is a BRACELET even when a CAD render is cropped so tightly that it resembles a pendant or a single link. Photography decides the product class; CAD decides internal geometry.",
+    "",
+    "CANONICAL VOCABULARIES — you MUST answer using values from these lists verbatim. Never invent a new label, never return a synonym, never return a value that is not in the list. If nothing in a list truly matches, return an EMPTY value with low confidence instead of forcing a wrong option.",
+    vocabulary("jewelryType", options.jewelryTypes),
+    vocabulary("metal", options.metals),
+    vocabulary("stoneType", options.stones),
+    vocabulary("stoneColor", options.stoneColors),
+    vocabulary("stoneQuality", options.qualities),
+    vocabulary("setting", options.settingTypes),
+    regionLines.length ? "region (type-aware — use the list matching the resolved jewelryType):" : "",
+    ...regionLines,
     "",
     "TASKS:",
     "1. GROUPING — decide how many DISTINCT PHYSICAL PIECES these images show, and assign every referenceIndex to exactly one product. Different angles, macro crops, CAD renders and lifestyle shots of the SAME piece belong to the SAME product. Never merge clearly different products (different silhouette, different type, different stone layout) into one product. Set productCount accordingly.",
     "2. ROLES — for each reference, propose a role from this vocabulary when it fits: " +
     args.roleVocabulary.join(", ") +
     ". Use \"Uncertain\" when you are not reasonably sure. Set designAuthorityLikely = true only for genuine CAD / technical / design-authority renders (clean synthetic render, wireframe, spec drawing), with a confidence you actually believe.",
-    "3. EXTRACTION — per product, detect jewelryType, metal, stoneType, stoneColor, stoneQuality, settings (setting name + region, one entry per region), visibleComponents, and connectedComponents (e.g. a chain physically attached to a pendant). Give dimensions and weight ONLY when explicitly readable in the image (printed CAD dimensions, a spec sheet, a caption) — otherwise leave value empty.",
-    "4. SETTING SIGNATURES — one universal signature entry per setting region, populated exactly as described: echo the setting name in declaredSetting and describe the physical construction you observe. Never privilege or assume any particular named setting.",
-    "5. CONFIDENCE — every detected field carries confidence 0..1. Anything below 0.7 must ALSO be listed in needsConfirmation by field name (jewelryType, metal, stoneType, stoneColor, stoneQuality, settings, dimensions, weight). Never guess to fill a field: an empty value with low confidence is correct behaviour.",
+    "3. EXTRACTION — per product, detect jewelryType, metal, stoneType, stoneColor, stoneQuality, settings, visibleComponents, and connectedComponents (e.g. a chain physically attached to a pendant). Give dimensions and weight ONLY when explicitly readable in the image (printed CAD dimensions, a spec sheet, a caption) — otherwise leave value empty.",
+    "4. ENGINEERING-AWARE SETTING DETECTION — do NOT label every dense diamond surface generic pavé. Before naming a setting, inspect and weigh: stone-size distribution (uniform vs anchor stones with smaller filler stones), which stones are anchors and which are fillers, stone orientation and rotation, row regularity vs deliberate irregular tiling, stone density and spacing, how the stones are held (individual prongs, shared prongs, beads, channel walls, bezels, flush/burnish, invisible rails), how much metal is exposed between stones, and construction specific to the product class (link-by-link repetition, clasp mechanics, sidewall/underside build, rail or channel continuity). THEN pick the closest canonical setting from the list. Two dense white surfaces can be completely different settings — decide by construction, not by first impression.",
+    "5. MULTI-REGION SETTINGS — return ONE settings entry per physically distinct construction region you can actually see (for a bracelet typically the links, then the clasp, then the sidewall / underside; for a pendant the main face, border, lettering, bail). Use the canonical region labels for the resolved jewelryType. Include settingVisualSignature (the observed physical construction, in your own words) and evidenceReferenceIndexes (which referenceIndexes you actually saw it in) for every entry. If only one construction exists across the whole piece, return exactly one entry.",
+    "6. SETTING SIGNATURES — one universal signature entry per setting region, populated exactly as described: echo the setting name in declaredSetting and describe the physical construction you observe, using the ENTIRE reference library as evidence. Never privilege or assume any particular named setting.",
+    "7. CONFIDENCE — every detected field carries confidence 0..1. Anything below 0.7 must ALSO be listed in needsConfirmation by field name (jewelryType, metal, stoneType, stoneColor, stoneQuality, settings, dimensions, weight). Never guess to fill a field, and never turn uncertainty into a generic default: an empty value with low confidence is correct behaviour.",
     "Short phrases only. Never output URLs, file names, base64 or media of any kind.",
-  ].join("\n");
+  ].filter(Boolean).join("\n");
 }
 
-async function referenceFingerprint(references: JewelryReferenceInput[]) {
+/**
+ * The cache key is the FULL intake input: urls + user roles + user authority
+ * flags + the canonical vocabularies. Any of them changing is a genuinely
+ * different question, so it never serves a previous set's answer.
+ */
+async function referenceFingerprint(references: JewelryReferenceInput[], options: IntakeOptions) {
   return await sha256Hex(
     JSON.stringify({
       version: INTAKE_VERSION,
       model: GEMINI_ANALYSIS_MODEL,
-      references: references.map((ref) => ref.url).sort(),
+      references: references
+        .map((ref) => `${ref.url}|${ref.role ?? ""}|${ref.cad ? 1 : 0}`)
+        .sort(),
+      options,
     }),
   );
 }
+
 
 async function runIntake(args: {
   ai: GoogleGenAI;
   references: JewelryReferenceInput[];
   roleVocabulary: string[];
+  options: IntakeOptions;
 }) {
   const parts: unknown[] = [
-    { text: buildIntakePrompt({ references: args.references, roleVocabulary: args.roleVocabulary }) },
+    {
+      text: buildIntakePrompt({
+        references: args.references,
+        roleVocabulary: args.roleVocabulary,
+        options: args.options,
+      }),
+    },
   ];
   for (const ref of args.references) parts.push(await inlineImage(ref.url));
 
@@ -621,26 +765,53 @@ async function runIntake(args: {
   return JSON.parse((response.text ?? "").trim());
 }
 
-/** Every detected field is stamped with its provenance for the app's priority rules. */
-function stampSources(intake: any) {
-  const fields = [
-    "jewelryType",
-    "metal",
-    "stoneType",
-    "stoneColor",
-    "stoneQuality",
-    "dimensions",
-    "weight",
+/**
+ * Stamps provenance AND resolves every detected field onto the app's canonical
+ * enums, so "Auto from reference" can become a real value downstream. Each
+ * field gets: resolvedValue (canonical or ""), confidenceTier and source.
+ */
+function stampSources(intake: any, options: IntakeOptions) {
+  const fields: [string, string[]][] = [
+    ["jewelryType", options.jewelryTypes],
+    ["metal", options.metals],
+    ["stoneType", options.stones],
+    ["stoneColor", options.stoneColors],
+    ["stoneQuality", options.qualities],
+    ["dimensions", []],
+    ["weight", []],
   ];
   for (const product of Array.isArray(intake?.products) ? intake.products : []) {
-    for (const field of fields) {
+    for (const [field, vocabulary] of fields) {
       const entry = product?.[field];
-      if (entry && typeof entry === "object") {
-        entry.source = String(entry.value ?? "").trim() ? "gemini_detected" : "unknown";
+      if (!entry || typeof entry !== "object") continue;
+      const canonical = toCanonical(entry.value, vocabulary);
+      const tier = confidenceTier(entry.confidence);
+      // Low confidence never auto-populates a control — it only suggests.
+      entry.resolvedValue = tier === "low" ? "" : canonical;
+      entry.confidenceTier = tier;
+      entry.source = canonical ? "gemini_detected" : "unknown";
+      if (!entry.resolvedValue) {
+        const list: string[] = Array.isArray(product.needsConfirmation)
+          ? product.needsConfirmation
+          : (product.needsConfirmation = []);
+        if (String(entry.value ?? "").trim() && !list.includes(field)) list.push(field);
       }
     }
+
+    // Regions are type-aware: use the list for the resolved product type when
+    // one exists, otherwise validate against every region the app knows.
+    const resolvedType = String(product?.jewelryType?.resolvedValue ?? "").toLowerCase();
+    const regionKey = Object.keys(options.settingRegions).find((key) =>
+      resolvedType.includes(key) || key.includes(resolvedType),
+    );
+    const regionVocabulary = (regionKey && options.settingRegions[regionKey]) || allRegions(options);
+
     for (const setting of Array.isArray(product?.settings) ? product.settings : []) {
-      setting.source = "gemini_detected";
+      const tier = confidenceTier(setting.confidence);
+      setting.resolvedSetting = tier === "low" ? "" : toCanonical(setting.setting, options.settingTypes);
+      setting.resolvedRegion = toCanonical(setting.region, regionVocabulary);
+      setting.confidenceTier = tier;
+      setting.source = setting.resolvedSetting ? "gemini_detected" : "unknown";
     }
     for (const ref of Array.isArray(product?.references) ? product.references : []) {
       ref.source = ref?.designAuthorityLikely === true ? "cad" : "reference_inference";
@@ -648,6 +819,7 @@ function stampSources(intake: any) {
   }
   return intake;
 }
+
 
 async function handleIntake(req: Request, body: any, user: { id: string }, apiKey?: string) {
   const references: JewelryReferenceInput[] =
@@ -666,7 +838,12 @@ async function handleIntake(req: Request, body: any, user: { id: string }, apiKe
     .filter(Boolean)
     .slice(0, 60);
 
-  const fingerprint = await referenceFingerprint(references);
+  const options = readOptions(body?.options ?? {});
+  // Echoed back untouched so the client can discard a stale response.
+  const setVersion = body?.setVersion ? String(body.setVersion) : null;
+  const requestId = Number.isFinite(Number(body?.requestId)) ? Number(body.requestId) : null;
+
+  const fingerprint = await referenceFingerprint(references, options);
   const admin = createAdminClient();
 
   const { data: cached } = await admin
@@ -680,6 +857,8 @@ async function handleIntake(req: Request, body: any, user: { id: string }, apiKe
     return json({
       cached: true,
       fingerprint,
+      setVersion,
+      requestId,
       version: cached.version ?? INTAKE_VERSION,
       analyzedAt: cached.analyzed_at,
       intake: cached.analysis,
@@ -689,8 +868,12 @@ async function handleIntake(req: Request, body: any, user: { id: string }, apiKe
   if (!apiKey) return json({ error: "Jewelry analysis is unavailable (analysis key not configured)" }, 503);
 
   const ai = new GoogleGenAI({ apiKey });
+  // ONE call for the whole settled reference set — never one call per image.
   const batch = references.slice(0, MAX_IMAGES_PER_CALL);
-  const intake = stampSources(await runIntake({ ai, references: batch, roleVocabulary }));
+  const intake = stampSources(
+    await runIntake({ ai, references: batch, roleVocabulary, options }),
+    options,
+  );
   intake.version = INTAKE_VERSION;
   intake.referenceCount = batch.length;
 
@@ -711,11 +894,14 @@ async function handleIntake(req: Request, body: any, user: { id: string }, apiKe
   return json({
     cached: false,
     fingerprint,
+    setVersion,
+    requestId,
     version: INTAKE_VERSION,
     analyzedAt: new Date().toISOString(),
     intake,
     guardStripped: stripped,
   });
+
 }
 
 
