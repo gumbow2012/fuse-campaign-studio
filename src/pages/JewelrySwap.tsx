@@ -787,6 +787,15 @@ export default function JewelrySwap() {
   const [knowledgeMap, setKnowledgeMap] = useState<ProductKnowledgeMap | null>(null);
   const [engineeringOpen, setEngineeringOpen] = useState(false);
   /**
+   * A PROPOSAL only. FUSE never splits a card by itself — the user answers this
+   * question, and only their answer creates a second piece.
+   */
+  const [splitSuggestion, setSplitSuggestion] = useState<{
+    question: string;
+    groups: { label: string; urls: string[] }[];
+  } | null>(null);
+
+  /**
    * Facts the USER settled (answers to genuine conflicts). These are sent as
    * USER_CONFIRMED and the analysis may never override them.
    */
