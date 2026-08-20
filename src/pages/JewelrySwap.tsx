@@ -585,11 +585,11 @@ function authorityCount(piece: Piece) {
 
 /** Compact, factual config line — never a fabricated accuracy score. */
 function pieceSummary(piece: Piece, frameCount: number) {
-  const authority = authorityCount(piece);
   const parts = [
     `${piece.type.toUpperCase()} REPLACEMENT`,
-    `Design authority: ${authority ? `${authority} reference${authority === 1 ? "" : "s"}` : "none"}`,
+    // Authority is assigned automatically by FUSE and is not surfaced here.
     `Metal: ${piece.metal === AUTO_METAL ? "Auto" : piece.metal}`,
+
     `Stone: ${piece.stone === AUTO_STONE ? "Auto" : piece.stone}`,
   ];
   if (piece.stoneColor && piece.stoneColor !== AUTO_STONE_COLOR) {
