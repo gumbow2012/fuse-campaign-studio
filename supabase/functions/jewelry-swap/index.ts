@@ -997,6 +997,9 @@ async function startSwapFrame(admin: AdminClient, args: {
           image_model: imageModelKey,
           image_endpoint: endpointId,
           geometry_fidelity: "strict",
+          // Structured product authority resolved for this run (verification hook).
+          target_spec: routedPieces.map((piece) => resolveTargetSpec(piece)),
+
           preferred_role: args.preferredRole ?? null,
           failure_reason: args.failureReason ?? null,
           replacement_mode: normalizeMode(args.mode, args.macro === true),
