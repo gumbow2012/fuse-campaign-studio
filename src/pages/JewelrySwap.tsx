@@ -49,14 +49,17 @@ import {
 
 
 import {
+  analyzeJewelryFrames,
   animateJewelryFrame,
   callJewelrySwap,
   createTemplateFromJewelrySwap,
   listAssets,
   persistTemplateLayout,
   CAMERA_DIRECTIONS,
+  type JewelryFrameAnalysis,
   type JewelryGeneration,
   type JewelryImageModel,
+  type JewelryProjectAnalysis,
   type JewelrySwapTemplateResult,
   type LibraryAsset,
   type SwapGeneration,
