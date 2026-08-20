@@ -3014,6 +3014,39 @@ export default function JewelrySwap() {
                       );
                     })}
                   </div>
+
+                  {/* Nano Banana Pro quality — batch level, never per frame. */}
+                  <div className="mt-3 flex flex-wrap items-center gap-3">
+                    <span className="text-[10px] font-semibold uppercase tracking-[0.18em] text-cyan-200/70">
+                      Image quality
+                    </span>
+                    <div className="inline-flex rounded-xl border border-white/12 bg-black/40 p-0.5">
+                      {NANO_QUALITY_OPTIONS.map((option) => {
+                        const active = nanoQuality === option.value;
+                        return (
+                          <button
+                            key={option.value}
+                            type="button"
+                            onClick={() => setNanoQuality(option.value)}
+                            className={cn(
+                              "rounded-lg px-3 py-1.5 text-[11px] font-semibold transition-all duration-200",
+                              active
+                                ? "border border-cyan-200/50 bg-cyan-200/12 text-cyan-100 shadow-[0_0_14px_-4px_hsl(190_90%_60%/0.55)]"
+                                : "border border-transparent text-foreground/60 hover:text-foreground",
+                            )}
+                          >
+                            {option.label}
+                            <span className="ml-1.5 font-normal opacity-70">· {option.hint}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                    {/* Non-blocking hint only — quality is never auto-switched. */}
+                    {macroQualityHint && nanoQuality === "2k" ? (
+                      <span className="text-[10px] text-amber-200/85">4K recommended for macro detail</span>
+                    ) : null}
+                  </div>
+
                   <div className="mt-3 flex flex-wrap items-center gap-2">
                     <Button
                       size="sm"
