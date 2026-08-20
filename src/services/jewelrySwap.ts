@@ -703,6 +703,13 @@ export type ProductKnowledgeMap = {
   physicalStones?: PkmPhysicalStone[];
   stoneGroups?: PkmStoneGroup[];
   settings?: PkmSetting[];
+  /** COMPOSITIONAL setting model — independent axes, not one dropdown value. */
+  settingAnalysis?: PkmSettingAnalysis;
+  /** Topology + retention composed into the user-facing wording. */
+  resolvedSettingTerminology?: string | null;
+  /** Ontology terms that describe a stone-field topology rather than retention. */
+  settingTopologyTerms?: string[];
+
   materialRegions?: PkmMaterialRegion[];
   constructionConflicts?: {
     topic?: string;
