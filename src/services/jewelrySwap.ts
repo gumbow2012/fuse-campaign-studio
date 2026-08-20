@@ -562,6 +562,34 @@ export type PkmSetting = {
   };
 };
 
+/**
+ * COMPOSITIONAL setting model. Stone-field topology (e.g. "Galaxy") and
+ * retention/packing construction (e.g. "Mosaic", "Prong", "Bead") are
+ * independent axes: "Galaxy Mosaic" and "Galaxy + Bead" are valid results.
+ */
+export type PkmSettingAnalysis = {
+  stoneFieldTopology?: string | null;
+  retentionConstruction?: string | null;
+  coverageStyle?: string | null;
+  customTerminology?: string[];
+  topologyEvidence?: string[];
+  retentionEvidence?: string[];
+  conflictingSignals?: string[];
+  /** Raw apparent classes vs the classes that survived normalization. */
+  apparentSizeClasses?: string[];
+  physicalSizeClasses?: string[];
+  perspectiveNormalizationBasis?: string | null;
+  physicalSizeVariationConfirmed?: boolean;
+  repeatedModuleSizeComparison?: string | null;
+  videoSizeEvidence?: string | null;
+  vocabularyDomain?: VocabularyDomain | null;
+  provenance?: Provenance;
+  confidence?: number;
+  needsConfirmation?: boolean;
+  /** True when a size-variation topology failed the perspective gate. */
+  perspectiveGateApplied?: boolean;
+};
+
 
 export type PkmMaterialRegion = {
   regionId?: string;
@@ -703,6 +731,13 @@ export type ProductKnowledgeMap = {
   physicalStones?: PkmPhysicalStone[];
   stoneGroups?: PkmStoneGroup[];
   settings?: PkmSetting[];
+  /** COMPOSITIONAL setting model — independent axes, not one dropdown value. */
+  settingAnalysis?: PkmSettingAnalysis;
+  /** Topology + retention composed into the user-facing wording. */
+  resolvedSettingTerminology?: string | null;
+  /** Ontology terms that describe a stone-field topology rather than retention. */
+  settingTopologyTerms?: string[];
+
   materialRegions?: PkmMaterialRegion[];
   constructionConflicts?: {
     topic?: string;
@@ -819,7 +854,14 @@ export type IntakeSetting = {
   needsConfirmation?: boolean;
   evidenceReferenceIndexes?: number[];
   source?: string;
+  /**
+   * First-pass, single-image classifications are PRELIMINARY evidence only and
+   * never drive the visible field — `JewelryIntake.resolvedJewelrySpec` does.
+   */
+  preliminary?: boolean;
+  provenance?: Provenance | "PRELIMINARY_OBSERVATION";
 };
+
 
 
 export type IntakeProduct = {
@@ -857,7 +899,36 @@ export type JewelryIntake = {
   /** The fused engineering understanding of the replacement piece(s). */
   knowledgeMap?: ProductKnowledgeMap;
   videoAnalyses?: JewelryVideoAnalysis[];
+  /** THE authority for the visible setting field and the Nano engineering lock. */
+  resolvedJewelrySpec?: ResolvedJewelrySpec;
 };
+
+export type ResolvedSettingSpec = {
+  region?: string | null;
+  /** Composed compositional wording, e.g. "Galaxy Mosaic". */
+  displayLabel?: string;
+  /** Canonical app enum value, empty when the fused map needs confirmation. */
+  setting?: string;
+  detectedSetting?: string | null;
+  vocabularyDomain?: VocabularyDomain | null;
+  matchedSignals?: string[];
+  conflictingSignals?: string[];
+  reason?: string | null;
+  provenance?: Provenance | null;
+  userConfirmedTerm?: boolean;
+  confidence?: number;
+  needsConfirmation?: boolean;
+};
+
+export type ResolvedJewelrySpec = {
+  source?: string;
+  version?: string | null;
+  productCaseId?: string | null;
+  userFacingTerminology?: string | null;
+  settingAnalysis?: PkmSettingAnalysis | null;
+  settings: ResolvedSettingSpec[];
+};
+
 
 export type JewelryIntakeResult = {
   cached: boolean;

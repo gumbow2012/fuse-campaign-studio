@@ -180,8 +180,12 @@ const QUALITY_OPTIONS = [AUTO_QUALITY, "FL/IF", "VVS", "VS", "SI", "I", "Custom"
 const AUTO_SETTING = "Auto from reference";
 const SETTING_TYPE_OPTIONS = [
   AUTO_SETTING,
+  // Stone-field topology terms compose with retention terms ("Galaxy Mosaic").
+  "Galaxy",
+  "Galaxy Mosaic",
   "Mosaic",
   "Reverse Mosaic",
+
   "Micro Pavé",
   "Pavé",
   "Bead Set",
@@ -477,7 +481,10 @@ type Piece = {
       needsConfirmation?: boolean;
       /** Its evidence statement, produced before the enum choice. */
       reason?: string | null;
+      /** Compositional wording from the fused map, e.g. "Galaxy Mosaic". */
+      label?: string | null;
     }[];
+
     /** Where a clarity grade was actually read from (visual_only → review). */
     qualityEvidenceSource?: string | null;
   } | null;
@@ -589,10 +596,16 @@ function detectedSettingsLine(piece: Piece) {
   );
   if (user.length) return user.join(" | ");
   const detected = (piece.detected?.settings ?? []).map((setting) => {
-    // Declined regions read honestly instead of borrowing a common name.
-    const value = setting.needsConfirmation || !setting.type ? "Needs confirmation" : setting.type;
+    // The fused compositional wording is preferred; declined regions read
+    // honestly instead of borrowing a common name.
+    const value = setting.label
+      ? setting.label
+      : setting.needsConfirmation || !setting.type
+        ? "Needs confirmation"
+        : setting.type;
     return setting.region ? `${setting.region} · ${value}` : value;
   });
+
   return detected.length ? detected.join(" | ") : "Not detected";
 
 }
@@ -1712,6 +1725,16 @@ export default function JewelrySwap() {
     const products = Array.isArray(result?.products) ? result!.products : [];
     if (!products.length) return;
     const knowledgeMap = result?.knowledgeMap;
+    /**
+     * THE visible setting authority: complete reference set + complete product
+     * video -> PKM -> terminology ontology -> resolvedJewelrySpec. The old
+     * first-image classifier (`product.settings`) is PRELIMINARY evidence only.
+     */
+    const resolvedSpec = result?.resolvedJewelrySpec ?? null;
+    const resolvedSettingRows = (resolvedSpec?.settings ?? []).filter(
+      (setting) => setting.displayLabel || setting.setting || setting.region,
+    );
+
 
     /**
      * ONE CARD = ONE PHYSICAL PIECE. A card is only ever created by the user
@@ -1835,17 +1858,37 @@ export default function JewelrySwap() {
 
         // Canonical, per-region settings — the existing multi-setting rows are
         // auto-populated without the user pressing "+ Add setting". A region the
-        // classifier declined is kept (type "") so it can be surfaced for review.
-        const detectedSettings = (product.settings ?? [])
-          .map((setting) => ({
-            type: String(setting.resolvedSetting ?? "").trim(),
-            region: String(setting.resolvedRegion ?? setting.region ?? "").trim() || null,
-            tier: setting.confidenceTier ?? "low",
+        // analysis declined is kept (type "") so it can be surfaced for review.
+        // The FUSED spec wins; the preliminary per-image classifier is ignored
+        // for the visible field and only fills the region list as a fallback.
+        const useResolved = productIndex === 0 && resolvedSettingRows.length > 0;
+        const detectedSettings = useResolved
+          ? resolvedSettingRows.map((setting) => ({
+            type: String(setting.setting ?? "").trim(),
+            region: String(setting.region ?? "").trim() || null,
+            tier: (Number(setting.confidence ?? 0) >= 0.7
+              ? "high"
+              : Number(setting.confidence ?? 0) >= 0.45
+                ? "medium"
+                : "low") as "high" | "medium" | "low",
             needsConfirmation:
-              setting.needsConfirmation === true || !String(setting.resolvedSetting ?? "").trim(),
-            reason: String(setting.settingClassificationReason ?? "").trim() || null,
+              setting.needsConfirmation === true || !String(setting.setting ?? "").trim(),
+            reason: String(setting.reason ?? "").trim() || null,
+            // Compositional wording ("Galaxy Mosaic") shown as-is, even when it
+            // is not one of the canonical dropdown values.
+            label: String(setting.displayLabel ?? "").trim() || null,
           }))
-          .filter((setting) => setting.type || setting.region);
+          : (product.settings ?? [])
+            .map((setting) => ({
+              type: "",
+              region: String(setting.resolvedRegion ?? setting.region ?? "").trim() || null,
+              tier: "low" as const,
+              // Preliminary observations always await the fused result.
+              needsConfirmation: true,
+              reason: String(setting.settingClassificationReason ?? "").trim() || null,
+              label: null as string | null,
+            }))
+            .filter((setting) => setting.region);
 
         const userSetSettings =
           baseSources.settings === "user_override" &&
@@ -1856,6 +1899,7 @@ export default function JewelrySwap() {
             ...EMPTY_SETTING,
             // A declined / low-confidence region stays on Auto for the user.
             type: setting.needsConfirmation || setting.tier === "low" ? "" : setting.type,
+
             region: setting.region ?? "",
           }));
 
@@ -1924,7 +1968,10 @@ export default function JewelrySwap() {
               region: setting.region,
               needsConfirmation: setting.needsConfirmation,
               reason: setting.reason,
+              // Compositional terminology from the fused map, when available.
+              label: setting.label ?? null,
             })),
+
           },
           sources: {
             ...baseSources,
@@ -3758,7 +3805,12 @@ export default function JewelrySwap() {
                             <span className="uppercase tracking-[0.14em]">
                               {entry.region || "Region"}
                             </span>{" "}
-                            — {entry.needsConfirmation ? "Needs confirmation. " : `${entry.type}. `}
+                            — {entry.label
+                              ? `${entry.label}. `
+                              : entry.needsConfirmation
+                                ? "Needs confirmation. "
+                                : `${entry.type}. `}
+
                             {entry.reason}
                           </p>
                         ))}

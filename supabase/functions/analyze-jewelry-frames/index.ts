@@ -1035,7 +1035,33 @@ function engineeringLockLines(pkm: any): string[] {
     if (parts.length) lines.push(`${region} stone field — ${parts.join("; ")}`);
   }
 
+  // COMPOSITIONAL SETTING FACTS — the Nano engineering lock reads the fused
+  // PKM axes, never the first-pass single-image classifier.
+  const settingAnalysis = pkm?.settingAnalysis;
+  if (settingAnalysis && typeof settingAnalysis === "object" && settingAnalysis.needsConfirmation !== true) {
+    if (settingAnalysis.stoneFieldTopology) {
+      lines.push(
+        `preserve the observed ${String(settingAnalysis.stoneFieldTopology).slice(0, 60)} stone-field topology: ${
+          (listOf(settingAnalysis.physicalSizeClasses).join(", ") || "as mapped").slice(0, 160)
+        } (perspective-normalized physical size classes, not apparent size)`,
+      );
+    }
+    if (settingAnalysis.retentionConstruction) {
+      lines.push(
+        `retain the stones by the observed ${String(settingAnalysis.retentionConstruction).slice(0, 60)} construction${
+          listOf(settingAnalysis.retentionEvidence).length
+            ? `: ${listOf(settingAnalysis.retentionEvidence).slice(0, 2).join("; ").slice(0, 160)}`
+            : ""
+        }`,
+      );
+    }
+    if (settingAnalysis.coverageStyle) {
+      lines.push(`coverage: ${String(settingAnalysis.coverageStyle).slice(0, 60)} — coverage only, never a retention method`);
+    }
+  }
+
   for (const setting of (Array.isArray(pkm?.settings) ? pkm.settings : []).slice(0, 4)) {
+
     if (setting?.needsConfirmation === true || !hard(setting)) continue;
     const signature = String(setting?.settingVisualSignature ?? "").trim();
     if (!signature) continue;
@@ -2210,7 +2236,37 @@ const HIP_HOP_TERMS: JewelryTerm[] = [
       compatibleGeometry: ["flat", "convex", "letter/plaque", "linear run"],
     },
   },
+  /**
+   * STONE-FIELD TOPOLOGY term. Deliberately NOT over-specified: Galaxy names a
+   * size topology, so its retention mechanics must be observed, never assumed.
+   * New hip_hop_custom terms are added here alone — no schema change needed.
+   */
+  {
+    canonicalName: "Galaxy Setting",
+    vocabularyDomain: "hip_hop_custom",
+    aliases: ["galaxy", "galaxy set", "galaxy setting"],
+    definition:
+      "Modern custom/hip-hop jewelry term for a stone field characterized primarily by deliberate variation in physical stone size across a surface. Exact packing and retention mechanics may vary by jeweler and piece, so Galaxy must be identified from the observed stone-size topology and overall construction rather than a single assumed prong pattern.",
+    termKind: "setting",
+    relatedTerms: ["Mosaic Setting (custom)"],
+    engineeringSignature: {
+      stoneSizePattern:
+        "multiple deliberate physical stone-size classes; size variation is structural and must remain after perspective normalization",
+      packingPattern:
+        "typically non-uniform / organic / irregular compared with regimented uniform pavé; exact packing must be derived from the references",
+      expectedStoneCuts: ["round_brilliant", "mixed", "custom"],
+      retentionMechanics:
+        "VARIABLE — determine from observed construction; Galaxy describes the stone-field topology and must not imply one universal retention system",
+      prongBehavior: "VARIABLE — observe rather than assume",
+      metalVisibility: "derive from references",
+      rowBehavior:
+        "generally not dependent on one repeated uniform-size row system; derive actual topology from evidence",
+      orientationBehavior: "derive from physical stone map",
+      compatibleGeometry: ["flat", "convex", "curved", "irregular", "plaque", "link", "tooth"],
+    },
+  },
 ];
+
 
 /** ONE ontology, two clearly labelled vocabulary layers. */
 const JEWELRY_TERMS: JewelryTerm[] = [...CLASSICAL_TERMS, ...HIP_HOP_TERMS];
@@ -2727,6 +2783,38 @@ const PKM_SCHEMA = {
     /** ONE post-fusion name for the whole card (e.g. "Cuban Bracelet"). */
     productCaseName: { type: Type.STRING },
 
+    /**
+     * COMPOSITIONAL SETTING MODEL. One mutually-exclusive dropdown value is too
+     * lossy: stone-field TOPOLOGY (e.g. Galaxy) and RETENTION/packing
+     * CONSTRUCTION (e.g. Mosaic, Prong, Bead) are independent axes and may both
+     * be true at once. Coverage is a third, separate axis.
+     */
+    settingAnalysis: {
+      type: Type.OBJECT,
+      properties: {
+        stoneFieldTopology: { type: Type.STRING },
+        retentionConstruction: { type: Type.STRING },
+        coverageStyle: { type: Type.STRING },
+        customTerminology: STRING_ARRAY,
+        /** How the topology decision was reached — evidence, not a name. */
+        topologyEvidence: STRING_ARRAY,
+        retentionEvidence: STRING_ARRAY,
+        conflictingSignals: STRING_ARRAY,
+        /** Raw (pre-normalization) vs surviving PHYSICAL size classes. */
+        apparentSizeClasses: STRING_ARRAY,
+        physicalSizeClasses: STRING_ARRAY,
+        perspectiveNormalizationBasis: { type: Type.STRING },
+        physicalSizeVariationConfirmed: { type: Type.BOOLEAN },
+        repeatedModuleSizeComparison: { type: Type.STRING },
+        videoSizeEvidence: { type: Type.STRING },
+        vocabularyDomain: { type: Type.STRING },
+        provenance: PROVENANCE,
+        confidence: CONFIDENCE,
+        needsConfirmation: { type: Type.BOOLEAN },
+      },
+    },
+
+
 
     coverage: {
       type: Type.OBJECT,
@@ -3128,6 +3216,10 @@ function buildKnowledgeMapPrompt(args: {
     "27. CONFLICTS ARE ATTRIBUTE-SPECIFIC, NEVER 'TWO PRODUCTS'. If two references disagree, NEVER conclude they show separate pieces. First investigate the mundane causes — perspective, distance, lighting and white balance, glare and scintillation, compression artefacts, occlusion, CAD versus manufactured piece, prototype versus final production, or a contaminated reference (a stock or lookalike image) — and record the disagreement against THAT attribute only (constructionConflicts / conflictingEvidence). Everything else about the piece stays fused. Only for a genuine HIGH-confidence conflict ask the plain question per rule 23.",
     "28. A SECOND PIECE ONLY WHEN THE USER SAYS SO. You may NEVER split this case. If — and only if — you have very strong evidence that unrelated objects were uploaded together, set separatePieceSuggestion.suspected true with the candidate groups (label + referenceIds + reason) and a plain question (\"These files appear to contain two different pieces: A — Cuban Bracelet, B — Pendant. Separate them?\"). The user answers; you never act on it, and everything stays in ONE fused map until they do. Different angles, crops, fragments, CAD renders, lighting or finishes are NOT evidence of a second piece.",
     "29. NAME THE CASE AFTER FUSION. Set productCaseName to ONE short, plain post-fusion name for the whole piece derived from the fused reconstruction (e.g. \"Cuban Bracelet\", \"Diamond Cross Pendant\"). Never an asset-style or render-style title (no \"Render\", \"Design\", \"Mockup\", \"Untitled\", file names, resolutions or per-image descriptions), and never one name per reference.",
+    "30. COMPOSITIONAL SETTING MODEL — TOPOLOGY IS NOT RETENTION. Fill settingAnalysis with INDEPENDENT axes: stoneFieldTopology (how the physical stone sizes are distributed across the surface, e.g. Galaxy for deliberate multi-size variation, or a uniform-field topology), retentionConstruction (how the stones are physically held, e.g. Mosaic, Prong, Bead, Rail, Channel, Bezel or a custom term), coverageStyle (coverage only, e.g. Fully Iced / partial) and customTerminology (every custom term that genuinely applies). These are NOT mutually exclusive and NOT a single dropdown: \"Galaxy Mosaic\", \"Galaxy + Prong\" and \"Galaxy + Bead\" are all valid results, and a piece may be stoneFieldTopology Galaxy AND retentionConstruction Mosaic at the same time. Never force a topology term to imply one retention mechanic, and never let choosing one axis suppress the other. Record topologyEvidence, retentionEvidence and conflictingSignals as observed physical statements, and set needsConfirmation true (confidence below 0.45) rather than guessing an axis you could not establish.",
+    "31. GALAXY REQUIRES REAL PHYSICAL SIZE VARIATION (HARD GATE). Before Galaxy may ever appear in settingAnalysis you MUST run and report this pipeline: (a) list the RAW apparent stone-size classes in apparentSizeClasses; (b) perspective-normalize them (perspectiveNormalizationBasis); (c) compare the same stone field across views/references; (d) compare corresponding stones on repeated identical modules (repeatedModuleSizeComparison); (e) use the full-clip video size persistence across rotation (videoSizeEvidence); then (f) state the surviving physicalSizeClasses and set physicalSizeVariationConfirmed. If the apparent differences DISAPPEAR after normalization, that is NOT Galaxy evidence and Galaxy must not be used. Only persistent real size differences confirmed by multiple views or the full clip are strong Galaxy evidence. Do not steer toward or away from Galaxy — it competes on evidence like every other term.",
+    "32. THE VISIBLE SETTING COMES FROM THIS FUSED MAP. Your settings[] entries and settingAnalysis are the FINAL user-facing setting authority; any earlier single-pass first-image impression is a PRELIMINARY observation only and must be overridden here when the fused evidence disagrees. Never output vague placeholders like \"Mixed/Multiple\" as a conclusion when the evidence supports a real compositional answer; if the evidence genuinely does not support one, say needs_confirmation.",
+
     "NO PRODUCT-TYPE SHORTCUTS: never infer a setting, component list, stone count or module from the product type or from the piece's name. Everything must come from what the references physically show.",
 
 
@@ -3226,6 +3318,9 @@ async function runKnowledgeMap(args: {
       map.crossReferenceMatches.filter((match: any) => match?.merged).length
     }/${map.crossReferenceMatches.length} status=${map.fusionState.classificationStatus} v${map.fusionState.modelVersion} splitSuggested=${map.separatePieceSuggestion.suspected}`,
   );
+  // COMPOSITIONAL SETTING MODEL + the Galaxy perspective gate, enforced in code.
+  normalizeSettingAnalysis(map);
+  logSettingAcceptance(map);
   console.log(
     `[analyze-jewelry-frames] FINAL SETTING CLASSIFICATION setting=${detectedValue(map?.setting) || map?.setting?.canonical || "?"} reason=${String(map?.settingClassificationReason ?? "").slice(0, 300)}`,
   );
@@ -3233,6 +3328,142 @@ async function runKnowledgeMap(args: {
 
   return { knowledgeMap: applyUserConfirmedFacts(map, args.userConfirmedFacts ?? []), geminiMs: Date.now() - started };
 }
+
+/** Every term whose signature is a stone-field TOPOLOGY rather than retention. */
+const TOPOLOGY_TERMS = SETTING_ONTOLOGY.filter((term) =>
+  /VARIABLE/i.test(term.engineeringSignature.retentionMechanics)
+).map((term) => term.canonicalName);
+
+function termByName(name: string) {
+  const lower = String(name ?? "").trim().toLowerCase();
+  if (!lower) return null;
+  return (
+    JEWELRY_TERMS.find((term) =>
+      term.canonicalName.toLowerCase() === lower ||
+      term.aliases.some((alias) => alias.toLowerCase() === lower)
+    ) ??
+    JEWELRY_TERMS.find((term) =>
+      lower.includes(term.canonicalName.toLowerCase()) ||
+      term.aliases.some((alias) => lower.includes(alias.toLowerCase()))
+    ) ?? null
+  );
+}
+
+/**
+ * Guarantees the compositional shape exists, and enforces the ONE structural
+ * rule in code: a stone-field topology that depends on real physical size
+ * variation (Galaxy and any future term like it) may not survive when the
+ * apparent size differences did not survive perspective normalization.
+ * Retention construction is untouched — the axes are independent.
+ */
+function normalizeSettingAnalysis(map: any) {
+  const raw = map?.settingAnalysis && typeof map.settingAnalysis === "object" ? map.settingAnalysis : {};
+  const groups = arrayOf(map?.stoneGroups);
+  const physicalVariation = raw.physicalSizeVariationConfirmed === true ||
+    groups.some((group: any) =>
+      group?.physicalSizeDifference === true ||
+      ["mixed", "graduated"].includes(String(group?.sizeUniformity ?? ""))
+    );
+
+  const analysis = {
+    stoneFieldTopology: String(raw.stoneFieldTopology ?? "").trim() || null,
+    retentionConstruction: String(raw.retentionConstruction ?? "").trim() || null,
+    coverageStyle: String(raw.coverageStyle ?? "").trim() || null,
+    customTerminology: arrayOf(raw.customTerminology).map((entry: any) => String(entry).trim()).filter(Boolean),
+    topologyEvidence: arrayOf(raw.topologyEvidence),
+    retentionEvidence: arrayOf(raw.retentionEvidence),
+    conflictingSignals: arrayOf(raw.conflictingSignals),
+    apparentSizeClasses: arrayOf(raw.apparentSizeClasses),
+    physicalSizeClasses: arrayOf(raw.physicalSizeClasses),
+    perspectiveNormalizationBasis: String(raw.perspectiveNormalizationBasis ?? "").trim() || null,
+    physicalSizeVariationConfirmed: physicalVariation,
+    repeatedModuleSizeComparison: String(raw.repeatedModuleSizeComparison ?? "").trim() || null,
+    videoSizeEvidence: String(raw.videoSizeEvidence ?? "").trim() || null,
+    vocabularyDomain: String(raw.vocabularyDomain ?? "").trim() || null,
+    provenance: raw.provenance ?? "LOW_CONFIDENCE_INFERENCE",
+    confidence: Number.isFinite(Number(raw.confidence)) ? Number(raw.confidence) : 0,
+    needsConfirmation: raw.needsConfirmation === true,
+    /** Set when the perspective gate removed a size-variation topology claim. */
+    perspectiveGateApplied: false,
+  };
+
+  // HARD GATE — universal, driven by the ontology signature, never hardcoded to
+  // one product or one term name.
+  const topologyTerm = analysis.stoneFieldTopology ? termByName(analysis.stoneFieldTopology) : null;
+  const dependsOnSizeVariation = Boolean(
+    topologyTerm && /size/i.test(topologyTerm.engineeringSignature.stoneSizePattern) &&
+      /variation|classes|mixed/i.test(topologyTerm.engineeringSignature.stoneSizePattern),
+  );
+  if (dependsOnSizeVariation && !physicalVariation) {
+    analysis.conflictingSignals = [
+      ...analysis.conflictingSignals,
+      `apparent stone-size variation did not survive perspective normalization — "${analysis.stoneFieldTopology}" topology not supported`,
+    ];
+    analysis.stoneFieldTopology = null;
+    analysis.customTerminology = analysis.customTerminology.filter(
+      (term: string) => termByName(term)?.canonicalName !== topologyTerm?.canonicalName,
+    );
+    analysis.needsConfirmation = true;
+    analysis.perspectiveGateApplied = true;
+  }
+
+  map.settingAnalysis = analysis;
+  // The compositional axes ARE the user-facing terminology.
+  map.resolvedSettingTerminology = [
+    analysis.stoneFieldTopology,
+    analysis.retentionConstruction,
+  ].filter(Boolean).join(" ") || null;
+  map.settingTopologyTerms = TOPOLOGY_TERMS;
+  return map;
+}
+
+/** ACCEPTANCE LOG — one line per required signal, no product hardcoding. */
+function logSettingAcceptance(map: any) {
+  const analysis = map?.settingAnalysis ?? {};
+  const groups = arrayOf(map?.stoneGroups);
+  const settings = arrayOf(map?.settings);
+  const signalsFor = (name: string) => {
+    const term = termByName(name);
+    const match = settings.find((setting: any) =>
+      termByName(setting?.detectedSetting ?? setting?.canonicalSetting ?? "")?.canonicalName ===
+        term?.canonicalName
+    );
+    return {
+      matched: arrayOf(match?.matchedSignals),
+      conflicting: arrayOf(match?.conflictingSignals),
+    };
+  };
+  const line = (label: string, value: unknown) =>
+    console.log(`[analyze-jewelry-frames] ${label}: ${
+      typeof value === "string" ? value : JSON.stringify(value ?? null)
+    }`);
+
+  line("RAW APPARENT STONE SIZE CLASSES", arrayOf(analysis.apparentSizeClasses));
+  line("PERSPECTIVE-NORMALIZED PHYSICAL SIZE CLASSES", arrayOf(analysis.physicalSizeClasses));
+  line("PERSPECTIVE NORMALIZATION BASIS", analysis.perspectiveNormalizationBasis ?? "none");
+  line("REPEATED MODULE SIZE COMPARISON", analysis.repeatedModuleSizeComparison ?? "none");
+  line("FULL-VIDEO SIZE EVIDENCE", analysis.videoSizeEvidence ?? "none");
+  line(
+    "STONE GROUP UNIFORMITY",
+    groups.map((group: any) => ({
+      region: group?.regionId ?? null,
+      uniformity: group?.sizeUniformity ?? null,
+      physicalSizeDifference: group?.physicalSizeDifference ?? null,
+      apparentSizeDifference: group?.apparentSizeDifference ?? null,
+    })),
+  );
+  for (const candidate of ["Galaxy Setting", "Mosaic Setting (custom)"]) {
+    const { matched, conflicting } = signalsFor(candidate);
+    line(`${candidate.toUpperCase()} MATCH SIGNALS`, matched);
+    line(`${candidate.toUpperCase()} CONFLICTING SIGNALS`, conflicting);
+  }
+  line("PERSPECTIVE GATE APPLIED", analysis.perspectiveGateApplied === true);
+  line("FINAL STONE FIELD TOPOLOGY", analysis.stoneFieldTopology ?? "needs_confirmation");
+  line("FINAL RETENTION CONSTRUCTION", analysis.retentionConstruction ?? "needs_confirmation");
+  line("FINAL COVERAGE STYLE", analysis.coverageStyle ?? "none");
+  line("FINAL USER-FACING TERMINOLOGY", map?.resolvedSettingTerminology ?? "needs_confirmation");
+}
+
 
 
 /**
@@ -3268,7 +3499,27 @@ function applyUserConfirmedFacts(map: any, facts: UserConfirmedFact[]) {
       // The observed construction is kept — only the LABEL is locked.
       lock(setting);
     }
+    // The compositional axes carry the user's wording too: a user-supplied
+    // topology term lands on topology, anything else on retention.
+    const analysis = map.settingAnalysis && typeof map.settingAnalysis === "object"
+      ? map.settingAnalysis
+      : (map.settingAnalysis = {});
+    const isTopology = (TOPOLOGY_TERMS as string[]).some((term) =>
+      term.toLowerCase().includes(label.toLowerCase()) || label.toLowerCase().includes(term.toLowerCase())
+    );
+    if (isTopology) analysis.stoneFieldTopology = label;
+    else analysis.retentionConstruction = label;
+    analysis.customTerminology = [
+      ...new Set([...(Array.isArray(analysis.customTerminology) ? analysis.customTerminology : []), label]),
+    ];
+    analysis.provenance = "USER_CONFIRMED";
+    analysis.confidence = 1;
+    analysis.needsConfirmation = false;
+    analysis.perspectiveGateApplied = false;
+    map.resolvedSettingTerminology = [analysis.stoneFieldTopology, analysis.retentionConstruction]
+      .filter(Boolean).join(" ") || label;
   }
+
 
   if (locked.has("setting")) for (const setting of arrayOf(map.settings)) lock(setting);
 
@@ -3283,6 +3534,73 @@ function applyUserConfirmedFacts(map: any, facts: UserConfirmedFact[]) {
 function arrayOf(value: unknown): any[] {
   return Array.isArray(value) ? value : [];
 }
+
+/**
+ * THE user-facing setting authority. Built from the FUSED map only:
+ * complete reference set + complete product-video analysis -> PKM ->
+ * terminology ontology -> resolvedJewelrySpec -> UI + Nano engineering lock.
+ * The first-pass single-image classifier never contributes here.
+ */
+function buildResolvedJewelrySpec(pkm: any, options: IntakeOptions) {
+  const analysis = pkm?.settingAnalysis ?? null;
+  const terminology = pkm?.resolvedSettingTerminology ?? null;
+  const canonicalOf = (value: unknown) => {
+    const raw = String(value ?? "").trim();
+    if (!raw) return "";
+    const canonical = toCanonical(raw, options.settingTypes);
+    return canonical || "";
+  };
+
+  const settings = arrayOf(pkm?.settings).map((setting: any) => {
+    const label = String(setting?.detectedSetting ?? setting?.canonicalSetting ?? "").trim();
+    const needsConfirmation = setting?.needsConfirmation === true ||
+      /needs_confirmation/i.test(label) ||
+      Number(setting?.confidence ?? 0) < 0.45;
+    return {
+      region: String(setting?.regionId ?? setting?.componentId ?? "").trim() || null,
+      // The composed compositional terminology is what the user reads.
+      displayLabel: needsConfirmation ? "" : (terminology || label),
+      setting: needsConfirmation ? "" : (canonicalOf(terminology) || canonicalOf(label)),
+      detectedSetting: label || null,
+      vocabularyDomain: setting?.vocabularyDomain ?? analysis?.vocabularyDomain ?? null,
+      matchedSignals: arrayOf(setting?.matchedSignals),
+      conflictingSignals: arrayOf(setting?.conflictingSignals),
+      reason: String(setting?.settingClassificationReason ?? "").trim() || null,
+      provenance: setting?.provenance ?? analysis?.provenance ?? null,
+      userConfirmedTerm: setting?.userConfirmedTerm === true,
+      confidence: Number(setting?.confidence ?? 0) || 0,
+      needsConfirmation,
+    };
+  });
+
+  // A map with the compositional axes but no per-region rows still resolves.
+  if (!settings.length && terminology) {
+    settings.push({
+      region: null,
+      displayLabel: terminology,
+      setting: canonicalOf(terminology),
+      detectedSetting: terminology,
+      vocabularyDomain: analysis?.vocabularyDomain ?? null,
+      matchedSignals: arrayOf(analysis?.topologyEvidence),
+      conflictingSignals: arrayOf(analysis?.conflictingSignals),
+      reason: null,
+      provenance: analysis?.provenance ?? null,
+      userConfirmedTerm: analysis?.provenance === "USER_CONFIRMED",
+      confidence: Number(analysis?.confidence ?? 0) || 0,
+      needsConfirmation: analysis?.needsConfirmation === true,
+    });
+  }
+
+  return {
+    source: pkm ? "product_knowledge_map" : "unavailable",
+    version: pkm?.version ?? null,
+    productCaseId: pkm?.productCaseId ?? null,
+    userFacingTerminology: terminology,
+    settingAnalysis: analysis,
+    settings,
+  };
+}
+
 
 
 
@@ -3468,6 +3786,23 @@ async function handleIntake(req: Request, body: any, user: { id: string }, apiKe
     // The engineering map is an ENHANCEMENT: intake must still succeed without it.
     console.warn("[intake] knowledge map unavailable:", errorMessage(error));
   }
+
+  /* ---- THE VISIBLE SETTING COMES FROM THE FUSED MAP, NOT THE FIRST PASS --- */
+  // The single-pass, first-image classifier is demoted to PRELIMINARY evidence:
+  // it can never drive the user-facing field or the Nano engineering lock.
+  for (const product of arrayOf(intake.products)) {
+    for (const setting of arrayOf(product?.settings)) {
+      setting.preliminary = true;
+      setting.provenance = "PRELIMINARY_OBSERVATION";
+    }
+  }
+  intake.resolvedJewelrySpec = buildResolvedJewelrySpec(intake.knowledgeMap, options);
+  console.log(
+    `[intake] RESOLVED SETTING SPEC source=${intake.resolvedJewelrySpec.source} terminology=${
+      intake.resolvedJewelrySpec.userFacingTerminology ?? "needs_confirmation"
+    } regions=${intake.resolvedJewelrySpec.settings.length}`,
+  );
+
 
   const timings = {
     cacheHit: false,
