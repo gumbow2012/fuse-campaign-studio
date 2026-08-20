@@ -255,6 +255,8 @@ function selectReferencesForFrame(args: {
   piece: JewelryPiece;
   mode?: ReplacementMode | string | null;
   preferredRole?: string | null;
+  /** Stage-A still analysis for THIS frame. Advisory only — never authoritative. */
+  geminiFrameAnalysis?: GeminiFrameAnalysis | null;
 }): JewelryReference[] {
   const all = pieceReferences(args.piece);
   if (all.length <= 1) return all;
