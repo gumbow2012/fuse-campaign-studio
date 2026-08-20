@@ -1444,10 +1444,14 @@ export default function JewelrySwap() {
             metal: product.metal?.resolvedValue ?? product.metal?.value ?? null,
             stone: product.stoneType?.resolvedValue ?? product.stoneType?.value ?? null,
             stoneColor: product.stoneColor?.resolvedValue ?? product.stoneColor?.value ?? null,
-            quality: product.stoneQuality?.resolvedValue ?? product.stoneQuality?.value ?? null,
+            // A photo-only clarity read is never treated as a detected grade.
+            quality: product.stoneQuality?.resolvedValue ?? null,
+            qualityEvidenceSource: product.stoneQuality?.qualityEvidenceSource ?? null,
             settings: detectedSettings.map((setting) => ({
               type: setting.type,
               region: setting.region,
+              needsConfirmation: setting.needsConfirmation,
+              reason: setting.reason,
             })),
           },
           sources: {
@@ -1459,11 +1463,12 @@ export default function JewelrySwap() {
             quality: resolvedQuality.source,
             settings: userSetSettings
               ? "user_override"
-              : autoSettings.length
+              : autoSettings.some((setting) => setting.type)
                 ? "gemini_detected"
                 : "unknown",
           },
           needsConfirmation: Array.isArray(product.needsConfirmation) ? product.needsConfirmation : [],
+
         });
       });
 
