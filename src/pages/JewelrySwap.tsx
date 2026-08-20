@@ -3142,34 +3142,14 @@ export default function JewelrySwap() {
                               </option>
                             ))}
                           </select>
-                          {/* Geometry authority is per reference image — auto-on for CAD labels. */}
-                          <label
-                            className="flex items-center gap-1 text-[9px] text-muted-foreground"
-                            title="Use this image as the geometry / design authority"
-                          >
-                            <input
-                              type="checkbox"
-                              checked={isGeometryAuthority(piece, angleIndex)}
-                              onChange={(event) =>
-                                setPieces((prev) =>
-                                  prev.map((item, i) =>
-                                    i === index
-                                      ? {
-                                          ...item,
-                                          cads: item.urls.map((_, a) =>
-                                            a === angleIndex
-                                              ? event.target.checked
-                                              : item.cads?.[a] ?? null,
-                                          ),
-                                        }
-                                      : item,
-                                  ),
-                                )
-                              }
-                              className="h-2.5 w-2.5 accent-cyan-300"
-                            />
-                            Authority
-                          </label>
+                          {/* AUTO label only — authority is assigned by FUSE, never by
+                              the user. Hidden entirely when it wouldn't be useful. */}
+                          {autoAuthorityLabelByUrl.get(url) ? (
+                            <p className="truncate text-[8px] font-semibold uppercase tracking-[0.12em] text-cyan-200/80">
+                              {autoAuthorityLabelByUrl.get(url)}
+                            </p>
+                          ) : null}
+
                         </div>
                       ))}
                       <button
