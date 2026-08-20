@@ -313,6 +313,40 @@ const IMAGE_MODEL_LABELS: Record<JewelryImageModel, string> = {
   nb2: "Nano Banana 2",
 };
 
+/**
+ * Nano Banana Pro image quality. The Pro edit endpoint natively accepts
+ * `resolution: "1K" | "2K" | "4K"`; the alternate nb2 endpoint does NOT, so this
+ * control only ever affects the Pro path. Resolution travels in the API request,
+ * never in the prompt.
+ */
+const NANO_QUALITY_OPTIONS = [
+  { value: "2k" as const, label: "2K", hint: "Fast", resolution: "2K" },
+  { value: "4k" as const, label: "4K", hint: "Max detail", resolution: "4K" },
+];
+
+type NanoQuality = (typeof NANO_QUALITY_OPTIONS)[number]["value"];
+
+/**
+ * The backend prices this image endpoint per request (fal unit price × 1), so the
+ * real estimate does not change between 2K and 4K — no multiplier is applied.
+ */
+const NANO_COST_MULTIPLIER = 1;
+
+function resolutionForQuality(quality: NanoQuality) {
+  return NANO_QUALITY_OPTIONS.find((option) => option.value === quality)?.resolution ?? "2K";
+}
+
+/** Reads back the resolution a generation actually ran at, if it was persisted. */
+function qualityFromGeneration(
+  generation?: { resolution?: string | null; nanoQuality?: string | null } | null,
+): NanoQuality | null {
+  const raw = String(generation?.nanoQuality ?? generation?.resolution ?? "").toLowerCase();
+  if (raw.includes("4k")) return "4k";
+  if (raw.includes("2k")) return "2k";
+  return null;
+}
+
+
 const VIDEO_MODELS = [
   { key: "seedance-2.0", label: "Seedance 2.0", usdPerSecond: 0.3024 },
   { key: "seedance-2.0-fast", label: "Seedance 2.0 Fast", usdPerSecond: 0.2419 },
@@ -653,6 +687,11 @@ export default function JewelrySwap() {
   // Which frame's Regenerate menu is expanded, and which frame is being compared
   // against the opt-in alternate model.
   const [regenMenu, setRegenMenu] = useState<number | null>(null);
+  /** Batch-level Nano Banana Pro quality. Always defaults to 2K — never auto-4K. */
+  const [nanoQuality, setNanoQuality] = useState<NanoQuality>("2k");
+  /** Per-frame Regenerate quality, defaulting to that frame's previous value. */
+  const [frameQuality, setFrameQuality] = useState<Record<number, NanoQuality>>({});
+
   const [compareIndex, setCompareIndex] = useState<number | null>(null);
 
   const [approved, setApproved] = useState<Set<number>>(new Set());
@@ -1437,6 +1476,7 @@ export default function JewelrySwap() {
       frameIndex: number,
       options?: {
         imageModel?: JewelryImageModel;
+        quality?: NanoQuality;
         preferredRole?: string | null;
         failureReason?: string | null;
         mode?: ReplacementMode;
@@ -1450,6 +1490,7 @@ export default function JewelrySwap() {
       const imageModel: JewelryImageModel = options?.imageModel ?? "pro";
       const mode: ReplacementMode = options?.mode ?? frameMode[frameIndex] ?? "auto";
       const coverage: Coverage = options?.coverage ?? frameCoverage[frameIndex] ?? "auto";
+      const quality: NanoQuality = options?.quality ?? nanoQuality;
       const data = await callJewelrySwap<{ generation: JewelryGeneration }>({
         action: "swap_frame",
         sourceFrameUrl: frame.url,
@@ -1460,8 +1501,10 @@ export default function JewelrySwap() {
         frameTime: frame.time,
         aspectRatio: meta?.aspectRatio,
         extraPrompt,
-        resolution: "2K",
+        // Pro-only API parameter — the nb2 endpoint 422s on `resolution`.
+        resolution: imageModel === "pro" ? resolutionForQuality(quality) : undefined,
         imageModel,
+
         preferredRole:
           options?.preferredRole !== undefined
             ? options.preferredRole
@@ -1486,6 +1529,8 @@ export default function JewelrySwap() {
         setAltSwaps((prev) => ({ ...prev, [frameIndex]: data.generation }));
       } else {
         setSwaps((prev) => ({ ...prev, [frameIndex]: data.generation }));
+        // Remember the quality this frame actually ran at so Regenerate defaults to it.
+        setFrameQuality((prev) => ({ ...prev, [frameIndex]: quality }));
         setApproved((prev) => {
           const next = new Set(prev);
           next.delete(frameIndex);
@@ -1503,7 +1548,9 @@ export default function JewelrySwap() {
       frameCoverage,
       frameAnalysisFor,
       analysis,
+      nanoQuality,
     ],
+
   );
 
   /**
@@ -1618,10 +1665,34 @@ export default function JewelrySwap() {
 
   /* ------------------------- Live dollar/credit preview --------------------- */
 
+  /**
+   * REAL estimate only. The backend prices this endpoint per image (fal pricing
+   * unit price × 1), so the figure is resolution-independent — 2K and 4K show
+   * the same true number rather than an invented multiplier.
+   */
+  const swapCostPerFrameUsd = IMAGE_FLAT_USD * NANO_COST_MULTIPLIER;
   const swapCostUsd = useMemo(
-    () => IMAGE_FLAT_USD * resolutionMultiplier("2K") * Math.max(0, selectedFrames.size),
-    [selectedFrames],
+    () => swapCostPerFrameUsd * Math.max(0, selectedFrames.size),
+    [selectedFrames, swapCostPerFrameUsd],
   );
+
+  /**
+   * Macro hint only: a macro-mode/coverage frame or a Gemini
+   * `highDetailRecommended` flag surfaces a suggestion. Analysis never controls
+   * or auto-switches the resolution.
+   */
+  const macroQualityHint = useMemo(() => {
+    const indices = [...selectedFrames];
+    return indices.some((index) => {
+      if (frameMode[index] === "macro" || frameCoverage[index] === "macro") return true;
+      const advice = frameAnalysisFor(index) as (JewelryFrameAnalysis & {
+        highDetailRecommended?: boolean | null;
+      }) | null;
+      return advice?.highDetailRecommended === true || advice?.coverage === "macro_detail";
+    });
+  }, [selectedFrames, frameMode, frameCoverage, frameAnalysisFor]);
+
+
 
   const videoCostUsd = useMemo(() => {
     const perSecond = VIDEO_MODELS.find((entry) => entry.key === videoModel)?.usdPerSecond ?? 0;
@@ -2970,6 +3041,39 @@ export default function JewelrySwap() {
                       );
                     })}
                   </div>
+
+                  {/* Nano Banana Pro quality — batch level, never per frame. */}
+                  <div className="mt-3 flex flex-wrap items-center gap-3">
+                    <span className="text-[10px] font-semibold uppercase tracking-[0.18em] text-cyan-200/70">
+                      Image quality
+                    </span>
+                    <div className="inline-flex rounded-xl border border-white/12 bg-black/40 p-0.5">
+                      {NANO_QUALITY_OPTIONS.map((option) => {
+                        const active = nanoQuality === option.value;
+                        return (
+                          <button
+                            key={option.value}
+                            type="button"
+                            onClick={() => setNanoQuality(option.value)}
+                            className={cn(
+                              "rounded-lg px-3 py-1.5 text-[11px] font-semibold transition-all duration-200",
+                              active
+                                ? "border border-cyan-200/50 bg-cyan-200/12 text-cyan-100 shadow-[0_0_14px_-4px_hsl(190_90%_60%/0.55)]"
+                                : "border border-transparent text-foreground/60 hover:text-foreground",
+                            )}
+                          >
+                            {option.label}
+                            <span className="ml-1.5 font-normal opacity-70">· {option.hint}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                    {/* Non-blocking hint only — quality is never auto-switched. */}
+                    {macroQualityHint && nanoQuality === "2k" ? (
+                      <span className="text-[10px] text-amber-200/85">4K recommended for macro detail</span>
+                    ) : null}
+                  </div>
+
                   <div className="mt-3 flex flex-wrap items-center gap-2">
                     <Button
                       size="sm"
@@ -3205,6 +3309,37 @@ export default function JewelrySwap() {
                                 </option>
                               ))}
                             </select>
+                            {/* Defaults to the quality this frame last ran at. */}
+                            <div className="flex items-center gap-2">
+                              <span className="text-[9px] uppercase tracking-[0.14em] text-muted-foreground">
+                                Quality
+                              </span>
+                              <div className="inline-flex rounded-lg border border-white/12 bg-black/50 p-0.5">
+                                {NANO_QUALITY_OPTIONS.map((option) => {
+                                  const current =
+                                    frameQuality[index] ?? qualityFromGeneration(swap) ?? nanoQuality;
+                                  const active = current === option.value;
+                                  return (
+                                    <button
+                                      key={option.value}
+                                      type="button"
+                                      onClick={() =>
+                                        setFrameQuality((prev) => ({ ...prev, [index]: option.value }))
+                                      }
+                                      className={cn(
+                                        "rounded-md px-2 py-1 text-[10px] font-semibold transition-all",
+                                        active
+                                          ? "border border-cyan-200/50 bg-cyan-200/12 text-cyan-100 shadow-[0_0_12px_-4px_hsl(190_90%_60%/0.55)]"
+                                          : "border border-transparent text-foreground/60 hover:text-foreground",
+                                      )}
+                                    >
+                                      {option.label}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            </div>
+
                             <details className="rounded-lg border border-white/10 bg-black/30 px-2 py-1.5">
                               <summary className="cursor-pointer text-[10px] text-muted-foreground">
                                 Advanced
@@ -3261,6 +3396,8 @@ export default function JewelrySwap() {
                                 void swapFrame(index, {
                                   imageModel: "pro",
                                   failureReason: frameReason[index] || null,
+                                  quality:
+                                    frameQuality[index] ?? qualityFromGeneration(swap) ?? nanoQuality,
                                 });
                               }}
                               className="w-full rounded-lg bg-[hsl(var(--primary))] text-[11px] text-primary-foreground hover:bg-[hsl(var(--primary))]/90"

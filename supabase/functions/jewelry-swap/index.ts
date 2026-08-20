@@ -94,6 +94,10 @@ function serialize(row: any) {
     frameTime: typeof payload.frame_time === "number" ? payload.frame_time : null,
     sourceFrameUrl: typeof payload.source_frame_url === "string" ? payload.source_frame_url : null,
     imageModel: payload.image_model === "nb2" ? "nb2" : payload.image_model === "pro" ? "pro" : null,
+    // Resolution actually sent to the Pro endpoint — lets Regenerate default to it.
+    resolution: typeof payload.resolution === "string" ? payload.resolution : null,
+    nanoQuality: typeof payload.nano_quality === "string" ? payload.nano_quality : null,
+
     preferredRole: typeof payload.preferred_role === "string" ? payload.preferred_role : null,
     coverage: typeof payload.coverage === "string" ? payload.coverage : null,
     shotKey: typeof payload.shot_key === "string" ? payload.shot_key : null,
@@ -1929,7 +1933,13 @@ async function startSwapFrame(admin: AdminClient, args: {
           stage: "frame_swap",
           image_model: imageModelKey,
           image_endpoint: endpointId,
+          // Quality is an API parameter (never prompt text) and only the Pro
+          // endpoint accepts it — the nb2 path never carries a resolution.
+          nano_quality: imageModelKey === "pro" && ["2K", "4K"].includes(resolution)
+            ? resolution.toLowerCase()
+            : null,
           geometry_fidelity: "strict",
+
           // Structured product authority resolved for this run (verification hook).
           target_spec: routedPieces.map((piece) => resolveTargetSpec(piece)),
 
