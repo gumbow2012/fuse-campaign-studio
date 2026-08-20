@@ -1816,7 +1816,7 @@ export default function GenerationStudio() {
                         type="button"
                         onClick={() => setAssetTypeFilter(option)}
                         className={cn(
-                          "rounded-lg px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] transition-colors",
+                          "rounded-lg px-3 py-1.5 font-display text-[12px] font-semibold uppercase tracking-[0.07em] transition-colors",
                           assetTypeFilter === option
                             ? "bg-cyan-300/20 text-cyan-100"
                             : "text-muted-foreground hover:text-foreground",
@@ -1836,7 +1836,7 @@ export default function GenerationStudio() {
                         type="button"
                         onClick={() => setAssetSort(option.value)}
                         className={cn(
-                          "rounded-lg px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] transition-colors",
+                          "rounded-lg px-3 py-1.5 font-display text-[12px] font-semibold uppercase tracking-[0.07em] transition-colors",
                           assetSort === option.value
                             ? "bg-cyan-300/20 text-cyan-100"
                             : "text-muted-foreground hover:text-foreground",
