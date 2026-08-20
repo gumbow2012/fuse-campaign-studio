@@ -1294,6 +1294,36 @@ export default function JewelrySwap() {
   /** Unresolved product-spec concerns across all pieces (user overrides clear them). */
   const uncertainCount = reviewCount(pieces);
 
+  /** One plain sentence describing the fused understanding. */
+  const understoodSummary = useMemo(() => {
+    if (!knowledgeMap) return "";
+    const metal = knowledgeMap.materialRegions?.[0]?.metal ?? null;
+    const stoneCount = knowledgeMap.stones?.length ?? 0;
+    const parts = [
+      knowledgeMap.productType || "Jewelry piece",
+      metal || null,
+      stoneCount ? `${stoneCount} stone${stoneCount === 1 ? "" : "s"} mapped` : null,
+      knowledgeMap.repeatedModules?.length
+        ? `${knowledgeMap.repeatedModules.length} repeating module${
+            knowledgeMap.repeatedModules.length === 1 ? "" : "s"
+          }`
+        : null,
+    ].filter(Boolean);
+    return parts.join(" · ");
+  }, [knowledgeMap]);
+
+  /** Coverage read-out, one badge per area of the piece. */
+  const coverageBadges = useMemo(() => {
+    const coverage = knowledgeMap?.coverage ?? {};
+    return [
+      { label: "Geometry", level: coverage.geometry || "Unknown" },
+      { label: "Stone layout", level: coverage.stoneLayout || "Unknown" },
+      { label: "Setting", level: coverage.setting || "Unknown" },
+      { label: "Clasp", level: coverage.clasp || "Unknown" },
+    ];
+  }, [knowledgeMap]);
+
+
 
   /** The app's canonical vocabularies, handed to the analysis every call. */
   const intakeOptions = useMemo(
