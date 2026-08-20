@@ -44,7 +44,8 @@ Deno.serve(async (req) => {
           properties: { ok: { type: Type.BOOLEAN } },
           required: ["ok"],
         },
-        maxOutputTokens: 32,
+        maxOutputTokens: 512,
+        thinkingConfig: { thinkingBudget: 0 },
       },
     });
 
