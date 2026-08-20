@@ -1795,7 +1795,17 @@ async function startSwapFrame(admin: AdminClient, args: {
           selected_reference_cad: selectedRefs.map((ref) => isCadRef(ref)),
           references_sent: selectedRefs.length,
           references_available: pieces.reduce((sum, piece) => sum + pieceReferences(piece).length, 0),
+          // Stage-A debug trail (never contains any API key).
+          gemini_analysis_used: !!frameAnalysis,
+          gemini_view: frameAnalysis?.view ?? null,
+          gemini_coverage: frameAnalysis?.coverage ?? null,
+          gemini_detailType: frameAnalysis?.detailType ?? null,
+          gemini_magnification: frameAnalysis?.magnification ?? null,
+          gemini_recommended_roles: frameAnalysis?.recommendedReferenceRoles ?? null,
+          gemini_avoid_roles: frameAnalysis?.avoidReferenceRoles ?? null,
+          gemini_risk_flags: frameAnalysis?.riskFlags ?? null,
           pieces,
+
         },
       })
       .eq("id", inserted.id)
