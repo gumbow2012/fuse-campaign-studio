@@ -1181,8 +1181,10 @@ export default function JewelrySwap() {
               : item,
           ),
         );
+        invalidateAssetCache(); // new uploads must appear next time the picker opens
       } catch (error) {
         toast.error(error instanceof Error ? error.message : "Could not upload that angle");
+
       } finally {
         setUploadingPiece(false);
         setAngleTarget(null);
