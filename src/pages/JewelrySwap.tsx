@@ -2618,6 +2618,8 @@ export default function JewelrySwap() {
       opticsProfile,
       opticsControls,
       ensureFrameOptics,
+      recordFrameGeneration,
+
     ],
 
 
