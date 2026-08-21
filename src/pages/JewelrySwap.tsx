@@ -5736,6 +5736,15 @@ export default function JewelrySwap() {
                   validatedMasterCount={
                     Object.values(canonicalMasters).filter((master) => master.validated).length
                   }
+                  batchesSlot={
+                    <CampaignBatchPanel
+                      batches={batches}
+                      activeBatchId={activeBatchId}
+                      blockedReason={batchBlocked}
+                      onStartBatch={startNextBatch}
+                      onApproveBatch={approveBatch}
+                    />
+                  }
                   mastersSlot={
                     <CanonicalMastersPanel
                       plan={canonicalMasterPlan}
