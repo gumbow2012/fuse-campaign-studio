@@ -1916,6 +1916,9 @@ function buildSeedanceDirectorPrompt(args: {
   const core = coreLength(fullCore) <= DIRECTOR_MAX_CHARS ? fullCore : buildCore(shortTimeline);
 
   const optional = [
+    // Product identity first: the Master Product Lock is the highest-value
+    // optional section inside the character budget.
+    masterLockBlock.length ? masterLockBlock.join("\n") : null,
     hasStones ? `${DIRECTOR_GEMSTONES}${colorless ? ` ${DIRECTOR_COLORLESS}` : ""}` : null,
     DIRECTOR_METAL,
     String(args.opticsText ?? "").trim() || null,
