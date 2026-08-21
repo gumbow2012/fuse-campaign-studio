@@ -4025,6 +4025,8 @@ export default function JewelrySwap() {
       setKnowledgeMap((state?.knowledgeMap ?? null) as ProductKnowledgeMap | null);
       // Reuse the stored lock — reopening never recomputes or re-runs Gemini.
       setMasterProductLock((state?.masterProductLock ?? null) as MasterProductLock | null);
+      // Pre-campaign projects have no marker and stay on the unchanged Swap surface.
+      setWorkspaceMode(state?.mode === "campaign" ? "campaign" : "swap");
       // Reuse the stored photography profile — reopening never re-reads the look.
       setPhotographyRefs((state?.photographyReferenceUrls ?? []) as string[]);
       const storedPhotography = (state?.campaignPhotographyProfile ??
