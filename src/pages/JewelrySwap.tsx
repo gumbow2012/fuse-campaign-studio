@@ -1579,6 +1579,64 @@ export default function JewelrySwap() {
     [knowledgeMap, pieces, materialAuthorityOverride],
   );
 
+  /* ------------------- Campaign photography profile (§20) ------------------ */
+
+  /** Look references upload to the same storage pattern as product references. */
+  const addPhotographyRefs = useCallback(async (files: File[]) => {
+    if (!files.length) return;
+    setPhotographyStatus("uploading");
+    setPhotographyError(null);
+    try {
+      const folder = await createOutfitSwapFolder();
+      const urls: string[] = [];
+      for (const file of files.slice(0, 6)) {
+        const compressed = await compressImageFile(file);
+        const stored = await uploadToStorage(folder, compressed, compressed.name);
+        urls.push(stored.url);
+      }
+      setPhotographyRefs((prev) => [...prev, ...urls].slice(0, 6));
+      setPhotographyStatus((prev) => (prev === "uploading" ? "idle" : prev));
+    } catch (error) {
+      setPhotographyStatus("error");
+      setPhotographyError(
+        error instanceof Error ? error.message : "Could not upload that look reference",
+      );
+    }
+  }, []);
+
+  const removePhotographyRef = useCallback((url: string) => {
+    setPhotographyRefs((prev) => prev.filter((entry) => entry !== url));
+  }, []);
+
+  /**
+   * Analysis only (Gemini, cached server-side by the reference set). It runs on
+   * request and re-runs only when the look references actually change.
+   */
+  const analyzePhotography = useCallback(async () => {
+    if (!photographyRefs.length) return;
+    const version = photographySetVersion(photographyRefs);
+    setPhotographyStatus("analyzing");
+    setPhotographyError(null);
+    try {
+      const result = await analyzeCampaignPhotography({ referenceUrls: photographyRefs });
+      setCampaignPhotographyProfile(result.profile ?? null);
+      photographyVersion.current = version;
+      setPhotographyStatus(result.profile ? "ready" : "idle");
+    } catch (error) {
+      setPhotographyStatus("error");
+      setPhotographyError(
+        error instanceof Error ? error.message : "Could not read the campaign look",
+      );
+    }
+  }, [photographyRefs]);
+
+  /** A changed look reference set marks the stored profile stale — never auto-reruns. */
+  useEffect(() => {
+    if (!campaignPhotographyProfile) return;
+    const version = photographySetVersion(photographyRefs);
+    setPhotographyStatus(version === photographyVersion.current ? "ready" : "stale");
+  }, [photographyRefs, campaignPhotographyProfile]);
+
   /**
    * The EVIDENCE ROLE of one thumbnail (CAD FRONT / MACRO / SIDE / CLASP …).
    * Deliberately never a product name: a thumbnail is an observation, not a piece.
@@ -3454,6 +3512,10 @@ export default function JewelrySwap() {
       pieces,
       knowledgeMap,
       masterProductLock,
+      // CAMPAIGN PHOTOGRAPHY PROFILE — look only, stored so reopen never re-reads.
+      photographyReferenceUrls: photographyRefs,
+      campaignPhotographyProfile,
+      photographySetVersion: photographyVersion.current,
       userLocks,
       analysis,
       analysisKey,
@@ -3498,6 +3560,8 @@ export default function JewelrySwap() {
       pieces,
       knowledgeMap,
       masterProductLock,
+      photographyRefs,
+      campaignPhotographyProfile,
       userLocks,
       analysis,
       analysisKey,
@@ -3592,6 +3656,14 @@ export default function JewelrySwap() {
       setKnowledgeMap((state?.knowledgeMap ?? null) as ProductKnowledgeMap | null);
       // Reuse the stored lock — reopening never recomputes or re-runs Gemini.
       setMasterProductLock((state?.masterProductLock ?? null) as MasterProductLock | null);
+      // Reuse the stored photography profile — reopening never re-reads the look.
+      setPhotographyRefs((state?.photographyReferenceUrls ?? []) as string[]);
+      const storedPhotography = (state?.campaignPhotographyProfile ??
+        null) as CampaignPhotographyProfile | null;
+      setCampaignPhotographyProfile(storedPhotography);
+      photographyVersion.current = state?.photographySetVersion ?? null;
+      setPhotographyStatus(storedPhotography ? "ready" : "idle");
+      setPhotographyError(null);
       setUserLocks((state?.userLocks ?? []) as UserConfirmedFact[]);
       setAnalysis((state?.analysis ?? null) as JewelryProjectAnalysis | null);
       setAnalysisKey(state?.analysisKey ?? null);
