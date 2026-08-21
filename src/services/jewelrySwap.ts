@@ -57,8 +57,10 @@ export type JewelryGeneration = SwapGeneration & {
   /** Animate stage: the chosen shot + its direction summary and full prompt. */
   shotKey?: string | null;
   shotLabel?: string | null;
-  /** §F4/§F5 — clip duration actually submitted to Kling. No quality/resolution input exists. */
+  /** §F6 — motion preset submitted for this clip (null on legacy clips). */
+  motionPreset?: string | null;
   durationSeconds?: number | null;
+
 
   cameraDirection?: string | null;
   directionSummary?: AnimationDirectionSummary | null;
