@@ -925,6 +925,11 @@ export default function JewelrySwap() {
   const [frameRevision, setFrameRevision] = useState<Record<number, number>>({});
   /** APPROVAL BY ID (§37): the exact revision approved for each frame. */
   const [approvedGenerationId, setApprovedGenerationId] = useState<Record<number, string>>({});
+  /** Latest history, readable inside setState updaters. */
+  const frameGenerationsRef = useRef<Record<number, JewelryGeneration[]>>({});
+  frameGenerationsRef.current = frameGenerations;
+
+
 
   // Nano Banana Pro results (the default) and the opt-in Nano Banana 2 runs live
   // side by side so a frame can be compared before one is approved. Both are
