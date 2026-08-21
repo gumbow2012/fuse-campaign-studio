@@ -3946,10 +3946,16 @@ async function handleValidate(body: any, apiKey?: string) {
   if (!/^https?:\/\//.test(imageUrl)) return json({ error: "A generated image URL is required" }, 400);
 
   const pkm = body?.knowledgeMap ?? null;
-  const lockLines = pkm ? engineeringLockLines(pkm) : [];
+  // The ACTIVE Master Product Lock is the comparison baseline when supplied;
+  // the knowledge-map lock lines stay the fallback. No new validation system.
+  const lockLines = [
+    ...masterLockBaselineLines(body?.masterProductLock),
+    ...(pkm ? engineeringLockLines(pkm) : []),
+  ];
   if (!lockLines.length) {
     return json({ validation: null, skipped: "no_locked_constraints" });
   }
+
 
   const part = await inlineImage(imageUrl);
   const ai = new GoogleGenAI({ apiKey });
