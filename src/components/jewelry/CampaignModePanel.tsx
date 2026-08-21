@@ -66,6 +66,7 @@ export function CampaignModePanel({
   photographySlot,
   mastersSlot,
   batchesSlot,
+  matchedPairsSlot,
 }: {
   hasLock: boolean;
   lockSummary: string | null;
@@ -78,6 +79,8 @@ export function CampaignModePanel({
   mastersSlot: ReactNode;
   /** BATCH CONTINUATION (§28) — lineage read-out + start/approve controls. */
   batchesSlot?: ReactNode;
+  /** MATCHED PAIRS (§29) — manufacturing-state counterparts of approved plates. */
+  matchedPairsSlot?: ReactNode;
 }) {
   return (
     <div className="space-y-3">
@@ -153,6 +156,7 @@ export function CampaignModePanel({
 
       {batchesSlot}
       {mastersSlot}
+      {matchedPairsSlot}
       {photographySlot}
 
       {!hasLock ? (

@@ -64,6 +64,11 @@ export type JewelryGeneration = SwapGeneration & {
   stage?: string | null;
   canonicalMasterView?: string | null;
   canonicalMasterLabel?: string | null;
+  /** MATCHED PAIR (§29): the plate this variant was derived from + its stage. */
+  matchedPairSourceId?: string | null;
+  matchedPairSourceStage?: string | null;
+  matchedPairTargetStage?: string | null;
+  matchedPairTargetLabel?: string | null;
 };
 
 /**
@@ -90,6 +95,35 @@ export async function generateCanonicalMaster(args: {
   });
   return data.generation;
 }
+
+/**
+ * MATCHED-PAIR MANUFACTURING (§29) — one paid Nano run on the EXISTING
+ * nano-banana-pro path that renders the OTHER manufacturing state of an
+ * existing approved plate. Camera, crop, composition, lighting, orientation,
+ * scale and background are held identical by the prompt; the manufacturing
+ * stage is the only thing that changes. Explicit user action only.
+ */
+export async function generateMatchedPair(args: {
+  sourceImageUrl: string;
+  sourceId: string;
+  sourceLabel?: string | null;
+  sourceStage: string;
+  targetStage: string;
+  pieces: unknown[];
+  aspectRatio?: string;
+  resolution?: string;
+  extraPrompt?: string;
+  imageModel?: JewelryImageModel;
+  masterProductLock?: unknown;
+  materialAuthority?: unknown;
+}) {
+  const data = await callJewelrySwap<{ generation: JewelryGeneration }>({
+    action: "generate_matched_pair",
+    ...args,
+  });
+  return data.generation;
+}
+
 
 /** Animate-stage camera direction options exposed in the UI. */
 export const CAMERA_DIRECTIONS = [

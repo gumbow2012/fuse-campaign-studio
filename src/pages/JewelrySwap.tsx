@@ -90,6 +90,15 @@ import {
   startCampaignBatch,
   type CampaignBatch,
 } from "@/lib/campaignBatches";
+import { MatchedPairPanel } from "@/components/jewelry/MatchedPairPanel";
+import {
+  matchedPairBlockedReason,
+  matchedPairKey,
+  oppositeManufacturingStage,
+  planMatchedPairSources,
+  type ManufacturingStage,
+  type MatchedPair,
+} from "@/lib/matchedPairs";
 
 import CampaignPhotographyPanel, {
 
@@ -123,6 +132,7 @@ import {
   animateJewelryFrame,
   callJewelrySwap,
   generateCanonicalMaster,
+  generateMatchedPair,
   createTemplateFromJewelrySwap,
   listAssets,
   invalidateAssetCache,
@@ -934,6 +944,13 @@ export default function JewelrySwap() {
   useEffect(() => {
     canonicalMastersRef.current = canonicalMasters;
   }, [canonicalMasters]);
+  /**
+   * MATCHED-PAIR MANUFACTURING (§29). Counterpart plates of approved masters in
+   * the OTHER manufacturing state, keyed `${sourceId}:${targetStage}`. Each pair
+   * is one explicit paid Nano run — nothing here ever fires automatically.
+   */
+  const [matchedPairs, setMatchedPairs] = useState<Record<string, MatchedPair>>({});
+  const [matchedPairBusyKey, setMatchedPairBusyKey] = useState<string | null>(null);
   /**
    * BATCH CONTINUATION (§28). Batches are lineage records ONLY: a new batch
    * inherits the established Master Product Lock, campaign look, optics profile
@@ -2375,7 +2392,28 @@ export default function JewelrySwap() {
         });
         return;
       }
+      // MATCHED PAIRS (§29) own their own slot too — a pair is a counterpart
+      // plate of an approved master, not a new revision of a source frame.
+      if (generation.stage === "matched_pair") {
+        setMatchedPairs((prev) => {
+          const key = Object.keys(prev).find(
+            (entry) => prev[entry].generationId === generation.id,
+          );
+          if (!key) return prev;
+          return {
+            ...prev,
+            [key]: {
+              ...prev[key],
+              status: generation.status,
+              outputUrl: generation.outputUrl ?? prev[key].outputUrl,
+              error: generation.error ?? null,
+            },
+          };
+        });
+        return;
+      }
       recordFrameGeneration(generation);
+
     },
     [recordFrameGeneration],
   );
@@ -2458,8 +2496,13 @@ export default function JewelrySwap() {
         ids.push(master.generationId);
       }
     }
+    for (const pair of Object.values(matchedPairs)) {
+      if (pair.generationId && (pair.status === "queued" || pair.status === "running")) {
+        ids.push(pair.generationId);
+      }
+    }
     return ids;
-  }, [swaps, altSwaps, videos, canonicalMasters]);
+  }, [swaps, altSwaps, videos, canonicalMasters, matchedPairs]);
 
   /**
    * Adaptive status polling. A flat 5s tick meant a finished job could sit
@@ -2852,6 +2895,102 @@ export default function JewelrySwap() {
       tagBatchMaster,
     ],
   );
+
+  /* ---------------- Matched-pair manufacturing (§29) ------------------------ */
+
+  /**
+   * Pairable plates: approved canonical masters only. Availability comes from
+   * the LOCK (does this product actually have stones?) — never from a product
+   * name — so any stone-bearing piece qualifies and stone-free pieces do not.
+   */
+  const matchedPairSources = useMemo(
+    () => planMatchedPairSources({ masters: canonicalMasters }),
+    [canonicalMasters],
+  );
+
+  const matchedPairsDisabledReason = useMemo(
+    () => matchedPairBlockedReason({ lock: masterProductLock, sources: matchedPairSources }),
+    [masterProductLock, matchedPairSources],
+  );
+
+  /**
+   * EXPLICIT USER ACTION ONLY — one matched pair is ONE paid run on the same
+   * Nano path used by frame swaps and canonical masters. The prompt holds
+   * camera, crop, composition, lighting, orientation, scale and background
+   * identical to the source plate and changes ONLY the manufacturing stage.
+   */
+  const generateMatchedPairFor = useCallback(
+    async (sourceId: string) => {
+      if (matchedPairsDisabledReason) return;
+      const source = matchedPairSources.find((entry) => entry.id === sourceId);
+      if (!source) return;
+      const targetStage: ManufacturingStage = oppositeManufacturingStage(source.stage);
+      const key = matchedPairKey(source.id, targetStage);
+      setMatchedPairBusyKey(key);
+      try {
+        const generation = await generateMatchedPair({
+          sourceImageUrl: source.url,
+          sourceId: source.id,
+          sourceLabel: source.label,
+          sourceStage: source.stage,
+          targetStage,
+          pieces: piecePayload(),
+          resolution: resolutionForQuality(nanoQuality),
+          imageModel: "pro",
+          masterProductLock,
+          materialAuthority,
+        });
+        setMatchedPairs((prev) => ({
+          ...prev,
+          [key]: {
+            key,
+            sourceId: source.id,
+            sourceLabel: source.label,
+            sourceUrl: source.url,
+            sourceStage: source.stage,
+            targetStage,
+            generationId: generation.id,
+            status: generation.status,
+            outputUrl: generation.outputUrl ?? null,
+            error: generation.error ?? null,
+            lockVersion: masterProductLock?.version ?? null,
+            createdAt: generation.createdAt ?? null,
+          },
+        }));
+      } catch (error) {
+        setMatchedPairs((prev) => ({
+          ...prev,
+          [key]: {
+            key,
+            sourceId: source.id,
+            sourceLabel: source.label,
+            sourceUrl: source.url,
+            sourceStage: source.stage,
+            targetStage,
+            generationId: prev[key]?.generationId ?? "",
+            status: "failed",
+            outputUrl: null,
+            error:
+              error instanceof Error ? error.message : "Could not start this matched pair",
+            lockVersion: masterProductLock?.version ?? null,
+            createdAt: null,
+          },
+        }));
+      } finally {
+        setMatchedPairBusyKey(null);
+      }
+    },
+    [
+      matchedPairSources,
+      matchedPairsDisabledReason,
+      piecePayload,
+      nanoQuality,
+      masterProductLock,
+      materialAuthority,
+    ],
+  );
+
+
 
   /** Stable id for a selected frame — used to match analysis back to frames. */
   const frameIdFor = useCallback(
@@ -3960,6 +4099,8 @@ export default function JewelrySwap() {
       // BATCH CONTINUATION (§28) — lineage only; survives reopen.
       batches,
       activeBatchId,
+      // MATCHED PAIRS (§29) — counterpart plates linked to their source plate.
+      matchedPairs: matchedPairs as unknown as Record<string, unknown>,
       userLocks,
       analysis,
       analysisKey,
@@ -4008,6 +4149,7 @@ export default function JewelrySwap() {
       photographyRefs,
       campaignPhotographyProfile,
       canonicalMasters,
+      matchedPairs,
       shotCoveragePlan,
       batches,
       activeBatchId,
@@ -4117,6 +4259,8 @@ export default function JewelrySwap() {
       setCanonicalMasters(
         (state?.canonicalMasters ?? {}) as Record<string, CanonicalMaster>,
       );
+      // MATCHED PAIRS (§29) — restored as-is; reopening re-renders nothing.
+      setMatchedPairs((state?.matchedPairs ?? {}) as Record<string, MatchedPair>);
       // BATCH CONTINUATION (§28) — restored as-is; no batch re-runs anything.
       const storedBatches = (state?.batches ?? []) as CampaignBatch[];
       setBatches(storedBatches);
@@ -4261,6 +4405,7 @@ export default function JewelrySwap() {
     setCanonicalMasters({});
     setBatches([]);
     setActiveBatchId(null);
+    setMatchedPairs({});
 
     setUserLocks([]);
     setAnalysis(null);
@@ -4829,6 +4974,14 @@ export default function JewelrySwap() {
                           void generateComponentMaster(componentId)
                         }
                         onValidate={(key) => void validateCanonicalMaster(key)}
+                      />
+                      {/* MATCHED PAIRS (§29) — user-triggered paid Nano runs. */}
+                      <MatchedPairPanel
+                        sources={matchedPairSources}
+                        pairs={matchedPairs}
+                        busyKey={matchedPairBusyKey}
+                        disabledReason={matchedPairsDisabledReason}
+                        onGenerate={(sourceId) => void generateMatchedPairFor(sourceId)}
                       />
                       {/* CAMPAIGN PHOTOGRAPHY PROFILE (§20) — look only, no geometry. */}
                       <CampaignPhotographyPanel
@@ -5762,6 +5915,15 @@ export default function JewelrySwap() {
                         void generateComponentMaster(componentId)
                       }
                       onValidate={(key) => void validateCanonicalMaster(key)}
+                    />
+                  }
+                  matchedPairsSlot={
+                    <MatchedPairPanel
+                      sources={matchedPairSources}
+                      pairs={matchedPairs}
+                      busyKey={matchedPairBusyKey}
+                      disabledReason={matchedPairsDisabledReason}
+                      onGenerate={(sourceId) => void generateMatchedPairFor(sourceId)}
                     />
                   }
                   photographySlot={
