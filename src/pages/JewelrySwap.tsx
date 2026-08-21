@@ -2595,18 +2595,14 @@ export default function JewelrySwap() {
         frameOpticsProfile,
         opticsControls,
       });
-      if (imageModel === "nb2") {
-        setAltSwaps((prev) => ({ ...prev, [frameIndex]: data.generation }));
-      } else {
-        setSwaps((prev) => ({ ...prev, [frameIndex]: data.generation }));
+      // A regeneration APPENDS a revision (§36) and never unapproves the
+      // revision the user already approved (§37).
+      recordFrameGeneration(data.generation);
+      if (imageModel !== "nb2") {
         // Remember the quality this frame actually ran at so Regenerate defaults to it.
         setFrameQuality((prev) => ({ ...prev, [frameIndex]: quality }));
-        setApproved((prev) => {
-          const next = new Set(prev);
-          next.delete(frameIndex);
-          return next;
-        });
       }
+
     },
     [
       frames,
