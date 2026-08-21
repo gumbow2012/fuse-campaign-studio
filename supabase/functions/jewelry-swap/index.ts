@@ -3289,6 +3289,8 @@ Deno.serve(async (req) => {
         aspectRatio: body.aspectRatio,
         generateAudio: body.generateAudio,
         extraPrompt: body.extraPrompt,
+        opticsProfile: body.opticsProfile ?? null,
+        opticsControls: body.opticsControls ?? null,
         webhookBase,
       });
       return json({ generation });
