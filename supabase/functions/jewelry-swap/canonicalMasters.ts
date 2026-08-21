@@ -16,6 +16,7 @@
  */
 
 import { type MasterProductLock, masterLockPromptLines } from "./masterLock.ts";
+import { compilePromptBlocks } from "./promptBlocks.ts";
 import {
   type MaterialAppearanceAuthority,
   materialAuthorityPromptLines,
@@ -130,20 +131,31 @@ export function buildCanonicalMasterPrompt(args: {
   const photographyLines = campaignPhotographyPromptLines(args.campaignPhotography ?? null);
   const extra = clean(args.extra, 400);
 
-  const sections: (string | null)[] = [
-    "TASK — CANONICAL PRODUCT MASTER. Render one clean, neutral, technically accurate studio reference photograph of the single product defined below. This is a master reference plate for a product library: absolute physical accuracy outweighs styling.",
+  return compilePromptBlocks({
+    /* TASK (+ the requested VIEW framing — camera only, never the product). */
+    TASK: [
+      "TASK — CANONICAL PRODUCT MASTER. Render one clean, neutral, technically accurate studio reference photograph of the single product defined below. This is a master reference plate for a product library: absolute physical accuracy outweighs styling.",
+      "",
+      `VIEW — ${canonicalMasterLabel(view, component)}. ${framing.framing}${
+        component ? ` The component in question is: ${component}.` : ""
+      }`,
+    ],
 
-    `VIEW — ${canonicalMasterLabel(view, component)}. ${framing.framing}${
-      component ? ` The component in question is: ${component}.` : ""
-    }`,
+    /* MASTER PRODUCT LOCK — the project's product identity (§E1). */
+    MASTER_PRODUCT_LOCK: lockLines.length
+      ? lockLines
+      : ["PRODUCT IDENTITY: reproduce the product in the supplied reference images exactly as constructed. Invent nothing."],
 
-    lockLines.length
-      ? lockLines.join("\n")
-      : "PRODUCT IDENTITY: reproduce the product in the supplied reference images exactly as constructed. Invent nothing.",
+    /* CONNECTED ASSET — connected parts stay physically attached (§30). */
+    CONNECTED_ASSET: connectedLines,
 
-    // Neutral capture brief. Intentionally NOT a campaign look — the campaign
-    // photography profile is a separate authority and is not applied here.
-    [
+    /*
+     * PHOTOGRAPHY — the campaign path uses the Campaign Photography Profile
+     * (D5 plates); a neutral canonical master keeps the neutral capture brief.
+     * The profile still overrides only camera/optics/light/environment, never
+     * construction, so it stays AFTER the neutral brief.
+     */
+    PHOTOGRAPHY: [
       "CAPTURE — neutral product-master studio conditions:",
       "- Seamless neutral mid-grey background, no props, no hands, no models, no environment, no text, no watermark.",
       "- Even, soft, colour-neutral studio lighting; no coloured gels, no dramatic rim light, no lens flare, no bloom.",
@@ -151,26 +163,20 @@ export function buildCanonicalMasterPrompt(args: {
       "- Deep depth of field: the whole product sharp edge to edge, no bokeh, no motion blur.",
       "- Product fills the frame with even margins; upright, level and uncropped.",
       "- Consistency matters: every master of this product must read as the same physical object shot in the same studio session.",
-    ].join("\n"),
+      ...(photographyLines.length ? ["", ...photographyLines] : []),
+    ],
 
-    materialLines.length ? materialLines.join("\n") : null,
+    /* REFERENCE ROUTING — material realism authority only, zero geometry (§C3). */
+    REFERENCE_ROUTING: materialLines,
 
-    // CAMPAIGN look (D5 plates only): overrides the neutral capture brief for
-    // camera/optics/light/environment — never for construction.
-    photographyLines.length ? photographyLines.join("\n") : null,
-
-    // CONNECTED PRODUCT SYSTEMS (§30): connected parts stay physically attached.
-    connectedLines.length ? connectedLines.join("\n") : null,
-
-    [
+    /* NEGATIVES / hard rules. */
+    NEGATIVES: [
       "HARD RULES:",
       "- ONE product only, exactly as locked. Do not redesign, restyle, simplify, embellish, or change proportions, component count, stone counts, stone sizes, stone placement or setting construction.",
       "- Do not add branding, engraving, chains, packaging or accessories that are not part of the locked product.",
       "- Where the locked identity is silent, follow the supplied reference images rather than inventing.",
-    ].join("\n"),
+    ],
 
-    extra ? `ADDITIONAL DIRECTION: ${extra}` : null,
-  ];
-
-  return sections.filter(Boolean).join("\n\n").slice(0, 12000);
+    EXTRA: extra ? `ADDITIONAL DIRECTION: ${extra}` : null,
+  }).slice(0, 12000);
 }
