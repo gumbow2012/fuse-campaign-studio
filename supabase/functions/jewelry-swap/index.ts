@@ -3900,6 +3900,7 @@ Deno.serve(async (req) => {
         frameOpticsProfile: body.frameOpticsProfile ?? null,
         opticsControls: body.opticsControls ?? null,
         masterProductLock: body.masterProductLock ?? null,
+        projectId: body.projectId ?? null,
         materialAuthority: body.materialAuthority ?? null,
         webhookBase,
       });
@@ -3919,6 +3920,7 @@ Deno.serve(async (req) => {
         extraPrompt: body.extraPrompt,
         imageModel: body.imageModel,
         masterProductLock: body.masterProductLock ?? null,
+        projectId: body.projectId ?? null,
         materialAuthority: body.materialAuthority ?? null,
         setIndex: body.setIndex,
         setSize: body.setSize,
@@ -3943,6 +3945,7 @@ Deno.serve(async (req) => {
         extraPrompt: body.extraPrompt,
         imageModel: body.imageModel,
         masterProductLock: body.masterProductLock ?? null,
+        projectId: body.projectId ?? null,
         materialAuthority: body.materialAuthority ?? null,
         webhookBase,
       });
@@ -3964,6 +3967,7 @@ Deno.serve(async (req) => {
         opticsProfile: body.opticsProfile ?? null,
         opticsControls: body.opticsControls ?? null,
         masterProductLock: body.masterProductLock ?? null,
+        projectId: body.projectId ?? null,
         materialAuthority: body.materialAuthority ?? null,
       });
       return json({ preview });
@@ -3982,6 +3986,7 @@ Deno.serve(async (req) => {
         opticsProfile: body.opticsProfile ?? null,
         opticsControls: body.opticsControls ?? null,
         masterProductLock: body.masterProductLock ?? null,
+        projectId: body.projectId ?? null,
         materialAuthority: body.materialAuthority ?? null,
         promptOverride: body.promptOverride ?? null,
         inputFingerprint: body.promptInputFingerprint ?? null,
