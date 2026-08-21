@@ -2323,7 +2323,59 @@ async function prepareReconstruction(admin: AdminClient, args: ReconstructionPre
     extra: args.extraPrompt ?? null,
     opticsText,
   });
-  const prompt = director.prompt;
+  return {
+    availableUrls,
+    referenceUrls,
+    videoModel,
+    endpointId,
+    duration,
+    specs,
+    director,
+  };
+}
+
+/** Non-paid preview: same prep, no FAL submit, no row insert, no credits. */
+async function previewReconstructionPrompt(admin: AdminClient, args: ReconstructionPrep) {
+  const prep = await prepareReconstruction(admin, args);
+  return {
+    prompt: prep.director.prompt,
+    shotPlan: prep.director.shotPlan,
+    frameRoles: prep.director.frameRoles,
+    geometry: prep.director.geometry,
+    characterCount: prep.director.prompt.length,
+    maxCharacters: DIRECTOR_MAX_CHARS,
+    referencesUsed: prep.referenceUrls.length,
+    referencesAvailable: prep.availableUrls.length,
+  };
+}
+
+/** Normalizes a manual prompt without ever truncating it. */
+function normalizePromptOverride(value: unknown) {
+  if (typeof value !== "string") return null;
+  const text = value.replace(/\r\n/g, "\n").replace(/[ \t]+$/gm, "").trim();
+  if (!text) return null;
+  if (text.length > DIRECTOR_MAX_CHARS) {
+    throw new Error(
+      `Your prompt is ${text.length} characters — Seedance accepts at most ${DIRECTOR_MAX_CHARS}. Shorten it and try again.`,
+    );
+  }
+  return text;
+}
+
+async function startReconstruction(admin: AdminClient, args: ReconstructionPrep & {
+  /** When set, this exact text becomes the final Seedance prompt. */
+  promptOverride?: unknown;
+  inputFingerprint?: unknown;
+  webhookBase: string;
+}) {
+  const { availableUrls, referenceUrls, videoModel, endpointId, duration, specs, director } =
+    await prepareReconstruction(admin, args);
+
+  const autoPrompt = director.prompt;
+  const override = normalizePromptOverride(args.promptOverride);
+  const prompt = override ?? autoPrompt;
+
+
 
 
   const { data: inserted, error: insertError } = await admin
