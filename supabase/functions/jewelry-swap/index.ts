@@ -1859,6 +1859,8 @@ function buildSeedanceDirectorPrompt(args: {
   extra?: string | null;
   /** DIAMOND OPTICS: pre-synthesised optical lines (analysed × user controls). */
   opticsText?: string | null;
+  /** MASTER PRODUCT LOCK: the project's authoritative product identity. */
+  masterLock?: MasterProductLock | null;
 }) {
   const duration = Math.max(1, Math.round(Number(args.duration) || 5));
   const selected = selectDirectorFrames(args.frames);
@@ -1866,9 +1868,10 @@ function buildSeedanceDirectorPrompt(args: {
   const plan = buildShotPlan(selected, geometry, duration);
   const specLines = args.specs.map((spec) => targetSpecLine(spec)).filter(Boolean) as string[];
   // The ACTUAL confirmed product type: a user-confirmed value first, then the
-  // analysis-detected value, and only a neutral generic word if neither exists.
-  // Never a control default and never a hardcoded product name.
-  const productType = confirmedProductType(args.specs);
+  // analysis-detected value, then the project's Master Product Lock, and only a
+  // neutral generic word if none exists. Never a hardcoded product name.
+  const productType = confirmedProductType(args.specs, args.masterLock ?? null);
+  const masterLockBlock = masterLockPromptLines(args.masterLock ?? null, { compact: true });
 
   const hasStones = args.specs.some((spec) => spec.stone && !/no stones/i.test(spec.stone)) ||
     geometry.macro;
