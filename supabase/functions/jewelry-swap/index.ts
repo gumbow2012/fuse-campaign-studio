@@ -173,6 +173,11 @@ function serialize(row: any) {
     coverage: typeof payload.coverage === "string" ? payload.coverage : null,
     shotKey: typeof payload.shot_key === "string" ? payload.shot_key : null,
     shotLabel: typeof payload.shot_label === "string" ? payload.shot_label : null,
+    // §F4/§F5 — the duration actually submitted for this clip (no resolution field exists).
+    durationSeconds: typeof payload.submitted_duration_seconds === "number"
+      ? payload.submitted_duration_seconds
+      : null,
+
     cameraDirection: typeof payload.camera_direction === "string" ? payload.camera_direction : null,
     directionSummary: payload.direction_summary && typeof payload.direction_summary === "object"
       ? payload.direction_summary as Record<string, string>
