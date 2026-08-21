@@ -3347,6 +3347,22 @@ Deno.serve(async (req) => {
       return json({ generation });
     }
 
+    // NON-PAID: prompt preview only — no FAL submit, no generation row, no credits.
+    if (action === "preview_reconstruction_prompt") {
+      const preview = await previewReconstructionPrompt(admin, {
+        userId: user.id,
+        frameUrls: body.frameUrls ?? [],
+        model: body.model,
+        duration: body.duration,
+        resolution: body.resolution,
+        aspectRatio: body.aspectRatio,
+        extraPrompt: body.extraPrompt,
+        opticsProfile: body.opticsProfile ?? null,
+        opticsControls: body.opticsControls ?? null,
+      });
+      return json({ preview });
+    }
+
     if (action === "reconstruct") {
       const generation = await startReconstruction(admin, {
         userId: user.id,
@@ -3359,6 +3375,8 @@ Deno.serve(async (req) => {
         extraPrompt: body.extraPrompt,
         opticsProfile: body.opticsProfile ?? null,
         opticsControls: body.opticsControls ?? null,
+        promptOverride: body.promptOverride ?? null,
+        inputFingerprint: body.promptInputFingerprint ?? null,
         webhookBase,
       });
       return json({ generation });
