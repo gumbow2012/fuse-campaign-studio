@@ -44,6 +44,14 @@ export type JewelryProjectState = {
   /** SHOT COVERAGE PLAN (§25) — planning only, recomputed when inputs change. */
   shotCoveragePlan?: unknown | null;
   /**
+   * BATCH CONTINUATION (§28). Batches record lineage only: each entry names the
+   * lock/look/optics it inherited plus the approved plates carried forward, so a
+   * later batch continues the SAME product without any re-analysis.
+   */
+  batches?: unknown[];
+  activeBatchId?: string | null;
+
+  /**
    * CAMPAIGN PHOTOGRAPHY PROFILE (§20) — HOW the product is photographed, kept
    * separate from product identity. Photography references carry zero geometry.
    */
