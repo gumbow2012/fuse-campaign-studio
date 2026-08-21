@@ -2421,8 +2421,16 @@ async function startReconstruction(admin: AdminClient, args: ReconstructionPrep 
   inputFingerprint?: unknown;
   webhookBase: string;
 }) {
-  const { availableUrls, referenceUrls, videoModel, endpointId, duration, specs, director } =
-    await prepareReconstruction(admin, args);
+  const {
+    availableUrls,
+    referenceUrls,
+    videoModel,
+    endpointId,
+    duration,
+    specs,
+    director,
+    masterLock,
+  } = await prepareReconstruction(admin, args);
 
   const autoPrompt = director.prompt;
   const override = normalizePromptOverride(args.promptOverride);
