@@ -2229,6 +2229,10 @@ export default function JewelrySwap() {
         // Detected values — used ONLY to resolve fields left on "Auto" so the
         // prompt never carries the literal word "Auto".
         detected: piece.detected ?? null,
+        // Field provenance — lets the backend tell a CONFIRMED value apart from
+        // an untouched control default when it resolves the target spec.
+        sources: piece.sources ?? null,
+
 
       })),
     [pieces],
