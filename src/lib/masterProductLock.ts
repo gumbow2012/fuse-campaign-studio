@@ -35,10 +35,18 @@ export type MasterLockSettingRegion = {
 
 export type MasterProductLock = {
   version: string;
+  /**
+   * §E5 — CONTENT VERSION STAMP. `${version}:${hash-of-locked-content}`. It
+   * changes only when the locked product identity itself changes, so a
+   * generation can record exactly WHICH lock drove it and be validated against
+   * that same lock later instead of whatever the lock is now.
+   */
+  lockVersion: string;
   /** Stable id of the locked product case (one card = one physical product). */
   lockId: string | null;
   /** The reference-set fingerprint this lock was derived from. */
   referenceSetVersion: string | null;
+
   derivedFrom: {
     pkmVersion: string | null;
     productCaseId: string | null;
