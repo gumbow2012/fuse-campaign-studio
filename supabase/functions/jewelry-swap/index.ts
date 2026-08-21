@@ -3128,7 +3128,10 @@ async function startReconstruction(admin: AdminClient, args: ReconstructionPrep 
     };
 
     const webhookUrl = `${args.webhookBase}${encodeURIComponent(inserted.id)}`;
-    const requestId = await submitFalJob(endpointId, falInput, webhookUrl);
+    // §F3 — bounded retry is safe here ONLY because no request id exists yet
+    // (the job was never accepted, so no paid submission can be duplicated).
+    const requestId = await submitWithTransientRetry(endpointId, falInput, webhookUrl);
+
 
     const { data: updated } = await admin
       .from("studio_generations")
