@@ -147,6 +147,48 @@ export type Database = {
           },
         ]
       }
+      jewelry_knowledge_base: {
+        Row: {
+          aliases: string[]
+          canonical_name: string
+          confidence: number | null
+          created_at: string
+          definition: string | null
+          engineering_signature: Json
+          id: string
+          source_urls: string[]
+          term_key: string
+          updated_at: string
+          vocabulary_domain: string | null
+        }
+        Insert: {
+          aliases?: string[]
+          canonical_name: string
+          confidence?: number | null
+          created_at?: string
+          definition?: string | null
+          engineering_signature?: Json
+          id?: string
+          source_urls?: string[]
+          term_key: string
+          updated_at?: string
+          vocabulary_domain?: string | null
+        }
+        Update: {
+          aliases?: string[]
+          canonical_name?: string
+          confidence?: number | null
+          created_at?: string
+          definition?: string | null
+          engineering_signature?: Json
+          id?: string
+          source_urls?: string[]
+          term_key?: string
+          updated_at?: string
+          vocabulary_domain?: string | null
+        }
+        Relationships: []
+      }
       jewelry_still_analyses: {
         Row: {
           analysis: Json

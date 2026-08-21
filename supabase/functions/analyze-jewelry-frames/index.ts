@@ -17,6 +17,11 @@ import {
   json,
   requireUser,
 } from "../_shared/supabase-admin.ts";
+import {
+  attachResearchToMap,
+  collectUncertainTerms,
+  researchUncertainTerms,
+} from "./research.ts";
 
 const ANALYSIS_VERSION = "jewelry-still-analysis-v2";
 const GEMINI_ANALYSIS_MODEL = Deno.env.get("GEMINI_ANALYSIS_MODEL")?.trim() || "gemini-3.6-flash";
@@ -3787,6 +3792,49 @@ async function handleIntake(req: Request, body: any, user: { id: string }, apiKe
     console.warn("[intake] knowledge map unavailable:", errorMessage(error));
   }
 
+  /* ---- TARGETED RESEARCH AGENT — product understanding only, only if unsure -- */
+  // Never per frame, never per generation. Vocabulary research only: the observed
+  // product evidence keeps full authority over every classified axis.
+  let researchMs = 0;
+  let researchedTermCount = 0;
+  // Attached AFTER the media guard so the citation URLs survive it.
+  let researchedTerms: Awaited<ReturnType<typeof researchUncertainTerms>>["researchedTerms"] = [];
+  if (intake.knowledgeMap) {
+    try {
+      const uncertain = collectUncertainTerms(
+        intake.knowledgeMap,
+        (name: string) => Boolean(termByName(name)),
+      );
+      if (uncertain.length) {
+        console.log(
+          `[intake] RESEARCH TRIGGERED terms=${
+            uncertain.map((entry) => `${entry.term}(${entry.triggers.join("|")})`).join(", ")
+          }`,
+        );
+        const research = await researchUncertainTerms({
+          ai,
+          admin,
+          model: GEMINI_ANALYSIS_MODEL,
+          map: intake.knowledgeMap,
+          uncertain,
+        });
+        researchMs = research.researchMs;
+        researchedTerms = research.researchedTerms;
+        researchedTermCount = research.researchedTerms.length;
+        console.log(
+          `[intake] RESEARCH DONE terms=${researchedTermCount} cacheHits=${research.cacheHits} ms=${researchMs}`,
+        );
+      } else {
+        console.log("[intake] RESEARCH SKIPPED — setting confidently classified");
+      }
+    } catch (error) {
+      // Research is an enhancement: intake must still succeed without it.
+      console.warn("[intake] research agent unavailable:", errorMessage(error));
+    }
+  }
+
+
+
   /* ---- THE VISIBLE SETTING COMES FROM THE FUSED MAP, NOT THE FIRST PASS --- */
   // The single-pass, first-image classifier is demoted to PRELIMINARY evidence:
   // it can never drive the user-facing field or the Nano engineering lock.
@@ -3809,6 +3857,8 @@ async function handleIntake(req: Request, body: any, user: { id: string }, apiKe
     referenceFetchMs: run.timings.referenceFetchMs,
     geminiMs: run.timings.geminiMs,
     knowledgeMapMs,
+    researchMs,
+    researchedTermCount,
     videoAnalysisMs: video.geminiMs,
     videoReferenceCount: videoReferences.length,
     unavailableReferences: run.timings.unavailableReferences,
@@ -3821,6 +3871,14 @@ async function handleIntake(req: Request, body: any, user: { id: string }, apiKe
 
   const stripped = assertAnalysisOnly(intake, "intake");
   if (stripped.length) console.warn("intake guard stripped:", stripped.join(", "));
+
+  // Research findings are TEXT + citation links only (never media), so they are
+  // attached after the media guard and stay candidates, never overrides.
+  if (intake.knowledgeMap && researchedTerms.length) {
+    attachResearchToMap(intake.knowledgeMap, researchedTerms);
+  }
+
+
 
 
   await admin.from("jewelry_still_analyses").upsert(
