@@ -3872,7 +3872,14 @@ export default function JewelrySwap() {
   const animateFrame = useCallback(
     async (
       frame: { index: number; url: string; time: number },
-      position: { setIndex: number; setSize: number; direction?: string; motionPreset?: string },
+      position: {
+        setIndex: number;
+        setSize: number;
+        direction?: string;
+        motionPreset?: string;
+        durationSeconds?: number;
+      },
+
     ) => {
 
       // Condition the animate input in the browser so the edge worker never
