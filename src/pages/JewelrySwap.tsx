@@ -3919,6 +3919,9 @@ export default function JewelrySwap() {
       canonicalMasters,
       // SHOT COVERAGE PLAN — planning read-out, recomputed on input change.
       shotCoveragePlan,
+      // BATCH CONTINUATION (§28) — lineage only; survives reopen.
+      batches,
+      activeBatchId,
       userLocks,
       analysis,
       analysisKey,
@@ -3968,6 +3971,8 @@ export default function JewelrySwap() {
       campaignPhotographyProfile,
       canonicalMasters,
       shotCoveragePlan,
+      batches,
+      activeBatchId,
       userLocks,
       analysis,
       analysisKey,
