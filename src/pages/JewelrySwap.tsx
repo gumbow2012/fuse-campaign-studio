@@ -2635,6 +2635,44 @@ export default function JewelrySwap() {
   }, [masterProductLock, pieces.length]);
 
   /**
+   * BATCH CONTINUATION (§28). Approved (QC-passed) plates are what a later batch
+   * inherits — no product understanding is recomputed for a new batch.
+   */
+  const approvedMasterKeys = useMemo(
+    () =>
+      Object.values(canonicalMasters)
+        .filter((master) => isMasterValidated(master))
+        .map((master) => master.key),
+    [canonicalMasters],
+  );
+
+  const batchBlocked = useMemo(
+    () => batchBlockedReason({ batches, hasLock: Boolean(masterProductLock) }),
+    [batches, masterProductLock],
+  );
+
+  /** Records lineage only — generation still happens via the Generate buttons. */
+  const startNextBatch = useCallback(() => {
+    if (batchBlocked) return;
+    const batch = startCampaignBatch({
+      batches,
+      lockVersion: masterProductLock?.version ?? null,
+      photographySetVersion: photographyVersion.current,
+      hasOpticsProfile: Boolean(opticsProfile),
+      approvedMasterKeys,
+    });
+    setBatches((prev) => [...prev, batch]);
+    setActiveBatchId(batch.id);
+  }, [batchBlocked, batches, masterProductLock, opticsProfile, approvedMasterKeys]);
+
+  const approveBatch = useCallback((batchId: string) => {
+    setBatches((prev) => approveCampaignBatch(prev, batchId));
+    setActiveBatchId((current) => (current === batchId ? null : current));
+  }, []);
+
+
+
+  /**
    * EXPLICIT USER ACTION ONLY. Each planned view is one paid run on the existing
    * Nano path (same endpoint, pricing and bookkeeping as a frame swap), so this
    * is never called from analysis, restore, autosave or any effect.
