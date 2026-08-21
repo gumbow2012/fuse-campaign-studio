@@ -2832,6 +2832,10 @@ export default function JewelrySwap() {
     videoDuration,
     opticsProfile,
     opticsControls,
+    promptMode,
+    promptDraft,
+    promptMaxChars,
+    promptFingerprint,
   ]);
 
   /** Stops tracking and frees the UI, even if the provider job keeps running. */
