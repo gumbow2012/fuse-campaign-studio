@@ -153,8 +153,11 @@ import {
 
   persistTemplateLayout,
   CAMERA_DIRECTIONS,
+  MOTION_PRESETS,
+  DEFAULT_MOTION_PRESET,
   ANIMATE_DURATION_OPTIONS,
   DEFAULT_ANIMATE_DURATION,
+
   type JewelryFrameAnalysis,
   type JewelryGeneration,
   type JewelryImageModel,
