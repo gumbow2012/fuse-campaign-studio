@@ -45,6 +45,7 @@ import {
   isCanonicalMasterView,
 } from "./canonicalMasters.ts";
 import { collectValidatedMasterRefs } from "./validatedMasters.ts";
+import { compilePromptBlocks } from "./promptBlocks.ts";
 import {
   type ConnectedAssetModel,
   connectedAssetPromptLines,
