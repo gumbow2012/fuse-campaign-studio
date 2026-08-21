@@ -2984,6 +2984,8 @@ const ANIMATE_DURATION = 3;
 async function startAnimateFrame(admin: AdminClient, args: {
   userId: string;
   imageUrl: string;
+  /** Client-conditioned (<=9.5 MB) copy of the frame; the 4K original stays the approved asset. */
+  animateInputUrl?: unknown;
   frameIndex?: number;
   frameTime?: number;
   /** "auto" | a shot key | "custom" */
@@ -2997,6 +2999,8 @@ async function startAnimateFrame(admin: AdminClient, args: {
 }) {
   const imageUrl = String(args.imageUrl ?? "").trim();
   if (!imageUrl) throw new Error("A swapped frame is required");
+  const clientInputUrl = String(args.animateInputUrl ?? "").trim();
+
 
   const videoModel = getVideoModel(ANIMATE_MODEL_KEY);
   const endpointId = videoModel.endpointId;
