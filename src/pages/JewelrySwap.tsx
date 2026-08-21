@@ -5090,14 +5090,17 @@ export default function JewelrySwap() {
                     const swap = swaps[index];
                     const alt = altSwaps[index];
                     const frame = frames[index];
-                    const isApproved = approved.has(index);
                     const picked = chosenModel[index] === "nb2" && alt ? "nb2" : "pro";
                     const active = picked === "nb2" ? alt : swap;
+                    const revision = revisionInfo(index);
+                    const isApproved = !!active && approvedGenerationId[index] === active.id;
+                    const approvedElsewhere = !!approvedGenerationId[index] && !isApproved;
                     return (
                       <article
-                        key={swap.id}
+                        key={`frame-${index}`}
                         className={cn(
                           "group/card space-y-2 rounded-2xl border bg-black/25 p-2.5",
+
                           isApproved ? "border-cyan-200/50" : "border-white/10",
                         )}
                       >
