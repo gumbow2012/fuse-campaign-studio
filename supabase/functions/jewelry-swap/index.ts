@@ -1426,6 +1426,9 @@ function buildJewelryPrompt(args: {
   masterLock?: MasterProductLock | null;
   /** MATERIAL APPEARANCE AUTHORITY: material realism only — zero geometry. */
   materialAuthority?: MaterialAppearanceAuthority | null;
+  /** CONNECTED PRODUCT SYSTEMS (§30): attachment rules for connected parts. */
+  connectedAssets?: ConnectedAssetModel | null;
+
 }) {
   let cursor = 2; // image 1 is the source frame
   const lines: string[] = [];
