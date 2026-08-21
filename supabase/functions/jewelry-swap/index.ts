@@ -2214,7 +2214,14 @@ async function startReconstruction(admin: AdminClient, args: {
         quality: fill("quality") as string | null,
         dimensions: fill("dimensions") as string | null,
         settings: resolved.settings.length ? resolved.settings : (stored.settings ?? []),
-        sources: { ...(stored.sources ?? {}), ...resolved.sources },
+        sources: (() => {
+          const merged: Record<string, string> = { ...(stored.sources ?? {}) };
+          for (const [field, value] of Object.entries(resolved.sources ?? {})) {
+            if (value && value !== "unknown") merged[field] = value;
+          }
+          return merged;
+        })(),
+
       };
     })
     : storedSpecs;
