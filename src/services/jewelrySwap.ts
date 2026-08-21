@@ -1231,6 +1231,8 @@ export async function previewReconstructionPrompt(args: {
   opticsControls?: DiamondOpticsControls | null;
   /** MASTER PRODUCT LOCK: the project's authoritative product identity. */
   masterProductLock?: unknown;
+  /** MATERIAL APPEARANCE AUTHORITY: material realism only — zero geometry. */
+  materialAuthority?: unknown;
 }): Promise<SeedanceDirectorPreview> {
   const data = await callJewelrySwap<{ preview: SeedanceDirectorPreview }>({
     action: "preview_reconstruction_prompt",
