@@ -918,11 +918,21 @@ export default function JewelrySwap() {
   );
 
 
+  // REVISION HISTORY (§36): every image generation a frame has ever produced,
+  // append-only. Regenerating adds a revision; nothing is ever overwritten.
+  const [frameGenerations, setFrameGenerations] = useState<Record<number, JewelryGeneration[]>>({});
+  /** Which revision of each frame's history is currently on screen. */
+  const [frameRevision, setFrameRevision] = useState<Record<number, number>>({});
+  /** APPROVAL BY ID (§37): the exact revision approved for each frame. */
+  const [approvedGenerationId, setApprovedGenerationId] = useState<Record<number, string>>({});
+
   // Nano Banana Pro results (the default) and the opt-in Nano Banana 2 runs live
-  // side by side so a frame can be compared before one is approved.
+  // side by side so a frame can be compared before one is approved. Both are
+  // DERIVED views of the displayed revision — the history above is the truth.
   const [swaps, setSwaps] = useState<Record<number, JewelryGeneration>>({});
   const [altSwaps, setAltSwaps] = useState<Record<number, JewelryGeneration>>({});
   const [chosenModel, setChosenModel] = useState<Record<number, JewelryImageModel>>({});
+
   const [framePreferredRole, setFramePreferredRole] = useState<Record<number, string>>({});
   const [frameReason, setFrameReason] = useState<Record<number, string>>({});
   /** Per-frame replacement mode — persists so later regenerations reuse it. */
