@@ -3831,22 +3831,53 @@ export default function JewelrySwap() {
   const [cameraDirection, setCameraDirection] = useState<string>("auto");
   const [customCameraPrompt, setCustomCameraPrompt] = useState("");
   /**
-   * §F6/§F7 — motion + duration resolve as: per-clip override (keyed by approved
-   * frame URL) → global default → shipped default. Apply-to-all is a bulk-set:
-   * it writes the global default and clears overrides, so a later per-clip change
-   * still wins.
+   * §F6/§F7/§F8 — motion + duration resolve as: per-clip override → global
+   * default → shipped default. Apply-to-all is a bulk-set (not a lock), so a
+   * later per-clip change still wins.
+   *
+   * §F8 — overrides are keyed by the STABLE frame index, not the approved image
+   * URL: approving a new revision (or a re-signed storage URL after reopen)
+   * changes the URL and used to silently drop the user's per-clip setting.
+   * Legacy URL-keyed entries are still read as a fallback so older projects
+   * restore exactly as saved.
    */
   const [clipMotions, setClipMotions] = useState<Record<string, string>>({});
   const [clipDurations, setClipDurations] = useState<Record<string, number>>({});
   const [globalMotion, setGlobalMotion] = useState<string>(DEFAULT_MOTION_PRESET);
+  type ClipRef = { index: number; url: string };
   const motionForFrame = useCallback(
-    (url: string) => clipMotions[url] ?? globalMotion,
+    (frame: ClipRef) =>
+      clipMotions[String(frame.index)] ?? clipMotions[frame.url] ?? globalMotion,
     [clipMotions, globalMotion],
   );
   const durationForFrame = useCallback(
-    (url: string) => clipDurations[url] ?? animateDuration,
+    (frame: ClipRef) =>
+      clipDurations[String(frame.index)] ?? clipDurations[frame.url] ?? animateDuration,
     [clipDurations, animateDuration],
   );
+  const clipIsOverridden = useCallback(
+    (frame: ClipRef) =>
+      clipMotions[String(frame.index)] !== undefined ||
+      clipMotions[frame.url] !== undefined ||
+      clipDurations[String(frame.index)] !== undefined ||
+      clipDurations[frame.url] !== undefined,
+    [clipMotions, clipDurations],
+  );
+  /** §F8 — write the override on the stable key and retire any legacy URL key. */
+  const setClipMotion = useCallback((frame: ClipRef, value: string) => {
+    setClipMotions((prev) => {
+      const next = { ...prev, [String(frame.index)]: value };
+      delete next[frame.url];
+      return next;
+    });
+  }, []);
+  const setClipDuration = useCallback((frame: ClipRef, seconds: number) => {
+    setClipDurations((prev) => {
+      const next = { ...prev, [String(frame.index)]: seconds };
+      delete next[frame.url];
+      return next;
+    });
+  }, []);
   /** §F7 — bulk-set duration + motion on every approved clip (no fake quality). */
   const applySettingsToAllClips = useCallback(() => {
     setClipMotions({});
@@ -3861,7 +3892,7 @@ export default function JewelrySwap() {
   // Kling 3.0 without audio: $0.112 per second — summed over each clip's own length.
   const animateCostUsd = useMemo(
     () =>
-      approvedFrames.reduce((total, frame) => total + 0.112 * durationForFrame(frame.url), 0),
+      approvedFrames.reduce((total, frame) => total + 0.112 * durationForFrame(frame), 0),
     [approvedFrames, durationForFrame],
   );
 
@@ -3904,13 +3935,13 @@ export default function JewelrySwap() {
         imageUrl: frame.url,
         animateInputUrl: conditioned.conditioned ? conditioned.url : null,
         // §F4/§F7 — per-clip override wins over the global default; submitted as-is.
-        durationSeconds: position.durationSeconds ?? durationForFrame(frame.url),
+        durationSeconds: position.durationSeconds ?? durationForFrame(frame),
         frameIndex: frame.index,
         frameTime: frame.time,
         cameraDirection: position.direction ?? cameraDirection,
         customPrompt: customCameraPrompt.trim() || null,
         // §F6 — this clip's own motion preset ("auto" reproduces prior output).
-        motionPreset: position.motionPreset ?? motionForFrame(frame.url),
+        motionPreset: position.motionPreset ?? motionForFrame(frame),
         setIndex: position.setIndex,
         setSize: position.setSize,
         pieceTypes,
@@ -6859,9 +6890,7 @@ export default function JewelrySwap() {
                     </label>
                     <div className="space-y-1.5">
                       {approvedFrames.map((frame, index) => {
-                        const overridden =
-                          clipMotions[frame.url] !== undefined ||
-                          clipDurations[frame.url] !== undefined;
+                        const overridden = clipIsOverridden(frame);
                         return (
                           <div
                             key={frame.url}
@@ -6871,12 +6900,9 @@ export default function JewelrySwap() {
                               Clip {index + 1}
                             </span>
                             <select
-                              value={String(durationForFrame(frame.url))}
+                              value={String(durationForFrame(frame))}
                               onChange={(event) =>
-                                setClipDurations((prev) => ({
-                                  ...prev,
-                                  [frame.url]: Number(event.target.value),
-                                }))
+                                setClipDuration(frame, Number(event.target.value))
                               }
                               className={`${SELECT_CLASS} w-24 shrink-0`}
                             >
@@ -6887,16 +6913,12 @@ export default function JewelrySwap() {
                               ))}
                             </select>
                             <select
-                              value={motionForFrame(frame.url)}
-                              onChange={(event) =>
-                                setClipMotions((prev) => ({
-                                  ...prev,
-                                  [frame.url]: event.target.value,
-                                }))
-                              }
+                              value={motionForFrame(frame)}
+                              onChange={(event) => setClipMotion(frame, event.target.value)}
                               className={`${SELECT_CLASS} min-w-[9rem] flex-1`}
                             >
                               {MOTION_PRESETS.map((option) => (
+
                                 <option key={option.value} value={option.value}>
                                   {option.label}
                                 </option>
