@@ -46,6 +46,12 @@ import {
 } from "./canonicalMasters.ts";
 import { collectValidatedMasterRefs } from "./validatedMasters.ts";
 import {
+  type ConnectedAssetModel,
+  connectedAssetPromptLines,
+  normalizeConnectedAssets,
+} from "./connectedAssets.ts";
+
+import {
   buildMatchedPairPrompt,
   isManufacturingStage,
   type ManufacturingStage,
