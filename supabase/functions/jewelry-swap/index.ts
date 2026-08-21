@@ -872,23 +872,35 @@ function resolveTargetSpec(piece: JewelryPiece): TargetSpec {
       : null;
 
   const detected = piece.detected ?? null;
+  const provenance = piece.sources ?? null;
   const sources: Record<string, string> = {};
 
-  /** user value → detected value → null, recording which one was used. */
+  /**
+   * user value → detected value → null, recording which one was used.
+   * A card field the user never touched (provenance != "user_override") is a
+   * CONTROL DEFAULT, not a confirmed fact, so the analysis-detected value wins
+   * for it. This keeps a never-edited dropdown default out of the prompts.
+   */
   const resolve = (field: string, userValue: unknown, detectedValue: unknown) => {
     const user = String(userValue ?? "").trim();
-    if (user && !isAuto(user)) {
+    const auto = String(detectedValue ?? "").trim();
+    const userConfirmed = !provenance || provenance[field] === "user_override";
+    if (userConfirmed && user && !isAuto(user)) {
       sources[field] = "user_override";
       return user;
     }
-    const auto = String(detectedValue ?? "").trim();
     if (auto && !isAuto(auto)) {
       sources[field] = "gemini_detected";
       return auto;
     }
+    if (user && !isAuto(user)) {
+      sources[field] = provenance?.[field] ?? "unknown";
+      return user;
+    }
     sources[field] = "unknown";
     return null;
   };
+
 
   const userSettings = pieceSettings(piece);
   const detectedSettings = (Array.isArray(detected?.settings) ? detected!.settings! : [])
