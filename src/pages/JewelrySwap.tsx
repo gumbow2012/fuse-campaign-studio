@@ -51,8 +51,13 @@ import {
 import {
   buildMasterProductLock,
   masterLockSummary,
+  masterLockVersionOf,
+  rememberMasterLock,
+  resolveMasterLockForVersion,
+  type MasterLockRegistry,
   type MasterProductLock,
 } from "@/lib/masterProductLock";
+
 import {
   buildConnectedAssetModel,
   isConnectedAssetModelCurrent,
