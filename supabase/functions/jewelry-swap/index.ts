@@ -2191,6 +2191,10 @@ async function startReconstruction(admin: AdminClient, args: {
   aspectRatio?: string;
   generateAudio?: boolean;
   extraPrompt?: string;
+  /** DIAMOND OPTICS: cached global source optics profile. */
+  opticsProfile?: unknown;
+  /** DIAMOND OPTICS: Sparkle / Rainbow-Fire / advanced controls. */
+  opticsControls?: unknown;
   webhookBase: string;
 }) {
   const availableUrls = cleanUrls(args.frameUrls);
