@@ -38,6 +38,12 @@ import {
   masterLockSummaryLine,
   normalizeMasterLock,
 } from "./masterLock.ts";
+import {
+  type MaterialAppearanceAuthority,
+  materialAuthorityPromptLines,
+  materialAuthoritySummaryLine,
+  normalizeMaterialAuthority,
+} from "./materialAuthority.ts";
 
 /**
  * Jewelry Swap: sibling of Outfit Swap. Per-frame nano-banana jewelry
