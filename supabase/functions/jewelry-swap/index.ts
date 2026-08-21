@@ -2292,6 +2292,20 @@ async function startReconstruction(admin: AdminClient, args: {
 
   const notes = specPieces.map((piece) => String(piece?.notes ?? "").trim()).filter(Boolean).join(" ");
 
+  // DIAMOND OPTICS (temporal): the cached profile drives one consistent optical
+  // character across the rebuilt clip. Cached only — never a Gemini call here.
+  const reconstructControls = readOpticsControls(args.opticsControls);
+  const reconstructOptics = normalizeOpticsProfile(args.opticsProfile);
+  const opticsText = reconstructOptics
+    ? opticsPromptLines({
+      profile: reconstructOptics,
+      controls: reconstructControls,
+      colorlessStones: isColorlessSpec(specs),
+      stoneFamily: reconstructOptics.stoneFamily ?? null,
+      temporal: true,
+    }).join("\n")
+    : null;
+
   const director = buildSeedanceDirectorPrompt({
     frames,
     specs,
@@ -2299,6 +2313,7 @@ async function startReconstruction(admin: AdminClient, args: {
     duration,
     aspectRatio: args.aspectRatio ?? null,
     extra: args.extraPrompt ?? null,
+    opticsText,
   });
   const prompt = director.prompt;
 
