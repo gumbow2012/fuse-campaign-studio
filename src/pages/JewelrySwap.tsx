@@ -3581,12 +3581,15 @@ export default function JewelrySwap() {
     setFrameQuality({});
     setSwaps({});
     setAltSwaps({});
+    setFrameGenerations({});
+    setFrameRevision({});
     setChosenModel({});
     setFramePreferredRole({});
     setFrameReason({});
     setFrameMode({});
     setFrameCoverage({});
-    setApproved(new Set());
+    setApprovedGenerationId({});
+
     setExtraPrompt("");
     setPromptMode("auto");
     setPromptDraft("");
