@@ -6771,7 +6771,13 @@ export default function JewelrySwap() {
                     // output resolution is provider-fixed, so this stays read-only info.
                     ["Output", "Provider-fixed (not selectable)"],
 
-                    ["Duration", `${animateDuration} sec`],
+                    [
+                      "Duration",
+                      Object.keys(clipDurations).length
+                        ? `${animateDuration} sec default · per-clip overrides`
+                        : `${animateDuration} sec`,
+                    ],
+
                     [
                       "Motion",
                       CAMERA_DIRECTIONS.find((option) => option.value === cameraDirection)?.label ??
