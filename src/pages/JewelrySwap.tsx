@@ -5621,6 +5621,7 @@ export default function JewelrySwap() {
 
               </div>
             </SectionCard>
+            ) : null}
           </div>
 
           {/* RIGHT: frames, review, result */}
