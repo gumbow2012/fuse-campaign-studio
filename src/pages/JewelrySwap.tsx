@@ -2719,7 +2719,18 @@ export default function JewelrySwap() {
     } finally {
       setReconstructing(false);
     }
-  }, [approvedUrls, piecePayload, videoModel, resolution, preserveAudio, meta, extraPrompt, videoDuration]);
+  }, [
+    approvedUrls,
+    piecePayload,
+    videoModel,
+    resolution,
+    preserveAudio,
+    meta,
+    extraPrompt,
+    videoDuration,
+    opticsProfile,
+    opticsControls,
+  ]);
 
   /** Stops tracking and frees the UI, even if the provider job keeps running. */
   const cancelVideo = useCallback(async () => {
