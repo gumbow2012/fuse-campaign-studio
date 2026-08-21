@@ -178,8 +178,17 @@ function serialize(row: any) {
       ? payload.direction_summary as Record<string, string>
       : null,
     animationPrompt: typeof payload.animation_prompt === "string" ? payload.animation_prompt : null,
+    // §F3 — provider lookup temporarily unavailable; the job is still tracked.
+    providerTransient: payload.provider_transient === true,
+    providerTransientNote: typeof payload.provider_transient_note === "string"
+      ? payload.provider_transient_note
+      : null,
+    providerTransientAt: typeof payload.provider_transient_at === "string"
+      ? payload.provider_transient_at
+      : null,
     createdAt: row.created_at ?? null,
     completedAt: row.completed_at ?? null,
+
   };
 }
 
@@ -3119,7 +3128,10 @@ async function startReconstruction(admin: AdminClient, args: ReconstructionPrep 
     };
 
     const webhookUrl = `${args.webhookBase}${encodeURIComponent(inserted.id)}`;
-    const requestId = await submitFalJob(endpointId, falInput, webhookUrl);
+    // §F3 — bounded retry is safe here ONLY because no request id exists yet
+    // (the job was never accepted, so no paid submission can be duplicated).
+    const requestId = await submitWithTransientRetry(endpointId, falInput, webhookUrl);
+
 
     const { data: updated } = await admin
       .from("studio_generations")
@@ -3830,51 +3842,151 @@ async function startAnimateFrame(admin: AdminClient, args: {
   }
 }
 
-/** Poll fal for an in-flight row and persist any terminal result. */
+/* ==================== §F3 — transient provider resilience ==================== */
+
+const F3_POLL_RETRIES = 3;
+const F3_POLL_BACKOFF_MS = [400, 1200, 2500];
+const F3_SUBMIT_RETRIES = 2;
+const F3_SUBMIT_BACKOFF_MS = [600, 1800];
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/**
+ * §F3 — transient provider/gateway failures. These NEVER mean the paid job
+ * failed; they only mean we could not READ its state right now.
+ */
+function isTransientProviderError(message: string) {
+  return /\b(502|503|504)\b|bad gateway|gateway time-?out|service unavailable|downstream_service_unavailable|temporarily unavailable|timed? ?out|timeout|econnreset|socket hang up|fetch failed|network|queue status lookup failed|queue result lookup failed|result lookup failed/i
+    .test(message);
+}
+
+/**
+ * §F3 — submit-side bounded retry. Only safe BEFORE a request id exists: a
+ * failed submit was never accepted, so no paid job can be duplicated. Once a
+ * request id is returned we never resubmit (see `syncRow`).
+ */
+async function submitWithTransientRetry(
+  endpointId: string,
+  falInput: Record<string, unknown>,
+  webhookUrl: string,
+) {
+  let lastError: unknown = null;
+  for (let attempt = 0; attempt <= F3_SUBMIT_RETRIES; attempt += 1) {
+    try {
+      return await submitFalJob(endpointId, falInput, webhookUrl);
+    } catch (error) {
+      lastError = error;
+      const message = errorMessage(error);
+      // Hard rejections (bad input, auth, 4xx) must fail fast — never loop.
+      if (!isTransientProviderError(message) || attempt === F3_SUBMIT_RETRIES) throw error;
+      await sleep(F3_SUBMIT_BACKOFF_MS[attempt] ?? 1800);
+    }
+  }
+  throw lastError;
+}
+
+/**
+ * Poll fal for an in-flight row and persist any terminal result.
+ *
+ * §F3 — the row already carries `provider_request_id`, i.e. a PAID accepted
+ * job. Transient lookup failures retry the SAME request id with bounded
+ * backoff and, if still unreadable, leave the row `running` with a
+ * "still tracking" marker. The job is NEVER resubmitted from this path.
+ */
 async function syncRow(admin: AdminClient, row: any) {
   if (row.status !== "running" && row.status !== "queued") return serialize(row);
   if (!row.provider_request_id || !row.provider_model) return serialize(row);
 
-  try {
-    const status = await getFalQueueStatus(row.provider_model, row.provider_request_id);
-    const normalized = String(status ?? "").toUpperCase();
-    if (normalized !== "COMPLETED" && normalized !== "OK") return serialize(row);
-
-    const result = await getFalQueueResult(row.provider_model, row.provider_request_id);
-    const output = extractOutput(result);
-    if (!output) throw new Error("The provider finished without returning a file");
-
+  const markTransient = async (message: string, attempts: number) => {
+    const payload = (row.input_payload ?? {}) as Record<string, unknown>;
     const { data: updated } = await admin
       .from("studio_generations")
       .update({
+        input_payload: {
+          ...payload,
+          provider_transient: true,
+          provider_transient_note: message.slice(0, 500),
+          provider_transient_attempts: attempts,
+          provider_transient_at: new Date().toISOString(),
+        },
+      })
+      .eq("id", row.id)
+      .select("*")
+      .single();
+    return serialize(updated ?? row);
+  };
+
+  const clearTransient = async (patch: Record<string, unknown>) => {
+    const payload = (row.input_payload ?? {}) as Record<string, unknown>;
+    const nextPayload = { ...payload };
+    delete nextPayload.provider_transient;
+    delete nextPayload.provider_transient_note;
+    delete nextPayload.provider_transient_attempts;
+    delete nextPayload.provider_transient_at;
+    const { data: updated } = await admin
+      .from("studio_generations")
+      .update({ ...patch, input_payload: nextPayload })
+      .eq("id", row.id)
+      .select("*")
+      .single();
+    return updated ?? row;
+  };
+
+  let lastTransient = "";
+  for (let attempt = 0; attempt <= F3_POLL_RETRIES; attempt += 1) {
+    try {
+      // Same provider request id on every attempt — read-only, never a resubmit.
+      const status = await getFalQueueStatus(row.provider_model, row.provider_request_id);
+      const normalized = String(status ?? "").toUpperCase();
+      if (normalized !== "COMPLETED" && normalized !== "OK") {
+        // Still in flight: clear any stale transient marker and keep waiting.
+        if ((row.input_payload as any)?.provider_transient) {
+          return serialize(await clearTransient({}));
+        }
+        return serialize(row);
+      }
+
+      const result = await getFalQueueResult(row.provider_model, row.provider_request_id);
+      const output = extractOutput(result);
+      if (!output) throw new Error("The provider finished without returning a file");
+
+      return serialize(await clearTransient({
         status: "complete",
         output_url: output.url,
         output_type: output.type,
         completed_at: new Date().toISOString(),
-      })
-      .eq("id", row.id)
-      .select("*")
-      .single();
+      }));
+    } catch (error) {
+      const message = errorMessage(error);
+      if (isTransientProviderError(message)) {
+        lastTransient = message;
+        if (attempt < F3_POLL_RETRIES) {
+          await sleep(F3_POLL_BACKOFF_MS[attempt] ?? 2500);
+          continue;
+        }
+        // Still unreadable: keep the job alive and tell the user we're tracking.
+        return await markTransient(message, attempt + 1);
+      }
 
-    return serialize(updated ?? row);
-  } catch (error) {
-    const message = errorMessage(error);
-    if (/queue status lookup failed|fetch|network/i.test(message)) return serialize(row);
+      // Confirmed hard failure reported by the provider — terminal.
+      const { data: updated } = await admin
+        .from("studio_generations")
+        .update({
+          status: "failed",
+          error_log: message.slice(0, 10000),
+          completed_at: new Date().toISOString(),
+        })
+        .eq("id", row.id)
+        .select("*")
+        .single();
 
-    const { data: updated } = await admin
-      .from("studio_generations")
-      .update({
-        status: "failed",
-        error_log: message.slice(0, 10000),
-        completed_at: new Date().toISOString(),
-      })
-      .eq("id", row.id)
-      .select("*")
-      .single();
-
-    return serialize(updated ?? row);
+      return serialize(updated ?? row);
+    }
   }
+
+  return await markTransient(lastTransient || "Provider temporarily unavailable", F3_POLL_RETRIES + 1);
 }
+
 
 type LibraryAssetRow = {
   id: string;
