@@ -3872,6 +3872,14 @@ async function handleIntake(req: Request, body: any, user: { id: string }, apiKe
   const stripped = assertAnalysisOnly(intake, "intake");
   if (stripped.length) console.warn("intake guard stripped:", stripped.join(", "));
 
+  // Research findings are TEXT + citation links only (never media), so they are
+  // attached after the media guard and stay candidates, never overrides.
+  if (intake.knowledgeMap && researchedTerms.length) {
+    attachResearchToMap(intake.knowledgeMap, researchedTerms);
+  }
+
+
+
 
   await admin.from("jewelry_still_analyses").upsert(
     {
