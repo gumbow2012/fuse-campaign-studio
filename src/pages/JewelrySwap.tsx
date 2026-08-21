@@ -6168,7 +6168,10 @@ export default function JewelrySwap() {
                 </div>
               )}
             </SectionCard>
+            ) : null}
 
+            {/* SWAP ONLY — animation runs off approved swapped frames. */}
+            {isSwapMode ? (
             <SectionCard
               step={6}
               title="Animate swapped frames"
