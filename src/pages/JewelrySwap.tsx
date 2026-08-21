@@ -52,6 +52,9 @@ import {
   buildMasterProductLock,
   type MasterProductLock,
 } from "@/lib/masterProductLock";
+import { buildFidelityAudit, type FidelityAudit } from "@/lib/fidelityAudit";
+import FidelityPanel from "@/components/jewelry/FidelityPanel";
+
 import DiamondOpticsPanel from "@/components/jewelry/DiamondOpticsPanel";
 import { SeedanceDirectionPanel } from "@/components/jewelry/SeedanceDirectionPanel";
 import {
