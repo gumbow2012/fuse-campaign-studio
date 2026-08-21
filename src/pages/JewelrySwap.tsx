@@ -934,7 +934,27 @@ export default function JewelrySwap() {
   useEffect(() => {
     canonicalMastersRef.current = canonicalMasters;
   }, [canonicalMasters]);
+  /**
+   * BATCH CONTINUATION (§28). Batches are lineage records ONLY: a new batch
+   * inherits the established Master Product Lock, campaign look, optics profile
+   * and approved plates, so the product is never rediscovered between batches.
+   * Starting/approving a batch generates nothing.
+   */
+  const [batches, setBatches] = useState<CampaignBatch[]>([]);
+  const [activeBatchId, setActiveBatchId] = useState<string | null>(null);
+  /** Read inside generation callbacks without re-binding them. */
+  const activeBatchIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    activeBatchIdRef.current = activeBatchId;
+  }, [activeBatchId]);
+  /** Tag a freshly rendered plate with the open batch (no generation here). */
+  const tagBatchMaster = useCallback((masterKey: string) => {
+    const batchId = activeBatchIdRef.current;
+    if (!batchId) return;
+    setBatches((prev) => recordBatchMaster(prev, batchId, masterKey));
+  }, []);
   const [mastersBusy, setMastersBusy] = useState(false);
+
   const [engineeringOpen, setEngineeringOpen] = useState(false);
   /**
    * A PROPOSAL only. FUSE never splits a card by itself — the user answers this
