@@ -3858,6 +3858,14 @@ export default function JewelrySwap() {
     );
   }, [animateDuration, globalMotion]);
 
+  // Kling 3.0 without audio: $0.112 per second — summed over each clip's own length.
+  const animateCostUsd = useMemo(
+    () =>
+      approvedFrames.reduce((total, frame) => total + 0.112 * durationForFrame(frame.url), 0),
+    [approvedFrames, durationForFrame],
+  );
+
+
 
 
   const pieceTypes = useMemo(
