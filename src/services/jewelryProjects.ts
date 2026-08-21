@@ -31,6 +31,8 @@ export type JewelryProjectState = {
   intakeFingerprint: string | null;
   intakeReferences: unknown[];
   intakeSummary: unknown | null;
+  /** MASTER PRODUCT LOCK — the project's authoritative product identity. */
+  masterProductLock: unknown | null;
   /** Diamond Optics (profile + per-frame refinements + slider settings). */
   opticsProfile: unknown | null;
   frameOptics: Record<string, unknown>;

@@ -1222,6 +1222,8 @@ export async function previewReconstructionPrompt(args: {
   extraPrompt?: string;
   opticsProfile?: DiamondOpticsProfile | null;
   opticsControls?: DiamondOpticsControls | null;
+  /** MASTER PRODUCT LOCK: the project's authoritative product identity. */
+  masterProductLock?: unknown;
 }): Promise<SeedanceDirectorPreview> {
   const data = await callJewelrySwap<{ preview: SeedanceDirectorPreview }>({
     action: "preview_reconstruction_prompt",

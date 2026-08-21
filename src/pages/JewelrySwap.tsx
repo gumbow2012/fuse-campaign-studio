@@ -48,6 +48,10 @@ import {
 } from "@/services/storageUpload";
 
 
+import {
+  buildMasterProductLock,
+  type MasterProductLock,
+} from "@/lib/masterProductLock";
 import DiamondOpticsPanel from "@/components/jewelry/DiamondOpticsPanel";
 import { SeedanceDirectionPanel } from "@/components/jewelry/SeedanceDirectionPanel";
 import {
@@ -3605,6 +3609,7 @@ export default function JewelrySwap() {
     setSelectedFrames(new Set());
     setPieces([]);
     setKnowledgeMap(null);
+    setMasterProductLock(null);
     setUserLocks([]);
     setAnalysis(null);
     setAnalysisKey(null);
