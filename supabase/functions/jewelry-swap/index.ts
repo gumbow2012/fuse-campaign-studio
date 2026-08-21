@@ -3700,6 +3700,9 @@ function buildAnimationPrompt(
 
   const direction = [
     shot ? `SHOT — ${shot.label}. ${shot.body}` : "",
+    // §F6 — empty for "auto", so the default prompt is byte-identical to before.
+    String(motionDirective ?? "").trim(),
+
     custom
       ? capPrompt(
           `DIRECTOR NOTE (camera, focus and lighting only; the object never moves): ${custom}`,
