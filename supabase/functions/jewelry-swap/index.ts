@@ -3967,7 +3967,6 @@ Deno.serve(async (req) => {
         opticsProfile: body.opticsProfile ?? null,
         opticsControls: body.opticsControls ?? null,
         masterProductLock: body.masterProductLock ?? null,
-        projectId: body.projectId ?? null,
         materialAuthority: body.materialAuthority ?? null,
       });
       return json({ preview });
@@ -3986,7 +3985,6 @@ Deno.serve(async (req) => {
         opticsProfile: body.opticsProfile ?? null,
         opticsControls: body.opticsControls ?? null,
         masterProductLock: body.masterProductLock ?? null,
-        projectId: body.projectId ?? null,
         materialAuthority: body.materialAuthority ?? null,
         promptOverride: body.promptOverride ?? null,
         inputFingerprint: body.promptInputFingerprint ?? null,
