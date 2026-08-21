@@ -919,6 +919,34 @@ export default function JewelrySwap() {
    */
   const [masterProductLock, setMasterProductLock] = useState<MasterProductLock | null>(null);
   /**
+   * §E5 — LOCK VERSION PROVENANCE. `masterLockRegistry` keeps every lock version
+   * this project has generated with, and `generationLockVersion` records which
+   * version drove each generation, so the EXISTING validate path can compare a
+   * generation against the lock that actually produced it (legacy generations
+   * without a stamp fall back to the current lock).
+   */
+  const [masterLockRegistry, setMasterLockRegistry] = useState<MasterLockRegistry>({});
+  const [generationLockVersion, setGenerationLockVersion] = useState<Record<string, string>>({});
+  const masterLockRegistryRef = useRef<MasterLockRegistry>({});
+  masterLockRegistryRef.current = masterLockRegistry;
+  const generationLockVersionRef = useRef<Record<string, string>>({});
+  generationLockVersionRef.current = generationLockVersion;
+  const masterLockVersion = useMemo(
+    () => masterLockVersionOf(masterProductLock),
+    [masterProductLock],
+  );
+  // Registers the ACTIVE lock version once; never recomputes the lock itself.
+  useEffect(() => {
+    if (!masterProductLock) return;
+    setMasterLockRegistry((prev) => rememberMasterLock(prev, masterProductLock));
+  }, [masterProductLock]);
+  const stampGeneration = useCallback((id: string | null | undefined) => {
+    const stamp = masterLockVersionOf(masterProductLock);
+    if (!id || !stamp) return;
+    setGenerationLockVersion((prev) => (prev[id] === stamp ? prev : { ...prev, [id]: stamp }));
+  }, [masterProductLock]);
+
+  /**
    * §E1 — the ACTIVE project id, readable from generation callbacks declared
    * before the project state exists. Sent with every Nano generation so the
    * backend can INHERIT the project's persisted Master Product Lock.
