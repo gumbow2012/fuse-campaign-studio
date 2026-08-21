@@ -3864,6 +3864,8 @@ export default function JewelrySwap() {
   const projectState = useMemo<JewelryProjectState>(
     () => ({
       version: JEWELRY_PROJECT_STATE_VERSION,
+      // WORKSPACE MODE (§26) — the project remembers whether it is a swap or a campaign.
+      mode: workspaceMode,
       videoUrl,
       videoPreview: videoUrl,
       meta,
