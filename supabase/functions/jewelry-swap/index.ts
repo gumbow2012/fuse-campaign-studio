@@ -1340,6 +1340,12 @@ function buildJewelryPrompt(args: {
   frameAnalysis?: GeminiFrameAnalysis | null;
   /** Stage-A product-level analysis of the references (advisory). */
   productAnalysis?: GeminiProductAnalysis | null;
+  /** DIAMOND OPTICS: cached analysed profile (global merged with frame refinement). */
+  opticsProfile?: DiamondOpticsProfile | null;
+  /** DIAMOND OPTICS: user Sparkle / Fire / advanced controls (AUTO by default). */
+  opticsControls?: DiamondOpticsControls | null;
+  /** DIAMOND OPTICS: add the temporal-consistency line (video rebuild stage). */
+  opticsTemporal?: boolean;
 }) {
   let cursor = 2; // image 1 is the source frame
   const lines: string[] = [];
