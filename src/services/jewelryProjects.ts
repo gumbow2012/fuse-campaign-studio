@@ -134,6 +134,12 @@ export type JewelryProjectState = {
   /** §F4 — per-batch Kling clip duration in seconds. */
   animateDuration: number;
   customCameraPrompt: string;
+  /**
+   * §F6 — per-clip motion presets keyed by approved frame URL. Missing entries
+   * fall back to "auto", so legacy projects behave exactly as before.
+   */
+  clipMotions?: Record<string, string> | null;
+
   /** Generated videos (re-attached from the server library on load too). */
   videos: unknown[];
 };

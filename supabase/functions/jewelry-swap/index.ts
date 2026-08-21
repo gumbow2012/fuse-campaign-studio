@@ -179,6 +179,9 @@ function serialize(row: any) {
       : null,
 
     cameraDirection: typeof payload.camera_direction === "string" ? payload.camera_direction : null,
+    // §F6 — per-clip motion preset actually submitted (legacy clips read null).
+    motionPreset: typeof payload.motion_preset === "string" ? payload.motion_preset : null,
+
     directionSummary: payload.direction_summary && typeof payload.direction_summary === "object"
       ? payload.direction_summary as Record<string, string>
       : null,
@@ -3657,12 +3660,52 @@ function capPrompt(text: string, max = ANIMATE_PROMPT_MAX) {
   return (word > max * 0.6 ? slice.slice(0, word) : slice).trim();
 }
 
+/**
+ * §F6 — MOTION PRESETS. The live Kling schema (see §F5) has NO dedicated camera
+ * motion field, so motion is routed exclusively through the `prompt` input as a
+ * curated directive. `shot_type` stays untouched (its enum is only
+ * "customize" | "intelligent" — a multi-shot switch, not a camera control).
+ * "auto" contributes NO directive, so the default reproduces today's output.
+ */
+const MOTION_PRESET_DIRECTIVES: Record<string, string> = {
+  slow_orbit:
+    "MOTION — Slow Orbit: the CAMERA arcs slowly and continuously around the piece at a fixed distance, revealing form through parallax only.",
+  push_in:
+    "MOTION — Push-In: the CAMERA advances slowly and steadily straight toward the piece, tightening the frame without any cut or zoom snap.",
+  locked_off:
+    "MOTION — Locked-Off: the CAMERA is completely static on a tripod; the only change in frame is light and specular movement.",
+  tilt_reveal:
+    "MOTION — Tilt Reveal: the CAMERA tilts slowly from below or above the piece to reveal it progressively, ending on a settled framing.",
+};
+
+function resolveMotionDirective(preset: unknown) {
+  const key = String(preset ?? "auto").trim().toLowerCase();
+  if (!key || key === "auto") return { key: "auto", directive: "" };
+  const directive = MOTION_PRESET_DIRECTIVES[key];
+  if (!directive) {
+    throw new Error(
+      `Motion preset "${key}" is not supported. Supported: auto, ${
+        Object.keys(MOTION_PRESET_DIRECTIVES).join(", ")
+      }.`,
+    );
+  }
+  return { key, directive };
+}
+
 /** Compose the final Kling prompt for one clip, in strict priority order. */
-function buildAnimationPrompt(shot: ShotSpec | null, customPrompt?: string | null) {
+function buildAnimationPrompt(
+  shot: ShotSpec | null,
+  customPrompt?: string | null,
+  motionDirective?: string,
+) {
+
   const custom = String(customPrompt ?? "").trim();
 
   const direction = [
     shot ? `SHOT — ${shot.label}. ${shot.body}` : "",
+    // §F6 — empty for "auto", so the default prompt is byte-identical to before.
+    String(motionDirective ?? "").trim(),
+
     custom
       ? capPrompt(
           `DIRECTOR NOTE (camera, focus and lighting only; the object never moves): ${custom}`,
@@ -3743,6 +3786,9 @@ async function startAnimateFrame(admin: AdminClient, args: {
   /** "auto" | a shot key | "custom" */
   cameraDirection?: unknown;
   customPrompt?: string | null;
+  /** §F6 — per-clip motion preset ("auto" | slow_orbit | push_in | locked_off | tilt_reveal). */
+  motionPreset?: unknown;
+
   /** Position of this clip inside the approved set + the set size (Auto mode). */
   setIndex?: number;
   setSize?: number;
@@ -3776,7 +3822,10 @@ async function startAnimateFrame(admin: AdminClient, args: {
     shot = resolveShot(direction) ?? planShotSet(setSize, pieceTypes)[0] ?? null;
   }
 
-  const prompt = buildAnimationPrompt(shot, args.customPrompt);
+  // §F6 — throws (never silently ignores) on an unknown preset.
+  const motion = resolveMotionDirective(args.motionPreset);
+  const prompt = buildAnimationPrompt(shot, args.customPrompt, motion.directive);
+
   const summary = shot ? shot.summary : CUSTOM_SUMMARY;
 
   const { data: inserted, error: insertError } = await admin
@@ -3860,6 +3909,10 @@ async function startAnimateFrame(admin: AdminClient, args: {
           frame_index: Number(args.frameIndex ?? 0),
           frame_time: Number(args.frameTime ?? 0),
           camera_direction: direction,
+          // §F6 — motion routes through `prompt` only; recorded for audit.
+          motion_preset: motion.key,
+          motion_routed_via: "prompt",
+
           shot_key: shot?.key ?? "custom",
           shot_label: shot?.label ?? "Custom direction",
           shot_energy: shot?.energy ?? "custom",
@@ -4332,6 +4385,8 @@ Deno.serve(async (req) => {
         frameTime: body.frameTime,
         cameraDirection: body.cameraDirection,
         customPrompt: body.customPrompt ?? null,
+        motionPreset: body.motionPreset ?? "auto",
+
         setIndex: body.setIndex,
         setSize: body.setSize,
         pieceTypes: body.pieceTypes ?? [],

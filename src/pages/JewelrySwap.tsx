@@ -153,8 +153,11 @@ import {
 
   persistTemplateLayout,
   CAMERA_DIRECTIONS,
+  MOTION_PRESETS,
+  DEFAULT_MOTION_PRESET,
   ANIMATE_DURATION_OPTIONS,
   DEFAULT_ANIMATE_DURATION,
+
   type JewelryFrameAnalysis,
   type JewelryGeneration,
   type JewelryImageModel,
@@ -3831,6 +3834,13 @@ export default function JewelrySwap() {
   const [zipping, setZipping] = useState(false);
   const [cameraDirection, setCameraDirection] = useState<string>("auto");
   const [customCameraPrompt, setCustomCameraPrompt] = useState("");
+  /** §F6 — per-clip motion preset keyed by approved frame URL; unset = "auto". */
+  const [clipMotions, setClipMotions] = useState<Record<string, string>>({});
+  const motionForFrame = useCallback(
+    (url: string) => clipMotions[url] ?? DEFAULT_MOTION_PRESET,
+    [clipMotions],
+  );
+
 
   const pieceTypes = useMemo(
     () => pieces.map((piece) => piece.type).filter(Boolean),
@@ -3840,8 +3850,9 @@ export default function JewelrySwap() {
   const animateFrame = useCallback(
     async (
       frame: { index: number; url: string; time: number },
-      position: { setIndex: number; setSize: number; direction?: string },
+      position: { setIndex: number; setSize: number; direction?: string; motionPreset?: string },
     ) => {
+
       // Condition the animate input in the browser so the edge worker never
       // decodes a 4K image (that OOM was the HTTP 546). The approved 4K asset
       // itself is untouched — this only creates a temporary animation input.
@@ -3865,6 +3876,8 @@ export default function JewelrySwap() {
         frameTime: frame.time,
         cameraDirection: position.direction ?? cameraDirection,
         customPrompt: customCameraPrompt.trim() || null,
+        // §F6 — this clip's own motion preset ("auto" reproduces prior output).
+        motionPreset: position.motionPreset ?? motionForFrame(frame.url),
         setIndex: position.setIndex,
         setSize: position.setSize,
         pieceTypes,
@@ -3872,7 +3885,8 @@ export default function JewelrySwap() {
 
       setVideos((prev) => [generation, ...prev]);
     },
-    [animateDuration, cameraDirection, customCameraPrompt, pieceTypes],
+    [animateDuration, cameraDirection, customCameraPrompt, motionForFrame, pieceTypes],
+
   );
 
   const animateApproved = useCallback(async () => {
@@ -3937,6 +3951,9 @@ export default function JewelrySwap() {
             setIndex: position >= 0 ? position : 0,
             setSize: Math.max(1, approvedFrames.length),
             direction: clip.cameraDirection ?? undefined,
+            // §F6 — a regenerated clip keeps its own motion preset.
+            motionPreset: clip.motionPreset ?? undefined,
+
           },
         );
         setVideos((prev) => prev.filter((entry) => entry.id !== clip.id));
@@ -4340,6 +4357,9 @@ export default function JewelrySwap() {
       cameraDirection,
       customCameraPrompt,
       animateDuration,
+      // §F6 — per-clip motion presets keyed by approved frame URL.
+      clipMotions,
+
       videos,
     }),
     [
@@ -4396,6 +4416,8 @@ export default function JewelrySwap() {
       cameraDirection,
       customCameraPrompt,
       animateDuration,
+      clipMotions,
+
       videos,
     ],
   );
@@ -4599,6 +4621,17 @@ export default function JewelrySwap() {
           ? Number(state?.animateDuration)
           : DEFAULT_ANIMATE_DURATION,
       );
+      // §F6 — restore per-clip motion, dropping any preset no longer supported.
+      setClipMotions(() => {
+        const raw = (state?.clipMotions ?? {}) as Record<string, unknown>;
+        const valid: Record<string, string> = {};
+        for (const [url, value] of Object.entries(raw)) {
+          const preset = String(value ?? "");
+          if (MOTION_PRESETS.some((option) => option.value === preset)) valid[url] = preset;
+        }
+        return valid;
+      });
+
 
       setProjectId(project.id);
       setProjectName(project.name);
@@ -6716,6 +6749,50 @@ export default function JewelrySwap() {
                     listed.
                   </p>
                 </div>
+
+                {/* §F6 — per-clip motion. Kling has no camera-motion field, so each
+                    preset becomes a prompt directive; "Auto" adds none. */}
+                {approvedFrames.length ? (
+                  <div>
+                    <label className="mb-1 block text-[10px] uppercase tracking-[0.14em] text-cyan-200/70">
+                      Motion per clip
+                    </label>
+                    <div className="space-y-1.5">
+                      {approvedFrames.map((frame, index) => (
+                        <div
+                          key={frame.url}
+                          className="flex items-center gap-2 rounded-xl border border-white/10 bg-black/25 px-3 py-2"
+                        >
+                          <span className="w-16 shrink-0 text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
+                            Clip {index + 1}
+                          </span>
+                          <select
+                            value={motionForFrame(frame.url)}
+                            onChange={(event) =>
+                              setClipMotions((prev) => ({
+                                ...prev,
+                                [frame.url]: event.target.value,
+                              }))
+                            }
+                            className={SELECT_CLASS}
+                          >
+                            {MOTION_PRESETS.map((option) => (
+                              <option key={option.value} value={option.value}>
+                                {option.label}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      ))}
+                    </div>
+                    <p className="mt-1 text-[10px] text-muted-foreground">
+                      Auto keeps the current cinematic planning. Motion is written into the clip
+                      direction — Kling has no separate camera-motion setting.
+                    </p>
+                  </div>
+                ) : null}
+
+
 
                 <div>
                   <label className="mb-1 block text-[10px] uppercase tracking-[0.14em] text-cyan-200/70">
