@@ -41,6 +41,11 @@ export type JewelryProjectState = {
   campaignPhotographyProfile: unknown | null;
   /** Photography reference-set fingerprint the stored profile belongs to. */
   photographySetVersion: string | null;
+  /**
+   * CANONICAL MASTER REFERENCE SET (§22) — user-generated clean masters of the
+   * active product, keyed by plan key. Not auto-trusted (validation is later).
+   */
+  canonicalMasters: Record<string, unknown> | null;
   /** Diamond Optics (profile + per-frame refinements + slider settings). */
   opticsProfile: unknown | null;
   frameOptics: Record<string, unknown>;
