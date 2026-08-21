@@ -3783,6 +3783,9 @@ async function startAnimateFrame(admin: AdminClient, args: {
   /** "auto" | a shot key | "custom" */
   cameraDirection?: unknown;
   customPrompt?: string | null;
+  /** §F6 — per-clip motion preset ("auto" | slow_orbit | push_in | locked_off | tilt_reveal). */
+  motionPreset?: unknown;
+
   /** Position of this clip inside the approved set + the set size (Auto mode). */
   setIndex?: number;
   setSize?: number;
