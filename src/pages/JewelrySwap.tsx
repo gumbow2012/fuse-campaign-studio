@@ -5808,7 +5808,10 @@ export default function JewelrySwap() {
                 </div>
               )}
             </SectionCard>
+            ) : null}
 
+            {/* SWAP ONLY — frame review belongs to the replacement pipeline. */}
+            {isSwapMode ? (
             <SectionCard step={4} title="Review swaps" hint="Approve the frames that will drive the rebuild.">
               {swapEntries.length ? (
                 <div className="grid gap-3 sm:grid-cols-2">
