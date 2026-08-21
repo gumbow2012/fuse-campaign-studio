@@ -2084,6 +2084,8 @@ async function startCanonicalMaster(admin: AdminClient, args: {
   extraPrompt?: string;
   imageModel?: string;
   masterProductLock?: unknown;
+  /** Active project id — used to INHERIT the persisted lock when none is sent. */
+  projectId?: unknown;
   materialAuthority?: unknown;
   /** Which slot of the requested master set this is (audit only). */
   setIndex?: number;
@@ -2105,7 +2107,11 @@ async function startCanonicalMaster(admin: AdminClient, args: {
     : "pro";
   const endpointId = imageModelKey === "nb2" ? IMAGE_MODEL_ALT : IMAGE_MODEL;
 
-  const masterLock = normalizeMasterLock(args.masterProductLock ?? null);
+  const masterLock = await resolveInheritedMasterLock(admin, {
+    userId: args.userId,
+    projectId: args.projectId,
+    provided: args.masterProductLock,
+  });
   const materialAuthority = normalizeMaterialAuthority(args.materialAuthority ?? null);
 
   // Product references only — a master is rendered FROM the evidence, so there
@@ -2249,6 +2255,8 @@ async function startMatchedPair(admin: AdminClient, args: {
   extraPrompt?: string;
   imageModel?: string;
   masterProductLock?: unknown;
+  /** Active project id — used to INHERIT the persisted lock when none is sent. */
+  projectId?: unknown;
   materialAuthority?: unknown;
   webhookBase: string;
 }) {
@@ -2270,7 +2278,11 @@ async function startMatchedPair(admin: AdminClient, args: {
     : "pro";
   const endpointId = imageModelKey === "nb2" ? IMAGE_MODEL_ALT : IMAGE_MODEL;
 
-  const masterLock = normalizeMasterLock(args.masterProductLock ?? null);
+  const masterLock = await resolveInheritedMasterLock(admin, {
+    userId: args.userId,
+    projectId: args.projectId,
+    provided: args.masterProductLock,
+  });
   const materialAuthority = normalizeMaterialAuthority(args.materialAuthority ?? null);
 
   const pieces = (Array.isArray(args.pieces) ? args.pieces : [])
@@ -2417,6 +2429,8 @@ async function startSwapFrame(admin: AdminClient, args: {
   opticsControls?: unknown;
   /** MASTER PRODUCT LOCK derived once per reference set on the client. */
   masterProductLock?: unknown;
+  /** Active project id — used to INHERIT the persisted lock when none is sent. */
+  projectId?: unknown;
   /** MATERIAL APPEARANCE AUTHORITY derived from the existing evidence strengths. */
   materialAuthority?: unknown;
   webhookBase: string;
@@ -2437,7 +2451,11 @@ async function startSwapFrame(admin: AdminClient, args: {
   const frameAnalysis = normalizeFrameAnalysis(args.frameAnalysis ?? null);
   const productAnalysis = normalizeProductAnalysis(args.productAnalysis ?? null);
   // MASTER PRODUCT LOCK: every frame in the project inherits the SAME lock.
-  const masterLock = normalizeMasterLock(args.masterProductLock ?? null);
+  const masterLock = await resolveInheritedMasterLock(admin, {
+    userId: args.userId,
+    projectId: args.projectId,
+    provided: args.masterProductLock,
+  });
   // MATERIAL APPEARANCE AUTHORITY: material realism only — never geometry.
   const materialAuthority = normalizeMaterialAuthority(args.materialAuthority ?? null);
 
