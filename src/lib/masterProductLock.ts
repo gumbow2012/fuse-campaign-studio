@@ -35,10 +35,18 @@ export type MasterLockSettingRegion = {
 
 export type MasterProductLock = {
   version: string;
+  /**
+   * §E5 — CONTENT VERSION STAMP. `${version}:${hash-of-locked-content}`. It
+   * changes only when the locked product identity itself changes, so a
+   * generation can record exactly WHICH lock drove it and be validated against
+   * that same lock later instead of whatever the lock is now.
+   */
+  lockVersion: string;
   /** Stable id of the locked product case (one card = one physical product). */
   lockId: string | null;
   /** The reference-set fingerprint this lock was derived from. */
   referenceSetVersion: string | null;
+
   derivedFrom: {
     pkmVersion: string | null;
     productCaseId: string | null;
@@ -235,7 +243,9 @@ export function buildMasterProductLock(args: {
 
   const lock: MasterProductLock = {
     version: MASTER_PRODUCT_LOCK_VERSION,
+    lockVersion: MASTER_PRODUCT_LOCK_VERSION,
     lockId: clean(pkm.productCaseId) ?? clean(args.referenceSetVersion),
+
     referenceSetVersion: clean(args.referenceSetVersion),
     derivedFrom: {
       pkmVersion: clean(pkm.version),
@@ -304,8 +314,81 @@ export function buildMasterProductLock(args: {
       : null,
   };
 
+  // §E5 — stamp the lock with a hash of its own locked content.
+  lock.lockVersion = computeMasterLockVersion(lock);
   return lock;
 }
+
+/** FNV-1a over the locked content — stable, order-independent of nothing else. */
+function hashText(text: string): string {
+  let hash = 0x811c9dc5;
+  for (let i = 0; i < text.length; i += 1) {
+    hash ^= text.charCodeAt(i);
+    hash = Math.imul(hash, 0x01000193) >>> 0;
+  }
+  return hash.toString(16).padStart(8, "0");
+}
+
+/**
+ * §E5 — `${schema version}:${content hash}`. `lockVersion` itself is excluded
+ * from the hash so re-stamping is idempotent.
+ */
+export function computeMasterLockVersion(lock: MasterProductLock): string {
+  const { lockVersion: _ignored, ...content } = lock;
+  return `${lock.version}:${hashText(JSON.stringify(content))}`;
+}
+
+/** The version stamp of a lock (legacy locks get one computed on the fly). */
+export function masterLockVersionOf(lock: MasterProductLock | null | undefined): string | null {
+  if (!lock) return null;
+  const stored = String(lock.lockVersion ?? "").trim();
+  return stored || computeMasterLockVersion(lock);
+}
+
+/**
+ * §E5 — LOCK REGISTRY. Every lock version a project has ever generated with is
+ * kept so a fidelity audit can compare a generation against the exact lock that
+ * produced it. Keyed by version stamp; older entries are pruned (max 12).
+ */
+export type MasterLockRegistry = Record<string, MasterProductLock>;
+
+const MAX_REGISTRY_ENTRIES = 12;
+
+export function rememberMasterLock(
+  registry: MasterLockRegistry | null | undefined,
+  lock: MasterProductLock | null | undefined,
+): MasterLockRegistry {
+  const current = registry ?? {};
+  const stamp = masterLockVersionOf(lock);
+  if (!stamp || !lock) return current;
+  if (current[stamp]) return current;
+  const next: MasterLockRegistry = { ...current, [stamp]: { ...lock, lockVersion: stamp } };
+  const keys = Object.keys(next);
+  if (keys.length <= MAX_REGISTRY_ENTRIES) return next;
+  for (const key of keys.slice(0, keys.length - MAX_REGISTRY_ENTRIES)) {
+    if (key !== stamp) delete next[key];
+  }
+  return next;
+}
+
+/**
+ * The lock a generation was produced with. Legacy generations (no stamp, or a
+ * stamp whose lock is no longer stored) fall back to the CURRENT lock, so the
+ * existing validate path keeps working unchanged.
+ */
+export function resolveMasterLockForVersion(
+  registry: MasterLockRegistry | null | undefined,
+  stamp: string | null | undefined,
+  current: MasterProductLock | null,
+): MasterProductLock | null {
+  const key = String(stamp ?? "").trim();
+  if (key) {
+    if (registry?.[key]) return registry[key];
+    if (current && masterLockVersionOf(current) === key) return current;
+  }
+  return current;
+}
+
 
 /** True when the stored lock still belongs to the active reference set. */
 export function isMasterLockCurrent(

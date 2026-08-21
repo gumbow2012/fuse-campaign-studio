@@ -51,8 +51,13 @@ import {
 import {
   buildMasterProductLock,
   masterLockSummary,
+  masterLockVersionOf,
+  rememberMasterLock,
+  resolveMasterLockForVersion,
+  type MasterLockRegistry,
   type MasterProductLock,
 } from "@/lib/masterProductLock";
+
 import {
   buildConnectedAssetModel,
   isConnectedAssetModelCurrent,
@@ -913,6 +918,34 @@ export default function JewelrySwap() {
    * set actually changes; every generation in the project inherits this lock.
    */
   const [masterProductLock, setMasterProductLock] = useState<MasterProductLock | null>(null);
+  /**
+   * §E5 — LOCK VERSION PROVENANCE. `masterLockRegistry` keeps every lock version
+   * this project has generated with, and `generationLockVersion` records which
+   * version drove each generation, so the EXISTING validate path can compare a
+   * generation against the lock that actually produced it (legacy generations
+   * without a stamp fall back to the current lock).
+   */
+  const [masterLockRegistry, setMasterLockRegistry] = useState<MasterLockRegistry>({});
+  const [generationLockVersion, setGenerationLockVersion] = useState<Record<string, string>>({});
+  const masterLockRegistryRef = useRef<MasterLockRegistry>({});
+  masterLockRegistryRef.current = masterLockRegistry;
+  const generationLockVersionRef = useRef<Record<string, string>>({});
+  generationLockVersionRef.current = generationLockVersion;
+  const masterLockVersion = useMemo(
+    () => masterLockVersionOf(masterProductLock),
+    [masterProductLock],
+  );
+  // Registers the ACTIVE lock version once; never recomputes the lock itself.
+  useEffect(() => {
+    if (!masterProductLock) return;
+    setMasterLockRegistry((prev) => rememberMasterLock(prev, masterProductLock));
+  }, [masterProductLock]);
+  const stampGeneration = useCallback((id: string | null | undefined) => {
+    const stamp = masterLockVersionOf(masterProductLock);
+    if (!id || !stamp) return;
+    setGenerationLockVersion((prev) => (prev[id] === stamp ? prev : { ...prev, [id]: stamp }));
+  }, [masterProductLock]);
+
   /**
    * §E1 — the ACTIVE project id, readable from generation callbacks declared
    * before the project state exists. Sent with every Nano generation so the
@@ -2740,7 +2773,7 @@ export default function JewelrySwap() {
     if (batchBlocked) return;
     const batch = startCampaignBatch({
       batches,
-      lockVersion: masterProductLock?.version ?? null,
+      lockVersion: masterLockVersion,
       photographySetVersion: photographyVersion.current,
       hasOpticsProfile: Boolean(opticsProfile),
       approvedMasterKeys,
@@ -2798,7 +2831,7 @@ export default function JewelrySwap() {
                 status: generation.status,
                 outputUrl: generation.outputUrl ?? null,
                 error: generation.error ?? null,
-                lockVersion: masterProductLock?.version ?? null,
+                lockVersion: masterLockVersion,
                 createdAt: generation.createdAt ?? null,
                 // A fresh render is never trusted: validation must run again.
                 validated: false,
@@ -2822,7 +2855,7 @@ export default function JewelrySwap() {
                 status: "failed",
                 outputUrl: null,
                 error: error instanceof Error ? error.message : "Could not start this master",
-                lockVersion: masterProductLock?.version ?? null,
+                lockVersion: masterLockVersion,
                 createdAt: null,
                 validated: false,
                 validation: null,
@@ -2898,7 +2931,7 @@ export default function JewelrySwap() {
             status: generation.status,
             outputUrl: generation.outputUrl ?? null,
             error: generation.error ?? null,
-            lockVersion: masterProductLock?.version ?? null,
+            lockVersion: masterLockVersion,
             createdAt: generation.createdAt ?? null,
             // A fresh render is never trusted — validation (§23) must run again.
             validated: false,
@@ -2922,7 +2955,7 @@ export default function JewelrySwap() {
             status: "failed",
             outputUrl: null,
             error: error instanceof Error ? error.message : "Could not start this component master",
-            lockVersion: masterProductLock?.version ?? null,
+            lockVersion: masterLockVersion,
             createdAt: null,
             validated: false,
             validation: null,
@@ -3003,7 +3036,7 @@ export default function JewelrySwap() {
             status: generation.status,
             outputUrl: generation.outputUrl ?? null,
             error: generation.error ?? null,
-            lockVersion: masterProductLock?.version ?? null,
+            lockVersion: masterLockVersion,
             createdAt: generation.createdAt ?? null,
           },
         }));
@@ -3022,7 +3055,7 @@ export default function JewelrySwap() {
             outputUrl: null,
             error:
               error instanceof Error ? error.message : "Could not start this matched pair",
-            lockVersion: masterProductLock?.version ?? null,
+            lockVersion: masterLockVersion,
             createdAt: null,
           },
         }));
@@ -3289,6 +3322,9 @@ export default function JewelrySwap() {
       // A regeneration APPENDS a revision (§36) and never unapproves the
       // revision the user already approved (§37).
       recordFrameGeneration(data.generation);
+      // §E5 — remember WHICH lock version produced this generation.
+      stampGeneration(data.generation?.id);
+
       if (imageModel !== "nb2") {
         // Remember the quality this frame actually ran at so Regenerate defaults to it.
         setFrameQuality((prev) => ({ ...prev, [frameIndex]: quality }));
@@ -3914,7 +3950,15 @@ export default function JewelrySwap() {
     async (generation: JewelryGeneration | null | undefined) => {
       if (!generation?.outputUrl || generation.status !== "complete") return;
       const id = generation.id;
-      if (!knowledgeMap && !masterProductLock) {
+      // §E5 — validate against the lock version that DROVE this generation.
+      // Legacy generations (no stamp) fall back to the current lock.
+      const drivingStamp = generationLockVersionRef.current[id] ?? null;
+      const drivingLock = resolveMasterLockForVersion(
+        masterLockRegistryRef.current,
+        drivingStamp,
+        masterProductLock,
+      );
+      if (!knowledgeMap && !drivingLock) {
         setFidelityState((prev) => ({ ...prev, [id]: "skipped" }));
         return;
       }
@@ -3923,7 +3967,7 @@ export default function JewelrySwap() {
         const report = await validateAgainstKnowledgeMap({
           imageUrl: generation.outputUrl,
           knowledgeMap: (knowledgeMap ?? {}) as ProductKnowledgeMap,
-          masterProductLock,
+          masterProductLock: drivingLock,
         });
         if (!report) {
           setFidelityState((prev) => ({ ...prev, [id]: "skipped" }));
@@ -3931,7 +3975,10 @@ export default function JewelrySwap() {
         }
         setFidelityAudits((prev) => ({
           ...prev,
-          [id]: buildFidelityAudit({ report, lockVersion: masterProductLock?.version ?? null }),
+          [id]: buildFidelityAudit({
+            report,
+            lockVersion: masterLockVersionOf(drivingLock) ?? drivingStamp,
+          }),
         }));
         setFidelityState((prev) => ({ ...prev, [id]: "done" }));
       } catch (error) {
@@ -3945,6 +3992,7 @@ export default function JewelrySwap() {
     [knowledgeMap, masterProductLock],
   );
 
+
   /* ------- CANONICAL MASTER VALIDATION (§23) — analysis only --------------- *
    * Reuses the SAME `mode: "validate"` path as the frame fidelity audit above
    * (no second validation system). Authority order is unchanged and enforced
@@ -3957,7 +4005,15 @@ export default function JewelrySwap() {
     async (key: string) => {
       const master = canonicalMastersRef.current[key];
       if (!master?.outputUrl || master.status !== "complete") return;
-      if (!knowledgeMap && !masterProductLock) {
+      // §E5 — a master carries the lock version it was generated with; validate
+      // against THAT lock (legacy masters fall back to the current one).
+      const drivingStamp = (master as { lockVersion?: string | null }).lockVersion ?? null;
+      const drivingLock = resolveMasterLockForVersion(
+        masterLockRegistryRef.current,
+        drivingStamp,
+        masterProductLock,
+      );
+      if (!knowledgeMap && !drivingLock) {
         setCanonicalMasters((prev) =>
           prev[key] ? { ...prev, [key]: { ...prev[key], validationState: "skipped" } } : prev,
         );
@@ -3972,8 +4028,9 @@ export default function JewelrySwap() {
         const report = await validateAgainstKnowledgeMap({
           imageUrl: master.outputUrl,
           knowledgeMap: (knowledgeMap ?? {}) as ProductKnowledgeMap,
-          masterProductLock,
+          masterProductLock: drivingLock,
         });
+
         if (!report) {
           setCanonicalMasters((prev) =>
             prev[key] ? { ...prev, [key]: { ...prev[key], validationState: "skipped" } } : prev,
@@ -3982,9 +4039,10 @@ export default function JewelrySwap() {
         }
         const audit = buildFidelityAudit({
           report,
-          lockVersion: masterProductLock?.version ?? null,
+          lockVersion: masterLockVersionOf(drivingLock) ?? drivingStamp,
           dimensions: MASTER_DIMENSIONS,
         });
+
         setCanonicalMasters((prev) =>
           prev[key]
             ? {
@@ -4148,6 +4206,10 @@ export default function JewelrySwap() {
       pieces,
       knowledgeMap,
       masterProductLock,
+      // §E5 — lock-version provenance so a reopened project still validates a
+      // generation against the lock version that actually produced it.
+      masterLockRegistry,
+      generationLockVersion,
       // CAMPAIGN PHOTOGRAPHY PROFILE — look only, stored so reopen never re-reads.
       photographyReferenceUrls: photographyRefs,
       campaignPhotographyProfile,
@@ -4207,6 +4269,8 @@ export default function JewelrySwap() {
       pieces,
       knowledgeMap,
       masterProductLock,
+      masterLockRegistry,
+      generationLockVersion,
       workspaceMode,
       photographyRefs,
       campaignPhotographyProfile,
@@ -4310,6 +4374,11 @@ export default function JewelrySwap() {
       setKnowledgeMap((state?.knowledgeMap ?? null) as ProductKnowledgeMap | null);
       // Reuse the stored lock — reopening never recomputes or re-runs Gemini.
       setMasterProductLock((state?.masterProductLock ?? null) as MasterProductLock | null);
+      // §E5 — restore the lock-version registry + per-generation stamps.
+      setMasterLockRegistry((state?.masterLockRegistry ?? {}) as MasterLockRegistry);
+      setGenerationLockVersion(
+        (state?.generationLockVersion ?? {}) as Record<string, string>,
+      );
       // Pre-campaign projects have no marker and stay on the unchanged Swap surface.
       setWorkspaceMode(state?.mode === "campaign" ? "campaign" : "swap");
       // Reuse the stored photography profile — reopening never re-reads the look.

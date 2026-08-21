@@ -41,6 +41,15 @@ export type JewelryProjectState = {
   intakeSummary: unknown | null;
   /** MASTER PRODUCT LOCK — the project's authoritative product identity. */
   masterProductLock: unknown | null;
+  /**
+   * §E5 — every Master Product Lock VERSION this project has generated with,
+   * keyed by version stamp, so a fidelity audit can validate a generation
+   * against the exact lock that produced it.
+   */
+  masterLockRegistry?: Record<string, unknown> | null;
+  /** §E5 — generation id → the lock version stamp that drove that generation. */
+  generationLockVersion?: Record<string, string> | null;
+
   /** SHOT COVERAGE PLAN (§25) — planning only, recomputed when inputs change. */
   shotCoveragePlan?: unknown | null;
   /**
