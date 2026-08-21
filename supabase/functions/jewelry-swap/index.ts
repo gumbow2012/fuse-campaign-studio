@@ -2182,17 +2182,43 @@ async function startReconstruction(admin: AdminClient, args: {
     }
     return [];
   })();
-  const specs: TargetSpec[] = specPieces.length
-    ? specPieces.map((piece) => resolveTargetSpec(piece))
-    : (() => {
-      for (const url of referenceUrls) {
-        const payload = metaByUrl.get(url);
-        if (Array.isArray(payload?.target_spec) && payload.target_spec.length) {
-          return payload.target_spec as TargetSpec[];
-        }
+  /** The spec the swap stage already resolved and stored for these frames. */
+  const storedSpecs: TargetSpec[] = (() => {
+    for (const url of referenceUrls) {
+      const payload = metaByUrl.get(url);
+      if (Array.isArray(payload?.target_spec) && payload.target_spec.length) {
+        return payload.target_spec as TargetSpec[];
       }
-      return [];
-    })();
+    }
+    return [];
+  })();
+
+  /**
+   * Reconstruct reads the SAME confirmed spec the swap used: resolved from the
+   * stored pieces, with any field still missing filled from the stored spec.
+   * No field is ever defaulted to a product name here.
+   */
+  const specs: TargetSpec[] = specPieces.length
+    ? specPieces.map((piece, index) => {
+      const resolved = resolveTargetSpec(piece);
+      const stored = storedSpecs[index] ?? null;
+      if (!stored) return resolved;
+      const fill = (field: keyof TargetSpec) =>
+        (resolved[field] ?? null) || ((stored as any)[field] ?? null);
+      return {
+        ...resolved,
+        type: fill("type") as string | null,
+        metal: fill("metal") as string | null,
+        stone: fill("stone") as string | null,
+        stoneColor: fill("stoneColor") as string | null,
+        quality: fill("quality") as string | null,
+        dimensions: fill("dimensions") as string | null,
+        settings: resolved.settings.length ? resolved.settings : (stored.settings ?? []),
+        sources: { ...(stored.sources ?? {}), ...resolved.sources },
+      };
+    })
+    : storedSpecs;
+
   const notes = specPieces.map((piece) => String(piece?.notes ?? "").trim()).filter(Boolean).join(" ");
 
   const director = buildSeedanceDirectorPrompt({
