@@ -885,6 +885,14 @@ export default function JewelrySwap() {
    */
   const [masterProductLock, setMasterProductLock] = useState<MasterProductLock | null>(null);
   /**
+   * WORKSPACE MODE (§26). "swap" is the default and leaves the existing flow
+   * untouched. "campaign" hides the source-cinematography steps and builds
+   * product photography from scratch — SAME lock, photography profile, coverage
+   * planner, Nano master path and validation, no second intelligence stack.
+   */
+  const [workspaceMode, setWorkspaceMode] = useState<JewelryWorkspaceMode>("swap");
+  const isSwapMode = workspaceMode === "swap";
+  /**
    * MATERIAL APPEARANCE AUTHORITY (§31) — manual override, advanced only.
    * Empty = FUSE derives it automatically from the existing evidence strengths.
    */
