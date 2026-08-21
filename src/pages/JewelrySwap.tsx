@@ -4405,6 +4405,7 @@ export default function JewelrySwap() {
     setCanonicalMasters({});
     setBatches([]);
     setActiveBatchId(null);
+    setMatchedPairs({});
 
     setUserLocks([]);
     setAnalysis(null);
@@ -4973,6 +4974,14 @@ export default function JewelrySwap() {
                           void generateComponentMaster(componentId)
                         }
                         onValidate={(key) => void validateCanonicalMaster(key)}
+                      />
+                      {/* MATCHED PAIRS (§29) — user-triggered paid Nano runs. */}
+                      <MatchedPairPanel
+                        sources={matchedPairSources}
+                        pairs={matchedPairs}
+                        busyKey={matchedPairBusyKey}
+                        disabledReason={matchedPairsDisabledReason}
+                        onGenerate={(sourceId) => void generateMatchedPairFor(sourceId)}
                       />
                       {/* CAMPAIGN PHOTOGRAPHY PROFILE (§20) — look only, no geometry. */}
                       <CampaignPhotographyPanel
@@ -5906,6 +5915,15 @@ export default function JewelrySwap() {
                         void generateComponentMaster(componentId)
                       }
                       onValidate={(key) => void validateCanonicalMaster(key)}
+                    />
+                  }
+                  matchedPairsSlot={
+                    <MatchedPairPanel
+                      sources={matchedPairSources}
+                      pairs={matchedPairs}
+                      busyKey={matchedPairBusyKey}
+                      disabledReason={matchedPairsDisabledReason}
+                      onGenerate={(sourceId) => void generateMatchedPairFor(sourceId)}
                     />
                   }
                   photographySlot={
