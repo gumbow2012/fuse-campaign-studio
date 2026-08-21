@@ -99,6 +99,7 @@ import {
 
   animateJewelryFrame,
   callJewelrySwap,
+  generateCanonicalMaster,
   createTemplateFromJewelrySwap,
   listAssets,
   invalidateAssetCache,
@@ -1592,6 +1593,100 @@ export default function JewelrySwap() {
     [knowledgeMap, pieces, materialAuthorityOverride],
   );
 
+  /* -------------------- Canonical master reference set (§22) ---------------- */
+
+  /**
+   * The master view set is DERIVED from the locked product topology — no
+   * per-product-type list exists anywhere. Different products therefore ask for
+   * different masters purely from their own evidence.
+   */
+  const canonicalMasterPlan: CanonicalMasterPlanEntry[] = useMemo(
+    () => (masterProductLock ? planCanonicalMasterViews(masterProductLock) : []),
+    [masterProductLock],
+  );
+
+  const canonicalMastersDisabledReason = useMemo(() => {
+    if (!masterProductLock) return "Confirm the product to lock its identity first.";
+    if (!pieces.length) return "Add at least one product reference first.";
+    return null;
+  }, [masterProductLock, pieces.length]);
+
+  /**
+   * EXPLICIT USER ACTION ONLY. Each planned view is one paid run on the existing
+   * Nano path (same endpoint, pricing and bookkeeping as a frame swap), so this
+   * is never called from analysis, restore, autosave or any effect.
+   */
+  const generateCanonicalMasters = useCallback(async () => {
+    if (canonicalMastersDisabledReason || !canonicalMasterPlan.length) return;
+    setMastersBusy(true);
+    try {
+      const payload = piecePayload();
+      await submitWithConcurrency(
+        canonicalMasterPlan,
+        2,
+        async (entry, index) => {
+          try {
+            const generation = await generateCanonicalMaster({
+              view: entry.view,
+              componentLabel: entry.componentLabel,
+              pieces: payload,
+              aspectRatio: "1:1",
+              resolution: resolutionForQuality(nanoQuality),
+              imageModel: "pro",
+              masterProductLock,
+              materialAuthority,
+              setIndex: index,
+              setSize: canonicalMasterPlan.length,
+            });
+            setCanonicalMasters((prev) => ({
+              ...prev,
+              [entry.key]: {
+                key: entry.key,
+                view: entry.view,
+                label: entry.label,
+                componentLabel: entry.componentLabel,
+                generationId: generation.id,
+                status: generation.status,
+                outputUrl: generation.outputUrl ?? null,
+                error: generation.error ?? null,
+                lockVersion: masterProductLock?.version ?? null,
+                createdAt: generation.createdAt ?? null,
+                validated: false,
+              },
+            }));
+          } catch (error) {
+            setCanonicalMasters((prev) => ({
+              ...prev,
+              [entry.key]: {
+                key: entry.key,
+                view: entry.view,
+                label: entry.label,
+                componentLabel: entry.componentLabel,
+                generationId: prev[entry.key]?.generationId ?? "",
+                status: "failed",
+                outputUrl: null,
+                error: error instanceof Error ? error.message : "Could not start this master",
+                lockVersion: masterProductLock?.version ?? null,
+                createdAt: null,
+                validated: false,
+              },
+            }));
+          }
+          return null;
+        },
+      );
+    } finally {
+      setMastersBusy(false);
+    }
+  }, [
+    canonicalMasterPlan,
+    canonicalMastersDisabledReason,
+    piecePayload,
+    nanoQuality,
+    masterProductLock,
+    materialAuthority,
+  ]);
+
   /* ------------------- Campaign photography profile (§20) ------------------ */
 
   /** Look references upload to the same storage pattern as product references. */
@@ -2299,6 +2394,25 @@ export default function JewelrySwap() {
         });
         return;
       }
+      // CANONICAL MASTERS are not frame revisions — they update their own slot.
+      if (generation.stage === "canonical_master") {
+        setCanonicalMasters((prev) => {
+          const key = Object.keys(prev).find(
+            (entry) => prev[entry].generationId === generation.id,
+          );
+          if (!key) return prev;
+          return {
+            ...prev,
+            [key]: {
+              ...prev[key],
+              status: generation.status,
+              outputUrl: generation.outputUrl ?? prev[key].outputUrl,
+              error: generation.error ?? null,
+            },
+          };
+        });
+        return;
+      }
       recordFrameGeneration(generation);
     },
     [recordFrameGeneration],
@@ -2377,8 +2491,13 @@ export default function JewelrySwap() {
     for (const video of videos) {
       if (video.status === "queued" || video.status === "running") ids.push(video.id);
     }
+    for (const master of Object.values(canonicalMasters)) {
+      if (master.generationId && (master.status === "queued" || master.status === "running")) {
+        ids.push(master.generationId);
+      }
+    }
     return ids;
-  }, [swaps, altSwaps, videos]);
+  }, [swaps, altSwaps, videos, canonicalMasters]);
 
   /**
    * Adaptive status polling. A flat 5s tick meant a finished job could sit
@@ -3529,6 +3648,8 @@ export default function JewelrySwap() {
       photographyReferenceUrls: photographyRefs,
       campaignPhotographyProfile,
       photographySetVersion: photographyVersion.current,
+      // CANONICAL MASTERS — stored per project, tagged with their view.
+      canonicalMasters,
       userLocks,
       analysis,
       analysisKey,
@@ -3575,6 +3696,7 @@ export default function JewelrySwap() {
       masterProductLock,
       photographyRefs,
       campaignPhotographyProfile,
+      canonicalMasters,
       userLocks,
       analysis,
       analysisKey,
@@ -3676,6 +3798,9 @@ export default function JewelrySwap() {
       setCampaignPhotographyProfile(storedPhotography);
       photographyVersion.current = state?.photographySetVersion ?? null;
       setPhotographyStatus(storedPhotography ? "ready" : "idle");
+      setCanonicalMasters(
+        (state?.canonicalMasters ?? {}) as Record<string, CanonicalMaster>,
+      );
       setPhotographyError(null);
       setUserLocks((state?.userLocks ?? []) as UserConfirmedFact[]);
       setAnalysis((state?.analysis ?? null) as JewelryProjectAnalysis | null);
@@ -3808,6 +3933,7 @@ export default function JewelrySwap() {
     photographyVersion.current = null;
     setPhotographyStatus("idle");
     setPhotographyError(null);
+    setCanonicalMasters({});
     setUserLocks([]);
     setAnalysis(null);
     setAnalysisKey(null);
@@ -4333,6 +4459,14 @@ export default function JewelrySwap() {
                           )}
                         </select>
                       </div>
+                      {/* CANONICAL MASTERS (§22) — user-triggered paid Nano runs. */}
+                      <CanonicalMastersPanel
+                        plan={canonicalMasterPlan}
+                        masters={canonicalMasters}
+                        busy={mastersBusy}
+                        disabledReason={canonicalMastersDisabledReason}
+                        onGenerate={() => void generateCanonicalMasters()}
+                      />
                       {/* CAMPAIGN PHOTOGRAPHY PROFILE (§20) — look only, no geometry. */}
                       <CampaignPhotographyPanel
                         referenceUrls={photographyRefs}
