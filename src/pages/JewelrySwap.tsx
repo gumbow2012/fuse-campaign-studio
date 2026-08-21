@@ -3847,8 +3847,9 @@ export default function JewelrySwap() {
   const animateFrame = useCallback(
     async (
       frame: { index: number; url: string; time: number },
-      position: { setIndex: number; setSize: number; direction?: string },
+      position: { setIndex: number; setSize: number; direction?: string; motionPreset?: string },
     ) => {
+
       // Condition the animate input in the browser so the edge worker never
       // decodes a 4K image (that OOM was the HTTP 546). The approved 4K asset
       // itself is untouched — this only creates a temporary animation input.
