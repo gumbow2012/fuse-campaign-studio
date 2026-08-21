@@ -56,6 +56,13 @@ export type JewelryProjectState = {
    * pairs survive reopen. Keyed `${sourceId}:${targetStage}`.
    */
   matchedPairs?: Record<string, unknown> | null;
+  /**
+   * CONNECTED PRODUCT SYSTEMS (§30). Physical relationships between connected
+   * parts (attachment / articulation / gravity / overlap / tension / weight),
+   * derived from the lock's topology. Data only — recomputed when the lock
+   * changes; not wired into generation yet.
+   */
+  connectedAssets?: unknown | null;
 
   /**
    * CAMPAIGN PHOTOGRAPHY PROFILE (§20) — HOW the product is photographed, kept

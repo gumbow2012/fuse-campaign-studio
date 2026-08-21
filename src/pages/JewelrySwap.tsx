@@ -54,6 +54,11 @@ import {
   type MasterProductLock,
 } from "@/lib/masterProductLock";
 import {
+  buildConnectedAssetModel,
+  isConnectedAssetModelCurrent,
+  type ConnectedAssetModel,
+} from "@/lib/connectedAssets";
+import {
   deriveMaterialAppearanceAuthority,
   materialAuthorityLabel,
   type MaterialAppearanceAuthority,
@@ -908,6 +913,23 @@ export default function JewelrySwap() {
    * set actually changes; every generation in the project inherits this lock.
    */
   const [masterProductLock, setMasterProductLock] = useState<MasterProductLock | null>(null);
+  /**
+   * CONNECTED PRODUCT SYSTEMS (§30). Physical relationships between connected
+   * parts of THIS product, derived from the lock's own component topology.
+   * Data only in this commit — recomputed solely when the lock/topology changes.
+   */
+  const [connectedAssetModel, setConnectedAssetModel] = useState<ConnectedAssetModel | null>(null);
+  useEffect(() => {
+    if (!masterProductLock) {
+      setConnectedAssetModel(null);
+      return;
+    }
+    setConnectedAssetModel((current) =>
+      isConnectedAssetModelCurrent(current, masterProductLock)
+        ? current
+        : buildConnectedAssetModel(masterProductLock),
+    );
+  }, [masterProductLock]);
   /**
    * WORKSPACE MODE (§26). "swap" is the default and leaves the existing flow
    * untouched. "campaign" hides the source-cinematography steps and builds
@@ -4101,6 +4123,8 @@ export default function JewelrySwap() {
       activeBatchId,
       // MATCHED PAIRS (§29) — counterpart plates linked to their source plate.
       matchedPairs: matchedPairs as unknown as Record<string, unknown>,
+      // CONNECTED PRODUCT SYSTEMS (§30) — derived relationship model, data only.
+      connectedAssets: connectedAssetModel as unknown as unknown | null,
       userLocks,
       analysis,
       analysisKey,
@@ -4150,6 +4174,7 @@ export default function JewelrySwap() {
       campaignPhotographyProfile,
       canonicalMasters,
       matchedPairs,
+      connectedAssetModel,
       shotCoveragePlan,
       batches,
       activeBatchId,
@@ -4261,6 +4286,8 @@ export default function JewelrySwap() {
       );
       // MATCHED PAIRS (§29) — restored as-is; reopening re-renders nothing.
       setMatchedPairs((state?.matchedPairs ?? {}) as Record<string, MatchedPair>);
+      // CONNECTED PRODUCT SYSTEMS (§30) — restored; rebuilt only if the lock moved.
+      setConnectedAssetModel((state?.connectedAssets ?? null) as ConnectedAssetModel | null);
       // BATCH CONTINUATION (§28) — restored as-is; no batch re-runs anything.
       const storedBatches = (state?.batches ?? []) as CampaignBatch[];
       setBatches(storedBatches);
