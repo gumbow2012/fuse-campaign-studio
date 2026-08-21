@@ -5814,9 +5814,11 @@ export default function JewelrySwap() {
             const alt = altSwaps[index];
             const frame = frames[index];
             if (!swap) return null;
-            const isApproved = approved.has(index);
             const picked = chosenModel[index] === "nb2" && alt ? "nb2" : "pro";
             const active = (picked === "nb2" ? alt : swap)!;
+            const revision = revisionInfo(index);
+            const isApproved = approvedGenerationId[index] === active?.id;
+
             return (
               <>
                 <DialogHeader>
