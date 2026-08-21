@@ -3950,7 +3950,15 @@ export default function JewelrySwap() {
     async (generation: JewelryGeneration | null | undefined) => {
       if (!generation?.outputUrl || generation.status !== "complete") return;
       const id = generation.id;
-      if (!knowledgeMap && !masterProductLock) {
+      // §E5 — validate against the lock version that DROVE this generation.
+      // Legacy generations (no stamp) fall back to the current lock.
+      const drivingStamp = generationLockVersionRef.current[id] ?? null;
+      const drivingLock = resolveMasterLockForVersion(
+        masterLockRegistryRef.current,
+        drivingStamp,
+        masterProductLock,
+      );
+      if (!knowledgeMap && !drivingLock) {
         setFidelityState((prev) => ({ ...prev, [id]: "skipped" }));
         return;
       }
@@ -3959,7 +3967,7 @@ export default function JewelrySwap() {
         const report = await validateAgainstKnowledgeMap({
           imageUrl: generation.outputUrl,
           knowledgeMap: (knowledgeMap ?? {}) as ProductKnowledgeMap,
-          masterProductLock,
+          masterProductLock: drivingLock,
         });
         if (!report) {
           setFidelityState((prev) => ({ ...prev, [id]: "skipped" }));
@@ -3967,7 +3975,10 @@ export default function JewelrySwap() {
         }
         setFidelityAudits((prev) => ({
           ...prev,
-          [id]: buildFidelityAudit({ report, lockVersion: masterLockVersion }),
+          [id]: buildFidelityAudit({
+            report,
+            lockVersion: masterLockVersionOf(drivingLock) ?? drivingStamp,
+          }),
         }));
         setFidelityState((prev) => ({ ...prev, [id]: "done" }));
       } catch (error) {
@@ -3980,6 +3991,7 @@ export default function JewelrySwap() {
     },
     [knowledgeMap, masterProductLock],
   );
+
 
   /* ------- CANONICAL MASTER VALIDATION (§23) — analysis only --------------- *
    * Reuses the SAME `mode: "validate"` path as the frame fidelity audit above
