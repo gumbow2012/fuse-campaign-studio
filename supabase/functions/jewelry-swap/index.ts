@@ -3010,18 +3010,23 @@ async function previewReconstructionPrompt(admin: AdminClient, args: Reconstruct
   };
 }
 
-/** Normalizes a manual prompt without ever truncating it. */
+/**
+ * §F1 — the EXACT user-edited string is what gets submitted: this only
+ * validates it (non-empty, within the Seedance limit) and NEVER rewrites,
+ * trims, merges or truncates it, so the text previewed in the UI is byte-for-byte
+ * the text sent to the provider.
+ */
 function normalizePromptOverride(value: unknown) {
   if (typeof value !== "string") return null;
-  const text = value.replace(/\r\n/g, "\n").replace(/[ \t]+$/gm, "").trim();
-  if (!text) return null;
-  if (text.length > DIRECTOR_MAX_CHARS) {
+  if (!value.trim()) return null;
+  if (value.length > DIRECTOR_MAX_CHARS) {
     throw new Error(
-      `Your prompt is ${text.length} characters — Seedance accepts at most ${DIRECTOR_MAX_CHARS}. Shorten it and try again.`,
+      `Your prompt is ${value.length} characters — Seedance accepts at most ${DIRECTOR_MAX_CHARS}. Shorten it and try again.`,
     );
   }
-  return text;
+  return value;
 }
+
 
 async function startReconstruction(admin: AdminClient, args: ReconstructionPrep & {
   /** When set, this exact text becomes the final Seedance prompt. */
