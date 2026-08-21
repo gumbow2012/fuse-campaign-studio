@@ -3819,7 +3819,10 @@ async function startAnimateFrame(admin: AdminClient, args: {
     shot = resolveShot(direction) ?? planShotSet(setSize, pieceTypes)[0] ?? null;
   }
 
-  const prompt = buildAnimationPrompt(shot, args.customPrompt);
+  // §F6 — throws (never silently ignores) on an unknown preset.
+  const motion = resolveMotionDirective(args.motionPreset);
+  const prompt = buildAnimationPrompt(shot, args.customPrompt, motion.directive);
+
   const summary = shot ? shot.summary : CUSTOM_SUMMARY;
 
   const { data: inserted, error: insertError } = await admin
