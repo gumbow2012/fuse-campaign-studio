@@ -2776,6 +2776,8 @@ export default function JewelrySwap() {
             validationError: null,
           },
         }));
+        tagBatchMaster(entry.key);
+
       } catch (error) {
         setCanonicalMasters((prev) => ({
           ...prev,
