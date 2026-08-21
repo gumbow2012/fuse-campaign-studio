@@ -130,7 +130,9 @@ export function masterLockPromptLines(lock: MasterProductLock | null, opts?: { c
 
   const limit = opts?.compact ? 12 : 22;
   return [
-    "MASTER PRODUCT LOCK — the ONE physical product for this project. It is the authoritative product identity for EVERY frame: do not re-decide, re-style or re-interpret the product per frame. Reproduce exactly what is locked below; anything not listed is unlocked and must follow the references.",
+    "MASTER PRODUCT LOCK — the ONE physical product for this project. It is the authoritative product identity for EVERY frame, master, component, matched pair and campaign plate: do not re-decide, re-style or re-interpret the product per generation. Reproduce exactly what is locked below; anything not listed is unlocked and must follow the references.",
+    "AUTHORITY ORDER (highest first): user-confirmed facts > the original direct evidence images > CAD > this lock / product knowledge map > any previously generated canonical master.",
+
     ...rows.slice(0, limit),
     confirmed.length
       ? `USER-CONFIRMED FACTS (HIGHEST AUTHORITY — they override the lock and every analysis): ${
