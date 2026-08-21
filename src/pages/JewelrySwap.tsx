@@ -6833,7 +6833,7 @@ export default function JewelrySwap() {
 
 
                             <p className="text-[10px] uppercase tracking-[0.14em] text-cyan-200/70">
-                              Kling 3.0 · 3 sec · 1080p
+                              {`Kling 3.0 · ${clip.durationSeconds ?? animateDuration} sec`}
                               {clip.shotLabel ? ` · ${clip.shotLabel}` : ""}
                             </p>
 
