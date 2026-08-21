@@ -31,6 +31,13 @@ import {
   opticsSummaryLine,
   readOpticsControls,
 } from "../_shared/diamond-optics.ts";
+import {
+  type MasterProductLock,
+  masterLockProductType,
+  masterLockPromptLines,
+  masterLockSummaryLine,
+  normalizeMasterLock,
+} from "./masterLock.ts";
 
 /**
  * Jewelry Swap: sibling of Outfit Swap. Per-frame nano-banana jewelry
