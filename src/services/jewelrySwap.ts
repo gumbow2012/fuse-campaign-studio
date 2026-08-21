@@ -69,7 +69,16 @@ export type JewelryGeneration = SwapGeneration & {
   matchedPairSourceStage?: string | null;
   matchedPairTargetStage?: string | null;
   matchedPairTargetLabel?: string | null;
+  /**
+   * §F3 — the provider status/result lookup is temporarily unreadable (502/503/
+   * 504 / downstream_service_unavailable / lookup timeout). The submitted job is
+   * still running and is polled by the SAME request id — never resubmitted.
+   */
+  providerTransient?: boolean | null;
+  providerTransientNote?: string | null;
+  providerTransientAt?: string | null;
 };
+
 
 /**
  * CANONICAL MASTER (§22) — one paid Nano run for ONE view of the active
