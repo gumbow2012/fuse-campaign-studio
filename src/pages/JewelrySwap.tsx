@@ -2697,26 +2697,26 @@ export default function JewelrySwap() {
 
 
   const removeSwap = useCallback(async (frameIndex: number) => {
-    const ids = [swaps[frameIndex]?.id, altSwaps[frameIndex]?.id].filter(Boolean) as string[];
-    setSwaps((prev) => {
+    const ids = (frameGenerationsRef.current[frameIndex] ?? []).map((entry) => entry.id);
+    setFrameGenerations((prev) => {
       const next = { ...prev };
       delete next[frameIndex];
       return next;
     });
-    setAltSwaps((prev) => {
+    setFrameRevision((prev) => {
       const next = { ...prev };
       delete next[frameIndex];
       return next;
     });
-    setApproved((prev) => {
-      const next = new Set(prev);
-      next.delete(frameIndex);
+    setApprovedGenerationId((prev) => {
+      const next = { ...prev };
+      delete next[frameIndex];
       return next;
     });
     if (ids.length) {
       await callJewelrySwap({ action: "delete", generationIds: ids }).catch(() => null);
     }
-  }, [swaps, altSwaps]);
+  }, []);
 
   /** The result the user picked (defaults to Nano Banana Pro). */
   const selectedSwap = useCallback(
@@ -2724,6 +2724,20 @@ export default function JewelrySwap() {
       (chosenModel[index] === "nb2" ? altSwaps[index] : swaps[index]) ?? swaps[index] ?? null,
     [chosenModel, swaps, altSwaps],
   );
+
+  /**
+   * APPROVAL BY ID (§37): the exact revision the user approved — this, not
+   * "the latest", is what animate and the Seedance rebuild consume.
+   */
+  const approvedSwap = useCallback(
+    (index: number) => {
+      const id = approvedGenerationId[index];
+      if (!id) return null;
+      return (frameGenerations[index] ?? []).find((entry) => entry.id === id) ?? null;
+    },
+    [approvedGenerationId, frameGenerations],
+  );
+
 
   /* ---------------------------- 5. Reconstruction --------------------------- */
 
