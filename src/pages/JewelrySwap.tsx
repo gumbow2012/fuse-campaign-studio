@@ -3825,21 +3825,47 @@ export default function JewelrySwap() {
 
   // Kling 3.0 without audio: $0.112 per second.
   const [animateDuration, setAnimateDuration] = useState<number>(DEFAULT_ANIMATE_DURATION);
-  const animateCostUsd = useMemo(
-    () => 0.112 * animateDuration * approvedFrames.length,
-    [animateDuration, approvedFrames],
-  );
 
   const [animating, setAnimating] = useState(false);
   const [zipping, setZipping] = useState(false);
   const [cameraDirection, setCameraDirection] = useState<string>("auto");
   const [customCameraPrompt, setCustomCameraPrompt] = useState("");
-  /** §F6 — per-clip motion preset keyed by approved frame URL; unset = "auto". */
+  /**
+   * §F6/§F7 — motion + duration resolve as: per-clip override (keyed by approved
+   * frame URL) → global default → shipped default. Apply-to-all is a bulk-set:
+   * it writes the global default and clears overrides, so a later per-clip change
+   * still wins.
+   */
   const [clipMotions, setClipMotions] = useState<Record<string, string>>({});
+  const [clipDurations, setClipDurations] = useState<Record<string, number>>({});
+  const [globalMotion, setGlobalMotion] = useState<string>(DEFAULT_MOTION_PRESET);
   const motionForFrame = useCallback(
-    (url: string) => clipMotions[url] ?? DEFAULT_MOTION_PRESET,
-    [clipMotions],
+    (url: string) => clipMotions[url] ?? globalMotion,
+    [clipMotions, globalMotion],
   );
+  const durationForFrame = useCallback(
+    (url: string) => clipDurations[url] ?? animateDuration,
+    [clipDurations, animateDuration],
+  );
+  /** §F7 — bulk-set duration + motion on every approved clip (no fake quality). */
+  const applySettingsToAllClips = useCallback(() => {
+    setClipMotions({});
+    setClipDurations({});
+    toast.success(
+      `Applied ${animateDuration} sec · ${
+        MOTION_PRESETS.find((option) => option.value === globalMotion)?.label ?? globalMotion
+      } to all clips`,
+    );
+  }, [animateDuration, globalMotion]);
+
+  // Kling 3.0 without audio: $0.112 per second — summed over each clip's own length.
+  const animateCostUsd = useMemo(
+    () =>
+      approvedFrames.reduce((total, frame) => total + 0.112 * durationForFrame(frame.url), 0),
+    [approvedFrames, durationForFrame],
+  );
+
+
 
 
   const pieceTypes = useMemo(
@@ -3850,7 +3876,14 @@ export default function JewelrySwap() {
   const animateFrame = useCallback(
     async (
       frame: { index: number; url: string; time: number },
-      position: { setIndex: number; setSize: number; direction?: string; motionPreset?: string },
+      position: {
+        setIndex: number;
+        setSize: number;
+        direction?: string;
+        motionPreset?: string;
+        durationSeconds?: number;
+      },
+
     ) => {
 
       // Condition the animate input in the browser so the edge worker never
@@ -3870,8 +3903,8 @@ export default function JewelrySwap() {
       const generation = await animateJewelryFrame({
         imageUrl: frame.url,
         animateInputUrl: conditioned.conditioned ? conditioned.url : null,
-        // §F4 — the chosen duration is submitted exactly as selected.
-        durationSeconds: animateDuration,
+        // §F4/§F7 — per-clip override wins over the global default; submitted as-is.
+        durationSeconds: position.durationSeconds ?? durationForFrame(frame.url),
         frameIndex: frame.index,
         frameTime: frame.time,
         cameraDirection: position.direction ?? cameraDirection,
@@ -3885,7 +3918,8 @@ export default function JewelrySwap() {
 
       setVideos((prev) => [generation, ...prev]);
     },
-    [animateDuration, cameraDirection, customCameraPrompt, motionForFrame, pieceTypes],
+    [cameraDirection, customCameraPrompt, durationForFrame, motionForFrame, pieceTypes],
+
 
   );
 
@@ -3953,6 +3987,9 @@ export default function JewelrySwap() {
             direction: clip.cameraDirection ?? undefined,
             // §F6 — a regenerated clip keeps its own motion preset.
             motionPreset: clip.motionPreset ?? undefined,
+            // §F7 — and its own length, not the current global default.
+            durationSeconds: clip.durationSeconds ?? undefined,
+
 
           },
         );
@@ -4357,8 +4394,11 @@ export default function JewelrySwap() {
       cameraDirection,
       customCameraPrompt,
       animateDuration,
-      // §F6 — per-clip motion presets keyed by approved frame URL.
+      // §F6/§F7 — global motion default + per-clip overrides keyed by frame URL.
+      globalMotion,
       clipMotions,
+      clipDurations,
+
 
       videos,
     }),
@@ -4417,6 +4457,9 @@ export default function JewelrySwap() {
       customCameraPrompt,
       animateDuration,
       clipMotions,
+      clipDurations,
+      globalMotion,
+
 
       videos,
     ],
@@ -4631,6 +4674,24 @@ export default function JewelrySwap() {
         }
         return valid;
       });
+      // §F7 — restore the global motion default and per-clip duration overrides,
+      // dropping anything outside the provider-supported sets.
+      setGlobalMotion(
+        MOTION_PRESETS.some((option) => option.value === state?.globalMotion)
+          ? String(state?.globalMotion)
+          : DEFAULT_MOTION_PRESET,
+      );
+      setClipDurations(() => {
+        const raw = (state?.clipDurations ?? {}) as Record<string, unknown>;
+        const valid: Record<string, number> = {};
+        for (const [url, value] of Object.entries(raw)) {
+          const seconds = Number(value);
+          if (ANIMATE_DURATION_OPTIONS.includes(seconds as 3)) valid[url] = seconds;
+        }
+        return valid;
+      });
+
+
 
 
       setProjectId(project.id);
@@ -6710,7 +6771,13 @@ export default function JewelrySwap() {
                     // output resolution is provider-fixed, so this stays read-only info.
                     ["Output", "Provider-fixed (not selectable)"],
 
-                    ["Duration", `${animateDuration} sec`],
+                    [
+                      "Duration",
+                      Object.keys(clipDurations).length
+                        ? `${animateDuration} sec default · per-clip overrides`
+                        : `${animateDuration} sec`,
+                    ],
+
                     [
                       "Motion",
                       CAMERA_DIRECTIONS.find((option) => option.value === cameraDirection)?.label ??
@@ -6729,68 +6796,128 @@ export default function JewelrySwap() {
                   ))}
                 </dl>
 
-                <div>
-                  <label className="mb-1 block text-[10px] uppercase tracking-[0.14em] text-cyan-200/70">
-                    Clip length
-                  </label>
-                  <select
-                    value={String(animateDuration)}
-                    onChange={(event) => setAnimateDuration(Number(event.target.value))}
-                    className={SELECT_CLASS}
+                {/* §F7 — bulk defaults for the only two truly-configurable Kling
+                    inputs: duration and motion. No quality/resolution control —
+                    §F5 confirmed the provider exposes none. */}
+                <div className="rounded-xl border border-white/10 bg-black/25 p-3">
+                  <p className="mb-2 text-[10px] uppercase tracking-[0.14em] text-cyan-200/70">
+                    All clips
+                  </p>
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    <div>
+                      <label className="mb-1 block text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
+                        Clip length
+                      </label>
+                      <select
+                        value={String(animateDuration)}
+                        onChange={(event) => setAnimateDuration(Number(event.target.value))}
+                        className={SELECT_CLASS}
+                      >
+                        {ANIMATE_DURATION_OPTIONS.map((seconds) => (
+                          <option key={seconds} value={seconds}>
+                            {seconds} sec
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
+                        Motion
+                      </label>
+                      <select
+                        value={globalMotion}
+                        onChange={(event) => setGlobalMotion(event.target.value)}
+                        className={SELECT_CLASS}
+                      >
+                        {MOTION_PRESETS.map((option) => (
+                          <option key={option.value} value={option.value}>
+                            {option.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={applySettingsToAllClips}
+                    disabled={!approvedFrames.length}
+                    className="mt-2 w-full rounded-lg border border-cyan-400/30 bg-cyan-500/10 px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-cyan-100 transition hover:bg-cyan-500/20 disabled:cursor-not-allowed disabled:opacity-40"
                   >
-                    {ANIMATE_DURATION_OPTIONS.map((seconds) => (
-                      <option key={seconds} value={seconds}>
-                        {seconds} sec
-                      </option>
-                    ))}
-                  </select>
+                    Apply to all clips
+                  </button>
                   <p className="mt-1 text-[10px] text-muted-foreground">
-                    Applies to every clip in this batch. Only lengths Kling 3.0 Pro accepts are
-                    listed.
+                    Only lengths and motion presets Kling 3.0 Pro actually accepts. Output quality is
+                    provider-fixed and not selectable. You can still override any single clip below.
                   </p>
                 </div>
 
-                {/* §F6 — per-clip motion. Kling has no camera-motion field, so each
-                    preset becomes a prompt directive; "Auto" adds none. */}
+                {/* §F6/§F7 — per-clip overrides win over the "All clips" defaults. */}
                 {approvedFrames.length ? (
                   <div>
                     <label className="mb-1 block text-[10px] uppercase tracking-[0.14em] text-cyan-200/70">
-                      Motion per clip
+                      Per-clip overrides
                     </label>
                     <div className="space-y-1.5">
-                      {approvedFrames.map((frame, index) => (
-                        <div
-                          key={frame.url}
-                          className="flex items-center gap-2 rounded-xl border border-white/10 bg-black/25 px-3 py-2"
-                        >
-                          <span className="w-16 shrink-0 text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
-                            Clip {index + 1}
-                          </span>
-                          <select
-                            value={motionForFrame(frame.url)}
-                            onChange={(event) =>
-                              setClipMotions((prev) => ({
-                                ...prev,
-                                [frame.url]: event.target.value,
-                              }))
-                            }
-                            className={SELECT_CLASS}
+                      {approvedFrames.map((frame, index) => {
+                        const overridden =
+                          clipMotions[frame.url] !== undefined ||
+                          clipDurations[frame.url] !== undefined;
+                        return (
+                          <div
+                            key={frame.url}
+                            className="flex flex-wrap items-center gap-2 rounded-xl border border-white/10 bg-black/25 px-3 py-2"
                           >
-                            {MOTION_PRESETS.map((option) => (
-                              <option key={option.value} value={option.value}>
-                                {option.label}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-                      ))}
+                            <span className="w-16 shrink-0 text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
+                              Clip {index + 1}
+                            </span>
+                            <select
+                              value={String(durationForFrame(frame.url))}
+                              onChange={(event) =>
+                                setClipDurations((prev) => ({
+                                  ...prev,
+                                  [frame.url]: Number(event.target.value),
+                                }))
+                              }
+                              className={`${SELECT_CLASS} w-24 shrink-0`}
+                            >
+                              {ANIMATE_DURATION_OPTIONS.map((seconds) => (
+                                <option key={seconds} value={seconds}>
+                                  {seconds} sec
+                                </option>
+                              ))}
+                            </select>
+                            <select
+                              value={motionForFrame(frame.url)}
+                              onChange={(event) =>
+                                setClipMotions((prev) => ({
+                                  ...prev,
+                                  [frame.url]: event.target.value,
+                                }))
+                              }
+                              className={`${SELECT_CLASS} min-w-[9rem] flex-1`}
+                            >
+                              {MOTION_PRESETS.map((option) => (
+                                <option key={option.value} value={option.value}>
+                                  {option.label}
+                                </option>
+                              ))}
+                            </select>
+                            {overridden ? (
+                              <span className="text-[9px] uppercase tracking-[0.14em] text-cyan-300/80">
+                                Custom
+                              </span>
+                            ) : null}
+                          </div>
+                        );
+                      })}
                     </div>
                     <p className="mt-1 text-[10px] text-muted-foreground">
-                      Auto keeps the current cinematic planning. Motion is written into the clip
-                      direction — Kling has no separate camera-motion setting.
+                      Auto motion keeps the current cinematic planning. Motion is written into the
+                      clip direction — Kling has no separate camera-motion setting.
                     </p>
                   </div>
                 ) : null}
+
 
 
 

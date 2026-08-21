@@ -136,9 +136,14 @@ export type JewelryProjectState = {
   customCameraPrompt: string;
   /**
    * §F6 — per-clip motion presets keyed by approved frame URL. Missing entries
-   * fall back to "auto", so legacy projects behave exactly as before.
+   * fall back to the global default, so legacy projects behave as before.
    */
   clipMotions?: Record<string, string> | null;
+  /** §F7 — per-clip duration overrides in seconds, keyed by approved frame URL. */
+  clipDurations?: Record<string, number> | null;
+  /** §F7 — global motion default applied to clips without an override. */
+  globalMotion?: string | null;
+
 
   /** Generated videos (re-attached from the server library on load too). */
   videos: unknown[];
