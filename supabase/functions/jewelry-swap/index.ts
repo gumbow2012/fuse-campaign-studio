@@ -2373,6 +2373,7 @@ async function prepareReconstruction(admin: AdminClient, args: ReconstructionPre
     aspectRatio: args.aspectRatio ?? null,
     extra: args.extraPrompt ?? null,
     opticsText,
+    masterLock,
   });
   return {
     availableUrls,
@@ -2382,6 +2383,7 @@ async function prepareReconstruction(admin: AdminClient, args: ReconstructionPre
     duration,
     specs,
     director,
+    masterLock,
   };
 }
 
