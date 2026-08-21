@@ -120,6 +120,13 @@ function serialize(row: any) {
     providerModel: row.provider_model ?? null,
     inputPayload: payload,
     stage: typeof payload.stage === "string" ? payload.stage : null,
+    // CANONICAL MASTER (§22) view tagging, so the client can group masters.
+    canonicalMasterView: typeof payload.canonical_master_view === "string"
+      ? payload.canonical_master_view
+      : null,
+    canonicalMasterLabel: typeof payload.canonical_master_label === "string"
+      ? payload.canonical_master_label
+      : null,
     frameIndex: typeof payload.frame_index === "number" ? payload.frame_index : null,
     frameTime: typeof payload.frame_time === "number" ? payload.frame_time : null,
     sourceFrameUrl: typeof payload.source_frame_url === "string" ? payload.source_frame_url : null,
