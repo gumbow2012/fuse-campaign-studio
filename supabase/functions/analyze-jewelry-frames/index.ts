@@ -3855,6 +3855,8 @@ async function handleIntake(req: Request, body: any, user: { id: string }, apiKe
     referenceFetchMs: run.timings.referenceFetchMs,
     geminiMs: run.timings.geminiMs,
     knowledgeMapMs,
+    researchMs,
+    researchedTermCount,
     videoAnalysisMs: video.geminiMs,
     videoReferenceCount: videoReferences.length,
     unavailableReferences: run.timings.unavailableReferences,
