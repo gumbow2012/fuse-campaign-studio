@@ -3166,13 +3166,24 @@ export default function JewelrySwap() {
     }
   }, [clips]);
 
-  const toggleApproved = useCallback((index: number) => {
-    setApproved((prev) => {
-      const next = new Set(prev);
-      next.has(index) ? next.delete(index) : next.add(index);
-      return next;
-    });
-  }, []);
+  /**
+   * Approval binds to the generation ON SCREEN (§37). Approving a different
+   * revision moves the binding; clicking the already-approved revision clears it.
+   */
+  const toggleApproved = useCallback(
+    (index: number) => {
+      const shown = selectedSwap(index);
+      if (!shown) return;
+      setApprovedGenerationId((prev) => {
+        const next = { ...prev };
+        if (next[index] === shown.id) delete next[index];
+        else next[index] = shown.id;
+        return next;
+      });
+    },
+    [selectedSwap],
+  );
+
 
 
   const swapEntries = useMemo(
