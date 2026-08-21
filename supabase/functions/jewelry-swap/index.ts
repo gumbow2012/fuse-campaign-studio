@@ -3133,6 +3133,11 @@ async function startReconstruction(admin: AdminClient, args: ReconstructionPrep 
           ...falInput,
           feature: "jewelry-swap",
           stage: "reconstruction",
+          // §F2 — these are always equal: an unsupported request throws above,
+          // so no silent downgrade can ever be recorded.
+          requested_resolution: requestedResolution,
+          submitted_resolution: resolution,
+          supported_resolutions: supportedResolutions,
           video_model: videoModel.key,
           references_used: referenceUrls.length,
           references_available: availableUrls.length,
