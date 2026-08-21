@@ -71,6 +71,12 @@ import {
   planCanonicalComponentMasters,
   type CanonicalComponentPlanEntry,
 } from "@/lib/canonicalMasterViews";
+import {
+  canonicalMasterPlanFromCoverage,
+  missingCanonicalMasterViews,
+  planShotCoverage,
+  type ShotCoveragePlan,
+} from "@/lib/shotCoveragePlanner";
 import CanonicalMastersPanel from "@/components/jewelry/CanonicalMastersPanel";
 import CampaignPhotographyPanel, {
   type PhotographyStatus,
@@ -2544,9 +2550,40 @@ export default function JewelrySwap() {
    * per-product-type list exists anywhere. Different products therefore ask for
    * different masters purely from their own evidence.
    */
-  const canonicalMasterPlan: CanonicalMasterPlanEntry[] = useMemo(
-    () => (masterProductLock ? planCanonicalMasterViews(masterProductLock) : []),
-    [masterProductLock],
+  /**
+   * SHOT COVERAGE PLAN (§25). Planning/logic only — it never generates anything.
+   * The shot set is computed from the locked topology, then each planned shot is
+   * marked COVERED (an existing master or a matching uploaded reference already
+   * documents it) or MISSING. Recomputed whenever the lock, the reference set or
+   * the master set changes.
+   */
+  const shotCoveragePlan: ShotCoveragePlan | null = useMemo(() => {
+    if (!masterProductLock) return null;
+    return planShotCoverage({
+      lock: masterProductLock,
+      masters: canonicalMasters,
+      referenceLabels: pieces.flatMap((piece) => [
+        piece.name,
+        ...(piece.roles ?? []),
+      ]).filter(Boolean) as string[],
+    });
+  }, [masterProductLock, canonicalMasters, pieces]);
+
+  /**
+   * D1's view selection now comes from the coverage planner (it replaces the
+   * old basic topology default). `planCanonicalMasterViews` remains the
+   * fallback when no coverage plan could be computed.
+   */
+  const canonicalMasterPlan: CanonicalMasterPlanEntry[] = useMemo(() => {
+    if (shotCoveragePlan) return canonicalMasterPlanFromCoverage(shotCoveragePlan);
+    return masterProductLock ? planCanonicalMasterViews(masterProductLock) : [];
+  }, [shotCoveragePlan, masterProductLock]);
+
+  /** Only the MISSING views are worth rendering when the user presses Generate. */
+  const canonicalMasterTargets: CanonicalMasterPlanEntry[] = useMemo(
+    () =>
+      shotCoveragePlan ? missingCanonicalMasterViews(shotCoveragePlan) : canonicalMasterPlan,
+    [shotCoveragePlan, canonicalMasterPlan],
   );
 
   const canonicalMastersDisabledReason = useMemo(() => {
@@ -2561,12 +2598,12 @@ export default function JewelrySwap() {
    * is never called from analysis, restore, autosave or any effect.
    */
   const generateCanonicalMasters = useCallback(async () => {
-    if (canonicalMastersDisabledReason || !canonicalMasterPlan.length) return;
+    if (canonicalMastersDisabledReason || !canonicalMasterTargets.length) return;
     setMastersBusy(true);
     try {
       const payload = piecePayload();
       await submitWithConcurrency(
-        canonicalMasterPlan,
+        canonicalMasterTargets,
         2,
         async (entry, index) => {
           try {
@@ -2580,7 +2617,7 @@ export default function JewelrySwap() {
               masterProductLock,
               materialAuthority,
               setIndex: index,
-              setSize: canonicalMasterPlan.length,
+              setSize: canonicalMasterTargets.length,
             });
             setCanonicalMasters((prev) => ({
               ...prev,
@@ -2630,7 +2667,7 @@ export default function JewelrySwap() {
       setMastersBusy(false);
     }
   }, [
-    canonicalMasterPlan,
+    canonicalMasterTargets,
     canonicalMastersDisabledReason,
     piecePayload,
     nanoQuality,
@@ -3829,6 +3866,8 @@ export default function JewelrySwap() {
       photographySetVersion: photographyVersion.current,
       // CANONICAL MASTERS — stored per project, tagged with their view.
       canonicalMasters,
+      // SHOT COVERAGE PLAN — planning read-out, recomputed on input change.
+      shotCoveragePlan,
       userLocks,
       analysis,
       analysisKey,
@@ -3876,6 +3915,7 @@ export default function JewelrySwap() {
       photographyRefs,
       campaignPhotographyProfile,
       canonicalMasters,
+      shotCoveragePlan,
       userLocks,
       analysis,
       analysisKey,
@@ -4642,6 +4682,11 @@ export default function JewelrySwap() {
                       <CanonicalMastersPanel
                         plan={canonicalMasterPlan}
                         componentPlan={canonicalComponentPlan}
+                        coverageSummary={
+                          shotCoveragePlan
+                            ? `Coverage — ${shotCoveragePlan.coveredCount} of ${shotCoveragePlan.entries.length} planned shots covered, ${shotCoveragePlan.missingCount} still missing.`
+                            : null
+                        }
                         masters={canonicalMasters}
                         busy={mastersBusy}
                         disabledReason={canonicalMastersDisabledReason}

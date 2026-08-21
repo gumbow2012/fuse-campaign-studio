@@ -22,6 +22,7 @@ export function CanonicalMastersPanel({
   masters,
   busy,
   disabledReason,
+  coverageSummary = null,
   onGenerate,
   onGenerateComponent,
   onValidate,
@@ -32,6 +33,8 @@ export function CanonicalMastersPanel({
   masters: Record<string, CanonicalMaster>;
   busy: boolean;
   disabledReason: string | null;
+  /** Coverage read-out from the shot coverage planner (§25). */
+  coverageSummary?: string | null;
   onGenerate: () => void;
   /** Explicit per-component master generation (§24) — user-triggered only. */
   onGenerateComponent?: (componentId: string) => void;
@@ -67,6 +70,10 @@ export function CanonicalMastersPanel({
             : `Generate ${plan.length || ""} masters`.trim()}
         </Button>
       </div>
+
+      {coverageSummary ? (
+        <p className="mt-2 text-[10px] text-foreground/55">{coverageSummary}</p>
+      ) : null}
 
       {disabledReason ? (
         <p className="mt-2 text-[10px] text-amber-200/80">{disabledReason}</p>
