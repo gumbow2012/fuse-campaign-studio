@@ -4186,6 +4186,43 @@ export default function JewelrySwap() {
                           )}
                         </div>
                       </div>
+                      {/* MATERIAL APPEARANCE AUTHORITY — material realism only.
+                          Auto-derived; this override exists for rare cases. */}
+                      <div className="rounded-xl border border-white/10 bg-black/40 p-2">
+                        <p className="text-[9px] uppercase tracking-[0.14em] text-cyan-200/70">
+                          Material-appearance authority
+                        </p>
+                        <p className="mb-1 text-[9px] text-foreground/50">
+                          Drives metal finish, polish, microtexture, brilliance and fire realism only
+                          — it contributes no geometry, stone layout, setting or product identity.
+                        </p>
+                        <p className="mb-1 text-[9px] text-foreground/70">
+                          {materialAuthority
+                            ? `${materialAuthorityLabel(materialAuthority)} · ${
+                              materialAuthority.source === "user" ? "manual" : "auto"
+                            }`
+                            : "No reference is clearly strongest for material yet."}
+                        </p>
+                        <select
+                          value={materialAuthorityOverride ?? ""}
+                          onChange={(event) =>
+                            setMaterialAuthorityOverride(event.target.value || null)
+                          }
+                          className="w-full rounded-lg border border-white/12 bg-black/50 px-2 py-1 text-[9px] text-foreground/80"
+                        >
+                          <option value="">Auto (FUSE decides)</option>
+                          {pieces.flatMap((piece) =>
+                            piece.urls.map((url, angleIndex) => {
+                              const refId = refIdByUrl.get(url) ?? `REF_${angleIndex + 1}`;
+                              return (
+                                <option key={`material-${url}-${angleIndex}`} value={refId}>
+                                  {refId} · {piece.roles?.[angleIndex] || "unlabeled"}
+                                </option>
+                              );
+                            }),
+                          )}
+                        </select>
+                      </div>
                       <pre className="max-h-64 overflow-auto rounded-xl border border-white/10 bg-black/50 p-2 text-[9px] leading-relaxed text-foreground/70">
                         {JSON.stringify({ knowledgeMap, userConfirmedFacts: userLocks }, null, 2)}
                       </pre>
