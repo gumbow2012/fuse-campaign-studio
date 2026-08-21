@@ -65,6 +65,7 @@ export function CampaignModePanel({
   validatedMasterCount,
   photographySlot,
   mastersSlot,
+  batchesSlot,
 }: {
   hasLock: boolean;
   lockSummary: string | null;
@@ -75,6 +76,8 @@ export function CampaignModePanel({
   validatedMasterCount: number;
   photographySlot: ReactNode;
   mastersSlot: ReactNode;
+  /** BATCH CONTINUATION (§28) — lineage read-out + start/approve controls. */
+  batchesSlot?: ReactNode;
 }) {
   return (
     <div className="space-y-3">
@@ -148,6 +151,7 @@ export function CampaignModePanel({
         />
       </div>
 
+      {batchesSlot}
       {mastersSlot}
       {photographySlot}
 

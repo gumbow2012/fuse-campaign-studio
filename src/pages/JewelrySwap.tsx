@@ -82,6 +82,15 @@ import CanonicalMastersPanel from "@/components/jewelry/CanonicalMastersPanel";
 import CampaignModePanel, {
   type JewelryWorkspaceMode,
 } from "@/components/jewelry/CampaignModePanel";
+import CampaignBatchPanel from "@/components/jewelry/CampaignBatchPanel";
+import {
+  approveCampaignBatch,
+  batchBlockedReason,
+  recordBatchMaster,
+  startCampaignBatch,
+  type CampaignBatch,
+} from "@/lib/campaignBatches";
+
 import CampaignPhotographyPanel, {
 
   type PhotographyStatus,
@@ -925,7 +934,27 @@ export default function JewelrySwap() {
   useEffect(() => {
     canonicalMastersRef.current = canonicalMasters;
   }, [canonicalMasters]);
+  /**
+   * BATCH CONTINUATION (§28). Batches are lineage records ONLY: a new batch
+   * inherits the established Master Product Lock, campaign look, optics profile
+   * and approved plates, so the product is never rediscovered between batches.
+   * Starting/approving a batch generates nothing.
+   */
+  const [batches, setBatches] = useState<CampaignBatch[]>([]);
+  const [activeBatchId, setActiveBatchId] = useState<string | null>(null);
+  /** Read inside generation callbacks without re-binding them. */
+  const activeBatchIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    activeBatchIdRef.current = activeBatchId;
+  }, [activeBatchId]);
+  /** Tag a freshly rendered plate with the open batch (no generation here). */
+  const tagBatchMaster = useCallback((masterKey: string) => {
+    const batchId = activeBatchIdRef.current;
+    if (!batchId) return;
+    setBatches((prev) => recordBatchMaster(prev, batchId, masterKey));
+  }, []);
   const [mastersBusy, setMastersBusy] = useState(false);
+
   const [engineeringOpen, setEngineeringOpen] = useState(false);
   /**
    * A PROPOSAL only. FUSE never splits a card by itself — the user answers this
@@ -2606,6 +2635,44 @@ export default function JewelrySwap() {
   }, [masterProductLock, pieces.length]);
 
   /**
+   * BATCH CONTINUATION (§28). Approved (QC-passed) plates are what a later batch
+   * inherits — no product understanding is recomputed for a new batch.
+   */
+  const approvedMasterKeys = useMemo(
+    () =>
+      Object.values(canonicalMasters)
+        .filter((master) => master.validated || isMasterValidated(master.validation))
+        .map((master) => master.key),
+    [canonicalMasters],
+  );
+
+  const batchBlocked = useMemo(
+    () => batchBlockedReason({ batches, hasLock: Boolean(masterProductLock) }),
+    [batches, masterProductLock],
+  );
+
+  /** Records lineage only — generation still happens via the Generate buttons. */
+  const startNextBatch = useCallback(() => {
+    if (batchBlocked) return;
+    const batch = startCampaignBatch({
+      batches,
+      lockVersion: masterProductLock?.version ?? null,
+      photographySetVersion: photographyVersion.current,
+      hasOpticsProfile: Boolean(opticsProfile),
+      approvedMasterKeys,
+    });
+    setBatches((prev) => [...prev, batch]);
+    setActiveBatchId(batch.id);
+  }, [batchBlocked, batches, masterProductLock, opticsProfile, approvedMasterKeys]);
+
+  const approveBatch = useCallback((batchId: string) => {
+    setBatches((prev) => approveCampaignBatch(prev, batchId));
+    setActiveBatchId((current) => (current === batchId ? null : current));
+  }, []);
+
+
+
+  /**
    * EXPLICIT USER ACTION ONLY. Each planned view is one paid run on the existing
    * Nano path (same endpoint, pricing and bookkeeping as a frame swap), so this
    * is never called from analysis, restore, autosave or any effect.
@@ -2652,6 +2719,9 @@ export default function JewelrySwap() {
                 validationError: null,
               },
             }));
+            // BATCH CONTINUATION (§28) — record which batch produced this plate.
+            tagBatchMaster(entry.key);
+
           } catch (error) {
             setCanonicalMasters((prev) => ({
               ...prev,
@@ -2686,6 +2756,7 @@ export default function JewelrySwap() {
     nanoQuality,
     masterProductLock,
     materialAuthority,
+    tagBatchMaster,
   ]);
 
 
@@ -2744,6 +2815,8 @@ export default function JewelrySwap() {
             validationError: null,
           },
         }));
+        tagBatchMaster(entry.key);
+
       } catch (error) {
         setCanonicalMasters((prev) => ({
           ...prev,
@@ -2776,6 +2849,7 @@ export default function JewelrySwap() {
       nanoQuality,
       masterProductLock,
       materialAuthority,
+      tagBatchMaster,
     ],
   );
 
@@ -3883,6 +3957,9 @@ export default function JewelrySwap() {
       canonicalMasters,
       // SHOT COVERAGE PLAN — planning read-out, recomputed on input change.
       shotCoveragePlan,
+      // BATCH CONTINUATION (§28) — lineage only; survives reopen.
+      batches,
+      activeBatchId,
       userLocks,
       analysis,
       analysisKey,
@@ -3932,6 +4009,8 @@ export default function JewelrySwap() {
       campaignPhotographyProfile,
       canonicalMasters,
       shotCoveragePlan,
+      batches,
+      activeBatchId,
       userLocks,
       analysis,
       analysisKey,
@@ -4038,6 +4117,15 @@ export default function JewelrySwap() {
       setCanonicalMasters(
         (state?.canonicalMasters ?? {}) as Record<string, CanonicalMaster>,
       );
+      // BATCH CONTINUATION (§28) — restored as-is; no batch re-runs anything.
+      const storedBatches = (state?.batches ?? []) as CampaignBatch[];
+      setBatches(storedBatches);
+      setActiveBatchId(
+        storedBatches.find((batch) => batch.id === state?.activeBatchId)?.id ??
+          storedBatches.find((batch) => batch.status === "open")?.id ??
+          null,
+      );
+
       setPhotographyError(null);
       setUserLocks((state?.userLocks ?? []) as UserConfirmedFact[]);
       setAnalysis((state?.analysis ?? null) as JewelryProjectAnalysis | null);
@@ -4171,6 +4259,9 @@ export default function JewelrySwap() {
     setPhotographyStatus("idle");
     setPhotographyError(null);
     setCanonicalMasters({});
+    setBatches([]);
+    setActiveBatchId(null);
+
     setUserLocks([]);
     setAnalysis(null);
     setAnalysisKey(null);
@@ -5644,6 +5735,15 @@ export default function JewelrySwap() {
                   masterCount={Object.keys(canonicalMasters).length}
                   validatedMasterCount={
                     Object.values(canonicalMasters).filter((master) => master.validated).length
+                  }
+                  batchesSlot={
+                    <CampaignBatchPanel
+                      batches={batches}
+                      activeBatchId={activeBatchId}
+                      blockedReason={batchBlocked}
+                      onStartBatch={startNextBatch}
+                      onApproveBatch={approveBatch}
+                    />
                   }
                   mastersSlot={
                     <CanonicalMastersPanel
