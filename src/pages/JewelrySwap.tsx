@@ -4457,6 +4457,9 @@ export default function JewelrySwap() {
       customCameraPrompt,
       animateDuration,
       clipMotions,
+      clipDurations,
+      globalMotion,
+
 
       videos,
     ],
