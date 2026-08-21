@@ -2303,6 +2303,20 @@ async function prepareReconstruction(admin: AdminClient, args: ReconstructionPre
   })();
 
   /**
+   * MASTER PRODUCT LOCK: the same lock the approved frames were generated with.
+   * Sent by the client; otherwise read back from the stored swap payload so the
+   * rebuild can never re-decide the product.
+   */
+  const masterLock = normalizeMasterLock(args.masterProductLock ?? null) ?? (() => {
+    for (const url of referenceUrls) {
+      const stored = normalizeMasterLock(metaByUrl.get(url)?.master_product_lock ?? null);
+      if (stored) return stored;
+    }
+    return null;
+  })();
+
+
+  /**
    * Reconstruct reads the SAME confirmed spec the swap used: resolved from the
    * stored pieces, with any field still missing filled from the stored spec.
    * No field is ever defaulted to a product name here.
