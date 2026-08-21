@@ -2441,6 +2441,14 @@ async function startReconstruction(admin: AdminClient, args: ReconstructionPrep 
           frame_roles: director.frameRoles,
           available_geometry: director.geometry,
           target_spec: specs,
+          // Prompt audit trail: FUSE's version vs the exact text submitted.
+          director_prompt_auto: autoPrompt,
+          director_prompt_final: prompt,
+          director_prompt_user_edited: override !== null,
+          director_prompt_character_count: prompt.length,
+          director_prompt_input_fingerprint:
+            typeof args.inputFingerprint === "string" ? args.inputFingerprint : null,
+
 
         },
       })
