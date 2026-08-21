@@ -63,6 +63,12 @@ import {
   photographySetVersion,
   type CampaignPhotographyProfile,
 } from "@/services/campaignPhotography";
+import {
+  type CanonicalMaster,
+  type CanonicalMasterPlanEntry,
+  planCanonicalMasterViews,
+} from "@/lib/canonicalMasterViews";
+import CanonicalMastersPanel from "@/components/jewelry/CanonicalMastersPanel";
 import CampaignPhotographyPanel, {
   type PhotographyStatus,
 } from "@/components/jewelry/CampaignPhotographyPanel";
@@ -885,6 +891,13 @@ export default function JewelrySwap() {
   const [photographyError, setPhotographyError] = useState<string | null>(null);
   /** The reference set the stored profile was analysed from (recompute guard). */
   const photographyVersion = useRef<string | null>(null);
+  /**
+   * CANONICAL MASTER REFERENCE SET (§22): clean neutral masters of the active
+   * product, keyed by plan key. User-triggered only — generating them spends
+   * credits on the EXISTING Nano path, so nothing here runs automatically.
+   */
+  const [canonicalMasters, setCanonicalMasters] = useState<Record<string, CanonicalMaster>>({});
+  const [mastersBusy, setMastersBusy] = useState(false);
   const [engineeringOpen, setEngineeringOpen] = useState(false);
   /**
    * A PROPOSAL only. FUSE never splits a card by itself — the user answers this
