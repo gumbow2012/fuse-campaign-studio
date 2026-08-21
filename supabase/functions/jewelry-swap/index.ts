@@ -1122,6 +1122,74 @@ function multiSettingBlock(specs: TargetSpec[]): string | null {
   ].join("\n");
 }
 
+/**
+ * Compact PKM / analysis-derived ENGINEERING LOCK: the measurable construction
+ * facts (stone-size class, packing/spacing, exposed metal, module geometry) for
+ * each declared region. Setting-agnostic — a name only appears because it was
+ * resolved from the confirmed spec.
+ */
+function engineeringLockLines(
+  specs: TargetSpec[],
+  product?: GeminiProductAnalysis | null,
+): string | null {
+  const settings = resolvedSettings(specs);
+  const signatures = settingSignatures(product ?? null);
+  const norm = (value: unknown) => String(value ?? "").trim().toLowerCase();
+  const signatureFor = (region: string, type: string) =>
+    signatures.find((sig) => norm(sig.region) === norm(region) && norm(sig.declaredSetting) === norm(type)) ??
+      signatures.find((sig) => norm(sig.region) === norm(region)) ??
+      signatures.find((sig) => norm(sig.declaredSetting) === norm(type)) ??
+      (signatures.length === 1 ? signatures[0] : null);
+
+  const rows: string[] = [];
+  for (const setting of settings) {
+    const described = (() => {
+      const sig = signatureFor(setting.region, setting.type);
+      const text = sig ? describeSignature(sig) : "";
+      return text ? text.slice(0, 320) : "as constructed on the CAD / product references";
+    })();
+    const details = [setting.stone, setting.color, setting.quality].filter(Boolean).join(", ");
+    rows.push(`- ${setting.region} → ${setting.type}${details ? ` (${details})` : ""}: ${described}.`);
+  }
+  if (!rows.length && !signatures.length) return null;
+  if (!rows.length) {
+    return [
+      "ENGINEERING LOCK (observed construction — reproduce exactly):",
+      `- ${describeSignature(signatures[0]).slice(0, 320)}.`,
+    ].join("\n");
+  }
+  return [
+    "ENGINEERING LOCK (per region: stone-size class, packing/spacing, exposed metal, module geometry — reproduce exactly, region by region, no averaging between regions):",
+    ...rows.slice(0, 6),
+  ].join("\n");
+}
+
+/** One-line replacement-mode instruction (compact form of modeBlock). */
+function compactModeLine(mode: ReplacementMode) {
+  if (mode === "macro") {
+    return "MODE: MACRO. Stay at local-detail scale and rebuild only the corresponding detail of the replacement (links, clasp, setting surface) — never reveal the whole product.";
+  }
+  if (mode === "standard") {
+    return "MODE: STANDARD. Rebuild the jewelry region at the source's existing scale and framing.";
+  }
+  return "MODE: AUTO. Silently judge whether SOURCE_FRAME is a normal shot or a macro detail, then rebuild only the correspondingly-scaled region of the replacement.";
+}
+
+/** One-line coverage instruction (compact form of coverageBlock). */
+function compactCoverageLine(coverage: Coverage, mode: ReplacementMode) {
+  if (coverage === "macro" || (coverage === "auto" && mode === "macro")) {
+    return "COVERAGE: MACRO_DETAIL — reproduce the matching replacement detail at the same magnification; do not reveal the whole product.";
+  }
+  if (coverage === "full") {
+    return "COVERAGE: FULL_OBJECT — the complete replacement is visible, fit inside the frame (contain) at its true proportions; do not crop its ends or distort its aspect ratio.";
+  }
+  if (coverage === "partial") {
+    return "COVERAGE: PARTIAL_OBJECT — keep the source's intentional crop; do not reveal the complete piece for readability.";
+  }
+  return "COVERAGE: AUTO — silently classify SOURCE_FRAME as full product, intentionally cropped, or macro detail, and keep the replacement at exactly that coverage.";
+}
+
+
 
 
 
