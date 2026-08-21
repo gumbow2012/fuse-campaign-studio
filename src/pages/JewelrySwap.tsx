@@ -4674,6 +4674,24 @@ export default function JewelrySwap() {
         }
         return valid;
       });
+      // §F7 — restore the global motion default and per-clip duration overrides,
+      // dropping anything outside the provider-supported sets.
+      setGlobalMotion(
+        MOTION_PRESETS.some((option) => option.value === state?.globalMotion)
+          ? String(state?.globalMotion)
+          : DEFAULT_MOTION_PRESET,
+      );
+      setClipDurations(() => {
+        const raw = (state?.clipDurations ?? {}) as Record<string, unknown>;
+        const valid: Record<string, number> = {};
+        for (const [url, value] of Object.entries(raw)) {
+          const seconds = Number(value);
+          if (ANIMATE_DURATION_OPTIONS.includes(seconds as 3)) valid[url] = seconds;
+        }
+        return valid;
+      });
+
+
 
 
       setProjectId(project.id);
