@@ -1388,6 +1388,7 @@ function buildJewelryPrompt(args: {
       const num = cursor++;
       refNums.push(num);
       refLabels.push(`reference image ${num} = ${ref.role ? ref.role : "Unlabeled view"}`);
+      if (materialAuthorityUrl && ref.url === materialAuthorityUrl) materialRefNum = num;
       if (ref.cad) {
         cadActive = true;
         cadRefNums.push(num);
