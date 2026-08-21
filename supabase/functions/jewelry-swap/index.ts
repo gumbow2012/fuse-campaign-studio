@@ -1474,6 +1474,13 @@ function buildJewelryPrompt(args: {
         cadRefNums.length ? ` (image ${refListPhrase(cadRefNums)})` : ""
       }.`
       : null,
+    // MATERIAL APPEARANCE AUTHORITY (§31): material realism only, zero geometry.
+    ...(() => {
+      const materialLines = materialAuthorityPromptLines(args.materialAuthority ?? null, {
+        imageNumber: materialRefNum,
+      });
+      return materialLines.length ? materialLines : [];
+    })(),
     "",
 
     /* 4 — PRESERVE from SOURCE_FRAME (secondary to the replacement). */
