@@ -157,11 +157,13 @@ export function buildConnectedAssetModel(
       connectedParts.add(norm(partB));
 
       const pairWords = `${norm(partA)} ${norm(partB)}`;
-      const match = evidence.find(
-        (entry) => pairWords.includes(entry.kind) || norm(entry.text).split(":")[0]?.length
-          ? pairWords.includes(entry.kind)
-          : false,
-      );
+      const match =
+        evidence.find((entry) => pairWords.includes(entry.kind)) ??
+        evidence.find((entry) => {
+          const label = norm(entry.text).split(":")[0] ?? "";
+          return Boolean(label) && (pairWords.includes(label) || label.includes(norm(partA)) || label.includes(norm(partB)));
+        }) ??
+        null;
       const joint = match?.text ?? null;
       const articulation = describeArticulation(joint ?? pairWords, mechanics);
 
