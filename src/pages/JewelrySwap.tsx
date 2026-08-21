@@ -3825,10 +3825,6 @@ export default function JewelrySwap() {
 
   // Kling 3.0 without audio: $0.112 per second.
   const [animateDuration, setAnimateDuration] = useState<number>(DEFAULT_ANIMATE_DURATION);
-  const animateCostUsd = useMemo(
-    () => 0.112 * animateDuration * approvedFrames.length,
-    [animateDuration, approvedFrames],
-  );
 
   const [animating, setAnimating] = useState(false);
   const [zipping, setZipping] = useState(false);
