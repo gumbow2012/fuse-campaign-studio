@@ -6750,6 +6750,50 @@ export default function JewelrySwap() {
                   </p>
                 </div>
 
+                {/* §F6 — per-clip motion. Kling has no camera-motion field, so each
+                    preset becomes a prompt directive; "Auto" adds none. */}
+                {approvedFrames.length ? (
+                  <div>
+                    <label className="mb-1 block text-[10px] uppercase tracking-[0.14em] text-cyan-200/70">
+                      Motion per clip
+                    </label>
+                    <div className="space-y-1.5">
+                      {approvedFrames.map((frame, index) => (
+                        <div
+                          key={frame.url}
+                          className="flex items-center gap-2 rounded-xl border border-white/10 bg-black/25 px-3 py-2"
+                        >
+                          <span className="w-16 shrink-0 text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
+                            Clip {index + 1}
+                          </span>
+                          <select
+                            value={motionForFrame(frame.url)}
+                            onChange={(event) =>
+                              setClipMotions((prev) => ({
+                                ...prev,
+                                [frame.url]: event.target.value,
+                              }))
+                            }
+                            className={SELECT_CLASS}
+                          >
+                            {MOTION_PRESETS.map((option) => (
+                              <option key={option.value} value={option.value}>
+                                {option.label}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      ))}
+                    </div>
+                    <p className="mt-1 text-[10px] text-muted-foreground">
+                      Auto keeps the current cinematic planning. Motion is written into the clip
+                      direction — Kling has no separate camera-motion setting.
+                    </p>
+                  </div>
+                ) : null}
+
+
+
                 <div>
                   <label className="mb-1 block text-[10px] uppercase tracking-[0.14em] text-cyan-200/70">
                     Camera direction
