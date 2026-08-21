@@ -50,6 +50,7 @@ import {
 
 import {
   buildMasterProductLock,
+  masterLockSummary,
   type MasterProductLock,
 } from "@/lib/masterProductLock";
 import {
@@ -78,7 +79,11 @@ import {
   type ShotCoveragePlan,
 } from "@/lib/shotCoveragePlanner";
 import CanonicalMastersPanel from "@/components/jewelry/CanonicalMastersPanel";
+import CampaignModePanel, {
+  type JewelryWorkspaceMode,
+} from "@/components/jewelry/CampaignModePanel";
 import CampaignPhotographyPanel, {
+
   type PhotographyStatus,
 } from "@/components/jewelry/CampaignPhotographyPanel";
 import FidelityPanel from "@/components/jewelry/FidelityPanel";
@@ -884,6 +889,14 @@ export default function JewelrySwap() {
    * set actually changes; every generation in the project inherits this lock.
    */
   const [masterProductLock, setMasterProductLock] = useState<MasterProductLock | null>(null);
+  /**
+   * WORKSPACE MODE (§26). "swap" is the default and leaves the existing flow
+   * untouched. "campaign" hides the source-cinematography steps and builds
+   * product photography from scratch — SAME lock, photography profile, coverage
+   * planner, Nano master path and validation, no second intelligence stack.
+   */
+  const [workspaceMode, setWorkspaceMode] = useState<JewelryWorkspaceMode>("swap");
+  const isSwapMode = workspaceMode === "swap";
   /**
    * MATERIAL APPEARANCE AUTHORITY (§31) — manual override, advanced only.
    * Empty = FUSE derives it automatically from the existing evidence strengths.
@@ -3852,6 +3865,8 @@ export default function JewelrySwap() {
   const projectState = useMemo<JewelryProjectState>(
     () => ({
       version: JEWELRY_PROJECT_STATE_VERSION,
+      // WORKSPACE MODE (§26) — the project remembers whether it is a swap or a campaign.
+      mode: workspaceMode,
       videoUrl,
       videoPreview: videoUrl,
       meta,
@@ -3912,6 +3927,7 @@ export default function JewelrySwap() {
       pieces,
       knowledgeMap,
       masterProductLock,
+      workspaceMode,
       photographyRefs,
       campaignPhotographyProfile,
       canonicalMasters,
@@ -4010,6 +4026,8 @@ export default function JewelrySwap() {
       setKnowledgeMap((state?.knowledgeMap ?? null) as ProductKnowledgeMap | null);
       // Reuse the stored lock — reopening never recomputes or re-runs Gemini.
       setMasterProductLock((state?.masterProductLock ?? null) as MasterProductLock | null);
+      // Pre-campaign projects have no marker and stay on the unchanged Swap surface.
+      setWorkspaceMode(state?.mode === "campaign" ? "campaign" : "swap");
       // Reuse the stored photography profile — reopening never re-reads the look.
       setPhotographyRefs((state?.photographyReferenceUrls ?? []) as string[]);
       const storedPhotography = (state?.campaignPhotographyProfile ??
@@ -4224,7 +4242,27 @@ export default function JewelrySwap() {
         <header className="mb-6 space-y-1">
           <p className="text-xs font-semibold uppercase tracking-[0.2em] text-cyan-200/70">FUSE Lab</p>
           <div className="flex flex-wrap items-center gap-3">
-            <h1 className="font-heading text-2xl font-semibold text-foreground sm:text-3xl">Jewelry Swap</h1>
+            <h1 className="font-heading text-2xl font-semibold text-foreground sm:text-3xl">
+              {isSwapMode ? "Jewelry Swap" : "Jewelry Campaign"}
+            </h1>
+            {/* MODE SWITCH (§26) — same intelligence stack, two surfaces. */}
+            <div className="flex items-center gap-1 rounded-xl border border-white/12 bg-black/40 p-1">
+              {(["swap", "campaign"] as JewelryWorkspaceMode[]).map((option) => (
+                <button
+                  key={option}
+                  type="button"
+                  onClick={() => setWorkspaceMode(option)}
+                  className={cn(
+                    "rounded-lg px-2.5 py-1 text-[11px] font-medium capitalize transition-colors",
+                    workspaceMode === option
+                      ? "bg-cyan-400/15 text-cyan-100"
+                      : "text-foreground/55 hover:text-foreground/80",
+                  )}
+                >
+                  {option}
+                </button>
+              ))}
+            </div>
             <ProjectPicker
               projects={projects}
               currentId={projectId}
@@ -4237,14 +4275,18 @@ export default function JewelrySwap() {
             />
           </div>
           <p className="max-w-2xl text-sm text-muted-foreground">
-            Upload a clip, replace the jewelry in the frames you pick with your references, then rebuild the
-            same video with the new pieces.
+            {isSwapMode
+              ? "Upload a clip, replace the jewelry in the frames you pick with your references, then rebuild the same video with the new pieces."
+              : "No clip needed — add your product references and FUSE builds clean campaign photography of the same locked piece across the shots it needs."}
           </p>
+
         </header>
 
         <div className="grid gap-5 xl:grid-cols-[minmax(0,420px)_minmax(0,1fr)]">
           {/* LEFT: inputs */}
           <div className="space-y-5">
+            {/* SWAP ONLY — campaign mode has no source cinematography. */}
+            {isSwapMode ? (
             <SectionCard step={1} title="Source video" hint="MP4 or MOV, up to 60 MB.">
               <input
                 ref={videoInputRef}
@@ -4338,6 +4380,7 @@ export default function JewelrySwap() {
               ) : null}
 
             </SectionCard>
+            ) : null}
 
             <SectionCard
               step={3}
@@ -5400,6 +5443,8 @@ export default function JewelrySwap() {
 
             </SectionCard>
 
+            {/* SWAP ONLY — the rebuilt-video step needs the source clip. */}
+            {isSwapMode ? (
             <SectionCard step={5} title="Video generation" hint="Your clip, rebuilt with the new jewelry.">
               <div className="space-y-3">
                 <div className="grid grid-cols-2 gap-2">
@@ -5577,10 +5622,64 @@ export default function JewelrySwap() {
 
               </div>
             </SectionCard>
+            ) : null}
           </div>
 
           {/* RIGHT: frames, review, result */}
           <div className="space-y-5">
+            {/* CAMPAIGN MODE (§26) — reuses the lock, look profile, coverage plan,
+                Nano master path and validation already built for Swap. */}
+            {!isSwapMode ? (
+              <SectionCard
+                step={1}
+                title="Campaign photography"
+                hint="Clean product plates built from the locked product — no source clip involved."
+              >
+                <CampaignModePanel
+                  hasLock={Boolean(masterProductLock)}
+                  lockSummary={masterProductLock ? masterLockSummary(masterProductLock)[0] ?? null : null}
+                  referenceCount={pieces.reduce((total, piece) => total + piece.urls.length, 0)}
+                  hasPhotographyProfile={Boolean(campaignPhotographyProfile)}
+                  coveragePlan={shotCoveragePlan}
+                  masterCount={Object.keys(canonicalMasters).length}
+                  validatedMasterCount={
+                    Object.values(canonicalMasters).filter((master) => master.validated).length
+                  }
+                  mastersSlot={
+                    <CanonicalMastersPanel
+                      plan={canonicalMasterPlan}
+                      componentPlan={canonicalComponentPlan}
+                      coverageSummary={
+                        shotCoveragePlan
+                          ? `Coverage — ${shotCoveragePlan.coveredCount} of ${shotCoveragePlan.entries.length} planned shots covered, ${shotCoveragePlan.missingCount} still missing.`
+                          : null
+                      }
+                      masters={canonicalMasters}
+                      busy={mastersBusy}
+                      disabledReason={canonicalMastersDisabledReason}
+                      onGenerate={() => void generateCanonicalMasters()}
+                      onGenerateComponent={(componentId) =>
+                        void generateComponentMaster(componentId)
+                      }
+                      onValidate={(key) => void validateCanonicalMaster(key)}
+                    />
+                  }
+                  photographySlot={
+                    <CampaignPhotographyPanel
+                      referenceUrls={photographyRefs}
+                      profile={campaignPhotographyProfile}
+                      status={photographyStatus}
+                      error={photographyError}
+                      onAdd={(files) => void addPhotographyRefs(files)}
+                      onRemove={removePhotographyRef}
+                      onAnalyze={() => void analyzePhotography()}
+                    />
+                  }
+                />
+              </SectionCard>
+            ) : null}
+            {/* SWAP ONLY — source frames come from the clip. */}
+            {isSwapMode ? (
             <SectionCard
               step={2}
               title="Source references"
@@ -5710,7 +5809,10 @@ export default function JewelrySwap() {
                 </div>
               )}
             </SectionCard>
+            ) : null}
 
+            {/* SWAP ONLY — frame review belongs to the replacement pipeline. */}
+            {isSwapMode ? (
             <SectionCard step={4} title="Review swaps" hint="Approve the frames that will drive the rebuild.">
               {swapEntries.length ? (
                 <div className="grid gap-3 sm:grid-cols-2">
@@ -6067,7 +6169,10 @@ export default function JewelrySwap() {
                 </div>
               )}
             </SectionCard>
+            ) : null}
 
+            {/* SWAP ONLY — animation runs off approved swapped frames. */}
+            {isSwapMode ? (
             <SectionCard
               step={6}
               title="Animate swapped frames"
@@ -6305,6 +6410,7 @@ export default function JewelrySwap() {
                 )}
               </div>
             </SectionCard>
+            ) : null}
 
             <SectionCard
               step={7}
