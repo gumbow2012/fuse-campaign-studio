@@ -3688,6 +3688,15 @@ export default function JewelrySwap() {
       toast.error(`Your prompt is over the ${promptMaxChars.toLocaleString()}-character limit`);
       return;
     }
+    // §F2 — never submit a resolution the model cannot render.
+    if (!supportedResolutionsFor(videoModel).includes(resolution)) {
+      toast.error(
+        `${resolution.toUpperCase()} is not available for this model — pick ${
+          supportedResolutionsFor(videoModel).map((value) => value.toUpperCase()).join(" or ")
+        }`,
+      );
+      return;
+    }
     setReconstructing(true);
     try {
       const data = await callJewelrySwap<{ generation: SwapGeneration }>({
