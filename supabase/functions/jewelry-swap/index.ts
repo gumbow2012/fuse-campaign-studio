@@ -2274,6 +2274,8 @@ type ReconstructionPrep = {
   opticsControls?: unknown;
   /** MASTER PRODUCT LOCK for this project (falls back to the stored one). */
   masterProductLock?: unknown;
+  /** MATERIAL APPEARANCE AUTHORITY (falls back to the stored one). */
+  materialAuthority?: unknown;
 };
 
 async function prepareReconstruction(admin: AdminClient, args: ReconstructionPrep) {
@@ -2401,6 +2403,21 @@ async function prepareReconstruction(admin: AdminClient, args: ReconstructionPre
     }).join("\n")
     : null;
 
+  /**
+   * MATERIAL APPEARANCE AUTHORITY: the same reference the approved frames used,
+   * read back from the stored swap payload when the client omits it. Material
+   * realism only — it never contributes geometry to the rebuild.
+   */
+  const materialAuthority = normalizeMaterialAuthority(args.materialAuthority ?? null) ?? (() => {
+    for (const url of referenceUrls) {
+      const stored = normalizeMaterialAuthority(
+        metaByUrl.get(url)?.material_appearance_authority ?? null,
+      );
+      if (stored) return stored;
+    }
+    return null;
+  })();
+
   const director = buildSeedanceDirectorPrompt({
     frames,
     specs,
@@ -2410,6 +2427,7 @@ async function prepareReconstruction(admin: AdminClient, args: ReconstructionPre
     extra: args.extraPrompt ?? null,
     opticsText,
     masterLock,
+    materialAuthority,
   });
   return {
     availableUrls,
@@ -2420,6 +2438,7 @@ async function prepareReconstruction(admin: AdminClient, args: ReconstructionPre
     specs,
     director,
     masterLock,
+    materialAuthority,
   };
 }
 
@@ -2466,6 +2485,7 @@ async function startReconstruction(admin: AdminClient, args: ReconstructionPrep 
     specs,
     director,
     masterLock,
+    materialAuthority,
   } = await prepareReconstruction(admin, args);
 
   const autoPrompt = director.prompt;
