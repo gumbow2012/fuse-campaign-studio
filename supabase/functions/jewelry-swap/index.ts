@@ -21,6 +21,16 @@ import {
   videoFallbackUsdPerSecond,
 } from "../_shared/fal.ts";
 import { conditionImageForKling } from "./animateInput.ts";
+import {
+  applyOpticsControls,
+  type DiamondOpticsControls,
+  type DiamondOpticsProfile,
+  mergeFrameOptics,
+  normalizeOpticsProfile,
+  opticsPromptLines,
+  opticsSummaryLine,
+  readOpticsControls,
+} from "../_shared/diamond-optics.ts";
 
 /**
  * Jewelry Swap: sibling of Outfit Swap. Per-frame nano-banana jewelry
@@ -1330,6 +1340,12 @@ function buildJewelryPrompt(args: {
   frameAnalysis?: GeminiFrameAnalysis | null;
   /** Stage-A product-level analysis of the references (advisory). */
   productAnalysis?: GeminiProductAnalysis | null;
+  /** DIAMOND OPTICS: cached analysed profile (global merged with frame refinement). */
+  opticsProfile?: DiamondOpticsProfile | null;
+  /** DIAMOND OPTICS: user Sparkle / Fire / advanced controls (AUTO by default). */
+  opticsControls?: DiamondOpticsControls | null;
+  /** DIAMOND OPTICS: add the temporal-consistency line (video rebuild stage). */
+  opticsTemporal?: boolean;
 }) {
   let cursor = 2; // image 1 is the source frame
   const lines: string[] = [];
@@ -1438,6 +1454,16 @@ function buildJewelryPrompt(args: {
     compactCoverageLine(coverage, mode),
     "",
     "NEGATIVES: no hybrid of old and new piece, no invented stones/prongs/halos/center stones, no resized or recut stones, no regularized layouts, no stone-color drift, no reference background or props leaking in, no reframing, beautification or product-shot conversion, no rotating lettering upright for legibility.",
+    ...(() => {
+      const opticsLines = opticsPromptLines({
+        profile: args.opticsProfile ?? null,
+        controls: args.opticsControls ?? undefined,
+        colorlessStones: colorless,
+        stoneFamily: args.opticsProfile?.stoneFamily ?? null,
+        temporal: args.opticsTemporal === true,
+      });
+      return opticsLines.length ? ["", ...opticsLines] : [];
+    })(),
     correction ? "" : null,
     correction,
     String(args.extra ?? "").trim() ? "" : null,
@@ -1813,6 +1839,8 @@ function buildSeedanceDirectorPrompt(args: {
   duration: number;
   aspectRatio?: string | null;
   extra?: string | null;
+  /** DIAMOND OPTICS: pre-synthesised optical lines (analysed × user controls). */
+  opticsText?: string | null;
 }) {
   const duration = Math.max(1, Math.round(Number(args.duration) || 5));
   const selected = selectDirectorFrames(args.frames);
@@ -1869,6 +1897,7 @@ function buildSeedanceDirectorPrompt(args: {
   const optional = [
     hasStones ? `${DIRECTOR_GEMSTONES}${colorless ? ` ${DIRECTOR_COLORLESS}` : ""}` : null,
     DIRECTOR_METAL,
+    String(args.opticsText ?? "").trim() || null,
     DIRECTOR_OPTICS,
     DIRECTOR_LIGHTING,
     DIRECTOR_TRANSITIONS,
@@ -1926,6 +1955,12 @@ async function startSwapFrame(admin: AdminClient, args: {
   frameAnalysis?: unknown;
   /** Stage-A product analysis of the references (advisory, optional). */
   productAnalysis?: unknown;
+  /** DIAMOND OPTICS: cached global source-clip optics profile. */
+  opticsProfile?: unknown;
+  /** DIAMOND OPTICS: cached per-frame refinement of the global profile. */
+  frameOpticsProfile?: unknown;
+  /** DIAMOND OPTICS: Sparkle / Rainbow-Fire / advanced controls (AUTO default). */
+  opticsControls?: unknown;
   webhookBase: string;
 }) {
   const sourceFrameUrl = String(args.sourceFrameUrl ?? "").trim();
@@ -1943,6 +1978,18 @@ async function startSwapFrame(admin: AdminClient, args: {
   // Stage-A still analysis (advisory). Absent or malformed → deterministic path.
   const frameAnalysis = normalizeFrameAnalysis(args.frameAnalysis ?? null);
   const productAnalysis = normalizeProductAnalysis(args.productAnalysis ?? null);
+
+  // DIAMOND OPTICS (additive): cached analysed optics × user controls. No Gemini
+  // call happens here — moving a slider only re-synthesises these prompt lines.
+  const opticsControls = readOpticsControls(args.opticsControls);
+  const opticsProfile = mergeFrameOptics(
+    normalizeOpticsProfile(args.opticsProfile),
+    normalizeOpticsProfile(args.frameOpticsProfile),
+  );
+  const resolvedOptics = opticsProfile
+    ? applyOpticsControls(opticsProfile, opticsControls)
+    : null;
+
 
   // Deterministic image-payload routing: computed ONCE and used for BOTH the
   // payload order and the prompt's "reference image N = role" numbering so the
@@ -1969,6 +2016,8 @@ async function startSwapFrame(admin: AdminClient, args: {
     macro: args.macro === true,
     frameAnalysis,
     productAnalysis,
+    opticsProfile,
+    opticsControls,
   });
 
 
@@ -2035,6 +2084,17 @@ async function startSwapFrame(admin: AdminClient, args: {
             ? resolution.toLowerCase()
             : null,
           geometry_fidelity: "strict",
+
+          // DIAMOND OPTICS telemetry (analysed × controls, no media).
+          diamond_optics: resolvedOptics
+            ? {
+              version: resolvedOptics.version ?? null,
+              scope: opticsProfile?.scope ?? null,
+              controls: opticsControls,
+              summary: opticsSummaryLine(resolvedOptics),
+            }
+            : null,
+
 
           // Structured product authority resolved for this run (verification hook).
           target_spec: routedPieces.map((piece) => resolveTargetSpec(piece)),
@@ -2131,6 +2191,10 @@ async function startReconstruction(admin: AdminClient, args: {
   aspectRatio?: string;
   generateAudio?: boolean;
   extraPrompt?: string;
+  /** DIAMOND OPTICS: cached global source optics profile. */
+  opticsProfile?: unknown;
+  /** DIAMOND OPTICS: Sparkle / Rainbow-Fire / advanced controls. */
+  opticsControls?: unknown;
   webhookBase: string;
 }) {
   const availableUrls = cleanUrls(args.frameUrls);
@@ -2228,6 +2292,20 @@ async function startReconstruction(admin: AdminClient, args: {
 
   const notes = specPieces.map((piece) => String(piece?.notes ?? "").trim()).filter(Boolean).join(" ");
 
+  // DIAMOND OPTICS (temporal): the cached profile drives one consistent optical
+  // character across the rebuilt clip. Cached only — never a Gemini call here.
+  const reconstructControls = readOpticsControls(args.opticsControls);
+  const reconstructOptics = normalizeOpticsProfile(args.opticsProfile);
+  const opticsText = reconstructOptics
+    ? opticsPromptLines({
+      profile: reconstructOptics,
+      controls: reconstructControls,
+      colorlessStones: isColorlessSpec(specs),
+      stoneFamily: reconstructOptics.stoneFamily ?? null,
+      temporal: true,
+    }).join("\n")
+    : null;
+
   const director = buildSeedanceDirectorPrompt({
     frames,
     specs,
@@ -2235,6 +2313,7 @@ async function startReconstruction(admin: AdminClient, args: {
     duration,
     aspectRatio: args.aspectRatio ?? null,
     extra: args.extraPrompt ?? null,
+    opticsText,
   });
   const prompt = director.prompt;
 
@@ -3192,6 +3271,9 @@ Deno.serve(async (req) => {
         macro: body.macro === true,
         frameAnalysis: body.frameAnalysis ?? null,
         productAnalysis: body.productAnalysis ?? null,
+        opticsProfile: body.opticsProfile ?? null,
+        frameOpticsProfile: body.frameOpticsProfile ?? null,
+        opticsControls: body.opticsControls ?? null,
         webhookBase,
       });
       return json({ generation });
@@ -3207,6 +3289,8 @@ Deno.serve(async (req) => {
         aspectRatio: body.aspectRatio,
         generateAudio: body.generateAudio,
         extraPrompt: body.extraPrompt,
+        opticsProfile: body.opticsProfile ?? null,
+        opticsControls: body.opticsControls ?? null,
         webhookBase,
       });
       return json({ generation });

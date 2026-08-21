@@ -48,11 +48,16 @@ import {
 } from "@/services/storageUpload";
 
 
+import DiamondOpticsPanel from "@/components/jewelry/DiamondOpticsPanel";
 import {
+  analyzeDiamondOptics,
   analyzeJewelryFrames,
   analyzeJewelryIntake,
   recordJewelryTiming,
   submitWithConcurrency,
+  AUTO_OPTICS_CONTROLS,
+  type DiamondOpticsControls,
+  type DiamondOpticsProfile,
   type JewelryIntake,
   type DetectedField,
   type ProductKnowledgeMap,
@@ -835,6 +840,21 @@ export default function JewelrySwap() {
    * USER_CONFIRMED and the analysis may never override them.
    */
   const [userLocks, setUserLocks] = useState<UserConfirmedFact[]>([]);
+
+  /**
+   * DIAMOND OPTICS (additive). The SOURCE clip is analysed ONCE for lighting and
+   * optical response; a selected frame gets a lightweight refinement. Both are
+   * cached server-side, so the Sparkle / Rainbow-Fire sliders only re-synthesise
+   * the prompt — they never trigger a new analysis.
+   */
+  const [opticsProfile, setOpticsProfile] = useState<DiamondOpticsProfile | null>(null);
+  const [frameOptics, setFrameOptics] = useState<Record<number, DiamondOpticsProfile>>({});
+  const [opticsControls, setOpticsControls] = useState<DiamondOpticsControls>({
+    ...AUTO_OPTICS_CONTROLS,
+  });
+  const [opticsStatus, setOpticsStatus] = useState<"idle" | "analyzing" | "ready" | "error">(
+    "idle",
+  );
 
 
   const [dropActive, setDropActive] = useState(false);
@@ -2329,6 +2349,87 @@ export default function JewelrySwap() {
     [analysis, frameIdFor],
   );
 
+  /* ---------------- DIAMOND OPTICS: analysis (cached, never per-slider) --------------- */
+
+  /** Target stone character — WHAT reacts to the analysed source light. */
+  const opticsStoneContext = useCallback(() => {
+    const piece = pieces[0];
+    const stoneColor = String(piece?.stoneColor ?? "").trim();
+    return {
+      productType: String(piece?.type ?? "").trim() || null,
+      stoneType: String(piece?.stone ?? "").trim() || null,
+      stoneColor: stoneColor || null,
+      colorless: /colorless|d-?f|white/i.test(`${stoneColor} ${piece?.quality ?? ""}`),
+      settingSummary:
+        (piece?.settings ?? [])
+          .map((setting) => [setting.type, setting.region].filter(Boolean).join(" ").trim())
+          .filter(Boolean)
+          .join("; ") || null,
+    };
+  }, [pieces]);
+
+  const opticsSourceKey = videoUrl ?? frames[0]?.url ?? null;
+  const opticsRequestedFor = useRef<string | null>(null);
+
+  const runOpticsAnalysis = useCallback(async () => {
+    if (!opticsSourceKey) return;
+    setOpticsStatus("analyzing");
+    try {
+      const result = await analyzeDiamondOptics({
+        mode: "global",
+        sourceVideoUrl: videoUrl,
+        // Fallback when the clip itself is not reachable: a few source frames
+        // still carry the scene's lighting behaviour.
+        sourceFrameUrls: videoUrl ? [] : frames.slice(0, 3).map((frame) => frame.url),
+        stoneContext: opticsStoneContext(),
+      });
+      setOpticsProfile(result.profile ?? null);
+      setFrameOptics({});
+      setOpticsStatus(result.profile ? "ready" : "error");
+    } catch {
+      setOpticsStatus("error");
+    }
+  }, [opticsSourceKey, videoUrl, frames, opticsStoneContext]);
+
+  useEffect(() => {
+    if (!opticsSourceKey) {
+      opticsRequestedFor.current = null;
+      setOpticsProfile(null);
+      setFrameOptics({});
+      setOpticsStatus("idle");
+      return;
+    }
+    if (opticsRequestedFor.current === opticsSourceKey) return;
+    opticsRequestedFor.current = opticsSourceKey;
+    void runOpticsAnalysis();
+  }, [opticsSourceKey, runOpticsAnalysis]);
+
+  /** Lightweight per-frame refinement of the global profile (cached server-side). */
+  const ensureFrameOptics = useCallback(
+    async (frameIndex: number): Promise<DiamondOpticsProfile | null> => {
+      const cached = frameOptics[frameIndex];
+      if (cached) return cached;
+      const frame = frames[frameIndex];
+      if (!frame || !opticsProfile) return null;
+      try {
+        const result = await analyzeDiamondOptics({
+          mode: "frame",
+          frameUrl: frame.url,
+          globalProfile: opticsProfile,
+          stoneContext: opticsStoneContext(),
+        });
+        if (result.profile) {
+          setFrameOptics((prev) => ({ ...prev, [frameIndex]: result.profile! }));
+          return result.profile;
+        }
+      } catch {
+        // Refinement is advisory — the global profile still drives the prompt.
+      }
+      return null;
+    },
+    [frameOptics, frames, opticsProfile, opticsStoneContext],
+  );
+
 
   const swapFrame = useCallback(
     async (
@@ -2350,6 +2451,8 @@ export default function JewelrySwap() {
       const mode: ReplacementMode = options?.mode ?? frameMode[frameIndex] ?? "auto";
       const coverage: Coverage = options?.coverage ?? frameCoverage[frameIndex] ?? "auto";
       const quality: NanoQuality = options?.quality ?? nanoQuality;
+      // Cached optics: the global source profile plus this frame's refinement.
+      const frameOpticsProfile = opticsProfile ? await ensureFrameOptics(frameIndex) : null;
       const data = await callJewelrySwap<{ generation: JewelryGeneration }>({
         action: "swap_frame",
         sourceFrameUrl: frame.url,
@@ -2383,6 +2486,10 @@ export default function JewelrySwap() {
           options?.productAnalysis !== undefined
             ? options.productAnalysis
             : analysis?.productAnalysis ?? null,
+        // DIAMOND OPTICS — analysed source optics + user controls (no rerun).
+        opticsProfile,
+        frameOpticsProfile,
+        opticsControls,
       });
       if (imageModel === "nb2") {
         setAltSwaps((prev) => ({ ...prev, [frameIndex]: data.generation }));
@@ -2408,7 +2515,11 @@ export default function JewelrySwap() {
       frameAnalysisFor,
       analysis,
       nanoQuality,
+      opticsProfile,
+      opticsControls,
+      ensureFrameOptics,
     ],
+
 
   );
 
@@ -2596,6 +2707,9 @@ export default function JewelrySwap() {
         preserveAudio,
         generateAudio: preserveAudio,
         extraPrompt,
+        // DIAMOND OPTICS: one consistent optical character across the rebuild.
+        opticsProfile,
+        opticsControls,
       });
       // Non-blocking: each click is its own record, so several can run at once.
       setVideos((prev) => [data.generation, ...prev]);
@@ -2605,7 +2719,18 @@ export default function JewelrySwap() {
     } finally {
       setReconstructing(false);
     }
-  }, [approvedUrls, piecePayload, videoModel, resolution, preserveAudio, meta, extraPrompt, videoDuration]);
+  }, [
+    approvedUrls,
+    piecePayload,
+    videoModel,
+    resolution,
+    preserveAudio,
+    meta,
+    extraPrompt,
+    videoDuration,
+    opticsProfile,
+    opticsControls,
+  ]);
 
   /** Stops tracking and frees the UI, even if the provider job keeps running. */
   const cancelVideo = useCallback(async () => {
@@ -3994,6 +4119,15 @@ export default function JewelrySwap() {
                   className="min-h-[70px] rounded-xl border-white/12 bg-black/40 text-xs"
                 />
               </div>
+
+              <DiamondOpticsPanel
+                controls={opticsControls}
+                onChange={setOpticsControls}
+                profile={opticsProfile}
+                status={opticsStatus}
+                onAnalyze={runOpticsAnalysis}
+              />
+
 
             </SectionCard>
 

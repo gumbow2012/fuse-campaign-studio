@@ -1047,6 +1047,154 @@ export async function validateAgainstKnowledgeMap(
   return (data?.validation ?? null) as JewelryValidationReport | null;
 }
 
+/* ------------------------------------------------------------------ *
+ * DIAMOND OPTICS PROFILE (additive, analysis only)
+ * ------------------------------------------------------------------ *
+ * The SOURCE clip is the authority for the SCENE's light; the REPLACEMENT
+ * references are the authority for how the target stones respond. The analysed
+ * profile is cached server-side, so moving the Sparkle / Rainbow-Fire sliders
+ * only re-synthesises prompt lines — it never re-runs analysis.
+ */
+
+export type OpticsHueDistribution = {
+  red?: number;
+  orange?: number;
+  yellow?: number;
+  green?: number;
+  cyan?: number;
+  blue?: number;
+  violet?: number;
+};
+
+export type DiamondOpticsProfile = {
+  version?: string;
+  scope?: "global" | "frame";
+  stoneFamily?: string | null;
+  brilliance?: {
+    intensity?: number;
+    whiteHighlightRatio?: number;
+    peakBrightness?: number;
+    contrast?: number;
+  };
+  fire?: {
+    intensity?: number;
+    rainbowRatio?: number;
+    saturation?: number;
+    hueDistribution?: OpticsHueDistribution;
+  };
+  glints?: {
+    density?: number;
+    /** Normalized to visible stone diameter (0.22 = 0.22× a stone), never pixels. */
+    averageSize?: number;
+    maximumSize?: number;
+    /** Fraction of the visible stone field actively sparkling at one instant. */
+    spatialCoverage?: number;
+    sharpness?: number;
+    persistence?: number;
+  };
+  bloom?: { intensity?: number; radius?: number };
+  starburst?: {
+    frequency?: number;
+    intensity?: number;
+    averageRayLength?: number;
+    maximumRayLength?: number;
+  };
+  lighting?: {
+    dominantDirection?: string | null;
+    hardness?: number;
+    exposure?: number;
+    contrast?: number;
+    environmentTemperature?: string | null;
+  };
+  lensFlare?: { presence?: number; style?: string | null };
+  confidence?: number;
+  notes?: string[];
+};
+
+/** AUTO reproduces the analysed source optics; a number is a 0–100 multiplier. */
+export type OpticsControl = "auto" | number;
+
+export type DiamondOpticsControls = {
+  sparkle: OpticsControl;
+  fire: OpticsControl;
+  whiteBrilliance: OpticsControl;
+  glintSize: OpticsControl;
+  glintCoverage: OpticsControl;
+  bloom: OpticsControl;
+  starburst: OpticsControl;
+  fireSaturation: OpticsControl;
+};
+
+export const AUTO_OPTICS_CONTROLS: DiamondOpticsControls = {
+  sparkle: "auto",
+  fire: "auto",
+  whiteBrilliance: "auto",
+  glintSize: "auto",
+  glintCoverage: "auto",
+  bloom: "auto",
+  starburst: "auto",
+  fireSaturation: "auto",
+};
+
+export function opticsControlsAreAuto(controls: DiamondOpticsControls) {
+  return Object.values(controls).every((value) => value === "auto");
+}
+
+export type DiamondOpticsResult = {
+  cached: boolean;
+  mode: "global" | "frame";
+  fingerprint: string;
+  version: string;
+  analyzedAt?: string | null;
+  profile: DiamondOpticsProfile | null;
+  timings?: Record<string, unknown>;
+};
+
+/**
+ * Analyse the SOURCE optics once (`mode: "global"`), then optionally refine a
+ * selected frame (`mode: "frame"`, passing the global profile).
+ */
+export async function analyzeDiamondOptics(
+  args: {
+    mode?: "global" | "frame";
+    sourceVideoUrl?: string | null;
+    sourceFrameUrls?: string[];
+    frameUrl?: string | null;
+    globalProfile?: DiamondOpticsProfile | null;
+    stoneContext?: {
+      productType?: string | null;
+      stoneType?: string | null;
+      stoneColor?: string | null;
+      colorless?: boolean;
+      settingSummary?: string | null;
+    };
+  },
+  signal?: AbortSignal,
+): Promise<DiamondOpticsResult> {
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+
+  const response = await fetch(`${SUPABASE_URL}/functions/v1/analyze-diamond-optics`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      apikey: SUPABASE_PUBLISHABLE_KEY,
+      Authorization: `Bearer ${session?.access_token ?? SUPABASE_PUBLISHABLE_KEY}`,
+    },
+    body: JSON.stringify({
+      mode: args.mode ?? "global",
+      sourceVideoUrl: args.sourceVideoUrl ?? null,
+      sourceFrameUrls: args.sourceFrameUrls ?? [],
+      frameUrl: args.frameUrl ?? null,
+      globalProfile: args.globalProfile ?? null,
+      stoneContext: args.stoneContext ?? {},
+    }),
+    signal,
+  });
+
+  return await readJsonResponse<DiamondOpticsResult>(response, "Diamond optics analysis");
+}
 
 
 /** Call the jewelry-swap edge function with a just-in-time session token. */
