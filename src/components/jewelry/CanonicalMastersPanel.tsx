@@ -21,12 +21,15 @@ export function CanonicalMastersPanel({
   busy,
   disabledReason,
   onGenerate,
+  onValidate,
 }: {
   plan: CanonicalMasterPlanEntry[];
   masters: Record<string, CanonicalMaster>;
   busy: boolean;
   disabledReason: string | null;
   onGenerate: () => void;
+  /** Analysis-only validation of one master (§23) — never regenerates. */
+  onValidate: (key: string) => void;
 }) {
   const entries = Object.values(masters);
   const running = entries.filter((m) => m.status === "queued" || m.status === "running").length;
@@ -100,7 +103,75 @@ export function CanonicalMastersPanel({
                   <p className="mt-1 line-clamp-2 text-[9px] text-red-300/80">{master.error}</p>
                 ) : null}
                 {master?.status === "complete" ? (
-                  <p className="mt-1 text-[9px] text-foreground/35">Not yet validated</p>
+                  <div className="mt-1 space-y-1">
+                    <div className="flex items-center justify-between gap-2">
+                      <span
+                        className={
+                          master.validated
+                            ? "text-[9px] font-semibold tracking-[0.12em] text-emerald-200/90"
+                            : "text-[9px] text-foreground/40"
+                        }
+                      >
+                        {master.validated
+                          ? "VALIDATED"
+                          : master.validationState === "checking"
+                            ? "Validating…"
+                            : master.validation
+                              ? "REJECTED — not validated"
+                              : "Not yet validated"}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => onValidate(entry.key)}
+                        disabled={master.validationState === "checking"}
+                        className="rounded-md border border-white/12 px-1.5 py-0.5 text-[9px] text-foreground/75 transition-colors hover:border-cyan-200/50 hover:text-cyan-100 disabled:opacity-40"
+                      >
+                        {master.validation ? "Re-validate" : "Validate"}
+                      </button>
+                    </div>
+                    {master.validationState === "failed" ? (
+                      <p className="text-[9px] text-amber-200/80">
+                        {master.validationError || "Validation unavailable right now."}
+                      </p>
+                    ) : null}
+                    {master.validationState === "skipped" ? (
+                      <p className="text-[9px] text-foreground/40">
+                        No locked product details to compare against yet.
+                      </p>
+                    ) : null}
+                    {master.validation ? (
+                      <div className="space-y-0.5">
+                        {master.validation.rows.map((row) => (
+                          <div
+                            key={row.dimension}
+                            className="flex items-baseline justify-between gap-2"
+                          >
+                            <span className="text-[9px] text-foreground/45">{row.dimension}</span>
+                            <span
+                              className={
+                                row.verdict === "PASS"
+                                  ? "text-[9px] text-emerald-200/90"
+                                  : row.verdict === "WARNING"
+                                    ? "text-[9px] text-amber-200/90"
+                                    : "text-[9px] text-red-300"
+                              }
+                              title={row.note ?? undefined}
+                            >
+                              {row.verdict}
+                            </span>
+                          </div>
+                        ))}
+                        {master.validation.summary ? (
+                          <p className="pt-0.5 text-[9px] leading-relaxed text-foreground/40">
+                            {master.validation.summary}
+                          </p>
+                        ) : null}
+                        <p className="text-[9px] text-foreground/30">
+                          Analysis only — nothing was regenerated.
+                        </p>
+                      </div>
+                    ) : null}
+                  </div>
                 ) : null}
               </div>
             );
