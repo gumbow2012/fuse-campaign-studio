@@ -1089,11 +1089,14 @@ export default function JewelrySwap() {
     setFrames([]);
     setSwaps({});
     setAltSwaps({});
+    setFrameGenerations({});
+    setFrameRevision({});
     setChosenModel({});
     setFramePreferredRole({});
     setFrameReason({});
     setFrameMode({});
-    setApproved(new Set());
+    setApprovedGenerationId({});
+
     setSelectedFrames(new Set());
     setSourceNotice(null);
   }, []);
