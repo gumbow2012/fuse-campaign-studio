@@ -3731,6 +3731,8 @@ async function startAnimateFrame(admin: AdminClient, args: {
   imageUrl: string;
   /** Client-conditioned (<=9.5 MB) copy of the frame; the 4K original stays the approved asset. */
   animateInputUrl?: unknown;
+  /** §F4 — per-clip duration in seconds; must be one of ANIMATE_DURATIONS. */
+  durationSeconds?: unknown;
   frameIndex?: number;
   frameTime?: number;
   /** "auto" | a shot key | "custom" */
@@ -3745,6 +3747,8 @@ async function startAnimateFrame(admin: AdminClient, args: {
   const imageUrl = String(args.imageUrl ?? "").trim();
   if (!imageUrl) throw new Error("A swapped frame is required");
   const clientInputUrl = String(args.animateInputUrl ?? "").trim();
+  // §F4 — throws (never clamps) when the requested duration is unsupported.
+  const requestedDuration = resolveAnimateDuration(args.durationSeconds);
 
 
   const videoModel = getVideoModel(ANIMATE_MODEL_KEY);
@@ -3788,7 +3792,7 @@ async function startAnimateFrame(admin: AdminClient, args: {
   try {
     const estimatedCostUsd = await estimateUsd({
       endpointId,
-      seconds: ANIMATE_DURATION,
+      seconds: requestedDuration,
       fallbackUsdPerSecond: videoFallbackUsdPerSecond(videoModel, false) ?? null,
     });
 
@@ -3804,7 +3808,7 @@ async function startAnimateFrame(admin: AdminClient, args: {
     const falInput = buildVideoModelInput(ANIMATE_MODEL_KEY, {
       imageUrl: conditioned.url,
       prompt,
-      duration: ANIMATE_DURATION,
+      duration: requestedDuration,
       generateAudio: false,
     });
 
@@ -3826,6 +3830,10 @@ async function startAnimateFrame(admin: AdminClient, args: {
           stage: "frame_animation",
           video_model: ANIMATE_MODEL_KEY,
           resolution: "1080p",
+          // §F4 — requested === submitted, persisted for audit.
+          requested_duration_seconds: requestedDuration,
+          submitted_duration_seconds: Number(falInput.duration ?? requestedDuration),
+          supported_duration_seconds: [...ANIMATE_DURATIONS],
           source_frame_url: imageUrl,
           animate_input_url: conditioned.url,
           animate_input_conditioned: conditioned.conditioned,
@@ -4302,6 +4310,7 @@ Deno.serve(async (req) => {
         userId: user.id,
         imageUrl: body.imageUrl ?? body.sourceFrameUrl,
         animateInputUrl: body.animateInputUrl ?? null,
+        durationSeconds: body.durationSeconds ?? null,
         frameIndex: body.frameIndex,
         frameTime: body.frameTime,
         cameraDirection: body.cameraDirection,
