@@ -178,6 +178,14 @@ type JewelryPiece = {
     quality?: string | null;
     settings?: { type?: string | null; region?: string | null }[] | null;
   } | null;
+  /**
+   * Provenance per field as recorded by the intake UI
+   * ("user_override" | "gemini_detected" | "gemini_suggested" | "unknown").
+   * A field the user never set is resolved from `detected` even when the card
+   * still shows a default control value.
+   */
+  sources?: Record<string, string> | null;
+
 
 
 };
