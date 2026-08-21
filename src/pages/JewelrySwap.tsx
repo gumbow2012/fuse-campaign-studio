@@ -4618,6 +4618,17 @@ export default function JewelrySwap() {
           ? Number(state?.animateDuration)
           : DEFAULT_ANIMATE_DURATION,
       );
+      // §F6 — restore per-clip motion, dropping any preset no longer supported.
+      setClipMotions(() => {
+        const raw = (state?.clipMotions ?? {}) as Record<string, unknown>;
+        const valid: Record<string, string> = {};
+        for (const [url, value] of Object.entries(raw)) {
+          const preset = String(value ?? "");
+          if (MOTION_PRESETS.some((option) => option.value === preset)) valid[url] = preset;
+        }
+        return valid;
+      });
+
 
       setProjectId(project.id);
       setProjectName(project.name);
