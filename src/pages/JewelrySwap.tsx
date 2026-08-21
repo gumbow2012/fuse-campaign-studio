@@ -914,6 +914,12 @@ export default function JewelrySwap() {
    */
   const [masterProductLock, setMasterProductLock] = useState<MasterProductLock | null>(null);
   /**
+   * CONNECTED PRODUCT SYSTEMS (§30). Physical relationships between connected
+   * parts of THIS product, derived from the lock's own component topology.
+   * Data only in this commit — recomputed solely when the lock/topology changes.
+   */
+  const [connectedAssetModel, setConnectedAssetModel] = useState<ConnectedAssetModel | null>(null);
+  /**
    * WORKSPACE MODE (§26). "swap" is the default and leaves the existing flow
    * untouched. "campaign" hides the source-cinematography steps and builds
    * product photography from scratch — SAME lock, photography profile, coverage
