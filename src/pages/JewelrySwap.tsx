@@ -3322,6 +3322,9 @@ export default function JewelrySwap() {
       // A regeneration APPENDS a revision (§36) and never unapproves the
       // revision the user already approved (§37).
       recordFrameGeneration(data.generation);
+      // §E5 — remember WHICH lock version produced this generation.
+      stampGeneration(data.generation?.id);
+
       if (imageModel !== "nb2") {
         // Remember the quality this frame actually ran at so Regenerate defaults to it.
         setFrameQuality((prev) => ({ ...prev, [frameIndex]: quality }));
