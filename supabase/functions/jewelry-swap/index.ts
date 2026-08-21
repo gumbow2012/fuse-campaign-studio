@@ -1454,6 +1454,16 @@ function buildJewelryPrompt(args: {
     compactCoverageLine(coverage, mode),
     "",
     "NEGATIVES: no hybrid of old and new piece, no invented stones/prongs/halos/center stones, no resized or recut stones, no regularized layouts, no stone-color drift, no reference background or props leaking in, no reframing, beautification or product-shot conversion, no rotating lettering upright for legibility.",
+    ...(() => {
+      const opticsLines = opticsPromptLines({
+        profile: args.opticsProfile ?? null,
+        controls: args.opticsControls ?? undefined,
+        colorlessStones: colorless,
+        stoneFamily: args.opticsProfile?.stoneFamily ?? null,
+        temporal: args.opticsTemporal === true,
+      });
+      return opticsLines.length ? ["", ...opticsLines] : [];
+    })(),
     correction ? "" : null,
     correction,
     String(args.extra ?? "").trim() ? "" : null,
