@@ -2349,6 +2349,87 @@ export default function JewelrySwap() {
     [analysis, frameIdFor],
   );
 
+  /* ---------------- DIAMOND OPTICS: analysis (cached, never per-slider) --------------- */
+
+  /** Target stone character — WHAT reacts to the analysed source light. */
+  const opticsStoneContext = useCallback(() => {
+    const piece = pieces[0];
+    const stoneColor = String(piece?.stoneColor ?? "").trim();
+    return {
+      productType: String(piece?.type ?? "").trim() || null,
+      stoneType: String(piece?.stone ?? "").trim() || null,
+      stoneColor: stoneColor || null,
+      colorless: /colorless|d-?f|white/i.test(`${stoneColor} ${piece?.quality ?? ""}`),
+      settingSummary:
+        (piece?.settings ?? [])
+          .map((setting) => [setting.type, setting.region].filter(Boolean).join(" ").trim())
+          .filter(Boolean)
+          .join("; ") || null,
+    };
+  }, [pieces]);
+
+  const opticsSourceKey = videoUrl ?? frames[0]?.url ?? null;
+  const opticsRequestedFor = useRef<string | null>(null);
+
+  const runOpticsAnalysis = useCallback(async () => {
+    if (!opticsSourceKey) return;
+    setOpticsStatus("analyzing");
+    try {
+      const result = await analyzeDiamondOptics({
+        mode: "global",
+        sourceVideoUrl: videoUrl,
+        // Fallback when the clip itself is not reachable: a few source frames
+        // still carry the scene's lighting behaviour.
+        sourceFrameUrls: videoUrl ? [] : frames.slice(0, 3).map((frame) => frame.url),
+        stoneContext: opticsStoneContext(),
+      });
+      setOpticsProfile(result.profile ?? null);
+      setFrameOptics({});
+      setOpticsStatus(result.profile ? "ready" : "error");
+    } catch {
+      setOpticsStatus("error");
+    }
+  }, [opticsSourceKey, videoUrl, frames, opticsStoneContext]);
+
+  useEffect(() => {
+    if (!opticsSourceKey) {
+      opticsRequestedFor.current = null;
+      setOpticsProfile(null);
+      setFrameOptics({});
+      setOpticsStatus("idle");
+      return;
+    }
+    if (opticsRequestedFor.current === opticsSourceKey) return;
+    opticsRequestedFor.current = opticsSourceKey;
+    void runOpticsAnalysis();
+  }, [opticsSourceKey, runOpticsAnalysis]);
+
+  /** Lightweight per-frame refinement of the global profile (cached server-side). */
+  const ensureFrameOptics = useCallback(
+    async (frameIndex: number): Promise<DiamondOpticsProfile | null> => {
+      const cached = frameOptics[frameIndex];
+      if (cached) return cached;
+      const frame = frames[frameIndex];
+      if (!frame || !opticsProfile) return null;
+      try {
+        const result = await analyzeDiamondOptics({
+          mode: "frame",
+          frameUrl: frame.url,
+          globalProfile: opticsProfile,
+          stoneContext: opticsStoneContext(),
+        });
+        if (result.profile) {
+          setFrameOptics((prev) => ({ ...prev, [frameIndex]: result.profile! }));
+          return result.profile;
+        }
+      } catch {
+        // Refinement is advisory — the global profile still drives the prompt.
+      }
+      return null;
+    },
+    [frameOptics, frames, opticsProfile, opticsStoneContext],
+  );
+
 
   const swapFrame = useCallback(
     async (
