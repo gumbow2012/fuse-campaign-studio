@@ -3872,6 +3872,8 @@ export default function JewelrySwap() {
         frameTime: frame.time,
         cameraDirection: position.direction ?? cameraDirection,
         customPrompt: customCameraPrompt.trim() || null,
+        // §F6 — this clip's own motion preset ("auto" reproduces prior output).
+        motionPreset: position.motionPreset ?? motionForFrame(frame.url),
         setIndex: position.setIndex,
         setSize: position.setSize,
         pieceTypes,
@@ -3879,7 +3881,8 @@ export default function JewelrySwap() {
 
       setVideos((prev) => [generation, ...prev]);
     },
-    [animateDuration, cameraDirection, customCameraPrompt, pieceTypes],
+    [animateDuration, cameraDirection, customCameraPrompt, motionForFrame, pieceTypes],
+
   );
 
   const animateApproved = useCallback(async () => {
