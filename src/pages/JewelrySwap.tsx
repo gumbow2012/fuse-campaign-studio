@@ -4099,6 +4099,8 @@ export default function JewelrySwap() {
       // BATCH CONTINUATION (§28) — lineage only; survives reopen.
       batches,
       activeBatchId,
+      // MATCHED PAIRS (§29) — counterpart plates linked to their source plate.
+      matchedPairs: matchedPairs as unknown as Record<string, unknown>,
       userLocks,
       analysis,
       analysisKey,
@@ -4147,6 +4149,7 @@ export default function JewelrySwap() {
       photographyRefs,
       campaignPhotographyProfile,
       canonicalMasters,
+      matchedPairs,
       shotCoveragePlan,
       batches,
       activeBatchId,
@@ -4256,6 +4259,8 @@ export default function JewelrySwap() {
       setCanonicalMasters(
         (state?.canonicalMasters ?? {}) as Record<string, CanonicalMaster>,
       );
+      // MATCHED PAIRS (§29) — restored as-is; reopening re-renders nothing.
+      setMatchedPairs((state?.matchedPairs ?? {}) as Record<string, MatchedPair>);
       // BATCH CONTINUATION (§28) — restored as-is; no batch re-runs anything.
       const storedBatches = (state?.batches ?? []) as CampaignBatch[];
       setBatches(storedBatches);
