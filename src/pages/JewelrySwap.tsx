@@ -3258,6 +3258,9 @@ export default function JewelrySwap() {
         // MASTER PRODUCT LOCK — the product identity every frame inherits.
         masterProductLock,
         projectId: activeProjectIdRef.current,
+        // §E2 — VALIDATED canonical/component masters are extra reference
+        // candidates (below the originals and CAD). Unvalidated ones are ignored.
+        canonicalMasters: canonicalMastersRef.current,
         // MATERIAL APPEARANCE AUTHORITY — material realism only, zero geometry.
         materialAuthority,
       });
