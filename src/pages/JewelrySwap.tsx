@@ -82,6 +82,15 @@ import CanonicalMastersPanel from "@/components/jewelry/CanonicalMastersPanel";
 import CampaignModePanel, {
   type JewelryWorkspaceMode,
 } from "@/components/jewelry/CampaignModePanel";
+import CampaignBatchPanel from "@/components/jewelry/CampaignBatchPanel";
+import {
+  approveCampaignBatch,
+  batchBlockedReason,
+  recordBatchMaster,
+  startCampaignBatch,
+  type CampaignBatch,
+} from "@/lib/campaignBatches";
+
 import CampaignPhotographyPanel, {
 
   type PhotographyStatus,
