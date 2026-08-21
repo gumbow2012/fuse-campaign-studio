@@ -3363,6 +3363,10 @@ export default function JewelrySwap() {
       swaps,
       altSwaps,
       chosenModel,
+      frameGenerations,
+      frameRevision,
+      approvedGenerationId,
+
       framePreferredRole,
       frameReason,
       frameMode,
