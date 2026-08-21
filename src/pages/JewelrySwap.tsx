@@ -3892,7 +3892,7 @@ export default function JewelrySwap() {
   // Kling 3.0 without audio: $0.112 per second — summed over each clip's own length.
   const animateCostUsd = useMemo(
     () =>
-      approvedFrames.reduce((total, frame) => total + 0.112 * durationForFrame(frame.url), 0),
+      approvedFrames.reduce((total, frame) => total + 0.112 * durationForFrame(frame), 0),
     [approvedFrames, durationForFrame],
   );
 
@@ -3935,13 +3935,13 @@ export default function JewelrySwap() {
         imageUrl: frame.url,
         animateInputUrl: conditioned.conditioned ? conditioned.url : null,
         // §F4/§F7 — per-clip override wins over the global default; submitted as-is.
-        durationSeconds: position.durationSeconds ?? durationForFrame(frame.url),
+        durationSeconds: position.durationSeconds ?? durationForFrame(frame),
         frameIndex: frame.index,
         frameTime: frame.time,
         cameraDirection: position.direction ?? cameraDirection,
         customPrompt: customCameraPrompt.trim() || null,
         // §F6 — this clip's own motion preset ("auto" reproduces prior output).
-        motionPreset: position.motionPreset ?? motionForFrame(frame.url),
+        motionPreset: position.motionPreset ?? motionForFrame(frame),
         setIndex: position.setIndex,
         setSize: position.setSize,
         pieceTypes,
@@ -6902,7 +6902,7 @@ export default function JewelrySwap() {
                               Clip {index + 1}
                             </span>
                             <select
-                              value={String(durationForFrame(frame.url))}
+                              value={String(durationForFrame(frame))}
                               onChange={(event) =>
                                 setClipDurations((prev) => ({
                                   ...prev,
@@ -6918,7 +6918,7 @@ export default function JewelrySwap() {
                               ))}
                             </select>
                             <select
-                              value={motionForFrame(frame.url)}
+                              value={motionForFrame(frame)}
                               onChange={(event) =>
                                 setClipMotions((prev) => ({
                                   ...prev,
