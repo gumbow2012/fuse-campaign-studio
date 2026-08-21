@@ -5863,7 +5863,33 @@ export default function JewelrySwap() {
                         {costPreview(swap.estimatedCredits, swap.estimatedCostUsd)}
                       </span>
                     </div>
+                    {revision.total > 1 && (
+                      <div className="flex items-center justify-between rounded-xl border border-white/10 bg-black/30 px-3 py-1.5">
+                        <button
+                          type="button"
+                          onClick={() => stepRevision(index, -1)}
+                          disabled={revision.current === 0}
+                          className="px-1 text-white/70 disabled:opacity-30"
+                          aria-label="Previous version"
+                        >
+                          ‹
+                        </button>
+                        <span className="text-[10px] uppercase tracking-[0.18em] text-white/55">
+                          Version {revision.position} / {revision.total}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => stepRevision(index, 1)}
+                          disabled={revision.current >= revision.total - 1}
+                          className="px-1 text-white/70 disabled:opacity-30"
+                          aria-label="Next version"
+                        >
+                          ›
+                        </button>
+                      </div>
+                    )}
                     <Button
+
                       disabled={active.status !== "complete"}
                       onClick={() => toggleApproved(index)}
                       className={cn(
