@@ -2182,7 +2182,13 @@ function pickEvenlySpaced<T>(items: T[], max: number): T[] {
   return picked;
 }
 
-async function startReconstruction(admin: AdminClient, args: {
+/**
+ * SINGLE SOURCE OF TRUTH for the Seedance director prompt. Both the non-paid
+ * preview action and the real reconstruction submit run this exact prep, so the
+ * previewed prompt can never drift from the one Seedance receives.
+ * Deterministic + local: reads persisted swap metadata only, never Gemini.
+ */
+type ReconstructionPrep = {
   userId: string;
   frameUrls: string[];
   model?: string;
@@ -2195,8 +2201,10 @@ async function startReconstruction(admin: AdminClient, args: {
   opticsProfile?: unknown;
   /** DIAMOND OPTICS: Sparkle / Rainbow-Fire / advanced controls. */
   opticsControls?: unknown;
-  webhookBase: string;
-}) {
+};
+
+async function prepareReconstruction(admin: AdminClient, args: ReconstructionPrep) {
+
   const availableUrls = cleanUrls(args.frameUrls);
   if (!availableUrls.length) throw new Error("Approve at least one swapped frame first");
   // Seedance reference-to-video accepts at most 9 reference images — sample
@@ -2315,7 +2323,59 @@ async function startReconstruction(admin: AdminClient, args: {
     extra: args.extraPrompt ?? null,
     opticsText,
   });
-  const prompt = director.prompt;
+  return {
+    availableUrls,
+    referenceUrls,
+    videoModel,
+    endpointId,
+    duration,
+    specs,
+    director,
+  };
+}
+
+/** Non-paid preview: same prep, no FAL submit, no row insert, no credits. */
+async function previewReconstructionPrompt(admin: AdminClient, args: ReconstructionPrep) {
+  const prep = await prepareReconstruction(admin, args);
+  return {
+    prompt: prep.director.prompt,
+    shotPlan: prep.director.shotPlan,
+    frameRoles: prep.director.frameRoles,
+    geometry: prep.director.geometry,
+    characterCount: prep.director.prompt.length,
+    maxCharacters: DIRECTOR_MAX_CHARS,
+    referencesUsed: prep.referenceUrls.length,
+    referencesAvailable: prep.availableUrls.length,
+  };
+}
+
+/** Normalizes a manual prompt without ever truncating it. */
+function normalizePromptOverride(value: unknown) {
+  if (typeof value !== "string") return null;
+  const text = value.replace(/\r\n/g, "\n").replace(/[ \t]+$/gm, "").trim();
+  if (!text) return null;
+  if (text.length > DIRECTOR_MAX_CHARS) {
+    throw new Error(
+      `Your prompt is ${text.length} characters — Seedance accepts at most ${DIRECTOR_MAX_CHARS}. Shorten it and try again.`,
+    );
+  }
+  return text;
+}
+
+async function startReconstruction(admin: AdminClient, args: ReconstructionPrep & {
+  /** When set, this exact text becomes the final Seedance prompt. */
+  promptOverride?: unknown;
+  inputFingerprint?: unknown;
+  webhookBase: string;
+}) {
+  const { availableUrls, referenceUrls, videoModel, endpointId, duration, specs, director } =
+    await prepareReconstruction(admin, args);
+
+  const autoPrompt = director.prompt;
+  const override = normalizePromptOverride(args.promptOverride);
+  const prompt = override ?? autoPrompt;
+
+
 
 
   const { data: inserted, error: insertError } = await admin
@@ -2381,6 +2441,14 @@ async function startReconstruction(admin: AdminClient, args: {
           frame_roles: director.frameRoles,
           available_geometry: director.geometry,
           target_spec: specs,
+          // Prompt audit trail: FUSE's version vs the exact text submitted.
+          director_prompt_auto: autoPrompt,
+          director_prompt_final: prompt,
+          director_prompt_user_edited: override !== null,
+          director_prompt_character_count: prompt.length,
+          director_prompt_input_fingerprint:
+            typeof args.inputFingerprint === "string" ? args.inputFingerprint : null,
+
 
         },
       })
@@ -3279,6 +3347,22 @@ Deno.serve(async (req) => {
       return json({ generation });
     }
 
+    // NON-PAID: prompt preview only — no FAL submit, no generation row, no credits.
+    if (action === "preview_reconstruction_prompt") {
+      const preview = await previewReconstructionPrompt(admin, {
+        userId: user.id,
+        frameUrls: body.frameUrls ?? [],
+        model: body.model,
+        duration: body.duration,
+        resolution: body.resolution,
+        aspectRatio: body.aspectRatio,
+        extraPrompt: body.extraPrompt,
+        opticsProfile: body.opticsProfile ?? null,
+        opticsControls: body.opticsControls ?? null,
+      });
+      return json({ preview });
+    }
+
     if (action === "reconstruct") {
       const generation = await startReconstruction(admin, {
         userId: user.id,
@@ -3291,6 +3375,8 @@ Deno.serve(async (req) => {
         extraPrompt: body.extraPrompt,
         opticsProfile: body.opticsProfile ?? null,
         opticsControls: body.opticsControls ?? null,
+        promptOverride: body.promptOverride ?? null,
+        inputFingerprint: body.promptInputFingerprint ?? null,
         webhookBase,
       });
       return json({ generation });

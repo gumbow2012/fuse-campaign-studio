@@ -49,8 +49,11 @@ import {
 
 
 import DiamondOpticsPanel from "@/components/jewelry/DiamondOpticsPanel";
+import { SeedanceDirectionPanel } from "@/components/jewelry/SeedanceDirectionPanel";
 import {
   analyzeDiamondOptics,
+  previewReconstructionPrompt,
+  type SeedanceDirectorPreview,
   analyzeJewelryFrames,
   analyzeJewelryIntake,
   recordJewelryTiming,
@@ -2688,9 +2691,108 @@ export default function JewelrySwap() {
     return perSecond * videoDuration * resolutionMultiplier(resolution);
   }, [videoModel, videoDuration, resolution]);
 
+  /* --------------- Seedance director prompt preview + direct editor --------- */
+
+  const [promptPreview, setPromptPreview] = useState<SeedanceDirectorPreview | null>(null);
+  const [promptStatus, setPromptStatus] = useState<"idle" | "loading" | "ready" | "error">("idle");
+  const [promptMode, setPromptMode] = useState<"auto" | "manual">("auto");
+  const [promptDraft, setPromptDraft] = useState("");
+  const [promptStale, setPromptStale] = useState(false);
+  const promptFingerprintRef = useRef<string | null>(null);
+
+  /** Everything that changes the auto prompt — drives preview refresh/staleness. */
+  const promptFingerprint = useMemo(
+    () =>
+      JSON.stringify({
+        frames: approvedUrls,
+        model: videoModel,
+        duration: videoDuration,
+        resolution,
+        aspectRatio: meta?.aspectRatio ?? null,
+        extraPrompt,
+        optics: opticsProfile
+          ? { scope: opticsProfile.scope ?? null, controls: opticsControls }
+          : null,
+      }),
+    [
+      approvedUrls,
+      videoModel,
+      videoDuration,
+      resolution,
+      meta,
+      extraPrompt,
+      opticsProfile,
+      opticsControls,
+    ],
+  );
+
+  const promptMaxChars = promptPreview?.maxCharacters ?? 2400;
+  const promptValue = promptMode === "manual" ? promptDraft : promptPreview?.prompt ?? "";
+  const promptOverLimit = promptValue.length > promptMaxChars;
+
+  /** Non-paid: rebuilds the FUSE prompt through the backend director. */
+  const refreshPromptPreview = useCallback(
+    async (options?: { resetManual?: boolean }) => {
+      if (!approvedUrls.length) {
+        setPromptPreview(null);
+        setPromptStatus("idle");
+        return;
+      }
+      setPromptStatus("loading");
+      try {
+        const preview = await previewReconstructionPrompt({
+          frameUrls: approvedUrls,
+          model: videoModel,
+          duration: videoDuration,
+          resolution,
+          aspectRatio: meta?.aspectRatio,
+          extraPrompt,
+          opticsProfile,
+          opticsControls,
+        });
+        setPromptPreview(preview);
+        setPromptStatus("ready");
+        setPromptStale(false);
+        if (options?.resetManual) {
+          setPromptMode("auto");
+          setPromptDraft("");
+        }
+      } catch {
+        setPromptStatus("error");
+      }
+    },
+    [
+      approvedUrls,
+      videoModel,
+      videoDuration,
+      resolution,
+      meta,
+      extraPrompt,
+      opticsProfile,
+      opticsControls,
+    ],
+  );
+
+  // AUTO prompts follow the inputs; a MANUAL draft is never overwritten.
+  useEffect(() => {
+    if (promptFingerprintRef.current === promptFingerprint) return;
+    const first = promptFingerprintRef.current === null;
+    promptFingerprintRef.current = promptFingerprint;
+    if (promptMode === "manual" && !first) {
+      setPromptStale(true);
+      return;
+    }
+    void refreshPromptPreview();
+  }, [promptFingerprint, promptMode, refreshPromptPreview]);
+
+
   const reconstruct = useCallback(async () => {
     if (!approvedUrls.length) {
       toast.error("Approve at least one swapped frame first");
+      return;
+    }
+    if (promptMode === "manual" && promptDraft.trim().length > promptMaxChars) {
+      toast.error(`Your prompt is over the ${promptMaxChars.toLocaleString()}-character limit`);
       return;
     }
     setReconstructing(true);
@@ -2710,6 +2812,9 @@ export default function JewelrySwap() {
         // DIAMOND OPTICS: one consistent optical character across the rebuild.
         opticsProfile,
         opticsControls,
+        // The editor owns the COMPLETE final Seedance prompt when manual.
+        promptOverride: promptMode === "manual" ? promptDraft : null,
+        promptInputFingerprint: promptFingerprint,
       });
       // Non-blocking: each click is its own record, so several can run at once.
       setVideos((prev) => [data.generation, ...prev]);
@@ -2730,6 +2835,10 @@ export default function JewelrySwap() {
     videoDuration,
     opticsProfile,
     opticsControls,
+    promptMode,
+    promptDraft,
+    promptMaxChars,
+    promptFingerprint,
   ]);
 
   /** Stops tracking and frees the UI, even if the provider job keeps running. */
@@ -4241,9 +4350,35 @@ export default function JewelrySwap() {
                   </p>
                 ) : null}
 
+                <SeedanceDirectionPanel
+                  preview={promptPreview}
+                  status={promptStatus}
+                  value={promptValue}
+                  mode={promptMode}
+                  stale={promptStale}
+                  maxCharacters={promptMaxChars}
+                  onChange={(text) => {
+                    setPromptMode("manual");
+                    setPromptDraft(text);
+                  }}
+                  onReset={() => {
+                    setPromptMode("auto");
+                    setPromptDraft("");
+                    setPromptStale(false);
+                    void refreshPromptPreview({ resetManual: true });
+                  }}
+                  onKeepManual={() => setPromptStale(false)}
+                  onRebuild={() => {
+                    setPromptMode("auto");
+                    setPromptDraft("");
+                    void refreshPromptPreview({ resetManual: true });
+                  }}
+                  onRefresh={() => void refreshPromptPreview()}
+                />
+
                 <Button
                   onClick={reconstruct}
-                  disabled={reconstructing || !approvedUrls.length}
+                  disabled={reconstructing || !approvedUrls.length || promptOverLimit}
                   className="w-full rounded-xl bg-[hsl(var(--primary))] py-5 font-semibold text-primary-foreground hover:bg-[hsl(var(--primary))]/90"
                 >
                   {reconstructing ? <Loader2 size={15} className="animate-spin" /> : <Film size={15} />}
@@ -5030,7 +5165,22 @@ export default function JewelrySwap() {
                                 <Trash2 size={12} />
                               </Button>
                             </div>
+                            {video.prompt ? (
+                              <details className="rounded-lg border border-white/10 bg-black/30 p-2">
+                                <summary className="cursor-pointer font-orbitron text-[10px] uppercase tracking-[0.14em] text-cyan-200/70">
+                                  View prompt
+                                  {(video as { inputPayload?: Record<string, unknown> })
+                                    .inputPayload?.director_prompt_user_edited === true
+                                    ? " · manual"
+                                    : ""}
+                                </summary>
+                                <p className="mt-2 max-h-40 overflow-y-auto whitespace-pre-wrap text-[10px] leading-relaxed text-white/60">
+                                  {video.prompt}
+                                </p>
+                              </details>
+                            ) : null}
                           </>
+
                         ) : running ? (
                           <VideoProgress
                             compact
