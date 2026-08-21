@@ -4382,6 +4382,8 @@ Deno.serve(async (req) => {
         frameTime: body.frameTime,
         cameraDirection: body.cameraDirection,
         customPrompt: body.customPrompt ?? null,
+        motionPreset: body.motionPreset ?? "auto",
+
         setIndex: body.setIndex,
         setSize: body.setSize,
         pieceTypes: body.pieceTypes ?? [],
