@@ -3831,22 +3831,53 @@ export default function JewelrySwap() {
   const [cameraDirection, setCameraDirection] = useState<string>("auto");
   const [customCameraPrompt, setCustomCameraPrompt] = useState("");
   /**
-   * §F6/§F7 — motion + duration resolve as: per-clip override (keyed by approved
-   * frame URL) → global default → shipped default. Apply-to-all is a bulk-set:
-   * it writes the global default and clears overrides, so a later per-clip change
-   * still wins.
+   * §F6/§F7/§F8 — motion + duration resolve as: per-clip override → global
+   * default → shipped default. Apply-to-all is a bulk-set (not a lock), so a
+   * later per-clip change still wins.
+   *
+   * §F8 — overrides are keyed by the STABLE frame index, not the approved image
+   * URL: approving a new revision (or a re-signed storage URL after reopen)
+   * changes the URL and used to silently drop the user's per-clip setting.
+   * Legacy URL-keyed entries are still read as a fallback so older projects
+   * restore exactly as saved.
    */
   const [clipMotions, setClipMotions] = useState<Record<string, string>>({});
   const [clipDurations, setClipDurations] = useState<Record<string, number>>({});
   const [globalMotion, setGlobalMotion] = useState<string>(DEFAULT_MOTION_PRESET);
+  type ClipRef = { index: number; url: string };
   const motionForFrame = useCallback(
-    (url: string) => clipMotions[url] ?? globalMotion,
+    (frame: ClipRef) =>
+      clipMotions[String(frame.index)] ?? clipMotions[frame.url] ?? globalMotion,
     [clipMotions, globalMotion],
   );
   const durationForFrame = useCallback(
-    (url: string) => clipDurations[url] ?? animateDuration,
+    (frame: ClipRef) =>
+      clipDurations[String(frame.index)] ?? clipDurations[frame.url] ?? animateDuration,
     [clipDurations, animateDuration],
   );
+  const clipIsOverridden = useCallback(
+    (frame: ClipRef) =>
+      clipMotions[String(frame.index)] !== undefined ||
+      clipMotions[frame.url] !== undefined ||
+      clipDurations[String(frame.index)] !== undefined ||
+      clipDurations[frame.url] !== undefined,
+    [clipMotions, clipDurations],
+  );
+  /** §F8 — write the override on the stable key and retire any legacy URL key. */
+  const setClipMotion = useCallback((frame: ClipRef, value: string) => {
+    setClipMotions((prev) => {
+      const next = { ...prev, [String(frame.index)]: value };
+      delete next[frame.url];
+      return next;
+    });
+  }, []);
+  const setClipDuration = useCallback((frame: ClipRef, seconds: number) => {
+    setClipDurations((prev) => {
+      const next = { ...prev, [String(frame.index)]: seconds };
+      delete next[frame.url];
+      return next;
+    });
+  }, []);
   /** §F7 — bulk-set duration + motion on every approved clip (no fake quality). */
   const applySettingsToAllClips = useCallback(() => {
     setClipMotions({});
