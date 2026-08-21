@@ -2745,10 +2745,11 @@ export default function JewelrySwap() {
     () =>
       [...approved]
         .sort((a, b) => a - b)
-        .map((index) => selectedSwap(index)?.outputUrl)
+        .map((index) => (approvedSwap(index) ?? selectedSwap(index))?.outputUrl)
         .filter((url): url is string => !!url),
-    [approved, selectedSwap],
+    [approved, approvedSwap, selectedSwap],
   );
+
 
 
   /** Seedance 2.0 supported clip lengths (model range 4–15s). */
