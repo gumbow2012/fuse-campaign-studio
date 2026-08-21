@@ -174,6 +174,36 @@ export type Database = {
         }
         Relationships: []
       }
+      jewelry_swap_projects: {
+        Row: {
+          created_at: string
+          id: string
+          name: string | null
+          project_state: Json | null
+          source_video_url: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          name?: string | null
+          project_state?: Json | null
+          source_video_url?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          name?: string | null
+          project_state?: Json | null
+          source_video_url?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       node_runs: {
         Row: {
           completed_at: string | null
