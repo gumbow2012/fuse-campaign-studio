@@ -5291,6 +5291,17 @@ export default function JewelrySwap() {
                           </p>
                         )}
 
+                        {/* PRODUCT FIDELITY (§35) — on demand, never regenerates. */}
+                        {active?.status === "complete" && active.outputUrl ? (
+                          <FidelityPanel
+                            audit={fidelityAudits[active.id] ?? null}
+                            state={fidelityState[active.id] ?? "idle"}
+                            error={fidelityError[active.id] ?? null}
+                            onCheck={() => void runFidelityCheck(active)}
+                          />
+                        ) : null}
+
+
                         <div className="flex items-center gap-1.5">
                           <Button
                             size="sm"
