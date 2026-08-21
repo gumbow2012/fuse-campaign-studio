@@ -173,6 +173,11 @@ function serialize(row: any) {
     coverage: typeof payload.coverage === "string" ? payload.coverage : null,
     shotKey: typeof payload.shot_key === "string" ? payload.shot_key : null,
     shotLabel: typeof payload.shot_label === "string" ? payload.shot_label : null,
+    // §F4/§F5 — the duration actually submitted for this clip (no resolution field exists).
+    durationSeconds: typeof payload.submitted_duration_seconds === "number"
+      ? payload.submitted_duration_seconds
+      : null,
+
     cameraDirection: typeof payload.camera_direction === "string" ? payload.camera_direction : null,
     directionSummary: payload.direction_summary && typeof payload.direction_summary === "object"
       ? payload.direction_summary as Record<string, string>
@@ -3829,7 +3834,19 @@ async function startAnimateFrame(admin: AdminClient, args: {
           feature: "jewelry-swap",
           stage: "frame_animation",
           video_model: ANIMATE_MODEL_KEY,
-          resolution: "1080p",
+          /**
+           * §F5 — schema-derived. The live fal OpenAPI schema for
+           * fal-ai/kling-video/v3/pro/image-to-video exposes ONLY:
+           * start_image_url, end_image_url, prompt, negative_prompt, duration,
+           * cfg_scale, generate_audio, shot_type, multi_prompt, elements.
+           * There is NO resolution/quality/size/aspect_ratio input, and the
+           * output schema declares only a video File. Output resolution is
+           * provider-fixed and NOT configurable — never advertise a value.
+           */
+          resolution_configurable: false,
+          requested_quality: null,
+          submitted_quality: null,
+
           // §F4 — requested === submitted, persisted for audit.
           requested_duration_seconds: requestedDuration,
           submitted_duration_seconds: Number(falInput.duration ?? requestedDuration),
