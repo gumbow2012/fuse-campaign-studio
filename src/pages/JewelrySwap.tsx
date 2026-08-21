@@ -2688,6 +2688,101 @@ export default function JewelrySwap() {
     return perSecond * videoDuration * resolutionMultiplier(resolution);
   }, [videoModel, videoDuration, resolution]);
 
+  /* --------------- Seedance director prompt preview + direct editor --------- */
+
+  const [promptPreview, setPromptPreview] = useState<SeedanceDirectorPreview | null>(null);
+  const [promptStatus, setPromptStatus] = useState<"idle" | "loading" | "ready" | "error">("idle");
+  const [promptMode, setPromptMode] = useState<"auto" | "manual">("auto");
+  const [promptDraft, setPromptDraft] = useState("");
+  const [promptStale, setPromptStale] = useState(false);
+  const promptFingerprintRef = useRef<string | null>(null);
+
+  /** Everything that changes the auto prompt — drives preview refresh/staleness. */
+  const promptFingerprint = useMemo(
+    () =>
+      JSON.stringify({
+        frames: approvedUrls,
+        model: videoModel,
+        duration: videoDuration,
+        resolution,
+        aspectRatio: meta?.aspectRatio ?? null,
+        extraPrompt,
+        optics: opticsProfile
+          ? { scope: opticsProfile.scope ?? null, controls: opticsControls }
+          : null,
+      }),
+    [
+      approvedUrls,
+      videoModel,
+      videoDuration,
+      resolution,
+      meta,
+      extraPrompt,
+      opticsProfile,
+      opticsControls,
+    ],
+  );
+
+  const promptMaxChars = promptPreview?.maxCharacters ?? 2400;
+  const promptValue = promptMode === "manual" ? promptDraft : promptPreview?.prompt ?? "";
+  const promptOverLimit = promptValue.length > promptMaxChars;
+
+  /** Non-paid: rebuilds the FUSE prompt through the backend director. */
+  const refreshPromptPreview = useCallback(
+    async (options?: { resetManual?: boolean }) => {
+      if (!approvedUrls.length) {
+        setPromptPreview(null);
+        setPromptStatus("idle");
+        return;
+      }
+      setPromptStatus("loading");
+      try {
+        const preview = await previewReconstructionPrompt({
+          frameUrls: approvedUrls,
+          model: videoModel,
+          duration: videoDuration,
+          resolution,
+          aspectRatio: meta?.aspectRatio,
+          extraPrompt,
+          opticsProfile,
+          opticsControls,
+        });
+        setPromptPreview(preview);
+        setPromptStatus("ready");
+        setPromptStale(false);
+        if (options?.resetManual) {
+          setPromptMode("auto");
+          setPromptDraft("");
+        }
+      } catch {
+        setPromptStatus("error");
+      }
+    },
+    [
+      approvedUrls,
+      videoModel,
+      videoDuration,
+      resolution,
+      meta,
+      extraPrompt,
+      opticsProfile,
+      opticsControls,
+    ],
+  );
+
+  // AUTO prompts follow the inputs; a MANUAL draft is never overwritten.
+  useEffect(() => {
+    if (promptFingerprintRef.current === promptFingerprint) return;
+    const first = promptFingerprintRef.current === null;
+    promptFingerprintRef.current = promptFingerprint;
+    if (promptMode === "manual" && !first) {
+      setPromptStale(true);
+      return;
+    }
+    void refreshPromptPreview();
+  }, [promptFingerprint, promptMode, refreshPromptPreview]);
+
+
   const reconstruct = useCallback(async () => {
     if (!approvedUrls.length) {
       toast.error("Approve at least one swapped frame first");
