@@ -1361,12 +1361,18 @@ function buildJewelryPrompt(args: {
   opticsTemporal?: boolean;
   /** MASTER PRODUCT LOCK: the project's single authoritative product identity. */
   masterLock?: MasterProductLock | null;
+  /** MATERIAL APPEARANCE AUTHORITY: material realism only — zero geometry. */
+  materialAuthority?: MaterialAppearanceAuthority | null;
 }) {
   let cursor = 2; // image 1 is the source frame
   const lines: string[] = [];
   const refLabels: string[] = [];
   const cadRefNums: number[] = [];
   let cadActive = false;
+  // Prompt image number of the material-appearance authority, when that
+  // reference is actually part of THIS frame's payload.
+  const materialAuthorityUrl = String(args.materialAuthority?.referenceUrl ?? "").trim();
+  let materialRefNum: number | null = null;
 
   // Resolved spec per piece, computed BEFORE the piece lines so the visible
   // product identity (type/metal/stone/color/setting) always comes from the
