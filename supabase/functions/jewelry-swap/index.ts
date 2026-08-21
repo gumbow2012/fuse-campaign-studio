@@ -1832,13 +1832,15 @@ const DIRECTOR_MAX_CHARS = 2400;
  * then analysis-detected, then a neutral generic. Fully universal — no product
  * name is ever hardcoded or defaulted here.
  */
-function confirmedProductType(specs: TargetSpec[]) {
+function confirmedProductType(specs: TargetSpec[], masterLock?: MasterProductLock | null) {
   const byProvenance = (want: string) =>
     specs.find((spec) => spec.type && spec.sources?.type === want)?.type ?? null;
   return (
     byProvenance("user_override") ??
     byProvenance("gemini_detected") ??
     specs.find((spec) => spec.type)?.type ??
+    // The project's MASTER PRODUCT LOCK before any generic fallback.
+    masterLockProductType(masterLock ?? null) ??
     "jewelry piece"
   );
 }
