@@ -2182,7 +2182,13 @@ function pickEvenlySpaced<T>(items: T[], max: number): T[] {
   return picked;
 }
 
-async function startReconstruction(admin: AdminClient, args: {
+/**
+ * SINGLE SOURCE OF TRUTH for the Seedance director prompt. Both the non-paid
+ * preview action and the real reconstruction submit run this exact prep, so the
+ * previewed prompt can never drift from the one Seedance receives.
+ * Deterministic + local: reads persisted swap metadata only, never Gemini.
+ */
+type ReconstructionPrep = {
   userId: string;
   frameUrls: string[];
   model?: string;
@@ -2195,8 +2201,10 @@ async function startReconstruction(admin: AdminClient, args: {
   opticsProfile?: unknown;
   /** DIAMOND OPTICS: Sparkle / Rainbow-Fire / advanced controls. */
   opticsControls?: unknown;
-  webhookBase: string;
-}) {
+};
+
+async function prepareReconstruction(admin: AdminClient, args: ReconstructionPrep) {
+
   const availableUrls = cleanUrls(args.frameUrls);
   if (!availableUrls.length) throw new Error("Approve at least one swapped frame first");
   // Seedance reference-to-video accepts at most 9 reference images — sample
