@@ -1,4 +1,5 @@
 import type { MasterProductLock } from "@/lib/masterProductLock";
+import type { FidelityAudit } from "@/lib/fidelityAudit";
 
 /**
  * CANONICAL MASTER VIEW PLANNER (§22)
@@ -163,6 +164,21 @@ export function planCanonicalMasterViews(
   return plan;
 }
 
+/**
+ * CANONICAL MASTER VALIDATION (§23) — the result of running the EXISTING
+ * `mode: "validate"` path on a generated master. A master is only usable
+ * downstream when the validation verdict contains no FAIL.
+ */
+export type CanonicalMasterValidation = FidelityAudit;
+
+/** Verdict is trusted only when nothing materially changed the product. */
+export function isMasterValidated(audit: FidelityAudit | null | undefined): boolean {
+  if (!audit) return false;
+  if (audit.rows.some((row) => row.verdict === "FAIL")) return false;
+  // A "violation" verdict means the render materially changed the product.
+  return audit.verdict !== "violation";
+}
+
 /** A generated canonical master, stored per project and tagged with its view. */
 export type CanonicalMaster = {
   /** The plan key this master answers (`front`, `component_bail`, …). */
@@ -178,8 +194,14 @@ export type CanonicalMaster = {
   lockVersion: string | null;
   createdAt: string | null;
   /**
-   * Masters are NOT auto-trusted — fidelity validation arrives in a later
-   * commit, so nothing downstream may treat these as verified yet.
+   * Masters are NOT auto-trusted. This only becomes true after the existing
+   * validate path returns a verdict with no FAIL (§23); a rejected master
+   * stays false and may never be used downstream.
    */
-  validated: false;
+  validated: boolean;
+  /** Per-master validation read-out (silhouette, stones, settings, material…). */
+  validation?: CanonicalMasterValidation | null;
+  /** UI state of the validation call. Never auto-regenerates on failure. */
+  validationState?: "idle" | "checking" | "done" | "failed" | "skipped";
+  validationError?: string | null;
 };

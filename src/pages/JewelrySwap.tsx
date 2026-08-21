@@ -57,7 +57,7 @@ import {
   materialAuthorityLabel,
   type MaterialAppearanceAuthority,
 } from "@/lib/materialAuthority";
-import { buildFidelityAudit, type FidelityAudit } from "@/lib/fidelityAudit";
+import { buildFidelityAudit, MASTER_DIMENSIONS, type FidelityAudit } from "@/lib/fidelityAudit";
 import {
   analyzeCampaignPhotography,
   photographySetVersion,
@@ -66,6 +66,7 @@ import {
 import {
   type CanonicalMaster,
   type CanonicalMasterPlanEntry,
+  isMasterValidated,
   planCanonicalMasterViews,
 } from "@/lib/canonicalMasterViews";
 import CanonicalMastersPanel from "@/components/jewelry/CanonicalMastersPanel";
@@ -898,6 +899,11 @@ export default function JewelrySwap() {
    * credits on the EXISTING Nano path, so nothing here runs automatically.
    */
   const [canonicalMasters, setCanonicalMasters] = useState<Record<string, CanonicalMaster>>({});
+  /** Latest masters, so validation reads current state without re-binding. */
+  const canonicalMastersRef = useRef<Record<string, CanonicalMaster>>({});
+  useEffect(() => {
+    canonicalMastersRef.current = canonicalMasters;
+  }, [canonicalMasters]);
   const [mastersBusy, setMastersBusy] = useState(false);
   const [engineeringOpen, setEngineeringOpen] = useState(false);
   /**
@@ -2587,7 +2593,11 @@ export default function JewelrySwap() {
                 error: generation.error ?? null,
                 lockVersion: masterProductLock?.version ?? null,
                 createdAt: generation.createdAt ?? null,
+                // A fresh render is never trusted: validation must run again.
                 validated: false,
+                validation: null,
+                validationState: "idle",
+                validationError: null,
               },
             }));
           } catch (error) {
@@ -2605,6 +2615,9 @@ export default function JewelrySwap() {
                 lockVersion: masterProductLock?.version ?? null,
                 createdAt: null,
                 validated: false,
+                validation: null,
+                validationState: "idle",
+                validationError: null,
               },
             }));
           }
@@ -3515,6 +3528,79 @@ export default function JewelrySwap() {
           [id]: error instanceof Error ? error.message : "Fidelity check failed",
         }));
         setFidelityState((prev) => ({ ...prev, [id]: "failed" }));
+      }
+    },
+    [knowledgeMap, masterProductLock],
+  );
+
+  /* ------- CANONICAL MASTER VALIDATION (§23) — analysis only --------------- *
+   * Reuses the SAME `mode: "validate"` path as the frame fidelity audit above
+   * (no second validation system). Authority order is unchanged and enforced
+   * server-side: USER_CONFIRMED > original direct evidence > CAD > PKM /
+   * Master Product Lock > validated canonical master. A master only becomes
+   * `validated: true` when the read-out contains no FAIL; a rejected master is
+   * surfaced and NEVER auto-regenerated (no generation credits are spent).
+   */
+  const validateCanonicalMaster = useCallback(
+    async (key: string) => {
+      const master = canonicalMastersRef.current[key];
+      if (!master?.outputUrl || master.status !== "complete") return;
+      if (!knowledgeMap && !masterProductLock) {
+        setCanonicalMasters((prev) =>
+          prev[key] ? { ...prev, [key]: { ...prev[key], validationState: "skipped" } } : prev,
+        );
+        return;
+      }
+      setCanonicalMasters((prev) =>
+        prev[key]
+          ? { ...prev, [key]: { ...prev[key], validationState: "checking", validationError: null } }
+          : prev,
+      );
+      try {
+        const report = await validateAgainstKnowledgeMap({
+          imageUrl: master.outputUrl,
+          knowledgeMap: (knowledgeMap ?? {}) as ProductKnowledgeMap,
+          masterProductLock,
+        });
+        if (!report) {
+          setCanonicalMasters((prev) =>
+            prev[key] ? { ...prev, [key]: { ...prev[key], validationState: "skipped" } } : prev,
+          );
+          return;
+        }
+        const audit = buildFidelityAudit({
+          report,
+          lockVersion: masterProductLock?.version ?? null,
+          dimensions: MASTER_DIMENSIONS,
+        });
+        setCanonicalMasters((prev) =>
+          prev[key]
+            ? {
+                ...prev,
+                [key]: {
+                  ...prev[key],
+                  validation: audit,
+                  validated: isMasterValidated(audit),
+                  validationState: "done",
+                  validationError: null,
+                },
+              }
+            : prev,
+        );
+      } catch (error) {
+        setCanonicalMasters((prev) =>
+          prev[key]
+            ? {
+                ...prev,
+                [key]: {
+                  ...prev[key],
+                  validationState: "failed",
+                  validationError:
+                    error instanceof Error ? error.message : "Validation failed",
+                },
+              }
+            : prev,
+        );
       }
     },
     [knowledgeMap, masterProductLock],
@@ -4467,6 +4553,7 @@ export default function JewelrySwap() {
                         busy={mastersBusy}
                         disabledReason={canonicalMastersDisabledReason}
                         onGenerate={() => void generateCanonicalMasters()}
+                        onValidate={(key) => void validateCanonicalMaster(key)}
                       />
                       {/* CAMPAIGN PHOTOGRAPHY PROFILE (§20) — look only, no geometry. */}
                       <CampaignPhotographyPanel
