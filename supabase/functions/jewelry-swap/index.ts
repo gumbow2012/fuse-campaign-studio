@@ -3906,6 +3906,10 @@ async function startAnimateFrame(admin: AdminClient, args: {
           frame_index: Number(args.frameIndex ?? 0),
           frame_time: Number(args.frameTime ?? 0),
           camera_direction: direction,
+          // §F6 — motion routes through `prompt` only; recorded for audit.
+          motion_preset: motion.key,
+          motion_routed_via: "prompt",
+
           shot_key: shot?.key ?? "custom",
           shot_label: shot?.label ?? "Custom direction",
           shot_energy: shot?.energy ?? "custom",
