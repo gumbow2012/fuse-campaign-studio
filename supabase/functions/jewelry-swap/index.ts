@@ -1976,6 +1976,18 @@ async function startSwapFrame(admin: AdminClient, args: {
   const frameAnalysis = normalizeFrameAnalysis(args.frameAnalysis ?? null);
   const productAnalysis = normalizeProductAnalysis(args.productAnalysis ?? null);
 
+  // DIAMOND OPTICS (additive): cached analysed optics × user controls. No Gemini
+  // call happens here — moving a slider only re-synthesises these prompt lines.
+  const opticsControls = readOpticsControls(args.opticsControls);
+  const opticsProfile = mergeFrameOptics(
+    normalizeOpticsProfile(args.opticsProfile),
+    normalizeOpticsProfile(args.frameOpticsProfile),
+  );
+  const resolvedOptics = opticsProfile
+    ? applyOpticsControls(opticsProfile, opticsControls)
+    : null;
+
+
   // Deterministic image-payload routing: computed ONCE and used for BOTH the
   // payload order and the prompt's "reference image N = role" numbering so the
   // two can never drift. SOURCE_FRAME is always image 1.
