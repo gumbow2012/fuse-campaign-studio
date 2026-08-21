@@ -26,8 +26,10 @@ export type FidelityAudit = {
   checkedAt: string;
 };
 
+export type FidelityDimension = { dimension: string; match: RegExp };
+
 /** Fixed, product-agnostic dimensions with the words a violation may use. */
-const DIMENSIONS: { dimension: string; match: RegExp }[] = [
+const DIMENSIONS: FidelityDimension[] = [
   {
     dimension: "Geometry",
     match: /geometr|silhouette|proportion|shape|dimension|ratio|thickness|topolog|architecture|sidewall|relief|outline/i,
@@ -49,6 +51,38 @@ const DIMENSIONS: { dimension: string; match: RegExp }[] = [
     match: /context|scene|background|pose|light|crop|camera|composition|invented|extra component/i,
   },
 ];
+
+/**
+ * CANONICAL MASTER VALIDATION (§23) dimensions. Same product-agnostic idea as
+ * above, split finer because a master must be checked attribute by attribute
+ * before anything downstream may trust it.
+ */
+export const MASTER_DIMENSIONS: FidelityDimension[] = [
+  { dimension: "Silhouette", match: /silhouette|outline|shape|contour/i },
+  {
+    dimension: "Proportions",
+    match: /proportion|ratio|dimension|thickness|width|height|depth|scale|geometr/i,
+  },
+  {
+    dimension: "Component count",
+    match: /component|count|topolog|architecture|part|element|extra|missing|invented/i,
+  },
+  { dimension: "Repeated modules", match: /module|repeat|link|row|pattern|sequence/i },
+  { dimension: "Stones", match: /stone|diamond|gem|cut|pav|placement|orientation/i },
+  {
+    dimension: "Settings",
+    match: /setting|prong|bezel|channel|retention|bead|gallery|seat/i,
+  },
+  {
+    dimension: "Bail / Clasp",
+    match: /bail|clasp|hinge|connector|chain|loop|jump ?ring|closure|mechanic/i,
+  },
+  {
+    dimension: "Material",
+    match: /material|metal|gold|silver|platinum|finish|polish|colour|color|texture|plating/i,
+  },
+];
+
 
 const severityVerdict = (severity: string): FidelityVerdict =>
   /high/i.test(severity) ? "FAIL" : "WARNING";
