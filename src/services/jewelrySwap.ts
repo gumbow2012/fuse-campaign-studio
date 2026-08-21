@@ -1196,6 +1196,36 @@ export async function analyzeDiamondOptics(
   return await readJsonResponse<DiamondOpticsResult>(response, "Diamond optics analysis");
 }
 
+/** The exact Seedance director prompt, built by the backend (never rebuilt here). */
+export type SeedanceDirectorPreview = {
+  prompt: string;
+  shotPlan?: unknown;
+  frameRoles?: unknown;
+  geometry?: unknown;
+  characterCount: number;
+  maxCharacters: number;
+  referencesUsed?: number;
+  referencesAvailable?: number;
+};
+
+/** NON-PAID: returns the director prompt without submitting or charging anything. */
+export async function previewReconstructionPrompt(args: {
+  frameUrls: string[];
+  model?: string;
+  duration?: number | string;
+  resolution?: string;
+  aspectRatio?: string;
+  extraPrompt?: string;
+  opticsProfile?: DiamondOpticsProfile | null;
+  opticsControls?: DiamondOpticsControls | null;
+}): Promise<SeedanceDirectorPreview> {
+  const data = await callJewelrySwap<{ preview: SeedanceDirectorPreview }>({
+    action: "preview_reconstruction_prompt",
+    ...args,
+  });
+  return data.preview;
+}
+
 
 /** Call the jewelry-swap edge function with a just-in-time session token. */
 export async function callJewelrySwap<T = any>(body: Record<string, unknown>): Promise<T> {
