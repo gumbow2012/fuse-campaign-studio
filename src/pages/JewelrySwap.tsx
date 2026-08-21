@@ -4379,6 +4379,7 @@ export default function JewelrySwap() {
               ) : null}
 
             </SectionCard>
+            ) : null}
 
             <SectionCard
               step={3}
