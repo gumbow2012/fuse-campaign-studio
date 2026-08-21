@@ -3186,19 +3186,8 @@ export default function JewelrySwap() {
 
 
 
-  /** Step through a frame's revision history (‹ n / m ›). */
-  const stepRevision = useCallback((index: number, delta: number) => {
-    const total = (frameGenerationsRef.current[index] ?? []).length;
-    if (total <= 1) return;
-    setFrameRevision((prev) => {
-      const current = prev[index] ?? total - 1;
-      const next = Math.min(Math.max(current + delta, 0), total - 1);
-      if (next === current) return prev;
-      return { ...prev, [index]: next };
-    });
-  }, []);
-
   const revisionInfo = useCallback(
+
     (index: number) => {
       const total = (frameGenerations[index] ?? []).length;
       const current = Math.min(frameRevision[index] ?? total - 1, Math.max(total - 1, 0));
