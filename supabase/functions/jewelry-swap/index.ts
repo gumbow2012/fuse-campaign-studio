@@ -51,7 +51,6 @@ import {
   normalizeConnectedAssets,
 } from "./connectedAssets.ts";
 import {
-  type CampaignPhotographyProfile,
   campaignPhotographySummaryLine,
   normalizeCampaignPhotographyProfile,
 } from "../_shared/campaign-photography.ts";
@@ -2210,6 +2209,8 @@ async function startCanonicalMaster(admin: AdminClient, args: {
   if (!imageUrls.length) throw new Error("Add at least one jewelry reference image");
 
   const componentLabel = String(args.componentLabel ?? "").trim() || null;
+  const connectedAssets = normalizeConnectedAssets(args.connectedAssets ?? null);
+  const campaignPhotography = normalizeCampaignPhotographyProfile(args.campaignPhotography ?? null);
   const prompt = buildCanonicalMasterPrompt({
     view,
     componentLabel,
@@ -2289,6 +2290,8 @@ async function startCanonicalMaster(admin: AdminClient, args: {
           master_product_lock_summary: masterLockSummaryLine(masterLock),
           material_appearance_authority: materialAuthority,
           material_appearance_authority_summary: materialAuthoritySummaryLine(materialAuthority),
+          campaign_photography_summary: campaignPhotographySummaryLine(campaignPhotography),
+          connected_assets_count: connectedAssets?.connectedAssets.length ?? 0,
           all_reference_ids_analyzed: [...referenceIds.values()],
           references_sent: imageUrls.length,
           pieces,
