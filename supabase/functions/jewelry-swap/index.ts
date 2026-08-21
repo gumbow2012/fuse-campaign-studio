@@ -3076,9 +3076,26 @@ async function startReconstruction(admin: AdminClient, args: ReconstructionPrep 
       fallbackUsdPerSecond: videoFallbackUsdPerSecond(videoModel, generateAudio) ?? null,
     });
 
-    const resolution = videoModel.resolutions?.includes(String(args.resolution ?? "").toLowerCase())
-      ? String(args.resolution).toLowerCase()
-      : "1080p";
+    /**
+     * §F2 — RESOLUTION TRUTHFULNESS. These sets come from the LIVE fal OpenAPI
+     * schema for the reference-to-video endpoints we actually submit to
+     * (verified 2026-08-21):
+     *   bytedance/seedance-2.0/reference-to-video      → 480p, 720p, 1080p, 4k
+     *   bytedance/seedance-2.0/fast/reference-to-video → 480p, 720p
+     * The UI offers exactly these options per model. An unsupported request is
+     * REJECTED (never silently downgraded).
+     */
+    const requestedResolution = String(args.resolution ?? "").trim().toLowerCase() || "720p";
+    const supportedResolutions = REFERENCE_VIDEO_RESOLUTIONS_BY_MODEL[videoModel.key] ??
+      ["480p", "720p"];
+    if (!supportedResolutions.includes(requestedResolution)) {
+      throw new Error(
+        `${videoModel.label} cannot render ${requestedResolution.toUpperCase()} — supported resolutions: ${
+          supportedResolutions.map((value) => value.toUpperCase()).join(", ")
+        }`,
+      );
+    }
+    const resolution = requestedResolution;
     const aspect = String(args.aspectRatio ?? "").trim();
     const aspectRatio = videoModel.aspectRatios?.includes(aspect) ? aspect : "9:16";
 
