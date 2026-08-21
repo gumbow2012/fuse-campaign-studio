@@ -2492,6 +2492,11 @@ async function startSwapFrame(admin: AdminClient, args: {
   masterProductLock?: unknown;
   /** Active project id — used to INHERIT the persisted lock when none is sent. */
   projectId?: unknown;
+  /**
+   * §E2 — the client's live canonical/component master state. Only D2-VALIDATED
+   * entries become reference candidates; omitted → read from the project.
+   */
+  canonicalMasters?: unknown;
   /** MATERIAL APPEARANCE AUTHORITY derived from the existing evidence strengths. */
   materialAuthority?: unknown;
   webhookBase: string;
@@ -3977,6 +3982,7 @@ Deno.serve(async (req) => {
         masterProductLock: body.masterProductLock ?? null,
         projectId: body.projectId ?? null,
         materialAuthority: body.materialAuthority ?? null,
+        canonicalMasters: body.canonicalMasters ?? null,
         webhookBase,
       });
       return json({ generation });
