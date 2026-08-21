@@ -945,6 +945,13 @@ export default function JewelrySwap() {
     canonicalMastersRef.current = canonicalMasters;
   }, [canonicalMasters]);
   /**
+   * MATCHED-PAIR MANUFACTURING (§29). Counterpart plates of approved masters in
+   * the OTHER manufacturing state, keyed `${sourceId}:${targetStage}`. Each pair
+   * is one explicit paid Nano run — nothing here ever fires automatically.
+   */
+  const [matchedPairs, setMatchedPairs] = useState<Record<string, MatchedPair>>({});
+  const [matchedPairBusyKey, setMatchedPairBusyKey] = useState<string | null>(null);
+  /**
    * BATCH CONTINUATION (§28). Batches are lineage records ONLY: a new batch
    * inherits the established Master Product Lock, campaign look, optics profile
    * and approved plates, so the product is never rediscovered between batches.
