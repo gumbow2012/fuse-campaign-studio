@@ -33,6 +33,8 @@ export type JewelryProjectState = {
   intakeSummary: unknown | null;
   /** MASTER PRODUCT LOCK — the project's authoritative product identity. */
   masterProductLock: unknown | null;
+  /** SHOT COVERAGE PLAN (§25) — planning only, recomputed when inputs change. */
+  shotCoveragePlan?: unknown | null;
   /**
    * CAMPAIGN PHOTOGRAPHY PROFILE (§20) — HOW the product is photographed, kept
    * separate from product identity. Photography references carry zero geometry.
