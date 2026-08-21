@@ -2236,6 +2236,8 @@ type ReconstructionPrep = {
   opticsProfile?: unknown;
   /** DIAMOND OPTICS: Sparkle / Rainbow-Fire / advanced controls. */
   opticsControls?: unknown;
+  /** MASTER PRODUCT LOCK for this project (falls back to the stored one). */
+  masterProductLock?: unknown;
 };
 
 async function prepareReconstruction(admin: AdminClient, args: ReconstructionPrep) {
