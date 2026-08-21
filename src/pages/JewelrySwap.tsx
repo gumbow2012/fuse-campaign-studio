@@ -5169,7 +5169,8 @@ export default function JewelrySwap() {
                               <details className="rounded-lg border border-white/10 bg-black/30 p-2">
                                 <summary className="cursor-pointer font-orbitron text-[10px] uppercase tracking-[0.14em] text-cyan-200/70">
                                   View prompt
-                                  {video.inputPayload?.director_prompt_user_edited === true
+                                  {(video as { inputPayload?: Record<string, unknown> })
+                                    .inputPayload?.director_prompt_user_edited === true
                                     ? " · manual"
                                     : ""}
                                 </summary>
