@@ -3831,6 +3831,13 @@ export default function JewelrySwap() {
   const [zipping, setZipping] = useState(false);
   const [cameraDirection, setCameraDirection] = useState<string>("auto");
   const [customCameraPrompt, setCustomCameraPrompt] = useState("");
+  /** §F6 — per-clip motion preset keyed by approved frame URL; unset = "auto". */
+  const [clipMotions, setClipMotions] = useState<Record<string, string>>({});
+  const motionForFrame = useCallback(
+    (url: string) => clipMotions[url] ?? DEFAULT_MOTION_PRESET,
+    [clipMotions],
+  );
+
 
   const pieceTypes = useMemo(
     () => pieces.map((piece) => piece.type).filter(Boolean),
