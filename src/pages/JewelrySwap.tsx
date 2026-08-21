@@ -48,11 +48,16 @@ import {
 } from "@/services/storageUpload";
 
 
+import DiamondOpticsPanel from "@/components/jewelry/DiamondOpticsPanel";
 import {
+  analyzeDiamondOptics,
   analyzeJewelryFrames,
   analyzeJewelryIntake,
   recordJewelryTiming,
   submitWithConcurrency,
+  AUTO_OPTICS_CONTROLS,
+  type DiamondOpticsControls,
+  type DiamondOpticsProfile,
   type JewelryIntake,
   type DetectedField,
   type ProductKnowledgeMap,
