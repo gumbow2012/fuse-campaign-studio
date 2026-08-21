@@ -4221,6 +4221,9 @@ export default function JewelrySwap() {
     setPhotographyStatus("idle");
     setPhotographyError(null);
     setCanonicalMasters({});
+    setBatches([]);
+    setActiveBatchId(null);
+
     setUserLocks([]);
     setAnalysis(null);
     setAnalysisKey(null);
