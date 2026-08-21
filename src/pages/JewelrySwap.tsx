@@ -919,6 +919,17 @@ export default function JewelrySwap() {
    * Data only in this commit — recomputed solely when the lock/topology changes.
    */
   const [connectedAssetModel, setConnectedAssetModel] = useState<ConnectedAssetModel | null>(null);
+  useEffect(() => {
+    if (!masterProductLock) {
+      setConnectedAssetModel(null);
+      return;
+    }
+    setConnectedAssetModel((current) =>
+      isConnectedAssetModelCurrent(current, masterProductLock)
+        ? current
+        : buildConnectedAssetModel(masterProductLock),
+    );
+  }, [masterProductLock]);
   /**
    * WORKSPACE MODE (§26). "swap" is the default and leaves the existing flow
    * untouched. "campaign" hides the source-cinematography steps and builds
