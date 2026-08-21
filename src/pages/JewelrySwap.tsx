@@ -2681,6 +2681,9 @@ export default function JewelrySwap() {
                 validationError: null,
               },
             }));
+            // BATCH CONTINUATION (§28) — record which batch produced this plate.
+            tagBatchMaster(entry.key);
+
           } catch (error) {
             setCanonicalMasters((prev) => ({
               ...prev,
