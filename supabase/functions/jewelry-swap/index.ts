@@ -50,6 +50,12 @@ import {
   connectedAssetPromptLines,
   normalizeConnectedAssets,
 } from "./connectedAssets.ts";
+import {
+  type CampaignPhotographyProfile,
+  campaignPhotographySummaryLine,
+  normalizeCampaignPhotographyProfile,
+} from "../_shared/campaign-photography.ts";
+
 
 import {
   buildMatchedPairPrompt,
