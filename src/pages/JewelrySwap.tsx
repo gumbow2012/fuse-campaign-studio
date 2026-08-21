@@ -4561,7 +4561,7 @@ export default function JewelrySwap() {
       setExtraPrompt(state?.extraPrompt ?? "");
 
       setVideoModel(state?.videoModel ?? "seedance-2.0");
-      setResolution(state?.resolution ?? "1080p");
+      setResolution(state?.resolution ?? DEFAULT_VIDEO_RESOLUTION);
       setPreserveAudio(state?.preserveAudio ?? true);
       setVideoDuration(state?.videoDuration ?? 15);
       setDurationTouched(Boolean(state?.durationTouched));
