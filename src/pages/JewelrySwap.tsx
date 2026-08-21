@@ -2773,7 +2773,7 @@ export default function JewelrySwap() {
     if (batchBlocked) return;
     const batch = startCampaignBatch({
       batches,
-      lockVersion: masterProductLock?.version ?? null,
+      lockVersion: masterLockVersion,
       photographySetVersion: photographyVersion.current,
       hasOpticsProfile: Boolean(opticsProfile),
       approvedMasterKeys,
@@ -2831,7 +2831,7 @@ export default function JewelrySwap() {
                 status: generation.status,
                 outputUrl: generation.outputUrl ?? null,
                 error: generation.error ?? null,
-                lockVersion: masterProductLock?.version ?? null,
+                lockVersion: masterLockVersion,
                 createdAt: generation.createdAt ?? null,
                 // A fresh render is never trusted: validation must run again.
                 validated: false,
@@ -2855,7 +2855,7 @@ export default function JewelrySwap() {
                 status: "failed",
                 outputUrl: null,
                 error: error instanceof Error ? error.message : "Could not start this master",
-                lockVersion: masterProductLock?.version ?? null,
+                lockVersion: masterLockVersion,
                 createdAt: null,
                 validated: false,
                 validation: null,
@@ -2931,7 +2931,7 @@ export default function JewelrySwap() {
             status: generation.status,
             outputUrl: generation.outputUrl ?? null,
             error: generation.error ?? null,
-            lockVersion: masterProductLock?.version ?? null,
+            lockVersion: masterLockVersion,
             createdAt: generation.createdAt ?? null,
             // A fresh render is never trusted — validation (§23) must run again.
             validated: false,
@@ -2955,7 +2955,7 @@ export default function JewelrySwap() {
             status: "failed",
             outputUrl: null,
             error: error instanceof Error ? error.message : "Could not start this component master",
-            lockVersion: masterProductLock?.version ?? null,
+            lockVersion: masterLockVersion,
             createdAt: null,
             validated: false,
             validation: null,
@@ -3036,7 +3036,7 @@ export default function JewelrySwap() {
             status: generation.status,
             outputUrl: generation.outputUrl ?? null,
             error: generation.error ?? null,
-            lockVersion: masterProductLock?.version ?? null,
+            lockVersion: masterLockVersion,
             createdAt: generation.createdAt ?? null,
           },
         }));
@@ -3055,7 +3055,7 @@ export default function JewelrySwap() {
             outputUrl: null,
             error:
               error instanceof Error ? error.message : "Could not start this matched pair",
-            lockVersion: masterProductLock?.version ?? null,
+            lockVersion: masterLockVersion,
             createdAt: null,
           },
         }));
@@ -3964,7 +3964,7 @@ export default function JewelrySwap() {
         }
         setFidelityAudits((prev) => ({
           ...prev,
-          [id]: buildFidelityAudit({ report, lockVersion: masterProductLock?.version ?? null }),
+          [id]: buildFidelityAudit({ report, lockVersion: masterLockVersion }),
         }));
         setFidelityState((prev) => ({ ...prev, [id]: "done" }));
       } catch (error) {
@@ -4015,7 +4015,7 @@ export default function JewelrySwap() {
         }
         const audit = buildFidelityAudit({
           report,
-          lockVersion: masterProductLock?.version ?? null,
+          lockVersion: masterLockVersion,
           dimensions: MASTER_DIMENSIONS,
         });
         setCanonicalMasters((prev) =>
