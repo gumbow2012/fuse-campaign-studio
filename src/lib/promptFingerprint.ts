@@ -31,20 +31,21 @@ export function promptInputFingerprint(inputs: unknown): string {
 }
 
 /**
- * §F1 — the persisted prompt record for one reconstruction. `final` is the
- * EXACT string that was submitted to the provider.
+ * §F1 — the persisted prompt record for one reconstruction.
+ * `director_prompt_final` is the EXACT string submitted to the provider.
  */
 export type DirectorPromptRecord = {
   /** What the builder produced for the recorded inputs. */
-  auto: string | null;
-  /** The exact text submitted (identical to `auto` unless the user edited it). */
-  final: string;
+  director_prompt_auto: string | null;
+  /** The exact text submitted (identical to auto unless the user edited it). */
+  director_prompt_final: string;
   /** True when the user hand-edited the prompt. */
-  userEdited: boolean;
-  /** Fingerprint of the inputs that produced `auto`. */
-  inputFingerprint: string | null;
+  director_prompt_user_edited: boolean;
+  /** Fingerprint of the inputs that produced the auto prompt. */
+  input_fingerprint: string | null;
   createdAt: string;
 };
+
 
 /** True when the inputs moved on since this prompt record was captured. */
 export function isDirectorPromptStale(
