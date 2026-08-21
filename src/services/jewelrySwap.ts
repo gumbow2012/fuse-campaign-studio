@@ -60,7 +60,36 @@ export type JewelryGeneration = SwapGeneration & {
   cameraDirection?: string | null;
   directionSummary?: AnimationDirectionSummary | null;
   animationPrompt?: string | null;
+  /** CANONICAL MASTER (§22): which view this master answers, when it is one. */
+  stage?: string | null;
+  canonicalMasterView?: string | null;
+  canonicalMasterLabel?: string | null;
 };
+
+/**
+ * CANONICAL MASTER (§22) — one paid Nano run for ONE view of the active
+ * product, on the EXISTING nano-banana-pro path. Explicit user action only:
+ * nothing in the app calls this automatically.
+ */
+export async function generateCanonicalMaster(args: {
+  view: string;
+  componentLabel?: string | null;
+  pieces: unknown[];
+  aspectRatio?: string;
+  resolution?: string;
+  extraPrompt?: string;
+  imageModel?: JewelryImageModel;
+  masterProductLock?: unknown;
+  materialAuthority?: unknown;
+  setIndex?: number;
+  setSize?: number;
+}) {
+  const data = await callJewelrySwap<{ generation: JewelryGeneration }>({
+    action: "generate_canonical_master",
+    ...args,
+  });
+  return data.generation;
+}
 
 /** Animate-stage camera direction options exposed in the UI. */
 export const CAMERA_DIRECTIONS = [
