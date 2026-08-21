@@ -17,6 +17,11 @@ import {
   json,
   requireUser,
 } from "../_shared/supabase-admin.ts";
+import {
+  attachResearchToMap,
+  collectUncertainTerms,
+  researchUncertainTerms,
+} from "./research.ts";
 
 const ANALYSIS_VERSION = "jewelry-still-analysis-v2";
 const GEMINI_ANALYSIS_MODEL = Deno.env.get("GEMINI_ANALYSIS_MODEL")?.trim() || "gemini-3.6-flash";
