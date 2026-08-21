@@ -3987,6 +3987,9 @@ export default function JewelrySwap() {
             direction: clip.cameraDirection ?? undefined,
             // §F6 — a regenerated clip keeps its own motion preset.
             motionPreset: clip.motionPreset ?? undefined,
+            // §F7 — and its own length, not the current global default.
+            durationSeconds: clip.durationSeconds ?? undefined,
+
 
           },
         );
