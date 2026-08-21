@@ -52,6 +52,11 @@ import {
   buildMasterProductLock,
   type MasterProductLock,
 } from "@/lib/masterProductLock";
+import {
+  deriveMaterialAppearanceAuthority,
+  materialAuthorityLabel,
+  type MaterialAppearanceAuthority,
+} from "@/lib/materialAuthority";
 import { buildFidelityAudit, type FidelityAudit } from "@/lib/fidelityAudit";
 import FidelityPanel from "@/components/jewelry/FidelityPanel";
 
@@ -855,6 +860,11 @@ export default function JewelrySwap() {
    * set actually changes; every generation in the project inherits this lock.
    */
   const [masterProductLock, setMasterProductLock] = useState<MasterProductLock | null>(null);
+  /**
+   * MATERIAL APPEARANCE AUTHORITY (§31) — manual override, advanced only.
+   * Empty = FUSE derives it automatically from the existing evidence strengths.
+   */
+  const [materialAuthorityOverride, setMaterialAuthorityOverride] = useState<string | null>(null);
   const [engineeringOpen, setEngineeringOpen] = useState(false);
   /**
    * A PROPOSAL only. FUSE never splits a card by itself — the user answers this
@@ -1530,6 +1540,24 @@ export default function JewelrySwap() {
     pieces.flatMap((piece) => piece.urls).forEach((url, index) => map.set(url, `REF_${index + 1}`));
     return map;
   }, [pieces]);
+
+  /**
+   * MATERIAL APPEARANCE AUTHORITY (§31) — the reference that is strongest for
+   * MATERIAL REALISM (metal finish, polish, microtexture, brilliance, fire).
+   * Reuses the attribute-specific authority already in the knowledge map
+   * (evidenceStrength + authorityFor); it grants no geometry authority at all.
+   */
+  const materialAuthority: MaterialAppearanceAuthority | null = useMemo(
+    () =>
+      deriveMaterialAppearanceAuthority({
+        knowledgeMap,
+        references: pieces.flatMap((piece) =>
+          piece.urls.map((url, angleIndex) => ({ url, role: piece.roles?.[angleIndex] ?? null })),
+        ),
+        override: materialAuthorityOverride,
+      }),
+    [knowledgeMap, pieces, materialAuthorityOverride],
+  );
 
   /**
    * The EVIDENCE ROLE of one thumbnail (CAD FRONT / MACRO / SIDE / CLASP …).
@@ -2619,6 +2647,8 @@ export default function JewelrySwap() {
         opticsControls,
         // MASTER PRODUCT LOCK — the product identity every frame inherits.
         masterProductLock,
+        // MATERIAL APPEARANCE AUTHORITY — material realism only, zero geometry.
+        materialAuthority,
       });
       // A regeneration APPENDS a revision (§36) and never unapproves the
       // revision the user already approved (§37).
@@ -2643,6 +2673,7 @@ export default function JewelrySwap() {
       opticsProfile,
       opticsControls,
       masterProductLock,
+      materialAuthority,
       ensureFrameOptics,
       recordFrameGeneration,
 
@@ -2890,6 +2921,7 @@ export default function JewelrySwap() {
           opticsProfile,
           opticsControls,
           masterProductLock,
+          materialAuthority,
         });
         setPromptPreview(preview);
         setPromptStatus("ready");
@@ -2912,6 +2944,7 @@ export default function JewelrySwap() {
       opticsProfile,
       opticsControls,
       masterProductLock,
+      materialAuthority,
     ],
   );
 
@@ -2956,6 +2989,8 @@ export default function JewelrySwap() {
         opticsControls,
         // MASTER PRODUCT LOCK — same identity as the approved frames.
         masterProductLock,
+        // MATERIAL APPEARANCE AUTHORITY — same material reference, zero geometry.
+        materialAuthority,
         // The editor owns the COMPLETE final Seedance prompt when manual.
         promptOverride: promptMode === "manual" ? promptDraft : null,
         promptInputFingerprint: promptFingerprint,
@@ -2980,6 +3015,7 @@ export default function JewelrySwap() {
     opticsProfile,
     opticsControls,
     masterProductLock,
+    materialAuthority,
     promptMode,
     promptDraft,
     promptMaxChars,
