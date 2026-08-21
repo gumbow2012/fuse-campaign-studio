@@ -2641,7 +2641,7 @@ export default function JewelrySwap() {
   const approvedMasterKeys = useMemo(
     () =>
       Object.values(canonicalMasters)
-        .filter((master) => isMasterValidated(master))
+        .filter((master) => master.validated || isMasterValidated(master.validation))
         .map((master) => master.key),
     [canonicalMasters],
   );
