@@ -950,7 +950,12 @@ export default function JewelrySwap() {
 
   const [compareIndex, setCompareIndex] = useState<number | null>(null);
 
-  const [approved, setApproved] = useState<Set<number>>(new Set());
+  /** Derived from the approval ids — a frame is approved when one is bound. */
+  const approved = useMemo(
+    () => new Set(Object.keys(approvedGenerationId).map(Number)),
+    [approvedGenerationId],
+  );
+
   const [swapping, setSwapping] = useState(false);
 
   const [videoModel, setVideoModel] = useState("seedance-2.0");
