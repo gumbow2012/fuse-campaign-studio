@@ -840,6 +840,12 @@ export default function JewelrySwap() {
 
   /** The fused engineering understanding from the last intake pass. */
   const [knowledgeMap, setKnowledgeMap] = useState<ProductKnowledgeMap | null>(null);
+  /**
+   * MASTER PRODUCT LOCK (§2): the project's single authoritative product
+   * identity, DERIVED from the active PKM. Recomputed only when the reference
+   * set actually changes; every generation in the project inherits this lock.
+   */
+  const [masterProductLock, setMasterProductLock] = useState<MasterProductLock | null>(null);
   const [engineeringOpen, setEngineeringOpen] = useState(false);
   /**
    * A PROPOSAL only. FUSE never splits a card by itself — the user answers this
@@ -1742,6 +1748,14 @@ export default function JewelrySwap() {
           });
           applyIntake(urls, result.intake);
           setKnowledgeMap(result.intake?.knowledgeMap ?? null);
+          // Derived once per reference set — never per frame, never per generation.
+          setMasterProductLock(
+            buildMasterProductLock({
+              knowledgeMap: result.intake?.knowledgeMap ?? null,
+              resolvedSpec: result.intake?.resolvedJewelrySpec ?? null,
+              referenceSetVersion: version,
+            }),
+          );
           setIntake({
             status: "ready",
 
@@ -2594,6 +2608,8 @@ export default function JewelrySwap() {
         opticsProfile,
         frameOpticsProfile,
         opticsControls,
+        // MASTER PRODUCT LOCK — the product identity every frame inherits.
+        masterProductLock,
       });
       // A regeneration APPENDS a revision (§36) and never unapproves the
       // revision the user already approved (§37).
@@ -2617,6 +2633,7 @@ export default function JewelrySwap() {
       nanoQuality,
       opticsProfile,
       opticsControls,
+      masterProductLock,
       ensureFrameOptics,
       recordFrameGeneration,
 
@@ -2863,6 +2880,7 @@ export default function JewelrySwap() {
           extraPrompt,
           opticsProfile,
           opticsControls,
+          masterProductLock,
         });
         setPromptPreview(preview);
         setPromptStatus("ready");
@@ -2884,6 +2902,7 @@ export default function JewelrySwap() {
       extraPrompt,
       opticsProfile,
       opticsControls,
+      masterProductLock,
     ],
   );
 
@@ -2926,6 +2945,8 @@ export default function JewelrySwap() {
         // DIAMOND OPTICS: one consistent optical character across the rebuild.
         opticsProfile,
         opticsControls,
+        // MASTER PRODUCT LOCK — same identity as the approved frames.
+        masterProductLock,
         // The editor owns the COMPLETE final Seedance prompt when manual.
         promptOverride: promptMode === "manual" ? promptDraft : null,
         promptInputFingerprint: promptFingerprint,
@@ -2949,6 +2970,7 @@ export default function JewelrySwap() {
     videoDuration,
     opticsProfile,
     opticsControls,
+    masterProductLock,
     promptMode,
     promptDraft,
     promptMaxChars,
@@ -3319,6 +3341,7 @@ export default function JewelrySwap() {
       selectedFrames: Array.from(selectedFrames),
       pieces,
       knowledgeMap,
+      masterProductLock,
       userLocks,
       analysis,
       analysisKey,
@@ -3362,6 +3385,7 @@ export default function JewelrySwap() {
       selectedFrames,
       pieces,
       knowledgeMap,
+      masterProductLock,
       userLocks,
       analysis,
       analysisKey,
@@ -3454,6 +3478,8 @@ export default function JewelrySwap() {
       setPieces((state?.pieces ?? []) as Piece[]);
 
       setKnowledgeMap((state?.knowledgeMap ?? null) as ProductKnowledgeMap | null);
+      // Reuse the stored lock — reopening never recomputes or re-runs Gemini.
+      setMasterProductLock((state?.masterProductLock ?? null) as MasterProductLock | null);
       setUserLocks((state?.userLocks ?? []) as UserConfirmedFact[]);
       setAnalysis((state?.analysis ?? null) as JewelryProjectAnalysis | null);
       setAnalysisKey(state?.analysisKey ?? null);
