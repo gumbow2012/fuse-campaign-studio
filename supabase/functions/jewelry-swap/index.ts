@@ -3657,8 +3657,45 @@ function capPrompt(text: string, max = ANIMATE_PROMPT_MAX) {
   return (word > max * 0.6 ? slice.slice(0, word) : slice).trim();
 }
 
+/**
+ * §F6 — MOTION PRESETS. The live Kling schema (see §F5) has NO dedicated camera
+ * motion field, so motion is routed exclusively through the `prompt` input as a
+ * curated directive. `shot_type` stays untouched (its enum is only
+ * "customize" | "intelligent" — a multi-shot switch, not a camera control).
+ * "auto" contributes NO directive, so the default reproduces today's output.
+ */
+const MOTION_PRESET_DIRECTIVES: Record<string, string> = {
+  slow_orbit:
+    "MOTION — Slow Orbit: the CAMERA arcs slowly and continuously around the piece at a fixed distance, revealing form through parallax only.",
+  push_in:
+    "MOTION — Push-In: the CAMERA advances slowly and steadily straight toward the piece, tightening the frame without any cut or zoom snap.",
+  locked_off:
+    "MOTION — Locked-Off: the CAMERA is completely static on a tripod; the only change in frame is light and specular movement.",
+  tilt_reveal:
+    "MOTION — Tilt Reveal: the CAMERA tilts slowly from below or above the piece to reveal it progressively, ending on a settled framing.",
+};
+
+function resolveMotionDirective(preset: unknown) {
+  const key = String(preset ?? "auto").trim().toLowerCase();
+  if (!key || key === "auto") return { key: "auto", directive: "" };
+  const directive = MOTION_PRESET_DIRECTIVES[key];
+  if (!directive) {
+    throw new Error(
+      `Motion preset "${key}" is not supported. Supported: auto, ${
+        Object.keys(MOTION_PRESET_DIRECTIVES).join(", ")
+      }.`,
+    );
+  }
+  return { key, directive };
+}
+
 /** Compose the final Kling prompt for one clip, in strict priority order. */
-function buildAnimationPrompt(shot: ShotSpec | null, customPrompt?: string | null) {
+function buildAnimationPrompt(
+  shot: ShotSpec | null,
+  customPrompt?: string | null,
+  motionDirective?: string,
+) {
+
   const custom = String(customPrompt ?? "").trim();
 
   const direction = [
