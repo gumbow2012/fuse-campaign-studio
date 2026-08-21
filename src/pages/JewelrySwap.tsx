@@ -49,8 +49,11 @@ import {
 
 
 import DiamondOpticsPanel from "@/components/jewelry/DiamondOpticsPanel";
+import { SeedanceDirectionPanel } from "@/components/jewelry/SeedanceDirectionPanel";
 import {
   analyzeDiamondOptics,
+  previewReconstructionPrompt,
+  type SeedanceDirectorPreview,
   analyzeJewelryFrames,
   analyzeJewelryIntake,
   recordJewelryTiming,
