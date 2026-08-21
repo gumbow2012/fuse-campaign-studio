@@ -989,10 +989,13 @@ export default function JewelrySwap() {
     setFrames([]);
     setSwaps({});
     setAltSwaps({});
+    setFrameGenerations({});
+    setFrameRevision({});
     setChosenModel({});
     setFramePreferredRole({});
     setFrameReason({});
-    setApproved(new Set());
+    setApprovedGenerationId({});
+
     setSelectedFrames(new Set());
     // The video library is intentionally preserved across new source clips.
 
