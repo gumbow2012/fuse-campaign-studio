@@ -78,6 +78,8 @@ export type JewelryGeneration = SwapGeneration & {
  */
 export async function generateCanonicalMaster(args: {
   view: string;
+  /** Active project id — lets the backend inherit the persisted lock (§E1). */
+  projectId?: string | null;
   componentLabel?: string | null;
   pieces: unknown[];
   aspectRatio?: string;
@@ -105,6 +107,8 @@ export async function generateCanonicalMaster(args: {
  */
 export async function generateMatchedPair(args: {
   sourceImageUrl: string;
+  /** Active project id — lets the backend inherit the persisted lock (§E1). */
+  projectId?: string | null;
   sourceId: string;
   sourceLabel?: string | null;
   sourceStage: string;

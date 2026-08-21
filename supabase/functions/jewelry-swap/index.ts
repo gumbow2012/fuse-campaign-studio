@@ -2016,6 +2016,47 @@ function buildSeedanceDirectorPrompt(args: {
   };
 }
 
+/**
+ * MASTER PRODUCT LOCK INHERITANCE (§E1)
+ * ---------------------------------------------------------------------------
+ * The single product-identity source for EVERY Nano generation in a project
+ * (swap frames, canonical masters, component masters, matched pairs, campaign
+ * plates). The product is decided ONCE per project and inherited, never
+ * re-derived per frame.
+ *
+ * Resolution order (authority is preserved — the lock itself already carries the
+ * user-confirmed facts that outrank it):
+ *   1. the lock the client sent with this request (the live in-session lock),
+ *   2. the lock persisted on the ACTIVE project's `project_state`.
+ * When neither exists the result is null and behaviour is unchanged (legacy
+ * sessions keep working exactly as before).
+ */
+async function resolveInheritedMasterLock(admin: AdminClient, args: {
+  userId: string;
+  projectId?: unknown;
+  provided?: unknown;
+}): Promise<MasterProductLock | null> {
+  const direct = normalizeMasterLock(args.provided ?? null);
+  if (direct) return direct;
+
+  const projectId = String(args.projectId ?? "").trim();
+  if (!projectId) return null;
+
+  try {
+    const { data } = await admin
+      .from("jewelry_swap_projects")
+      .select("project_state")
+      .eq("id", projectId)
+      .eq("user_id", args.userId)
+      .maybeSingle();
+    const state = (data?.project_state ?? null) as Record<string, any> | null;
+    return normalizeMasterLock(state?.masterProductLock ?? null);
+  } catch (_error) {
+    // Inheritance is best-effort: a missing project must never block a run.
+    return null;
+  }
+}
+
 
 /**
  * CANONICAL MASTER REFERENCE SET (§22)
@@ -2043,6 +2084,8 @@ async function startCanonicalMaster(admin: AdminClient, args: {
   extraPrompt?: string;
   imageModel?: string;
   masterProductLock?: unknown;
+  /** Active project id — used to INHERIT the persisted lock when none is sent. */
+  projectId?: unknown;
   materialAuthority?: unknown;
   /** Which slot of the requested master set this is (audit only). */
   setIndex?: number;
@@ -2064,7 +2107,11 @@ async function startCanonicalMaster(admin: AdminClient, args: {
     : "pro";
   const endpointId = imageModelKey === "nb2" ? IMAGE_MODEL_ALT : IMAGE_MODEL;
 
-  const masterLock = normalizeMasterLock(args.masterProductLock ?? null);
+  const masterLock = await resolveInheritedMasterLock(admin, {
+    userId: args.userId,
+    projectId: args.projectId,
+    provided: args.masterProductLock,
+  });
   const materialAuthority = normalizeMaterialAuthority(args.materialAuthority ?? null);
 
   // Product references only — a master is rendered FROM the evidence, so there
@@ -2208,6 +2255,8 @@ async function startMatchedPair(admin: AdminClient, args: {
   extraPrompt?: string;
   imageModel?: string;
   masterProductLock?: unknown;
+  /** Active project id — used to INHERIT the persisted lock when none is sent. */
+  projectId?: unknown;
   materialAuthority?: unknown;
   webhookBase: string;
 }) {
@@ -2229,7 +2278,11 @@ async function startMatchedPair(admin: AdminClient, args: {
     : "pro";
   const endpointId = imageModelKey === "nb2" ? IMAGE_MODEL_ALT : IMAGE_MODEL;
 
-  const masterLock = normalizeMasterLock(args.masterProductLock ?? null);
+  const masterLock = await resolveInheritedMasterLock(admin, {
+    userId: args.userId,
+    projectId: args.projectId,
+    provided: args.masterProductLock,
+  });
   const materialAuthority = normalizeMaterialAuthority(args.materialAuthority ?? null);
 
   const pieces = (Array.isArray(args.pieces) ? args.pieces : [])
@@ -2376,6 +2429,8 @@ async function startSwapFrame(admin: AdminClient, args: {
   opticsControls?: unknown;
   /** MASTER PRODUCT LOCK derived once per reference set on the client. */
   masterProductLock?: unknown;
+  /** Active project id — used to INHERIT the persisted lock when none is sent. */
+  projectId?: unknown;
   /** MATERIAL APPEARANCE AUTHORITY derived from the existing evidence strengths. */
   materialAuthority?: unknown;
   webhookBase: string;
@@ -2396,7 +2451,11 @@ async function startSwapFrame(admin: AdminClient, args: {
   const frameAnalysis = normalizeFrameAnalysis(args.frameAnalysis ?? null);
   const productAnalysis = normalizeProductAnalysis(args.productAnalysis ?? null);
   // MASTER PRODUCT LOCK: every frame in the project inherits the SAME lock.
-  const masterLock = normalizeMasterLock(args.masterProductLock ?? null);
+  const masterLock = await resolveInheritedMasterLock(admin, {
+    userId: args.userId,
+    projectId: args.projectId,
+    provided: args.masterProductLock,
+  });
   // MATERIAL APPEARANCE AUTHORITY: material realism only — never geometry.
   const materialAuthority = normalizeMaterialAuthority(args.materialAuthority ?? null);
 
@@ -3841,6 +3900,7 @@ Deno.serve(async (req) => {
         frameOpticsProfile: body.frameOpticsProfile ?? null,
         opticsControls: body.opticsControls ?? null,
         masterProductLock: body.masterProductLock ?? null,
+        projectId: body.projectId ?? null,
         materialAuthority: body.materialAuthority ?? null,
         webhookBase,
       });
@@ -3860,6 +3920,7 @@ Deno.serve(async (req) => {
         extraPrompt: body.extraPrompt,
         imageModel: body.imageModel,
         masterProductLock: body.masterProductLock ?? null,
+        projectId: body.projectId ?? null,
         materialAuthority: body.materialAuthority ?? null,
         setIndex: body.setIndex,
         setSize: body.setSize,
@@ -3884,6 +3945,7 @@ Deno.serve(async (req) => {
         extraPrompt: body.extraPrompt,
         imageModel: body.imageModel,
         masterProductLock: body.masterProductLock ?? null,
+        projectId: body.projectId ?? null,
         materialAuthority: body.materialAuthority ?? null,
         webhookBase,
       });

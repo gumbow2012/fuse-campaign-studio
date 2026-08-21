@@ -914,6 +914,12 @@ export default function JewelrySwap() {
    */
   const [masterProductLock, setMasterProductLock] = useState<MasterProductLock | null>(null);
   /**
+   * §E1 — the ACTIVE project id, readable from generation callbacks declared
+   * before the project state exists. Sent with every Nano generation so the
+   * backend can INHERIT the project's persisted Master Product Lock.
+   */
+  const activeProjectIdRef = useRef<string | null>(null);
+  /**
    * CONNECTED PRODUCT SYSTEMS (§30). Physical relationships between connected
    * parts of THIS product, derived from the lock's own component topology.
    * Data only in this commit — recomputed solely when the lock/topology changes.
@@ -2760,6 +2766,7 @@ export default function JewelrySwap() {
               resolution: resolutionForQuality(nanoQuality),
               imageModel: "pro",
               masterProductLock,
+              projectId: activeProjectIdRef.current,
               materialAuthority,
               setIndex: index,
               setSize: canonicalMasterTargets.length,
@@ -2857,6 +2864,7 @@ export default function JewelrySwap() {
           resolution: resolutionForQuality(nanoQuality),
           imageModel: "pro",
           masterProductLock,
+          projectId: activeProjectIdRef.current,
           materialAuthority,
         });
         setCanonicalMasters((prev) => ({
@@ -2960,6 +2968,7 @@ export default function JewelrySwap() {
           resolution: resolutionForQuality(nanoQuality),
           imageModel: "pro",
           masterProductLock,
+          projectId: activeProjectIdRef.current,
           materialAuthority,
         });
         setMatchedPairs((prev) => ({
@@ -3248,6 +3257,7 @@ export default function JewelrySwap() {
         opticsControls,
         // MASTER PRODUCT LOCK — the product identity every frame inherits.
         masterProductLock,
+        projectId: activeProjectIdRef.current,
         // MATERIAL APPEARANCE AUTHORITY — material realism only, zero geometry.
         materialAuthority,
       });
@@ -4075,6 +4085,9 @@ export default function JewelrySwap() {
   const [projects, setProjects] = useState<JewelryProjectSummary[]>([]);
   const [projectsLoading, setProjectsLoading] = useState(false);
   const [projectId, setProjectId] = useState<string | null>(null);
+  useEffect(() => {
+    activeProjectIdRef.current = projectId;
+  }, [projectId]);
   const [projectName, setProjectName] = useState("Untitled project");
   const [saveStatus, setSaveStatus] = useState<ProjectSaveStatus>("idle");
   /** True while a restore is writing state, so the autosave never echoes it back. */
