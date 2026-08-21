@@ -2128,6 +2128,12 @@ async function startSwapFrame(admin: AdminClient, args: {
           // Structured product authority resolved for this run (verification hook).
           target_spec: routedPieces.map((piece) => resolveTargetSpec(piece)),
 
+          // MASTER PRODUCT LOCK inherited by this frame (audit + reconstruct reuse).
+          master_product_lock: masterLock,
+          master_product_lock_summary: masterLockSummaryLine(masterLock),
+
+
+
           preferred_role: args.preferredRole ?? null,
           failure_reason: args.failureReason ?? null,
           replacement_mode: normalizeMode(args.mode, args.macro === true),
