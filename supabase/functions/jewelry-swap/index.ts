@@ -1802,7 +1802,11 @@ function buildSeedanceDirectorPrompt(args: {
   const geometry = directorGeometry(selected);
   const plan = buildShotPlan(selected, geometry, duration);
   const specLines = args.specs.map((spec) => targetSpecLine(spec)).filter(Boolean) as string[];
-  const productType = args.specs.find((spec) => spec.type)?.type ?? "jewelry piece";
+  // The ACTUAL confirmed product type: a user-confirmed value first, then the
+  // analysis-detected value, and only a neutral generic word if neither exists.
+  // Never a control default and never a hardcoded product name.
+  const productType = confirmedProductType(args.specs);
+
   const hasStones = args.specs.some((spec) => spec.stone && !/no stones/i.test(spec.stone)) ||
     geometry.macro;
   const directorSettings = declaredSettingList(args.specs);
