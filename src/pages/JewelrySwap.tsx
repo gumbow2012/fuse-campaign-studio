@@ -2116,27 +2116,90 @@ export default function JewelrySwap() {
   /* ------------------------------ 4. Frame swaps ---------------------------- */
 
 
+  /**
+   * REVISION HISTORY (§36): append a brand-new generation, or update an
+   * existing revision in place while it progresses. Nothing is ever removed,
+   * so a regeneration can never destroy an earlier result.
+   */
+  const recordFrameGeneration = useCallback((generation: JewelryGeneration) => {
+    if (generation.frameIndex === null || generation.frameIndex === undefined) return;
+    const index = generation.frameIndex as number;
+    setFrameGenerations((prev) => {
+      const list = prev[index] ?? [];
+      const at = list.findIndex((entry) => entry.id === generation.id);
+      if (at !== -1) {
+        const next = [...list];
+        next[at] = generation;
+        return { ...prev, [index]: next };
+      }
+      const appended = [...list, generation];
+      // A fresh revision becomes the one on screen; approval stays where it is.
+      setFrameRevision((rev) => ({ ...rev, [index]: appended.length - 1 }));
+      return { ...prev, [index]: appended };
+    });
+  }, []);
+
   /** Merge a fresh generation record into whichever collection owns it. */
-  const applyGeneration = useCallback((generation: JewelryGeneration) => {
-    if (generation.kind === "video") {
-      setVideos((prev) => {
-        const index = prev.findIndex((entry) => entry.id === generation.id);
-        if (index === -1) return [generation, ...prev];
-        const next = [...prev];
-        next[index] = generation;
-        return next;
-      });
-      return;
-    }
-    if (generation.frameIndex !== null) {
-      const index = generation.frameIndex as number;
-      if (generation.imageModel === "nb2") {
-        setAltSwaps((prev) => ({ ...prev, [index]: generation }));
+  const applyGeneration = useCallback(
+    (generation: JewelryGeneration) => {
+      if (generation.kind === "video") {
+        setVideos((prev) => {
+          const index = prev.findIndex((entry) => entry.id === generation.id);
+          if (index === -1) return [generation, ...prev];
+          const next = [...prev];
+          next[index] = generation;
+          return next;
+        });
         return;
       }
-      setSwaps((prev) => ({ ...prev, [index]: generation }));
+      recordFrameGeneration(generation);
+    },
+    [recordFrameGeneration],
+  );
+
+  /**
+   * The displayed revision drives the legacy `swaps` / `altSwaps` views the
+   * review UI reads, so stepping through revisions updates the whole card.
+   */
+  useEffect(() => {
+    const nextSwaps: Record<number, JewelryGeneration> = {};
+    const nextAlt: Record<number, JewelryGeneration> = {};
+    for (const key of Object.keys(frameGenerations)) {
+      const index = Number(key);
+      const list = frameGenerations[index] ?? [];
+      if (!list.length) continue;
+      const at = Math.min(Math.max(frameRevision[index] ?? list.length - 1, 0), list.length - 1);
+      const shown = list[at];
+      const upto = list.slice(0, at + 1);
+      const pro =
+        shown.imageModel !== "nb2"
+          ? shown
+          : [...upto].reverse().find((entry) => entry.imageModel !== "nb2") ??
+            list.find((entry) => entry.imageModel !== "nb2");
+      const alt =
+        shown.imageModel === "nb2"
+          ? shown
+          : [...upto].reverse().find((entry) => entry.imageModel === "nb2");
+      if (pro) nextSwaps[index] = pro;
+      if (alt) nextAlt[index] = alt;
     }
+    setSwaps(nextSwaps);
+    setAltSwaps(nextAlt);
+  }, [frameGenerations, frameRevision]);
+
+  /** Step to another revision of one frame (‹ / › in the review card). */
+  const stepRevision = useCallback((index: number, delta: number) => {
+    setFrameRevision((prev) => {
+      const list = frameGenerationsRef.current[index] ?? [];
+      if (list.length < 2) return prev;
+      const current = Math.min(Math.max(prev[index] ?? list.length - 1, 0), list.length - 1);
+      const next = Math.min(Math.max(current + delta, 0), list.length - 1);
+      if (next === current) return prev;
+      return { ...prev, [index]: next };
+    });
   }, []);
+
+
 
   // Re-attach to anything the backend still has in flight (refresh-safe).
   useEffect(() => {
