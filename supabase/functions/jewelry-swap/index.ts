@@ -3047,8 +3047,14 @@ async function startAnimateFrame(admin: AdminClient, args: {
       fallbackUsdPerSecond: videoFallbackUsdPerSecond(videoModel, false) ?? null,
     });
 
-    // Kling rejects input images over 10 MB; condition the approved frame first.
-    const conditioned = await conditionImageForKling(admin as any, imageUrl, args.userId);
+    // Kling rejects input images over 10 MB. The client now conditions the
+    // frame, so this server-side pass is only a safety fallback and early-returns.
+    const conditioned = await conditionImageForKling(
+      admin as any,
+      clientInputUrl || imageUrl,
+      args.userId,
+    );
+
 
     const falInput = buildVideoModelInput(ANIMATE_MODEL_KEY, {
       imageUrl: conditioned.url,
