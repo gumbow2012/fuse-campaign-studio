@@ -100,6 +100,7 @@ import {
 } from "@/lib/videoFrames";
 
 import { compressImageFile } from "@/lib/imageCompress";
+import { conditionAnimateInput } from "@/services/animateInput";
 
 
 const JEWELRY_TYPES = [
