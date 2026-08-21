@@ -1353,6 +1353,8 @@ function buildJewelryPrompt(args: {
   opticsControls?: DiamondOpticsControls | null;
   /** DIAMOND OPTICS: add the temporal-consistency line (video rebuild stage). */
   opticsTemporal?: boolean;
+  /** MASTER PRODUCT LOCK: the project's single authoritative product identity. */
+  masterLock?: MasterProductLock | null;
 }) {
   let cursor = 2; // image 1 is the source frame
   const lines: string[] = [];
