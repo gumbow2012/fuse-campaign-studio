@@ -2809,6 +2809,9 @@ export default function JewelrySwap() {
         // DIAMOND OPTICS: one consistent optical character across the rebuild.
         opticsProfile,
         opticsControls,
+        // The editor owns the COMPLETE final Seedance prompt when manual.
+        promptOverride: promptMode === "manual" ? promptDraft : null,
+        promptInputFingerprint: promptFingerprint,
       });
       // Non-blocking: each click is its own record, so several can run at once.
       setVideos((prev) => [data.generation, ...prev]);
