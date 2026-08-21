@@ -2451,6 +2451,8 @@ export default function JewelrySwap() {
       const mode: ReplacementMode = options?.mode ?? frameMode[frameIndex] ?? "auto";
       const coverage: Coverage = options?.coverage ?? frameCoverage[frameIndex] ?? "auto";
       const quality: NanoQuality = options?.quality ?? nanoQuality;
+      // Cached optics: the global source profile plus this frame's refinement.
+      const frameOpticsProfile = opticsProfile ? await ensureFrameOptics(frameIndex) : null;
       const data = await callJewelrySwap<{ generation: JewelryGeneration }>({
         action: "swap_frame",
         sourceFrameUrl: frame.url,
