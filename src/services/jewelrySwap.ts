@@ -159,6 +159,13 @@ export const CAMERA_DIRECTIONS = [
   { value: "custom", label: "Custom" },
 ] as const;
 
+/**
+ * §F4 — schema-derived from the live fal OpenAPI schema for
+ * fal-ai/kling-video/v3/pro/image-to-video (`duration` string enum "3".."15").
+ */
+export const ANIMATE_DURATION_OPTIONS = [3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15] as const;
+export const DEFAULT_ANIMATE_DURATION = 3;
+
 export type CameraDirection = (typeof CAMERA_DIRECTIONS)[number]["value"];
 
 /** Animate one approved frame with a camera direction (and optional custom text). */
@@ -166,6 +173,8 @@ export async function animateJewelryFrame(args: {
   imageUrl: string;
   /** Conditioned (<=9.5 MB) copy of the frame to send to Kling. */
   animateInputUrl?: string | null;
+  /** §F4 — per-clip duration in seconds (Kling 3.0 Pro supports 3–15 as discrete values). */
+  durationSeconds?: number;
   frameIndex: number;
   frameTime: number;
   cameraDirection: string;
@@ -178,6 +187,7 @@ export async function animateJewelryFrame(args: {
     action: "animate_frame",
     imageUrl: args.imageUrl,
     animateInputUrl: args.animateInputUrl ?? null,
+    durationSeconds: args.durationSeconds ?? null,
     frameIndex: args.frameIndex,
     frameTime: args.frameTime,
     cameraDirection: args.cameraDirection,
