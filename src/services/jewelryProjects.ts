@@ -116,6 +116,19 @@ export type JewelryProjectState = {
   durationTouched: boolean;
   promptMode: string;
   promptDraft: string;
+  /**
+   * §F1 — SEEDANCE PROMPT PROVENANCE per generation: the builder output, the
+   * EXACT submitted string, whether the user edited it, and the fingerprint of
+   * the inputs that produced the auto prompt (for stale detection).
+   */
+  directorPrompts?: Record<string, {
+    auto: string | null;
+    final: string;
+    userEdited: boolean;
+    inputFingerprint: string | null;
+    createdAt: string;
+  }> | null;
+
   /** Kling animate settings. */
   cameraDirection: string;
   customCameraPrompt: string;
