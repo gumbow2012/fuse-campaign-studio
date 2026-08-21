@@ -3797,6 +3797,8 @@ async function handleIntake(req: Request, body: any, user: { id: string }, apiKe
   // product evidence keeps full authority over every classified axis.
   let researchMs = 0;
   let researchedTermCount = 0;
+  // Attached AFTER the media guard so the citation URLs survive it.
+  let researchedTerms: Awaited<ReturnType<typeof researchUncertainTerms>>["researchedTerms"] = [];
   if (intake.knowledgeMap) {
     try {
       const uncertain = collectUncertainTerms(
@@ -3817,8 +3819,8 @@ async function handleIntake(req: Request, body: any, user: { id: string }, apiKe
           uncertain,
         });
         researchMs = research.researchMs;
+        researchedTerms = research.researchedTerms;
         researchedTermCount = research.researchedTerms.length;
-        attachResearchToMap(intake.knowledgeMap, research.researchedTerms);
         console.log(
           `[intake] RESEARCH DONE terms=${researchedTermCount} cacheHits=${research.cacheHits} ms=${researchMs}`,
         );
