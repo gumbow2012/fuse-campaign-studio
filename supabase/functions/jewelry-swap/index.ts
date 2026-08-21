@@ -2013,6 +2013,8 @@ async function startSwapFrame(admin: AdminClient, args: {
     macro: args.macro === true,
     frameAnalysis,
     productAnalysis,
+    opticsProfile,
+    opticsControls,
   });
 
 
