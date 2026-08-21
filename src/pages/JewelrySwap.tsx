@@ -2896,6 +2896,102 @@ export default function JewelrySwap() {
     ],
   );
 
+  /* ---------------- Matched-pair manufacturing (§29) ------------------------ */
+
+  /**
+   * Pairable plates: approved canonical masters only. Availability comes from
+   * the LOCK (does this product actually have stones?) — never from a product
+   * name — so any stone-bearing piece qualifies and stone-free pieces do not.
+   */
+  const matchedPairSources = useMemo(
+    () => planMatchedPairSources({ masters: canonicalMasters }),
+    [canonicalMasters],
+  );
+
+  const matchedPairsDisabledReason = useMemo(
+    () => matchedPairBlockedReason({ lock: masterProductLock, sources: matchedPairSources }),
+    [masterProductLock, matchedPairSources],
+  );
+
+  /**
+   * EXPLICIT USER ACTION ONLY — one matched pair is ONE paid run on the same
+   * Nano path used by frame swaps and canonical masters. The prompt holds
+   * camera, crop, composition, lighting, orientation, scale and background
+   * identical to the source plate and changes ONLY the manufacturing stage.
+   */
+  const generateMatchedPairFor = useCallback(
+    async (sourceId: string) => {
+      if (matchedPairsDisabledReason) return;
+      const source = matchedPairSources.find((entry) => entry.id === sourceId);
+      if (!source) return;
+      const targetStage: ManufacturingStage = oppositeManufacturingStage(source.stage);
+      const key = matchedPairKey(source.id, targetStage);
+      setMatchedPairBusyKey(key);
+      try {
+        const generation = await generateMatchedPair({
+          sourceImageUrl: source.url,
+          sourceId: source.id,
+          sourceLabel: source.label,
+          sourceStage: source.stage,
+          targetStage,
+          pieces: piecePayload(),
+          resolution: resolutionForQuality(nanoQuality),
+          imageModel: "pro",
+          masterProductLock,
+          materialAuthority,
+        });
+        setMatchedPairs((prev) => ({
+          ...prev,
+          [key]: {
+            key,
+            sourceId: source.id,
+            sourceLabel: source.label,
+            sourceUrl: source.url,
+            sourceStage: source.stage,
+            targetStage,
+            generationId: generation.id,
+            status: generation.status,
+            outputUrl: generation.outputUrl ?? null,
+            error: generation.error ?? null,
+            lockVersion: masterProductLock?.version ?? null,
+            createdAt: generation.createdAt ?? null,
+          },
+        }));
+      } catch (error) {
+        setMatchedPairs((prev) => ({
+          ...prev,
+          [key]: {
+            key,
+            sourceId: source.id,
+            sourceLabel: source.label,
+            sourceUrl: source.url,
+            sourceStage: source.stage,
+            targetStage,
+            generationId: prev[key]?.generationId ?? "",
+            status: "failed",
+            outputUrl: null,
+            error:
+              error instanceof Error ? error.message : "Could not start this matched pair",
+            lockVersion: masterProductLock?.version ?? null,
+            createdAt: null,
+          },
+        }));
+      } finally {
+        setMatchedPairBusyKey(null);
+      }
+    },
+    [
+      matchedPairSources,
+      matchedPairsDisabledReason,
+      piecePayload,
+      nanoQuality,
+      masterProductLock,
+      materialAuthority,
+    ],
+  );
+
+
+
   /** Stable id for a selected frame — used to match analysis back to frames. */
   const frameIdFor = useCallback(
     (index: number) => `frame-${index}-${(frames[index]?.time ?? 0).toFixed(3)}`,
