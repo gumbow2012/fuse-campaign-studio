@@ -90,7 +90,7 @@ import {
   startCampaignBatch,
   type CampaignBatch,
 } from "@/lib/campaignBatches";
-import MatchedPairPanel from "@/components/jewelry/MatchedPairPanel";
+import { MatchedPairPanel } from "@/components/jewelry/MatchedPairPanel";
 import {
   matchedPairBlockedReason,
   matchedPairKey,
@@ -132,6 +132,7 @@ import {
   animateJewelryFrame,
   callJewelrySwap,
   generateCanonicalMaster,
+  generateMatchedPair,
   createTemplateFromJewelrySwap,
   listAssets,
   invalidateAssetCache,
