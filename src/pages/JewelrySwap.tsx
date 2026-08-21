@@ -1199,7 +1199,19 @@ export default function JewelrySwap() {
 
   const [videoModel, setVideoModel] = useState("seedance-2.0");
   const [preserveAudio, setPreserveAudio] = useState(true);
-  const [resolution, setResolution] = useState("1080p");
+  const [resolution, setResolution] = useState(DEFAULT_VIDEO_RESOLUTION);
+  const videoResolutionOptions = supportedResolutionsFor(videoModel);
+  // §F2 — if a stored/previous pick is not supported by the selected model, fix
+  // the selection VISIBLY (the dropdown updates + the user is told) so the UI can
+  // never show one resolution while another is submitted.
+  useEffect(() => {
+    if (videoResolutionOptions.includes(resolution)) return;
+    const label = VIDEO_MODELS.find((entry) => entry.key === videoModel)?.label ?? "This model";
+    setResolution(DEFAULT_VIDEO_RESOLUTION);
+    toast.info(
+      `${label} does not support ${resolution.toUpperCase()} — switched to ${DEFAULT_VIDEO_RESOLUTION.toUpperCase()}`,
+    );
+  }, [videoModel, resolution, videoResolutionOptions]);
   // Every Jewelry Swap video the user has started — newest first. Jobs live
   // server-side, so refreshing simply re-attaches to the running ones.
   const [videos, setVideos] = useState<JewelryGeneration[]>([]);
