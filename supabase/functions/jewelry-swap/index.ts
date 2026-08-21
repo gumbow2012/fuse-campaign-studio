@@ -1786,6 +1786,23 @@ function directorSettingLine(settings: string[]) {
 const DIRECTOR_MAX_CHARS = 2400;
 
 /**
+ * The confirmed product type across the resolved specs: user-confirmed first,
+ * then analysis-detected, then a neutral generic. Fully universal — no product
+ * name is ever hardcoded or defaulted here.
+ */
+function confirmedProductType(specs: TargetSpec[]) {
+  const byProvenance = (want: string) =>
+    specs.find((spec) => spec.type && spec.sources?.type === want)?.type ?? null;
+  return (
+    byProvenance("user_override") ??
+    byProvenance("gemini_detected") ??
+    specs.find((spec) => spec.type)?.type ??
+    "jewelry piece"
+  );
+}
+
+
+/**
  * A dynamic luxury-jewelry-director shot plan for the Seedance
  * reference-to-video reconstruction. Universal for any jewelry type.
  */
