@@ -1423,6 +1423,9 @@ function buildJewelryPrompt(args: {
   const declaredSettings = declaredSettingList(specs);
   const colorless = isColorlessSpec(specs);
   const engineeringLock = engineeringLockLines(specs, productAnalysis);
+  // MASTER PRODUCT LOCK: derived once per reference set and inherited by every
+  // frame. Sits UNDER the user's confirmed spec in the authority order.
+  const masterLockBlock = masterLockPromptLines(args.masterLock ?? null, { compact: true });
 
   const prompt = [
     /* 1 — REPLACEMENT LEADS. */
@@ -1434,6 +1437,7 @@ function buildJewelryPrompt(args: {
     /* 2 — TARGET IDENTITY (mandatory), BEFORE any preservation rule. */
     "TARGET IDENTITY — MANDATORY. The specification below defines WHAT must appear. It outranks aesthetics, model inference and the preservation rules further down. Never substitute another product type, metal, stone, stone color or setting construction.",
     specLines.length ? specLines.join("\n") : null,
+    masterLockBlock.length ? masterLockBlock.join("\n") : null,
     declaredSettings.length
       ? `SETTING LOCK: ${declaredSettings.join("; ")} — reproduce each declared construction exactly as built on the references; never swap it for another setting family and never regularize it into a uniform stone field.`
       : null,
