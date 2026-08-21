@@ -1897,6 +1897,7 @@ function buildSeedanceDirectorPrompt(args: {
   const optional = [
     hasStones ? `${DIRECTOR_GEMSTONES}${colorless ? ` ${DIRECTOR_COLORLESS}` : ""}` : null,
     DIRECTOR_METAL,
+    String(args.opticsText ?? "").trim() || null,
     DIRECTOR_OPTICS,
     DIRECTOR_LIGHTING,
     DIRECTOR_TRANSITIONS,
