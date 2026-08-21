@@ -2515,7 +2515,11 @@ export default function JewelrySwap() {
       frameAnalysisFor,
       analysis,
       nanoQuality,
+      opticsProfile,
+      opticsControls,
+      ensureFrameOptics,
     ],
+
 
   );
 
