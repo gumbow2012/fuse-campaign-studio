@@ -46,6 +46,17 @@ import {
 } from "./canonicalMasters.ts";
 import { collectValidatedMasterRefs } from "./validatedMasters.ts";
 import {
+  type ConnectedAssetModel,
+  connectedAssetPromptLines,
+  normalizeConnectedAssets,
+} from "./connectedAssets.ts";
+import {
+  campaignPhotographySummaryLine,
+  normalizeCampaignPhotographyProfile,
+} from "../_shared/campaign-photography.ts";
+
+
+import {
   buildMatchedPairPrompt,
   isManufacturingStage,
   type ManufacturingStage,
@@ -1426,6 +1437,9 @@ function buildJewelryPrompt(args: {
   masterLock?: MasterProductLock | null;
   /** MATERIAL APPEARANCE AUTHORITY: material realism only — zero geometry. */
   materialAuthority?: MaterialAppearanceAuthority | null;
+  /** CONNECTED PRODUCT SYSTEMS (§30): attachment rules for connected parts. */
+  connectedAssets?: ConnectedAssetModel | null;
+
 }) {
   let cursor = 2; // image 1 is the source frame
   const lines: string[] = [];
@@ -1548,7 +1562,15 @@ function buildJewelryPrompt(args: {
 
     /* 4 — PRESERVE from SOURCE_FRAME (secondary to the replacement). */
     "PRESERVE FROM SOURCE_FRAME (secondary — this must NEVER cause the original jewelry to be kept): camera position and angle, perspective, crop, zoom, composition, depth of field, focus plane, lighting, background, subject, skin, hair, clothing, hands, occlusion order, and the jewelry's position, orientation, rotation, tilt, visible percentage and scale. Only the jewelry's identity changes — never the shot. Geometry comes from the REFERENCES; framing comes from SOURCE_FRAME.",
+    // SWAP MODE keeps the SOURCE cinematography (camera + light come from the
+    // frame above) — the campaign photography profile is deliberately NOT used
+    // here. CONNECTED PRODUCT SYSTEMS (§30) rules are appended when present.
+    ...(() => {
+      const connected = connectedAssetPromptLines(args.connectedAssets ?? null);
+      return connected.length ? ["", connected.join("\n")] : [];
+    })(),
     "",
+
     compactModeLine(mode),
     compactCoverageLine(coverage, mode),
     "",
@@ -2148,6 +2170,10 @@ async function startCanonicalMaster(admin: AdminClient, args: {
   /** Active project id — used to INHERIT the persisted lock when none is sent. */
   projectId?: unknown;
   materialAuthority?: unknown;
+  /** CONNECTED PRODUCT SYSTEMS (§30): attachment rules, derived from the lock. */
+  connectedAssets?: unknown;
+  /** CAMPAIGN PHOTOGRAPHY PROFILE (§C4): campaign plates (D5) only. */
+  campaignPhotography?: unknown;
   /** Which slot of the requested master set this is (audit only). */
   setIndex?: number;
   setSize?: number;
@@ -2183,11 +2209,16 @@ async function startCanonicalMaster(admin: AdminClient, args: {
   if (!imageUrls.length) throw new Error("Add at least one jewelry reference image");
 
   const componentLabel = String(args.componentLabel ?? "").trim() || null;
+  const connectedAssets = normalizeConnectedAssets(args.connectedAssets ?? null);
+  const campaignPhotography = normalizeCampaignPhotographyProfile(args.campaignPhotography ?? null);
   const prompt = buildCanonicalMasterPrompt({
     view,
     componentLabel,
     masterLock,
     materialAuthority,
+    connectedAssets: normalizeConnectedAssets(args.connectedAssets ?? null),
+    // Campaign plates (D5) carry the photography profile; neutral masters do not.
+    campaignPhotography: normalizeCampaignPhotographyProfile(args.campaignPhotography ?? null),
     extra: args.extraPrompt,
   });
 
@@ -2259,6 +2290,8 @@ async function startCanonicalMaster(admin: AdminClient, args: {
           master_product_lock_summary: masterLockSummaryLine(masterLock),
           material_appearance_authority: materialAuthority,
           material_appearance_authority_summary: materialAuthoritySummaryLine(materialAuthority),
+          campaign_photography_summary: campaignPhotographySummaryLine(campaignPhotography),
+          connected_assets_count: connectedAssets?.connectedAssets.length ?? 0,
           all_reference_ids_analyzed: [...referenceIds.values()],
           references_sent: imageUrls.length,
           pieces,
@@ -2499,6 +2532,8 @@ async function startSwapFrame(admin: AdminClient, args: {
   canonicalMasters?: unknown;
   /** MATERIAL APPEARANCE AUTHORITY derived from the existing evidence strengths. */
   materialAuthority?: unknown;
+  /** CONNECTED PRODUCT SYSTEMS (§30): attachment rules, derived from the lock. */
+  connectedAssets?: unknown;
   webhookBase: string;
 }) {
   const sourceFrameUrl = String(args.sourceFrameUrl ?? "").trim();
@@ -2524,6 +2559,8 @@ async function startSwapFrame(admin: AdminClient, args: {
   });
   // MATERIAL APPEARANCE AUTHORITY: material realism only — never geometry.
   const materialAuthority = normalizeMaterialAuthority(args.materialAuthority ?? null);
+  // CONNECTED PRODUCT SYSTEMS (§30): present → attachment rules are appended.
+  const connectedAssets = normalizeConnectedAssets(args.connectedAssets ?? null);
 
   // DIAMOND OPTICS (additive): cached analysed optics × user controls. No Gemini
   // call happens here — moving a slider only re-synthesises these prompt lines.
@@ -2580,6 +2617,7 @@ async function startSwapFrame(admin: AdminClient, args: {
     opticsControls,
     masterLock,
     materialAuthority,
+    connectedAssets,
   });
 
 
@@ -3983,6 +4021,7 @@ Deno.serve(async (req) => {
         projectId: body.projectId ?? null,
         materialAuthority: body.materialAuthority ?? null,
         canonicalMasters: body.canonicalMasters ?? null,
+        connectedAssets: body.connectedAssets ?? null,
         webhookBase,
       });
       return json({ generation });
@@ -4003,6 +4042,8 @@ Deno.serve(async (req) => {
         masterProductLock: body.masterProductLock ?? null,
         projectId: body.projectId ?? null,
         materialAuthority: body.materialAuthority ?? null,
+        connectedAssets: body.connectedAssets ?? null,
+        campaignPhotography: body.campaignPhotography ?? null,
         setIndex: body.setIndex,
         setSize: body.setSize,
         webhookBase,

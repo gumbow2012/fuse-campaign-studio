@@ -973,6 +973,19 @@ export default function JewelrySwap() {
     canonicalMastersRef.current = canonicalMasters;
   }, [canonicalMasters]);
   /**
+   * §E3 — the analysis profiles the Nano prompt reads. Kept in refs so every
+   * generation sends the CURRENT model without re-binding the callbacks.
+   */
+  const connectedAssetsRef = useRef<ConnectedAssetModel | null>(null);
+  useEffect(() => {
+    connectedAssetsRef.current = connectedAssetModel;
+  }, [connectedAssetModel]);
+  const campaignPhotographyProfileRef = useRef<CampaignPhotographyProfile | null>(null);
+  useEffect(() => {
+    campaignPhotographyProfileRef.current = campaignPhotographyProfile;
+  }, [campaignPhotographyProfile]);
+
+  /**
    * MATCHED-PAIR MANUFACTURING (§29). Counterpart plates of approved masters in
    * the OTHER manufacturing state, keyed `${sourceId}:${targetStage}`. Each pair
    * is one explicit paid Nano run — nothing here ever fires automatically.
@@ -2768,6 +2781,9 @@ export default function JewelrySwap() {
               masterProductLock,
               projectId: activeProjectIdRef.current,
               materialAuthority,
+              // §E3 — attachment rules + (campaign mode only) the photography look.
+              connectedAssets: connectedAssetsRef.current,
+              campaignPhotography: isSwapMode ? null : campaignPhotographyProfileRef.current,
               setIndex: index,
               setSize: canonicalMasterTargets.length,
             });
@@ -2866,6 +2882,9 @@ export default function JewelrySwap() {
           masterProductLock,
           projectId: activeProjectIdRef.current,
           materialAuthority,
+          // §E3 — attachment rules + (campaign mode only) the photography look.
+          connectedAssets: connectedAssetsRef.current,
+          campaignPhotography: isSwapMode ? null : campaignPhotographyProfileRef.current,
         });
         setCanonicalMasters((prev) => ({
           ...prev,
@@ -3263,6 +3282,9 @@ export default function JewelrySwap() {
         canonicalMasters: canonicalMastersRef.current,
         // MATERIAL APPEARANCE AUTHORITY — material realism only, zero geometry.
         materialAuthority,
+        // §E3 — CONNECTED PRODUCT SYSTEMS: connected parts stay attached. Swap
+        // mode keeps the SOURCE cinematography, so no photography profile here.
+        connectedAssets: connectedAssetsRef.current,
       });
       // A regeneration APPENDS a revision (§36) and never unapproves the
       // revision the user already approved (§37).

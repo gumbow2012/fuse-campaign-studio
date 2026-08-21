@@ -88,6 +88,10 @@ export async function generateCanonicalMaster(args: {
   imageModel?: JewelryImageModel;
   masterProductLock?: unknown;
   materialAuthority?: unknown;
+  /** CONNECTED PRODUCT SYSTEMS (§30): attachment rules for connected parts. */
+  connectedAssets?: unknown;
+  /** CAMPAIGN PHOTOGRAPHY PROFILE (§C4): campaign plates only. */
+  campaignPhotography?: unknown;
   setIndex?: number;
   setSize?: number;
 }) {

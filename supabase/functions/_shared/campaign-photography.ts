@@ -105,7 +105,52 @@ export function normalizeCampaignPhotographyProfile(
   return profile;
 }
 
+/**
+ * CAMPAIGN PHOTOGRAPHY (§C4) — prompt synthesis (§E3).
+ *
+ * Concise CAMERA / LIGHT lines only. A photography reference contributes ZERO
+ * product geometry: it may never change construction, stone layout, proportions
+ * or component count. Low confidence stays advisory rather than mandatory.
+ * Empty array when no profile exists → callers append nothing.
+ */
+export function campaignPhotographyPromptLines(
+  profile: CampaignPhotographyProfile | null | undefined,
+): string[] {
+  if (!profile) return [];
+  const labels: Record<CampaignPhotographyField, string> = {
+    lensCharacter: "Lens character",
+    macroMagnification: "Magnification",
+    cameraHeight: "Camera height",
+    cameraDistance: "Camera distance",
+    lensCompression: "Perspective",
+    lightingFamily: "Lighting",
+    exposure: "Exposure",
+    contrast: "Contrast",
+    whiteBalance: "White balance",
+    surfaceEnvironment: "Surface / environment",
+    depthOfField: "Depth of field",
+    focusBehavior: "Focus behaviour",
+    negativeSpace: "Negative space",
+  };
+  const rows = TEXT_KEYS
+    .map((key) => (profile[key] ? `- ${labels[key]}: ${profile[key]}` : null))
+    .filter((row): row is string => Boolean(row));
+  if (!rows.length) return [];
+
+  const confidence = typeof profile.confidence === "number" ? profile.confidence : null;
+  const advisory = confidence !== null && confidence < 0.5;
+
+  return [
+    `CAMPAIGN PHOTOGRAPHY PROFILE — reproduce this CAPTURE look${
+      advisory ? " (advisory — low-confidence evidence, follow it only where it does not fight the product)" : ""
+    }: camera, optics, lighting, exposure and environment only.`,
+    ...rows,
+    "PHOTOGRAPHY IS NOT GEOMETRY: this profile may NEVER change the product's construction, proportions, component count, stone count, stone size, stone placement or setting family. Photographic references contribute lighting and camera character only — never product identity.",
+  ];
+}
+
 /** Compact one-line summary for logs and the engineering surface. */
+
 export function campaignPhotographySummaryLine(
   profile: CampaignPhotographyProfile | null,
 ): string | null {
