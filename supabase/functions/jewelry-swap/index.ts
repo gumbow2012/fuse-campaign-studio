@@ -2984,6 +2984,8 @@ const ANIMATE_DURATION = 3;
 async function startAnimateFrame(admin: AdminClient, args: {
   userId: string;
   imageUrl: string;
+  /** Client-conditioned (<=9.5 MB) copy of the frame; the 4K original stays the approved asset. */
+  animateInputUrl?: unknown;
   frameIndex?: number;
   frameTime?: number;
   /** "auto" | a shot key | "custom" */
@@ -2997,6 +2999,8 @@ async function startAnimateFrame(admin: AdminClient, args: {
 }) {
   const imageUrl = String(args.imageUrl ?? "").trim();
   if (!imageUrl) throw new Error("A swapped frame is required");
+  const clientInputUrl = String(args.animateInputUrl ?? "").trim();
+
 
   const videoModel = getVideoModel(ANIMATE_MODEL_KEY);
   const endpointId = videoModel.endpointId;
@@ -3043,8 +3047,14 @@ async function startAnimateFrame(admin: AdminClient, args: {
       fallbackUsdPerSecond: videoFallbackUsdPerSecond(videoModel, false) ?? null,
     });
 
-    // Kling rejects input images over 10 MB; condition the approved frame first.
-    const conditioned = await conditionImageForKling(admin as any, imageUrl, args.userId);
+    // Kling rejects input images over 10 MB. The client now conditions the
+    // frame, so this server-side pass is only a safety fallback and early-returns.
+    const conditioned = await conditionImageForKling(
+      admin as any,
+      clientInputUrl || imageUrl,
+      args.userId,
+    );
+
 
     const falInput = buildVideoModelInput(ANIMATE_MODEL_KEY, {
       imageUrl: conditioned.url,
@@ -3075,6 +3085,8 @@ async function startAnimateFrame(admin: AdminClient, args: {
           animate_input_url: conditioned.url,
           animate_input_conditioned: conditioned.conditioned,
           animate_input_note: conditioned.note ?? null,
+          animate_input_client_conditioned: !!clientInputUrl,
+
           frame_index: Number(args.frameIndex ?? 0),
           frame_time: Number(args.frameTime ?? 0),
           camera_direction: direction,
@@ -3386,6 +3398,7 @@ Deno.serve(async (req) => {
       const generation = await startAnimateFrame(admin, {
         userId: user.id,
         imageUrl: body.imageUrl ?? body.sourceFrameUrl,
+        animateInputUrl: body.animateInputUrl ?? null,
         frameIndex: body.frameIndex,
         frameTime: body.frameTime,
         cameraDirection: body.cameraDirection,

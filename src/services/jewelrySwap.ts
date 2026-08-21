@@ -84,6 +84,8 @@ export type CameraDirection = (typeof CAMERA_DIRECTIONS)[number]["value"];
 /** Animate one approved frame with a camera direction (and optional custom text). */
 export async function animateJewelryFrame(args: {
   imageUrl: string;
+  /** Conditioned (<=9.5 MB) copy of the frame to send to Kling. */
+  animateInputUrl?: string | null;
   frameIndex: number;
   frameTime: number;
   cameraDirection: string;
@@ -95,6 +97,7 @@ export async function animateJewelryFrame(args: {
   const data = await callJewelrySwap<{ generation: JewelryGeneration }>({
     action: "animate_frame",
     imageUrl: args.imageUrl,
+    animateInputUrl: args.animateInputUrl ?? null,
     frameIndex: args.frameIndex,
     frameTime: args.frameTime,
     cameraDirection: args.cameraDirection,
@@ -103,6 +106,7 @@ export async function animateJewelryFrame(args: {
     setSize: args.setSize,
     pieceTypes: args.pieceTypes,
   });
+
   return data.generation;
 }
 

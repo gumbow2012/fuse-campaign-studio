@@ -100,6 +100,7 @@ import {
 } from "@/lib/videoFrames";
 
 import { compressImageFile } from "@/lib/imageCompress";
+import { conditionAnimateInput } from "@/services/animateInput";
 
 
 const JEWELRY_TYPES = [
@@ -2912,8 +2913,23 @@ export default function JewelrySwap() {
       frame: { index: number; url: string; time: number },
       position: { setIndex: number; setSize: number; direction?: string },
     ) => {
+      // Condition the animate input in the browser so the edge worker never
+      // decodes a 4K image (that OOM was the HTTP 546). The approved 4K asset
+      // itself is untouched — this only creates a temporary animation input.
+      const conditioned = await conditionAnimateInput(frame.url);
+      console.info("[jewelry-swap] animate input conditioned", {
+        originalUrl: conditioned.originalUrl,
+        originalBytes: conditioned.originalBytes,
+        originalDimensions: conditioned.originalDimensions,
+        conditionedUrl: conditioned.url,
+        conditionedBytes: conditioned.conditionedBytes,
+        conditionedDimensions: conditioned.conditionedDimensions,
+        conditioned: conditioned.conditioned,
+        note: conditioned.note ?? null,
+      });
       const generation = await animateJewelryFrame({
         imageUrl: frame.url,
+        animateInputUrl: conditioned.conditioned ? conditioned.url : null,
         frameIndex: frame.index,
         frameTime: frame.time,
         cameraDirection: position.direction ?? cameraDirection,
@@ -2922,6 +2938,7 @@ export default function JewelrySwap() {
         setSize: position.setSize,
         pieceTypes,
       });
+
       setVideos((prev) => [generation, ...prev]);
     },
     [cameraDirection, customCameraPrompt, pieceTypes],
