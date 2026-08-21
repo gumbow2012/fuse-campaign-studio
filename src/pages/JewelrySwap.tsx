@@ -4123,6 +4123,8 @@ export default function JewelrySwap() {
       activeBatchId,
       // MATCHED PAIRS (§29) — counterpart plates linked to their source plate.
       matchedPairs: matchedPairs as unknown as Record<string, unknown>,
+      // CONNECTED PRODUCT SYSTEMS (§30) — derived relationship model, data only.
+      connectedAssets: connectedAssetModel as unknown as unknown | null,
       userLocks,
       analysis,
       analysisKey,
@@ -4172,6 +4174,7 @@ export default function JewelrySwap() {
       campaignPhotographyProfile,
       canonicalMasters,
       matchedPairs,
+      connectedAssetModel,
       shotCoveragePlan,
       batches,
       activeBatchId,
@@ -4283,6 +4286,8 @@ export default function JewelrySwap() {
       );
       // MATCHED PAIRS (§29) — restored as-is; reopening re-renders nothing.
       setMatchedPairs((state?.matchedPairs ?? {}) as Record<string, MatchedPair>);
+      // CONNECTED PRODUCT SYSTEMS (§30) — restored; rebuilt only if the lock moved.
+      setConnectedAssetModel((state?.connectedAssets ?? null) as ConnectedAssetModel | null);
       // BATCH CONTINUATION (§28) — restored as-is; no batch re-runs anything.
       const storedBatches = (state?.batches ?? []) as CampaignBatch[];
       setBatches(storedBatches);
