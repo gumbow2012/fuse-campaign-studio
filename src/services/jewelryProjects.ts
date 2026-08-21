@@ -12,6 +12,14 @@ export const JEWELRY_PROJECT_STATE_VERSION = 1;
 /** Everything needed to rebuild the Jewelry Swap workspace. */
 export type JewelryProjectState = {
   version: number;
+  /**
+   * WORKSPACE MODE (§26). "swap" replaces jewelry inside existing source
+   * cinematography (the default, unchanged behaviour); "campaign" builds clean
+   * product photography from scratch with no source clip. Both modes share the
+   * same product-understanding stack, so this only marks which surface the
+   * project belongs to. Absent on pre-campaign projects → treated as "swap".
+   */
+  mode?: "swap" | "campaign";
   /** Source clip. */
   videoUrl: string | null;
   videoPreview: string | null;
