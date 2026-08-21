@@ -492,10 +492,34 @@ function qualityFromGeneration(
 }
 
 
+/**
+ * §F2 — RESOLUTION TRUTHFULNESS. `resolutions` are exactly the values the live
+ * fal OpenAPI schema for each model's reference-to-video endpoint accepts
+ * (verified 2026-08-21). Only these are offered, so the resolution the user
+ * picks is always the resolution submitted — never a silent downgrade.
+ */
 const VIDEO_MODELS = [
-  { key: "seedance-2.0", label: "Seedance 2.0", usdPerSecond: 0.3024 },
-  { key: "seedance-2.0-fast", label: "Seedance 2.0 Fast", usdPerSecond: 0.2419 },
+  {
+    key: "seedance-2.0",
+    label: "Seedance 2.0",
+    usdPerSecond: 0.3024,
+    resolutions: ["480p", "720p", "1080p", "4k"],
+  },
+  {
+    key: "seedance-2.0-fast",
+    label: "Seedance 2.0 Fast",
+    usdPerSecond: 0.2419,
+    resolutions: ["480p", "720p"],
+  },
 ];
+
+const DEFAULT_VIDEO_RESOLUTION = "720p";
+
+function supportedResolutionsFor(modelKey: string) {
+  return (
+    VIDEO_MODELS.find((entry) => entry.key === modelKey)?.resolutions ?? ["480p", "720p"]
+  );
+}
 
 
 type Frame = { time: number; url: string };
