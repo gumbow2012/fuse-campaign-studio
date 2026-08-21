@@ -6890,9 +6890,7 @@ export default function JewelrySwap() {
                     </label>
                     <div className="space-y-1.5">
                       {approvedFrames.map((frame, index) => {
-                        const overridden =
-                          clipMotions[frame.url] !== undefined ||
-                          clipDurations[frame.url] !== undefined;
+                        const overridden = clipIsOverridden(frame);
                         return (
                           <div
                             key={frame.url}
@@ -6904,10 +6902,7 @@ export default function JewelrySwap() {
                             <select
                               value={String(durationForFrame(frame))}
                               onChange={(event) =>
-                                setClipDurations((prev) => ({
-                                  ...prev,
-                                  [frame.url]: Number(event.target.value),
-                                }))
+                                setClipDuration(frame, Number(event.target.value))
                               }
                               className={`${SELECT_CLASS} w-24 shrink-0`}
                             >
@@ -6919,15 +6914,11 @@ export default function JewelrySwap() {
                             </select>
                             <select
                               value={motionForFrame(frame)}
-                              onChange={(event) =>
-                                setClipMotions((prev) => ({
-                                  ...prev,
-                                  [frame.url]: event.target.value,
-                                }))
-                              }
+                              onChange={(event) => setClipMotion(frame, event.target.value)}
                               className={`${SELECT_CLASS} min-w-[9rem] flex-1`}
                             >
                               {MOTION_PRESETS.map((option) => (
+
                                 <option key={option.value} value={option.value}>
                                   {option.label}
                                 </option>
