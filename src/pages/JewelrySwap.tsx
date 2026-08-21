@@ -54,6 +54,11 @@ import {
   type MasterProductLock,
 } from "@/lib/masterProductLock";
 import {
+  buildConnectedAssetModel,
+  isConnectedAssetModelCurrent,
+  type ConnectedAssetModel,
+} from "@/lib/connectedAssets";
+import {
   deriveMaterialAppearanceAuthority,
   materialAuthorityLabel,
   type MaterialAppearanceAuthority,
