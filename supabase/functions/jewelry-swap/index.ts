@@ -2014,6 +2014,8 @@ async function startSwapFrame(admin: AdminClient, args: {
   opticsControls?: unknown;
   /** MASTER PRODUCT LOCK derived once per reference set on the client. */
   masterProductLock?: unknown;
+  /** MATERIAL APPEARANCE AUTHORITY derived from the existing evidence strengths. */
+  materialAuthority?: unknown;
   webhookBase: string;
 }) {
   const sourceFrameUrl = String(args.sourceFrameUrl ?? "").trim();
