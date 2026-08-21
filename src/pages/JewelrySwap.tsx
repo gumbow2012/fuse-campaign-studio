@@ -4206,6 +4206,10 @@ export default function JewelrySwap() {
       pieces,
       knowledgeMap,
       masterProductLock,
+      // §E5 — lock-version provenance so a reopened project still validates a
+      // generation against the lock version that actually produced it.
+      masterLockRegistry,
+      generationLockVersion,
       // CAMPAIGN PHOTOGRAPHY PROFILE — look only, stored so reopen never re-reads.
       photographyReferenceUrls: photographyRefs,
       campaignPhotographyProfile,
@@ -4265,6 +4269,8 @@ export default function JewelrySwap() {
       pieces,
       knowledgeMap,
       masterProductLock,
+      masterLockRegistry,
+      generationLockVersion,
       workspaceMode,
       photographyRefs,
       campaignPhotographyProfile,
@@ -4368,6 +4374,11 @@ export default function JewelrySwap() {
       setKnowledgeMap((state?.knowledgeMap ?? null) as ProductKnowledgeMap | null);
       // Reuse the stored lock — reopening never recomputes or re-runs Gemini.
       setMasterProductLock((state?.masterProductLock ?? null) as MasterProductLock | null);
+      // §E5 — restore the lock-version registry + per-generation stamps.
+      setMasterLockRegistry((state?.masterLockRegistry ?? {}) as MasterLockRegistry);
+      setGenerationLockVersion(
+        (state?.generationLockVersion ?? {}) as Record<string, string>,
+      );
       // Pre-campaign projects have no marker and stay on the unchanged Swap surface.
       setWorkspaceMode(state?.mode === "campaign" ? "campaign" : "swap");
       // Reuse the stored photography profile — reopening never re-reads the look.
