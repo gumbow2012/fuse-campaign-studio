@@ -58,6 +58,14 @@ import {
   type MaterialAppearanceAuthority,
 } from "@/lib/materialAuthority";
 import { buildFidelityAudit, type FidelityAudit } from "@/lib/fidelityAudit";
+import {
+  analyzeCampaignPhotography,
+  photographySetVersion,
+  type CampaignPhotographyProfile,
+} from "@/services/campaignPhotography";
+import CampaignPhotographyPanel, {
+  type PhotographyStatus,
+} from "@/components/jewelry/CampaignPhotographyPanel";
 import FidelityPanel from "@/components/jewelry/FidelityPanel";
 
 import DiamondOpticsPanel from "@/components/jewelry/DiamondOpticsPanel";
@@ -865,6 +873,18 @@ export default function JewelrySwap() {
    * Empty = FUSE derives it automatically from the existing evidence strengths.
    */
   const [materialAuthorityOverride, setMaterialAuthorityOverride] = useState<string | null>(null);
+  /**
+   * CAMPAIGN PHOTOGRAPHY PROFILE (§20): HOW the product is photographed. These
+   * references are PHOTOGRAPHY authority only — zero product geometry/identity.
+   * Analysis only in this commit; nothing feeds a generation prompt yet.
+   */
+  const [photographyRefs, setPhotographyRefs] = useState<string[]>([]);
+  const [campaignPhotographyProfile, setCampaignPhotographyProfile] =
+    useState<CampaignPhotographyProfile | null>(null);
+  const [photographyStatus, setPhotographyStatus] = useState<PhotographyStatus>("idle");
+  const [photographyError, setPhotographyError] = useState<string | null>(null);
+  /** The reference set the stored profile was analysed from (recompute guard). */
+  const photographyVersion = useRef<string | null>(null);
   const [engineeringOpen, setEngineeringOpen] = useState(false);
   /**
    * A PROPOSAL only. FUSE never splits a card by itself — the user answers this
