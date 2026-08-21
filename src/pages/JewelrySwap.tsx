@@ -3145,8 +3145,303 @@ export default function JewelrySwap() {
     meta,
   ]);
 
+  /* ------------------------- PROJECT PERSISTENCE (additive) ------------------------- */
+
+  const [projects, setProjects] = useState<JewelryProjectSummary[]>([]);
+  const [projectsLoading, setProjectsLoading] = useState(false);
+  const [projectId, setProjectId] = useState<string | null>(null);
+  const [projectName, setProjectName] = useState("Untitled project");
+  const [saveStatus, setSaveStatus] = useState<ProjectSaveStatus>("idle");
+  /** True while a restore is writing state, so the autosave never echoes it back. */
+  const restoringProject = useRef(false);
+  const lastSavedSnapshot = useRef<string | null>(null);
+
+  const refreshProjects = useCallback(async () => {
+    setProjectsLoading(true);
+    try {
+      setProjects(await listJewelryProjects());
+    } catch {
+      // Projects are additive — a listing failure never blocks the workspace.
+    } finally {
+      setProjectsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void refreshProjects();
+  }, [refreshProjects]);
+
+  /** The full workspace snapshot stored in `project_state`. */
+  const projectState = useMemo<JewelryProjectState>(
+    () => ({
+      version: JEWELRY_PROJECT_STATE_VERSION,
+      videoUrl,
+      videoPreview: videoUrl,
+      meta,
+      frames,
+      selectedFrames: Array.from(selectedFrames),
+      pieces,
+      knowledgeMap,
+      userLocks,
+      analysis,
+      analysisKey,
+      referenceSetVersion,
+      intakeFingerprint: intakeProvenance.current.fingerprint,
+      intakeReferences: intakeProvenance.current.references,
+      intakeSummary: intake,
+      opticsProfile,
+      frameOptics: frameOptics as unknown as Record<string, unknown>,
+      opticsControls,
+      nanoQuality,
+      frameQuality: frameQuality as unknown as Record<string, unknown>,
+      swaps: swaps as unknown as Record<string, unknown>,
+      altSwaps: altSwaps as unknown as Record<string, unknown>,
+      chosenModel: chosenModel as unknown as Record<string, unknown>,
+      framePreferredRole: framePreferredRole as unknown as Record<string, unknown>,
+      frameReason: frameReason as unknown as Record<string, unknown>,
+      frameMode: frameMode as unknown as Record<string, unknown>,
+      frameCoverage: frameCoverage as unknown as Record<string, unknown>,
+      approved: Array.from(approved),
+      extraPrompt,
+      videoModel,
+      resolution,
+      preserveAudio,
+      videoDuration,
+      durationTouched,
+      promptMode,
+      promptDraft,
+      cameraDirection,
+      customCameraPrompt,
+      videos,
+    }),
+    [
+      videoUrl,
+      meta,
+      frames,
+      selectedFrames,
+      pieces,
+      knowledgeMap,
+      userLocks,
+      analysis,
+      analysisKey,
+      referenceSetVersion,
+      intake,
+      opticsProfile,
+      frameOptics,
+      opticsControls,
+      nanoQuality,
+      frameQuality,
+      swaps,
+      altSwaps,
+      chosenModel,
+      framePreferredRole,
+      frameReason,
+      frameMode,
+      frameCoverage,
+      approved,
+      extraPrompt,
+      videoModel,
+      resolution,
+      preserveAudio,
+      videoDuration,
+      durationTouched,
+      promptMode,
+      promptDraft,
+      cameraDirection,
+      customCameraPrompt,
+      videos,
+    ],
+  );
+
+  /**
+   * AUTOSAVE: debounced ~1.5s after the workspace settles — never per keystroke.
+   * A session with nothing in it (and no project yet) writes nothing at all.
+   */
+  useEffect(() => {
+    if (restoringProject.current) return;
+    const serialized = JSON.stringify(projectState);
+    if (lastSavedSnapshot.current === serialized) return;
+    const hasContent = Boolean(videoUrl) || frames.length > 0 || pieces.length > 0;
+    if (!projectId && !hasContent) return;
+
+    const timer = window.setTimeout(async () => {
+      setSaveStatus("saving");
+      try {
+        if (projectId) {
+          await saveJewelryProject({ id: projectId, sourceVideoUrl: videoUrl, projectState });
+        } else {
+          const created = await createJewelryProject({
+            name: projectName,
+            sourceVideoUrl: videoUrl,
+            projectState,
+          });
+          setProjectId(created.id);
+          setProjectName(created.name);
+        }
+        lastSavedSnapshot.current = serialized;
+        setSaveStatus("saved");
+        void refreshProjects();
+      } catch {
+        setSaveStatus("error");
+      }
+    }, 1500);
+
+    return () => window.clearTimeout(timer);
+  }, [projectState, projectId, projectName, videoUrl, frames.length, pieces.length, refreshProjects]);
+
+  /**
+   * RESTORE: rebuilds the workspace from `project_state`. `intakeJustApplied`
+   * is set so the reference-intake effect only records the restored
+   * fingerprint — Gemini is NOT re-run unless the references actually change.
+   */
+  const openProject = useCallback(async (id: string) => {
+    try {
+      const project = await loadJewelryProject(id);
+      const state = project.projectState;
+      restoringProject.current = true;
+      intakeJustApplied.current = true;
+
+      setVideoUrl(state?.videoUrl ?? null);
+      setVideoPreview(state?.videoPreview ?? state?.videoUrl ?? null);
+      setMeta((state?.meta ?? null) as VideoMeta | null);
+      setFrames((state?.frames ?? []) as Frame[]);
+      setSelectedFrames(new Set((state?.selectedFrames ?? []) as number[]));
+      setPieces((state?.pieces ?? []) as Piece[]);
+
+      setKnowledgeMap((state?.knowledgeMap ?? null) as ProductKnowledgeMap | null);
+      setUserLocks((state?.userLocks ?? []) as UserConfirmedFact[]);
+      setAnalysis((state?.analysis ?? null) as JewelryProjectAnalysis | null);
+      setAnalysisKey(state?.analysisKey ?? null);
+      setAnalysisState(state?.analysis ? "ready" : "idle");
+      intakeProvenance.current = {
+        fingerprint: state?.intakeFingerprint ?? null,
+        references: (state?.intakeReferences ?? []) as {
+          url: string;
+          role?: string | null;
+          cad?: boolean;
+        }[],
+      };
+      if (state?.referenceSetVersion) intakeSetVersion.current = state.referenceSetVersion;
+      setIntake(
+        (state?.intakeSummary as typeof intake) ?? {
+          status: "idle",
+          stage: 0,
+          productCount: 0,
+          referenceCount: 0,
+        },
+      );
+
+      setOpticsProfile((state?.opticsProfile ?? null) as DiamondOpticsProfile | null);
+      setFrameOptics((state?.frameOptics ?? {}) as Record<number, DiamondOpticsProfile>);
+      setOpticsControls((state?.opticsControls as DiamondOpticsControls) ?? {
+        ...AUTO_OPTICS_CONTROLS,
+      });
+      setOpticsStatus(state?.opticsProfile ? "ready" : "idle");
+
+      setNanoQuality((state?.nanoQuality ?? "2k") as NanoQuality);
+      setFrameQuality((state?.frameQuality ?? {}) as Record<number, NanoQuality>);
+      setSwaps((state?.swaps ?? {}) as Record<number, JewelryGeneration>);
+      setAltSwaps((state?.altSwaps ?? {}) as Record<number, JewelryGeneration>);
+      setChosenModel((state?.chosenModel ?? {}) as Record<number, JewelryImageModel>);
+      setFramePreferredRole((state?.framePreferredRole ?? {}) as Record<number, string>);
+      setFrameReason((state?.frameReason ?? {}) as Record<number, string>);
+      setFrameMode((state?.frameMode ?? {}) as Record<number, ReplacementMode>);
+      setFrameCoverage((state?.frameCoverage ?? {}) as Record<number, Coverage>);
+      setApproved(new Set((state?.approved ?? []) as number[]));
+      setExtraPrompt(state?.extraPrompt ?? "");
+
+      setVideoModel(state?.videoModel ?? "seedance-2.0");
+      setResolution(state?.resolution ?? "1080p");
+      setPreserveAudio(state?.preserveAudio ?? true);
+      setVideoDuration(state?.videoDuration ?? 15);
+      setDurationTouched(Boolean(state?.durationTouched));
+      setPromptMode((state?.promptMode ?? "auto") as "auto" | "manual");
+      setPromptDraft(state?.promptDraft ?? "");
+      setCameraDirection(state?.cameraDirection ?? "auto");
+      setCustomCameraPrompt(state?.customCameraPrompt ?? "");
+
+      setProjectId(project.id);
+      setProjectName(project.name);
+      setSaveStatus("saved");
+      toast.success(`Opened “${project.name}”`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not open that project");
+    } finally {
+      window.setTimeout(() => {
+        restoringProject.current = false;
+      }, 0);
+    }
+  }, []);
+
+  /** NEW PROJECT: a clean workspace; the row is created on the first save. */
+  const startNewProject = useCallback(() => {
+    restoringProject.current = true;
+    intakeJustApplied.current = true;
+
+    setVideoUrl(null);
+    setVideoPreview(null);
+    setMeta(null);
+    setFrames([]);
+    setSelectedFrames(new Set());
+    setPieces([]);
+    setKnowledgeMap(null);
+    setUserLocks([]);
+    setAnalysis(null);
+    setAnalysisKey(null);
+    setAnalysisState("idle");
+    intakeProvenance.current = { fingerprint: null, references: [] };
+    setIntake({ status: "idle", stage: 0, productCount: 0, referenceCount: 0 });
+    setOpticsProfile(null);
+    setFrameOptics({});
+    setOpticsControls({ ...AUTO_OPTICS_CONTROLS });
+    setOpticsStatus("idle");
+    setNanoQuality("2k");
+    setFrameQuality({});
+    setSwaps({});
+    setAltSwaps({});
+    setChosenModel({});
+    setFramePreferredRole({});
+    setFrameReason({});
+    setFrameMode({});
+    setFrameCoverage({});
+    setApproved(new Set());
+    setExtraPrompt("");
+    setPromptMode("auto");
+    setPromptDraft("");
+    setCameraDirection("auto");
+    setCustomCameraPrompt("");
+
+    setProjectId(null);
+    setProjectName(`Jewelry project ${new Date().toLocaleDateString()}`);
+    lastSavedSnapshot.current = null;
+    setSaveStatus("idle");
+    window.setTimeout(() => {
+      restoringProject.current = false;
+    }, 0);
+  }, []);
+
+  /** DUPLICATE: same references / PKM / specs in a new row, ready for another clip. */
+  const duplicateProject = useCallback(async () => {
+    try {
+      const copy = await duplicateJewelryProject({
+        name: `Copy of ${projectName}`,
+        sourceVideoUrl: videoUrl,
+        projectState,
+      });
+      setProjectId(copy.id);
+      setProjectName(copy.name);
+      lastSavedSnapshot.current = JSON.stringify(projectState);
+      setSaveStatus("saved");
+      await refreshProjects();
+      toast.success(`Duplicated as “${copy.name}”`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not duplicate that project");
+    }
+  }, [projectName, projectState, videoUrl, refreshProjects]);
+
 
   return (
+
     <SiteShell>
       <PageMeta
         title="Jewelry Swap | FUSE"
