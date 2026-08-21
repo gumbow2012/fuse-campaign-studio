@@ -1985,6 +1985,8 @@ async function startSwapFrame(admin: AdminClient, args: {
   frameOpticsProfile?: unknown;
   /** DIAMOND OPTICS: Sparkle / Rainbow-Fire / advanced controls (AUTO default). */
   opticsControls?: unknown;
+  /** MASTER PRODUCT LOCK derived once per reference set on the client. */
+  masterProductLock?: unknown;
   webhookBase: string;
 }) {
   const sourceFrameUrl = String(args.sourceFrameUrl ?? "").trim();
@@ -2002,6 +2004,8 @@ async function startSwapFrame(admin: AdminClient, args: {
   // Stage-A still analysis (advisory). Absent or malformed → deterministic path.
   const frameAnalysis = normalizeFrameAnalysis(args.frameAnalysis ?? null);
   const productAnalysis = normalizeProductAnalysis(args.productAnalysis ?? null);
+  // MASTER PRODUCT LOCK: every frame in the project inherits the SAME lock.
+  const masterLock = normalizeMasterLock(args.masterProductLock ?? null);
 
   // DIAMOND OPTICS (additive): cached analysed optics × user controls. No Gemini
   // call happens here — moving a slider only re-synthesises these prompt lines.
