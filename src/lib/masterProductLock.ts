@@ -243,7 +243,9 @@ export function buildMasterProductLock(args: {
 
   const lock: MasterProductLock = {
     version: MASTER_PRODUCT_LOCK_VERSION,
+    lockVersion: MASTER_PRODUCT_LOCK_VERSION,
     lockId: clean(pkm.productCaseId) ?? clean(args.referenceSetVersion),
+
     referenceSetVersion: clean(args.referenceSetVersion),
     derivedFrom: {
       pkmVersion: clean(pkm.version),
