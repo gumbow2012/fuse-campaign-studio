@@ -198,6 +198,8 @@ export async function animateJewelryFrame(args: {
   frameTime: number;
   cameraDirection: string;
   customPrompt?: string | null;
+  /** §F6 — per-clip motion preset; defaults to "auto" (behavior-preserving). */
+  motionPreset?: string | null;
   setIndex: number;
   setSize: number;
   pieceTypes: string[];
@@ -211,6 +213,8 @@ export async function animateJewelryFrame(args: {
     frameTime: args.frameTime,
     cameraDirection: args.cameraDirection,
     customPrompt: args.customPrompt ?? null,
+    motionPreset: args.motionPreset ?? DEFAULT_MOTION_PRESET,
+
     setIndex: args.setIndex,
     setSize: args.setSize,
     pieceTypes: args.pieceTypes,
