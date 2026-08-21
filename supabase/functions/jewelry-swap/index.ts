@@ -39,6 +39,12 @@ import {
   normalizeMasterLock,
 } from "./masterLock.ts";
 import {
+  buildCanonicalMasterPrompt,
+  canonicalMasterLabel,
+  type CanonicalMasterView,
+  isCanonicalMasterView,
+} from "./canonicalMasters.ts";
+import {
   type MaterialAppearanceAuthority,
   materialAuthorityPromptLines,
   materialAuthoritySummaryLine,
@@ -1983,6 +1989,164 @@ function buildSeedanceDirectorPrompt(args: {
 }
 
 
+/**
+ * CANONICAL MASTER REFERENCE SET (§22)
+ * ---------------------------------------------------------------------------
+ * Renders ONE canonical master of the active product for ONE view, reusing the
+ * EXISTING Nano path (`IMAGE_MODEL` / `IMAGE_MODEL_ALT` + `submitFalJob`) with
+ * the same webhook, pricing and `studio_generations` bookkeeping as a frame
+ * swap. No new provider, no new endpoint, no routing change.
+ *
+ * It is ALWAYS user-triggered: the caller is an explicit "Generate canonical
+ * masters" action, so it spends credits exactly like any other Nano run and is
+ * never fired automatically by analysis or by opening a project.
+ *
+ * A master has NO source frame — the product references are the only images
+ * sent, and the product identity comes from the Master Product Lock.
+ */
+async function startCanonicalMaster(admin: AdminClient, args: {
+  userId: string;
+  view: string;
+  /** Dynamic component name when the view is a mechanical component. */
+  componentLabel?: string | null;
+  pieces: JewelryPiece[];
+  aspectRatio?: string;
+  resolution?: string;
+  extraPrompt?: string;
+  imageModel?: string;
+  masterProductLock?: unknown;
+  materialAuthority?: unknown;
+  /** Which slot of the requested master set this is (audit only). */
+  setIndex?: number;
+  setSize?: number;
+  webhookBase: string;
+}) {
+  const view: CanonicalMasterView = isCanonicalMasterView(args.view)
+    ? args.view
+    : (() => {
+      throw new Error("Unknown canonical master view");
+    })();
+
+  const pieces = (Array.isArray(args.pieces) ? args.pieces : [])
+    .filter((piece) => pieceUrls(piece ?? {}).length);
+  if (!pieces.length) throw new Error("Add at least one jewelry reference");
+
+  const imageModelKey = String(args.imageModel ?? "pro").trim().toLowerCase() === "nb2"
+    ? "nb2"
+    : "pro";
+  const endpointId = imageModelKey === "nb2" ? IMAGE_MODEL_ALT : IMAGE_MODEL;
+
+  const masterLock = normalizeMasterLock(args.masterProductLock ?? null);
+  const materialAuthority = normalizeMaterialAuthority(args.materialAuthority ?? null);
+
+  // Product references only — a master is rendered FROM the evidence, so there
+  // is no source frame to preserve and no per-frame routing to apply.
+  const referenceIds = buildReferenceIdMap(pieces);
+  const references = pieces.flatMap((piece) => pieceReferences(piece));
+  const imageUrls = cleanUrls(references.map((ref) => ref.url));
+  if (!imageUrls.length) throw new Error("Add at least one jewelry reference image");
+
+  const componentLabel = String(args.componentLabel ?? "").trim() || null;
+  const prompt = buildCanonicalMasterPrompt({
+    view,
+    componentLabel,
+    masterLock,
+    materialAuthority,
+    extra: args.extraPrompt,
+  });
+
+  const { data: inserted, error: insertError } = await admin
+    .from("studio_generations")
+    .insert({
+      user_id: args.userId,
+      status: "queued",
+      kind: "image",
+      provider: "fal",
+      prompt,
+    })
+    .select("*")
+    .single();
+  if (insertError || !inserted) {
+    throw new Error(insertError?.message ?? "Could not start the canonical master");
+  }
+
+  try {
+    const estimatedCostUsd = await estimateUsd({
+      endpointId,
+      fallbackFlatUsd: IMAGE_FALLBACK_USD,
+    });
+
+    const aspect = String(args.aspectRatio ?? "").trim();
+    const resolution = String(args.resolution ?? "").trim().toUpperCase();
+    const falInput: Record<string, unknown> = imageModelKey === "nb2"
+      ? {
+        prompt,
+        image_urls: imageUrls,
+        output_format: "png",
+      }
+      : {
+        prompt,
+        image_urls: imageUrls,
+        output_format: "png",
+        ...(aspect && aspect !== "auto" ? { aspect_ratio: aspect } : {}),
+        ...(["1K", "2K", "4K"].includes(resolution) ? { resolution } : {}),
+      };
+
+    const webhookUrl = `${args.webhookBase}${encodeURIComponent(inserted.id)}`;
+    const requestId = await submitFalJob(endpointId, falInput, webhookUrl);
+
+    const { data: updated } = await admin
+      .from("studio_generations")
+      .update({
+        status: "running",
+        provider_model: endpointId,
+        provider_request_id: requestId,
+        estimated_cost_usd: estimatedCostUsd,
+        estimated_credits: creditsFromUsd(estimatedCostUsd),
+        input_payload: {
+          ...falInput,
+          feature: "jewelry-swap",
+          stage: "canonical_master",
+          canonical_master_view: view,
+          canonical_master_label: canonicalMasterLabel(view, componentLabel),
+          canonical_master_component: componentLabel,
+          canonical_master_set_index: Number(args.setIndex ?? 0),
+          canonical_master_set_size: Number(args.setSize ?? 0),
+          // Masters are NOT auto-trusted — validation is a later commit.
+          canonical_master_validated: false,
+          image_model: imageModelKey,
+          image_endpoint: endpointId,
+          nano_quality: imageModelKey === "pro" && ["2K", "4K"].includes(resolution)
+            ? resolution.toLowerCase()
+            : null,
+          master_product_lock: masterLock,
+          master_product_lock_summary: masterLockSummaryLine(masterLock),
+          material_appearance_authority: materialAuthority,
+          material_appearance_authority_summary: materialAuthoritySummaryLine(materialAuthority),
+          all_reference_ids_analyzed: [...referenceIds.values()],
+          references_sent: imageUrls.length,
+          pieces,
+        },
+      })
+      .eq("id", inserted.id)
+      .select("*")
+      .single();
+
+    return serialize(updated ?? inserted);
+  } catch (error) {
+    const message = errorMessage(error);
+    await admin
+      .from("studio_generations")
+      .update({
+        status: "failed",
+        error_log: message.slice(0, 10000),
+        completed_at: new Date().toISOString(),
+      })
+      .eq("id", inserted.id);
+    throw error;
+  }
+}
+
 async function startSwapFrame(admin: AdminClient, args: {
   userId: string;
   sourceFrameUrl: string;
@@ -3480,6 +3644,27 @@ Deno.serve(async (req) => {
         opticsControls: body.opticsControls ?? null,
         masterProductLock: body.masterProductLock ?? null,
         materialAuthority: body.materialAuthority ?? null,
+        webhookBase,
+      });
+      return json({ generation });
+    }
+
+    // CANONICAL MASTER (§22): explicit user action only — one paid Nano run per
+    // requested view, on the EXISTING Nano path.
+    if (action === "generate_canonical_master") {
+      const generation = await startCanonicalMaster(admin, {
+        userId: user.id,
+        view: String(body.view ?? ""),
+        componentLabel: body.componentLabel ?? null,
+        pieces: body.pieces ?? [],
+        aspectRatio: body.aspectRatio,
+        resolution: body.resolution,
+        extraPrompt: body.extraPrompt,
+        imageModel: body.imageModel,
+        masterProductLock: body.masterProductLock ?? null,
+        materialAuthority: body.materialAuthority ?? null,
+        setIndex: body.setIndex,
+        setSize: body.setSize,
         webhookBase,
       });
       return json({ generation });
