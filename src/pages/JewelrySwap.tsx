@@ -5186,6 +5186,38 @@ export default function JewelrySwap() {
 
 
 
+                        {/* REVISION HISTORY (§36): regenerating appends, never overwrites. */}
+                        {revision.total > 1 && (
+                          <div className="flex items-center justify-between rounded-lg border border-white/10 bg-black/30 px-2 py-1">
+                            <button
+                              type="button"
+                              onClick={() => stepRevision(index, -1)}
+                              disabled={revision.current === 0}
+                              className="rounded px-1.5 text-white/70 disabled:opacity-30"
+                              aria-label="Previous version"
+                            >
+                              ‹
+                            </button>
+                            <span className="text-[10px] uppercase tracking-[0.18em] text-white/55">
+                              Version {revision.position} / {revision.total}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => stepRevision(index, 1)}
+                              disabled={revision.current >= revision.total - 1}
+                              className="rounded px-1.5 text-white/70 disabled:opacity-30"
+                              aria-label="Next version"
+                            >
+                              ›
+                            </button>
+                          </div>
+                        )}
+
+                        {approvedElsewhere && (
+                          <p className="text-[10px] text-cyan-200/70">
+                            A different version of this frame is approved.
+                          </p>
+                        )}
 
                         <div className="flex items-center gap-1.5">
                           <Button
@@ -5202,6 +5234,7 @@ export default function JewelrySwap() {
                           >
                             <Check size={12} /> {isApproved ? "Approved" : "Approve"}
                           </Button>
+
 
                           <Button
                             size="sm"
