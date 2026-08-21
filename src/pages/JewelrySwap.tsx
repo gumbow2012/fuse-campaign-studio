@@ -3834,12 +3834,34 @@ export default function JewelrySwap() {
   const [zipping, setZipping] = useState(false);
   const [cameraDirection, setCameraDirection] = useState<string>("auto");
   const [customCameraPrompt, setCustomCameraPrompt] = useState("");
-  /** §F6 — per-clip motion preset keyed by approved frame URL; unset = "auto". */
+  /**
+   * §F6/§F7 — motion + duration resolve as: per-clip override (keyed by approved
+   * frame URL) → global default → shipped default. Apply-to-all is a bulk-set:
+   * it writes the global default and clears overrides, so a later per-clip change
+   * still wins.
+   */
   const [clipMotions, setClipMotions] = useState<Record<string, string>>({});
+  const [clipDurations, setClipDurations] = useState<Record<string, number>>({});
+  const [globalMotion, setGlobalMotion] = useState<string>(DEFAULT_MOTION_PRESET);
   const motionForFrame = useCallback(
-    (url: string) => clipMotions[url] ?? DEFAULT_MOTION_PRESET,
-    [clipMotions],
+    (url: string) => clipMotions[url] ?? globalMotion,
+    [clipMotions, globalMotion],
   );
+  const durationForFrame = useCallback(
+    (url: string) => clipDurations[url] ?? animateDuration,
+    [clipDurations, animateDuration],
+  );
+  /** §F7 — bulk-set duration + motion on every approved clip (no fake quality). */
+  const applySettingsToAllClips = useCallback(() => {
+    setClipMotions({});
+    setClipDurations({});
+    toast.success(
+      `Applied ${animateDuration} sec · ${
+        MOTION_PRESETS.find((option) => option.value === globalMotion)?.label ?? globalMotion
+      } to all clips`,
+    );
+  }, [animateDuration, globalMotion]);
+
 
 
   const pieceTypes = useMemo(
