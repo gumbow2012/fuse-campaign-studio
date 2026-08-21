@@ -20,6 +20,14 @@ import {
   type MaterialAppearanceAuthority,
   materialAuthorityPromptLines,
 } from "./materialAuthority.ts";
+import {
+  type ConnectedAssetModel,
+  connectedAssetPromptLines,
+} from "./connectedAssets.ts";
+import {
+  type CampaignPhotographyProfile,
+  campaignPhotographyPromptLines,
+} from "../_shared/campaign-photography.ts";
 
 /** The generic camera views a master can be rendered for. */
 export const CANONICAL_MASTER_VIEWS = [
@@ -103,6 +111,14 @@ export function buildCanonicalMasterPrompt(args: {
   componentLabel?: unknown;
   masterLock: MasterProductLock | null;
   materialAuthority?: MaterialAppearanceAuthority | null;
+  /** CONNECTED PRODUCT SYSTEMS (§30): attachment rules for connected parts. */
+  connectedAssets?: ConnectedAssetModel | null;
+  /**
+   * CAMPAIGN PHOTOGRAPHY PROFILE (§C4). Present ONLY for campaign plates (D5) —
+   * a neutral canonical master keeps the neutral capture brief below. Camera and
+   * light only; it never contributes product geometry.
+   */
+  campaignPhotography?: CampaignPhotographyProfile | null;
   extra?: unknown;
 }): string {
   const { view } = args;
@@ -110,6 +126,8 @@ export function buildCanonicalMasterPrompt(args: {
   const component = clean(args.componentLabel, 60);
   const lockLines = masterLockPromptLines(args.masterLock, { compact: false });
   const materialLines = materialAuthorityPromptLines(args.materialAuthority ?? null);
+  const connectedLines = connectedAssetPromptLines(args.connectedAssets ?? null);
+  const photographyLines = campaignPhotographyPromptLines(args.campaignPhotography ?? null);
   const extra = clean(args.extra, 400);
 
   const sections: (string | null)[] = [
@@ -136,6 +154,13 @@ export function buildCanonicalMasterPrompt(args: {
     ].join("\n"),
 
     materialLines.length ? materialLines.join("\n") : null,
+
+    // CAMPAIGN look (D5 plates only): overrides the neutral capture brief for
+    // camera/optics/light/environment — never for construction.
+    photographyLines.length ? photographyLines.join("\n") : null,
+
+    // CONNECTED PRODUCT SYSTEMS (§30): connected parts stay physically attached.
+    connectedLines.length ? connectedLines.join("\n") : null,
 
     [
       "HARD RULES:",
