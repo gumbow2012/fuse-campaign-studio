@@ -179,6 +179,9 @@ function serialize(row: any) {
       : null,
 
     cameraDirection: typeof payload.camera_direction === "string" ? payload.camera_direction : null,
+    // §F6 — per-clip motion preset actually submitted (legacy clips read null).
+    motionPreset: typeof payload.motion_preset === "string" ? payload.motion_preset : null,
+
     directionSummary: payload.direction_summary && typeof payload.direction_summary === "object"
       ? payload.direction_summary as Record<string, string>
       : null,
