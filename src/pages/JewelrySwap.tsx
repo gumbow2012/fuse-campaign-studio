@@ -3222,6 +3222,53 @@ export default function JewelrySwap() {
     [frameGenerations, frameRevision],
   );
 
+  /* --------------- PRODUCT FIDELITY (§35) — analysis only ------------------- *
+   * Compares a finished generation to the ACTIVE Master Product Lock through
+   * the EXISTING `mode: "validate"` path. It never regenerates and never
+   * spends generation credits — the user decides what to do with a WARNING.
+   */
+  const [fidelityAudits, setFidelityAudits] = useState<Record<string, FidelityAudit>>({});
+  const [fidelityState, setFidelityState] = useState<
+    Record<string, "checking" | "done" | "failed" | "skipped">
+  >({});
+  const [fidelityError, setFidelityError] = useState<Record<string, string>>({});
+
+  const runFidelityCheck = useCallback(
+    async (generation: JewelryGeneration | null | undefined) => {
+      if (!generation?.outputUrl || generation.status !== "complete") return;
+      const id = generation.id;
+      if (!knowledgeMap && !masterProductLock) {
+        setFidelityState((prev) => ({ ...prev, [id]: "skipped" }));
+        return;
+      }
+      setFidelityState((prev) => ({ ...prev, [id]: "checking" }));
+      try {
+        const report = await validateAgainstKnowledgeMap({
+          imageUrl: generation.outputUrl,
+          knowledgeMap: (knowledgeMap ?? {}) as ProductKnowledgeMap,
+          masterProductLock,
+        });
+        if (!report) {
+          setFidelityState((prev) => ({ ...prev, [id]: "skipped" }));
+          return;
+        }
+        setFidelityAudits((prev) => ({
+          ...prev,
+          [id]: buildFidelityAudit({ report, lockVersion: masterProductLock?.version ?? null }),
+        }));
+        setFidelityState((prev) => ({ ...prev, [id]: "done" }));
+      } catch (error) {
+        setFidelityError((prev) => ({
+          ...prev,
+          [id]: error instanceof Error ? error.message : "Fidelity check failed",
+        }));
+        setFidelityState((prev) => ({ ...prev, [id]: "failed" }));
+      }
+    },
+    [knowledgeMap, masterProductLock],
+  );
+
+
   const swapEntries = useMemo(
     () =>
       Object.keys(frameGenerations)
