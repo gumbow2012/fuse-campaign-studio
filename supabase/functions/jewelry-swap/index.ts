@@ -21,6 +21,16 @@ import {
   videoFallbackUsdPerSecond,
 } from "../_shared/fal.ts";
 import { conditionImageForKling } from "./animateInput.ts";
+import {
+  applyOpticsControls,
+  type DiamondOpticsControls,
+  type DiamondOpticsProfile,
+  mergeFrameOptics,
+  normalizeOpticsProfile,
+  opticsPromptLines,
+  opticsSummaryLine,
+  readOpticsControls,
+} from "../_shared/diamond-optics.ts";
 
 /**
  * Jewelry Swap: sibling of Outfit Swap. Per-frame nano-banana jewelry
