@@ -5165,7 +5165,21 @@ export default function JewelrySwap() {
                                 <Trash2 size={12} />
                               </Button>
                             </div>
+                            {video.prompt ? (
+                              <details className="rounded-lg border border-white/10 bg-black/30 p-2">
+                                <summary className="cursor-pointer font-orbitron text-[10px] uppercase tracking-[0.14em] text-cyan-200/70">
+                                  View prompt
+                                  {video.inputPayload?.director_prompt_user_edited === true
+                                    ? " · manual"
+                                    : ""}
+                                </summary>
+                                <p className="mt-2 max-h-40 overflow-y-auto whitespace-pre-wrap text-[10px] leading-relaxed text-white/60">
+                                  {video.prompt}
+                                </p>
+                              </details>
+                            ) : null}
                           </>
+
                         ) : running ? (
                           <VideoProgress
                             compact
