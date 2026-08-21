@@ -4120,6 +4120,15 @@ export default function JewelrySwap() {
                 />
               </div>
 
+              <DiamondOpticsPanel
+                controls={opticsControls}
+                onChange={setOpticsControls}
+                profile={opticsProfile}
+                status={opticsStatus}
+                onAnalyze={runOpticsAnalysis}
+              />
+
+
             </SectionCard>
 
             <SectionCard step={5} title="Video generation" hint="Your clip, rebuilt with the new jewelry.">
