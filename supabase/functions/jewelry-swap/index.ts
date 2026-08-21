@@ -3398,6 +3398,7 @@ Deno.serve(async (req) => {
       const generation = await startAnimateFrame(admin, {
         userId: user.id,
         imageUrl: body.imageUrl ?? body.sourceFrameUrl,
+        animateInputUrl: body.animateInputUrl ?? null,
         frameIndex: body.frameIndex,
         frameTime: body.frameTime,
         cameraDirection: body.cameraDirection,
