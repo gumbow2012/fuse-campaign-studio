@@ -2165,6 +2165,10 @@ async function startCanonicalMaster(admin: AdminClient, args: {
   /** Active project id — used to INHERIT the persisted lock when none is sent. */
   projectId?: unknown;
   materialAuthority?: unknown;
+  /** CONNECTED PRODUCT SYSTEMS (§30): attachment rules, derived from the lock. */
+  connectedAssets?: unknown;
+  /** CAMPAIGN PHOTOGRAPHY PROFILE (§C4): campaign plates (D5) only. */
+  campaignPhotography?: unknown;
   /** Which slot of the requested master set this is (audit only). */
   setIndex?: number;
   setSize?: number;
@@ -2205,6 +2209,9 @@ async function startCanonicalMaster(admin: AdminClient, args: {
     componentLabel,
     masterLock,
     materialAuthority,
+    connectedAssets: normalizeConnectedAssets(args.connectedAssets ?? null),
+    // Campaign plates (D5) carry the photography profile; neutral masters do not.
+    campaignPhotography: normalizeCampaignPhotographyProfile(args.campaignPhotography ?? null),
     extra: args.extraPrompt,
   });
 
@@ -2516,6 +2523,8 @@ async function startSwapFrame(admin: AdminClient, args: {
   canonicalMasters?: unknown;
   /** MATERIAL APPEARANCE AUTHORITY derived from the existing evidence strengths. */
   materialAuthority?: unknown;
+  /** CONNECTED PRODUCT SYSTEMS (§30): attachment rules, derived from the lock. */
+  connectedAssets?: unknown;
   webhookBase: string;
 }) {
   const sourceFrameUrl = String(args.sourceFrameUrl ?? "").trim();
@@ -2541,6 +2550,8 @@ async function startSwapFrame(admin: AdminClient, args: {
   });
   // MATERIAL APPEARANCE AUTHORITY: material realism only — never geometry.
   const materialAuthority = normalizeMaterialAuthority(args.materialAuthority ?? null);
+  // CONNECTED PRODUCT SYSTEMS (§30): present → attachment rules are appended.
+  const connectedAssets = normalizeConnectedAssets(args.connectedAssets ?? null);
 
   // DIAMOND OPTICS (additive): cached analysed optics × user controls. No Gemini
   // call happens here — moving a slider only re-synthesises these prompt lines.
@@ -2597,6 +2608,7 @@ async function startSwapFrame(admin: AdminClient, args: {
     opticsControls,
     masterLock,
     materialAuthority,
+    connectedAssets,
   });
 
 
@@ -4000,6 +4012,7 @@ Deno.serve(async (req) => {
         projectId: body.projectId ?? null,
         materialAuthority: body.materialAuthority ?? null,
         canonicalMasters: body.canonicalMasters ?? null,
+        connectedAssets: body.connectedAssets ?? null,
         webhookBase,
       });
       return json({ generation });
@@ -4020,6 +4033,8 @@ Deno.serve(async (req) => {
         masterProductLock: body.masterProductLock ?? null,
         projectId: body.projectId ?? null,
         materialAuthority: body.materialAuthority ?? null,
+        connectedAssets: body.connectedAssets ?? null,
+        campaignPhotography: body.campaignPhotography ?? null,
         setIndex: body.setIndex,
         setSize: body.setSize,
         webhookBase,
