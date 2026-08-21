@@ -119,6 +119,10 @@ import FidelityPanel from "@/components/jewelry/FidelityPanel";
 import DiamondOpticsPanel from "@/components/jewelry/DiamondOpticsPanel";
 import { SeedanceDirectionPanel } from "@/components/jewelry/SeedanceDirectionPanel";
 import {
+  promptInputFingerprint,
+  type DirectorPromptRecord,
+} from "@/lib/promptFingerprint";
+import {
   analyzeDiamondOptics,
   previewReconstructionPrompt,
   type SeedanceDirectorPreview,
@@ -3542,11 +3546,17 @@ export default function JewelrySwap() {
   const [promptDraft, setPromptDraft] = useState("");
   const [promptStale, setPromptStale] = useState(false);
   const promptFingerprintRef = useRef<string | null>(null);
+  /**
+   * §F1 — per-generation prompt provenance: the builder output (`auto`), the
+   * EXACT submitted string (`final`), whether the user edited it, and the
+   * fingerprint of the inputs that produced `auto`.
+   */
+  const [directorPrompts, setDirectorPrompts] = useState<Record<string, DirectorPromptRecord>>({});
 
   /** Everything that changes the auto prompt — drives preview refresh/staleness. */
   const promptFingerprint = useMemo(
     () =>
-      JSON.stringify({
+      promptInputFingerprint({
         frames: approvedUrls,
         model: videoModel,
         duration: videoDuration,
@@ -3667,6 +3677,20 @@ export default function JewelrySwap() {
         promptOverride: promptMode === "manual" ? promptDraft : null,
         promptInputFingerprint: promptFingerprint,
       });
+      // §F1 — record exactly WHAT was submitted for this generation.
+      const submitted = promptMode === "manual" ? promptDraft : promptPreview?.prompt ?? "";
+      if (data.generation?.id) {
+        setDirectorPrompts((prev) => ({
+          ...prev,
+          [data.generation.id]: {
+            auto: promptPreview?.prompt ?? null,
+            final: submitted,
+            userEdited: promptMode === "manual",
+            inputFingerprint: promptFingerprint,
+            createdAt: new Date().toISOString(),
+          },
+        }));
+      }
       // Non-blocking: each click is its own record, so several can run at once.
       setVideos((prev) => [data.generation, ...prev]);
       toast.success("Video queued — you can start another while this runs");
@@ -3692,6 +3716,7 @@ export default function JewelrySwap() {
     promptDraft,
     promptMaxChars,
     promptFingerprint,
+    promptPreview,
   ]);
 
   /** Stops tracking and frees the UI, even if the provider job keeps running. */
@@ -4257,6 +4282,8 @@ export default function JewelrySwap() {
       durationTouched,
       promptMode,
       promptDraft,
+      // §F1 — prompt provenance per generation (auto / final / edited / inputs).
+      directorPrompts,
       cameraDirection,
       customCameraPrompt,
       videos,
@@ -4310,6 +4337,8 @@ export default function JewelrySwap() {
       durationTouched,
       promptMode,
       promptDraft,
+      // §F1 — prompt provenance per generation (auto / final / edited / inputs).
+      directorPrompts,
       cameraDirection,
       customCameraPrompt,
       videos,
@@ -4502,6 +4531,10 @@ export default function JewelrySwap() {
       setDurationTouched(Boolean(state?.durationTouched));
       setPromptMode((state?.promptMode ?? "auto") as "auto" | "manual");
       setPromptDraft(state?.promptDraft ?? "");
+      // §F1 — restore the per-generation prompt provenance.
+      setDirectorPrompts(
+        (state?.directorPrompts ?? {}) as Record<string, DirectorPromptRecord>,
+      );
       setCameraDirection(state?.cameraDirection ?? "auto");
       setCustomCameraPrompt(state?.customCameraPrompt ?? "");
 
