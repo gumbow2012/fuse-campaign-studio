@@ -5626,6 +5626,59 @@ export default function JewelrySwap() {
 
           {/* RIGHT: frames, review, result */}
           <div className="space-y-5">
+            {/* CAMPAIGN MODE (§26) — reuses the lock, look profile, coverage plan,
+                Nano master path and validation already built for Swap. */}
+            {!isSwapMode ? (
+              <SectionCard
+                step={1}
+                title="Campaign photography"
+                hint="Clean product plates built from the locked product — no source clip involved."
+              >
+                <CampaignModePanel
+                  hasLock={Boolean(masterProductLock)}
+                  lockSummary={masterProductLock ? masterLockSummary(masterProductLock)[0] ?? null : null}
+                  referenceCount={pieces.reduce((total, piece) => total + piece.urls.length, 0)}
+                  hasPhotographyProfile={Boolean(campaignPhotographyProfile)}
+                  coveragePlan={shotCoveragePlan}
+                  masterCount={Object.keys(canonicalMasters).length}
+                  validatedMasterCount={
+                    Object.values(canonicalMasters).filter((master) => master.validated).length
+                  }
+                  mastersSlot={
+                    <CanonicalMastersPanel
+                      plan={canonicalMasterPlan}
+                      componentPlan={canonicalComponentPlan}
+                      coverageSummary={
+                        shotCoveragePlan
+                          ? `Coverage — ${shotCoveragePlan.coveredCount} of ${shotCoveragePlan.entries.length} planned shots covered, ${shotCoveragePlan.missingCount} still missing.`
+                          : null
+                      }
+                      masters={canonicalMasters}
+                      busy={mastersBusy}
+                      disabledReason={canonicalMastersDisabledReason}
+                      onGenerate={() => void generateCanonicalMasters()}
+                      onGenerateComponent={(componentId) =>
+                        void generateComponentMaster(componentId)
+                      }
+                      onValidate={(key) => void validateCanonicalMaster(key)}
+                    />
+                  }
+                  photographySlot={
+                    <CampaignPhotographyPanel
+                      referenceUrls={photographyRefs}
+                      profile={campaignPhotographyProfile}
+                      status={photographyStatus}
+                      error={photographyError}
+                      onAdd={(files) => void addPhotographyRefs(files)}
+                      onRemove={removePhotographyRef}
+                      onAnalyze={() => void analyzePhotography()}
+                    />
+                  }
+                />
+              </SectionCard>
+            ) : null}
+            {/* SWAP ONLY — source frames come from the clip. */}
+            {isSwapMode ? (
             <SectionCard
               step={2}
               title="Source references"
