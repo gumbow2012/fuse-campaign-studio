@@ -66,6 +66,7 @@ import {
 import {
   type CanonicalMaster,
   type CanonicalMasterPlanEntry,
+  isMasterValidated,
   planCanonicalMasterViews,
 } from "@/lib/canonicalMasterViews";
 import CanonicalMastersPanel from "@/components/jewelry/CanonicalMastersPanel";
@@ -898,6 +899,11 @@ export default function JewelrySwap() {
    * credits on the EXISTING Nano path, so nothing here runs automatically.
    */
   const [canonicalMasters, setCanonicalMasters] = useState<Record<string, CanonicalMaster>>({});
+  /** Latest masters, so validation reads current state without re-binding. */
+  const canonicalMastersRef = useRef<Record<string, CanonicalMaster>>({});
+  useEffect(() => {
+    canonicalMastersRef.current = canonicalMasters;
+  }, [canonicalMasters]);
   const [mastersBusy, setMastersBusy] = useState(false);
   const [engineeringOpen, setEngineeringOpen] = useState(false);
   /**
