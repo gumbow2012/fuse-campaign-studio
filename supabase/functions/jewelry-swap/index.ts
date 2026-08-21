@@ -2082,6 +2082,17 @@ async function startSwapFrame(admin: AdminClient, args: {
             : null,
           geometry_fidelity: "strict",
 
+          // DIAMOND OPTICS telemetry (analysed × controls, no media).
+          diamond_optics: resolvedOptics
+            ? {
+              version: resolvedOptics.version ?? null,
+              scope: opticsProfile?.scope ?? null,
+              controls: opticsControls,
+              summary: opticsSummaryLine(resolvedOptics),
+            }
+            : null,
+
+
           // Structured product authority resolved for this run (verification hook).
           target_spec: routedPieces.map((piece) => resolveTargetSpec(piece)),
 
