@@ -44,6 +44,7 @@ import {
   type CanonicalMasterView,
   isCanonicalMasterView,
 } from "./canonicalMasters.ts";
+import { collectValidatedMasterRefs } from "./validatedMasters.ts";
 import {
   buildMatchedPairPrompt,
   isManufacturingStage,
@@ -344,9 +345,17 @@ function selectReferencesForFrame(args: {
    * batch saw, so Gemini's per-frame ranking can be resolved back to refs.
    */
   referenceIds?: Map<string, string>;
+  /**
+   * VALIDATED canonical / component masters (§E2). Clean derived plates of the
+   * SAME product. They are candidates only — always below user-confirmed facts,
+   * the original direct evidence and CAD (steps 1-4 below). Empty → behaviour is
+   * exactly as before.
+   */
+  validatedMasters?: JewelryReference[];
 }): JewelryReference[] {
   const all = pieceReferences(args.piece);
-  if (all.length <= 1) return all;
+  const masters = (args.validatedMasters ?? []).filter((ref) => Boolean(ref?.url));
+  if (all.length <= 1 && !masters.length) return all;
 
   const mode = normalizeMode(args.mode ?? null, false);
   const preferred = String(args.preferredRole ?? "").trim();
@@ -458,6 +467,24 @@ function selectReferencesForFrame(args: {
   }
 
 
+  // 4.5) VALIDATED CANONICAL / COMPONENT MASTERS (§E2). Clean, neutral plates of
+  //      the same product, so they are preferred over arbitrary upload-order
+  //      photos — but only AFTER the user's override, CAD, Gemini's ranking and
+  //      the deterministic original-evidence priorities have had their turn. They
+  //      never displace an original the steps above already chose, and they are
+  //      subject to the same role dedupe and the same MAX_PRODUCT_REFERENCES cap.
+  if (masters.length && picked.length < MAX_PRODUCT_REFERENCES) {
+    // Prefer the master that answers what this frame is asking for.
+    const wanted = hasPreferred ? preferred : mode === "macro" ? "macro" : "";
+    if (wanted) {
+      take(masters.find((ref) => rolesMatch(roleText(ref), wanted)));
+    }
+    for (const ref of masters) {
+      if (picked.length >= MAX_PRODUCT_REFERENCES) break;
+      take(ref);
+    }
+  }
+
   // 5) Last resort only. Upload order has NO authority: it is consulted purely
   //    to keep a frame reconstructable when nothing above produced enough refs.
   if (!hasRanking || picked.length < MIN_PRODUCT_REFERENCES) {
@@ -483,6 +510,7 @@ function routePiece(
   preferredRole?: string | null,
   geminiFrameAnalysis?: GeminiFrameAnalysis | null,
   referenceIds?: Map<string, string>,
+  validatedMasters?: JewelryReference[],
 ): { piece: JewelryPiece; refs: JewelryReference[] } {
   const refs = selectReferencesForFrame({
     piece,
@@ -490,6 +518,7 @@ function routePiece(
     preferredRole,
     geminiFrameAnalysis,
     referenceIds,
+    validatedMasters,
   });
   return { piece: { ...piece, references: refs, urls: refs.map((ref) => ref.url) }, refs };
 }
@@ -2057,6 +2086,38 @@ async function resolveInheritedMasterLock(admin: AdminClient, args: {
   }
 }
 
+/**
+ * VALIDATED CANONICAL MASTERS (§E2) — resolved the same way as the lock: from the
+ * request when the client sent its live state, otherwise from the ACTIVE
+ * project's `project_state.canonicalMasters`. Only D2-validated masters survive
+ * `collectValidatedMasterRefs`; none → reference selection is unchanged.
+ */
+async function resolveValidatedMasterRefs(admin: AdminClient, args: {
+  userId: string;
+  projectId?: unknown;
+  provided?: unknown;
+}): Promise<JewelryReference[]> {
+  const direct = collectValidatedMasterRefs(args.provided ?? null);
+  if (direct.length) return direct as unknown as JewelryReference[];
+
+  const projectId = String(args.projectId ?? "").trim();
+  if (!projectId) return [];
+
+  try {
+    const { data } = await admin
+      .from("jewelry_swap_projects")
+      .select("project_state")
+      .eq("id", projectId)
+      .eq("user_id", args.userId)
+      .maybeSingle();
+    const state = (data?.project_state ?? null) as Record<string, any> | null;
+    return collectValidatedMasterRefs(state?.canonicalMasters ?? null) as unknown as JewelryReference[];
+  } catch (_error) {
+    // Best effort: masters are an enhancement, never a requirement.
+    return [];
+  }
+}
+
 
 /**
  * CANONICAL MASTER REFERENCE SET (§22)
@@ -2475,8 +2536,22 @@ async function startSwapFrame(admin: AdminClient, args: {
   // payload order and the prompt's "reference image N = role" numbering so the
   // two can never drift. SOURCE_FRAME is always image 1.
   const referenceIds = buildReferenceIdMap(pieces);
+  // §E2 — VALIDATED canonical/component masters of THIS project become extra
+  // reference candidates (below originals/CAD). None → unchanged behaviour.
+  const validatedMasters = await resolveValidatedMasterRefs(admin, {
+    userId: args.userId,
+    projectId: args.projectId,
+    provided: args.canonicalMasters,
+  });
   const routed = pieces.map((piece) =>
-    routePiece(piece, args.mode ?? null, args.preferredRole ?? null, frameAnalysis, referenceIds)
+    routePiece(
+      piece,
+      args.mode ?? null,
+      args.preferredRole ?? null,
+      frameAnalysis,
+      referenceIds,
+      validatedMasters,
+    )
   );
   const routedPieces = routed.map((entry) => entry.piece);
   const selectedRefs = routed.flatMap((entry) => entry.refs);
