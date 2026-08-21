@@ -492,10 +492,34 @@ function qualityFromGeneration(
 }
 
 
+/**
+ * §F2 — RESOLUTION TRUTHFULNESS. `resolutions` are exactly the values the live
+ * fal OpenAPI schema for each model's reference-to-video endpoint accepts
+ * (verified 2026-08-21). Only these are offered, so the resolution the user
+ * picks is always the resolution submitted — never a silent downgrade.
+ */
 const VIDEO_MODELS = [
-  { key: "seedance-2.0", label: "Seedance 2.0", usdPerSecond: 0.3024 },
-  { key: "seedance-2.0-fast", label: "Seedance 2.0 Fast", usdPerSecond: 0.2419 },
+  {
+    key: "seedance-2.0",
+    label: "Seedance 2.0",
+    usdPerSecond: 0.3024,
+    resolutions: ["480p", "720p", "1080p", "4k"],
+  },
+  {
+    key: "seedance-2.0-fast",
+    label: "Seedance 2.0 Fast",
+    usdPerSecond: 0.2419,
+    resolutions: ["480p", "720p"],
+  },
 ];
+
+const DEFAULT_VIDEO_RESOLUTION = "720p";
+
+function supportedResolutionsFor(modelKey: string) {
+  return (
+    VIDEO_MODELS.find((entry) => entry.key === modelKey)?.resolutions ?? ["480p", "720p"]
+  );
+}
 
 
 type Frame = { time: number; url: string };
@@ -1175,7 +1199,19 @@ export default function JewelrySwap() {
 
   const [videoModel, setVideoModel] = useState("seedance-2.0");
   const [preserveAudio, setPreserveAudio] = useState(true);
-  const [resolution, setResolution] = useState("1080p");
+  const [resolution, setResolution] = useState(DEFAULT_VIDEO_RESOLUTION);
+  const videoResolutionOptions = supportedResolutionsFor(videoModel);
+  // §F2 — if a stored/previous pick is not supported by the selected model, fix
+  // the selection VISIBLY (the dropdown updates + the user is told) so the UI can
+  // never show one resolution while another is submitted.
+  useEffect(() => {
+    if (videoResolutionOptions.includes(resolution)) return;
+    const label = VIDEO_MODELS.find((entry) => entry.key === videoModel)?.label ?? "This model";
+    setResolution(DEFAULT_VIDEO_RESOLUTION);
+    toast.info(
+      `${label} does not support ${resolution.toUpperCase()} — switched to ${DEFAULT_VIDEO_RESOLUTION.toUpperCase()}`,
+    );
+  }, [videoModel, resolution, videoResolutionOptions]);
   // Every Jewelry Swap video the user has started — newest first. Jobs live
   // server-side, so refreshing simply re-attaches to the running ones.
   const [videos, setVideos] = useState<JewelryGeneration[]>([]);
@@ -3652,6 +3688,15 @@ export default function JewelrySwap() {
       toast.error(`Your prompt is over the ${promptMaxChars.toLocaleString()}-character limit`);
       return;
     }
+    // §F2 — never submit a resolution the model cannot render.
+    if (!supportedResolutionsFor(videoModel).includes(resolution)) {
+      toast.error(
+        `${resolution.toUpperCase()} is not available for this model — pick ${
+          supportedResolutionsFor(videoModel).map((value) => value.toUpperCase()).join(" or ")
+        }`,
+      );
+      return;
+    }
     setReconstructing(true);
     try {
       const data = await callJewelrySwap<{ generation: SwapGeneration }>({
@@ -4525,7 +4570,7 @@ export default function JewelrySwap() {
       setExtraPrompt(state?.extraPrompt ?? "");
 
       setVideoModel(state?.videoModel ?? "seedance-2.0");
-      setResolution(state?.resolution ?? "1080p");
+      setResolution(state?.resolution ?? DEFAULT_VIDEO_RESOLUTION);
       setPreserveAudio(state?.preserveAudio ?? true);
       setVideoDuration(state?.videoDuration ?? 15);
       setDurationTouched(Boolean(state?.durationTouched));
@@ -5884,7 +5929,7 @@ export default function JewelrySwap() {
                       onChange={(event) => setResolution(event.target.value)}
                       className={SELECT_CLASS}
                     >
-                      {["480p", "720p", "1080p", "4k"].map((option) => (
+                      {videoResolutionOptions.map((option) => (
                         <option key={option} value={option}>
                           {option.toUpperCase()}
                         </option>
