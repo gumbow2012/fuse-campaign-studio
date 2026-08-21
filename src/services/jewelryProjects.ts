@@ -131,6 +131,8 @@ export type JewelryProjectState = {
 
   /** Kling animate settings. */
   cameraDirection: string;
+  /** §F4 — per-batch Kling clip duration in seconds. */
+  animateDuration: number;
   customCameraPrompt: string;
   /** Generated videos (re-attached from the server library on load too). */
   videos: unknown[];

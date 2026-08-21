@@ -153,6 +153,8 @@ import {
 
   persistTemplateLayout,
   CAMERA_DIRECTIONS,
+  ANIMATE_DURATION_OPTIONS,
+  DEFAULT_ANIMATE_DURATION,
   type JewelryFrameAnalysis,
   type JewelryGeneration,
   type JewelryImageModel,
@@ -3819,7 +3821,11 @@ export default function JewelrySwap() {
   );
 
   // Kling 3.0 without audio: $0.112 per second.
-  const animateCostUsd = useMemo(() => 0.112 * 3 * approvedFrames.length, [approvedFrames]);
+  const [animateDuration, setAnimateDuration] = useState<number>(DEFAULT_ANIMATE_DURATION);
+  const animateCostUsd = useMemo(
+    () => 0.112 * animateDuration * approvedFrames.length,
+    [animateDuration, approvedFrames],
+  );
 
   const [animating, setAnimating] = useState(false);
   const [zipping, setZipping] = useState(false);
@@ -3853,6 +3859,8 @@ export default function JewelrySwap() {
       const generation = await animateJewelryFrame({
         imageUrl: frame.url,
         animateInputUrl: conditioned.conditioned ? conditioned.url : null,
+        // §F4 — the chosen duration is submitted exactly as selected.
+        durationSeconds: animateDuration,
         frameIndex: frame.index,
         frameTime: frame.time,
         cameraDirection: position.direction ?? cameraDirection,
@@ -3864,7 +3872,7 @@ export default function JewelrySwap() {
 
       setVideos((prev) => [generation, ...prev]);
     },
-    [cameraDirection, customCameraPrompt, pieceTypes],
+    [animateDuration, cameraDirection, customCameraPrompt, pieceTypes],
   );
 
   const animateApproved = useCallback(async () => {
@@ -4331,6 +4339,7 @@ export default function JewelrySwap() {
       directorPrompts,
       cameraDirection,
       customCameraPrompt,
+      animateDuration,
       videos,
     }),
     [
@@ -4386,6 +4395,7 @@ export default function JewelrySwap() {
       directorPrompts,
       cameraDirection,
       customCameraPrompt,
+      animateDuration,
       videos,
     ],
   );
@@ -4582,6 +4592,13 @@ export default function JewelrySwap() {
       );
       setCameraDirection(state?.cameraDirection ?? "auto");
       setCustomCameraPrompt(state?.customCameraPrompt ?? "");
+      setAnimateDuration(
+        ANIMATE_DURATION_OPTIONS.includes(
+          (state?.animateDuration ?? DEFAULT_ANIMATE_DURATION) as 3,
+        )
+          ? Number(state?.animateDuration)
+          : DEFAULT_ANIMATE_DURATION,
+      );
 
       setProjectId(project.id);
       setProjectName(project.name);
@@ -6657,7 +6674,7 @@ export default function JewelrySwap() {
                   {[
                     ["Model", "Kling 3.0"],
                     ["Resolution", "1080p"],
-                    ["Duration", "3 sec"],
+                    ["Duration", `${animateDuration} sec`],
                     [
                       "Motion",
                       CAMERA_DIRECTIONS.find((option) => option.value === cameraDirection)?.label ??
@@ -6675,6 +6692,27 @@ export default function JewelrySwap() {
                     </div>
                   ))}
                 </dl>
+
+                <div>
+                  <label className="mb-1 block text-[10px] uppercase tracking-[0.14em] text-cyan-200/70">
+                    Clip length
+                  </label>
+                  <select
+                    value={String(animateDuration)}
+                    onChange={(event) => setAnimateDuration(Number(event.target.value))}
+                    className={SELECT_CLASS}
+                  >
+                    {ANIMATE_DURATION_OPTIONS.map((seconds) => (
+                      <option key={seconds} value={seconds}>
+                        {seconds} sec
+                      </option>
+                    ))}
+                  </select>
+                  <p className="mt-1 text-[10px] text-muted-foreground">
+                    Applies to every clip in this batch. Only lengths Kling 3.0 Pro accepts are
+                    listed.
+                  </p>
+                </div>
 
                 <div>
                   <label className="mb-1 block text-[10px] uppercase tracking-[0.14em] text-cyan-200/70">
