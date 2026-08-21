@@ -1517,85 +1517,98 @@ function buildJewelryPrompt(args: {
   // frame. Sits UNDER the user's confirmed spec in the authority order.
   const masterLockBlock = masterLockPromptLines(args.masterLock ?? null, { compact: true });
 
-  const prompt = [
-    /* 1 — REPLACEMENT LEADS. */
-    "TASK — FULL JEWELRY REPLACEMENT. Replace the jewelry in image 1 (SOURCE_FRAME) with the EXACT piece shown in the reference images. This is a full replacement, NOT a restyle: do NOT keep, blend or lightly edit the original jewelry. Remove the original piece's stones, setting pattern, metal geometry and decorative detail completely and rebuild that region as the referenced product.",
-    "",
-    `PIECES: ${lines.join(" ")}`,
-    "",
+  // §E4 — the prompt is compiled from ordered NAMED blocks. Each block holds the
+  // same concise directives as before (no re-expansion, no raw JSON) and is
+  // emitted only when its data exists.
+  const prompt = compilePromptBlocks({
+    /* TASK — REPLACEMENT LEADS. */
+    TASK: [
+      "TASK — FULL JEWELRY REPLACEMENT. Replace the jewelry in image 1 (SOURCE_FRAME) with the EXACT piece shown in the reference images. This is a full replacement, NOT a restyle: do NOT keep, blend or lightly edit the original jewelry. Remove the original piece's stones, setting pattern, metal geometry and decorative detail completely and rebuild that region as the referenced product.",
+      "",
+      `PIECES: ${lines.join(" ")}`,
+    ],
 
-    /* 2 — TARGET IDENTITY (mandatory), BEFORE any preservation rule. */
-    "TARGET IDENTITY — MANDATORY. The specification below defines WHAT must appear. It outranks aesthetics, model inference and the preservation rules further down. Never substitute another product type, metal, stone, stone color or setting construction.",
-    specLines.length ? specLines.join("\n") : null,
-    masterLockBlock.length ? masterLockBlock.join("\n") : null,
-    declaredSettings.length
-      ? `SETTING LOCK: ${declaredSettings.join("; ")} — reproduce each declared construction exactly as built on the references; never swap it for another setting family and never regularize it into a uniform stone field.`
-      : null,
-    engineeringLock,
-    colorless
-      ? "STONE COLOR: keep the specified body color across the whole piece; colorless/white diamonds stay visually colorless. Spectral fire is allowed and never changes body color."
-      : "STONE COLOR: keep the specified gemstone body color across the whole piece. Spectral fire is allowed and never changes body color.",
-    "",
+    /* MASTER PRODUCT LOCK — inherited project product identity (§E1). */
+    MASTER_PRODUCT_LOCK: masterLockBlock.length ? masterLockBlock : null,
 
-    /* 3 — REFERENCES = identity source. */
-    "REFERENCES = IDENTITY SOURCE. CAD / design-authority references are engineering truth for geometry, stone sizes, placement and construction. Photographic references are truth for material only (metal alloy and finish, polish, diamond appearance, micro-texture). Hands, gloves, wrists, necks, boxes, trays, backgrounds, shadows and studio context in the references are DISPOSABLE — never reproduce them.",
-    refLabels.length ? `REFERENCE VIEWS: ${refLabels.join("; ")}.` : null,
-    refLabels.length
-      ? "Identify which region of the piece SOURCE_FRAME shows, then rebuild that region from the best-matching labeled reference; use the others to stay consistent with the same physical object."
-      : null,
-    preferred
-      ? `PREFERRED ANGLE REFERENCE: prioritize the reference labeled "${preferred}" as the primary geometry match for this frame.`
-      : null,
-    cadActive
-      ? `CAD AUTHORITY: treat the CAD / design-authority reference as engineering truth, not inspiration${
-        cadRefNums.length ? ` (image ${refListPhrase(cadRefNums)})` : ""
-      }.`
-      : null,
-    // MATERIAL APPEARANCE AUTHORITY (§31): material realism only, zero geometry.
-    ...(() => {
-      const materialLines = materialAuthorityPromptLines(args.materialAuthority ?? null, {
+    /* TARGET SPEC — mandatory identity, above every preservation rule. */
+    TARGET_SPEC: [
+      "TARGET IDENTITY — MANDATORY. The specification below defines WHAT must appear. It outranks aesthetics, model inference and the preservation rules further down. Never substitute another product type, metal, stone, stone color or setting construction.",
+      specLines.length ? specLines.join("\n") : null,
+      declaredSettings.length
+        ? `SETTING LOCK: ${declaredSettings.join("; ")} — reproduce each declared construction exactly as built on the references; never swap it for another setting family and never regularize it into a uniform stone field.`
+        : null,
+    ],
+
+    /* STONE ENGINEERING — engineering lock + stone-color rule. */
+    STONE_ENGINEERING: [
+      engineeringLock,
+      colorless
+        ? "STONE COLOR: keep the specified body color across the whole piece; colorless/white diamonds stay visually colorless. Spectral fire is allowed and never changes body color."
+        : "STONE COLOR: keep the specified gemstone body color across the whole piece. Spectral fire is allowed and never changes body color.",
+    ],
+
+    /* CONNECTED ASSET — physical attachment rules (§30 / D8). */
+    CONNECTED_ASSET: connectedAssetPromptLines(args.connectedAssets ?? null),
+
+    /* SOURCE CAMERA — swap mode keeps the SOURCE cinematography. The campaign
+       photography profile is deliberately NOT used on the swap path. */
+    SOURCE_CAMERA: [
+      "PRESERVE FROM SOURCE_FRAME (secondary — this must NEVER cause the original jewelry to be kept): camera position and angle, perspective, crop, zoom, composition, depth of field, focus plane, lighting, background, subject, skin, hair, clothing, hands, occlusion order, and the jewelry's position, orientation, rotation, tilt, visible percentage and scale. Only the jewelry's identity changes — never the shot. Geometry comes from the REFERENCES; framing comes from SOURCE_FRAME.",
+    ],
+
+    /* LIGHTING — swap mode inherits SOURCE_FRAME light (stated above). */
+    LIGHTING: null,
+
+    /* OPTICS — Diamond Optics Profile lines. */
+    OPTICS: opticsPromptLines({
+      profile: args.opticsProfile ?? null,
+      controls: args.opticsControls ?? undefined,
+      colorlessStones: colorless,
+      stoneFamily: args.opticsProfile?.stoneFamily ?? null,
+      temporal: args.opticsTemporal === true,
+    }),
+
+    /* FRAME INSTRUCTION — reconstruct mode + coverage for THIS frame. */
+    FRAME_INSTRUCTION: [compactModeLine(mode), compactCoverageLine(coverage, mode)],
+
+    /* REFERENCE ROUTING — which reference answers which region (§E2/§C3). */
+    REFERENCE_ROUTING: [
+      "REFERENCES = IDENTITY SOURCE. CAD / design-authority references are engineering truth for geometry, stone sizes, placement and construction. Photographic references are truth for material only (metal alloy and finish, polish, diamond appearance, micro-texture).",
+      refLabels.length ? `REFERENCE VIEWS: ${refLabels.join("; ")}.` : null,
+      refLabels.length
+        ? "Identify which region of the piece SOURCE_FRAME shows, then rebuild that region from the best-matching labeled reference; use the others to stay consistent with the same physical object."
+        : null,
+      preferred
+        ? `PREFERRED ANGLE REFERENCE: prioritize the reference labeled "${preferred}" as the primary geometry match for this frame.`
+        : null,
+      cadActive
+        ? `CAD AUTHORITY: treat the CAD / design-authority reference as engineering truth, not inspiration${
+          cadRefNums.length ? ` (image ${refListPhrase(cadRefNums)})` : ""
+        }.`
+        : null,
+      ...materialAuthorityPromptLines(args.materialAuthority ?? null, {
         imageNumber: materialRefNum,
-      });
-      return materialLines.length ? materialLines : [];
-    })(),
-    "",
+      }),
+    ],
 
-    /* 4 — PRESERVE from SOURCE_FRAME (secondary to the replacement). */
-    "PRESERVE FROM SOURCE_FRAME (secondary — this must NEVER cause the original jewelry to be kept): camera position and angle, perspective, crop, zoom, composition, depth of field, focus plane, lighting, background, subject, skin, hair, clothing, hands, occlusion order, and the jewelry's position, orientation, rotation, tilt, visible percentage and scale. Only the jewelry's identity changes — never the shot. Geometry comes from the REFERENCES; framing comes from SOURCE_FRAME.",
-    // SWAP MODE keeps the SOURCE cinematography (camera + light come from the
-    // frame above) — the campaign photography profile is deliberately NOT used
-    // here. CONNECTED PRODUCT SYSTEMS (§30) rules are appended when present.
-    ...(() => {
-      const connected = connectedAssetPromptLines(args.connectedAssets ?? null);
-      return connected.length ? ["", connected.join("\n")] : [];
-    })(),
-    "",
+    /* CONTEXT FIREWALL — reference context never leaks into the frame. */
+    CONTEXT_FIREWALL: [
+      "CONTEXT FIREWALL: hands, gloves, wrists, necks, boxes, trays, backgrounds, shadows and studio context in the references are DISPOSABLE — never reproduce them. A reference controls ONLY the target jewelry object's construction and material.",
+    ],
 
-    compactModeLine(mode),
-    compactCoverageLine(coverage, mode),
-    "",
-    "NEGATIVES: no hybrid of old and new piece, no invented stones/prongs/halos/center stones, no resized or recut stones, no regularized layouts, no stone-color drift, no reference background or props leaking in, no reframing, beautification or product-shot conversion, no rotating lettering upright for legibility.",
-    ...(() => {
-      const opticsLines = opticsPromptLines({
-        profile: args.opticsProfile ?? null,
-        controls: args.opticsControls ?? undefined,
-        colorlessStones: colorless,
-        stoneFamily: args.opticsProfile?.stoneFamily ?? null,
-        temporal: args.opticsTemporal === true,
-      });
-      return opticsLines.length ? ["", ...opticsLines] : [];
-    })(),
-    correction ? "" : null,
-    correction,
-    String(args.extra ?? "").trim() ? "" : null,
-    String(args.extra ?? "").trim() || null,
-  ]
-    .filter((line) => line !== null)
-    .join("\n");
+    /* NEGATIVES. */
+    NEGATIVES: [
+      "NEGATIVES: no hybrid of old and new piece, no invented stones/prongs/halos/center stones, no resized or recut stones, no regularized layouts, no stone-color drift, no reference background or props leaking in, no reframing, beautification or product-shot conversion, no rotating lettering upright for legibility.",
+    ],
 
+    CORRECTION: correction,
+    EXTRA: String(args.extra ?? "").trim() || null,
+  });
 
   return prompt;
 }
+
 
 
 /* ------------------------------------------------------------------ *
