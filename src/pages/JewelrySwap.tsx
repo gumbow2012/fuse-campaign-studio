@@ -4005,7 +4005,15 @@ export default function JewelrySwap() {
     async (key: string) => {
       const master = canonicalMastersRef.current[key];
       if (!master?.outputUrl || master.status !== "complete") return;
-      if (!knowledgeMap && !masterProductLock) {
+      // §E5 — a master carries the lock version it was generated with; validate
+      // against THAT lock (legacy masters fall back to the current one).
+      const drivingStamp = (master as { lockVersion?: string | null }).lockVersion ?? null;
+      const drivingLock = resolveMasterLockForVersion(
+        masterLockRegistryRef.current,
+        drivingStamp,
+        masterProductLock,
+      );
+      if (!knowledgeMap && !drivingLock) {
         setCanonicalMasters((prev) =>
           prev[key] ? { ...prev, [key]: { ...prev[key], validationState: "skipped" } } : prev,
         );
@@ -4020,8 +4028,9 @@ export default function JewelrySwap() {
         const report = await validateAgainstKnowledgeMap({
           imageUrl: master.outputUrl,
           knowledgeMap: (knowledgeMap ?? {}) as ProductKnowledgeMap,
-          masterProductLock,
+          masterProductLock: drivingLock,
         });
+
         if (!report) {
           setCanonicalMasters((prev) =>
             prev[key] ? { ...prev, [key]: { ...prev[key], validationState: "skipped" } } : prev,
