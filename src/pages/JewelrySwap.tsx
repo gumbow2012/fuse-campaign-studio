@@ -2718,6 +2718,7 @@ export default function JewelrySwap() {
     nanoQuality,
     masterProductLock,
     materialAuthority,
+    tagBatchMaster,
   ]);
 
 
@@ -2810,6 +2811,7 @@ export default function JewelrySwap() {
       nanoQuality,
       masterProductLock,
       materialAuthority,
+      tagBatchMaster,
     ],
   );
 
