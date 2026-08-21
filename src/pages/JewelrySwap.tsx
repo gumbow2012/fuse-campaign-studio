@@ -918,11 +918,26 @@ export default function JewelrySwap() {
   );
 
 
+  // REVISION HISTORY (§36): every image generation a frame has ever produced,
+  // append-only. Regenerating adds a revision; nothing is ever overwritten.
+  const [frameGenerations, setFrameGenerations] = useState<Record<number, JewelryGeneration[]>>({});
+  /** Which revision of each frame's history is currently on screen. */
+  const [frameRevision, setFrameRevision] = useState<Record<number, number>>({});
+  /** APPROVAL BY ID (§37): the exact revision approved for each frame. */
+  const [approvedGenerationId, setApprovedGenerationId] = useState<Record<number, string>>({});
+  /** Latest history, readable inside setState updaters. */
+  const frameGenerationsRef = useRef<Record<number, JewelryGeneration[]>>({});
+  frameGenerationsRef.current = frameGenerations;
+
+
+
   // Nano Banana Pro results (the default) and the opt-in Nano Banana 2 runs live
-  // side by side so a frame can be compared before one is approved.
+  // side by side so a frame can be compared before one is approved. Both are
+  // DERIVED views of the displayed revision — the history above is the truth.
   const [swaps, setSwaps] = useState<Record<number, JewelryGeneration>>({});
   const [altSwaps, setAltSwaps] = useState<Record<number, JewelryGeneration>>({});
   const [chosenModel, setChosenModel] = useState<Record<number, JewelryImageModel>>({});
+
   const [framePreferredRole, setFramePreferredRole] = useState<Record<number, string>>({});
   const [frameReason, setFrameReason] = useState<Record<number, string>>({});
   /** Per-frame replacement mode — persists so later regenerations reuse it. */
@@ -940,7 +955,12 @@ export default function JewelrySwap() {
 
   const [compareIndex, setCompareIndex] = useState<number | null>(null);
 
-  const [approved, setApproved] = useState<Set<number>>(new Set());
+  /** Derived from the approval ids — a frame is approved when one is bound. */
+  const approved = useMemo(
+    () => new Set(Object.keys(approvedGenerationId).map(Number)),
+    [approvedGenerationId],
+  );
+
   const [swapping, setSwapping] = useState(false);
 
   const [videoModel, setVideoModel] = useState("seedance-2.0");
@@ -974,10 +994,13 @@ export default function JewelrySwap() {
     setFrames([]);
     setSwaps({});
     setAltSwaps({});
+    setFrameGenerations({});
+    setFrameRevision({});
     setChosenModel({});
     setFramePreferredRole({});
     setFrameReason({});
-    setApproved(new Set());
+    setApprovedGenerationId({});
+
     setSelectedFrames(new Set());
     // The video library is intentionally preserved across new source clips.
 
@@ -1071,11 +1094,14 @@ export default function JewelrySwap() {
     setFrames([]);
     setSwaps({});
     setAltSwaps({});
+    setFrameGenerations({});
+    setFrameRevision({});
     setChosenModel({});
     setFramePreferredRole({});
     setFrameReason({});
     setFrameMode({});
-    setApproved(new Set());
+    setApprovedGenerationId({});
+
     setSelectedFrames(new Set());
     setSourceNotice(null);
   }, []);
@@ -2095,27 +2121,90 @@ export default function JewelrySwap() {
   /* ------------------------------ 4. Frame swaps ---------------------------- */
 
 
+  /**
+   * REVISION HISTORY (§36): append a brand-new generation, or update an
+   * existing revision in place while it progresses. Nothing is ever removed,
+   * so a regeneration can never destroy an earlier result.
+   */
+  const recordFrameGeneration = useCallback((generation: JewelryGeneration) => {
+    if (generation.frameIndex === null || generation.frameIndex === undefined) return;
+    const index = generation.frameIndex as number;
+    setFrameGenerations((prev) => {
+      const list = prev[index] ?? [];
+      const at = list.findIndex((entry) => entry.id === generation.id);
+      if (at !== -1) {
+        const next = [...list];
+        next[at] = generation;
+        return { ...prev, [index]: next };
+      }
+      const appended = [...list, generation];
+      // A fresh revision becomes the one on screen; approval stays where it is.
+      setFrameRevision((rev) => ({ ...rev, [index]: appended.length - 1 }));
+      return { ...prev, [index]: appended };
+    });
+  }, []);
+
   /** Merge a fresh generation record into whichever collection owns it. */
-  const applyGeneration = useCallback((generation: JewelryGeneration) => {
-    if (generation.kind === "video") {
-      setVideos((prev) => {
-        const index = prev.findIndex((entry) => entry.id === generation.id);
-        if (index === -1) return [generation, ...prev];
-        const next = [...prev];
-        next[index] = generation;
-        return next;
-      });
-      return;
-    }
-    if (generation.frameIndex !== null) {
-      const index = generation.frameIndex as number;
-      if (generation.imageModel === "nb2") {
-        setAltSwaps((prev) => ({ ...prev, [index]: generation }));
+  const applyGeneration = useCallback(
+    (generation: JewelryGeneration) => {
+      if (generation.kind === "video") {
+        setVideos((prev) => {
+          const index = prev.findIndex((entry) => entry.id === generation.id);
+          if (index === -1) return [generation, ...prev];
+          const next = [...prev];
+          next[index] = generation;
+          return next;
+        });
         return;
       }
-      setSwaps((prev) => ({ ...prev, [index]: generation }));
+      recordFrameGeneration(generation);
+    },
+    [recordFrameGeneration],
+  );
+
+  /**
+   * The displayed revision drives the legacy `swaps` / `altSwaps` views the
+   * review UI reads, so stepping through revisions updates the whole card.
+   */
+  useEffect(() => {
+    const nextSwaps: Record<number, JewelryGeneration> = {};
+    const nextAlt: Record<number, JewelryGeneration> = {};
+    for (const key of Object.keys(frameGenerations)) {
+      const index = Number(key);
+      const list = frameGenerations[index] ?? [];
+      if (!list.length) continue;
+      const at = Math.min(Math.max(frameRevision[index] ?? list.length - 1, 0), list.length - 1);
+      const shown = list[at];
+      const upto = list.slice(0, at + 1);
+      const pro =
+        shown.imageModel !== "nb2"
+          ? shown
+          : [...upto].reverse().find((entry) => entry.imageModel !== "nb2") ??
+            list.find((entry) => entry.imageModel !== "nb2");
+      const alt =
+        shown.imageModel === "nb2"
+          ? shown
+          : [...upto].reverse().find((entry) => entry.imageModel === "nb2");
+      if (pro) nextSwaps[index] = pro;
+      if (alt) nextAlt[index] = alt;
     }
+    setSwaps(nextSwaps);
+    setAltSwaps(nextAlt);
+  }, [frameGenerations, frameRevision]);
+
+  /** Step to another revision of one frame (‹ / › in the review card). */
+  const stepRevision = useCallback((index: number, delta: number) => {
+    setFrameRevision((prev) => {
+      const list = frameGenerationsRef.current[index] ?? [];
+      if (list.length < 2) return prev;
+      const current = Math.min(Math.max(prev[index] ?? list.length - 1, 0), list.length - 1);
+      const next = Math.min(Math.max(current + delta, 0), list.length - 1);
+      if (next === current) return prev;
+      return { ...prev, [index]: next };
+    });
   }, []);
+
+
 
   // Re-attach to anything the backend still has in flight (refresh-safe).
   useEffect(() => {
@@ -2506,18 +2595,14 @@ export default function JewelrySwap() {
         frameOpticsProfile,
         opticsControls,
       });
-      if (imageModel === "nb2") {
-        setAltSwaps((prev) => ({ ...prev, [frameIndex]: data.generation }));
-      } else {
-        setSwaps((prev) => ({ ...prev, [frameIndex]: data.generation }));
+      // A regeneration APPENDS a revision (§36) and never unapproves the
+      // revision the user already approved (§37).
+      recordFrameGeneration(data.generation);
+      if (imageModel !== "nb2") {
         // Remember the quality this frame actually ran at so Regenerate defaults to it.
         setFrameQuality((prev) => ({ ...prev, [frameIndex]: quality }));
-        setApproved((prev) => {
-          const next = new Set(prev);
-          next.delete(frameIndex);
-          return next;
-        });
       }
+
     },
     [
       frames,
@@ -2533,6 +2618,8 @@ export default function JewelrySwap() {
       opticsProfile,
       opticsControls,
       ensureFrameOptics,
+      recordFrameGeneration,
+
     ],
 
 
@@ -2610,26 +2697,26 @@ export default function JewelrySwap() {
 
 
   const removeSwap = useCallback(async (frameIndex: number) => {
-    const ids = [swaps[frameIndex]?.id, altSwaps[frameIndex]?.id].filter(Boolean) as string[];
-    setSwaps((prev) => {
+    const ids = (frameGenerationsRef.current[frameIndex] ?? []).map((entry) => entry.id);
+    setFrameGenerations((prev) => {
       const next = { ...prev };
       delete next[frameIndex];
       return next;
     });
-    setAltSwaps((prev) => {
+    setFrameRevision((prev) => {
       const next = { ...prev };
       delete next[frameIndex];
       return next;
     });
-    setApproved((prev) => {
-      const next = new Set(prev);
-      next.delete(frameIndex);
+    setApprovedGenerationId((prev) => {
+      const next = { ...prev };
+      delete next[frameIndex];
       return next;
     });
     if (ids.length) {
       await callJewelrySwap({ action: "delete", generationIds: ids }).catch(() => null);
     }
-  }, [swaps, altSwaps]);
+  }, []);
 
   /** The result the user picked (defaults to Nano Banana Pro). */
   const selectedSwap = useCallback(
@@ -2638,16 +2725,31 @@ export default function JewelrySwap() {
     [chosenModel, swaps, altSwaps],
   );
 
+  /**
+   * APPROVAL BY ID (§37): the exact revision the user approved — this, not
+   * "the latest", is what animate and the Seedance rebuild consume.
+   */
+  const approvedSwap = useCallback(
+    (index: number) => {
+      const id = approvedGenerationId[index];
+      if (!id) return null;
+      return (frameGenerations[index] ?? []).find((entry) => entry.id === id) ?? null;
+    },
+    [approvedGenerationId, frameGenerations],
+  );
+
+
   /* ---------------------------- 5. Reconstruction --------------------------- */
 
   const approvedUrls = useMemo(
     () =>
       [...approved]
         .sort((a, b) => a - b)
-        .map((index) => selectedSwap(index)?.outputUrl)
+        .map((index) => (approvedSwap(index) ?? selectedSwap(index))?.outputUrl)
         .filter((url): url is string => !!url),
-    [approved, selectedSwap],
+    [approved, approvedSwap, selectedSwap],
   );
+
 
 
   /** Seedance 2.0 supported clip lengths (model range 4–15s). */
@@ -2899,11 +3001,12 @@ export default function JewelrySwap() {
         .sort((a, b) => a - b)
         .map((index) => ({
           index,
-          url: selectedSwap(index)?.outputUrl ?? null,
+          url: (approvedSwap(index) ?? selectedSwap(index))?.outputUrl ?? null,
           time: frames[index]?.time ?? 0,
         }))
         .filter((entry): entry is { index: number; url: string; time: number } => !!entry.url),
-    [approved, selectedSwap, frames],
+    [approved, approvedSwap, selectedSwap, frames],
+
   );
 
   // Kling 3.0 without audio: $0.112 per second.
@@ -3063,22 +3166,45 @@ export default function JewelrySwap() {
     }
   }, [clips]);
 
-  const toggleApproved = useCallback((index: number) => {
-    setApproved((prev) => {
-      const next = new Set(prev);
-      next.has(index) ? next.delete(index) : next.add(index);
-      return next;
-    });
-  }, []);
+  /**
+   * Approval binds to the generation ON SCREEN (§37). Approving a different
+   * revision moves the binding; clicking the already-approved revision clears it.
+   */
+  const toggleApproved = useCallback(
+    (index: number) => {
+      const shown = selectedSwap(index);
+      if (!shown) return;
+      setApprovedGenerationId((prev) => {
+        const next = { ...prev };
+        if (next[index] === shown.id) delete next[index];
+        else next[index] = shown.id;
+        return next;
+      });
+    },
+    [selectedSwap],
+  );
 
+
+
+  const revisionInfo = useCallback(
+
+    (index: number) => {
+      const total = (frameGenerations[index] ?? []).length;
+      const current = Math.min(frameRevision[index] ?? total - 1, Math.max(total - 1, 0));
+      return { total, position: total ? current + 1 : 0, current };
+    },
+    [frameGenerations, frameRevision],
+  );
 
   const swapEntries = useMemo(
     () =>
-      Object.keys(swaps)
+      Object.keys(frameGenerations)
         .map(Number)
+        .filter((index) => (frameGenerations[index] ?? []).length > 0)
         .sort((a, b) => a - b),
-    [swaps],
+    [frameGenerations],
   );
+
 
   /* ------------------- Serialize this run into a real template -------------- */
 
@@ -3207,12 +3333,16 @@ export default function JewelrySwap() {
       frameQuality: frameQuality as unknown as Record<string, unknown>,
       swaps: swaps as unknown as Record<string, unknown>,
       altSwaps: altSwaps as unknown as Record<string, unknown>,
+      frameGenerations: frameGenerations as unknown as Record<string, unknown[]>,
+      frameRevision: frameRevision as unknown as Record<string, number>,
+      approvedGenerationId: approvedGenerationId as unknown as Record<string, string>,
       chosenModel: chosenModel as unknown as Record<string, unknown>,
       framePreferredRole: framePreferredRole as unknown as Record<string, unknown>,
       frameReason: frameReason as unknown as Record<string, unknown>,
       frameMode: frameMode as unknown as Record<string, unknown>,
       frameCoverage: frameCoverage as unknown as Record<string, unknown>,
       approved: Array.from(approved),
+
       extraPrompt,
       videoModel,
       resolution,
@@ -3245,6 +3375,10 @@ export default function JewelrySwap() {
       swaps,
       altSwaps,
       chosenModel,
+      frameGenerations,
+      frameRevision,
+      approvedGenerationId,
+
       framePreferredRole,
       frameReason,
       frameMode,
@@ -3351,14 +3485,63 @@ export default function JewelrySwap() {
 
       setNanoQuality((state?.nanoQuality ?? "2k") as NanoQuality);
       setFrameQuality((state?.frameQuality ?? {}) as Record<number, NanoQuality>);
-      setSwaps((state?.swaps ?? {}) as Record<number, JewelryGeneration>);
-      setAltSwaps((state?.altSwaps ?? {}) as Record<number, JewelryGeneration>);
+      // REVISION HISTORY: restore the history when present, otherwise migrate a
+      // legacy single-generation project into 1-element revision lists.
+      const legacySwaps = (state?.swaps ?? {}) as Record<string, JewelryGeneration>;
+      const legacyAlt = (state?.altSwaps ?? {}) as Record<string, JewelryGeneration>;
+      const savedHistory = (state?.frameGenerations ?? null) as Record<
+        string,
+        JewelryGeneration[]
+      > | null;
+      const history: Record<number, JewelryGeneration[]> = {};
+      if (savedHistory && Object.keys(savedHistory).length) {
+        for (const key of Object.keys(savedHistory)) {
+          history[Number(key)] = (savedHistory[key] ?? []).filter(Boolean);
+        }
+      } else {
+        for (const key of Object.keys(legacySwaps)) {
+          const list = [legacySwaps[key], legacyAlt[key]].filter(Boolean) as JewelryGeneration[];
+          if (list.length) history[Number(key)] = list;
+        }
+      }
+      setFrameGenerations(history);
+      const revisions: Record<number, number> = {};
+      const savedRevisions = (state?.frameRevision ?? {}) as Record<string, number>;
+      for (const key of Object.keys(history)) {
+        const index = Number(key);
+        const saved = savedRevisions[key] ?? savedRevisions[String(index)];
+        revisions[index] =
+          typeof saved === "number"
+            ? Math.min(Math.max(saved, 0), history[index].length - 1)
+            : history[index].length - 1;
+      }
+      setFrameRevision(revisions);
+
+      // APPROVAL BY ID: restored directly, or bound to the legacy approved frame.
+      const savedApproval = (state?.approvedGenerationId ?? {}) as Record<string, string>;
+      const approvals: Record<number, string> = {};
+      if (Object.keys(savedApproval).length) {
+        for (const key of Object.keys(savedApproval)) {
+          const id = savedApproval[key];
+          if (id) approvals[Number(key)] = id;
+        }
+      } else {
+        for (const index of (state?.approved ?? []) as number[]) {
+          const picked =
+            ((state?.chosenModel ?? {}) as Record<string, string>)[String(index)] === "nb2"
+              ? legacyAlt[String(index)]
+              : legacySwaps[String(index)];
+          const fallback = picked ?? legacySwaps[String(index)];
+          if (fallback?.id) approvals[index] = fallback.id;
+        }
+      }
+      setApprovedGenerationId(approvals);
       setChosenModel((state?.chosenModel ?? {}) as Record<number, JewelryImageModel>);
       setFramePreferredRole((state?.framePreferredRole ?? {}) as Record<number, string>);
       setFrameReason((state?.frameReason ?? {}) as Record<number, string>);
       setFrameMode((state?.frameMode ?? {}) as Record<number, ReplacementMode>);
       setFrameCoverage((state?.frameCoverage ?? {}) as Record<number, Coverage>);
-      setApproved(new Set((state?.approved ?? []) as number[]));
+
       setExtraPrompt(state?.extraPrompt ?? "");
 
       setVideoModel(state?.videoModel ?? "seedance-2.0");
@@ -3410,12 +3593,15 @@ export default function JewelrySwap() {
     setFrameQuality({});
     setSwaps({});
     setAltSwaps({});
+    setFrameGenerations({});
+    setFrameRevision({});
     setChosenModel({});
     setFramePreferredRole({});
     setFrameReason({});
     setFrameMode({});
     setFrameCoverage({});
-    setApproved(new Set());
+    setApprovedGenerationId({});
+
     setExtraPrompt("");
     setPromptMode("auto");
     setPromptDraft("");
@@ -4893,14 +5079,17 @@ export default function JewelrySwap() {
                     const swap = swaps[index];
                     const alt = altSwaps[index];
                     const frame = frames[index];
-                    const isApproved = approved.has(index);
                     const picked = chosenModel[index] === "nb2" && alt ? "nb2" : "pro";
                     const active = picked === "nb2" ? alt : swap;
+                    const revision = revisionInfo(index);
+                    const isApproved = !!active && approvedGenerationId[index] === active.id;
+                    const approvedElsewhere = !!approvedGenerationId[index] && !isApproved;
                     return (
                       <article
-                        key={swap.id}
+                        key={`frame-${index}`}
                         className={cn(
                           "group/card space-y-2 rounded-2xl border bg-black/25 p-2.5",
+
                           isApproved ? "border-cyan-200/50" : "border-white/10",
                         )}
                       >
@@ -4986,6 +5175,38 @@ export default function JewelrySwap() {
 
 
 
+                        {/* REVISION HISTORY (§36): regenerating appends, never overwrites. */}
+                        {revision.total > 1 && (
+                          <div className="flex items-center justify-between rounded-lg border border-white/10 bg-black/30 px-2 py-1">
+                            <button
+                              type="button"
+                              onClick={() => stepRevision(index, -1)}
+                              disabled={revision.current === 0}
+                              className="rounded px-1.5 text-white/70 disabled:opacity-30"
+                              aria-label="Previous version"
+                            >
+                              ‹
+                            </button>
+                            <span className="text-[10px] uppercase tracking-[0.18em] text-white/55">
+                              Version {revision.position} / {revision.total}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => stepRevision(index, 1)}
+                              disabled={revision.current >= revision.total - 1}
+                              className="rounded px-1.5 text-white/70 disabled:opacity-30"
+                              aria-label="Next version"
+                            >
+                              ›
+                            </button>
+                          </div>
+                        )}
+
+                        {approvedElsewhere && (
+                          <p className="text-[10px] text-cyan-200/70">
+                            A different version of this frame is approved.
+                          </p>
+                        )}
 
                         <div className="flex items-center gap-1.5">
                           <Button
@@ -5002,6 +5223,7 @@ export default function JewelrySwap() {
                           >
                             <Check size={12} /> {isApproved ? "Approved" : "Approve"}
                           </Button>
+
 
                           <Button
                             size="sm"
@@ -5581,9 +5803,11 @@ export default function JewelrySwap() {
             const alt = altSwaps[index];
             const frame = frames[index];
             if (!swap) return null;
-            const isApproved = approved.has(index);
             const picked = chosenModel[index] === "nb2" && alt ? "nb2" : "pro";
             const active = (picked === "nb2" ? alt : swap)!;
+            const revision = revisionInfo(index);
+            const isApproved = approvedGenerationId[index] === active?.id;
+
             return (
               <>
                 <DialogHeader>
@@ -5628,7 +5852,33 @@ export default function JewelrySwap() {
                         {costPreview(swap.estimatedCredits, swap.estimatedCostUsd)}
                       </span>
                     </div>
+                    {revision.total > 1 && (
+                      <div className="flex items-center justify-between rounded-xl border border-white/10 bg-black/30 px-3 py-1.5">
+                        <button
+                          type="button"
+                          onClick={() => stepRevision(index, -1)}
+                          disabled={revision.current === 0}
+                          className="px-1 text-white/70 disabled:opacity-30"
+                          aria-label="Previous version"
+                        >
+                          ‹
+                        </button>
+                        <span className="text-[10px] uppercase tracking-[0.18em] text-white/55">
+                          Version {revision.position} / {revision.total}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => stepRevision(index, 1)}
+                          disabled={revision.current >= revision.total - 1}
+                          className="px-1 text-white/70 disabled:opacity-30"
+                          aria-label="Next version"
+                        >
+                          ›
+                        </button>
+                      </div>
+                    )}
                     <Button
+
                       disabled={active.status !== "complete"}
                       onClick={() => toggleApproved(index)}
                       className={cn(

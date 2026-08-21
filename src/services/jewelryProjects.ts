@@ -40,8 +40,14 @@ export type JewelryProjectState = {
   frameQuality: Record<string, unknown>;
   swaps: Record<string, unknown>;
   altSwaps: Record<string, unknown>;
+  /** Append-only per-frame revision history (§36) + which revision is shown. */
+  frameGenerations: Record<string, unknown[]>;
+  frameRevision: Record<string, number>;
+  /** Approval binds to a specific generation id per frame (§37). */
+  approvedGenerationId: Record<string, string>;
   chosenModel: Record<string, unknown>;
   framePreferredRole: Record<string, unknown>;
+
   frameReason: Record<string, unknown>;
   frameMode: Record<string, unknown>;
   frameCoverage: Record<string, unknown>;
