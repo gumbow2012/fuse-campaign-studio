@@ -31,6 +31,13 @@ import {
   opticsSummaryLine,
   readOpticsControls,
 } from "../_shared/diamond-optics.ts";
+import {
+  type MasterProductLock,
+  masterLockProductType,
+  masterLockPromptLines,
+  masterLockSummaryLine,
+  normalizeMasterLock,
+} from "./masterLock.ts";
 
 /**
  * Jewelry Swap: sibling of Outfit Swap. Per-frame nano-banana jewelry
@@ -1346,6 +1353,8 @@ function buildJewelryPrompt(args: {
   opticsControls?: DiamondOpticsControls | null;
   /** DIAMOND OPTICS: add the temporal-consistency line (video rebuild stage). */
   opticsTemporal?: boolean;
+  /** MASTER PRODUCT LOCK: the project's single authoritative product identity. */
+  masterLock?: MasterProductLock | null;
 }) {
   let cursor = 2; // image 1 is the source frame
   const lines: string[] = [];
@@ -1372,7 +1381,10 @@ function buildJewelryPrompt(args: {
         cadRefNums.push(num);
       }
     }
-    const type = spec.type ?? String(piece.type ?? "").trim() ?? "";
+    // Product identity comes from the confirmed spec first, then the project's
+    // MASTER PRODUCT LOCK — never a per-frame re-derivation of the product.
+    const type = spec.type ?? masterLockProductType(args.masterLock ?? null) ??
+      String(piece.type ?? "").trim() ?? "";
     const applyTo = String(piece.person ?? "Main subject").trim() || "Main subject";
     const notes = String(piece.notes ?? "").trim();
     if (piece.cad === true) cadActive = true;
@@ -1411,6 +1423,9 @@ function buildJewelryPrompt(args: {
   const declaredSettings = declaredSettingList(specs);
   const colorless = isColorlessSpec(specs);
   const engineeringLock = engineeringLockLines(specs, productAnalysis);
+  // MASTER PRODUCT LOCK: derived once per reference set and inherited by every
+  // frame. Sits UNDER the user's confirmed spec in the authority order.
+  const masterLockBlock = masterLockPromptLines(args.masterLock ?? null, { compact: true });
 
   const prompt = [
     /* 1 — REPLACEMENT LEADS. */
@@ -1422,6 +1437,7 @@ function buildJewelryPrompt(args: {
     /* 2 — TARGET IDENTITY (mandatory), BEFORE any preservation rule. */
     "TARGET IDENTITY — MANDATORY. The specification below defines WHAT must appear. It outranks aesthetics, model inference and the preservation rules further down. Never substitute another product type, metal, stone, stone color or setting construction.",
     specLines.length ? specLines.join("\n") : null,
+    masterLockBlock.length ? masterLockBlock.join("\n") : null,
     declaredSettings.length
       ? `SETTING LOCK: ${declaredSettings.join("; ")} — reproduce each declared construction exactly as built on the references; never swap it for another setting family and never regularize it into a uniform stone field.`
       : null,
@@ -1816,13 +1832,15 @@ const DIRECTOR_MAX_CHARS = 2400;
  * then analysis-detected, then a neutral generic. Fully universal — no product
  * name is ever hardcoded or defaulted here.
  */
-function confirmedProductType(specs: TargetSpec[]) {
+function confirmedProductType(specs: TargetSpec[], masterLock?: MasterProductLock | null) {
   const byProvenance = (want: string) =>
     specs.find((spec) => spec.type && spec.sources?.type === want)?.type ?? null;
   return (
     byProvenance("user_override") ??
     byProvenance("gemini_detected") ??
     specs.find((spec) => spec.type)?.type ??
+    // The project's MASTER PRODUCT LOCK before any generic fallback.
+    masterLockProductType(masterLock ?? null) ??
     "jewelry piece"
   );
 }
@@ -1841,6 +1859,8 @@ function buildSeedanceDirectorPrompt(args: {
   extra?: string | null;
   /** DIAMOND OPTICS: pre-synthesised optical lines (analysed × user controls). */
   opticsText?: string | null;
+  /** MASTER PRODUCT LOCK: the project's authoritative product identity. */
+  masterLock?: MasterProductLock | null;
 }) {
   const duration = Math.max(1, Math.round(Number(args.duration) || 5));
   const selected = selectDirectorFrames(args.frames);
@@ -1848,9 +1868,10 @@ function buildSeedanceDirectorPrompt(args: {
   const plan = buildShotPlan(selected, geometry, duration);
   const specLines = args.specs.map((spec) => targetSpecLine(spec)).filter(Boolean) as string[];
   // The ACTUAL confirmed product type: a user-confirmed value first, then the
-  // analysis-detected value, and only a neutral generic word if neither exists.
-  // Never a control default and never a hardcoded product name.
-  const productType = confirmedProductType(args.specs);
+  // analysis-detected value, then the project's Master Product Lock, and only a
+  // neutral generic word if none exists. Never a hardcoded product name.
+  const productType = confirmedProductType(args.specs, args.masterLock ?? null);
+  const masterLockBlock = masterLockPromptLines(args.masterLock ?? null, { compact: true });
 
   const hasStones = args.specs.some((spec) => spec.stone && !/no stones/i.test(spec.stone)) ||
     geometry.macro;
@@ -1895,6 +1916,9 @@ function buildSeedanceDirectorPrompt(args: {
   const core = coreLength(fullCore) <= DIRECTOR_MAX_CHARS ? fullCore : buildCore(shortTimeline);
 
   const optional = [
+    // Product identity first: the Master Product Lock is the highest-value
+    // optional section inside the character budget.
+    masterLockBlock.length ? masterLockBlock.join("\n") : null,
     hasStones ? `${DIRECTOR_GEMSTONES}${colorless ? ` ${DIRECTOR_COLORLESS}` : ""}` : null,
     DIRECTOR_METAL,
     String(args.opticsText ?? "").trim() || null,
@@ -1961,6 +1985,8 @@ async function startSwapFrame(admin: AdminClient, args: {
   frameOpticsProfile?: unknown;
   /** DIAMOND OPTICS: Sparkle / Rainbow-Fire / advanced controls (AUTO default). */
   opticsControls?: unknown;
+  /** MASTER PRODUCT LOCK derived once per reference set on the client. */
+  masterProductLock?: unknown;
   webhookBase: string;
 }) {
   const sourceFrameUrl = String(args.sourceFrameUrl ?? "").trim();
@@ -1978,6 +2004,8 @@ async function startSwapFrame(admin: AdminClient, args: {
   // Stage-A still analysis (advisory). Absent or malformed → deterministic path.
   const frameAnalysis = normalizeFrameAnalysis(args.frameAnalysis ?? null);
   const productAnalysis = normalizeProductAnalysis(args.productAnalysis ?? null);
+  // MASTER PRODUCT LOCK: every frame in the project inherits the SAME lock.
+  const masterLock = normalizeMasterLock(args.masterProductLock ?? null);
 
   // DIAMOND OPTICS (additive): cached analysed optics × user controls. No Gemini
   // call happens here — moving a slider only re-synthesises these prompt lines.
@@ -2018,6 +2046,7 @@ async function startSwapFrame(admin: AdminClient, args: {
     productAnalysis,
     opticsProfile,
     opticsControls,
+    masterLock,
   });
 
 
@@ -2098,6 +2127,12 @@ async function startSwapFrame(admin: AdminClient, args: {
 
           // Structured product authority resolved for this run (verification hook).
           target_spec: routedPieces.map((piece) => resolveTargetSpec(piece)),
+
+          // MASTER PRODUCT LOCK inherited by this frame (audit + reconstruct reuse).
+          master_product_lock: masterLock,
+          master_product_lock_summary: masterLockSummaryLine(masterLock),
+
+
 
           preferred_role: args.preferredRole ?? null,
           failure_reason: args.failureReason ?? null,
@@ -2201,6 +2236,8 @@ type ReconstructionPrep = {
   opticsProfile?: unknown;
   /** DIAMOND OPTICS: Sparkle / Rainbow-Fire / advanced controls. */
   opticsControls?: unknown;
+  /** MASTER PRODUCT LOCK for this project (falls back to the stored one). */
+  masterProductLock?: unknown;
 };
 
 async function prepareReconstruction(admin: AdminClient, args: ReconstructionPrep) {
@@ -2266,6 +2303,20 @@ async function prepareReconstruction(admin: AdminClient, args: ReconstructionPre
   })();
 
   /**
+   * MASTER PRODUCT LOCK: the same lock the approved frames were generated with.
+   * Sent by the client; otherwise read back from the stored swap payload so the
+   * rebuild can never re-decide the product.
+   */
+  const masterLock = normalizeMasterLock(args.masterProductLock ?? null) ?? (() => {
+    for (const url of referenceUrls) {
+      const stored = normalizeMasterLock(metaByUrl.get(url)?.master_product_lock ?? null);
+      if (stored) return stored;
+    }
+    return null;
+  })();
+
+
+  /**
    * Reconstruct reads the SAME confirmed spec the swap used: resolved from the
    * stored pieces, with any field still missing filled from the stored spec.
    * No field is ever defaulted to a product name here.
@@ -2322,6 +2373,7 @@ async function prepareReconstruction(admin: AdminClient, args: ReconstructionPre
     aspectRatio: args.aspectRatio ?? null,
     extra: args.extraPrompt ?? null,
     opticsText,
+    masterLock,
   });
   return {
     availableUrls,
@@ -2331,6 +2383,7 @@ async function prepareReconstruction(admin: AdminClient, args: ReconstructionPre
     duration,
     specs,
     director,
+    masterLock,
   };
 }
 
@@ -2368,8 +2421,16 @@ async function startReconstruction(admin: AdminClient, args: ReconstructionPrep 
   inputFingerprint?: unknown;
   webhookBase: string;
 }) {
-  const { availableUrls, referenceUrls, videoModel, endpointId, duration, specs, director } =
-    await prepareReconstruction(admin, args);
+  const {
+    availableUrls,
+    referenceUrls,
+    videoModel,
+    endpointId,
+    duration,
+    specs,
+    director,
+    masterLock,
+  } = await prepareReconstruction(admin, args);
 
   const autoPrompt = director.prompt;
   const override = normalizePromptOverride(args.promptOverride);
@@ -2441,6 +2502,9 @@ async function startReconstruction(admin: AdminClient, args: ReconstructionPrep 
           frame_roles: director.frameRoles,
           available_geometry: director.geometry,
           target_spec: specs,
+          // MASTER PRODUCT LOCK inherited by the rebuild (same lock as the frames).
+          master_product_lock: masterLock,
+          master_product_lock_summary: masterLockSummaryLine(masterLock),
           // Prompt audit trail: FUSE's version vs the exact text submitted.
           director_prompt_auto: autoPrompt,
           director_prompt_final: prompt,
@@ -3354,6 +3418,7 @@ Deno.serve(async (req) => {
         opticsProfile: body.opticsProfile ?? null,
         frameOpticsProfile: body.frameOpticsProfile ?? null,
         opticsControls: body.opticsControls ?? null,
+        masterProductLock: body.masterProductLock ?? null,
         webhookBase,
       });
       return json({ generation });
@@ -3371,6 +3436,7 @@ Deno.serve(async (req) => {
         extraPrompt: body.extraPrompt,
         opticsProfile: body.opticsProfile ?? null,
         opticsControls: body.opticsControls ?? null,
+        masterProductLock: body.masterProductLock ?? null,
       });
       return json({ preview });
     }
@@ -3387,6 +3453,7 @@ Deno.serve(async (req) => {
         extraPrompt: body.extraPrompt,
         opticsProfile: body.opticsProfile ?? null,
         opticsControls: body.opticsControls ?? null,
+        masterProductLock: body.masterProductLock ?? null,
         promptOverride: body.promptOverride ?? null,
         inputFingerprint: body.promptInputFingerprint ?? null,
         webhookBase,
