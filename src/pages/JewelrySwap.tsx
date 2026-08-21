@@ -4241,7 +4241,27 @@ export default function JewelrySwap() {
         <header className="mb-6 space-y-1">
           <p className="text-xs font-semibold uppercase tracking-[0.2em] text-cyan-200/70">FUSE Lab</p>
           <div className="flex flex-wrap items-center gap-3">
-            <h1 className="font-heading text-2xl font-semibold text-foreground sm:text-3xl">Jewelry Swap</h1>
+            <h1 className="font-heading text-2xl font-semibold text-foreground sm:text-3xl">
+              {isSwapMode ? "Jewelry Swap" : "Jewelry Campaign"}
+            </h1>
+            {/* MODE SWITCH (§26) — same intelligence stack, two surfaces. */}
+            <div className="flex items-center gap-1 rounded-xl border border-white/12 bg-black/40 p-1">
+              {(["swap", "campaign"] as JewelryWorkspaceMode[]).map((option) => (
+                <button
+                  key={option}
+                  type="button"
+                  onClick={() => setWorkspaceMode(option)}
+                  className={cn(
+                    "rounded-lg px-2.5 py-1 text-[11px] font-medium capitalize transition-colors",
+                    workspaceMode === option
+                      ? "bg-cyan-400/15 text-cyan-100"
+                      : "text-foreground/55 hover:text-foreground/80",
+                  )}
+                >
+                  {option}
+                </button>
+              ))}
+            </div>
             <ProjectPicker
               projects={projects}
               currentId={projectId}
@@ -4254,9 +4274,11 @@ export default function JewelrySwap() {
             />
           </div>
           <p className="max-w-2xl text-sm text-muted-foreground">
-            Upload a clip, replace the jewelry in the frames you pick with your references, then rebuild the
-            same video with the new pieces.
+            {isSwapMode
+              ? "Upload a clip, replace the jewelry in the frames you pick with your references, then rebuild the same video with the new pieces."
+              : "No clip needed — add your product references and FUSE builds clean campaign photography of the same locked piece across the shots it needs."}
           </p>
+
         </header>
 
         <div className="grid gap-5 xl:grid-cols-[minmax(0,420px)_minmax(0,1fr)]">
