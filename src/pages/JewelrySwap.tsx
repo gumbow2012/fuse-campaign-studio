@@ -3790,6 +3790,11 @@ export default function JewelrySwap() {
     setPieces([]);
     setKnowledgeMap(null);
     setMasterProductLock(null);
+    setPhotographyRefs([]);
+    setCampaignPhotographyProfile(null);
+    photographyVersion.current = null;
+    setPhotographyStatus("idle");
+    setPhotographyError(null);
     setUserLocks([]);
     setAnalysis(null);
     setAnalysisKey(null);
@@ -4315,6 +4320,16 @@ export default function JewelrySwap() {
                           )}
                         </select>
                       </div>
+                      {/* CAMPAIGN PHOTOGRAPHY PROFILE (§20) — look only, no geometry. */}
+                      <CampaignPhotographyPanel
+                        referenceUrls={photographyRefs}
+                        profile={campaignPhotographyProfile}
+                        status={photographyStatus}
+                        error={photographyError}
+                        onAdd={(files) => void addPhotographyRefs(files)}
+                        onRemove={removePhotographyRef}
+                        onAnalyze={() => void analyzePhotography()}
+                      />
                       <pre className="max-h-64 overflow-auto rounded-xl border border-white/10 bg-black/50 p-2 text-[9px] leading-relaxed text-foreground/70">
                         {JSON.stringify({ knowledgeMap, userConfirmedFacts: userLocks }, null, 2)}
                       </pre>
