@@ -1557,7 +1557,15 @@ function buildJewelryPrompt(args: {
 
     /* 4 — PRESERVE from SOURCE_FRAME (secondary to the replacement). */
     "PRESERVE FROM SOURCE_FRAME (secondary — this must NEVER cause the original jewelry to be kept): camera position and angle, perspective, crop, zoom, composition, depth of field, focus plane, lighting, background, subject, skin, hair, clothing, hands, occlusion order, and the jewelry's position, orientation, rotation, tilt, visible percentage and scale. Only the jewelry's identity changes — never the shot. Geometry comes from the REFERENCES; framing comes from SOURCE_FRAME.",
+    // SWAP MODE keeps the SOURCE cinematography (camera + light come from the
+    // frame above) — the campaign photography profile is deliberately NOT used
+    // here. CONNECTED PRODUCT SYSTEMS (§30) rules are appended when present.
+    ...(() => {
+      const connected = connectedAssetPromptLines(args.connectedAssets ?? null);
+      return connected.length ? ["", connected.join("\n")] : [];
+    })(),
     "",
+
     compactModeLine(mode),
     compactCoverageLine(coverage, mode),
     "",
