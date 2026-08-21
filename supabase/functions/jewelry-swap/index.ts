@@ -3085,6 +3085,8 @@ async function startAnimateFrame(admin: AdminClient, args: {
           animate_input_url: conditioned.url,
           animate_input_conditioned: conditioned.conditioned,
           animate_input_note: conditioned.note ?? null,
+          animate_input_client_conditioned: !!clientInputUrl,
+
           frame_index: Number(args.frameIndex ?? 0),
           frame_time: Number(args.frameTime ?? 0),
           camera_direction: direction,
