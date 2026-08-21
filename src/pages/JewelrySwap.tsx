@@ -2486,6 +2486,10 @@ export default function JewelrySwap() {
           options?.productAnalysis !== undefined
             ? options.productAnalysis
             : analysis?.productAnalysis ?? null,
+        // DIAMOND OPTICS — analysed source optics + user controls (no rerun).
+        opticsProfile,
+        frameOpticsProfile,
+        opticsControls,
       });
       if (imageModel === "nb2") {
         setAltSwaps((prev) => ({ ...prev, [frameIndex]: data.generation }));
