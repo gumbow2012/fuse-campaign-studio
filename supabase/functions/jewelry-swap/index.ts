@@ -3028,6 +3028,15 @@ function normalizePromptOverride(value: unknown) {
 }
 
 
+/**
+ * §F2 — resolutions the Seedance reference-to-video endpoints truly accept,
+ * read from the live fal OpenAPI schema (see note in startReconstruction).
+ */
+export const REFERENCE_VIDEO_RESOLUTIONS_BY_MODEL: Record<string, string[]> = {
+  "seedance-2.0": ["480p", "720p", "1080p", "4k"],
+  "seedance-2.0-fast": ["480p", "720p"],
+};
+
 async function startReconstruction(admin: AdminClient, args: ReconstructionPrep & {
   /** When set, this exact text becomes the final Seedance prompt. */
   promptOverride?: unknown;
