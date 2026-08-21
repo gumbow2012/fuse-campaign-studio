@@ -3892,8 +3892,8 @@ export default function JewelrySwap() {
       const generation = await animateJewelryFrame({
         imageUrl: frame.url,
         animateInputUrl: conditioned.conditioned ? conditioned.url : null,
-        // §F4 — the chosen duration is submitted exactly as selected.
-        durationSeconds: animateDuration,
+        // §F4/§F7 — per-clip override wins over the global default; submitted as-is.
+        durationSeconds: position.durationSeconds ?? durationForFrame(frame.url),
         frameIndex: frame.index,
         frameTime: frame.time,
         cameraDirection: position.direction ?? cameraDirection,
@@ -3907,7 +3907,8 @@ export default function JewelrySwap() {
 
       setVideos((prev) => [generation, ...prev]);
     },
-    [animateDuration, cameraDirection, customCameraPrompt, motionForFrame, pieceTypes],
+    [cameraDirection, customCameraPrompt, durationForFrame, motionForFrame, pieceTypes],
+
 
   );
 
