@@ -1881,6 +1881,8 @@ function buildSeedanceDirectorPrompt(args: {
   opticsText?: string | null;
   /** MASTER PRODUCT LOCK: the project's authoritative product identity. */
   masterLock?: MasterProductLock | null;
+  /** MATERIAL APPEARANCE AUTHORITY: material realism only — zero geometry. */
+  materialAuthority?: MaterialAppearanceAuthority | null;
 }) {
   const duration = Math.max(1, Math.round(Number(args.duration) || 5));
   const selected = selectDirectorFrames(args.frames);
