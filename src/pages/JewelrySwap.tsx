@@ -3683,10 +3683,10 @@ export default function JewelrySwap() {
         setDirectorPrompts((prev) => ({
           ...prev,
           [data.generation.id]: {
-            auto: promptPreview?.prompt ?? null,
-            final: submitted,
-            userEdited: promptMode === "manual",
-            inputFingerprint: promptFingerprint,
+            director_prompt_auto: promptPreview?.prompt ?? null,
+            director_prompt_final: submitted,
+            director_prompt_user_edited: promptMode === "manual",
+            input_fingerprint: promptFingerprint,
             createdAt: new Date().toISOString(),
           },
         }));

@@ -48,9 +48,9 @@ export type DirectorPromptRecord = {
 
 /** True when the inputs moved on since this prompt record was captured. */
 export function isDirectorPromptStale(
-  record: { inputFingerprint?: string | null } | null | undefined,
+  record: { input_fingerprint?: string | null } | null | undefined,
   currentFingerprint: string | null,
 ): boolean {
-  if (!record?.inputFingerprint || !currentFingerprint) return false;
-  return record.inputFingerprint !== currentFingerprint;
+  if (!record?.input_fingerprint || !currentFingerprint) return false;
+  return record.input_fingerprint !== currentFingerprint;
 }

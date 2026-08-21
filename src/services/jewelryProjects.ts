@@ -122,10 +122,10 @@ export type JewelryProjectState = {
    * the inputs that produced the auto prompt (for stale detection).
    */
   directorPrompts?: Record<string, {
-    auto: string | null;
-    final: string;
-    userEdited: boolean;
-    inputFingerprint: string | null;
+    director_prompt_auto: string | null;
+    director_prompt_final: string;
+    director_prompt_user_edited: boolean;
+    input_fingerprint: string | null;
     createdAt: string;
   }> | null;
 
