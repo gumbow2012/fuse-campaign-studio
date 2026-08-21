@@ -3705,6 +3705,26 @@ const CUSTOM_SUMMARY = {
 
 const ANIMATE_MODEL_KEY = "kling-3.0-pro";
 const ANIMATE_DURATION = 3;
+/**
+ * §F4 — schema-derived. Read from the live fal OpenAPI schema for
+ * fal-ai/kling-video/v3/pro/image-to-video: `duration` is a string enum
+ * ["3".."15"] (default "5"). Do not widen without re-reading the schema.
+ */
+const ANIMATE_DURATIONS = [3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15] as const;
+
+function resolveAnimateDuration(value: unknown) {
+  if (value === undefined || value === null || value === "") return ANIMATE_DURATION;
+  const requested = Number(value);
+  if (!Number.isFinite(requested) || !ANIMATE_DURATIONS.includes(requested as 3)) {
+    throw new Error(
+      `Clip duration ${String(value)}s is not supported by Kling 3.0 Pro. Supported: ${
+        ANIMATE_DURATIONS.join(", ")
+      } seconds.`,
+    );
+  }
+  return requested;
+}
+
 
 async function startAnimateFrame(admin: AdminClient, args: {
   userId: string;
