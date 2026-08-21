@@ -101,9 +101,12 @@ const trim = (value: unknown, max = 120): string | null => {
 export function buildFidelityAudit(args: {
   report: JewelryValidationReport;
   lockVersion?: string | null;
+  /** Dimension set to report against (defaults to the frame-review set). */
+  dimensions?: FidelityDimension[];
 }): FidelityAudit {
   const report = args.report;
-  const rows: FidelityRow[] = DIMENSIONS.map((entry) => ({
+  const dimensions = args.dimensions?.length ? args.dimensions : DIMENSIONS;
+  const rows: FidelityRow[] = dimensions.map((entry) => ({
     dimension: entry.dimension,
     verdict: "PASS" as FidelityVerdict,
     note: null as string | null,
@@ -111,9 +114,10 @@ export function buildFidelityAudit(args: {
 
   for (const violation of report.violations ?? []) {
     const label = `${violation.attribute ?? ""} ${violation.regionId ?? ""} ${violation.expected ?? ""}`;
-    const hit = DIMENSIONS.findIndex((entry) => entry.match.test(label));
-    // Unmatched attributes fall into Geometry — the broadest physical bucket.
+    const hit = dimensions.findIndex((entry) => entry.match.test(label));
+    // Unmatched attributes fall into the first (broadest physical) bucket.
     const at = hit >= 0 ? hit : 0;
+
     const verdict = severityVerdict(violation.severity ?? "medium");
     rows[at].verdict = worse(rows[at].verdict, verdict);
     const note = trim(
