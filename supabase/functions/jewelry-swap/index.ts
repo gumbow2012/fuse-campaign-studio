@@ -2502,6 +2502,9 @@ async function startReconstruction(admin: AdminClient, args: ReconstructionPrep 
           frame_roles: director.frameRoles,
           available_geometry: director.geometry,
           target_spec: specs,
+          // MASTER PRODUCT LOCK inherited by the rebuild (same lock as the frames).
+          master_product_lock: masterLock,
+          master_product_lock_summary: masterLockSummaryLine(masterLock),
           // Prompt audit trail: FUSE's version vs the exact text submitted.
           director_prompt_auto: autoPrompt,
           director_prompt_final: prompt,
