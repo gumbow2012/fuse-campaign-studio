@@ -93,6 +93,8 @@ import {
   type JewelrySwapTemplateResult,
   type LibraryAsset,
   type SwapGeneration,
+  validateAgainstKnowledgeMap,
+
 } from "@/services/jewelrySwap";
 
 import {
