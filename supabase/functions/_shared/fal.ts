@@ -425,6 +425,9 @@ export async function submitFalJob(
 export const SEEDANCE_REFERENCE_TO_VIDEO = "bytedance/seedance-2.0/reference-to-video";
 export const SEEDANCE_FAST_REFERENCE_TO_VIDEO = "bytedance/seedance-2.0/fast/reference-to-video";
 
+/** Reference-to-video endpoints only support these resolutions. */
+export const REFERENCE_VIDEO_RESOLUTIONS = ["480p", "720p"];
+
 /** Map a Seedance model key to its reference-to-video endpoint. */
 export function referenceToVideoEndpoint(modelKey: unknown) {
   const key = typeof modelKey === "string" ? modelKey.trim() : "";
@@ -460,9 +463,11 @@ export function buildSeedanceReferenceInput(args: {
 
   const endpointId = referenceToVideoEndpoint(model.key);
   const duration = String(clampSeedanceDuration(args.duration ?? 5, model));
-  const resolution = model.resolutions?.includes(String(args.resolution ?? "").toLowerCase())
-    ? String(args.resolution).toLowerCase()
-    : "1080p";
+  // reference-to-video endpoints only accept 480p or 720p (image-to-video is unaffected).
+  const requestedResolution = String(args.resolution ?? "").toLowerCase();
+  const resolution = REFERENCE_VIDEO_RESOLUTIONS.includes(requestedResolution)
+    ? requestedResolution
+    : "720p";
   const aspectRatio = model.aspectRatios?.includes(String(args.aspectRatio ?? ""))
     ? String(args.aspectRatio)
     : VERTICAL_VIDEO_ASPECT_RATIO;
