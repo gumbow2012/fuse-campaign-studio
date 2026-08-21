@@ -33,6 +33,14 @@ export type JewelryProjectState = {
   intakeSummary: unknown | null;
   /** MASTER PRODUCT LOCK — the project's authoritative product identity. */
   masterProductLock: unknown | null;
+  /**
+   * CAMPAIGN PHOTOGRAPHY PROFILE (§20) — HOW the product is photographed, kept
+   * separate from product identity. Photography references carry zero geometry.
+   */
+  photographyReferenceUrls: string[];
+  campaignPhotographyProfile: unknown | null;
+  /** Photography reference-set fingerprint the stored profile belongs to. */
+  photographySetVersion: string | null;
   /** Diamond Optics (profile + per-frame refinements + slider settings). */
   opticsProfile: unknown | null;
   frameOptics: Record<string, unknown>;

@@ -58,6 +58,14 @@ import {
   type MaterialAppearanceAuthority,
 } from "@/lib/materialAuthority";
 import { buildFidelityAudit, type FidelityAudit } from "@/lib/fidelityAudit";
+import {
+  analyzeCampaignPhotography,
+  photographySetVersion,
+  type CampaignPhotographyProfile,
+} from "@/services/campaignPhotography";
+import CampaignPhotographyPanel, {
+  type PhotographyStatus,
+} from "@/components/jewelry/CampaignPhotographyPanel";
 import FidelityPanel from "@/components/jewelry/FidelityPanel";
 
 import DiamondOpticsPanel from "@/components/jewelry/DiamondOpticsPanel";
@@ -865,6 +873,18 @@ export default function JewelrySwap() {
    * Empty = FUSE derives it automatically from the existing evidence strengths.
    */
   const [materialAuthorityOverride, setMaterialAuthorityOverride] = useState<string | null>(null);
+  /**
+   * CAMPAIGN PHOTOGRAPHY PROFILE (§20): HOW the product is photographed. These
+   * references are PHOTOGRAPHY authority only — zero product geometry/identity.
+   * Analysis only in this commit; nothing feeds a generation prompt yet.
+   */
+  const [photographyRefs, setPhotographyRefs] = useState<string[]>([]);
+  const [campaignPhotographyProfile, setCampaignPhotographyProfile] =
+    useState<CampaignPhotographyProfile | null>(null);
+  const [photographyStatus, setPhotographyStatus] = useState<PhotographyStatus>("idle");
+  const [photographyError, setPhotographyError] = useState<string | null>(null);
+  /** The reference set the stored profile was analysed from (recompute guard). */
+  const photographyVersion = useRef<string | null>(null);
   const [engineeringOpen, setEngineeringOpen] = useState(false);
   /**
    * A PROPOSAL only. FUSE never splits a card by itself — the user answers this
@@ -1558,6 +1578,64 @@ export default function JewelrySwap() {
       }),
     [knowledgeMap, pieces, materialAuthorityOverride],
   );
+
+  /* ------------------- Campaign photography profile (§20) ------------------ */
+
+  /** Look references upload to the same storage pattern as product references. */
+  const addPhotographyRefs = useCallback(async (files: File[]) => {
+    if (!files.length) return;
+    setPhotographyStatus("uploading");
+    setPhotographyError(null);
+    try {
+      const folder = await createOutfitSwapFolder();
+      const urls: string[] = [];
+      for (const file of files.slice(0, 6)) {
+        const compressed = await compressImageFile(file);
+        const stored = await uploadToStorage(folder, compressed, compressed.name);
+        urls.push(stored.url);
+      }
+      setPhotographyRefs((prev) => [...prev, ...urls].slice(0, 6));
+      setPhotographyStatus((prev) => (prev === "uploading" ? "idle" : prev));
+    } catch (error) {
+      setPhotographyStatus("error");
+      setPhotographyError(
+        error instanceof Error ? error.message : "Could not upload that look reference",
+      );
+    }
+  }, []);
+
+  const removePhotographyRef = useCallback((url: string) => {
+    setPhotographyRefs((prev) => prev.filter((entry) => entry !== url));
+  }, []);
+
+  /**
+   * Analysis only (Gemini, cached server-side by the reference set). It runs on
+   * request and re-runs only when the look references actually change.
+   */
+  const analyzePhotography = useCallback(async () => {
+    if (!photographyRefs.length) return;
+    const version = photographySetVersion(photographyRefs);
+    setPhotographyStatus("analyzing");
+    setPhotographyError(null);
+    try {
+      const result = await analyzeCampaignPhotography({ referenceUrls: photographyRefs });
+      setCampaignPhotographyProfile(result.profile ?? null);
+      photographyVersion.current = version;
+      setPhotographyStatus(result.profile ? "ready" : "idle");
+    } catch (error) {
+      setPhotographyStatus("error");
+      setPhotographyError(
+        error instanceof Error ? error.message : "Could not read the campaign look",
+      );
+    }
+  }, [photographyRefs]);
+
+  /** A changed look reference set marks the stored profile stale — never auto-reruns. */
+  useEffect(() => {
+    if (!campaignPhotographyProfile) return;
+    const version = photographySetVersion(photographyRefs);
+    setPhotographyStatus(version === photographyVersion.current ? "ready" : "stale");
+  }, [photographyRefs, campaignPhotographyProfile]);
 
   /**
    * The EVIDENCE ROLE of one thumbnail (CAD FRONT / MACRO / SIDE / CLASP …).
@@ -3434,6 +3512,10 @@ export default function JewelrySwap() {
       pieces,
       knowledgeMap,
       masterProductLock,
+      // CAMPAIGN PHOTOGRAPHY PROFILE — look only, stored so reopen never re-reads.
+      photographyReferenceUrls: photographyRefs,
+      campaignPhotographyProfile,
+      photographySetVersion: photographyVersion.current,
       userLocks,
       analysis,
       analysisKey,
@@ -3478,6 +3560,8 @@ export default function JewelrySwap() {
       pieces,
       knowledgeMap,
       masterProductLock,
+      photographyRefs,
+      campaignPhotographyProfile,
       userLocks,
       analysis,
       analysisKey,
@@ -3572,6 +3656,14 @@ export default function JewelrySwap() {
       setKnowledgeMap((state?.knowledgeMap ?? null) as ProductKnowledgeMap | null);
       // Reuse the stored lock — reopening never recomputes or re-runs Gemini.
       setMasterProductLock((state?.masterProductLock ?? null) as MasterProductLock | null);
+      // Reuse the stored photography profile — reopening never re-reads the look.
+      setPhotographyRefs((state?.photographyReferenceUrls ?? []) as string[]);
+      const storedPhotography = (state?.campaignPhotographyProfile ??
+        null) as CampaignPhotographyProfile | null;
+      setCampaignPhotographyProfile(storedPhotography);
+      photographyVersion.current = state?.photographySetVersion ?? null;
+      setPhotographyStatus(storedPhotography ? "ready" : "idle");
+      setPhotographyError(null);
       setUserLocks((state?.userLocks ?? []) as UserConfirmedFact[]);
       setAnalysis((state?.analysis ?? null) as JewelryProjectAnalysis | null);
       setAnalysisKey(state?.analysisKey ?? null);
@@ -3698,6 +3790,11 @@ export default function JewelrySwap() {
     setPieces([]);
     setKnowledgeMap(null);
     setMasterProductLock(null);
+    setPhotographyRefs([]);
+    setCampaignPhotographyProfile(null);
+    photographyVersion.current = null;
+    setPhotographyStatus("idle");
+    setPhotographyError(null);
     setUserLocks([]);
     setAnalysis(null);
     setAnalysisKey(null);
@@ -4223,6 +4320,16 @@ export default function JewelrySwap() {
                           )}
                         </select>
                       </div>
+                      {/* CAMPAIGN PHOTOGRAPHY PROFILE (§20) — look only, no geometry. */}
+                      <CampaignPhotographyPanel
+                        referenceUrls={photographyRefs}
+                        profile={campaignPhotographyProfile}
+                        status={photographyStatus}
+                        error={photographyError}
+                        onAdd={(files) => void addPhotographyRefs(files)}
+                        onRemove={removePhotographyRef}
+                        onAnalyze={() => void analyzePhotography()}
+                      />
                       <pre className="max-h-64 overflow-auto rounded-xl border border-white/10 bg-black/50 p-2 text-[9px] leading-relaxed text-foreground/70">
                         {JSON.stringify({ knowledgeMap, userConfirmedFacts: userLocks }, null, 2)}
                       </pre>
