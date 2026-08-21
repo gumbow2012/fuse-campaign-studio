@@ -1839,6 +1839,8 @@ function buildSeedanceDirectorPrompt(args: {
   duration: number;
   aspectRatio?: string | null;
   extra?: string | null;
+  /** DIAMOND OPTICS: pre-synthesised optical lines (analysed × user controls). */
+  opticsText?: string | null;
 }) {
   const duration = Math.max(1, Math.round(Number(args.duration) || 5));
   const selected = selectDirectorFrames(args.frames);
