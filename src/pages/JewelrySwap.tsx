@@ -50,6 +50,7 @@ import {
 
 import {
   buildMasterProductLock,
+  masterLockSummary,
   type MasterProductLock,
 } from "@/lib/masterProductLock";
 import {
