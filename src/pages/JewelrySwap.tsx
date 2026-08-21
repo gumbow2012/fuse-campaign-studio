@@ -52,6 +52,11 @@ import {
   buildMasterProductLock,
   type MasterProductLock,
 } from "@/lib/masterProductLock";
+import {
+  deriveMaterialAppearanceAuthority,
+  materialAuthorityLabel,
+  type MaterialAppearanceAuthority,
+} from "@/lib/materialAuthority";
 import { buildFidelityAudit, type FidelityAudit } from "@/lib/fidelityAudit";
 import FidelityPanel from "@/components/jewelry/FidelityPanel";
 
@@ -855,6 +860,11 @@ export default function JewelrySwap() {
    * set actually changes; every generation in the project inherits this lock.
    */
   const [masterProductLock, setMasterProductLock] = useState<MasterProductLock | null>(null);
+  /**
+   * MATERIAL APPEARANCE AUTHORITY (§31) — manual override, advanced only.
+   * Empty = FUSE derives it automatically from the existing evidence strengths.
+   */
+  const [materialAuthorityOverride, setMaterialAuthorityOverride] = useState<string | null>(null);
   const [engineeringOpen, setEngineeringOpen] = useState(false);
   /**
    * A PROPOSAL only. FUSE never splits a card by itself — the user answers this
@@ -1530,6 +1540,24 @@ export default function JewelrySwap() {
     pieces.flatMap((piece) => piece.urls).forEach((url, index) => map.set(url, `REF_${index + 1}`));
     return map;
   }, [pieces]);
+
+  /**
+   * MATERIAL APPEARANCE AUTHORITY (§31) — the reference that is strongest for
+   * MATERIAL REALISM (metal finish, polish, microtexture, brilliance, fire).
+   * Reuses the attribute-specific authority already in the knowledge map
+   * (evidenceStrength + authorityFor); it grants no geometry authority at all.
+   */
+  const materialAuthority: MaterialAppearanceAuthority | null = useMemo(
+    () =>
+      deriveMaterialAppearanceAuthority({
+        knowledgeMap,
+        references: pieces.flatMap((piece) =>
+          piece.urls.map((url, angleIndex) => ({ url, role: piece.roles?.[angleIndex] ?? null })),
+        ),
+        override: materialAuthorityOverride,
+      }),
+    [knowledgeMap, pieces, materialAuthorityOverride],
+  );
 
   /**
    * The EVIDENCE ROLE of one thumbnail (CAD FRONT / MACRO / SIDE / CLASP …).
@@ -2619,6 +2647,8 @@ export default function JewelrySwap() {
         opticsControls,
         // MASTER PRODUCT LOCK — the product identity every frame inherits.
         masterProductLock,
+        // MATERIAL APPEARANCE AUTHORITY — material realism only, zero geometry.
+        materialAuthority,
       });
       // A regeneration APPENDS a revision (§36) and never unapproves the
       // revision the user already approved (§37).
@@ -2643,6 +2673,7 @@ export default function JewelrySwap() {
       opticsProfile,
       opticsControls,
       masterProductLock,
+      materialAuthority,
       ensureFrameOptics,
       recordFrameGeneration,
 
@@ -2890,6 +2921,7 @@ export default function JewelrySwap() {
           opticsProfile,
           opticsControls,
           masterProductLock,
+          materialAuthority,
         });
         setPromptPreview(preview);
         setPromptStatus("ready");
@@ -2912,6 +2944,7 @@ export default function JewelrySwap() {
       opticsProfile,
       opticsControls,
       masterProductLock,
+      materialAuthority,
     ],
   );
 
@@ -2956,6 +2989,8 @@ export default function JewelrySwap() {
         opticsControls,
         // MASTER PRODUCT LOCK — same identity as the approved frames.
         masterProductLock,
+        // MATERIAL APPEARANCE AUTHORITY — same material reference, zero geometry.
+        materialAuthority,
         // The editor owns the COMPLETE final Seedance prompt when manual.
         promptOverride: promptMode === "manual" ? promptDraft : null,
         promptInputFingerprint: promptFingerprint,
@@ -2980,6 +3015,7 @@ export default function JewelrySwap() {
     opticsProfile,
     opticsControls,
     masterProductLock,
+    materialAuthority,
     promptMode,
     promptDraft,
     promptMaxChars,
@@ -4149,6 +4185,43 @@ export default function JewelrySwap() {
                             )),
                           )}
                         </div>
+                      </div>
+                      {/* MATERIAL APPEARANCE AUTHORITY — material realism only.
+                          Auto-derived; this override exists for rare cases. */}
+                      <div className="rounded-xl border border-white/10 bg-black/40 p-2">
+                        <p className="text-[9px] uppercase tracking-[0.14em] text-cyan-200/70">
+                          Material-appearance authority
+                        </p>
+                        <p className="mb-1 text-[9px] text-foreground/50">
+                          Drives metal finish, polish, microtexture, brilliance and fire realism only
+                          — it contributes no geometry, stone layout, setting or product identity.
+                        </p>
+                        <p className="mb-1 text-[9px] text-foreground/70">
+                          {materialAuthority
+                            ? `${materialAuthorityLabel(materialAuthority)} · ${
+                              materialAuthority.source === "user" ? "manual" : "auto"
+                            }`
+                            : "No reference is clearly strongest for material yet."}
+                        </p>
+                        <select
+                          value={materialAuthorityOverride ?? ""}
+                          onChange={(event) =>
+                            setMaterialAuthorityOverride(event.target.value || null)
+                          }
+                          className="w-full rounded-lg border border-white/12 bg-black/50 px-2 py-1 text-[9px] text-foreground/80"
+                        >
+                          <option value="">Auto (FUSE decides)</option>
+                          {pieces.flatMap((piece) =>
+                            piece.urls.map((url, angleIndex) => {
+                              const refId = refIdByUrl.get(url) ?? `REF_${angleIndex + 1}`;
+                              return (
+                                <option key={`material-${url}-${angleIndex}`} value={refId}>
+                                  {refId} · {piece.roles?.[angleIndex] || "unlabeled"}
+                                </option>
+                              );
+                            }),
+                          )}
+                        </select>
                       </div>
                       <pre className="max-h-64 overflow-auto rounded-xl border border-white/10 bg-black/50 p-2 text-[9px] leading-relaxed text-foreground/70">
                         {JSON.stringify({ knowledgeMap, userConfirmedFacts: userLocks }, null, 2)}

@@ -38,6 +38,12 @@ import {
   masterLockSummaryLine,
   normalizeMasterLock,
 } from "./masterLock.ts";
+import {
+  type MaterialAppearanceAuthority,
+  materialAuthorityPromptLines,
+  materialAuthoritySummaryLine,
+  normalizeMaterialAuthority,
+} from "./materialAuthority.ts";
 
 /**
  * Jewelry Swap: sibling of Outfit Swap. Per-frame nano-banana jewelry
@@ -1355,12 +1361,18 @@ function buildJewelryPrompt(args: {
   opticsTemporal?: boolean;
   /** MASTER PRODUCT LOCK: the project's single authoritative product identity. */
   masterLock?: MasterProductLock | null;
+  /** MATERIAL APPEARANCE AUTHORITY: material realism only — zero geometry. */
+  materialAuthority?: MaterialAppearanceAuthority | null;
 }) {
   let cursor = 2; // image 1 is the source frame
   const lines: string[] = [];
   const refLabels: string[] = [];
   const cadRefNums: number[] = [];
   let cadActive = false;
+  // Prompt image number of the material-appearance authority, when that
+  // reference is actually part of THIS frame's payload.
+  const materialAuthorityUrl = String(args.materialAuthority?.referenceUrl ?? "").trim();
+  let materialRefNum: number | null = null;
 
   // Resolved spec per piece, computed BEFORE the piece lines so the visible
   // product identity (type/metal/stone/color/setting) always comes from the
@@ -1376,6 +1388,7 @@ function buildJewelryPrompt(args: {
       const num = cursor++;
       refNums.push(num);
       refLabels.push(`reference image ${num} = ${ref.role ? ref.role : "Unlabeled view"}`);
+      if (materialAuthorityUrl && ref.url === materialAuthorityUrl) materialRefNum = num;
       if (ref.cad) {
         cadActive = true;
         cadRefNums.push(num);
@@ -1461,6 +1474,13 @@ function buildJewelryPrompt(args: {
         cadRefNums.length ? ` (image ${refListPhrase(cadRefNums)})` : ""
       }.`
       : null,
+    // MATERIAL APPEARANCE AUTHORITY (§31): material realism only, zero geometry.
+    ...(() => {
+      const materialLines = materialAuthorityPromptLines(args.materialAuthority ?? null, {
+        imageNumber: materialRefNum,
+      });
+      return materialLines.length ? materialLines : [];
+    })(),
     "",
 
     /* 4 — PRESERVE from SOURCE_FRAME (secondary to the replacement). */
@@ -1861,6 +1881,8 @@ function buildSeedanceDirectorPrompt(args: {
   opticsText?: string | null;
   /** MASTER PRODUCT LOCK: the project's authoritative product identity. */
   masterLock?: MasterProductLock | null;
+  /** MATERIAL APPEARANCE AUTHORITY: material realism only — zero geometry. */
+  materialAuthority?: MaterialAppearanceAuthority | null;
 }) {
   const duration = Math.max(1, Math.round(Number(args.duration) || 5));
   const selected = selectDirectorFrames(args.frames);
@@ -1919,6 +1941,11 @@ function buildSeedanceDirectorPrompt(args: {
     // Product identity first: the Master Product Lock is the highest-value
     // optional section inside the character budget.
     masterLockBlock.length ? masterLockBlock.join("\n") : null,
+    // MATERIAL APPEARANCE AUTHORITY (§31): material realism only, zero geometry.
+    (() => {
+      const materialLines = materialAuthorityPromptLines(args.materialAuthority ?? null);
+      return materialLines.length ? materialLines.join("\n") : null;
+    })(),
     hasStones ? `${DIRECTOR_GEMSTONES}${colorless ? ` ${DIRECTOR_COLORLESS}` : ""}` : null,
     DIRECTOR_METAL,
     String(args.opticsText ?? "").trim() || null,
@@ -1987,6 +2014,8 @@ async function startSwapFrame(admin: AdminClient, args: {
   opticsControls?: unknown;
   /** MASTER PRODUCT LOCK derived once per reference set on the client. */
   masterProductLock?: unknown;
+  /** MATERIAL APPEARANCE AUTHORITY derived from the existing evidence strengths. */
+  materialAuthority?: unknown;
   webhookBase: string;
 }) {
   const sourceFrameUrl = String(args.sourceFrameUrl ?? "").trim();
@@ -2006,6 +2035,8 @@ async function startSwapFrame(admin: AdminClient, args: {
   const productAnalysis = normalizeProductAnalysis(args.productAnalysis ?? null);
   // MASTER PRODUCT LOCK: every frame in the project inherits the SAME lock.
   const masterLock = normalizeMasterLock(args.masterProductLock ?? null);
+  // MATERIAL APPEARANCE AUTHORITY: material realism only — never geometry.
+  const materialAuthority = normalizeMaterialAuthority(args.materialAuthority ?? null);
 
   // DIAMOND OPTICS (additive): cached analysed optics × user controls. No Gemini
   // call happens here — moving a slider only re-synthesises these prompt lines.
@@ -2047,6 +2078,7 @@ async function startSwapFrame(admin: AdminClient, args: {
     opticsProfile,
     opticsControls,
     masterLock,
+    materialAuthority,
   });
 
 
@@ -2131,6 +2163,10 @@ async function startSwapFrame(admin: AdminClient, args: {
           // MASTER PRODUCT LOCK inherited by this frame (audit + reconstruct reuse).
           master_product_lock: masterLock,
           master_product_lock_summary: masterLockSummaryLine(masterLock),
+
+          // MATERIAL APPEARANCE AUTHORITY used for this run (material realism only).
+          material_appearance_authority: materialAuthority,
+          material_appearance_authority_summary: materialAuthoritySummaryLine(materialAuthority),
 
 
 
@@ -2238,6 +2274,8 @@ type ReconstructionPrep = {
   opticsControls?: unknown;
   /** MASTER PRODUCT LOCK for this project (falls back to the stored one). */
   masterProductLock?: unknown;
+  /** MATERIAL APPEARANCE AUTHORITY (falls back to the stored one). */
+  materialAuthority?: unknown;
 };
 
 async function prepareReconstruction(admin: AdminClient, args: ReconstructionPrep) {
@@ -2365,6 +2403,21 @@ async function prepareReconstruction(admin: AdminClient, args: ReconstructionPre
     }).join("\n")
     : null;
 
+  /**
+   * MATERIAL APPEARANCE AUTHORITY: the same reference the approved frames used,
+   * read back from the stored swap payload when the client omits it. Material
+   * realism only — it never contributes geometry to the rebuild.
+   */
+  const materialAuthority = normalizeMaterialAuthority(args.materialAuthority ?? null) ?? (() => {
+    for (const url of referenceUrls) {
+      const stored = normalizeMaterialAuthority(
+        metaByUrl.get(url)?.material_appearance_authority ?? null,
+      );
+      if (stored) return stored;
+    }
+    return null;
+  })();
+
   const director = buildSeedanceDirectorPrompt({
     frames,
     specs,
@@ -2374,6 +2427,7 @@ async function prepareReconstruction(admin: AdminClient, args: ReconstructionPre
     extra: args.extraPrompt ?? null,
     opticsText,
     masterLock,
+    materialAuthority,
   });
   return {
     availableUrls,
@@ -2384,6 +2438,7 @@ async function prepareReconstruction(admin: AdminClient, args: ReconstructionPre
     specs,
     director,
     masterLock,
+    materialAuthority,
   };
 }
 
@@ -2430,6 +2485,7 @@ async function startReconstruction(admin: AdminClient, args: ReconstructionPrep 
     specs,
     director,
     masterLock,
+    materialAuthority,
   } = await prepareReconstruction(admin, args);
 
   const autoPrompt = director.prompt;
@@ -2505,6 +2561,10 @@ async function startReconstruction(admin: AdminClient, args: ReconstructionPrep 
           // MASTER PRODUCT LOCK inherited by the rebuild (same lock as the frames).
           master_product_lock: masterLock,
           master_product_lock_summary: masterLockSummaryLine(masterLock),
+
+          // MATERIAL APPEARANCE AUTHORITY used for this run (material realism only).
+          material_appearance_authority: materialAuthority,
+          material_appearance_authority_summary: materialAuthoritySummaryLine(materialAuthority),
           // Prompt audit trail: FUSE's version vs the exact text submitted.
           director_prompt_auto: autoPrompt,
           director_prompt_final: prompt,
@@ -3419,6 +3479,7 @@ Deno.serve(async (req) => {
         frameOpticsProfile: body.frameOpticsProfile ?? null,
         opticsControls: body.opticsControls ?? null,
         masterProductLock: body.masterProductLock ?? null,
+        materialAuthority: body.materialAuthority ?? null,
         webhookBase,
       });
       return json({ generation });
@@ -3437,6 +3498,7 @@ Deno.serve(async (req) => {
         opticsProfile: body.opticsProfile ?? null,
         opticsControls: body.opticsControls ?? null,
         masterProductLock: body.masterProductLock ?? null,
+        materialAuthority: body.materialAuthority ?? null,
       });
       return json({ preview });
     }
@@ -3454,6 +3516,7 @@ Deno.serve(async (req) => {
         opticsProfile: body.opticsProfile ?? null,
         opticsControls: body.opticsControls ?? null,
         masterProductLock: body.masterProductLock ?? null,
+        materialAuthority: body.materialAuthority ?? null,
         promptOverride: body.promptOverride ?? null,
         inputFingerprint: body.promptInputFingerprint ?? null,
         webhookBase,
