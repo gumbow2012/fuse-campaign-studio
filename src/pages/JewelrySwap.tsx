@@ -52,6 +52,9 @@ import {
   buildMasterProductLock,
   type MasterProductLock,
 } from "@/lib/masterProductLock";
+import { buildFidelityAudit, type FidelityAudit } from "@/lib/fidelityAudit";
+import FidelityPanel from "@/components/jewelry/FidelityPanel";
+
 import DiamondOpticsPanel from "@/components/jewelry/DiamondOpticsPanel";
 import { SeedanceDirectionPanel } from "@/components/jewelry/SeedanceDirectionPanel";
 import {
@@ -90,6 +93,8 @@ import {
   type JewelrySwapTemplateResult,
   type LibraryAsset,
   type SwapGeneration,
+  validateAgainstKnowledgeMap,
+
 } from "@/services/jewelrySwap";
 
 import {
@@ -3222,6 +3227,53 @@ export default function JewelrySwap() {
     [frameGenerations, frameRevision],
   );
 
+  /* --------------- PRODUCT FIDELITY (§35) — analysis only ------------------- *
+   * Compares a finished generation to the ACTIVE Master Product Lock through
+   * the EXISTING `mode: "validate"` path. It never regenerates and never
+   * spends generation credits — the user decides what to do with a WARNING.
+   */
+  const [fidelityAudits, setFidelityAudits] = useState<Record<string, FidelityAudit>>({});
+  const [fidelityState, setFidelityState] = useState<
+    Record<string, "checking" | "done" | "failed" | "skipped">
+  >({});
+  const [fidelityError, setFidelityError] = useState<Record<string, string>>({});
+
+  const runFidelityCheck = useCallback(
+    async (generation: JewelryGeneration | null | undefined) => {
+      if (!generation?.outputUrl || generation.status !== "complete") return;
+      const id = generation.id;
+      if (!knowledgeMap && !masterProductLock) {
+        setFidelityState((prev) => ({ ...prev, [id]: "skipped" }));
+        return;
+      }
+      setFidelityState((prev) => ({ ...prev, [id]: "checking" }));
+      try {
+        const report = await validateAgainstKnowledgeMap({
+          imageUrl: generation.outputUrl,
+          knowledgeMap: (knowledgeMap ?? {}) as ProductKnowledgeMap,
+          masterProductLock,
+        });
+        if (!report) {
+          setFidelityState((prev) => ({ ...prev, [id]: "skipped" }));
+          return;
+        }
+        setFidelityAudits((prev) => ({
+          ...prev,
+          [id]: buildFidelityAudit({ report, lockVersion: masterProductLock?.version ?? null }),
+        }));
+        setFidelityState((prev) => ({ ...prev, [id]: "done" }));
+      } catch (error) {
+        setFidelityError((prev) => ({
+          ...prev,
+          [id]: error instanceof Error ? error.message : "Fidelity check failed",
+        }));
+        setFidelityState((prev) => ({ ...prev, [id]: "failed" }));
+      }
+    },
+    [knowledgeMap, masterProductLock],
+  );
+
+
   const swapEntries = useMemo(
     () =>
       Object.keys(frameGenerations)
@@ -5238,6 +5290,17 @@ export default function JewelrySwap() {
                             A different version of this frame is approved.
                           </p>
                         )}
+
+                        {/* PRODUCT FIDELITY (§35) — on demand, never regenerates. */}
+                        {active?.status === "complete" && active.outputUrl ? (
+                          <FidelityPanel
+                            audit={fidelityAudits[active.id] ?? null}
+                            state={fidelityState[active.id] ?? "idle"}
+                            error={fidelityError[active.id] ?? null}
+                            onCheck={() => void runFidelityCheck(active)}
+                          />
+                        ) : null}
+
 
                         <div className="flex items-center gap-1.5">
                           <Button

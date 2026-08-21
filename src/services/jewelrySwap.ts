@@ -1025,7 +1025,12 @@ export async function analyzeJewelryIntake(
  * constraints of the knowledge map? Analysis only — nothing is regenerated.
  */
 export async function validateAgainstKnowledgeMap(
-  args: { imageUrl: string; knowledgeMap: ProductKnowledgeMap },
+  args: {
+    imageUrl: string;
+    knowledgeMap: ProductKnowledgeMap;
+    /** Active project lock — the comparison baseline when present. */
+    masterProductLock?: unknown;
+  },
   signal?: AbortSignal,
 ): Promise<JewelryValidationReport | null> {
   const {
@@ -1043,6 +1048,7 @@ export async function validateAgainstKnowledgeMap(
       mode: "validate",
       imageUrl: args.imageUrl,
       knowledgeMap: args.knowledgeMap,
+      masterProductLock: args.masterProductLock ?? null,
     }),
     signal,
   });
@@ -1050,6 +1056,7 @@ export async function validateAgainstKnowledgeMap(
   const data = await readJsonResponse<any>(response, "Validation");
   return (data?.validation ?? null) as JewelryValidationReport | null;
 }
+
 
 /* ------------------------------------------------------------------ *
  * DIAMOND OPTICS PROFILE (additive, analysis only)

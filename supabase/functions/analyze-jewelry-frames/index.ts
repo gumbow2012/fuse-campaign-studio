@@ -3908,7 +3908,71 @@ async function handleIntake(req: Request, body: any, user: { id: string }, apiKe
 }
 
 
+/**
+ * Renders the client-derived Master Product Lock as flat constraint lines.
+ * Purely a read-out of what the lock already pinned — no classification here.
+ */
+function masterLockBaselineLines(value: unknown): string[] {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return [];
+  const lock = value as Record<string, any>;
+  const lines: string[] = [];
+  const push = (label: string, raw: unknown) => {
+    const text = String(raw ?? "").trim();
+    if (!text || /^(auto|unknown|null|n\/a|none)$/i.test(text)) return;
+    lines.push(`${label}: ${text.slice(0, 220)}`);
+  };
+  const pushList = (label: string, raw: unknown, max = 6) => {
+    if (!Array.isArray(raw)) return;
+    const values = raw.map((entry) => String(entry ?? "").trim()).filter(Boolean).slice(0, max);
+    if (values.length) push(label, values.join("; "));
+  };
+
+  push("PRODUCT TYPE", lock.productType);
+  push("SILHOUETTE", lock.overallSilhouette);
+  push("PROPORTIONS", lock.proportions);
+  pushList("COMPONENT TOPOLOGY", lock.componentTopology);
+  push("FRONT ARCHITECTURE", lock.frontArchitecture);
+  push("BACK ARCHITECTURE", lock.backArchitecture);
+  push("SIDEWALLS", lock.sidewalls);
+  push("RELIEF LAYERS", lock.reliefLayers);
+  push("BAIL", lock.bail);
+  push("CLASP", lock.clasp);
+  push("HINGE", lock.hinge);
+  push("CONNECTOR", lock.connector);
+  push("CHAIN INTEGRATION", lock.chainIntegration);
+  push("MECHANICAL CONSTRUCTION", lock.mechanicalConstruction);
+  pushList("STONE CUTS", lock.stoneCuts);
+  pushList("STONE SIZE CLASSES", lock.stoneSizeClasses);
+  push("STONE PLACEMENT", lock.stonePlacement);
+  push("STONE ORIENTATION", lock.stoneOrientation);
+  push("GEMSTONE PLACEMENT", lock.gemstonePlacement);
+  pushList("GEMSTONE / METAL COLORS", lock.gemstoneColors);
+  const setting = lock.settingConstruction;
+  if (setting && typeof setting === "object") {
+    push("SETTING TOPOLOGY", setting.topology);
+    push("SETTING RETENTION", setting.retention);
+    push("SETTING COVERAGE", setting.coverage);
+    push("SETTING TERMINOLOGY", setting.terminology);
+  }
+  push("EXPOSED-METAL PATTERN", lock.exposedMetalPattern);
+  push("BORDERS", lock.borders);
+  push("ENGRAVING", lock.engraving);
+  push("LETTERING", lock.lettering);
+  push("NEGATIVE SPACE", lock.negativeSpace);
+  push("GALLERY", lock.gallery);
+
+  if (Array.isArray(lock.userConfirmedFacts)) {
+    for (const fact of lock.userConfirmedFacts.slice(0, 8)) {
+      const attribute = String(fact?.attribute ?? "").trim();
+      const val = String(fact?.value ?? "").trim();
+      if (attribute && val) lines.push(`USER-CONFIRMED (highest authority): ${attribute} = ${val}`);
+    }
+  }
+  return lines.slice(0, 30);
+}
+
 /** Physical-fidelity report for one generated still — ANALYSIS ONLY. */
+
 const VALIDATION_SCHEMA = {
   type: Type.OBJECT,
   properties: {
@@ -3946,10 +4010,16 @@ async function handleValidate(body: any, apiKey?: string) {
   if (!/^https?:\/\//.test(imageUrl)) return json({ error: "A generated image URL is required" }, 400);
 
   const pkm = body?.knowledgeMap ?? null;
-  const lockLines = pkm ? engineeringLockLines(pkm) : [];
+  // The ACTIVE Master Product Lock is the comparison baseline when supplied;
+  // the knowledge-map lock lines stay the fallback. No new validation system.
+  const lockLines = [
+    ...masterLockBaselineLines(body?.masterProductLock),
+    ...(pkm ? engineeringLockLines(pkm) : []),
+  ];
   if (!lockLines.length) {
     return json({ validation: null, skipped: "no_locked_constraints" });
   }
+
 
   const part = await inlineImage(imageUrl);
   const ai = new GoogleGenAI({ apiKey });
