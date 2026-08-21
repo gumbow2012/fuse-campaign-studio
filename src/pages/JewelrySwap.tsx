@@ -78,7 +78,11 @@ import {
   type ShotCoveragePlan,
 } from "@/lib/shotCoveragePlanner";
 import CanonicalMastersPanel from "@/components/jewelry/CanonicalMastersPanel";
+import CampaignModePanel, {
+  type JewelryWorkspaceMode,
+} from "@/components/jewelry/CampaignModePanel";
 import CampaignPhotographyPanel, {
+
   type PhotographyStatus,
 } from "@/components/jewelry/CampaignPhotographyPanel";
 import FidelityPanel from "@/components/jewelry/FidelityPanel";
