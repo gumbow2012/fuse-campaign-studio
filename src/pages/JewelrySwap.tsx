@@ -3948,6 +3948,9 @@ export default function JewelrySwap() {
             setIndex: position >= 0 ? position : 0,
             setSize: Math.max(1, approvedFrames.length),
             direction: clip.cameraDirection ?? undefined,
+            // §F6 — a regenerated clip keeps its own motion preset.
+            motionPreset: clip.motionPreset ?? undefined,
+
           },
         );
         setVideos((prev) => prev.filter((entry) => entry.id !== clip.id));
