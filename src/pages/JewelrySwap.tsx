@@ -101,6 +101,17 @@ import {
 
 import { compressImageFile } from "@/lib/imageCompress";
 import { conditionAnimateInput } from "@/services/animateInput";
+import ProjectPicker, { type ProjectSaveStatus } from "@/components/jewelry/ProjectPicker";
+import {
+  JEWELRY_PROJECT_STATE_VERSION,
+  createJewelryProject,
+  duplicateJewelryProject,
+  listJewelryProjects,
+  loadJewelryProject,
+  saveJewelryProject,
+  type JewelryProjectState,
+  type JewelryProjectSummary,
+} from "@/services/jewelryProjects";
 
 
 const JEWELRY_TYPES = [
@@ -3452,7 +3463,19 @@ export default function JewelrySwap() {
       <div className="mx-auto w-full max-w-[1400px] px-4 py-8 sm:px-6">
         <header className="mb-6 space-y-1">
           <p className="text-xs font-semibold uppercase tracking-[0.2em] text-cyan-200/70">FUSE Lab</p>
-          <h1 className="font-heading text-2xl font-semibold text-foreground sm:text-3xl">Jewelry Swap</h1>
+          <div className="flex flex-wrap items-center gap-3">
+            <h1 className="font-heading text-2xl font-semibold text-foreground sm:text-3xl">Jewelry Swap</h1>
+            <ProjectPicker
+              projects={projects}
+              currentId={projectId}
+              currentName={projectId ? projectName : "Unsaved session"}
+              status={saveStatus}
+              loading={projectsLoading}
+              onSelect={(id) => void openProject(id)}
+              onNew={startNewProject}
+              onDuplicate={() => void duplicateProject()}
+            />
+          </div>
           <p className="max-w-2xl text-sm text-muted-foreground">
             Upload a clip, replace the jewelry in the frames you pick with your references, then rebuild the
             same video with the new pieces.
