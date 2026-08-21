@@ -6409,6 +6409,7 @@ export default function JewelrySwap() {
                 )}
               </div>
             </SectionCard>
+            ) : null}
 
             <SectionCard
               step={7}
