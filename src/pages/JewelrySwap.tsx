@@ -6969,11 +6969,22 @@ export default function JewelrySwap() {
                           </>
 
                         ) : running ? (
-                          <VideoProgress
-                            compact
-                            startedAt={video.createdAt}
-                            onCancel={() => setCancelTarget(video.id)}
-                          />
+                          <div className="space-y-2">
+                            {/* §F3 — provider lookup is temporarily unavailable, but the
+                                paid job keeps running and is still being tracked. */}
+                            {video.providerTransient ? (
+                              <p className="rounded-xl border border-amber-300/30 bg-amber-400/10 p-2.5 text-[11px] text-amber-200">
+                                Provider temporarily unavailable — still tracking your clip. Nothing
+                                was re-submitted and you won't be charged twice.
+                              </p>
+                            ) : null}
+                            <VideoProgress
+                              compact
+                              startedAt={video.createdAt}
+                              onCancel={() => setCancelTarget(video.id)}
+                            />
+                          </div>
+
                         ) : (
                           <div className="space-y-2">
                             <div className="rounded-xl border border-red-400/30 bg-red-500/10 p-2.5 text-[11px] text-red-300">
