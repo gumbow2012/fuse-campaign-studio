@@ -6673,7 +6673,10 @@ export default function JewelrySwap() {
                 <dl className="grid grid-cols-2 gap-2 sm:grid-cols-4">
                   {[
                     ["Model", "Kling 3.0"],
-                    ["Resolution", "1080p"],
+                    // §F5 — the provider schema exposes no resolution/quality input;
+                    // output resolution is provider-fixed, so this stays read-only info.
+                    ["Output", "Provider-fixed (not selectable)"],
+
                     ["Duration", `${animateDuration} sec`],
                     [
                       "Motion",
