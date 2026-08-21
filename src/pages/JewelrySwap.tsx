@@ -980,6 +980,11 @@ export default function JewelrySwap() {
   useEffect(() => {
     connectedAssetsRef.current = connectedAssetModel;
   }, [connectedAssetModel]);
+  const campaignPhotographyProfileRef = useRef<CampaignPhotographyProfile | null>(null);
+  useEffect(() => {
+    campaignPhotographyProfileRef.current = campaignPhotographyProfile;
+  }, [campaignPhotographyProfile]);
+
   /**
    * MATCHED-PAIR MANUFACTURING (§29). Counterpart plates of approved masters in
    * the OTHER manufacturing state, keyed `${sourceId}:${targetStage}`. Each pair
