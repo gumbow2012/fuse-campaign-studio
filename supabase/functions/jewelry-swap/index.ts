@@ -1952,6 +1952,12 @@ async function startSwapFrame(admin: AdminClient, args: {
   frameAnalysis?: unknown;
   /** Stage-A product analysis of the references (advisory, optional). */
   productAnalysis?: unknown;
+  /** DIAMOND OPTICS: cached global source-clip optics profile. */
+  opticsProfile?: unknown;
+  /** DIAMOND OPTICS: cached per-frame refinement of the global profile. */
+  frameOpticsProfile?: unknown;
+  /** DIAMOND OPTICS: Sparkle / Rainbow-Fire / advanced controls (AUTO default). */
+  opticsControls?: unknown;
   webhookBase: string;
 }) {
   const sourceFrameUrl = String(args.sourceFrameUrl ?? "").trim();
