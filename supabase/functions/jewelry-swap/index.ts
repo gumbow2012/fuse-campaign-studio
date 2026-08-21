@@ -193,7 +193,7 @@ type JewelryDimensions = {
 };
 
 /** A single labeled reference image of a piece. */
-type JewelryReference = { url: string; role?: string | null; cad?: boolean };
+type JewelryReference = { url: string; role?: string | null; cad?: boolean; master?: boolean };
 
 /** One structured stone-setting entry on a piece. */
 type JewelrySetting = {
