@@ -3473,14 +3473,63 @@ export default function JewelrySwap() {
 
       setNanoQuality((state?.nanoQuality ?? "2k") as NanoQuality);
       setFrameQuality((state?.frameQuality ?? {}) as Record<number, NanoQuality>);
-      setSwaps((state?.swaps ?? {}) as Record<number, JewelryGeneration>);
-      setAltSwaps((state?.altSwaps ?? {}) as Record<number, JewelryGeneration>);
+      // REVISION HISTORY: restore the history when present, otherwise migrate a
+      // legacy single-generation project into 1-element revision lists.
+      const legacySwaps = (state?.swaps ?? {}) as Record<string, JewelryGeneration>;
+      const legacyAlt = (state?.altSwaps ?? {}) as Record<string, JewelryGeneration>;
+      const savedHistory = (state?.frameGenerations ?? null) as Record<
+        string,
+        JewelryGeneration[]
+      > | null;
+      const history: Record<number, JewelryGeneration[]> = {};
+      if (savedHistory && Object.keys(savedHistory).length) {
+        for (const key of Object.keys(savedHistory)) {
+          history[Number(key)] = (savedHistory[key] ?? []).filter(Boolean);
+        }
+      } else {
+        for (const key of Object.keys(legacySwaps)) {
+          const list = [legacySwaps[key], legacyAlt[key]].filter(Boolean) as JewelryGeneration[];
+          if (list.length) history[Number(key)] = list;
+        }
+      }
+      setFrameGenerations(history);
+      const revisions: Record<number, number> = {};
+      const savedRevisions = (state?.frameRevision ?? {}) as Record<string, number>;
+      for (const key of Object.keys(history)) {
+        const index = Number(key);
+        const saved = savedRevisions[key] ?? savedRevisions[String(index)];
+        revisions[index] =
+          typeof saved === "number"
+            ? Math.min(Math.max(saved, 0), history[index].length - 1)
+            : history[index].length - 1;
+      }
+      setFrameRevision(revisions);
+
+      // APPROVAL BY ID: restored directly, or bound to the legacy approved frame.
+      const savedApproval = (state?.approvedGenerationId ?? {}) as Record<string, string>;
+      const approvals: Record<number, string> = {};
+      if (Object.keys(savedApproval).length) {
+        for (const key of Object.keys(savedApproval)) {
+          const id = savedApproval[key];
+          if (id) approvals[Number(key)] = id;
+        }
+      } else {
+        for (const index of (state?.approved ?? []) as number[]) {
+          const picked =
+            ((state?.chosenModel ?? {}) as Record<string, string>)[String(index)] === "nb2"
+              ? legacyAlt[String(index)]
+              : legacySwaps[String(index)];
+          const fallback = picked ?? legacySwaps[String(index)];
+          if (fallback?.id) approvals[index] = fallback.id;
+        }
+      }
+      setApprovedGenerationId(approvals);
       setChosenModel((state?.chosenModel ?? {}) as Record<number, JewelryImageModel>);
       setFramePreferredRole((state?.framePreferredRole ?? {}) as Record<number, string>);
       setFrameReason((state?.frameReason ?? {}) as Record<number, string>);
       setFrameMode((state?.frameMode ?? {}) as Record<number, ReplacementMode>);
       setFrameCoverage((state?.frameCoverage ?? {}) as Record<number, Coverage>);
-      setApproved(new Set((state?.approved ?? []) as number[]));
+
       setExtraPrompt(state?.extraPrompt ?? "");
 
       setVideoModel(state?.videoModel ?? "seedance-2.0");
