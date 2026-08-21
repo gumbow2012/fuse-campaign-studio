@@ -3479,6 +3479,7 @@ Deno.serve(async (req) => {
         frameOpticsProfile: body.frameOpticsProfile ?? null,
         opticsControls: body.opticsControls ?? null,
         masterProductLock: body.masterProductLock ?? null,
+        materialAuthority: body.materialAuthority ?? null,
         webhookBase,
       });
       return json({ generation });
@@ -3497,6 +3498,7 @@ Deno.serve(async (req) => {
         opticsProfile: body.opticsProfile ?? null,
         opticsControls: body.opticsControls ?? null,
         masterProductLock: body.masterProductLock ?? null,
+        materialAuthority: body.materialAuthority ?? null,
       });
       return json({ preview });
     }
@@ -3514,6 +3516,7 @@ Deno.serve(async (req) => {
         opticsProfile: body.opticsProfile ?? null,
         opticsControls: body.opticsControls ?? null,
         masterProductLock: body.masterProductLock ?? null,
+        materialAuthority: body.materialAuthority ?? null,
         promptOverride: body.promptOverride ?? null,
         inputFingerprint: body.promptInputFingerprint ?? null,
         webhookBase,
