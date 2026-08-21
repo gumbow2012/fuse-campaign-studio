@@ -2035,6 +2035,8 @@ async function startSwapFrame(admin: AdminClient, args: {
   const productAnalysis = normalizeProductAnalysis(args.productAnalysis ?? null);
   // MASTER PRODUCT LOCK: every frame in the project inherits the SAME lock.
   const masterLock = normalizeMasterLock(args.masterProductLock ?? null);
+  // MATERIAL APPEARANCE AUTHORITY: material realism only — never geometry.
+  const materialAuthority = normalizeMaterialAuthority(args.materialAuthority ?? null);
 
   // DIAMOND OPTICS (additive): cached analysed optics × user controls. No Gemini
   // call happens here — moving a slider only re-synthesises these prompt lines.
@@ -2076,6 +2078,7 @@ async function startSwapFrame(admin: AdminClient, args: {
     opticsProfile,
     opticsControls,
     masterLock,
+    materialAuthority,
   });
 
 
@@ -2160,6 +2163,10 @@ async function startSwapFrame(admin: AdminClient, args: {
           // MASTER PRODUCT LOCK inherited by this frame (audit + reconstruct reuse).
           master_product_lock: masterLock,
           master_product_lock_summary: masterLockSummaryLine(masterLock),
+
+          // MATERIAL APPEARANCE AUTHORITY used for this run (material realism only).
+          material_appearance_authority: materialAuthority,
+          material_appearance_authority_summary: materialAuthoritySummaryLine(materialAuthority),
 
 
 
@@ -2534,6 +2541,10 @@ async function startReconstruction(admin: AdminClient, args: ReconstructionPrep 
           // MASTER PRODUCT LOCK inherited by the rebuild (same lock as the frames).
           master_product_lock: masterLock,
           master_product_lock_summary: masterLockSummaryLine(masterLock),
+
+          // MATERIAL APPEARANCE AUTHORITY used for this run (material realism only).
+          material_appearance_authority: materialAuthority,
+          material_appearance_authority_summary: materialAuthoritySummaryLine(materialAuthority),
           // Prompt audit trail: FUSE's version vs the exact text submitted.
           director_prompt_auto: autoPrompt,
           director_prompt_final: prompt,
