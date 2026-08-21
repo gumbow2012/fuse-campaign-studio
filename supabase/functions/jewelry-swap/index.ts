@@ -2046,6 +2046,7 @@ async function startSwapFrame(admin: AdminClient, args: {
     productAnalysis,
     opticsProfile,
     opticsControls,
+    masterLock,
   });
 
 
