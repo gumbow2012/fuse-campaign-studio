@@ -3792,6 +3792,47 @@ async function handleIntake(req: Request, body: any, user: { id: string }, apiKe
     console.warn("[intake] knowledge map unavailable:", errorMessage(error));
   }
 
+  /* ---- TARGETED RESEARCH AGENT — product understanding only, only if unsure -- */
+  // Never per frame, never per generation. Vocabulary research only: the observed
+  // product evidence keeps full authority over every classified axis.
+  let researchMs = 0;
+  let researchedTermCount = 0;
+  if (intake.knowledgeMap) {
+    try {
+      const uncertain = collectUncertainTerms(
+        intake.knowledgeMap,
+        (name: string) => Boolean(termByName(name)),
+      );
+      if (uncertain.length) {
+        console.log(
+          `[intake] RESEARCH TRIGGERED terms=${
+            uncertain.map((entry) => `${entry.term}(${entry.triggers.join("|")})`).join(", ")
+          }`,
+        );
+        const research = await researchUncertainTerms({
+          ai,
+          admin,
+          model: GEMINI_ANALYSIS_MODEL,
+          map: intake.knowledgeMap,
+          uncertain,
+        });
+        researchMs = research.researchMs;
+        researchedTermCount = research.researchedTerms.length;
+        attachResearchToMap(intake.knowledgeMap, research.researchedTerms);
+        console.log(
+          `[intake] RESEARCH DONE terms=${researchedTermCount} cacheHits=${research.cacheHits} ms=${researchMs}`,
+        );
+      } else {
+        console.log("[intake] RESEARCH SKIPPED — setting confidently classified");
+      }
+    } catch (error) {
+      // Research is an enhancement: intake must still succeed without it.
+      console.warn("[intake] research agent unavailable:", errorMessage(error));
+    }
+  }
+
+
+
   /* ---- THE VISIBLE SETTING COMES FROM THE FUSED MAP, NOT THE FIRST PASS --- */
   // The single-pass, first-image classifier is demoted to PRELIMINARY evidence:
   // it can never drive the user-facing field or the Nano engineering lock.
