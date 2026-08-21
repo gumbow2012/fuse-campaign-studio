@@ -2707,6 +2707,9 @@ export default function JewelrySwap() {
         preserveAudio,
         generateAudio: preserveAudio,
         extraPrompt,
+        // DIAMOND OPTICS: one consistent optical character across the rebuild.
+        opticsProfile,
+        opticsControls,
       });
       // Non-blocking: each click is its own record, so several can run at once.
       setVideos((prev) => [data.generation, ...prev]);
