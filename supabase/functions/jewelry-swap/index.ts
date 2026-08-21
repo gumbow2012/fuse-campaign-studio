@@ -2016,6 +2016,47 @@ function buildSeedanceDirectorPrompt(args: {
   };
 }
 
+/**
+ * MASTER PRODUCT LOCK INHERITANCE (§E1)
+ * ---------------------------------------------------------------------------
+ * The single product-identity source for EVERY Nano generation in a project
+ * (swap frames, canonical masters, component masters, matched pairs, campaign
+ * plates). The product is decided ONCE per project and inherited, never
+ * re-derived per frame.
+ *
+ * Resolution order (authority is preserved — the lock itself already carries the
+ * user-confirmed facts that outrank it):
+ *   1. the lock the client sent with this request (the live in-session lock),
+ *   2. the lock persisted on the ACTIVE project's `project_state`.
+ * When neither exists the result is null and behaviour is unchanged (legacy
+ * sessions keep working exactly as before).
+ */
+async function resolveInheritedMasterLock(admin: AdminClient, args: {
+  userId: string;
+  projectId?: unknown;
+  provided?: unknown;
+}): Promise<MasterProductLock | null> {
+  const direct = normalizeMasterLock(args.provided ?? null);
+  if (direct) return direct;
+
+  const projectId = String(args.projectId ?? "").trim();
+  if (!projectId) return null;
+
+  try {
+    const { data } = await admin
+      .from("jewelry_swap_projects")
+      .select("project_state")
+      .eq("id", projectId)
+      .eq("user_id", args.userId)
+      .maybeSingle();
+    const state = (data?.project_state ?? null) as Record<string, any> | null;
+    return normalizeMasterLock(state?.masterProductLock ?? null);
+  } catch (_error) {
+    // Inheritance is best-effort: a missing project must never block a run.
+    return null;
+  }
+}
+
 
 /**
  * CANONICAL MASTER REFERENCE SET (§22)
