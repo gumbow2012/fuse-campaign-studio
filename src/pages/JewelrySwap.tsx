@@ -4340,6 +4340,9 @@ export default function JewelrySwap() {
       cameraDirection,
       customCameraPrompt,
       animateDuration,
+      // §F6 — per-clip motion presets keyed by approved frame URL.
+      clipMotions,
+
       videos,
     }),
     [
