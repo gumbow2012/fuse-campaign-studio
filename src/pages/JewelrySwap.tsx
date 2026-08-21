@@ -90,6 +90,15 @@ import {
   startCampaignBatch,
   type CampaignBatch,
 } from "@/lib/campaignBatches";
+import MatchedPairPanel from "@/components/jewelry/MatchedPairPanel";
+import {
+  matchedPairBlockedReason,
+  matchedPairKey,
+  oppositeManufacturingStage,
+  planMatchedPairSources,
+  type ManufacturingStage,
+  type MatchedPair,
+} from "@/lib/matchedPairs";
 
 import CampaignPhotographyPanel, {
 
@@ -2375,7 +2384,28 @@ export default function JewelrySwap() {
         });
         return;
       }
+      // MATCHED PAIRS (§29) own their own slot too — a pair is a counterpart
+      // plate of an approved master, not a new revision of a source frame.
+      if (generation.stage === "matched_pair") {
+        setMatchedPairs((prev) => {
+          const key = Object.keys(prev).find(
+            (entry) => prev[entry].generationId === generation.id,
+          );
+          if (!key) return prev;
+          return {
+            ...prev,
+            [key]: {
+              ...prev[key],
+              status: generation.status,
+              outputUrl: generation.outputUrl ?? prev[key].outputUrl,
+              error: generation.error ?? null,
+            },
+          };
+        });
+        return;
+      }
       recordFrameGeneration(generation);
+
     },
     [recordFrameGeneration],
   );
@@ -2458,8 +2488,13 @@ export default function JewelrySwap() {
         ids.push(master.generationId);
       }
     }
+    for (const pair of Object.values(matchedPairs)) {
+      if (pair.generationId && (pair.status === "queued" || pair.status === "running")) {
+        ids.push(pair.generationId);
+      }
+    }
     return ids;
-  }, [swaps, altSwaps, videos, canonicalMasters]);
+  }, [swaps, altSwaps, videos, canonicalMasters, matchedPairs]);
 
   /**
    * Adaptive status polling. A flat 5s tick meant a finished job could sit

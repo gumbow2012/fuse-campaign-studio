@@ -45,6 +45,14 @@ import {
   isCanonicalMasterView,
 } from "./canonicalMasters.ts";
 import {
+  buildMatchedPairPrompt,
+  isManufacturingStage,
+  type ManufacturingStage,
+  manufacturingStageLabel,
+  matchedPairSummaryLine,
+  oppositeManufacturingStage,
+} from "./matchedPair.ts";
+import {
   type MaterialAppearanceAuthority,
   materialAuthorityPromptLines,
   materialAuthoritySummaryLine,
@@ -126,6 +134,19 @@ function serialize(row: any) {
       : null,
     canonicalMasterLabel: typeof payload.canonical_master_label === "string"
       ? payload.canonical_master_label
+      : null,
+    // MATCHED PAIR (§29) linkage, so the client can attach the pair to its source.
+    matchedPairSourceId: typeof payload.matched_pair_source_id === "string"
+      ? payload.matched_pair_source_id
+      : null,
+    matchedPairSourceStage: typeof payload.matched_pair_source_stage === "string"
+      ? payload.matched_pair_source_stage
+      : null,
+    matchedPairTargetStage: typeof payload.matched_pair_target_stage === "string"
+      ? payload.matched_pair_target_stage
+      : null,
+    matchedPairTargetLabel: typeof payload.matched_pair_target_label === "string"
+      ? payload.matched_pair_target_label
       : null,
     frameIndex: typeof payload.frame_index === "number" ? payload.frame_index : null,
     frameTime: typeof payload.frame_time === "number" ? payload.frame_time : null,
@@ -2154,6 +2175,176 @@ async function startCanonicalMaster(admin: AdminClient, args: {
   }
 }
 
+/**
+ * MATCHED-PAIR MANUFACTURING (§29)
+ * ---------------------------------------------------------------------------
+ * Renders the OTHER manufacturing state of an existing approved plate (a
+ * canonical master or an approved swapped frame) — e.g. FINISHED → PRE-SETTING.
+ * Camera, crop, composition, lighting, orientation, scale and background are
+ * held identical; the manufacturing stage is the only degree of freedom.
+ *
+ * Reuses the EXISTING Nano path (`IMAGE_MODEL` / `IMAGE_MODEL_ALT` +
+ * `submitFalJob`) with the same webhook, pricing and `studio_generations`
+ * bookkeeping as any other image run. No new provider, no new endpoint, no
+ * routing change, no pricing change.
+ *
+ * ALWAYS user-triggered: the caller is an explicit "Generate matched pair"
+ * button, so nothing here fires from analysis, restore or autosave.
+ */
+async function startMatchedPair(admin: AdminClient, args: {
+  userId: string;
+  /** The approved plate this pair is derived from (the photographic authority). */
+  sourceImageUrl: string;
+  /** Client-side id of the source plate (master key / frame id) — linkage only. */
+  sourceId?: string | null;
+  sourceLabel?: string | null;
+  sourceStage?: string | null;
+  /** Requested target stage; defaults to the opposite of the source stage. */
+  targetStage?: string | null;
+  /** Product references — construction evidence for seats/retention only. */
+  pieces: JewelryPiece[];
+  aspectRatio?: string;
+  resolution?: string;
+  extraPrompt?: string;
+  imageModel?: string;
+  masterProductLock?: unknown;
+  materialAuthority?: unknown;
+  webhookBase: string;
+}) {
+  const sourceImageUrl = String(args.sourceImageUrl ?? "").trim();
+  if (!sourceImageUrl) throw new Error("Select an approved plate to pair first");
+
+  const sourceStage: ManufacturingStage = isManufacturingStage(args.sourceStage)
+    ? args.sourceStage
+    : "finished";
+  const targetStage: ManufacturingStage = isManufacturingStage(args.targetStage)
+    ? args.targetStage
+    : oppositeManufacturingStage(sourceStage);
+  if (targetStage === sourceStage) {
+    throw new Error("A matched pair must change the manufacturing stage");
+  }
+
+  const imageModelKey = String(args.imageModel ?? "pro").trim().toLowerCase() === "nb2"
+    ? "nb2"
+    : "pro";
+  const endpointId = imageModelKey === "nb2" ? IMAGE_MODEL_ALT : IMAGE_MODEL;
+
+  const masterLock = normalizeMasterLock(args.masterProductLock ?? null);
+  const materialAuthority = normalizeMaterialAuthority(args.materialAuthority ?? null);
+
+  const pieces = (Array.isArray(args.pieces) ? args.pieces : [])
+    .filter((piece) => pieceUrls(piece ?? {}).length);
+  const referenceIds = buildReferenceIdMap(pieces);
+  const references = pieces.flatMap((piece) => pieceReferences(piece));
+  // SOURCE PLATE FIRST — the prompt names image 1 as the photographic authority.
+  const imageUrls = cleanUrls([sourceImageUrl, ...references.map((ref) => ref.url)]);
+
+  const prompt = buildMatchedPairPrompt({
+    targetStage,
+    sourceStage,
+    sourceLabel: args.sourceLabel,
+    masterLock,
+    materialAuthority,
+    extra: args.extraPrompt,
+  });
+
+  const { data: inserted, error: insertError } = await admin
+    .from("studio_generations")
+    .insert({
+      user_id: args.userId,
+      status: "queued",
+      kind: "image",
+      provider: "fal",
+      prompt,
+    })
+    .select("*")
+    .single();
+  if (insertError || !inserted) {
+    throw new Error(insertError?.message ?? "Could not start the matched pair");
+  }
+
+  try {
+    const estimatedCostUsd = await estimateUsd({
+      endpointId,
+      fallbackFlatUsd: IMAGE_FALLBACK_USD,
+    });
+
+    const aspect = String(args.aspectRatio ?? "").trim();
+    const resolution = String(args.resolution ?? "").trim().toUpperCase();
+    const falInput: Record<string, unknown> = imageModelKey === "nb2"
+      ? {
+        prompt,
+        image_urls: imageUrls,
+        output_format: "png",
+      }
+      : {
+        prompt,
+        image_urls: imageUrls,
+        output_format: "png",
+        ...(aspect && aspect !== "auto" ? { aspect_ratio: aspect } : {}),
+        ...(["1K", "2K", "4K"].includes(resolution) ? { resolution } : {}),
+      };
+
+    const webhookUrl = `${args.webhookBase}${encodeURIComponent(inserted.id)}`;
+    const requestId = await submitFalJob(endpointId, falInput, webhookUrl);
+
+    const { data: updated } = await admin
+      .from("studio_generations")
+      .update({
+        status: "running",
+        provider_model: endpointId,
+        provider_request_id: requestId,
+        estimated_cost_usd: estimatedCostUsd,
+        estimated_credits: creditsFromUsd(estimatedCostUsd),
+        input_payload: {
+          ...falInput,
+          feature: "jewelry-swap",
+          stage: "matched_pair",
+          matched_pair_source_id: String(args.sourceId ?? "").trim() || null,
+          matched_pair_source_url: sourceImageUrl,
+          matched_pair_source_stage: sourceStage,
+          matched_pair_target_stage: targetStage,
+          matched_pair_target_label: manufacturingStageLabel(targetStage),
+          matched_pair_summary: matchedPairSummaryLine({
+            sourceStage,
+            targetStage,
+            sourceLabel: args.sourceLabel,
+          }),
+          image_model: imageModelKey,
+          image_endpoint: endpointId,
+          nano_quality: imageModelKey === "pro" && ["2K", "4K"].includes(resolution)
+            ? resolution.toLowerCase()
+            : null,
+          master_product_lock: masterLock,
+          master_product_lock_summary: masterLockSummaryLine(masterLock),
+          material_appearance_authority: materialAuthority,
+          material_appearance_authority_summary: materialAuthoritySummaryLine(materialAuthority),
+          all_reference_ids_analyzed: [...referenceIds.values()],
+          references_sent: imageUrls.length,
+          pieces,
+        },
+      })
+      .eq("id", inserted.id)
+      .select("*")
+      .single();
+
+    return serialize(updated ?? inserted);
+  } catch (error) {
+    const message = errorMessage(error);
+    await admin
+      .from("studio_generations")
+      .update({
+        status: "failed",
+        error_log: message.slice(0, 10000),
+        completed_at: new Date().toISOString(),
+      })
+      .eq("id", inserted.id);
+    throw error;
+  }
+}
+
+
+
 async function startSwapFrame(admin: AdminClient, args: {
   userId: string;
   sourceFrameUrl: string;
@@ -3676,6 +3867,30 @@ Deno.serve(async (req) => {
       });
       return json({ generation });
     }
+
+    // MATCHED PAIR (§29): explicit user action only — one paid Nano run that
+    // changes ONLY the manufacturing stage of an existing approved plate.
+    if (action === "generate_matched_pair") {
+      const generation = await startMatchedPair(admin, {
+        userId: user.id,
+        sourceImageUrl: String(body.sourceImageUrl ?? ""),
+        sourceId: body.sourceId ?? null,
+        sourceLabel: body.sourceLabel ?? null,
+        sourceStage: body.sourceStage ?? null,
+        targetStage: body.targetStage ?? null,
+        pieces: body.pieces ?? [],
+        aspectRatio: body.aspectRatio,
+        resolution: body.resolution,
+        extraPrompt: body.extraPrompt,
+        imageModel: body.imageModel,
+        masterProductLock: body.masterProductLock ?? null,
+        materialAuthority: body.materialAuthority ?? null,
+        webhookBase,
+      });
+      return json({ generation });
+    }
+
+
 
     // NON-PAID: prompt preview only — no FAL submit, no generation row, no credits.
     if (action === "preview_reconstruction_prompt") {

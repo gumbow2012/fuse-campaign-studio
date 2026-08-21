@@ -50,6 +50,12 @@ export type JewelryProjectState = {
    */
   batches?: unknown[];
   activeBatchId?: string | null;
+  /**
+   * MATCHED-PAIR MANUFACTURING (§29). Each entry links a generated counterpart
+   * plate (e.g. pre-setting) back to the approved plate it was derived from, so
+   * pairs survive reopen. Keyed `${sourceId}:${targetStage}`.
+   */
+  matchedPairs?: Record<string, unknown> | null;
 
   /**
    * CAMPAIGN PHOTOGRAPHY PROFILE (§20) — HOW the product is photographed, kept
