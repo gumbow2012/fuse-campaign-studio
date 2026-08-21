@@ -3271,6 +3271,9 @@ Deno.serve(async (req) => {
         macro: body.macro === true,
         frameAnalysis: body.frameAnalysis ?? null,
         productAnalysis: body.productAnalysis ?? null,
+        opticsProfile: body.opticsProfile ?? null,
+        frameOpticsProfile: body.frameOpticsProfile ?? null,
+        opticsControls: body.opticsControls ?? null,
         webhookBase,
       });
       return json({ generation });
