@@ -5920,7 +5920,7 @@ export default function JewelrySwap() {
                       onChange={(event) => setResolution(event.target.value)}
                       className={SELECT_CLASS}
                     >
-                      {["480p", "720p", "1080p", "4k"].map((option) => (
+                      {videoResolutionOptions.map((option) => (
                         <option key={option} value={option}>
                           {option.toUpperCase()}
                         </option>
