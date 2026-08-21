@@ -4284,6 +4284,8 @@ export default function JewelrySwap() {
         <div className="grid gap-5 xl:grid-cols-[minmax(0,420px)_minmax(0,1fr)]">
           {/* LEFT: inputs */}
           <div className="space-y-5">
+            {/* SWAP ONLY — campaign mode has no source cinematography. */}
+            {isSwapMode ? (
             <SectionCard step={1} title="Source video" hint="MP4 or MOV, up to 60 MB.">
               <input
                 ref={videoInputRef}
