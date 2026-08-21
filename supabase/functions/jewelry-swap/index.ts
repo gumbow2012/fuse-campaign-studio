@@ -1249,9 +1249,15 @@ function buildJewelryPrompt(args: {
   const cadRefNums: number[] = [];
   let cadActive = false;
 
-  for (const piece of args.pieces) {
+  // Resolved spec per piece, computed BEFORE the piece lines so the visible
+  // product identity (type/metal/stone/color/setting) always comes from the
+  // confirmed spec and never from a raw, possibly-default card field.
+  const specs = args.pieces.map((piece) => resolveTargetSpec(piece));
+
+  args.pieces.forEach((piece, pieceIndex) => {
     const refs = pieceReferences(piece);
-    if (!refs.length) continue;
+    if (!refs.length) return;
+    const spec = specs[pieceIndex];
     const refNums: number[] = [];
     for (const ref of refs) {
       const num = cursor++;
@@ -1262,49 +1268,27 @@ function buildJewelryPrompt(args: {
         cadRefNums.push(num);
       }
     }
-    const type = String(piece.type ?? "jewelry piece").trim() || "jewelry piece";
+    const type = spec.type ?? String(piece.type ?? "").trim() ?? "";
     const applyTo = String(piece.person ?? "Main subject").trim() || "Main subject";
     const notes = String(piece.notes ?? "").trim();
     if (piece.cad === true) cadActive = true;
 
-    let line = `Replace the ${type.toLowerCase()} on ${applyTo.toLowerCase()} with the piece shown in reference image(s) ${
+    let line = `Replace the ${(type || "jewelry piece").toLowerCase()} on ${applyTo.toLowerCase()} with the piece in reference image(s) ${
       refListPhrase(refNums)
     }${notes ? `, described as "${notes}"` : ""}.`;
 
-    if (!isAuto(piece.metal)) {
-      line += ` Metal: ${String(piece.metal).trim()} (overrides visual inference).`;
-    }
-    if (!isAuto(piece.stone)) {
-      const quality = String(piece.quality ?? "").trim();
-      line += ` Stones: ${String(piece.stone).trim()}${quality ? ` ${quality}` : ""}.`;
-    }
-
-    const dims = piece.dimensions ?? null;
-    const width = Number(dims?.width ?? NaN);
-    const height = Number(dims?.height ?? NaN);
-    const depth = Number(dims?.depth ?? NaN);
-    const weight = Number(dims?.weight ?? NaN);
-    if ([width, height, depth].some((value) => Number.isFinite(value) && value > 0)) {
-      const part = [width, height, depth]
-        .map((value) => (Number.isFinite(value) && value > 0 ? String(value) : "?"))
-        .join("×");
-      line += ` Physical size ~${part} mm${
-        Number.isFinite(weight) && weight > 0 ? `, ~${weight} g` : ""
-      } — give it believable mass and thickness, not paper-thin.`;
+    if (spec.dimensions) {
+      line += ` Physical size ${spec.dimensions} — believable mass and thickness, not paper-thin.`;
     }
 
     // Replacement scope: default to the narrowest safe scope (this piece only).
     const scope = String(piece.scope ?? "").trim().toLowerCase();
-    if (scope === "piece_chain" || /chain/.test(scope)) {
-      line +=
-        " REPLACEMENT SCOPE: this piece PLUS its attached chain/bracelet may be replaced together as one object, using the references for both. Everything else in SOURCE_FRAME stays untouched.";
-    } else {
-      line +=
-        " REPLACEMENT SCOPE: replace ONLY this piece. Keep SOURCE_FRAME's existing chain, bracelet, clasp, other jewelry and all surroundings exactly as they are.";
-    }
+    line += scope === "piece_chain" || /chain/.test(scope)
+      ? " SCOPE: this piece PLUS its attached chain/bracelet may be replaced together; everything else in SOURCE_FRAME stays untouched."
+      : " SCOPE: replace ONLY this piece; keep SOURCE_FRAME's existing chain, bracelet, clasp, other jewelry and surroundings.";
 
     lines.push(line);
-  }
+  });
 
   const preferred = String(args.preferredRole ?? "").trim();
   const correction = failureCorrection(args.failureReason);
@@ -1318,124 +1302,54 @@ function buildJewelryPrompt(args: {
   const coverage = manualCoverage === "auto"
     ? (coverageFromAnalysis(frameAnalysis) ?? normalizeCoverage(null, mode))
     : manualCoverage;
-  const analysisBlock = frameAnalysisBlock(frameAnalysis, productAnalysis);
 
-  // Structured product authority — injected into THIS prompt, after the PIECES
-  // lines and before the negatives. Only non-Auto values are emitted.
-  const specs = args.pieces.map((piece) => resolveTargetSpec(piece));
   const specLines = specs.map((spec) => targetSpecLine(spec)).filter(Boolean) as string[];
   const declaredSettings = declaredSettingList(specs);
   const colorless = isColorlessSpec(specs);
-  const stoneLock = stoneEngineeringLockBlock(specs, productAnalysis);
-  const settingMap = multiSettingBlock(specs);
-
-
-
-
+  const engineeringLock = engineeringLockLines(specs, productAnalysis);
 
   const prompt = [
-    "Use SOURCE_FRAME (image 1) as the ABSOLUTE authority for the photograph. This is a precise jewelry replacement, not a redesign or a product shot. Do NOT reframe or recreate the photograph.",
-    "",
-    "Preserve EXACTLY from SOURCE_FRAME: camera position, camera angle, perspective, crop, zoom level, composition, depth of field, focus plane, lighting, background, chain placement, and the jewelry's position, orientation, rotation, tilt, visible percentage, occlusion and scale.",
-    "",
-    REFERENCE_IMAGE_CONTEXT_RULE,
-    "",
-    REFERENCE_ROLE_PRIORITY_LINE,
-    "",
-    REFERENCE_CONTEXT_EXCLUSION,
-    "",
-    ANTI_HYBRID_BLOCK,
-    "",
-
-    SURGICAL_REPLACEMENT_CORE,
-    "",
-    NO_INVENTION_BLOCK,
-    "",
-    PRIORITY_ORDER_TEXT,
-    "",
-
-    "Replace ONLY the original jewelry piece with the piece defined by the JEWELRY_REFERENCES. The references are the ABSOLUTE authority for the replacement object's identity and construction: silhouette, lettering, symbols/logos, stone locations, stone cuts, stone sizes, stone density, metal geometry, bail, bail opening, hinges, connectors, bezels, prongs, edges, thickness, front, side and back construction, raised and recessed surfaces, and structural proportions.",
-    "",
-    "CRITICAL — do NOT make a product shot. Render ONLY the portion of the replacement jewelry that the exact source camera would physically see:",
-    "- If SOURCE_FRAME is an extreme macro of only the bail, output an extreme macro of ONLY the replacement bail.",
-    "- If SOURCE_FRAME shows only an edge, show only the corresponding replacement edge.",
-    "- If SOURCE_FRAME shows a partial pendant, keep the replacement equally partial.",
-    "- If the piece is rotated ~25°, keep the replacement rotated ~25°. Composition beats logo readability — never rotate lettering upright for legibility.",
-    "- Preserve the same focus/DOF, and any foreground occlusion.",
-    "The final image should align closely if overlaid on SOURCE_FRAME. Only the jewelry identity changes — never the shot.",
-    "",
-    "BOUNDING-BOX / SCALE LOCK: the replacement occupies approximately the same region of the frame the original jewelry occupied; for partial shots, the same partial region. Never enlarge the piece to showcase detail. This is a placement rule only — it must never distort the replacement's real proportions.",
-    "",
-    "BAIL / CONNECTOR LOCK: treat MAIN BODY / BAIL / CONNECTOR-HINGE / CHAIN as distinct components. The replacement's bail is the SAME physical bail in every frame, using the reference's own bail geometry (outer silhouette, inner opening, width, height, thickness, stone coverage, edge thickness, attachment point, hinge). Position and rotate it to fit the source — but NEVER morph the replacement bail toward the original piece's bail, and never resize it to match the original's bail. Geometry comes from the REFERENCE; the SOURCE controls only camera + placement. (If the original bail is 30mm and the replacement is 20mm, keep the replacement's real 20mm geometry, just placed and rotated correctly.)",
-    "",
-    "DO NOT HALLUCINATE: if the visible source region needs a part of the piece that no reference shows, infer minimally. Never invent extra stones, prongs, hinges, engraving, lettering or decorative structures. If the source region is too abstract to identify confidently, reproduce the closest corresponding macro region rather than inventing a full front-facing pendant.",
-    "",
-    "GEOMETRY FIDELITY: STRICT — replacement geometry locked, source camera and composition locked. The REPLACEMENT object's geometry may not drift, soften, average or be redesigned, and SOURCE_FRAME's camera, crop and composition may not change. This does NOT mean preserving the original object's construction: the original jewelry's geometry, identity and design must be fully removed. No beautification, reframing, added visibility or invented detail.",
-    "",
-    VIEW_SIDE_INTELLIGENCE_BLOCK,
+    /* 1 — REPLACEMENT LEADS. */
+    "TASK — FULL JEWELRY REPLACEMENT. Replace the jewelry in image 1 (SOURCE_FRAME) with the EXACT piece shown in the reference images. This is a full replacement, NOT a restyle: do NOT keep, blend or lightly edit the original jewelry. Remove the original piece's stones, setting pattern, metal geometry and decorative detail completely and rebuild that region as the referenced product.",
     "",
     `PIECES: ${lines.join(" ")}`,
-    refLabels.length ? "" : null,
+    "",
+
+    /* 2 — TARGET IDENTITY (mandatory), BEFORE any preservation rule. */
+    "TARGET IDENTITY — MANDATORY. The specification below defines WHAT must appear. It outranks aesthetics, model inference and the preservation rules further down. Never substitute another product type, metal, stone, stone color or setting construction.",
+    specLines.length ? specLines.join("\n") : null,
+    declaredSettings.length
+      ? `SETTING LOCK: ${declaredSettings.join("; ")} — reproduce each declared construction exactly as built on the references; never swap it for another setting family and never regularize it into a uniform stone field.`
+      : null,
+    engineeringLock,
+    colorless
+      ? "STONE COLOR: keep the specified body color across the whole piece; colorless/white diamonds stay visually colorless. Spectral fire is allowed and never changes body color."
+      : "STONE COLOR: keep the specified gemstone body color across the whole piece. Spectral fire is allowed and never changes body color.",
+    "",
+
+    /* 3 — REFERENCES = identity source. */
+    "REFERENCES = IDENTITY SOURCE. CAD / design-authority references are engineering truth for geometry, stone sizes, placement and construction. Photographic references are truth for material only (metal alloy and finish, polish, diamond appearance, micro-texture). Hands, gloves, wrists, necks, boxes, trays, backgrounds, shadows and studio context in the references are DISPOSABLE — never reproduce them.",
     refLabels.length ? `REFERENCE VIEWS: ${refLabels.join("; ")}.` : null,
     refLabels.length
-      ? "Identify which region of the piece SOURCE_FRAME actually shows, then reproduce that region using the best-matching labeled reference above. Use the other labeled references only to stay consistent with the same physical object."
+      ? "Identify which region of the piece SOURCE_FRAME shows, then rebuild that region from the best-matching labeled reference; use the others to stay consistent with the same physical object."
       : null,
-    preferred ? "" : null,
     preferred
-      ? `PREFERRED ANGLE REFERENCE: prioritize the reference labeled "${preferred}" as the primary geometry match for this frame, while still obeying SOURCE_FRAME for camera, crop and placement.`
+      ? `PREFERRED ANGLE REFERENCE: prioritize the reference labeled "${preferred}" as the primary geometry match for this frame.`
       : null,
-    "",
-    specLines.length ? specLines.join("\n") : null,
-    specLines.length ? "" : null,
-    stoneLock,
-    stoneLock ? "" : null,
-    settingMap,
-    settingMap ? "" : null,
-    SETTING_AUTHORITY_LINE,
-    "",
-    declaredSettings.length
-      ? `DECLARED SETTINGS (exact, user-selected — reproduce each one as constructed on the references; never swap one for another setting family): ${declaredSettings.join("; ")}.`
-      : null,
-    declaredSettings.length ? "" : null,
-
-    colorless ? `${STONE_COLOR_LOCK_LINE} ${COLORLESS_LINE}` : STONE_COLOR_LOCK_LINE,
-    "",
-    OPTICS_VS_COLOR_LINE,
-    "",
-    NO_INVENT_NEGATIVES_LINE,
-    "",
-    AUTHORITY_HIERARCHY_LINE,
-    "",
-    SPEC_HIERARCHY_LINE,
-    "",
-
-
-
-    "Do NOT redesign or simplify the jewelry. Do NOT invent, add, remove, or resize stones. Do NOT change stone shapes or randomize stone placement. Do NOT modify any jewelry that was not listed. Round stones stay round and individually seated; baguettes keep their long rectangular orientation; marquise keep pointed ends; princess stay square; emerald cuts keep the stepped rectangular form. Preserve the declared setting pattern exactly as the references construct it — never flatten or regularize it into a different setting.",
-    "",
-    "If a piece is a pendant only, replace only the pendant and keep the existing chain. If a chain only, replace only the chain and keep the existing pendant. If \"Pendant + Chain\", replace both.",
-    "",
-    "Every unrelated detail from SOURCE_FRAME — subject identity, skin, hair, clothing, hands, environment — must be preserved exactly. Respect layering: whatever was in front stays in front. Match the source lighting, contact shadows and reflections.",
-    "",
-    CONTEXT_NEGATIVES,
-    "",
-    modeBlock(mode),
-    "",
-    coverageBlock(coverage, mode),
-    analysisBlock ? "" : null,
-    analysisBlock,
-
-
-
-
-
-
-    cadActive ? "" : null,
     cadActive
-      ? (cadRefNums.length
-        ? `${CAD_AUTHORITY_TEXT} CAD reference image(s): ${refListPhrase(cadRefNums)}.`
-        : CAD_AUTHORITY_TEXT)
+      ? `CAD AUTHORITY: treat the CAD / design-authority reference as engineering truth, not inspiration${
+        cadRefNums.length ? ` (image ${refListPhrase(cadRefNums)})` : ""
+      }.`
       : null,
+    "",
+
+    /* 4 — PRESERVE from SOURCE_FRAME (secondary to the replacement). */
+    "PRESERVE FROM SOURCE_FRAME (secondary — this must NEVER cause the original jewelry to be kept): camera position and angle, perspective, crop, zoom, composition, depth of field, focus plane, lighting, background, subject, skin, hair, clothing, hands, occlusion order, and the jewelry's position, orientation, rotation, tilt, visible percentage and scale. Only the jewelry's identity changes — never the shot. Geometry comes from the REFERENCES; framing comes from SOURCE_FRAME.",
+    "",
+    compactModeLine(mode),
+    compactCoverageLine(coverage, mode),
+    "",
+    "NEGATIVES: no hybrid of old and new piece, no invented stones/prongs/halos/center stones, no resized or recut stones, no regularized layouts, no stone-color drift, no reference background or props leaking in, no reframing, beautification or product-shot conversion, no rotating lettering upright for legibility.",
     correction ? "" : null,
     correction,
     String(args.extra ?? "").trim() ? "" : null,
@@ -1443,6 +1357,7 @@ function buildJewelryPrompt(args: {
   ]
     .filter((line) => line !== null)
     .join("\n");
+
 
   return prompt;
 }
