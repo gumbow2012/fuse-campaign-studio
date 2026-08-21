@@ -841,6 +841,21 @@ export default function JewelrySwap() {
    */
   const [userLocks, setUserLocks] = useState<UserConfirmedFact[]>([]);
 
+  /**
+   * DIAMOND OPTICS (additive). The SOURCE clip is analysed ONCE for lighting and
+   * optical response; a selected frame gets a lightweight refinement. Both are
+   * cached server-side, so the Sparkle / Rainbow-Fire sliders only re-synthesise
+   * the prompt — they never trigger a new analysis.
+   */
+  const [opticsProfile, setOpticsProfile] = useState<DiamondOpticsProfile | null>(null);
+  const [frameOptics, setFrameOptics] = useState<Record<number, DiamondOpticsProfile>>({});
+  const [opticsControls, setOpticsControls] = useState<DiamondOpticsControls>({
+    ...AUTO_OPTICS_CONTROLS,
+  });
+  const [opticsStatus, setOpticsStatus] = useState<"idle" | "analyzing" | "ready" | "error">(
+    "idle",
+  );
+
 
   const [dropActive, setDropActive] = useState(false);
   // Reference intake (recognition / grouping / extraction). Never blocking:
