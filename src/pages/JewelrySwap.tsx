@@ -2788,6 +2788,10 @@ export default function JewelrySwap() {
       toast.error("Approve at least one swapped frame first");
       return;
     }
+    if (promptMode === "manual" && promptDraft.trim().length > promptMaxChars) {
+      toast.error(`Your prompt is over the ${promptMaxChars.toLocaleString()}-character limit`);
+      return;
+    }
     setReconstructing(true);
     try {
       const data = await callJewelrySwap<{ generation: SwapGeneration }>({
