@@ -171,7 +171,7 @@ export type CanonicalMaster = {
   label: string;
   componentLabel: string | null;
   generationId: string;
-  status: "queued" | "running" | "complete" | "failed";
+  status: "queued" | "running" | "complete" | "failed" | "canceled";
   outputUrl: string | null;
   error: string | null;
   /** The lock the master was rendered from (staleness / audit). */
