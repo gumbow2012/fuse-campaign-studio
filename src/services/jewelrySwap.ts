@@ -163,6 +163,22 @@ export const CAMERA_DIRECTIONS = [
 ] as const;
 
 /**
+ * §F6 — per-clip motion presets. Kling exposes no camera-motion field (see §F5),
+ * so each preset maps to a prompt directive server-side. "auto" adds nothing and
+ * therefore reproduces today's output exactly.
+ */
+export const MOTION_PRESETS = [
+  { value: "auto", label: "Auto — Jewelry Cinematic" },
+  { value: "slow_orbit", label: "Slow Orbit" },
+  { value: "push_in", label: "Push-In" },
+  { value: "locked_off", label: "Locked-Off / Static" },
+  { value: "tilt_reveal", label: "Tilt Reveal" },
+] as const;
+export const DEFAULT_MOTION_PRESET = "auto";
+export type MotionPreset = (typeof MOTION_PRESETS)[number]["value"];
+
+
+/**
  * §F4 — schema-derived from the live fal OpenAPI schema for
  * fal-ai/kling-video/v3/pro/image-to-video (`duration` string enum "3".."15").
  */
