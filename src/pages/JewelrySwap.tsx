@@ -4347,9 +4347,35 @@ export default function JewelrySwap() {
                   </p>
                 ) : null}
 
+                <SeedanceDirectionPanel
+                  preview={promptPreview}
+                  status={promptStatus}
+                  value={promptValue}
+                  mode={promptMode}
+                  stale={promptStale}
+                  maxCharacters={promptMaxChars}
+                  onChange={(text) => {
+                    setPromptMode("manual");
+                    setPromptDraft(text);
+                  }}
+                  onReset={() => {
+                    setPromptMode("auto");
+                    setPromptDraft("");
+                    setPromptStale(false);
+                    void refreshPromptPreview({ resetManual: true });
+                  }}
+                  onKeepManual={() => setPromptStale(false)}
+                  onRebuild={() => {
+                    setPromptMode("auto");
+                    setPromptDraft("");
+                    void refreshPromptPreview({ resetManual: true });
+                  }}
+                  onRefresh={() => void refreshPromptPreview()}
+                />
+
                 <Button
                   onClick={reconstruct}
-                  disabled={reconstructing || !approvedUrls.length}
+                  disabled={reconstructing || !approvedUrls.length || promptOverLimit}
                   className="w-full rounded-xl bg-[hsl(var(--primary))] py-5 font-semibold text-primary-foreground hover:bg-[hsl(var(--primary))]/90"
                 >
                   {reconstructing ? <Loader2 size={15} className="animate-spin" /> : <Film size={15} />}
