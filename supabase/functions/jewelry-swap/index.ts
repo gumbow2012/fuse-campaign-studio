@@ -1381,7 +1381,10 @@ function buildJewelryPrompt(args: {
         cadRefNums.push(num);
       }
     }
-    const type = spec.type ?? String(piece.type ?? "").trim() ?? "";
+    // Product identity comes from the confirmed spec first, then the project's
+    // MASTER PRODUCT LOCK — never a per-frame re-derivation of the product.
+    const type = spec.type ?? masterLockProductType(args.masterLock ?? null) ??
+      String(piece.type ?? "").trim() ?? "";
     const applyTo = String(piece.person ?? "Main subject").trim() || "Main subject";
     const notes = String(piece.notes ?? "").trim();
     if (piece.cad === true) cadActive = true;
