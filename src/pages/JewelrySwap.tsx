@@ -4079,6 +4079,15 @@ export default function JewelrySwap() {
       setCanonicalMasters(
         (state?.canonicalMasters ?? {}) as Record<string, CanonicalMaster>,
       );
+      // BATCH CONTINUATION (§28) — restored as-is; no batch re-runs anything.
+      const storedBatches = (state?.batches ?? []) as CampaignBatch[];
+      setBatches(storedBatches);
+      setActiveBatchId(
+        storedBatches.find((batch) => batch.id === state?.activeBatchId)?.id ??
+          storedBatches.find((batch) => batch.status === "open")?.id ??
+          null,
+      );
+
       setPhotographyError(null);
       setUserLocks((state?.userLocks ?? []) as UserConfirmedFact[]);
       setAnalysis((state?.analysis ?? null) as JewelryProjectAnalysis | null);
