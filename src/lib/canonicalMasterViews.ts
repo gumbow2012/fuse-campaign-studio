@@ -175,7 +175,8 @@ export type CanonicalMasterValidation = FidelityAudit;
 export function isMasterValidated(audit: FidelityAudit | null | undefined): boolean {
   if (!audit) return false;
   if (audit.rows.some((row) => row.verdict === "FAIL")) return false;
-  return audit.verdict !== "FAIL";
+  // A "violation" verdict means the render materially changed the product.
+  return audit.verdict !== "violation";
 }
 
 /** A generated canonical master, stored per project and tagged with its view. */
