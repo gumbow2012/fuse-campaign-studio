@@ -4039,9 +4039,10 @@ export default function JewelrySwap() {
         }
         const audit = buildFidelityAudit({
           report,
-          lockVersion: masterLockVersion,
+          lockVersion: masterLockVersionOf(drivingLock) ?? drivingStamp,
           dimensions: MASTER_DIMENSIONS,
         });
+
         setCanonicalMasters((prev) =>
           prev[key]
             ? {
