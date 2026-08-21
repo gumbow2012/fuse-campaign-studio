@@ -68,6 +68,8 @@ import {
   type CanonicalMasterPlanEntry,
   isMasterValidated,
   planCanonicalMasterViews,
+  planCanonicalComponentMasters,
+  type CanonicalComponentPlanEntry,
 } from "@/lib/canonicalMasterViews";
 import CanonicalMastersPanel from "@/components/jewelry/CanonicalMastersPanel";
 import CampaignPhotographyPanel, {
@@ -2637,6 +2639,96 @@ export default function JewelrySwap() {
   ]);
 
 
+  /**
+   * CANONICAL COMPONENT MASTERS (§24). The eligible components come purely from
+   * what the Master Product Lock recorded for THIS product — no per-product-type
+   * list exists, so a chain surfaces links + clasp and a pendant surfaces bail +
+   * center setting from their own locked topology alone.
+   */
+  const canonicalComponentPlan: CanonicalComponentPlanEntry[] = useMemo(
+    () => (masterProductLock ? planCanonicalComponentMasters(masterProductLock) : []),
+    [masterProductLock],
+  );
+
+  /**
+   * EXPLICIT USER ACTION ONLY — one component master is one paid run on the same
+   * Nano path used by the D1 view masters. Never called from an effect, restore
+   * or autosave, and never auto-retried.
+   */
+  const generateComponentMaster = useCallback(
+    async (componentId: string) => {
+      if (canonicalMastersDisabledReason) return;
+      const entry = canonicalComponentPlan.find((item) => item.componentId === componentId);
+      if (!entry) return;
+      setMastersBusy(true);
+      try {
+        const generation = await generateCanonicalMaster({
+          view: "component",
+          componentLabel: entry.label,
+          extraPrompt: `Isolate ONLY this component of the locked product: ${entry.geometry}. Reproduce its construction exactly as locked; show how it joins the body, and include nothing else.`,
+          pieces: piecePayload(),
+          aspectRatio: "1:1",
+          resolution: resolutionForQuality(nanoQuality),
+          imageModel: "pro",
+          masterProductLock,
+          materialAuthority,
+        });
+        setCanonicalMasters((prev) => ({
+          ...prev,
+          [entry.key]: {
+            key: entry.key,
+            componentId: entry.componentId,
+            view: "component",
+            label: entry.label,
+            componentLabel: entry.label,
+            generationId: generation.id,
+            status: generation.status,
+            outputUrl: generation.outputUrl ?? null,
+            error: generation.error ?? null,
+            lockVersion: masterProductLock?.version ?? null,
+            createdAt: generation.createdAt ?? null,
+            // A fresh render is never trusted — validation (§23) must run again.
+            validated: false,
+            validation: null,
+            validationState: "idle",
+            validationError: null,
+          },
+        }));
+      } catch (error) {
+        setCanonicalMasters((prev) => ({
+          ...prev,
+          [entry.key]: {
+            key: entry.key,
+            componentId: entry.componentId,
+            view: "component",
+            label: entry.label,
+            componentLabel: entry.label,
+            generationId: prev[entry.key]?.generationId ?? "",
+            status: "failed",
+            outputUrl: null,
+            error: error instanceof Error ? error.message : "Could not start this component master",
+            lockVersion: masterProductLock?.version ?? null,
+            createdAt: null,
+            validated: false,
+            validation: null,
+            validationState: "idle",
+            validationError: null,
+          },
+        }));
+      } finally {
+        setMastersBusy(false);
+      }
+    },
+    [
+      canonicalComponentPlan,
+      canonicalMastersDisabledReason,
+      piecePayload,
+      nanoQuality,
+      masterProductLock,
+      materialAuthority,
+    ],
+  );
+
   /** Stable id for a selected frame — used to match analysis back to frames. */
   const frameIdFor = useCallback(
     (index: number) => `frame-${index}-${(frames[index]?.time ?? 0).toFixed(3)}`,
@@ -4549,10 +4641,14 @@ export default function JewelrySwap() {
                       {/* CANONICAL MASTERS (§22) — user-triggered paid Nano runs. */}
                       <CanonicalMastersPanel
                         plan={canonicalMasterPlan}
+                        componentPlan={canonicalComponentPlan}
                         masters={canonicalMasters}
                         busy={mastersBusy}
                         disabledReason={canonicalMastersDisabledReason}
                         onGenerate={() => void generateCanonicalMasters()}
+                        onGenerateComponent={(componentId) =>
+                          void generateComponentMaster(componentId)
+                        }
                         onValidate={(key) => void validateCanonicalMaster(key)}
                       />
                       {/* CAMPAIGN PHOTOGRAPHY PROFILE (§20) — look only, no geometry. */}

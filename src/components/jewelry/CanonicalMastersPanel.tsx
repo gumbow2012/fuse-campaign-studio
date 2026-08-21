@@ -11,23 +11,30 @@
 
 import { Button } from "@/components/ui/button";
 import type {
+  CanonicalComponentPlanEntry,
   CanonicalMaster,
   CanonicalMasterPlanEntry,
 } from "@/lib/canonicalMasterViews";
 
 export function CanonicalMastersPanel({
   plan,
+  componentPlan = [],
   masters,
   busy,
   disabledReason,
   onGenerate,
+  onGenerateComponent,
   onValidate,
 }: {
   plan: CanonicalMasterPlanEntry[];
+  /** Components the locked topology actually contains (§24). */
+  componentPlan?: CanonicalComponentPlanEntry[];
   masters: Record<string, CanonicalMaster>;
   busy: boolean;
   disabledReason: string | null;
   onGenerate: () => void;
+  /** Explicit per-component master generation (§24) — user-triggered only. */
+  onGenerateComponent?: (componentId: string) => void;
   /** Analysis-only validation of one master (§23) — never regenerates. */
   onValidate: (key: string) => void;
 }) {
@@ -182,6 +189,88 @@ export function CanonicalMastersPanel({
           Confirm the product first — the master views are derived from the locked product topology.
         </p>
       )}
+
+      {componentPlan.length ? (
+        <div className="mt-4 border-t border-white/10 pt-3">
+          <p className="text-[10px] uppercase tracking-[0.16em] text-foreground/60">
+            Component masters
+          </p>
+          <p className="mt-1 text-[10px] leading-relaxed text-foreground/45">
+            Only the parts your locked product actually has. Rendering a part once and reusing it
+            keeps it identical across every frame.
+          </p>
+          <div className="mt-2 space-y-1.5">
+            {componentPlan.map((entry) => {
+              const master = masters[entry.key];
+              return (
+                <div
+                  key={entry.key}
+                  className="flex items-center gap-2 rounded-xl border border-white/10 bg-black/40 p-2"
+                >
+                  <div className="h-10 w-10 shrink-0 overflow-hidden rounded-lg border border-white/5 bg-white/[0.02]">
+                    {master?.outputUrl ? (
+                      <img
+                        src={master.outputUrl}
+                        alt={`Component master — ${entry.label}`}
+                        loading="lazy"
+                        className="h-full w-full object-contain"
+                      />
+                    ) : null}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-[10px] text-foreground/75">{entry.label}</p>
+                    <p className="truncate text-[9px] text-foreground/40">{entry.reason}</p>
+                    {master?.status === "failed" && master.error ? (
+                      <p className="truncate text-[9px] text-red-300/80">{master.error}</p>
+                    ) : null}
+                  </div>
+                  {master?.status === "complete" ? (
+                    <>
+                      <span
+                        className={
+                          master.validated
+                            ? "text-[9px] font-semibold tracking-[0.12em] text-emerald-200/90"
+                            : "text-[9px] text-foreground/40"
+                        }
+                      >
+                        {master.validated
+                          ? "VALIDATED"
+                          : master.validationState === "checking"
+                            ? "Validating…"
+                            : master.validation
+                              ? "REJECTED"
+                              : "Not validated"}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => onValidate(entry.key)}
+                        disabled={master.validationState === "checking"}
+                        className="rounded-md border border-white/12 px-1.5 py-0.5 text-[9px] text-foreground/75 transition-colors hover:border-cyan-200/50 hover:text-cyan-100 disabled:opacity-40"
+                      >
+                        {master.validation ? "Re-validate" : "Validate"}
+                      </button>
+                    </>
+                  ) : null}
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    disabled={busy || !!disabledReason || !onGenerateComponent}
+                    onClick={() => onGenerateComponent?.(entry.componentId)}
+                    className="h-6 shrink-0 rounded-lg px-2 text-[9px]"
+                  >
+                    {master?.status === "queued" || master?.status === "running"
+                      ? "Rendering…"
+                      : master?.outputUrl
+                        ? "Re-render"
+                        : "Generate"}
+                  </Button>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

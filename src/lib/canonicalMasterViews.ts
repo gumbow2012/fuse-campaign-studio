@@ -183,6 +183,8 @@ export function isMasterValidated(audit: FidelityAudit | null | undefined): bool
 export type CanonicalMaster = {
   /** The plan key this master answers (`front`, `component_bail`, …). */
   key: string;
+  /** Set for COMPONENT masters (§24): the locked component this master isolates. */
+  componentId?: string | null;
   view: CanonicalMasterView;
   label: string;
   componentLabel: string | null;
@@ -205,3 +207,136 @@ export type CanonicalMaster = {
   validationState?: "idle" | "checking" | "done" | "failed" | "skipped";
   validationError?: string | null;
 };
+
+/**
+ * CANONICAL COMPONENT MASTERS (§24)
+ * ---------------------------------------------------------------------------
+ * A component master is a canonical master of ONE mechanical/structural part of
+ * the locked product (a bail, a clasp, a repeated link, a center setting…).
+ * Reusing the exact same component render across frames improves temporal
+ * consistency.
+ *
+ * The eligible component list is derived ENTIRELY from what the Master Product
+ * Lock recorded for THIS product: there is no per-product-type list and no
+ * product-name matching anywhere. A Cuban chain surfaces links + clasp because
+ * its lock describes repeated modules and a clasp; a pendant surfaces bail +
+ * center setting because its lock describes those. Absent evidence simply
+ * means fewer eligible components.
+ */
+export type CanonicalComponentPlanEntry = {
+  /** Stable per-project component id (also the master state key suffix). */
+  componentId: string;
+  /** Master state key — shared with the view planner so slots are reused. */
+  key: string;
+  label: string;
+  /** The lock's own description of this component — used as prompt direction. */
+  geometry: string;
+  /** Which locked field justified this component (audit friendly). */
+  reason: string;
+};
+
+const COMPONENT_LIMIT = 8;
+
+export function planCanonicalComponentMasters(
+  lock: MasterProductLock | null,
+): CanonicalComponentPlanEntry[] {
+  if (!lock) return [];
+  const out: CanonicalComponentPlanEntry[] = [];
+  const add = (entry: CanonicalComponentPlanEntry) => {
+    if (out.length >= COMPONENT_LIMIT) return;
+    if (out.some((existing) => existing.componentId === entry.componentId)) return;
+    out.push(entry);
+  };
+  const slug = (value: string) =>
+    value.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 40) ||
+    "component";
+
+  // 1. Mechanical fields the lock actually filled in.
+  const mechanical: [string, unknown][] = [
+    ["bail", (lock as any).bail],
+    ["clasp", (lock as any).clasp],
+    ["hinge", (lock as any).hinge],
+    ["connector", (lock as any).connector],
+    ["chain_integration", (lock as any).chainIntegration],
+    ["gallery", (lock as any).gallery],
+    ["mechanical_construction", (lock as any).mechanicalConstruction],
+  ];
+  for (const [field, value] of mechanical) {
+    const text = clean(value);
+    if (!text) continue;
+    add({
+      componentId: field,
+      key: `component_${field}`,
+      label: text.slice(0, 60),
+      geometry: text,
+      reason: `Locked ${field.replace(/_/g, " ")}`,
+    });
+  }
+
+  // 2. Repeated modules (links, stations, segments) the lock recovered.
+  const modules = Array.isArray((lock as any)?.repeatedModules)
+    ? ((lock as any).repeatedModules as any[])
+    : [];
+  for (const module of modules) {
+    const geometry = [clean(module?.masterGeometry), clean(module?.masterStoneMap)]
+      .filter(Boolean)
+      .join(" — ");
+    if (!geometry) continue;
+    const id = slug(String(clean(module?.moduleId) ?? "module"));
+    const count = Number(module?.repeatCount);
+    add({
+      componentId: `module_${id}`,
+      key: `component_module_${id}`,
+      label: `${clean(module?.moduleId) ?? "Repeated module"}${
+        Number.isFinite(count) && count > 1 ? ` ×${count}` : ""
+      }`.slice(0, 60),
+      geometry,
+      reason: "Locked repeated module",
+    });
+  }
+
+  // 3. Setting construction — a center/region setting is a real component when
+  // the lock describes its topology or per-region construction.
+  const setting = (lock as any)?.settingConstruction ?? null;
+  if (setting && typeof setting === "object") {
+    const topology = clean(setting.topology);
+    const retention = clean(setting.retention);
+    if (topology || retention) {
+      add({
+        componentId: "center_setting",
+        key: "component_center_setting",
+        label: (clean(setting.terminology) ?? topology ?? "Center setting")!.slice(0, 60),
+        geometry: [topology, retention, clean(setting.coverage)].filter(Boolean).join(" — "),
+        reason: "Locked setting construction",
+      });
+    }
+    const regions = Array.isArray(setting.regions) ? (setting.regions as any[]) : [];
+    for (const region of regions) {
+      const name = clean(region?.region);
+      const geometry = [clean(region?.setting), clean(region?.construction)]
+        .filter(Boolean)
+        .join(" — ");
+      if (!name || !geometry) continue;
+      add({
+        componentId: `setting_${slug(name)}`,
+        key: `component_setting_${slug(name)}`,
+        label: `${name} setting`.slice(0, 60),
+        geometry,
+        reason: "Locked setting region",
+      });
+    }
+  }
+
+  // 4. Anything else the lock itself named as part of the component topology.
+  for (const part of list((lock as any)?.componentTopology)) {
+    add({
+      componentId: `topology_${slug(part)}`,
+      key: `component_topology_${slug(part)}`,
+      label: part.slice(0, 60),
+      geometry: part,
+      reason: "Named in locked component topology",
+    });
+  }
+
+  return out;
+}
