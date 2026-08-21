@@ -3926,6 +3926,7 @@ export default function JewelrySwap() {
       pieces,
       knowledgeMap,
       masterProductLock,
+      workspaceMode,
       photographyRefs,
       campaignPhotographyProfile,
       canonicalMasters,
