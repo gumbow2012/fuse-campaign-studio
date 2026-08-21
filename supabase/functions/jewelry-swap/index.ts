@@ -178,8 +178,17 @@ function serialize(row: any) {
       ? payload.direction_summary as Record<string, string>
       : null,
     animationPrompt: typeof payload.animation_prompt === "string" ? payload.animation_prompt : null,
+    // §F3 — provider lookup temporarily unavailable; the job is still tracked.
+    providerTransient: payload.provider_transient === true,
+    providerTransientNote: typeof payload.provider_transient_note === "string"
+      ? payload.provider_transient_note
+      : null,
+    providerTransientAt: typeof payload.provider_transient_at === "string"
+      ? payload.provider_transient_at
+      : null,
     createdAt: row.created_at ?? null,
     completedAt: row.completed_at ?? null,
+
   };
 }
 
