@@ -920,11 +920,6 @@ export default function JewelrySwap() {
    */
   const activeProjectIdRef = useRef<string | null>(null);
   /**
-   * §E2 — the live canonical/component master state, readable from generation
-   * callbacks declared before it exists. Only D2-validated entries are used.
-   */
-  const canonicalMastersRef = useRef<Record<string, unknown> | null>(null);
-  /**
    * CONNECTED PRODUCT SYSTEMS (§30). Physical relationships between connected
    * parts of THIS product, derived from the lock's own component topology.
    * Data only in this commit — recomputed solely when the lock/topology changes.
