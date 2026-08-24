@@ -10,7 +10,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import DirectorChip from "./DirectorChip";
+import ConfigTile from "./ConfigTile";
+import CinemaStage from "./CinemaStage";
+import { buildActiveConfigTiles } from "@/lib/cinema/activeConfigTiles";
+
 import ChipModal from "./ChipModal";
 import CameraPanel from "./CameraPanel";
 import MovementPanel from "./MovementPanel";
@@ -33,7 +36,6 @@ import type {
 } from "@/lib/cinema/types";
 import PreviewManifestReadout from "./PreviewManifestReadout";
 import PromptPreview from "./PromptPreview";
-import CinemaResults from "./CinemaResults";
 import {
   CINEMA_MODEL_ADAPTERS,
   CINEMA_MODEL_CAPABILITIES,
@@ -97,34 +99,6 @@ function defaultDuration(model: CinemaVideoModelKey): string {
 }
 
 
-function summarize(key: ChipKey, config: DirectorConfig, referenceCount: number): string {
-  if (key === "references") {
-    return referenceCount ? `${referenceCount} attached` : "None";
-  }
-  if (key === "presets") return "Full setups";
-  const value = config[key]?.value as Record<string, unknown> | undefined;
-  if (!value) return "Auto";
-  switch (key) {
-    case "filmSetup":
-      return String(value.productionType ?? value.format ?? "Auto");
-    case "camera":
-      return String(value.body ?? "Auto");
-    case "movement":
-      return String(value.motionType ?? "Auto");
-    case "composition":
-      return String(value.framing ?? "Auto");
-    case "lighting":
-      return String(value.mood ?? "Auto");
-    case "color":
-      return String(value.skinToneTreatment ?? "Auto");
-    case "optics":
-      return String(value.flare ?? "Auto");
-    case "atmosphere":
-      return String(value.weather ?? "Auto");
-    default:
-      return "Auto";
-  }
-}
 
 export interface CinemaComposerProps {
   config: DirectorConfig;
@@ -170,6 +144,7 @@ export default function CinemaComposer({
   const [generating, setGenerating] = useState(false);
   const [generations, setGenerations] = useState<CinemaGeneration[]>([]);
   const [revisionIndex, setRevisionIndex] = useState(0);
+  const [focusKey, setFocusKey] = useState<ChipKey | null>(null);
 
   const activeChip = CHIPS.find((c) => c.key === openChip) ?? null;
 
@@ -292,6 +267,12 @@ export default function CinemaComposer({
     }
   };
 
+  const tiles = useMemo(() => buildActiveConfigTiles(config, references), [config, references]);
+  const focusTile =
+    tiles.find((tile) => tile.key === focusKey) ??
+    tiles.find((tile) => tile.key === "camera") ??
+    tiles[0];
+
   return (
     <div className="space-y-5">
       <div className="flex items-center justify-between gap-4">
@@ -308,24 +289,54 @@ export default function CinemaComposer({
         </div>
       </div>
 
-      <div className="flex flex-wrap gap-2">
-        {CHIPS.map((chip) => (
-          <DirectorChip
-            key={chip.key}
-            label={chip.label}
-            summary={summarize(chip.key, config, references.length)}
-            active={openChip === chip.key}
-            onClick={() => setOpenChip(chip.key)}
-          />
-        ))}
+      {/* 1 — VISUAL STAGE (hero) */}
+      <CinemaStage
+        generations={generations}
+        index={revisionIndex}
+        onIndexChange={setRevisionIndex}
+        references={references}
+        focusTile={focusTile}
+      />
+
+      {/* 2 — ACTIVE CONFIG STRIP (visual selections over the existing panels) */}
+      <div className="fuse-panel rounded-2xl p-3">
+        <div className="mb-2 flex items-center justify-between gap-3 px-1">
+          <span className="font-display text-[10px] uppercase tracking-[0.28em] text-muted-foreground">
+            Shot setup
+          </span>
+          <span className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
+            {MODEL_LABELS[model]}
+          </span>
+        </div>
+        <div className="flex gap-2 overflow-x-auto pb-1">
+          {tiles.map((tile) => (
+            <ConfigTile
+              key={tile.key}
+              tile={tile}
+              active={openChip === tile.opens || focusKey === tile.key}
+              onClick={() => {
+                setFocusKey(tile.key);
+                setOpenChip(tile.opens);
+              }}
+            />
+          ))}
+        </div>
       </div>
 
-      <div className="fuse-panel rounded-2xl p-4">
+      {/* 3 — secondary scene prompt */}
+      <div className="fuse-panel rounded-2xl p-3">
+        <Label
+          htmlFor="cinema-scene-prompt"
+          className="px-1 font-display text-[10px] uppercase tracking-[0.28em] text-muted-foreground"
+        >
+          Scene
+        </Label>
         <Textarea
+          id="cinema-scene-prompt"
           value={prompt}
           onChange={(e) => onPromptChange(e.target.value)}
           placeholder="Describe your scene…"
-          className="min-h-[220px] resize-none border-0 bg-transparent text-base focus-visible:ring-0"
+          className="min-h-[84px] resize-none border-0 bg-transparent text-sm focus-visible:ring-0"
         />
       </div>
 
@@ -335,6 +346,7 @@ export default function CinemaComposer({
         model={model}
         onApply={onApplyDirectorProposal}
       />
+
 
       <div className="fuse-panel flex flex-wrap items-end gap-3 rounded-2xl p-4">
         <ControlBlock label="Model">
@@ -440,11 +452,6 @@ export default function CinemaComposer({
         onOverrideChange={setPromptOverride}
       />
 
-      <CinemaResults
-        generations={generations}
-        index={revisionIndex}
-        onIndexChange={setRevisionIndex}
-      />
 
       <ChipModal
         open={openChip !== null}
