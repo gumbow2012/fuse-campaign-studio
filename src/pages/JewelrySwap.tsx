@@ -6345,6 +6345,9 @@ export default function JewelrySwap() {
                     <span className="text-[10px] font-semibold uppercase tracking-[0.18em] text-cyan-200/70">
                       Image quality
                     </span>
+                    <span className="text-[10px] text-foreground/45">
+                      Pro only · Nano Banana 2 has no quality setting
+                    </span>
                     <div className="inline-flex rounded-xl border border-white/12 bg-black/40 p-0.5">
                       {NANO_QUALITY_OPTIONS.map((option) => {
                         const active = nanoQuality === option.value;
