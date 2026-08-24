@@ -156,6 +156,7 @@ export default function CinemaStudio() {
           onReferencesChange={setReferences}
           updateField={updateField}
           onApplyDirectorProposal={onApplyDirectorProposal}
+          cinemaProjectId={activeProjectId}
           projectPicker={{
             projects,
             activeProjectId,

@@ -9,6 +9,12 @@
 
 import { GoogleGenAI, Type } from "https://esm.sh/@google/genai@1.29.0";
 import { corsHeaders, errorMessage, json, requireUser } from "../_shared/supabase-admin.ts";
+import {
+  handleGenerate,
+  handleGenerateCallback,
+  handleGenerationHistory,
+  handleGenerationStatus,
+} from "./generate.ts";
 
 const GEMINI_ANALYSIS_MODEL = Deno.env.get("GEMINI_ANALYSIS_MODEL")?.trim() || "gemini-3.6-flash";
 
@@ -802,8 +808,22 @@ async function handleDetectRoles(body: any, apiKey?: string) {
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
+  // fal webhook: unauthenticated provider callback, scoped to one cinema row.
+  const url = new URL(req.url);
+  if (url.searchParams.get("callback") === "1") {
+    const generationId = url.searchParams.get("generationId") ?? "";
+    if (!generationId) return json({ error: "generationId is required" }, 400);
+    try {
+      return await handleGenerateCallback(req, generationId);
+    } catch (error) {
+      console.error("[cinema-studio] callback failed", errorMessage(error).slice(0, 800));
+      return json({ error: errorMessage(error) }, 500);
+    }
+  }
+
+  let user: Awaited<ReturnType<typeof requireUser>>;
   try {
-    await requireUser(req);
+    user = await requireUser(req);
   } catch (error) {
     return json({ error: errorMessage(error) }, 401);
   }
@@ -826,6 +846,12 @@ Deno.serve(async (req) => {
         return await handleAutoDirector(body, apiKey);
       case "detect-roles":
         return await handleDetectRoles(body, apiKey);
+      case "generate":
+        return await handleGenerate(body, user.id);
+      case "generation-status":
+        return await handleGenerationStatus(body, user.id);
+      case "generation-history":
+        return await handleGenerationHistory(body, user.id);
       default:
         return json({ error: `Unknown action: ${action || "(none)"}` }, 400);
     }

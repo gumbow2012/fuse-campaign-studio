@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
@@ -31,7 +31,22 @@ import type {
   DirectorConfigField,
   PartialDirectorConfig,
 } from "@/lib/cinema/types";
-import { CINEMA_MODEL_ADAPTERS, type CinemaVideoModelKey } from "@/lib/cinema/modelAdapters";
+import PromptPreview from "./PromptPreview";
+import CinemaResults from "./CinemaResults";
+import {
+  CINEMA_MODEL_ADAPTERS,
+  CINEMA_MODEL_CAPABILITIES,
+  CINEMA_MODEL_KEYS,
+  type CinemaVideoModelKey,
+} from "@/lib/cinema/modelAdapters";
+import { cinemaPromptCompiler } from "@/lib/cinema/promptCompiler";
+import {
+  listCinemaGenerations,
+  startCinemaGeneration,
+  syncCinemaGeneration,
+  type CinemaGeneration,
+} from "@/services/cinemaStudio";
+import { toast } from "sonner";
 
 type ChipKey = "references" | "presets" | DirectorConfigField;
 
@@ -56,7 +71,8 @@ const MODEL_LABELS: Record<CinemaVideoModelKey, string> = {
   "seedance-2.0-fast": "Seedance 2.0 Fast",
 };
 
-const MODEL_KEYS = Object.keys(CINEMA_MODEL_ADAPTERS) as CinemaVideoModelKey[];
+const MODEL_KEYS = CINEMA_MODEL_KEYS;
+const POLL_INTERVAL_MS = 6000;
 
 function summarize(key: ChipKey, config: DirectorConfig, referenceCount: number): string {
   if (key === "references") {
@@ -104,6 +120,8 @@ export interface CinemaComposerProps {
   ) => void;
   /** Merges a Director Agent proposal (never overwrites USER fields). */
   onApplyDirectorProposal: (proposal: PartialDirectorConfig) => void;
+  /** Generations are tagged with the active project (null = unsaved workspace). */
+  cinemaProjectId?: string | null;
 }
 
 export default function CinemaComposer({
@@ -117,16 +135,131 @@ export default function CinemaComposer({
   projectPicker,
   updateField,
   onApplyDirectorProposal,
+  cinemaProjectId = null,
 }: CinemaComposerProps) {
   const [openChip, setOpenChip] = useState<ChipKey | null>(null);
   const [model, setModel] = useState<CinemaVideoModelKey>("kling-3.0-pro");
-  const [resolution, setResolution] = useState("720p");
-  const [aspectRatio, setAspectRatio] = useState("9:16");
+  const [resolution, setResolution] = useState<string>("");
+  const [aspectRatio, setAspectRatio] = useState<string>("9:16");
   const [duration, setDuration] = useState("5");
   const [audio, setAudio] = useState(false);
-  const [outputCount, setOutputCount] = useState("1");
+  const [promptOverride, setPromptOverride] = useState<string | null>(null);
+  const [generating, setGenerating] = useState(false);
+  const [generations, setGenerations] = useState<CinemaGeneration[]>([]);
+  const [revisionIndex, setRevisionIndex] = useState(0);
 
   const activeChip = CHIPS.find((c) => c.key === openChip) ?? null;
+
+  /* Bottom-bar options come from the SELECTED model's live schema:
+     an option a model cannot do is never offered, so requested === submitted. */
+  const capabilities = CINEMA_MODEL_CAPABILITIES[model];
+
+  useEffect(() => {
+    setResolution((prev) =>
+      capabilities.resolutions.length
+        ? (capabilities.resolutions.includes(prev) ? prev : capabilities.resolutions[0])
+        : "",
+    );
+    setAspectRatio((prev) => {
+      if (capabilities.fixedAspect) return capabilities.fixedAspect;
+      if (!capabilities.aspectRatios.length) return "";
+      return capabilities.aspectRatios.includes(prev) ? prev : capabilities.aspectRatios[0];
+    });
+    setDuration((prev) =>
+      capabilities.durations.includes(prev) ? prev : capabilities.durations[0],
+    );
+    if (!capabilities.supportsAudio) setAudio(false);
+  }, [capabilities]);
+
+  const compiled = useMemo(
+    () =>
+      cinemaPromptCompiler({
+        resolvedConfig: config,
+        prompt,
+        references,
+        model,
+        request: {
+          resolution: resolution || null,
+          aspectRatio: aspectRatio || null,
+          duration: duration || null,
+          generateAudio: capabilities.supportsAudio ? audio : null,
+        },
+      }),
+    [config, prompt, references, model, resolution, aspectRatio, duration, audio, capabilities],
+  );
+
+  /* Load the project's revision history (append-only, oldest first). */
+  useEffect(() => {
+    let cancelled = false;
+    listCinemaGenerations(cinemaProjectId)
+      .then((rows) => {
+        if (cancelled) return;
+        setGenerations(rows);
+        setRevisionIndex(Math.max(0, rows.length - 1));
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [cinemaProjectId]);
+
+  /* Poll any in-flight generation until it settles. */
+  const pendingIds = generations
+    .filter((g) => g.status === "queued" || g.status === "running")
+    .map((g) => g.id)
+    .join(",");
+  const pendingRef = useRef(pendingIds);
+  pendingRef.current = pendingIds;
+
+  useEffect(() => {
+    if (!pendingIds) return;
+    const timer = window.setInterval(async () => {
+      const ids = pendingRef.current.split(",").filter(Boolean);
+      for (const id of ids) {
+        try {
+          const next = await syncCinemaGeneration(id);
+          setGenerations((prev) => prev.map((g) => (g.id === next.id ? next : g)));
+        } catch {
+          /* transient — keep polling */
+        }
+      }
+    }, POLL_INTERVAL_MS);
+    return () => window.clearInterval(timer);
+  }, [pendingIds]);
+
+  const finalPrompt = promptOverride ?? compiled.finalPrompt;
+  const canGenerate = !generating && finalPrompt.trim().length > 0;
+
+  const onGenerate = async () => {
+    if (!canGenerate) return;
+    setGenerating(true);
+    try {
+      const created = await startCinemaGeneration({
+        model,
+        prompt: finalPrompt,
+        promptSource: promptOverride === null ? "COMPILED" : "USER_EDITED",
+        nativeParams: compiled.nativeParams,
+        resolvedConfig: config,
+        references: references.map((ref) => ({
+          url: ref.url,
+          name: ref.name ?? null,
+          roles: ref.roles,
+        })),
+        referenceUrls: references.map((ref) => ref.url).filter(Boolean),
+        presetIds: [],
+        cinemaProjectId,
+      });
+      setGenerations((prev) => {
+        const next = [...prev, created];
+        setRevisionIndex(next.length - 1);
+        return next;
+      });
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Generation could not be started");
+    } finally {
+      setGenerating(false);
+    }
+  };
 
   return (
     <div className="space-y-5">
@@ -188,35 +321,46 @@ export default function CinemaComposer({
           </Select>
         </ControlBlock>
 
-        <ControlBlock label="Resolution">
-          <Select value={resolution} onValueChange={setResolution}>
-            <SelectTrigger className="w-[110px]">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {["480p", "720p", "1080p"].map((r) => (
-                <SelectItem key={r} value={r}>
-                  {r}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </ControlBlock>
+        {capabilities.resolutions.length ? (
+          <ControlBlock label="Resolution">
+            <Select value={resolution} onValueChange={setResolution}>
+              <SelectTrigger className="w-[110px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {capabilities.resolutions.map((r) => (
+                  <SelectItem key={r} value={r}>
+                    {r.toUpperCase()}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </ControlBlock>
+        ) : null}
 
-        <ControlBlock label="Aspect">
-          <Select value={aspectRatio} onValueChange={setAspectRatio}>
-            <SelectTrigger className="w-[100px]">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {["9:16", "16:9", "1:1"].map((r) => (
-                <SelectItem key={r} value={r}>
-                  {r}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </ControlBlock>
+        {capabilities.aspectRatios.length || capabilities.fixedAspect ? (
+          <ControlBlock label="Aspect">
+            <Select
+              value={aspectRatio}
+              onValueChange={setAspectRatio}
+              disabled={Boolean(capabilities.fixedAspect)}
+            >
+              <SelectTrigger className="w-[100px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {(capabilities.fixedAspect
+                  ? [capabilities.fixedAspect]
+                  : capabilities.aspectRatios
+                ).map((r) => (
+                  <SelectItem key={r} value={r}>
+                    {r}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </ControlBlock>
+        ) : null}
 
         <ControlBlock label="Duration">
           <Select value={duration} onValueChange={setDuration}>
@@ -224,45 +368,49 @@ export default function CinemaComposer({
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              {["5", "10"].map((d) => (
+              {capabilities.durations.map((d) => (
                 <SelectItem key={d} value={d}>
-                  {d}s
+                  {d === "auto" ? "Auto" : `${d}s`}
                 </SelectItem>
               ))}
             </SelectContent>
           </Select>
         </ControlBlock>
 
-        <ControlBlock label="Audio">
-          <div className="flex h-10 items-center">
-            <Switch checked={audio} onCheckedChange={setAudio} />
-          </div>
-        </ControlBlock>
-
-        <ControlBlock label="Outputs">
-          <Select value={outputCount} onValueChange={setOutputCount}>
-            <SelectTrigger className="w-[80px]">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {["1", "2", "4"].map((n) => (
-                <SelectItem key={n} value={n}>
-                  {n}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </ControlBlock>
+        {capabilities.supportsAudio ? (
+          <ControlBlock label="Audio">
+            <div className="flex h-10 items-center">
+              <Switch checked={audio} onCheckedChange={setAudio} />
+            </div>
+          </ControlBlock>
+        ) : null}
 
         <div className="ml-auto flex flex-col items-end gap-1">
-          <Button disabled className="font-display tracking-[0.16em]">
-            GENERATE
+          <Button
+            className="font-display tracking-[0.16em]"
+            disabled={!canGenerate}
+            onClick={onGenerate}
+          >
+            {generating ? "STARTING…" : "GENERATE"}
           </Button>
           <span className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
-            Coming soon
+            {MODEL_LABELS[model]}
           </span>
         </div>
       </div>
+
+      <PromptPreview
+        compiled={compiled}
+        resolvedConfig={config}
+        override={promptOverride}
+        onOverrideChange={setPromptOverride}
+      />
+
+      <CinemaResults
+        generations={generations}
+        index={revisionIndex}
+        onIndexChange={setRevisionIndex}
+      />
 
       <ChipModal
         open={openChip !== null}

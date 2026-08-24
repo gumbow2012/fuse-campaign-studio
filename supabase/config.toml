@@ -150,4 +150,4 @@ verify_jwt = false
 verify_jwt = false
 
 [functions.cinema-studio]
-verify_jwt = true
+verify_jwt = false
