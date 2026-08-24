@@ -8,6 +8,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { OPTICS_FLARE_OPTIONS } from "@/lib/cinema/presets/opticsPresets";
 import type {
   CinemaJewelryOptics,
   ConfigSource,
@@ -26,15 +27,7 @@ export interface OpticsPanelProps {
   advanced: boolean;
 }
 
-const FLARE_OPTIONS = [
-  "none",
-  "subtle",
-  "anamorphic streak",
-  "warm veiling",
-  "blue streak",
-  "spherical starburst",
-  "heavy vintage",
-];
+const FLARE_OPTIONS = OPTICS_FLARE_OPTIONS;
 
 const BOKEH_OPTIONS = [
   "neutral round",

@@ -7,6 +7,7 @@
 
 import type { ApertureSetup, LensSetup, PartialDirectorConfig } from "../types";
 
+import type { CinemaControlValidation, PreviewMedia } from "@/lib/cinema/previewTypes";
 export type LensPresetCategory =
   | "Auto"
   | "Spherical"
@@ -22,7 +23,10 @@ export type CinemaLensPreset = {
   tags: string[];
   /** Simple representative gradient (no generated imagery, no credits spent). */
   thumbnail: string;
-  config: PartialDirectorConfig;
+  config: PartialDirectorConfig;  /** CV1: optional standardized visual preview (gradients are fallback-only). */
+  preview?: PreviewMedia;
+  /** CV1: optional cross-model validation record. */
+  validation?: CinemaControlValidation;
 };
 
 const lens = (
@@ -227,7 +231,10 @@ export const FOCAL_LENGTH_MAX = 200;
 export type ApertureOption = {
   id: string;
   label: string;
-  value: ApertureSetup;
+  value: ApertureSetup;  /** CV1: optional standardized visual preview (gradients are fallback-only). */
+  preview?: PreviewMedia;
+  /** CV1: optional cross-model validation record. */
+  validation?: CinemaControlValidation;
 };
 
 export const APERTURE_OPTIONS: ApertureOption[] = [

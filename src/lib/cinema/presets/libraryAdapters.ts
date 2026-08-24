@@ -23,6 +23,8 @@ export const CAMERA_LIBRARY: LibraryPreset[] = CAMERA_PRESETS.map((p) => ({
   category: p.category,
   tags: p.tags,
   thumbnail: p.thumbnail,
+  preview: p.preview,
+  validation: p.validation,
   config: p.config,
   builtin: true,
 }));
@@ -34,6 +36,8 @@ export const LIGHTING_LIBRARY: LibraryPreset[] = LIGHTING_PRESETS.map((p) => ({
   category: p.category,
   tags: p.tags,
   thumbnail: p.thumbnail,
+  preview: p.preview,
+  validation: p.validation,
   subtitle: p.illuminationStyle,
   config: p.config,
   builtin: true,
@@ -48,6 +52,8 @@ export const COLOR_LIBRARY: LibraryPreset[] = COLOR_PRESETS.map((p) => ({
   thumbnail: swatchGradient(
     (p.config.color?.value.swatches ?? []).slice(0, 4).map((s) => s.hex),
   ),
+  preview: p.preview,
+  validation: p.validation,
   config: p.config,
   builtin: true,
 }));
@@ -59,6 +65,8 @@ export const MOVEMENT_LIBRARY: LibraryPreset[] = MOVEMENT_PRESETS.map((p) => ({
   category: p.category,
   tags: p.tags,
   thumbnail: p.thumbnail,
+  preview: p.preview,
+  validation: p.validation,
   config: p.config,
   builtin: true,
 }));
@@ -70,6 +78,8 @@ export const FULL_LIBRARY: LibraryPreset[] = FULL_PRESETS.map((p) => ({
   category: p.category,
   tags: p.tags,
   thumbnail: p.thumbnail,
+  preview: p.preview,
+  validation: p.validation,
   subtitle: p.summary,
   config: p.config,
   builtin: true,

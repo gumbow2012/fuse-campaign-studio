@@ -7,6 +7,7 @@
  * `src/lib/cinema` / `src/components/cinema`.
  */
 
+import type { CinemaControlValidation, PreviewMedia } from "./previewTypes";
 import type {
   CinemaPresetType,
   ConfigSource,
@@ -22,8 +23,12 @@ export type LibraryPreset = {
   name: string;
   category: string;
   tags: string[];
-  /** CSS gradient string (no generated imagery, no credits spent). */
+  /** CSS gradient string — FALLBACK ONLY when no preview media exists. */
   thumbnail?: string;
+  /** CV1: standardized visual preview media. */
+  preview?: PreviewMedia;
+  /** CV1: cross-model validation record. */
+  validation?: CinemaControlValidation;
   /** Short card line. */
   subtitle?: string;
   config: PartialDirectorConfig;

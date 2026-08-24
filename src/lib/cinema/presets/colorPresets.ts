@@ -8,6 +8,7 @@
 
 import type { ColorPalette, PartialDirectorConfig } from "../types";
 
+import type { CinemaControlValidation, PreviewMedia } from "@/lib/cinema/previewTypes";
 export type ColorPresetCategory =
   | "Natural"
   | "Film"
@@ -27,7 +28,10 @@ export type CinemaColorPreset = {
   name: string;
   category: ColorPresetCategory;
   tags: string[];
-  config: PartialDirectorConfig;
+  config: PartialDirectorConfig;  /** CV1: optional standardized visual preview (gradients are fallback-only). */
+  preview?: PreviewMedia;
+  /** CV1: optional cross-model validation record. */
+  validation?: CinemaControlValidation;
 };
 
 export const COLOR_PRESET_CATEGORIES: ColorPresetCategory[] = ["Natural", "Film", "Blockbuster", "Fashion", "Streetwear", "Music Video", "Luxury", "Jewelry", "Horror", "Sci-Fi", "Vintage", "Experimental"];
