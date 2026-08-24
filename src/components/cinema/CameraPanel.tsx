@@ -113,6 +113,12 @@ export default function CameraPanel({ config, updateField, advanced }: CameraPan
     [],
   );
 
+  // CV4: optional compare selections (camera bodies and lens looks).
+  const cameraCompare = useCompareSelection<CinemaCameraPreset>();
+  const lensCompare = useCompareSelection<CinemaLensPreset>();
+
+
+
   return (
     <ScrollArea className="max-h-[65vh] pr-3">
       <div className="space-y-7">
