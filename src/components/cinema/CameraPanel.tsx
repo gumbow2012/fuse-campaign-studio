@@ -507,6 +507,48 @@ export default function CameraPanel({ config, updateField, advanced }: CameraPan
   );
 }
 
+/** CV4: non-intrusive "mark A / compare with…" hint bar. */
+function CompareHint({
+  label,
+  noun,
+  onClear,
+}: {
+  label?: string;
+  noun: string;
+  onClear: () => void;
+}) {
+  return (
+    <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border/60 bg-card/40 px-2.5 py-1.5">
+      <ArrowLeftRight className="h-3 w-3 text-primary" />
+      <span className="text-[11px] text-muted-foreground">
+        {label
+          ? `A: ${label} — tap ⇄ on another ${noun} to compare`
+          : `Tap ⇄ on a ${noun} to mark it A, then compare with another.`}
+      </span>
+      {label ? (
+        <Button type="button" size="sm" variant="ghost" className="h-6 text-[11px]" onClick={onClear}>
+          Clear
+        </Button>
+      ) : null}
+    </div>
+  );
+}
+
+function CompareTileButton({ marked, onClick }: { marked: boolean; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      aria-label={marked ? "Marked as A" : "Compare with…"}
+      onClick={onClick}
+      className="absolute right-1.5 top-1.5 rounded-md bg-background/70 p-1 backdrop-blur"
+    >
+      <ArrowLeftRight
+        className={cn("h-3 w-3", marked ? "text-primary" : "text-muted-foreground")}
+      />
+    </button>
+  );
+}
+
 function SectionTitle({ title, hint }: { title: string; hint?: string }) {
   return (
     <div>
