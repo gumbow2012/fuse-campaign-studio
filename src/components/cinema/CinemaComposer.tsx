@@ -36,7 +36,6 @@ import type {
 } from "@/lib/cinema/types";
 import PreviewManifestReadout from "./PreviewManifestReadout";
 import PromptPreview from "./PromptPreview";
-import CinemaResults from "./CinemaResults";
 import {
   CINEMA_MODEL_ADAPTERS,
   CINEMA_MODEL_CAPABILITIES,
@@ -100,34 +99,6 @@ function defaultDuration(model: CinemaVideoModelKey): string {
 }
 
 
-function summarize(key: ChipKey, config: DirectorConfig, referenceCount: number): string {
-  if (key === "references") {
-    return referenceCount ? `${referenceCount} attached` : "None";
-  }
-  if (key === "presets") return "Full setups";
-  const value = config[key]?.value as Record<string, unknown> | undefined;
-  if (!value) return "Auto";
-  switch (key) {
-    case "filmSetup":
-      return String(value.productionType ?? value.format ?? "Auto");
-    case "camera":
-      return String(value.body ?? "Auto");
-    case "movement":
-      return String(value.motionType ?? "Auto");
-    case "composition":
-      return String(value.framing ?? "Auto");
-    case "lighting":
-      return String(value.mood ?? "Auto");
-    case "color":
-      return String(value.skinToneTreatment ?? "Auto");
-    case "optics":
-      return String(value.flare ?? "Auto");
-    case "atmosphere":
-      return String(value.weather ?? "Auto");
-    default:
-      return "Auto";
-  }
-}
 
 export interface CinemaComposerProps {
   config: DirectorConfig;
@@ -173,6 +144,7 @@ export default function CinemaComposer({
   const [generating, setGenerating] = useState(false);
   const [generations, setGenerations] = useState<CinemaGeneration[]>([]);
   const [revisionIndex, setRevisionIndex] = useState(0);
+  const [focusKey, setFocusKey] = useState<ChipKey | null>(null);
 
   const activeChip = CHIPS.find((c) => c.key === openChip) ?? null;
 
