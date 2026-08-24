@@ -88,6 +88,8 @@ const REFERENCE_STORE_KEY = "fuse-studio-reference-library";
 
 type StudioModelKey =
   | "nano-banana-pro"
+  | "gpt-image-2"
+  | "seedream-v4"
   | "kling-3.0-pro"
   | "kling-3.0-standard"
   | "seedance-2.0"
@@ -103,6 +105,12 @@ type StudioModel = {
   usdPerSecondAudio?: number;
   durationRange?: { min: number; max: number };
   resolutions: string[];
+  /** Label of the model's single secondary control (image models). */
+  paramLabel?: string;
+  /** Payload field the secondary control maps to (image models). */
+  paramField?: "resolution" | "quality" | "imageSize";
+  /** Image models only: whether the provider accepts aspect_ratio. */
+  supportsAspectRatio?: boolean;
   supportsAudio?: boolean;
   supportsEndFrame?: boolean;
 };
@@ -115,6 +123,10 @@ type StudioModel = {
  *   seedance 2.0 FAST image-to-video     → 480p, 720p ONLY
  */
 const IMAGE_RESOLUTIONS = ["1K", "2K", "4K"];
+/** LIVE fal schema: fal-ai/gpt-image-2(/edit) quality enum. No resolution, no aspect_ratio. */
+const GPT_IMAGE_2_QUALITIES = ["auto", "low", "medium", "high"];
+/** LIVE fal schema: seedream v4 takes image_size {width,height} — these tiers map to real dims. */
+const SEEDREAM_SIZES = ["1K", "2K", "4K", "2K VERTICAL"];
 const KLING_RESOLUTIONS: string[] = [];
 const SEEDANCE_RESOLUTIONS = ["480p", "720p", "1080p", "4k"];
 const SEEDANCE_FAST_RESOLUTIONS = ["480p", "720p"];
@@ -150,6 +162,27 @@ const STUDIO_MODELS: StudioModel[] = [
     blurb: "Google's flagship image model — reference-driven edits",
     recommended: true,
     resolutions: IMAGE_RESOLUTIONS,
+    paramLabel: "RESOLUTION",
+    paramField: "resolution",
+    supportsAspectRatio: true,
+  },
+  {
+    key: "gpt-image-2",
+    label: "GPT Image 2",
+    kind: "image",
+    blurb: "OpenAI image model — prompt-faithful edits and text",
+    resolutions: GPT_IMAGE_2_QUALITIES,
+    paramLabel: "QUALITY",
+    paramField: "quality",
+  },
+  {
+    key: "seedream-v4",
+    label: "Seedream v4",
+    kind: "image",
+    blurb: "ByteDance Seedream — up to 4K sizes",
+    resolutions: SEEDREAM_SIZES,
+    paramLabel: "SIZE",
+    paramField: "imageSize",
   },
   {
     key: "kling-3.0-pro",
@@ -1070,9 +1103,11 @@ export default function GenerationStudio() {
       kind: model.kind,
       model: model.key,
       prompt: text,
-      // Only send a resolution when the selected model truly accepts one.
-      ...(model.resolutions.length && quality ? { resolution: quality } : {}),
-      aspectRatio,
+      // Only send the secondary param the selected model truly accepts.
+      ...(model.resolutions.length && quality
+        ? { [model.paramField ?? "resolution"]: quality }
+        : {}),
+      ...(isVideo || model.supportsAspectRatio ? { aspectRatio } : {}),
       ...(urls.length ? { imageUrls: urls, startImageUrl: urls[0] } : {}),
       ...(isVideo
         ? {
@@ -1562,6 +1597,7 @@ export default function GenerationStudio() {
 
             {/* Format + quality */}
             <FusePanel className="space-y-6">
+              {isVideo || model.supportsAspectRatio ? (
               <div>
                 <SectionTitle>FORMAT</SectionTitle>
                 <SegmentedControl
@@ -1623,15 +1659,19 @@ export default function GenerationStudio() {
                   {formatDescriptor(aspectRatio)}
                 </p>
               </div>
+              ) : null}
 
               <div>
-                <SectionTitle>QUALITY</SectionTitle>
+                <SectionTitle>{model.paramLabel ?? "QUALITY"}</SectionTitle>
                 {model.resolutions.length ? (
                   <SegmentedControl
-                    ariaLabel="Quality"
+                    ariaLabel={model.paramLabel ?? "Quality"}
                     value={quality}
                     onChange={setQuality}
-                    options={model.resolutions.map((option) => ({ value: option, label: option }))}
+                    options={model.resolutions.map((option) => ({
+                      value: option,
+                      label: option.toUpperCase(),
+                    }))}
                   />
                 ) : (
                   <p className="text-[12px] leading-relaxed text-muted-foreground">
@@ -1697,8 +1737,11 @@ export default function GenerationStudio() {
                   <p>Direction is sent verbatim to the provider.</p>
                   <p>provider model: {model.key}</p>
                   <p>kind: {model.kind}</p>
-                  <p>resolution: {model.resolutions.length ? quality : "provider-fixed"}</p>
-                  <p>aspect_ratio: {aspectRatio}</p>
+                  <p>
+                    {(model.paramField ?? "resolution")}:{" "}
+                    {model.resolutions.length ? quality : "provider-fixed"}
+                  </p>
+                  {isVideo || model.supportsAspectRatio ? <p>aspect_ratio: {aspectRatio}</p> : null}
                   {isVideo ? <p>duration: {duration}s · audio: {String(generateAudio)}</p> : null}
                   <p>reference order: {references.map((_, index) => index + 1).join(" → ") || "—"}</p>
                 </div>
