@@ -146,7 +146,10 @@ export default function CameraPanel({ config, updateField, advanced }: CameraPan
                         "border-primary/80 ring-1 ring-primary/50",
                     )}
                   >
-                    <div className="h-12 w-full" style={{ background: preset.thumbnail }} />
+                    <PresetPreview
+                      media={resolvePreviewMedia({ category: "CAMERA", preset })}
+                      alt={preset.name}
+                    />
                     <div className="px-2.5 py-2">
                       <p className="font-display text-[11px] leading-tight text-foreground/90">
                         {preset.name}
@@ -185,7 +188,10 @@ export default function CameraPanel({ config, updateField, advanced }: CameraPan
                         "border-primary/80 ring-1 ring-primary/50",
                     )}
                   >
-                    <div className="h-12 w-full" style={{ background: preset.thumbnail }} />
+                    <PresetPreview
+                      media={resolvePreviewMedia({ category: "LENS", preset })}
+                      alt={preset.name}
+                    />
                     <div className="px-2.5 py-2">
                       <p className="font-display text-[11px] leading-tight text-foreground/90">
                         {preset.name}

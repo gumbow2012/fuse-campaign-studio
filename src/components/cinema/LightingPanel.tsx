@@ -187,7 +187,10 @@ export default function LightingPanel({ config, updateField }: LightingPanelProp
                     onClick={() => applyPreset(preset)}
                     className="block w-full text-left"
                   >
-                    <div className="h-12 w-full" style={{ background: preset.thumbnail }} />
+                    <PresetPreview
+                      media={resolvePreviewMedia({ category: "LIGHTING", preset })}
+                      alt={preset.name}
+                    />
                     <div className="space-y-1 px-2.5 py-2">
                       <p className="font-display text-[11px] leading-tight text-foreground/90">
                         {preset.name}
