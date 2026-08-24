@@ -31,6 +31,7 @@ import type {
   DirectorConfigField,
   PartialDirectorConfig,
 } from "@/lib/cinema/types";
+import PreviewManifestReadout from "./PreviewManifestReadout";
 import PromptPreview from "./PromptPreview";
 import CinemaResults from "./CinemaResults";
 import {
@@ -429,6 +430,8 @@ export default function CinemaComposer({
 
         </div>
       </div>
+
+      <PreviewManifestReadout />
 
       <PromptPreview
         compiled={compiled}
