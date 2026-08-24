@@ -35,11 +35,13 @@ import ShotBoard, { type ShotThumb } from "./ShotBoard";
 import CinemaProjectPicker, { type CinemaProjectPickerProps } from "./CinemaProjectPicker";
 import type {
   CinemaReference,
+  CinemaShot,
   ConfigSource,
   DirectorConfig,
   DirectorConfigField,
   PartialDirectorConfig,
 } from "@/lib/cinema/types";
+
 import PreviewManifestReadout from "./PreviewManifestReadout";
 import PromptPreview from "./PromptPreview";
 import {
