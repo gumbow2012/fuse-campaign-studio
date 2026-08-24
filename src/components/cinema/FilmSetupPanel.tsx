@@ -64,17 +64,6 @@ const ERAS = [
   "Timeless",
 ];
 
-const TEMPOS = [
-  "Still",
-  "Very Slow",
-  "Slow Burn",
-  "Steady",
-  "Rhythmic",
-  "Energetic",
-  "Frantic",
-  "Staccato Cuts",
-];
-
 const PRODUCTION_VALUES = [
   "Guerrilla",
   "Indie",

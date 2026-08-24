@@ -21,6 +21,7 @@
  * model — none of these endpoints expose cinematography parameters.
  */
 
+import { tempoPromptText } from "./tempoProfiles";
 import type {
   ApertureSetup,
   AtmosphereSetup,
