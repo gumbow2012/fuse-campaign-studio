@@ -1,6 +1,6 @@
 import PresetPreview from "./PresetPreview";
 import { resolvePreviewMedia } from "@/lib/cinema/previewTypes";
-import CompareView, { CompareDialog, useCompareSelection } from "./CompareView";
+import { CompareDialog, useCompareSelection } from "./CompareView";
 import { useMemo, useState } from "react";
 import { ArrowLeftRight, Plus, Star, Trash2 } from "lucide-react";
 
@@ -70,6 +70,8 @@ export default function LightingPanel({ config, updateField }: LightingPanelProp
   const [category, setCategory] = useState<LightingPresetCategory | "All">("All");
   const [favoritesOnly, setFavoritesOnly] = useState(false);
   const [favorites, setFavorites] = useState<string[]>([]);
+  const compare = useCompareSelection<CinemaLightingPreset>();
+
 
   const setLighting = (patch: Partial<LightingSetup>) =>
     updateField("lighting", { ...lighting, ...patch });
