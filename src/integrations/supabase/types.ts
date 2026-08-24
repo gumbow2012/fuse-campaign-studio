@@ -152,6 +152,51 @@ export type Database = {
         }
         Relationships: []
       }
+      cinema_preview_assets: {
+        Row: {
+          category: string
+          created_at: string
+          id: string
+          kind: string
+          poster: string | null
+          preset_id: string
+          sources: Json
+          src: string | null
+          swatches: string[]
+          thumb_src: string | null
+          updated_at: string
+          user_id: string | null
+        }
+        Insert: {
+          category: string
+          created_at?: string
+          id?: string
+          kind?: string
+          poster?: string | null
+          preset_id: string
+          sources?: Json
+          src?: string | null
+          swatches?: string[]
+          thumb_src?: string | null
+          updated_at?: string
+          user_id?: string | null
+        }
+        Update: {
+          category?: string
+          created_at?: string
+          id?: string
+          kind?: string
+          poster?: string | null
+          preset_id?: string
+          sources?: Json
+          src?: string | null
+          swatches?: string[]
+          thumb_src?: string | null
+          updated_at?: string
+          user_id?: string | null
+        }
+        Relationships: []
+      }
       cinema_projects: {
         Row: {
           created_at: string
