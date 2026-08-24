@@ -5,7 +5,7 @@
 // PATTERN (@google/genai + GEMINI_ANALYSIS_MODEL). ANALYSIS ONLY — it never
 // generates imagery and never spends generation credits.
 //
-// Actions implemented: "extract-palette".
+// Actions implemented: "extract-palette", "auto-director".
 
 import { GoogleGenAI, Type } from "https://esm.sh/@google/genai@1.29.0";
 import { corsHeaders, errorMessage, json, requireUser } from "../_shared/supabase-admin.ts";
@@ -212,6 +212,478 @@ async function handleExtractPalette(body: any, apiKey?: string) {
   return json({ palette, paletteName, model: GEMINI_ANALYSIS_MODEL });
 }
 
+/* ------------------------------------------------------------------ */
+/* Action: auto-director (Gemini proposes a DirectorConfig)             */
+/* ------------------------------------------------------------------ */
+
+const DIRECTOR_SCHEMA = {
+  type: Type.OBJECT,
+  properties: {
+    camera: {
+      type: Type.OBJECT,
+      properties: {
+        body: { type: Type.STRING },
+        sensor: { type: Type.STRING },
+        aspectRatio: { type: Type.STRING },
+        height: { type: Type.STRING },
+        angle: { type: Type.STRING },
+        distance: { type: Type.STRING },
+      },
+    },
+    lens: {
+      type: Type.OBJECT,
+      properties: {
+        focalLengthMm: { type: Type.NUMBER },
+        type: { type: Type.STRING, enum: ["spherical", "anamorphic", "macro", "tilt-shift"] },
+        character: { type: Type.STRING },
+      },
+    },
+    aperture: {
+      type: Type.OBJECT,
+      properties: {
+        fStop: { type: Type.NUMBER },
+        depthOfField: { type: Type.STRING, enum: ["deep", "medium", "shallow", "razor"] },
+        bokeh: { type: Type.STRING },
+      },
+    },
+    movement: {
+      type: Type.OBJECT,
+      properties: {
+        motionType: { type: Type.STRING },
+        direction: { type: Type.STRING },
+        speed: { type: Type.STRING, enum: ["very-slow", "slow", "medium", "fast"] },
+        range: { type: Type.NUMBER },
+        maxDegrees: { type: Type.NUMBER },
+        easing: { type: Type.STRING, enum: ["linear", "ease-in", "ease-out", "ease-in-out"] },
+        tracking: { type: Type.STRING, enum: ["none", "subject", "point-of-interest"] },
+        parallax: { type: Type.NUMBER },
+        roll: { type: Type.NUMBER },
+        heightChange: { type: Type.NUMBER },
+        focusBehavior: {
+          type: Type.STRING,
+          enum: ["locked", "follow-focus", "rack", "breathing"],
+        },
+        endBehavior: { type: Type.STRING, enum: ["settle", "continue", "hard-cut"] },
+      },
+    },
+    lighting: {
+      type: Type.OBJECT,
+      properties: {
+        mood: { type: Type.STRING },
+        ratio: { type: Type.STRING },
+        lights: {
+          type: Type.ARRAY,
+          items: {
+            type: Type.OBJECT,
+            properties: {
+              type: { type: Type.STRING },
+              position: { type: Type.STRING },
+              direction: { type: Type.STRING },
+              height: { type: Type.STRING },
+              size: { type: Type.NUMBER },
+              intensity: { type: Type.NUMBER },
+              temperature: { type: Type.NUMBER },
+              tint: { type: Type.NUMBER },
+              hardness: { type: Type.NUMBER },
+              falloff: { type: Type.STRING, enum: ["fast", "medium", "slow"] },
+            },
+          },
+        },
+      },
+    },
+    color: {
+      type: Type.OBJECT,
+      properties: {
+        paletteName: { type: Type.STRING },
+        swatches: {
+          type: Type.ARRAY,
+          items: {
+            type: Type.OBJECT,
+            properties: { hex: { type: Type.STRING }, name: { type: Type.STRING } },
+          },
+        },
+        shadowHue: { type: Type.STRING },
+        midtoneHue: { type: Type.STRING },
+        highlightHue: { type: Type.STRING },
+        temperature: { type: Type.NUMBER },
+        tint: { type: Type.NUMBER },
+        contrast: { type: Type.NUMBER },
+        saturation: { type: Type.NUMBER },
+        blackBehavior: { type: Type.STRING, enum: ["crushed", "lifted", "neutral", "filmic"] },
+        highlightBehavior: {
+          type: Type.STRING,
+          enum: ["clipped", "rolled-off", "bloomed", "neutral"],
+        },
+        skinToneTreatment: {
+          type: Type.STRING,
+          enum: ["natural", "warm", "cool", "desaturated", "golden", "porcelain"],
+        },
+      },
+    },
+    optics: {
+      type: Type.OBJECT,
+      properties: {
+        flare: { type: Type.STRING },
+        diffusion: { type: Type.NUMBER },
+        halation: { type: Type.NUMBER },
+        chromaticAberration: { type: Type.NUMBER },
+        vignette: { type: Type.NUMBER },
+        distortion: { type: Type.NUMBER },
+        bloom: { type: Type.NUMBER },
+        bokeh: { type: Type.STRING },
+        highlightBehavior: {
+          type: Type.STRING,
+          enum: ["clipped", "rolled-off", "bloomed", "neutral"],
+        },
+      },
+    },
+    composition: {
+      type: Type.OBJECT,
+      properties: {
+        framing: { type: Type.STRING },
+        rule: { type: Type.STRING },
+        subjectPlacement: { type: Type.STRING },
+        headroom: { type: Type.STRING },
+        leadRoom: { type: Type.STRING },
+        horizon: { type: Type.STRING },
+      },
+    },
+    focus: {
+      type: Type.OBJECT,
+      properties: {
+        focusTarget: { type: Type.STRING },
+        focusMode: { type: Type.STRING, enum: ["locked", "rack", "follow"] },
+        focusPlaneDepth: { type: Type.STRING },
+        rackDirection: {
+          type: Type.STRING,
+          enum: ["near-to-far", "far-to-near", "none"],
+        },
+      },
+    },
+    atmosphere: {
+      type: Type.OBJECT,
+      properties: {
+        haze: { type: Type.NUMBER },
+        smoke: { type: Type.NUMBER },
+        particles: { type: Type.STRING },
+        weather: { type: Type.STRING },
+        timeOfDay: { type: Type.STRING },
+        intensity: { type: Type.NUMBER },
+      },
+    },
+    rationale: {
+      type: Type.OBJECT,
+      properties: {
+        camera: { type: Type.STRING },
+        lens: { type: Type.STRING },
+        aperture: { type: Type.STRING },
+        movement: { type: Type.STRING },
+        lighting: { type: Type.STRING },
+        color: { type: Type.STRING },
+        optics: { type: Type.STRING },
+        composition: { type: Type.STRING },
+        focus: { type: Type.STRING },
+        atmosphere: { type: Type.STRING },
+      },
+    },
+    summary: { type: Type.STRING },
+  },
+  required: ["camera", "lens", "aperture", "movement", "lighting", "color", "composition", "focus"],
+} as const;
+
+const DIRECTOR_INSTRUCTIONS = `You are a senior film director + DP proposing a shot package.
+You ANALYSE ONLY: you never generate imagery and you never invent product facts.
+Given the scene prompt, any reference roles, the production type and the target video model,
+propose one coherent cinematography package.
+Rules:
+* Choose real camera bodies, real focal lengths and plausible f-stops.
+* movement.motionType must be one of: static, pan, tilt, dolly, truck, pedestal, orbit, crane, handheld, zoom, push-in, pull-out.
+* Numeric fields: range 0-1; parallax/roll/heightChange/haze/smoke/intensity/diffusion/halation/chromaticAberration/vignette/distortion/bloom 0-100; maxDegrees 0-360.
+* lighting.lights: 2-4 fixtures with position, direction, height, size, intensity, temperature (Kelvin-ish -100..100 creative), hardness 0-100.
+* color: a real grade — hex swatches "#RRGGBB", temperature/tint -100..100, contrast/saturation 0-100.
+* rationale.<field>: ONE short sentence (max 140 chars) explaining WHY that choice fits the prompt.
+* Respect the selected model's strengths but never mention the model name in rationales.
+Output strict JSON matching the schema.`;
+
+const MOTION_TYPES = [
+  "static",
+  "pan",
+  "tilt",
+  "dolly",
+  "truck",
+  "pedestal",
+  "orbit",
+  "crane",
+  "handheld",
+  "zoom",
+  "push-in",
+  "pull-out",
+];
+
+const LIGHT_TYPES = [
+  "key",
+  "fill",
+  "rim",
+  "practical",
+  "bounce",
+  "ambient",
+  "background",
+  "kicker",
+  "softbox",
+  "strip",
+  "point",
+  "fresnel",
+  "spotlight",
+  "window",
+  "negative-fill",
+  "led-panel",
+  "tube",
+  "neon",
+];
+
+function text(value: unknown, fallback: string, max = 80) {
+  const s = String(value ?? "").trim();
+  return s ? s.slice(0, max) : fallback;
+}
+
+function pickEnum<T extends string>(value: unknown, allowed: readonly T[], fallback: T): T {
+  const s = String(value ?? "").trim().toLowerCase();
+  return (allowed as readonly string[]).includes(s) ? (s as T) : fallback;
+}
+
+function num(value: unknown, min: number, max: number, fallback: number) {
+  const n = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(n)) return fallback;
+  return Math.max(min, Math.min(max, n));
+}
+
+async function handleAutoDirector(body: any, apiKey?: string) {
+  if (!apiKey) {
+    return json({ error: "Auto Director is unavailable (analysis key not configured)" }, 503);
+  }
+
+  const scenePrompt = String(body?.prompt ?? "").trim().slice(0, 4000);
+  if (!scenePrompt) return json({ error: "Describe the scene before running Auto Director" }, 400);
+
+  const productionType = text(body?.productionType, "commercial", 60);
+  const model = text(body?.model, "unspecified", 60);
+  const references = Array.isArray(body?.references) ? body.references.slice(0, 8) : [];
+  const referenceText = references.length
+    ? references
+        .map((r: any, i: number) => {
+          const roles = Array.isArray(r?.roles) ? r.roles.map((x: any) => String(x)).join(", ") : "";
+          return `Reference ${i + 1}: roles = ${roles || "unspecified"}`;
+        })
+        .join("\n")
+    : "No references attached.";
+
+  const filmSetup = body?.filmSetup && typeof body.filmSetup === "object" ? body.filmSetup : null;
+
+  const brief = `SCENE PROMPT:\n${scenePrompt}\n\nPRODUCTION TYPE: ${productionType}\nTARGET VIDEO MODEL: ${model}\nFILM SETUP: ${
+    filmSetup ? JSON.stringify(filmSetup).slice(0, 600) : "auto"
+  }\n\nREFERENCES:\n${referenceText}`;
+
+  const ai = new GoogleGenAI({ apiKey });
+  const response = await ai.models.generateContent({
+    model: GEMINI_ANALYSIS_MODEL,
+    contents: [{ role: "user", parts: [{ text: DIRECTOR_INSTRUCTIONS }, { text: brief }] }],
+    config: {
+      responseMimeType: "application/json",
+      responseSchema: DIRECTOR_SCHEMA as unknown as Record<string, unknown>,
+      temperature: 0.6,
+    },
+  });
+
+  let raw: any;
+  try {
+    raw = JSON.parse(response.text ?? "");
+  } catch {
+    return json({ error: "Auto Director returned an unreadable response — please retry." }, 502);
+  }
+
+  const sourced = (value: unknown) => ({ value, source: "DIRECTOR_AGENT" as const });
+
+  const swatches = (Array.isArray(raw?.color?.swatches) ? raw.color.swatches : [])
+    .map((s: any) => {
+      const hex = normalizeHex(s?.hex);
+      return hex ? { hex, name: typeof s?.name === "string" ? s.name.slice(0, 32) : undefined } : null;
+    })
+    .filter(Boolean)
+    .slice(0, 6);
+
+  const lights = (Array.isArray(raw?.lighting?.lights) ? raw.lighting.lights : [])
+    .slice(0, 4)
+    .map((l: any, i: number) => ({
+      id: `agent-light-${i + 1}`,
+      type: pickEnum(l?.type, LIGHT_TYPES, i === 0 ? "key" : "fill"),
+      position: text(l?.position, "camera left"),
+      direction: text(l?.direction, "toward subject"),
+      height: pickEnum(l?.height, ["below", "eye-level", "above", "top", "overhead"], "above"),
+      size: num(l?.size, 0, 100, 50),
+      intensity: num(l?.intensity, 0, 100, 60),
+      temperature: num(l?.temperature, -100, 100, 0),
+      tint: num(l?.tint, -100, 100, 0),
+      hardness: num(l?.hardness, 0, 100, 40),
+      falloff: pickEnum(l?.falloff, ["fast", "medium", "slow"], "medium"),
+    }));
+
+  const proposal = {
+    camera: sourced({
+      body: text(raw?.camera?.body, "modern cinema camera"),
+      sensor: text(raw?.camera?.sensor, "super35"),
+      aspectRatio: text(raw?.camera?.aspectRatio, "9:16", 12),
+      height: text(raw?.camera?.height, "eye-level"),
+      angle: text(raw?.camera?.angle, "straight-on"),
+      distance: text(raw?.camera?.distance, "medium"),
+    }),
+    lens: sourced({
+      focalLengthMm: Math.round(num(raw?.lens?.focalLengthMm, 8, 400, 50)),
+      type: pickEnum(raw?.lens?.type, ["spherical", "anamorphic", "macro", "tilt-shift"], "spherical"),
+      character: text(raw?.lens?.character, "neutral", 120),
+    }),
+    aperture: sourced({
+      fStop: Number(num(raw?.aperture?.fStop, 0.95, 22, 2.8).toFixed(2)),
+      depthOfField: pickEnum(
+        raw?.aperture?.depthOfField,
+        ["deep", "medium", "shallow", "razor"],
+        "medium",
+      ),
+      bokeh: text(raw?.aperture?.bokeh, "round", 60),
+    }),
+    movement: sourced({
+      motionType: pickEnum(raw?.movement?.motionType, MOTION_TYPES, "static"),
+      direction: text(raw?.movement?.direction, "none"),
+      speed: pickEnum(raw?.movement?.speed, ["very-slow", "slow", "medium", "fast"], "slow"),
+      range: num(raw?.movement?.range, 0, 1, 0.3),
+      maxDegrees: num(raw?.movement?.maxDegrees, 0, 360, 0),
+      easing: pickEnum(
+        raw?.movement?.easing,
+        ["linear", "ease-in", "ease-out", "ease-in-out"],
+        "ease-in-out",
+      ),
+      tracking: pickEnum(
+        raw?.movement?.tracking,
+        ["none", "subject", "point-of-interest"],
+        "subject",
+      ),
+      parallax: num(raw?.movement?.parallax, 0, 100, 20),
+      roll: num(raw?.movement?.roll, 0, 100, 0),
+      heightChange: num(raw?.movement?.heightChange, 0, 100, 0),
+      focusBehavior: pickEnum(
+        raw?.movement?.focusBehavior,
+        ["locked", "follow-focus", "rack", "breathing"],
+        "locked",
+      ),
+      endBehavior: pickEnum(
+        raw?.movement?.endBehavior,
+        ["settle", "continue", "hard-cut"],
+        "settle",
+      ),
+      envelope: { maxOrbit: num(raw?.movement?.maxDegrees, 0, 360, 0), geometryRequirements: [] },
+    }),
+    lighting: sourced({
+      lights: lights.length ? lights : [],
+      ratio: text(raw?.lighting?.ratio, "2:1", 24),
+      mood: text(raw?.lighting?.mood, "neutral", 60),
+    }),
+    color: sourced({
+      swatches,
+      shadowHue: text(raw?.color?.shadowHue, "neutral", 24),
+      midtoneHue: text(raw?.color?.midtoneHue, "neutral", 24),
+      highlightHue: text(raw?.color?.highlightHue, "neutral", 24),
+      temperature: num(raw?.color?.temperature, -100, 100, 0),
+      tint: num(raw?.color?.tint, -100, 100, 0),
+      contrast: num(raw?.color?.contrast, 0, 100, 50),
+      saturation: num(raw?.color?.saturation, 0, 100, 50),
+      blackBehavior: pickEnum(
+        raw?.color?.blackBehavior,
+        ["crushed", "lifted", "neutral", "filmic"],
+        "neutral",
+      ),
+      highlightBehavior: pickEnum(
+        raw?.color?.highlightBehavior,
+        ["clipped", "rolled-off", "bloomed", "neutral"],
+        "neutral",
+      ),
+      skinToneTreatment: pickEnum(
+        raw?.color?.skinToneTreatment,
+        ["natural", "warm", "cool", "desaturated", "golden", "porcelain"],
+        "natural",
+      ),
+    }),
+    optics: sourced({
+      flare: text(raw?.optics?.flare, "none", 60),
+      diffusion: num(raw?.optics?.diffusion, 0, 100, 0),
+      halation: num(raw?.optics?.halation, 0, 100, 0),
+      chromaticAberration: num(raw?.optics?.chromaticAberration, 0, 100, 0),
+      vignette: num(raw?.optics?.vignette, 0, 100, 0),
+      distortion: num(raw?.optics?.distortion, 0, 100, 0),
+      bloom: num(raw?.optics?.bloom, 0, 100, 0),
+      bokeh: text(raw?.optics?.bokeh, "round", 60),
+      highlightBehavior: pickEnum(
+        raw?.optics?.highlightBehavior,
+        ["clipped", "rolled-off", "bloomed", "neutral"],
+        "neutral",
+      ),
+    }),
+    composition: sourced({
+      framing: text(raw?.composition?.framing, "medium", 60),
+      rule: text(raw?.composition?.rule, "centered", 60),
+      subjectPlacement: text(raw?.composition?.subjectPlacement, "center", 60),
+      headroom: text(raw?.composition?.headroom, "balanced", 40),
+      leadRoom: text(raw?.composition?.leadRoom, "balanced", 40),
+      horizon: text(raw?.composition?.horizon, "center", 40),
+    }),
+    focus: sourced({
+      focusTarget: text(raw?.focus?.focusTarget, "subject", 60),
+      focusMode: pickEnum(raw?.focus?.focusMode, ["locked", "rack", "follow"], "locked"),
+      focusPlaneDepth: text(raw?.focus?.focusPlaneDepth, "subject plane", 60),
+      rackDirection: pickEnum(
+        raw?.focus?.rackDirection,
+        ["near-to-far", "far-to-near", "none"],
+        "none",
+      ),
+    }),
+    atmosphere: sourced({
+      haze: num(raw?.atmosphere?.haze, 0, 100, 0),
+      smoke: num(raw?.atmosphere?.smoke, 0, 100, 0),
+      particles: text(raw?.atmosphere?.particles, "none", 60),
+      weather: text(raw?.atmosphere?.weather, "clear", 40),
+      timeOfDay: text(raw?.atmosphere?.timeOfDay, "unspecified", 40),
+      intensity: num(raw?.atmosphere?.intensity, 0, 100, 0),
+    }),
+  };
+
+  const rationaleFields = [
+    "camera",
+    "lens",
+    "aperture",
+    "movement",
+    "lighting",
+    "color",
+    "optics",
+    "composition",
+    "focus",
+    "atmosphere",
+  ];
+  const rationale: Record<string, string> = {};
+  for (const field of rationaleFields) {
+    const value = raw?.rationale?.[field];
+    if (typeof value === "string" && value.trim()) rationale[field] = value.trim().slice(0, 200);
+  }
+
+  return json({
+    proposal,
+    rationale,
+    summary:
+      typeof raw?.summary === "string" && raw.summary.trim()
+        ? raw.summary.trim().slice(0, 320)
+        : undefined,
+    paletteName: text(raw?.color?.paletteName, "Director Grade", 48),
+    model: GEMINI_ANALYSIS_MODEL,
+  });
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
@@ -235,6 +707,8 @@ Deno.serve(async (req) => {
     switch (action) {
       case "extract-palette":
         return await handleExtractPalette(body, apiKey);
+      case "auto-director":
+        return await handleAutoDirector(body, apiKey);
       default:
         return json({ error: `Unknown action: ${action || "(none)"}` }, 400);
     }
