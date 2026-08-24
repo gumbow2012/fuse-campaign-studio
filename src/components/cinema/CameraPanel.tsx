@@ -1,3 +1,5 @@
+import PresetPreview from "./PresetPreview";
+import { resolvePreviewMedia } from "@/lib/cinema/previewTypes";
 import { useMemo } from "react";
 import { Slider } from "@/components/ui/slider";
 import { Input } from "@/components/ui/input";

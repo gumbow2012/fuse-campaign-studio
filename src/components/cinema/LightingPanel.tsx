@@ -1,3 +1,5 @@
+import PresetPreview from "./PresetPreview";
+import { resolvePreviewMedia } from "@/lib/cinema/previewTypes";
 import { useMemo, useState } from "react";
 import { Plus, Star, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
