@@ -80,11 +80,13 @@ export default function PresetPreview({ media, alt, className, autoPlay }: Prese
         className={base}
         onMouseEnter={() => void videoRef.current?.play().catch(() => undefined)}
         onMouseLeave={() => {
+          if (autoPlay) return;
           const video = videoRef.current;
           if (!video) return;
           video.pause();
           video.currentTime = 0;
         }}
+
       >
         {visible ? (
           <video
