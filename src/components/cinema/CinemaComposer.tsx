@@ -15,6 +15,7 @@ import ChipModal from "./ChipModal";
 import CameraPanel from "./CameraPanel";
 import MovementPanel from "./MovementPanel";
 import LightingPanel from "./LightingPanel";
+import ColorPanel from "./ColorPanel";
 import type { DirectorConfig, DirectorConfigField } from "@/lib/cinema/types";
 import { CINEMA_MODEL_ADAPTERS, type CinemaVideoModelKey } from "@/lib/cinema/modelAdapters";
 
@@ -243,6 +244,8 @@ export default function CinemaComposer({
           <MovementPanel config={config} updateField={updateField} advanced={advanced} />
         ) : openChip === "lighting" ? (
           <LightingPanel config={config} updateField={updateField} advanced={advanced} />
+        ) : openChip === "color" ? (
+          <ColorPanel config={config} updateField={updateField} advanced={advanced} />
         ) : undefined}
       </ChipModal>
     </div>
