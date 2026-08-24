@@ -1,9 +1,12 @@
 import PresetPreview from "./PresetPreview";
 import { resolvePreviewMedia } from "@/lib/cinema/previewTypes";
+import { CompareDialog, useCompareSelection } from "./CompareView";
 import { useMemo, useState } from "react";
-import { Star } from "lucide-react";
+import { ArrowLeftRight, Star } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+
 import { Slider } from "@/components/ui/slider";
 import { Separator } from "@/components/ui/separator";
 import { ScrollArea } from "@/components/ui/scroll-area";
