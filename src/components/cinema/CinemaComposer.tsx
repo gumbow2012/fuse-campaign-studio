@@ -278,6 +278,54 @@ export default function CinemaComposer({
   const finalPrompt = promptOverride ?? compiled.finalPrompt;
   const canGenerate = !generating && !compileError && finalPrompt.trim().length > 0;
 
+  /* ---------------- CV8: shot-scoped history ----------------
+     Generation rows are stored per project; each shot claims its own ids in
+     scenes[].shots[].generationIds. The FIRST shot also shows any unclaimed
+     row, so legacy single-shot projects keep their full history. */
+  const claimedIds = useMemo(() => {
+    const set = new Set<string>();
+    (shotBoard?.shots ?? []).forEach((shot) =>
+      (shot.generationIds ?? []).forEach((id) => set.add(id)),
+    );
+    return set;
+  }, [shotBoard?.shots]);
+
+  const generationsForShot = (shotId: string) => {
+    if (!shotBoard) return generations;
+    const own = new Set(
+      shotBoard.shots.find((s) => s.id === shotId)?.generationIds ?? [],
+    );
+    const isDefaultBucket = shotBoard.shots[0]?.id === shotId;
+    return generations.filter(
+      (row) => own.has(row.id) || (isDefaultBucket && !claimedIds.has(row.id)),
+    );
+  };
+
+  const shotGenerations = useMemo(
+    () => generationsForShot(shotBoard?.activeShotId ?? ""),
+    [generations, claimedIds, shotBoard?.activeShotId, shotBoard?.shots],
+  );
+
+  /** Latest completed output of a shot, for its board thumbnail. */
+  const thumbnailFor = (shot: CinemaShot): ShotThumb => {
+    const rows = generationsForShot(shot.id);
+    for (let i = rows.length - 1; i >= 0; i -= 1) {
+      const row = rows[i];
+      if (row.outputUrl) {
+        return { url: row.outputUrl, type: row.outputType === "video" ? "video" : "image" };
+      }
+    }
+    return null;
+  };
+
+  /* Switching shots (or appending to one) shows that shot's newest version. */
+  const activeShotKey = shotBoard?.activeShotId ?? "";
+  useEffect(() => {
+    setRevisionIndex(Math.max(0, shotGenerations.length - 1));
+  }, [activeShotKey, shotGenerations.length]);
+
+
+
 
   const onGenerate = async () => {
     if (!canGenerate) return;
