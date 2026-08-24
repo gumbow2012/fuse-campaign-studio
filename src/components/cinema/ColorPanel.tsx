@@ -22,6 +22,12 @@ import {
   type CinemaColorPreset,
   type ColorPresetCategory,
 } from "@/lib/cinema/presets/colorPresets";
+import PresetLibrarySection from "./PresetLibrarySection";
+import {
+  COLOR_LIBRARY,
+  COLOR_LIBRARY_CATEGORIES,
+} from "@/lib/cinema/presets/libraryAdapters";
+import type { PresetUpdateField } from "@/lib/cinema/presetLibrary";
 import { extractPaletteFromImage } from "@/services/cinemaStudio";
 
 export interface ColorPanelProps {
@@ -164,6 +170,16 @@ export default function ColorPanel({ config, updateField, advanced }: ColorPanel
           {color.blackBehavior} blacks · {color.highlightBehavior} highlights
         </p>
       </div>
+
+      {/* Preset library (builtin + mine, search / favorites / recent) --- */}
+      <PresetLibrarySection
+        type="color"
+        builtin={COLOR_LIBRARY}
+        categories={COLOR_LIBRARY_CATEGORIES}
+        config={config}
+        updateField={updateField as unknown as PresetUpdateField}
+        saveLabel="Save color preset"
+      />
 
       {/* Library ------------------------------------------------------- */}
       <div className="flex flex-col gap-3">

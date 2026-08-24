@@ -21,6 +21,7 @@ import OpticsPanel from "./OpticsPanel";
 import AtmospherePanel from "./AtmospherePanel";
 import DirectorAgentPanel from "./DirectorAgentPanel";
 import FilmSetupPanel from "./FilmSetupPanel";
+import FullPresetPanel from "./FullPresetPanel";
 import ReferenceManager from "./ReferenceManager";
 import CinemaProjectPicker, { type CinemaProjectPickerProps } from "./CinemaProjectPicker";
 import type {
@@ -32,10 +33,11 @@ import type {
 } from "@/lib/cinema/types";
 import { CINEMA_MODEL_ADAPTERS, type CinemaVideoModelKey } from "@/lib/cinema/modelAdapters";
 
-type ChipKey = "references" | DirectorConfigField;
+type ChipKey = "references" | "presets" | DirectorConfigField;
 
 const CHIPS: Array<{ key: ChipKey; label: string }> = [
   { key: "references", label: "References" },
+  { key: "presets", label: "Presets" },
   { key: "filmSetup", label: "Film Setup" },
   { key: "camera", label: "Camera" },
   { key: "movement", label: "Movement" },
@@ -60,6 +62,7 @@ function summarize(key: ChipKey, config: DirectorConfig, referenceCount: number)
   if (key === "references") {
     return referenceCount ? `${referenceCount} attached` : "None";
   }
+  if (key === "presets") return "Full setups";
   const value = config[key]?.value as Record<string, unknown> | undefined;
   if (!value) return "Auto";
   switch (key) {
@@ -273,6 +276,8 @@ export default function CinemaComposer({
             onChange={onReferencesChange}
             advanced={advanced}
           />
+        ) : openChip === "presets" ? (
+          <FullPresetPanel config={config} updateField={updateField as never} />
         ) : openChip === "filmSetup" ? (
           <FilmSetupPanel config={config} updateField={updateField} advanced={advanced} />
         ) : openChip === "camera" ? (

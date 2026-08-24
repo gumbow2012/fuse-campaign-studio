@@ -22,6 +22,7 @@ import {
 import { cn } from "@/lib/utils";
 import type {
   CinemaLight,
+  ConfigSource,
   CinemaLightType,
   DirectorConfig,
   DirectorConfigField,
@@ -37,6 +38,12 @@ import {
   type CinemaLightingPreset,
   type LightingPresetCategory,
 } from "@/lib/cinema/presets/lightingPresets";
+import PresetLibrarySection from "./PresetLibrarySection";
+import {
+  LIGHTING_LIBRARY,
+  LIGHTING_LIBRARY_CATEGORIES,
+} from "@/lib/cinema/presets/libraryAdapters";
+import type { PresetUpdateField } from "@/lib/cinema/presetLibrary";
 
 export interface LightingPanelProps {
   config: DirectorConfig;
@@ -44,6 +51,7 @@ export interface LightingPanelProps {
   updateField: <F extends DirectorConfigField>(
     field: F,
     value: DirectorConfig[F]["value"],
+    source?: ConfigSource,
   ) => void;
   advanced: boolean;
 }
@@ -121,6 +129,17 @@ export default function LightingPanel({ config, updateField }: LightingPanelProp
   return (
     <ScrollArea className="max-h-[65vh] pr-3">
       <div className="space-y-6">
+        <PresetLibrarySection
+          type="lighting"
+          builtin={LIGHTING_LIBRARY}
+          categories={LIGHTING_LIBRARY_CATEGORIES}
+          config={config}
+          updateField={updateField as unknown as PresetUpdateField}
+          saveLabel="Save lighting preset"
+        />
+
+        <Separator className="bg-border/60" />
+
         {/* ------------------------------ LIBRARY ------------------------------ */}
         <div className="space-y-3">
           <Input
@@ -357,14 +376,9 @@ export default function LightingPanel({ config, updateField }: LightingPanelProp
             </Accordion>
           )}
 
-          <div className="flex items-center gap-2">
-            <Button type="button" size="sm" disabled>
-              Save preset
-            </Button>
-            <span className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
-              Coming soon
-            </span>
-          </div>
+          <p className="text-[10px] text-muted-foreground">
+            Save this rig as a preset from the Lighting Presets library above.
+          </p>
         </section>
       </div>
     </ScrollArea>

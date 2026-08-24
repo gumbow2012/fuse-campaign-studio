@@ -194,3 +194,134 @@ export async function loadCinemaProject(
     state,
   };
 }
+
+/* ------------------------------------------------------------------ */
+/* Custom presets (cinema_presets — RLS: builtin or own row)           */
+/* ------------------------------------------------------------------ */
+
+import type { CinemaPreset, CinemaPresetType } from "@/lib/cinema/types";
+import {
+  readFavorites,
+  writeFavorites,
+  readRecents,
+  pushRecent,
+} from "@/lib/cinema/presetLibrary";
+
+async function requireUserId(): Promise<string> {
+  const { data } = await supabase.auth.getSession();
+  const userId = data.session?.user?.id;
+  if (!userId) throw new Error("Please sign in to manage Cinema presets");
+  return userId;
+}
+
+/** Lists the signed-in user's saved presets (optionally one type). */
+export async function listUserPresets(type?: CinemaPresetType): Promise<CinemaPreset[]> {
+  let query = supabase
+    .from("cinema_presets")
+    .select("id, user_id, type, name, category, tags, config, thumbnail, builtin")
+    .eq("builtin", false)
+    .order("created_at", { ascending: false })
+    .limit(200);
+  if (type) query = query.eq("type", type);
+
+  const { data, error } = await query;
+  if (error) throw new Error(error.message);
+
+  return (data ?? []).map((row) => ({
+    id: row.id as string,
+    userId: (row.user_id as string) ?? undefined,
+    type: (row.type as CinemaPresetType) ?? "full",
+    name: (row.name as string) ?? "Untitled preset",
+    category: (row.category as string) ?? "My Presets",
+    tags: Array.isArray(row.tags) ? (row.tags as string[]) : [],
+    thumbnail: (row.thumbnail as string) ?? "",
+    config: (row.config as unknown as CinemaPreset["config"]) ?? {},
+    builtin: false,
+  }));
+}
+
+/** Saves the captured config fragment as a user preset (builtin = false). */
+export async function createPreset(input: {
+  type: CinemaPresetType;
+  name: string;
+  category?: string;
+  tags?: string[];
+  thumbnail?: string;
+  config: unknown;
+}): Promise<CinemaPreset> {
+  const userId = await requireUserId();
+  const name = input.name.trim().slice(0, 120);
+  if (!name) throw new Error("Give the preset a name first");
+
+  const { data, error } = await supabase
+    .from("cinema_presets")
+    .insert([
+      {
+        user_id: userId,
+        builtin: false,
+        type: input.type,
+        name,
+        category: (input.category ?? "My Presets").slice(0, 60),
+        tags: (input.tags ?? []).map((t) => t.trim()).filter(Boolean).slice(0, 12),
+        thumbnail: input.thumbnail ?? null,
+        config: JSON.parse(JSON.stringify(input.config)) as Json,
+      },
+    ])
+    .select("id, user_id, type, name, category, tags, config, thumbnail, builtin")
+    .single();
+  if (error) throw new Error(error.message);
+
+  return {
+    id: data.id as string,
+    userId: (data.user_id as string) ?? undefined,
+    type: (data.type as CinemaPresetType) ?? input.type,
+    name: (data.name as string) ?? name,
+    category: (data.category as string) ?? "My Presets",
+    tags: Array.isArray(data.tags) ? (data.tags as string[]) : [],
+    thumbnail: (data.thumbnail as string) ?? "",
+    config: (data.config as unknown as CinemaPreset["config"]) ?? {},
+    builtin: false,
+  };
+}
+
+/** Deletes one of the user's own presets (RLS blocks builtin + others). */
+export async function deletePreset(presetId: string): Promise<void> {
+  const { error } = await supabase.from("cinema_presets").delete().eq("id", presetId);
+  if (error) throw new Error(error.message);
+}
+
+/**
+ * Favorites are a lightweight per-user set kept in local user state — the
+ * simplest option that works with existing RLS (builtin presets are CODE data
+ * and have no row to flag).
+ */
+export async function listFavoritePresetIds(type: CinemaPresetType): Promise<string[]> {
+  const userId = await requireUserId();
+  return readFavorites(userId, type);
+}
+
+export async function toggleFavorite(
+  type: CinemaPresetType,
+  presetId: string,
+): Promise<string[]> {
+  const userId = await requireUserId();
+  const current = readFavorites(userId, type);
+  const next = current.includes(presetId)
+    ? current.filter((id) => id !== presetId)
+    : [...current, presetId];
+  writeFavorites(userId, type, next);
+  return next;
+}
+
+export async function listRecentPresetIds(type: CinemaPresetType): Promise<string[]> {
+  const userId = await requireUserId();
+  return readRecents(userId, type);
+}
+
+export async function recordPresetUse(
+  type: CinemaPresetType,
+  presetId: string,
+): Promise<string[]> {
+  const userId = await requireUserId();
+  return pushRecent(userId, type, presetId);
+}
