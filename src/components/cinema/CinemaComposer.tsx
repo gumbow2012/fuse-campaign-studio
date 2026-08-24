@@ -424,8 +424,9 @@ export default function CinemaComposer({
             {generating ? "STARTING…" : "GENERATE"}
           </Button>
           <span className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
-            {MODEL_LABELS[model]}
+            {compileError ?? MODEL_LABELS[model]}
           </span>
+
         </div>
       </div>
 
