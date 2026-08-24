@@ -137,7 +137,7 @@ type StartInput = {
   resolution?: string;
   /** gpt-image-2 only. */
   quality?: string;
-  /** seedream-v4 only ("1K" | "2K" | "4K" | "2K VERTICAL"). */
+  /** seedream-v4 only ("1K" | "2K" | "4K"). */
   imageSize?: string;
   generateAudio?: boolean;
   aspectRatio?: string;
