@@ -144,6 +144,11 @@ export default function CameraPanel({ config, updateField, advanced }: CameraPan
             title="Camera Body"
             hint="Image-character presets — not hardware claims."
           />
+          <CompareHint
+            label={cameraCompare.a?.name}
+            noun="camera"
+            onClear={cameraCompare.reset}
+          />
           {camerasByCategory.map(({ category, presets }) => (
             <div key={category} className="space-y-2">
               <p className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
@@ -151,35 +156,72 @@ export default function CameraPanel({ config, updateField, advanced }: CameraPan
               </p>
               <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
                 {presets.map((preset) => (
-                  <button
+                  <div
                     key={preset.id}
-                    type="button"
-                    onClick={() => applyFragment(preset.config)}
                     className={cn(
-                      "overflow-hidden rounded-xl border text-left transition-all",
+                      "relative overflow-hidden rounded-xl border transition-all",
                       "border-border/70 bg-card/60 hover:border-primary/60",
                       camera.body === preset.config.camera?.value.body &&
                         "border-primary/80 ring-1 ring-primary/50",
                     )}
                   >
-                    <PresetPreview
-                      media={resolvePreviewMedia({ category: "CAMERA", preset })}
-                      alt={preset.name}
+                    <button
+                      type="button"
+                      onClick={() => applyFragment(preset.config)}
+                      className="block w-full text-left"
+                    >
+                      <PresetPreview
+                        media={resolvePreviewMedia({ category: "CAMERA", preset })}
+                        alt={preset.name}
+                      />
+                      <div className="px-2.5 py-2">
+                        <p className="font-display text-[11px] leading-tight text-foreground/90">
+                          {preset.name}
+                        </p>
+                        <p className="truncate text-[10px] text-muted-foreground">
+                          {preset.tags.slice(0, 2).join(" · ")}
+                        </p>
+                      </div>
+                    </button>
+                    <CompareTileButton
+                      marked={cameraCompare.isA(preset.id)}
+                      onClick={() => cameraCompare.pick(preset)}
                     />
-                    <div className="px-2.5 py-2">
-                      <p className="font-display text-[11px] leading-tight text-foreground/90">
-                        {preset.name}
-                      </p>
-                      <p className="truncate text-[10px] text-muted-foreground">
-                        {preset.tags.slice(0, 2).join(" · ")}
-                      </p>
-                    </div>
-                  </button>
+                  </div>
                 ))}
               </div>
             </div>
           ))}
+
+          {cameraCompare.a && cameraCompare.b ? (
+            <CompareDialog
+              open
+              onOpenChange={(open) => {
+                if (!open) cameraCompare.closeCompare();
+              }}
+              title="Compare camera look"
+              a={{
+                media: resolvePreviewMedia({ category: "CAMERA", preset: cameraCompare.a }),
+                label: cameraCompare.a.name,
+                sublabel: cameraCompare.a.tags.slice(0, 3).join(" · "),
+              }}
+              b={{
+                media: resolvePreviewMedia({ category: "CAMERA", preset: cameraCompare.b }),
+                label: cameraCompare.b.name,
+                sublabel: cameraCompare.b.tags.slice(0, 3).join(" · "),
+              }}
+              onApplyA={() => {
+                if (cameraCompare.a) applyFragment(cameraCompare.a.config);
+                cameraCompare.reset();
+              }}
+              onApplyB={() => {
+                if (cameraCompare.b) applyFragment(cameraCompare.b.config);
+                cameraCompare.reset();
+              }}
+            />
+          ) : null}
         </section>
+
 
         <Separator className="bg-border/60" />
 
