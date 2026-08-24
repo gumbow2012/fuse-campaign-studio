@@ -11,6 +11,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
+import PresetPreview from "./PresetPreview";
+import { resolvePreviewMedia, type CinemaPreviewCategory } from "@/lib/cinema/previewTypes";
 import { toast } from "@/hooks/use-toast";
 import type {
   CinemaPresetType,
@@ -36,6 +38,14 @@ import {
   recordPresetUse,
   toggleFavorite,
 } from "@/services/cinemaStudio";
+
+const PREVIEW_CATEGORY_BY_TYPE: Record<CinemaPresetType, CinemaPreviewCategory> = {
+  camera: "CAMERA",
+  lighting: "LIGHTING",
+  color: "COLOR",
+  movement: "MOVEMENT",
+  full: "FULL",
+};
 
 export interface PresetLibrarySectionProps {
   type: CinemaPresetType;
@@ -280,9 +290,14 @@ export default function PresetLibrarySection({
               key={preset.id}
               className="relative overflow-hidden rounded-xl border border-border/70 bg-card/60 transition-colors hover:border-primary/60"
             >
-              {preset.thumbnail ? (
-                <div className="h-12 w-full" style={{ background: preset.thumbnail }} />
-              ) : null}
+              <PresetPreview
+                media={resolvePreviewMedia({
+                  category: PREVIEW_CATEGORY_BY_TYPE[type],
+                  preset,
+                  swatches: (preset.config.color?.value.swatches ?? []).map((s) => s.hex),
+                })}
+                alt={preset.name}
+              />
               <div className="space-y-1.5 px-2.5 py-2">
                 <p className="font-display text-[11px] leading-tight text-foreground/90">
                   {preset.name}
