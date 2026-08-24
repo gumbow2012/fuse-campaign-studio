@@ -338,6 +338,10 @@ export type CinemaProjectState = {
   scenes: CinemaScene[];
   shots: CinemaShot[];
   advanced: boolean;
+  /** CV8 — the active scene/shot when the project was last saved. */
+  activeSceneId?: string;
+  activeShotId?: string;
+
   /**
    * FINISH metadata per generation id — non-destructive grade only.
    * Never implies the generation was re-rendered.
