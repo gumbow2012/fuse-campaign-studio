@@ -133,11 +133,13 @@ export async function createCinemaProject(
 
   const { data, error } = await supabase
     .from("cinema_projects")
-    .insert({
-      user_id: userId,
-      name: name.trim().slice(0, 120) || "Untitled Project",
-      project_state: state as unknown as Record<string, unknown>,
-    })
+    .insert([
+      {
+        user_id: userId,
+        name: name.trim().slice(0, 120) || "Untitled Project",
+        project_state: state as unknown as Record<string, unknown>,
+      },
+    ])
     .select("id, name, updated_at")
     .single();
   if (error) throw new Error(error.message);
