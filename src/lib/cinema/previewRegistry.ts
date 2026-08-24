@@ -119,6 +119,9 @@ export function loadPreviewRegistry(force = false): Promise<void> {
 /* -------------------------------- uploading ------------------------------- */
 
 const BUCKET = "fuse-assets";
+/** Preview URLs must outlive a browsing session by a wide margin. */
+const PREVIEW_URL_TTL = 60 * 60 * 24 * 365;
+
 
 export function previewStoragePath(presetId: string, filename: string) {
   const safe =
@@ -151,9 +154,26 @@ export async function uploadPresetPreviewFile(presetId: string, file: File) {
     contentType: file.type || "application/octet-stream",
   });
   if (error) throw new Error(error.message);
-  const { data } = supabase.storage.from(BUCKET).getPublicUrl(path);
-  return { path, url: data.publicUrl };
+  // `fuse-assets` is private, so previews are served through a long-lived signed
+  // URL (same pattern as the existing storage-upload service).
+  const { data, error: signError } = await supabase.storage
+    .from(BUCKET)
+    .createSignedUrl(path, PREVIEW_URL_TTL);
+  if (signError || !data?.signedUrl) {
+    throw new Error(signError?.message ?? "Could not link that preview file.");
+  }
+  return { path, url: data.signedUrl };
 }
+
+/** Re-sign a stored preview path when its URL has aged out. */
+export async function resignPreviewPath(path: string) {
+  const { data, error } = await supabase.storage
+    .from(BUCKET)
+    .createSignedUrl(path, PREVIEW_URL_TTL);
+  if (error || !data?.signedUrl) throw new Error(error?.message ?? "Could not link that preview.");
+  return data.signedUrl;
+}
+
 
 /** Register (or replace) the hosted media for one preset. */
 export async function registerPresetPreview(input: {
