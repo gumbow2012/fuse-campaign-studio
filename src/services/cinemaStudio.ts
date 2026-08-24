@@ -1,8 +1,11 @@
 import { supabase } from "@/integrations/supabase/client";
 import type {
+  CinemaProjectState,
+  CinemaProjectSummary,
   ColorPalette,
   DirectorConfigField,
   PartialDirectorConfig,
+  ReferenceRole,
 } from "@/lib/cinema/types";
 
 /**
@@ -85,4 +88,101 @@ export async function requestAutoDirector(
     filmSetup: input.filmSetup,
     references: (input.references ?? []).map((r) => ({ url: r.url, roles: r.roles ?? [] })),
   });
+}
+
+/* ------------------------------------------------------------------ */
+/* Reference role detection (analysis only)                            */
+/* ------------------------------------------------------------------ */
+
+export type DetectedRoles = {
+  roles: Array<{ role: ReferenceRole; strength: number }>;
+  note?: string;
+  model?: string;
+};
+
+/** Suggests roles for one reference image (Gemini). Explicit action only. */
+export async function detectReferenceRoles(imageDataUrl: string): Promise<DetectedRoles> {
+  return invokeCinemaStudio<DetectedRoles>("detect-roles", { imageDataUrl });
+}
+
+/* ------------------------------------------------------------------ */
+/* Project persistence (cinema_projects — RLS own-row)                 */
+/* ------------------------------------------------------------------ */
+
+export async function listCinemaProjects(): Promise<CinemaProjectSummary[]> {
+  const { data, error } = await supabase
+    .from("cinema_projects")
+    .select("id, name, updated_at")
+    .order("updated_at", { ascending: false })
+    .limit(50);
+  if (error) throw new Error(error.message);
+  return (data ?? []).map((row) => ({
+    id: row.id as string,
+    name: (row.name as string) ?? "Untitled Project",
+    updatedAt: (row.updated_at as string) ?? "",
+  }));
+}
+
+export async function createCinemaProject(
+  name: string,
+  state: CinemaProjectState,
+): Promise<CinemaProjectSummary> {
+  const { data: sessionData } = await supabase.auth.getSession();
+  const userId = sessionData.session?.user?.id;
+  if (!userId) throw new Error("Please sign in to save a Cinema project");
+
+  const { data, error } = await supabase
+    .from("cinema_projects")
+    .insert({
+      user_id: userId,
+      name: name.trim().slice(0, 120) || "Untitled Project",
+      project_state: state as unknown as Record<string, unknown>,
+    })
+    .select("id, name, updated_at")
+    .single();
+  if (error) throw new Error(error.message);
+  return {
+    id: data.id as string,
+    name: data.name as string,
+    updatedAt: (data.updated_at as string) ?? "",
+  };
+}
+
+export async function saveCinemaProject(
+  projectId: string,
+  state: CinemaProjectState,
+  name?: string,
+): Promise<void> {
+  const patch: Record<string, unknown> = {
+    project_state: state as unknown as Record<string, unknown>,
+    updated_at: new Date().toISOString(),
+  };
+  if (name !== undefined) patch.name = name.trim().slice(0, 120) || "Untitled Project";
+
+  const { error } = await supabase.from("cinema_projects").update(patch).eq("id", projectId);
+  if (error) throw new Error(error.message);
+}
+
+export async function loadCinemaProject(
+  projectId: string,
+): Promise<{ summary: CinemaProjectSummary; state: CinemaProjectState | null }> {
+  const { data, error } = await supabase
+    .from("cinema_projects")
+    .select("id, name, updated_at, project_state")
+    .eq("id", projectId)
+    .single();
+  if (error) throw new Error(error.message);
+
+  const raw = data.project_state as unknown;
+  const state =
+    raw && typeof raw === "object" && (raw as any).config ? (raw as CinemaProjectState) : null;
+
+  return {
+    summary: {
+      id: data.id as string,
+      name: (data.name as string) ?? "Untitled Project",
+      updatedAt: (data.updated_at as string) ?? "",
+    },
+    state,
+  };
 }
