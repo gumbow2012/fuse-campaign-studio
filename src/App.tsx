@@ -17,6 +17,7 @@ import FlowEmbed from "@/pages/FlowEmbed";
 import FlowTest from "@/pages/FlowTest";
 import GenerationStudio from "@/pages/GenerationStudio";
 import CinemaStudio from "@/pages/app/cinema/CinemaStudio";
+import CinemaControlLab from "@/pages/app/cinema/CinemaControlLab";
 import OutfitSwap from "@/pages/OutfitSwap";
 import JewelrySwap from "@/pages/JewelrySwap";
 import NanoRun from "@/pages/NanoRun";
@@ -110,6 +111,14 @@ const App = () => (
               element={
                 <BuilderRoute>
                   <CinemaStudio />
+                </BuilderRoute>
+              }
+            />
+            <Route
+              path="/app/lab/cinema/control"
+              element={
+                <BuilderRoute>
+                  <CinemaControlLab />
                 </BuilderRoute>
               }
             />
