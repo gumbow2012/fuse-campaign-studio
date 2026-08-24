@@ -477,11 +477,6 @@ export default function CinemaComposer({
         onOverrideChange={setPromptOverride}
       />
 
-      <CinemaResults
-        generations={generations}
-        index={revisionIndex}
-        onIndexChange={setRevisionIndex}
-      />
 
       <ChipModal
         open={openChip !== null}
