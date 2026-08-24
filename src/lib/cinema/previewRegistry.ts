@@ -119,6 +119,9 @@ export function loadPreviewRegistry(force = false): Promise<void> {
 /* -------------------------------- uploading ------------------------------- */
 
 const BUCKET = "fuse-assets";
+/** Preview URLs must outlive a browsing session by a wide margin. */
+const PREVIEW_URL_TTL = 60 * 60 * 24 * 365;
+
 
 export function previewStoragePath(presetId: string, filename: string) {
   const safe =
