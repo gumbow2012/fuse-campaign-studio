@@ -319,12 +319,20 @@ export default function ColorPanel({ config, updateField, advanced }: ColorPanel
                 title="Compare palettes"
                 description="Swatch bars for both palettes, side by side."
                 a={{
-                  media: { kind: "still-swatches", swatches: presetSwatches(compare.a) },
+                  media: {
+                    kind: "still-swatches",
+                    canonicalScene: "PRODUCT",
+                    swatches: presetSwatches(compare.a),
+                  },
                   label: compare.a.name,
                   sublabel: compare.a.tags.slice(0, 3).join(" · "),
                 }}
                 b={{
-                  media: { kind: "still-swatches", swatches: presetSwatches(compare.b) },
+                  media: {
+                    kind: "still-swatches",
+                    canonicalScene: "PRODUCT",
+                    swatches: presetSwatches(compare.b),
+                  },
                   label: compare.b.name,
                   sublabel: compare.b.tags.slice(0, 3).join(" · "),
                 }}
