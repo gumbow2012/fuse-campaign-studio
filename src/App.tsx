@@ -106,6 +106,15 @@ const App = () => (
               }
             />
             <Route
+              path="/app/lab/cinema"
+              element={
+                <BuilderRoute>
+                  <CinemaStudio />
+                </BuilderRoute>
+              }
+            />
+            <Route
+
               path="/app/lab/outfit-swap"
               element={
                 <BuilderRoute>
