@@ -1,5 +1,9 @@
 import { supabase } from "@/integrations/supabase/client";
-import type { ColorPalette } from "@/lib/cinema/types";
+import type {
+  ColorPalette,
+  DirectorConfigField,
+  PartialDirectorConfig,
+} from "@/lib/cinema/types";
 
 /**
  * FUSE Cinema analysis service — calls the isolated `cinema-studio` edge
@@ -43,4 +47,42 @@ async function invokeCinemaStudio<T>(action: string, payload: Record<string, unk
 export async function extractPaletteFromImage(file: File): Promise<ExtractedPalette> {
   const imageDataUrl = await fileToDataUrl(file);
   return invokeCinemaStudio<ExtractedPalette>("extract-palette", { imageDataUrl });
+}
+
+/* ------------------------------------------------------------------ */
+/* Auto Director (analysis only — proposes, never generates)           */
+/* ------------------------------------------------------------------ */
+
+export type DirectorProposalResult = {
+  proposal: PartialDirectorConfig;
+  rationale: Partial<Record<DirectorConfigField, string>>;
+  summary?: string;
+  paletteName?: string;
+  model?: string;
+};
+
+export type AutoDirectorInput = {
+  prompt: string;
+  productionType?: string;
+  model?: string;
+  filmSetup?: unknown;
+  references?: Array<{ url?: string; roles?: string[] }>;
+};
+
+/**
+ * Asks the Director Agent for a proposed DirectorConfig. Gemini runs ONLY on
+ * this explicit call — panel edits never hit the backend. No credit spend.
+ */
+export async function requestAutoDirector(
+  input: AutoDirectorInput,
+): Promise<DirectorProposalResult> {
+  const prompt = input.prompt.trim();
+  if (!prompt) throw new Error("Describe your scene before running Auto Director");
+  return invokeCinemaStudio<DirectorProposalResult>("auto-director", {
+    prompt,
+    productionType: input.productionType,
+    model: input.model,
+    filmSetup: input.filmSetup,
+    references: (input.references ?? []).map((r) => ({ url: r.url, roles: r.roles ?? [] })),
+  });
 }

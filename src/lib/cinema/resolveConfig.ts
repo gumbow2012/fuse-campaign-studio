@@ -158,3 +158,33 @@ export function resolveCinemaConfig(
 
   return resolved as unknown as ResolvedDirectorConfig;
 }
+
+/**
+ * Merge a Director Agent proposal into a working config.
+ * Same rule as `resolveCinemaConfig`: a proposal NEVER overwrites a field whose
+ * current source is "USER". Applied fields carry source "DIRECTOR_AGENT".
+ */
+export function applyDirectorProposal(
+  current: DirectorConfig,
+  proposal: PartialDirectorConfig,
+): { config: DirectorConfig; applied: DirectorConfigField[]; skipped: DirectorConfigField[] } {
+  const next = { ...current };
+  const applied: DirectorConfigField[] = [];
+  const skipped: DirectorConfigField[] = [];
+
+  for (const field of DIRECTOR_FIELDS) {
+    const proposed = proposal[field] as Sourced<unknown> | undefined;
+    if (!proposed || proposed.value === undefined || proposed.value === null) continue;
+    if (current[field]?.source === "USER") {
+      skipped.push(field);
+      continue;
+    }
+    (next as Record<string, Sourced<unknown>>)[field] = {
+      value: proposed.value,
+      source: "DIRECTOR_AGENT",
+    };
+    applied.push(field);
+  }
+
+  return { config: next, applied, skipped };
+}
