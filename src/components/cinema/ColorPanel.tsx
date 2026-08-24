@@ -22,6 +22,12 @@ import {
   type CinemaColorPreset,
   type ColorPresetCategory,
 } from "@/lib/cinema/presets/colorPresets";
+import PresetLibrarySection from "./PresetLibrarySection";
+import {
+  COLOR_LIBRARY,
+  COLOR_LIBRARY_CATEGORIES,
+} from "@/lib/cinema/presets/libraryAdapters";
+import type { PresetUpdateField } from "@/lib/cinema/presetLibrary";
 import { extractPaletteFromImage } from "@/services/cinemaStudio";
 
 export interface ColorPanelProps {

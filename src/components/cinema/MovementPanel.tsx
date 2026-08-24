@@ -6,6 +6,7 @@ import { Slider } from "@/components/ui/slider";
 import { Separator } from "@/components/ui/separator";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
+import type { ConfigSource } from "@/lib/cinema/types";
 import type {
   DirectorConfig,
   DirectorConfigField,
@@ -17,6 +18,12 @@ import {
   type CinemaMovementPreset,
   type MovementPresetCategory,
 } from "@/lib/cinema/presets/movementPresets";
+import PresetLibrarySection from "./PresetLibrarySection";
+import {
+  MOVEMENT_LIBRARY,
+  MOVEMENT_LIBRARY_CATEGORIES,
+} from "@/lib/cinema/presets/libraryAdapters";
+import type { PresetUpdateField } from "@/lib/cinema/presetLibrary";
 
 export interface MovementPanelProps {
   config: DirectorConfig;
@@ -24,6 +31,7 @@ export interface MovementPanelProps {
   updateField: <F extends DirectorConfigField>(
     field: F,
     value: DirectorConfig[F]["value"],
+    source?: ConfigSource,
   ) => void;
   advanced: boolean;
 }
@@ -103,6 +111,15 @@ export default function MovementPanel({ config, updateField, advanced }: Movemen
   return (
     <ScrollArea className="max-h-[65vh] pr-3">
       <div className="space-y-6">
+        <PresetLibrarySection
+          type="movement"
+          builtin={MOVEMENT_LIBRARY}
+          categories={MOVEMENT_LIBRARY_CATEGORIES}
+          config={config}
+          updateField={updateField as unknown as PresetUpdateField}
+          saveLabel="Save movement preset"
+        />
+
         <div className="space-y-3">
           <Input
             value={query}

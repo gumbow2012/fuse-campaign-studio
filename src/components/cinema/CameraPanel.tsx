@@ -6,6 +6,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
 import type {
   ApertureSetup,
+  ConfigSource,
   CameraSetup,
   DirectorConfig,
   DirectorConfigField,
@@ -26,6 +27,12 @@ import {
   LENS_PRESETS,
   LENS_PRESET_CATEGORIES,
 } from "@/lib/cinema/presets/lensPresets";
+import PresetLibrarySection from "./PresetLibrarySection";
+import {
+  CAMERA_LIBRARY,
+  CAMERA_LIBRARY_CATEGORIES,
+} from "@/lib/cinema/presets/libraryAdapters";
+import type { PresetUpdateField } from "@/lib/cinema/presetLibrary";
 
 export interface CameraPanelProps {
   config: DirectorConfig;
@@ -33,6 +40,7 @@ export interface CameraPanelProps {
   updateField: <F extends DirectorConfigField>(
     field: F,
     value: DirectorConfig[F]["value"],
+    source?: ConfigSource,
   ) => void;
   advanced: boolean;
 }
@@ -98,6 +106,22 @@ export default function CameraPanel({ config, updateField, advanced }: CameraPan
   return (
     <ScrollArea className="max-h-[65vh] pr-3">
       <div className="space-y-7">
+        {/* ---------------------------- PRESET LIBRARY ---------------------------- */}
+        <section className="space-y-3">
+          <SectionTitle
+            title="Camera Presets"
+            hint="Builtin looks plus your saved setups — search, favorite, reuse."
+          />
+          <PresetLibrarySection
+            type="camera"
+            builtin={CAMERA_LIBRARY}
+            categories={CAMERA_LIBRARY_CATEGORIES}
+            config={config}
+            updateField={updateField as unknown as PresetUpdateField}
+            saveLabel="Save camera preset"
+          />
+        </section>
+
         {/* ------------------------------ CAMERA BODY ------------------------------ */}
         <section className="space-y-4">
           <SectionTitle
