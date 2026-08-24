@@ -19,7 +19,13 @@ import ColorPanel from "./ColorPanel";
 import CompositionPanel from "./CompositionPanel";
 import OpticsPanel from "./OpticsPanel";
 import AtmospherePanel from "./AtmospherePanel";
-import type { ConfigSource, DirectorConfig, DirectorConfigField } from "@/lib/cinema/types";
+import DirectorAgentPanel from "./DirectorAgentPanel";
+import type {
+  ConfigSource,
+  DirectorConfig,
+  DirectorConfigField,
+  PartialDirectorConfig,
+} from "@/lib/cinema/types";
 import { CINEMA_MODEL_ADAPTERS, type CinemaVideoModelKey } from "@/lib/cinema/modelAdapters";
 
 type ChipKey = "references" | DirectorConfigField;
@@ -87,6 +93,8 @@ export interface CinemaComposerProps {
     value: DirectorConfig[F]["value"],
     source?: ConfigSource,
   ) => void;
+  /** Merges a Director Agent proposal (never overwrites USER fields). */
+  onApplyDirectorProposal: (proposal: PartialDirectorConfig) => void;
 }
 
 export default function CinemaComposer({
@@ -97,6 +105,7 @@ export default function CinemaComposer({
   onAdvancedChange,
   referenceCount = 0,
   updateField,
+  onApplyDirectorProposal,
 }: CinemaComposerProps) {
   const [openChip, setOpenChip] = useState<ChipKey | null>(null);
   const [model, setModel] = useState<CinemaVideoModelKey>("kling-3.0-pro");
@@ -143,6 +152,13 @@ export default function CinemaComposer({
           className="min-h-[220px] resize-none border-0 bg-transparent text-base focus-visible:ring-0"
         />
       </div>
+
+      <DirectorAgentPanel
+        config={config}
+        prompt={prompt}
+        model={model}
+        onApply={onApplyDirectorProposal}
+      />
 
       <div className="fuse-panel flex flex-wrap items-end gap-3 rounded-2xl p-4">
         <ControlBlock label="Model">

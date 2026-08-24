@@ -1,8 +1,13 @@
 import { useCallback, useState } from "react";
 import SiteShell from "@/components/mvp/SiteShell";
 import CinemaComposer from "@/components/cinema/CinemaComposer";
-import { SYSTEM_DEFAULT_CONFIG } from "@/lib/cinema/resolveConfig";
-import type { ConfigSource, DirectorConfig, DirectorConfigField } from "@/lib/cinema/types";
+import { SYSTEM_DEFAULT_CONFIG, applyDirectorProposal } from "@/lib/cinema/resolveConfig";
+import type {
+  ConfigSource,
+  DirectorConfig,
+  DirectorConfigField,
+  PartialDirectorConfig,
+} from "@/lib/cinema/types";
 
 export default function CinemaStudio() {
   const [config, setConfig] = useState<DirectorConfig>(() => ({ ...SYSTEM_DEFAULT_CONFIG }));
@@ -21,6 +26,11 @@ export default function CinemaStudio() {
     [],
   );
 
+  /** Director Agent proposals apply only where the field is not USER-sourced. */
+  const onApplyDirectorProposal = useCallback((proposal: PartialDirectorConfig) => {
+    setConfig((prev) => applyDirectorProposal(prev, proposal).config);
+  }, []);
+
   return (
     <SiteShell>
       <section className="container py-10">
@@ -31,6 +41,7 @@ export default function CinemaStudio() {
           advanced={advanced}
           onAdvancedChange={setAdvanced}
           updateField={updateField}
+          onApplyDirectorProposal={onApplyDirectorProposal}
         />
       </section>
     </SiteShell>
