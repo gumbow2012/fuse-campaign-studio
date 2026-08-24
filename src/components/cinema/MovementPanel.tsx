@@ -1,9 +1,12 @@
 import PresetPreview from "./PresetPreview";
 import { resolvePreviewMedia } from "@/lib/cinema/previewTypes";
+import { CompareDialog, useCompareSelection } from "./CompareView";
 import { useMemo, useState } from "react";
-import { Star } from "lucide-react";
+import { ArrowLeftRight, Star } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+
 import { Slider } from "@/components/ui/slider";
 import { Separator } from "@/components/ui/separator";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -59,6 +62,8 @@ export default function MovementPanel({ config, updateField, advanced }: Movemen
   const [category, setCategory] = useState<MovementPresetCategory | "All">("All");
   const [favoritesOnly, setFavoritesOnly] = useState(false);
   const [favorites, setFavorites] = useState<string[]>([]);
+  const compare = useCompareSelection<CinemaMovementPreset>();
+
 
   const setMovement = (patch: Partial<MovementPreset>) =>
     updateField("movement", { ...movement, ...patch });
@@ -146,9 +151,31 @@ export default function MovementPanel({ config, updateField, advanced }: Movemen
           </div>
         </div>
 
+        {/* CV4: optional compare flow — movement comparisons play both loops. */}
+        <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border/60 bg-card/40 px-2.5 py-1.5">
+          <ArrowLeftRight className="h-3 w-3 text-primary" />
+          <span className="text-[11px] text-muted-foreground">
+            {compare.a
+              ? `A: ${compare.a.name} — tap ⇄ on another movement to compare`
+              : "Tap ⇄ on a movement to mark it A, then compare with another."}
+          </span>
+          {compare.a ? (
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              className="h-6 text-[11px]"
+              onClick={compare.reset}
+            >
+              Clear
+            </Button>
+          ) : null}
+        </div>
+
         {grouped.length === 0 ? (
           <p className="text-sm text-muted-foreground">No movements match that filter.</p>
         ) : null}
+
 
         {grouped.map(({ category: cat, presets }) => (
           <div key={cat} className="space-y-2">
@@ -198,11 +225,55 @@ export default function MovementPanel({ config, updateField, advanced }: Movemen
                       )}
                     />
                   </button>
+                  <button
+                    type="button"
+                    aria-label={compare.isA(preset.id) ? "Marked as A" : "Compare with…"}
+                    onClick={() => compare.pick(preset)}
+                    className="absolute right-1.5 top-8 rounded-md bg-background/70 p-1 backdrop-blur"
+                  >
+                    <ArrowLeftRight
+                      className={cn(
+                        "h-3 w-3",
+                        compare.isA(preset.id) ? "text-primary" : "text-muted-foreground",
+                      )}
+                    />
+                  </button>
                 </div>
               ))}
             </div>
           </div>
         ))}
+
+        {compare.a && compare.b ? (
+          <CompareDialog
+            open
+            onOpenChange={(open) => {
+              if (!open) compare.closeCompare();
+            }}
+            title="Compare movement"
+            description="Both loops play simultaneously — gradient placeholders show where real loops are still pending."
+            a={{
+              media: resolvePreviewMedia({ category: "MOVEMENT", preset: compare.a }),
+              label: compare.a.name,
+              sublabel: compare.a.tags.slice(0, 3).join(" · "),
+            }}
+            b={{
+              media: resolvePreviewMedia({ category: "MOVEMENT", preset: compare.b }),
+              label: compare.b.name,
+              sublabel: compare.b.tags.slice(0, 3).join(" · "),
+            }}
+            modes={["side-by-side", "wipe", "hold"]}
+            onApplyA={() => {
+              if (compare.a) applyPreset(compare.a);
+              compare.reset();
+            }}
+            onApplyB={() => {
+              if (compare.b) applyPreset(compare.b);
+              compare.reset();
+            }}
+          />
+        ) : null}
+
 
         <Separator className="bg-border/60" />
 

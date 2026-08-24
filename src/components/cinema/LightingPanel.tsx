@@ -1,7 +1,9 @@
 import PresetPreview from "./PresetPreview";
 import { resolvePreviewMedia } from "@/lib/cinema/previewTypes";
+import { CompareDialog, useCompareSelection } from "./CompareView";
 import { useMemo, useState } from "react";
-import { Plus, Star, Trash2 } from "lucide-react";
+import { ArrowLeftRight, Plus, Star, Trash2 } from "lucide-react";
+
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -68,6 +70,8 @@ export default function LightingPanel({ config, updateField }: LightingPanelProp
   const [category, setCategory] = useState<LightingPresetCategory | "All">("All");
   const [favoritesOnly, setFavoritesOnly] = useState(false);
   const [favorites, setFavorites] = useState<string[]>([]);
+  const compare = useCompareSelection<CinemaLightingPreset>();
+
 
   const setLighting = (patch: Partial<LightingSetup>) =>
     updateField("lighting", { ...lighting, ...patch });
@@ -167,9 +171,31 @@ export default function LightingPanel({ config, updateField }: LightingPanelProp
           </div>
         </div>
 
+        {/* CV4: optional compare flow — mark A, then compare with any other preset. */}
+        <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border/60 bg-card/40 px-2.5 py-1.5">
+          <ArrowLeftRight className="h-3 w-3 text-primary" />
+          <span className="text-[11px] text-muted-foreground">
+            {compare.a
+              ? `A: ${compare.a.name} — tap ⇄ on another preset to compare`
+              : "Tap ⇄ on a preset to mark it A, then compare with another."}
+          </span>
+          {compare.a ? (
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              className="h-6 text-[11px]"
+              onClick={compare.reset}
+            >
+              Clear
+            </Button>
+          ) : null}
+        </div>
+
         {grouped.length === 0 ? (
           <p className="text-sm text-muted-foreground">No lighting presets match that filter.</p>
         ) : null}
+
 
         {grouped.map(({ category: cat, presets }) => (
           <div key={cat} className="space-y-2">
@@ -223,11 +249,56 @@ export default function LightingPanel({ config, updateField }: LightingPanelProp
                       )}
                     />
                   </button>
+                  <button
+                    type="button"
+                    aria-label={compare.isA(preset.id) ? "Marked as A" : "Compare with…"}
+                    onClick={() => compare.pick(preset)}
+                    className="absolute right-1.5 top-8 rounded-md bg-background/70 p-1 backdrop-blur"
+                  >
+                    <ArrowLeftRight
+                      className={cn(
+                        "h-3 w-3",
+                        compare.isA(preset.id) ? "text-primary" : "text-muted-foreground",
+                      )}
+                    />
+                  </button>
+
                 </div>
               ))}
             </div>
           </div>
         ))}
+
+        {compare.a && compare.b ? (
+          <CompareDialog
+            open
+            onOpenChange={(open) => {
+              if (!open) compare.closeCompare();
+            }}
+            title="Compare lighting"
+            a={{
+              media: resolvePreviewMedia({ category: "LIGHTING", preset: compare.a }),
+              label: compare.a.name,
+              sublabel: compare.a.illuminationStyle,
+            }}
+            b={{
+              media: resolvePreviewMedia({ category: "LIGHTING", preset: compare.b }),
+              label: compare.b.name,
+              sublabel: compare.b.illuminationStyle,
+            }}
+            modes={["side-by-side", "wipe", "hold"]}
+            onApplyA={() => {
+              if (compare.a) applyPreset(compare.a);
+              compare.reset();
+            }}
+            onApplyB={() => {
+              if (compare.b) applyPreset(compare.b);
+              compare.reset();
+            }}
+          />
+        ) : null}
+
+
 
         <Separator className="bg-border/60" />
 

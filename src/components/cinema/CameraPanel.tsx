@@ -1,10 +1,15 @@
 import PresetPreview from "./PresetPreview";
 import { resolvePreviewMedia } from "@/lib/cinema/previewTypes";
+import { CompareDialog, useCompareSelection } from "./CompareView";
+import FocalStrip from "./FocalStrip";
+import { ArrowLeftRight } from "lucide-react";
 import { useMemo } from "react";
+import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 import { ScrollArea } from "@/components/ui/scroll-area";
+
 import { cn } from "@/lib/utils";
 import type {
   ApertureSetup,
@@ -20,6 +25,7 @@ import type {
 import {
   CAMERA_PRESETS,
   CAMERA_PRESET_CATEGORIES,
+  type CinemaCameraPreset,
 } from "@/lib/cinema/presets/cameraPresets";
 import {
   APERTURE_OPTIONS,
@@ -28,7 +34,9 @@ import {
   FOCAL_LENGTH_PRESETS,
   LENS_PRESETS,
   LENS_PRESET_CATEGORIES,
+  type CinemaLensPreset,
 } from "@/lib/cinema/presets/lensPresets";
+
 import PresetLibrarySection from "./PresetLibrarySection";
 import {
   CAMERA_LIBRARY,
@@ -105,6 +113,12 @@ export default function CameraPanel({ config, updateField, advanced }: CameraPan
     [],
   );
 
+  // CV4: optional compare selections (camera bodies and lens looks).
+  const cameraCompare = useCompareSelection<CinemaCameraPreset>();
+  const lensCompare = useCompareSelection<CinemaLensPreset>();
+
+
+
   return (
     <ScrollArea className="max-h-[65vh] pr-3">
       <div className="space-y-7">
@@ -130,6 +144,11 @@ export default function CameraPanel({ config, updateField, advanced }: CameraPan
             title="Camera Body"
             hint="Image-character presets — not hardware claims."
           />
+          <CompareHint
+            label={cameraCompare.a?.name}
+            noun="camera"
+            onClear={cameraCompare.reset}
+          />
           {camerasByCategory.map(({ category, presets }) => (
             <div key={category} className="space-y-2">
               <p className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
@@ -137,41 +156,79 @@ export default function CameraPanel({ config, updateField, advanced }: CameraPan
               </p>
               <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
                 {presets.map((preset) => (
-                  <button
+                  <div
                     key={preset.id}
-                    type="button"
-                    onClick={() => applyFragment(preset.config)}
                     className={cn(
-                      "overflow-hidden rounded-xl border text-left transition-all",
+                      "relative overflow-hidden rounded-xl border transition-all",
                       "border-border/70 bg-card/60 hover:border-primary/60",
                       camera.body === preset.config.camera?.value.body &&
                         "border-primary/80 ring-1 ring-primary/50",
                     )}
                   >
-                    <PresetPreview
-                      media={resolvePreviewMedia({ category: "CAMERA", preset })}
-                      alt={preset.name}
+                    <button
+                      type="button"
+                      onClick={() => applyFragment(preset.config)}
+                      className="block w-full text-left"
+                    >
+                      <PresetPreview
+                        media={resolvePreviewMedia({ category: "CAMERA", preset })}
+                        alt={preset.name}
+                      />
+                      <div className="px-2.5 py-2">
+                        <p className="font-display text-[11px] leading-tight text-foreground/90">
+                          {preset.name}
+                        </p>
+                        <p className="truncate text-[10px] text-muted-foreground">
+                          {preset.tags.slice(0, 2).join(" · ")}
+                        </p>
+                      </div>
+                    </button>
+                    <CompareTileButton
+                      marked={cameraCompare.isA(preset.id)}
+                      onClick={() => cameraCompare.pick(preset)}
                     />
-                    <div className="px-2.5 py-2">
-                      <p className="font-display text-[11px] leading-tight text-foreground/90">
-                        {preset.name}
-                      </p>
-                      <p className="truncate text-[10px] text-muted-foreground">
-                        {preset.tags.slice(0, 2).join(" · ")}
-                      </p>
-                    </div>
-                  </button>
+                  </div>
                 ))}
               </div>
             </div>
           ))}
+
+          {cameraCompare.a && cameraCompare.b ? (
+            <CompareDialog
+              open
+              onOpenChange={(open) => {
+                if (!open) cameraCompare.closeCompare();
+              }}
+              title="Compare camera look"
+              a={{
+                media: resolvePreviewMedia({ category: "CAMERA", preset: cameraCompare.a }),
+                label: cameraCompare.a.name,
+                sublabel: cameraCompare.a.tags.slice(0, 3).join(" · "),
+              }}
+              b={{
+                media: resolvePreviewMedia({ category: "CAMERA", preset: cameraCompare.b }),
+                label: cameraCompare.b.name,
+                sublabel: cameraCompare.b.tags.slice(0, 3).join(" · "),
+              }}
+              onApplyA={() => {
+                if (cameraCompare.a) applyFragment(cameraCompare.a.config);
+                cameraCompare.reset();
+              }}
+              onApplyB={() => {
+                if (cameraCompare.b) applyFragment(cameraCompare.b.config);
+                cameraCompare.reset();
+              }}
+            />
+          ) : null}
         </section>
+
 
         <Separator className="bg-border/60" />
 
         {/* --------------------------------- LENS --------------------------------- */}
         <section className="space-y-4">
           <SectionTitle title="Lens" hint="Optical character library." />
+          <CompareHint label={lensCompare.a?.name} noun="lens" onClear={lensCompare.reset} />
           {lensesByCategory.map(({ category, presets }) => (
             <div key={category} className="space-y-2">
               <p className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
@@ -179,39 +236,81 @@ export default function CameraPanel({ config, updateField, advanced }: CameraPan
               </p>
               <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
                 {presets.map((preset) => (
-                  <button
+                  <div
                     key={preset.id}
-                    type="button"
-                    onClick={() => applyFragment(preset.config)}
                     className={cn(
-                      "overflow-hidden rounded-xl border text-left transition-all",
+                      "relative overflow-hidden rounded-xl border transition-all",
                       "border-border/70 bg-card/60 hover:border-primary/60",
                       lens.character === preset.config.lens?.value.character &&
                         "border-primary/80 ring-1 ring-primary/50",
                     )}
                   >
-                    <PresetPreview
-                      media={resolvePreviewMedia({ category: "LENS", preset })}
-                      alt={preset.name}
+                    <button
+                      type="button"
+                      onClick={() => applyFragment(preset.config)}
+                      className="block w-full text-left"
+                    >
+                      <PresetPreview
+                        media={resolvePreviewMedia({ category: "LENS", preset })}
+                        alt={preset.name}
+                      />
+                      <div className="px-2.5 py-2">
+                        <p className="font-display text-[11px] leading-tight text-foreground/90">
+                          {preset.name}
+                        </p>
+                        <p className="truncate text-[10px] text-muted-foreground">
+                          {preset.tags.slice(0, 2).join(" · ")}
+                        </p>
+                      </div>
+                    </button>
+                    <CompareTileButton
+                      marked={lensCompare.isA(preset.id)}
+                      onClick={() => lensCompare.pick(preset)}
                     />
-                    <div className="px-2.5 py-2">
-                      <p className="font-display text-[11px] leading-tight text-foreground/90">
-                        {preset.name}
-                      </p>
-                      <p className="truncate text-[10px] text-muted-foreground">
-                        {preset.tags.slice(0, 2).join(" · ")}
-                      </p>
-                    </div>
-                  </button>
+                  </div>
                 ))}
               </div>
             </div>
           ))}
 
+          {lensCompare.a && lensCompare.b ? (
+            <CompareDialog
+              open
+              onOpenChange={(open) => {
+                if (!open) lensCompare.closeCompare();
+              }}
+              title="Compare lens look"
+              a={{
+                media: resolvePreviewMedia({ category: "LENS", preset: lensCompare.a }),
+                label: lensCompare.a.name,
+                sublabel: lensCompare.a.tags.slice(0, 3).join(" · "),
+              }}
+              b={{
+                media: resolvePreviewMedia({ category: "LENS", preset: lensCompare.b }),
+                label: lensCompare.b.name,
+                sublabel: lensCompare.b.tags.slice(0, 3).join(" · "),
+              }}
+              onApplyA={() => {
+                if (lensCompare.a) applyFragment(lensCompare.a.config);
+                lensCompare.reset();
+              }}
+              onApplyB={() => {
+                if (lensCompare.b) applyFragment(lensCompare.b.config);
+                lensCompare.reset();
+              }}
+            />
+          ) : null}
+
+          <FocalStrip
+            value={lens.focalLengthMm}
+            onSelect={(mm) => setLens({ focalLengthMm: mm })}
+          />
+
           <div className="space-y-3">
             <p className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
               Focal Length
             </p>
+
             <div className="flex flex-wrap gap-1.5">
               {FOCAL_LENGTH_PRESETS.map((mm) => (
                 <PillButton
@@ -405,6 +504,48 @@ export default function CameraPanel({ config, updateField, advanced }: CameraPan
         ) : null}
       </div>
     </ScrollArea>
+  );
+}
+
+/** CV4: non-intrusive "mark A / compare with…" hint bar. */
+function CompareHint({
+  label,
+  noun,
+  onClear,
+}: {
+  label?: string;
+  noun: string;
+  onClear: () => void;
+}) {
+  return (
+    <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border/60 bg-card/40 px-2.5 py-1.5">
+      <ArrowLeftRight className="h-3 w-3 text-primary" />
+      <span className="text-[11px] text-muted-foreground">
+        {label
+          ? `A: ${label} — tap ⇄ on another ${noun} to compare`
+          : `Tap ⇄ on a ${noun} to mark it A, then compare with another.`}
+      </span>
+      {label ? (
+        <Button type="button" size="sm" variant="ghost" className="h-6 text-[11px]" onClick={onClear}>
+          Clear
+        </Button>
+      ) : null}
+    </div>
+  );
+}
+
+function CompareTileButton({ marked, onClick }: { marked: boolean; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      aria-label={marked ? "Marked as A" : "Compare with…"}
+      onClick={onClick}
+      className="absolute right-1.5 top-1.5 rounded-md bg-background/70 p-1 backdrop-blur"
+    >
+      <ArrowLeftRight
+        className={cn("h-3 w-3", marked ? "text-primary" : "text-muted-foreground")}
+      />
+    </button>
   );
 }
 

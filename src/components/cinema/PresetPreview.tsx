@@ -19,9 +19,14 @@ export interface PresetPreviewProps {
   /** Accessible description, e.g. the preset name. */
   alt: string;
   className?: string;
+  /**
+   * CV4: play `loop` previews as soon as they are visible (used by CompareView so
+   * two movement loops run side by side). Default stays hover-only.
+   */
+  autoPlay?: boolean;
 }
 
-export default function PresetPreview({ media, alt, className }: PresetPreviewProps) {
+export default function PresetPreview({ media, alt, className, autoPlay }: PresetPreviewProps) {
   const hostRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const [visible, setVisible] = useState(false);
@@ -45,7 +50,13 @@ export default function PresetPreview({ media, alt, className }: PresetPreviewPr
     return () => observer.disconnect();
   }, []);
 
+  useEffect(() => {
+    if (!autoPlay || !visible) return;
+    void videoRef.current?.play().catch(() => undefined);
+  }, [autoPlay, visible, media.src]);
+
   const base = cn("relative h-12 w-full overflow-hidden bg-muted/30", className);
+
 
   /* ------------------------------- swatches ------------------------------- */
   if (media.kind === "still-swatches" && !media.src) {
@@ -69,11 +80,13 @@ export default function PresetPreview({ media, alt, className }: PresetPreviewPr
         className={base}
         onMouseEnter={() => void videoRef.current?.play().catch(() => undefined)}
         onMouseLeave={() => {
+          if (autoPlay) return;
           const video = videoRef.current;
           if (!video) return;
           video.pause();
           video.currentTime = 0;
         }}
+
       >
         {visible ? (
           <video
