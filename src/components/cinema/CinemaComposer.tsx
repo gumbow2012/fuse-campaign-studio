@@ -20,7 +20,11 @@ import CompositionPanel from "./CompositionPanel";
 import OpticsPanel from "./OpticsPanel";
 import AtmospherePanel from "./AtmospherePanel";
 import DirectorAgentPanel from "./DirectorAgentPanel";
+import FilmSetupPanel from "./FilmSetupPanel";
+import ReferenceManager from "./ReferenceManager";
+import CinemaProjectPicker, { type CinemaProjectPickerProps } from "./CinemaProjectPicker";
 import type {
+  CinemaReference,
   ConfigSource,
   DirectorConfig,
   DirectorConfigField,
@@ -60,7 +64,7 @@ function summarize(key: ChipKey, config: DirectorConfig, referenceCount: number)
   if (!value) return "Auto";
   switch (key) {
     case "filmSetup":
-      return String(value.format ?? "Auto");
+      return String(value.productionType ?? value.format ?? "Auto");
     case "camera":
       return String(value.body ?? "Auto");
     case "movement":
@@ -86,7 +90,9 @@ export interface CinemaComposerProps {
   onPromptChange: (value: string) => void;
   advanced: boolean;
   onAdvancedChange: (value: boolean) => void;
-  referenceCount?: number;
+  references: CinemaReference[];
+  onReferencesChange: (references: CinemaReference[]) => void;
+  projectPicker: CinemaProjectPickerProps;
   /** Writes config[field] = { value, source } (defaults to "USER"). */
   updateField: <F extends DirectorConfigField>(
     field: F,
@@ -103,7 +109,9 @@ export default function CinemaComposer({
   onPromptChange,
   advanced,
   onAdvancedChange,
-  referenceCount = 0,
+  references,
+  onReferencesChange,
+  projectPicker,
   updateField,
   onApplyDirectorProposal,
 }: CinemaComposerProps) {
@@ -121,7 +129,8 @@ export default function CinemaComposer({
     <div className="space-y-5">
       <div className="flex items-center justify-between gap-4">
         <h1 className="font-display text-2xl tracking-tight sm:text-3xl">FUSE Cinema</h1>
-        <div className="flex items-center gap-2.5">
+        <div className="flex items-center gap-3">
+          <CinemaProjectPicker {...projectPicker} />
           <Label
             htmlFor="cinema-advanced"
             className="font-display text-[10px] uppercase tracking-[0.2em] text-muted-foreground"
@@ -137,7 +146,7 @@ export default function CinemaComposer({
           <DirectorChip
             key={chip.key}
             label={chip.label}
-            summary={summarize(chip.key, config, referenceCount)}
+            summary={summarize(chip.key, config, references.length)}
             active={openChip === chip.key}
             onClick={() => setOpenChip(chip.key)}
           />
@@ -258,7 +267,15 @@ export default function CinemaComposer({
         title={activeChip?.label ?? ""}
         description={advanced ? "Advanced mode enabled." : undefined}
       >
-        {openChip === "camera" ? (
+        {openChip === "references" ? (
+          <ReferenceManager
+            references={references}
+            onChange={onReferencesChange}
+            advanced={advanced}
+          />
+        ) : openChip === "filmSetup" ? (
+          <FilmSetupPanel config={config} updateField={updateField} advanced={advanced} />
+        ) : openChip === "camera" ? (
           <CameraPanel config={config} updateField={updateField} advanced={advanced} />
         ) : openChip === "movement" ? (
           <MovementPanel config={config} updateField={updateField} advanced={advanced} />
