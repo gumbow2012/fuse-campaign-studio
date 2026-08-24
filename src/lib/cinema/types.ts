@@ -294,6 +294,8 @@ export interface DirectorConfig {
   color: Sourced<ColorPalette>;
   optics: Sourced<OpticsSetup>;
   atmosphere: Sourced<AtmosphereSetup>;
+  character: Sourced<CharacterConfig>;
+
 }
 
 export type DirectorConfigField = keyof DirectorConfig;
