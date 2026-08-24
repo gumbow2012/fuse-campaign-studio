@@ -29,15 +29,19 @@ import FullPresetPanel from "./FullPresetPanel";
 import ReferenceManager from "./ReferenceManager";
 import ReferenceBoard from "./ReferenceBoard";
 import FinishWorkspace, { type ContinuationDirection } from "./FinishWorkspace";
+import ShotBoard, { type ShotThumb } from "./ShotBoard";
+
 
 import CinemaProjectPicker, { type CinemaProjectPickerProps } from "./CinemaProjectPicker";
 import type {
   CinemaReference,
+  CinemaShot,
   ConfigSource,
   DirectorConfig,
   DirectorConfigField,
   PartialDirectorConfig,
 } from "@/lib/cinema/types";
+
 import PreviewManifestReadout from "./PreviewManifestReadout";
 import PromptPreview from "./PromptPreview";
 import {
@@ -135,6 +139,22 @@ export interface CinemaComposerProps {
   /** Saved FINISH grade metadata per generation id (non-destructive). */
   finishes?: Record<string, CinemaFinish>;
   onFinishesChange?: (finishes: Record<string, CinemaFinish>) => void;
+  /** CV8 — multi-shot board binding (omit for a single-shot workspace). */
+  shotBoard?: {
+    shots: CinemaShot[];
+    activeShotId: string;
+    sceneName: string;
+    continuityLock: boolean;
+    resolveShotConfig: (shotId: string) => DirectorConfig;
+    onSelectShot: (shotId: string) => void;
+    onAddShot: () => void;
+    onDuplicateShot: (shotId: string) => void;
+    onDeleteShot: (shotId: string) => void;
+    onReorder: (from: number, to: number) => void;
+    onToggleContinuity: (value: boolean) => void;
+  };
+  /** Records a newly created generation id onto the active shot. */
+  onGenerationCreated?: (generationId: string) => void;
 }
 
 export default function CinemaComposer({
@@ -151,7 +171,10 @@ export default function CinemaComposer({
   cinemaProjectId = null,
   finishes = {},
   onFinishesChange,
+  shotBoard,
+  onGenerationCreated,
 }: CinemaComposerProps) {
+
   const [openChip, setOpenChip] = useState<ChipKey | null>(null);
   const [model, setModel] = useState<CinemaVideoModelKey>(DEFAULT_MODEL);
   const [resolution, setResolution] = useState<string>(() => defaultResolution(DEFAULT_MODEL));
@@ -255,6 +278,54 @@ export default function CinemaComposer({
   const finalPrompt = promptOverride ?? compiled.finalPrompt;
   const canGenerate = !generating && !compileError && finalPrompt.trim().length > 0;
 
+  /* ---------------- CV8: shot-scoped history ----------------
+     Generation rows are stored per project; each shot claims its own ids in
+     scenes[].shots[].generationIds. The FIRST shot also shows any unclaimed
+     row, so legacy single-shot projects keep their full history. */
+  const claimedIds = useMemo(() => {
+    const set = new Set<string>();
+    (shotBoard?.shots ?? []).forEach((shot) =>
+      (shot.generationIds ?? []).forEach((id) => set.add(id)),
+    );
+    return set;
+  }, [shotBoard?.shots]);
+
+  const generationsForShot = (shotId: string) => {
+    if (!shotBoard) return generations;
+    const own = new Set(
+      shotBoard.shots.find((s) => s.id === shotId)?.generationIds ?? [],
+    );
+    const isDefaultBucket = shotBoard.shots[0]?.id === shotId;
+    return generations.filter(
+      (row) => own.has(row.id) || (isDefaultBucket && !claimedIds.has(row.id)),
+    );
+  };
+
+  const shotGenerations = useMemo(
+    () => generationsForShot(shotBoard?.activeShotId ?? ""),
+    [generations, claimedIds, shotBoard?.activeShotId, shotBoard?.shots],
+  );
+
+  /** Latest completed output of a shot, for its board thumbnail. */
+  const thumbnailFor = (shot: CinemaShot): ShotThumb => {
+    const rows = generationsForShot(shot.id);
+    for (let i = rows.length - 1; i >= 0; i -= 1) {
+      const row = rows[i];
+      if (row.outputUrl) {
+        return { url: row.outputUrl, type: row.outputType === "video" ? "video" : "image" };
+      }
+    }
+    return null;
+  };
+
+  /* Switching shots (or appending to one) shows that shot's newest version. */
+  const activeShotKey = shotBoard?.activeShotId ?? "";
+  useEffect(() => {
+    setRevisionIndex(Math.max(0, shotGenerations.length - 1));
+  }, [activeShotKey, shotGenerations.length]);
+
+
+
 
   const onGenerate = async () => {
     if (!canGenerate) return;
@@ -275,11 +346,9 @@ export default function CinemaComposer({
         presetIds: [],
         cinemaProjectId,
       });
-      setGenerations((prev) => {
-        const next = [...prev, created];
-        setRevisionIndex(next.length - 1);
-        return next;
-      });
+      onGenerationCreated?.(created.id);
+      setGenerations((prev) => [...prev, created]);
+      setRevisionIndex(shotGenerations.length);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Generation could not be started");
     } finally {
@@ -289,7 +358,9 @@ export default function CinemaComposer({
 
   /* ---------------- CV7: FINISH + generative continuation ---------------- */
 
-  const selected = generations[Math.min(Math.max(revisionIndex, 0), generations.length - 1)];
+  const selected =
+    shotGenerations[Math.min(Math.max(revisionIndex, 0), shotGenerations.length - 1)];
+
   const selectedFinish: CinemaFinish = (selected && finishes[selected.id]) ?? NEUTRAL_FINISH;
 
   const onFinishChange = (next: CinemaFinish) => {
@@ -352,11 +423,10 @@ export default function CinemaComposer({
         presetIds: [],
         cinemaProjectId,
       });
-      setGenerations((prev) => {
-        const next = [...prev, created];
-        setRevisionIndex(next.length - 1);
-        return next;
-      });
+      onGenerationCreated?.(created.id);
+      setGenerations((prev) => [...prev, created]);
+      setRevisionIndex(shotGenerations.length);
+
       setSeed(null);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Continuation could not be started");
@@ -387,9 +457,28 @@ export default function CinemaComposer({
         </div>
       </div>
 
+      {/* 0 — CV8 SHOT BOARD: scene sequencing + active-shot switching */}
+      {shotBoard ? (
+        <ShotBoard
+          shots={shotBoard.shots}
+          activeShotId={shotBoard.activeShotId}
+          sceneName={shotBoard.sceneName}
+          continuityLock={shotBoard.continuityLock}
+          resolveShotConfig={shotBoard.resolveShotConfig}
+          thumbnailFor={thumbnailFor}
+          onSelectShot={shotBoard.onSelectShot}
+          onAddShot={shotBoard.onAddShot}
+          onDuplicateShot={shotBoard.onDuplicateShot}
+          onDeleteShot={shotBoard.onDeleteShot}
+          onReorder={shotBoard.onReorder}
+          onToggleContinuity={shotBoard.onToggleContinuity}
+        />
+      ) : null}
+
       {/* 1 — VISUAL STAGE (hero) */}
       <CinemaStage
-        generations={generations}
+        generations={shotGenerations}
+
         index={revisionIndex}
         onIndexChange={setRevisionIndex}
         references={references}
