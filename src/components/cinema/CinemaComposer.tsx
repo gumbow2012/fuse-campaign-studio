@@ -15,7 +15,8 @@ import ChipModal from "./ChipModal";
 import CameraPanel from "./CameraPanel";
 import MovementPanel from "./MovementPanel";
 import LightingPanel from "./LightingPanel";
-import type { DirectorConfig, DirectorConfigField } from "@/lib/cinema/types";
+import ColorPanel from "./ColorPanel";
+import type { ConfigSource, DirectorConfig, DirectorConfigField } from "@/lib/cinema/types";
 import { CINEMA_MODEL_ADAPTERS, type CinemaVideoModelKey } from "@/lib/cinema/modelAdapters";
 
 type ChipKey = "references" | DirectorConfigField;
@@ -77,10 +78,11 @@ export interface CinemaComposerProps {
   advanced: boolean;
   onAdvancedChange: (value: boolean) => void;
   referenceCount?: number;
-  /** Writes config[field] = { value, source: "USER" }. */
+  /** Writes config[field] = { value, source } (defaults to "USER"). */
   updateField: <F extends DirectorConfigField>(
     field: F,
     value: DirectorConfig[F]["value"],
+    source?: ConfigSource,
   ) => void;
 }
 
@@ -243,6 +245,8 @@ export default function CinemaComposer({
           <MovementPanel config={config} updateField={updateField} advanced={advanced} />
         ) : openChip === "lighting" ? (
           <LightingPanel config={config} updateField={updateField} advanced={advanced} />
+        ) : openChip === "color" ? (
+          <ColorPanel config={config} updateField={updateField} advanced={advanced} />
         ) : undefined}
       </ChipModal>
     </div>

@@ -35,6 +35,18 @@ export type ColorPalette = {
   blackBehavior: "crushed" | "lifted" | "neutral" | "filmic";
   highlightBehavior: "clipped" | "rolled-off" | "bloomed" | "neutral";
   skinToneTreatment: "natural" | "warm" | "cool" | "desaturated" | "golden" | "porcelain";
+  /* Additive grade controls (advanced mode + reference analysis). 0–100. */
+  highlights?: number;
+  shadows?: number;
+  blacks?: number;
+  whites?: number;
+  fade?: number;
+  grain?: number;
+  sharpness?: number;
+  halation?: number;
+  /** Dominant hue names observed in the reference / preset. */
+  dominantHues?: string[];
+
 };
 
 export type CinemaLightType =
