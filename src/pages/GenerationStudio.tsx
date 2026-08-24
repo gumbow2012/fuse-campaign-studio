@@ -107,9 +107,17 @@ type StudioModel = {
   supportsEndFrame?: boolean;
 };
 
+/**
+ * RESOLUTION TRUTHFULNESS — these lists mirror the live fal OpenAPI schemas:
+ *   nano-banana-pro (edit + text)        → 1K, 2K, 4K
+ *   kling 3.0 pro/standard               → NO resolution field (provider-fixed)
+ *   seedance 2.0 image-to-video          → 480p, 720p, 1080p, 4k
+ *   seedance 2.0 FAST image-to-video     → 480p, 720p ONLY
+ */
 const IMAGE_RESOLUTIONS = ["1K", "2K", "4K"];
-const KLING_RESOLUTIONS = ["720p", "1080p", "4K"];
-const SEEDANCE_RESOLUTIONS = ["480p", "720p", "1080p", "4K"];
+const KLING_RESOLUTIONS: string[] = [];
+const SEEDANCE_RESOLUTIONS = ["480p", "720p", "1080p", "4k"];
+const SEEDANCE_FAST_RESOLUTIONS = ["480p", "720p"];
 
 const ASPECT_OPTIONS: { value: string; note: string }[] = [
   { value: "auto", note: "Let the model decide" },
