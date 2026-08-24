@@ -5,11 +5,15 @@
 
 import type { CompositionSetup, FocusSetup } from "@/lib/cinema/types";
 
+import type { CinemaControlValidation, PreviewMedia } from "@/lib/cinema/previewTypes";
 export type CompositionPreset = {
   id: string;
   name: string;
   hint: string;
-  value: CompositionSetup;
+  value: CompositionSetup;  /** CV1: optional standardized visual preview (gradients are fallback-only). */
+  preview?: PreviewMedia;
+  /** CV1: optional cross-model validation record. */
+  validation?: CinemaControlValidation;
 };
 
 export const COMPOSITION_PRESETS: CompositionPreset[] = [
@@ -379,7 +383,10 @@ export type FocusPreset = {
   id: string;
   name: string;
   hint: string;
-  value: FocusSetup;
+  value: FocusSetup;  /** CV1: optional standardized visual preview (gradients are fallback-only). */
+  preview?: PreviewMedia;
+  /** CV1: optional cross-model validation record. */
+  validation?: CinemaControlValidation;
 };
 
 export const FOCUS_PRESETS: FocusPreset[] = [

@@ -4,13 +4,17 @@
 
 import type { AtmosphereSetup } from "@/lib/cinema/types";
 
+import type { CinemaControlValidation, PreviewMedia } from "@/lib/cinema/previewTypes";
 export type AtmospherePreset = {
   id: string;
   name: string;
   hint: string;
   /** Default intensity 0–100 when first selected. */
   defaultIntensity: number;
-  value: Omit<AtmosphereSetup, "presetId" | "presetName" | "intensity">;
+  value: Omit<AtmosphereSetup, "presetId" | "presetName" | "intensity">;  /** CV1: optional standardized visual preview (gradients are fallback-only). */
+  preview?: PreviewMedia;
+  /** CV1: optional cross-model validation record. */
+  validation?: CinemaControlValidation;
 };
 
 export const ATMOSPHERE_PRESETS: AtmospherePreset[] = [

@@ -7,7 +7,8 @@
  */
 
 import type {
-  ApertureSetup,
+
+import type { CinemaControlValidation, PreviewMedia } from "@/lib/cinema/previewTypes";  ApertureSetup,
   AtmosphereSetup,
   CameraSetup,
   CinemaLight,
@@ -42,7 +43,10 @@ export type CinemaFullPreset = {
   thumbnail: string;
   /** Short card line. */
   summary: string;
-  config: PartialDirectorConfig;
+  config: PartialDirectorConfig;  /** CV1: optional standardized visual preview (gradients are fallback-only). */
+  preview?: PreviewMedia;
+  /** CV1: optional cross-model validation record. */
+  validation?: CinemaControlValidation;
 };
 
 export const FULL_PRESET_CATEGORIES: FullPresetCategory[] = [
