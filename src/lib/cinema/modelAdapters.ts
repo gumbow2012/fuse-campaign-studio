@@ -21,6 +21,7 @@
  * model — none of these endpoints expose cinematography parameters.
  */
 
+import { tempoPromptText } from "./tempoProfiles";
 import type {
   ApertureSetup,
   AtmosphereSetup,
@@ -153,7 +154,7 @@ function filmSetupText(v: FilmSetup): string {
     typeof v.frameRate === "number" && `${v.frameRate}fps`,
     typeof v.shutterAngle === "number" && `${v.shutterAngle}° shutter`,
     typeof v.grain === "number" && v.grain > 0 && `grain ${v.grain}/100`,
-    v.tempo && `${v.tempo} tempo`,
+    v.tempo && tempoPromptText(v.tempo),
     v.productionValue && `${v.productionValue} production value`,
   );
 }

@@ -1,6 +1,8 @@
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
+import TempoPanel from "./TempoPanel";
+
 import type {
   ConfigSource,
   DirectorConfig,
@@ -62,17 +64,6 @@ const ERAS = [
   "Timeless",
 ];
 
-const TEMPOS = [
-  "Still",
-  "Very Slow",
-  "Slow Burn",
-  "Steady",
-  "Rhythmic",
-  "Energetic",
-  "Frantic",
-  "Staccato Cuts",
-];
-
 const PRODUCTION_VALUES = [
   "Guerrilla",
   "Indie",
@@ -132,13 +123,18 @@ export default function FilmSetupPanel({ config, updateField, advanced }: FilmSe
           onSelect={(era) => setFilmSetup({ era })}
         />
         <Separator className="bg-border/60" />
-        <ChoiceGroup
-          label="Tempo"
-          options={TEMPOS}
-          value={filmSetup.tempo}
-          onSelect={(tempo) => setFilmSetup({ tempo })}
-        />
+        <div className="space-y-2">
+          <h3 className="font-display text-[10px] uppercase tracking-[0.22em] text-muted-foreground">
+            Tempo
+          </h3>
+          <TempoPanel
+            embedded
+            value={filmSetup.tempo}
+            onSelect={(tempo) => setFilmSetup({ tempo })}
+          />
+        </div>
         <Separator className="bg-border/60" />
+
         <ChoiceGroup
           label="Production Value"
           options={PRODUCTION_VALUES}
