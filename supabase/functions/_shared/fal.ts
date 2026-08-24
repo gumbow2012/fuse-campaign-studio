@@ -119,13 +119,40 @@ export async function getFalQueueResult(endpointId: string, requestId: string) {
   }
 }
 
+/**
+ * RESOLUTION TRUTHFULNESS — nano-banana-pro (edit + text-to-image) exposes a
+ * real `resolution` enum in the live fal OpenAPI schema: 1K | 2K | 4K
+ * (default 1K). nano-banana (NB2) has NO resolution field, so its payload must
+ * never carry one.
+ */
+export const IMAGE_RESOLUTIONS = ["1K", "2K", "4K"] as const;
+export type ImageResolution = typeof IMAGE_RESOLUTIONS[number];
+
+/**
+ * Validates a requested nano-banana-pro resolution. Empty/absent → provider
+ * default "1K". A non-empty unsupported value is REJECTED (never silently
+ * downgraded), so requested === submitted.
+ */
+export function normalizeImageResolution(value: unknown): ImageResolution {
+  const raw = String(value ?? "").trim().toUpperCase();
+  if (!raw || raw === "AUTO") return "1K";
+  if ((IMAGE_RESOLUTIONS as readonly string[]).includes(raw)) return raw as ImageResolution;
+  throw new Error(
+    `Unsupported image resolution "${raw}" — supported: ${IMAGE_RESOLUTIONS.join(", ")}`,
+  );
+}
+
 export async function submitImageJob(args: {
   prompt: string;
   imageUrls: string[];
   aspectRatio?: string;
+  /** "1K" | "2K" | "4K" — validated, defaults to the provider default "1K". */
+  resolution?: string;
   webhookUrl: string;
 }) {
   if (!args.imageUrls.length) throw new Error("Image edit requires at least one image");
+
+  const resolution = normalizeImageResolution(args.resolution);
 
   let queued: unknown;
   try {
@@ -135,6 +162,7 @@ export async function submitImageJob(args: {
         image_urls: args.imageUrls,
         aspect_ratio: args.aspectRatio ?? "9:16",
         output_format: "png",
+        resolution,
       },
       webhookUrl: args.webhookUrl,
     });
@@ -148,8 +176,15 @@ export async function submitImageJob(args: {
   return requestId as string;
 }
 
-export async function runImageEdit(prompt: string, imageUrls: string[], aspectRatio = "9:16") {
+export async function runImageEdit(
+  prompt: string,
+  imageUrls: string[],
+  aspectRatio = "9:16",
+  resolutionRequest?: string,
+) {
   if (!imageUrls.length) throw new Error("Image edit requires at least one image");
+
+  const resolution = normalizeImageResolution(resolutionRequest);
 
   let result: unknown;
   try {
@@ -159,6 +194,7 @@ export async function runImageEdit(prompt: string, imageUrls: string[], aspectRa
         image_urls: imageUrls,
         aspect_ratio: aspectRatio,
         output_format: "png",
+        resolution,
       },
     });
   } catch (error) {
@@ -172,6 +208,7 @@ export async function runImageEdit(prompt: string, imageUrls: string[], aspectRa
 
   return imageUrl as string;
 }
+
 
 export async function submitVideoJob(args: {
   prompt: string;
