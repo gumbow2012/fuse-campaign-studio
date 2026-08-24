@@ -10,7 +10,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import DirectorChip from "./DirectorChip";
+import ConfigTile from "./ConfigTile";
+import CinemaStage from "./CinemaStage";
+import { buildActiveConfigTiles } from "@/lib/cinema/activeConfigTiles";
+
 import ChipModal from "./ChipModal";
 import CameraPanel from "./CameraPanel";
 import MovementPanel from "./MovementPanel";
