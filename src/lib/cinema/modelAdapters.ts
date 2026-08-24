@@ -24,6 +24,7 @@
 import type {
   ApertureSetup,
   AtmosphereSetup,
+  CharacterConfig,
   CameraSetup,
   ColorPalette,
   CompositionSetup,
@@ -298,6 +299,34 @@ function atmosphereText(v: AtmosphereSetup): string {
   );
 }
 
+function characterText(v: CharacterConfig): string {
+  const level = (label: string, value: unknown) =>
+    typeof value === "number" ? `${label} ${value}/100` : "";
+  return list(
+    v.emotion && `performance reads ${v.emotion}`,
+    v.expression,
+    v.emotion && level("emotion intensity", v.emotionIntensity),
+    v.eyeLine && `eye line ${v.eyeLine}`,
+    v.bodyLanguage && `${v.bodyLanguage} body language`,
+    v.blocking,
+    v.motion && `${v.motion} movement`,
+    level("energy", v.energy),
+    level("eye contact", v.eyeContact),
+    level("head movement", v.headMovement),
+    level("gesture level", v.gestureLevel),
+    level("body tension", v.bodyTension),
+    level("walking speed", v.walkingSpeed),
+    level("performance intensity", v.performanceIntensity),
+    level("stillness", v.stillness),
+    level("interaction level", v.interactionLevel),
+    v.identityReferenceIds?.length &&
+      `identity locked to ${v.identityReferenceIds.length} character reference${
+        v.identityReferenceIds.length === 1 ? "" : "s"
+      }`,
+    v.wardrobeAuthority && `wardrobe ${v.wardrobeAuthority}`,
+  );
+}
+
 /** Prose for one director field — model-independent; routing decides the use. */
 export function describeDirectorField(
   field: DirectorConfigField,
@@ -328,6 +357,8 @@ export function describeDirectorField(
       return opticsText(value as OpticsSetup);
     case "atmosphere":
       return atmosphereText(value as AtmosphereSetup);
+    case "character":
+      return characterText(value as CharacterConfig);
     default:
       return "";
   }

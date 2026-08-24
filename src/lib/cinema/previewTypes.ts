@@ -56,6 +56,7 @@ export type CinemaPreviewCategory =
   | "ATMOSPHERE"
   | "OPTICS"
   | "MOVEMENT"
+  | "CHARACTER"
   | "FULL";
 
 /**
@@ -74,6 +75,7 @@ export const PREVIEW_KINDS_BY_CATEGORY: Record<CinemaPreviewCategory, PreviewKin
   ATMOSPHERE: ["still"],
   OPTICS: ["still"],
   MOVEMENT: ["loop"],
+  CHARACTER: ["still"],
   FULL: ["still"],
 };
 
@@ -92,6 +94,7 @@ export const DEFAULT_CANONICAL_SCENE: Record<CinemaPreviewCategory, CanonicalSce
   ATMOSPHERE: "ENVIRONMENT",
   OPTICS: "ENVIRONMENT",
   MOVEMENT: "PORTRAIT",
+  CHARACTER: "PORTRAIT",
   FULL: "PORTRAIT",
 };
 

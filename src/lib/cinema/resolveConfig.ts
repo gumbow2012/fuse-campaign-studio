@@ -6,6 +6,7 @@
  */
 
 import type {
+  CharacterConfig,
   ColorPalette,
   DirectorConfig,
   DirectorConfigField,
@@ -28,6 +29,7 @@ const DIRECTOR_FIELDS: DirectorConfigField[] = [
   "color",
   "optics",
   "atmosphere",
+  "character",
 ];
 
 const SYSTEM_PALETTE: ColorPalette = {
@@ -42,6 +44,27 @@ const SYSTEM_PALETTE: ColorPalette = {
   blackBehavior: "neutral",
   highlightBehavior: "neutral",
   skinToneTreatment: "natural",
+};
+
+const SYSTEM_CHARACTER: CharacterConfig = {
+  identityReferenceIds: [],
+  expression: "",
+  emotion: "",
+  emotionIntensity: 50,
+  eyeLine: "",
+  bodyLanguage: "",
+  energy: 50,
+  blocking: "",
+  motion: "",
+  interactionLevel: 50,
+  wardrobeAuthority: "reference-guided",
+  eyeContact: 50,
+  headMovement: 30,
+  gestureLevel: 30,
+  bodyTension: 40,
+  walkingSpeed: 40,
+  performanceIntensity: 50,
+  stillness: 50,
 };
 
 export const SYSTEM_DEFAULT_CONFIG: DirectorConfig = {
@@ -111,6 +134,7 @@ export const SYSTEM_DEFAULT_CONFIG: DirectorConfig = {
     source: "SYSTEM_DEFAULT",
     value: { haze: 0, smoke: 0, particles: "none", weather: "clear", timeOfDay: "unspecified" },
   },
+  character: { source: "SYSTEM_DEFAULT", value: SYSTEM_CHARACTER },
 };
 
 function pick(
