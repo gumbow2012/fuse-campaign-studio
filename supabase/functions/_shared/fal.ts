@@ -566,3 +566,200 @@ export async function submitSeedanceReferenceVideoJob(args: {
   return { requestId, endpointId, input };
 }
 
+
+/* ==================== Image model registry (additive) ==================== */
+
+/**
+ * Generation Studio image models. Mirrors the VIDEO_MODELS pattern.
+ * Each entry knows its edit + text endpoints and WHICH secondary param it
+ * truly accepts, so per-model builders never cross-contaminate payloads
+ * (nano's `resolution` must never reach gpt-image-2 / seedream, etc.).
+ *
+ * LIVE fal OpenAPI schema:
+ *   fal-ai/nano-banana-pro/edit | fal-ai/nano-banana-pro
+ *     → prompt, image_urls[], aspect_ratio, output_format, resolution 1K|2K|4K
+ *   fal-ai/gpt-image-2/edit | fal-ai/gpt-image-2
+ *     → prompt, image_urls[], quality auto|low|medium|high, output_format,
+ *       optional mask_url, num_images. NO resolution, NO aspect_ratio.
+ *   fal-ai/bytedance/seedream/v4/edit | .../v4/text-to-image
+ *     → prompt, image_urls[], image_size { width, height } (default 2048x2048)
+ */
+export type ImageModelKey = "nano-banana-pro" | "gpt-image-2" | "seedream-v4";
+
+export type ImageModelParamKind = "resolution" | "quality" | "image_size";
+
+export type ImageModelDefinition = {
+  key: ImageModelKey;
+  label: string;
+  editEndpointId: string;
+  textEndpointId: string;
+  paramKind: ImageModelParamKind;
+  /** Selectable values for the model's single secondary control. */
+  options: string[];
+  defaultOption: string;
+  supportsAspectRatio: boolean;
+  supportsOutputFormat: boolean;
+  /** Only used when the live fal pricing lookup returns nothing. */
+  fallbackFlatUsd: number;
+};
+
+export const DEFAULT_IMAGE_MODEL: ImageModelKey = "nano-banana-pro";
+
+/** Seedream "Size" tiers → the real dimensions submitted as image_size. */
+export const SEEDREAM_IMAGE_SIZES: Record<string, { width: number; height: number }> = {
+  "1K": { width: 1024, height: 1024 },
+  "2K": { width: 2048, height: 2048 },
+  "4K": { width: 4096, height: 4096 },
+  "2K VERTICAL": { width: 1536, height: 2048 },
+};
+
+export const GPT_IMAGE_2_QUALITIES = ["auto", "low", "medium", "high"] as const;
+
+export const IMAGE_MODELS: Record<ImageModelKey, ImageModelDefinition> = {
+  "nano-banana-pro": {
+    key: "nano-banana-pro",
+    label: "Nano Banana Pro",
+    editEndpointId: IMAGE_MODEL,
+    textEndpointId: TEXT_IMAGE_MODEL,
+    paramKind: "resolution",
+    options: [...IMAGE_RESOLUTIONS],
+    defaultOption: "1K",
+    supportsAspectRatio: true,
+    supportsOutputFormat: true,
+    fallbackFlatUsd: 0.15,
+  },
+  "gpt-image-2": {
+    key: "gpt-image-2",
+    label: "GPT Image 2",
+    editEndpointId: "fal-ai/gpt-image-2/edit",
+    textEndpointId: "fal-ai/gpt-image-2",
+    paramKind: "quality",
+    options: [...GPT_IMAGE_2_QUALITIES],
+    defaultOption: "auto",
+    supportsAspectRatio: false,
+    supportsOutputFormat: true,
+    fallbackFlatUsd: 0.12,
+  },
+  "seedream-v4": {
+    key: "seedream-v4",
+    label: "Seedream v4",
+    editEndpointId: "fal-ai/bytedance/seedream/v4/edit",
+    textEndpointId: "fal-ai/bytedance/seedream/v4/text-to-image",
+    paramKind: "image_size",
+    options: Object.keys(SEEDREAM_IMAGE_SIZES),
+    defaultOption: "2K",
+    supportsAspectRatio: false,
+    supportsOutputFormat: false,
+    fallbackFlatUsd: 0.06,
+  },
+};
+
+export function resolveImageModelKey(value: unknown): ImageModelKey {
+  const key = typeof value === "string" ? value.trim() : "";
+  return (key && key in IMAGE_MODELS ? key : DEFAULT_IMAGE_MODEL) as ImageModelKey;
+}
+
+export function getImageModel(value: unknown) {
+  return IMAGE_MODELS[resolveImageModelKey(value)];
+}
+
+/** Validated gpt-image-2 quality; unsupported values are rejected, not clamped. */
+export function normalizeImageQuality(value: unknown) {
+  const raw = String(value ?? "").trim().toLowerCase();
+  if (!raw) return "auto";
+  if ((GPT_IMAGE_2_QUALITIES as readonly string[]).includes(raw)) return raw;
+  throw new Error(
+    `Unsupported image quality "${raw}" — supported: ${GPT_IMAGE_2_QUALITIES.join(", ")}`,
+  );
+}
+
+/** Validated Seedream size tier → real {width,height}. */
+export function normalizeSeedreamImageSize(value: unknown) {
+  const raw = String(value ?? "").trim().toUpperCase();
+  const tier = raw || "2K";
+  const size = SEEDREAM_IMAGE_SIZES[tier];
+  if (!size) {
+    throw new Error(
+      `Unsupported image size "${tier}" — supported: ${Object.keys(SEEDREAM_IMAGE_SIZES).join(", ")}`,
+    );
+  }
+  return { tier, size };
+}
+
+export type ImageModelRequest = {
+  prompt: string;
+  imageUrls?: string[];
+  aspectRatio?: string | null;
+  /** nano-banana-pro only. */
+  resolution?: unknown;
+  /** gpt-image-2 only. */
+  quality?: unknown;
+  /** seedream-v4 only. */
+  imageSize?: unknown;
+  maskUrl?: string | null;
+};
+
+/**
+ * Per-model input builder. Returns the endpoint (edit when references exist,
+ * else text-to-image), the exact fal input, and the requested/submitted option
+ * so callers can persist requested === submitted.
+ */
+export function buildImageModelInput(modelKey: unknown, request: ImageModelRequest) {
+  const model = getImageModel(modelKey);
+  const imageUrls = (request.imageUrls ?? [])
+    .map((entry) => String(entry ?? "").trim())
+    .filter((entry, index, all) => entry && all.indexOf(entry) === index);
+  const isEdit = imageUrls.length > 0;
+  const endpointId = isEdit ? model.editEndpointId : model.textEndpointId;
+
+  // Reject params the selected model does not support — never silently drop.
+  const has = (value: unknown) => value !== undefined && value !== null && String(value).trim() !== "";
+  if (model.paramKind !== "resolution" && has(request.resolution)) {
+    throw new Error(`${model.label} has no resolution setting`);
+  }
+  if (model.paramKind !== "quality" && has(request.quality)) {
+    throw new Error(`${model.label} has no quality setting`);
+  }
+  if (model.paramKind !== "image_size" && has(request.imageSize)) {
+    throw new Error(`${model.label} has no image size setting`);
+  }
+  const aspect = has(request.aspectRatio) ? String(request.aspectRatio).trim() : null;
+  if (aspect && !model.supportsAspectRatio) {
+    throw new Error(`${model.label} has no aspect ratio setting`);
+  }
+  if (has(request.maskUrl) && model.key !== "gpt-image-2") {
+    throw new Error(`${model.label} does not accept a mask`);
+  }
+
+  const input: Record<string, unknown> = {
+    prompt: request.prompt,
+    ...(isEdit ? { image_urls: imageUrls } : {}),
+    ...(model.supportsOutputFormat ? { output_format: "png" } : {}),
+  };
+
+  let requestedOption: string;
+  if (model.paramKind === "resolution") {
+    const resolution = normalizeImageResolution(request.resolution);
+    input.resolution = resolution;
+    if (aspect) input.aspect_ratio = aspect;
+    requestedOption = resolution;
+  } else if (model.paramKind === "quality") {
+    const quality = normalizeImageQuality(request.quality);
+    input.quality = quality;
+    if (isEdit && has(request.maskUrl)) input.mask_url = String(request.maskUrl).trim();
+    requestedOption = quality;
+  } else {
+    const { tier, size } = normalizeSeedreamImageSize(request.imageSize);
+    input.image_size = { width: size.width, height: size.height };
+    requestedOption = tier;
+  }
+
+  return {
+    model,
+    endpointId,
+    isEdit,
+    input,
+    requestedOption,
+    submittedOption: requestedOption,
+  };
+}
