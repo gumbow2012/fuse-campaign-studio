@@ -73,6 +73,28 @@ const MODEL_LABELS: Record<CinemaVideoModelKey, string> = {
 
 const MODEL_KEYS = CINEMA_MODEL_KEYS;
 const POLL_INTERVAL_MS = 6000;
+const DEFAULT_MODEL: CinemaVideoModelKey = "kling-3.0-pro";
+
+/* Bottom-bar defaults must come from the model's own schema — a hardcoded
+   default (e.g. "9:16") would be submitted to a model that has no such
+   setting and the adapter rejects it. */
+function defaultResolution(model: CinemaVideoModelKey): string {
+  return CINEMA_MODEL_CAPABILITIES[model].resolutions[0] ?? "";
+}
+
+function defaultAspect(model: CinemaVideoModelKey): string {
+  const caps = CINEMA_MODEL_CAPABILITIES[model];
+  if (caps.fixedAspect) return caps.fixedAspect;
+  if (!caps.aspectRatios.length) return "";
+  return caps.aspectRatios.includes("9:16") ? "9:16" : caps.aspectRatios[0];
+}
+
+function defaultDuration(model: CinemaVideoModelKey): string {
+  const durations = CINEMA_MODEL_CAPABILITIES[model].durations;
+  if (!durations.length) return "";
+  return durations.includes("5") ? "5" : durations[0];
+}
+
 
 function summarize(key: ChipKey, config: DirectorConfig, referenceCount: number): string {
   if (key === "references") {
@@ -138,10 +160,10 @@ export default function CinemaComposer({
   cinemaProjectId = null,
 }: CinemaComposerProps) {
   const [openChip, setOpenChip] = useState<ChipKey | null>(null);
-  const [model, setModel] = useState<CinemaVideoModelKey>("kling-3.0-pro");
-  const [resolution, setResolution] = useState<string>("");
-  const [aspectRatio, setAspectRatio] = useState<string>("9:16");
-  const [duration, setDuration] = useState("5");
+  const [model, setModel] = useState<CinemaVideoModelKey>(DEFAULT_MODEL);
+  const [resolution, setResolution] = useState<string>(() => defaultResolution(DEFAULT_MODEL));
+  const [aspectRatio, setAspectRatio] = useState<string>(() => defaultAspect(DEFAULT_MODEL));
+  const [duration, setDuration] = useState<string>(() => defaultDuration(DEFAULT_MODEL));
   const [audio, setAudio] = useState(false);
   const [promptOverride, setPromptOverride] = useState<string | null>(null);
   const [generating, setGenerating] = useState(false);
@@ -166,27 +188,34 @@ export default function CinemaComposer({
       return capabilities.aspectRatios.includes(prev) ? prev : capabilities.aspectRatios[0];
     });
     setDuration((prev) =>
-      capabilities.durations.includes(prev) ? prev : capabilities.durations[0],
+      capabilities.durations.includes(prev) ? prev : (capabilities.durations[0] ?? ""),
     );
     if (!capabilities.supportsAudio) setAudio(false);
   }, [capabilities]);
 
-  const compiled = useMemo(
-    () =>
-      cinemaPromptCompiler({
-        resolvedConfig: config,
-        prompt,
-        references,
-        model,
-        request: {
+  /* The adapter rejects any option the selected model cannot do. Surface that
+     as a message instead of letting it unmount the studio. */
+  const [compiled, compileError] = useMemo(() => {
+    const build = (request: Parameters<typeof cinemaPromptCompiler>[0]["request"]) =>
+      cinemaPromptCompiler({ resolvedConfig: config, prompt, references, model, request });
+    try {
+      return [
+        build({
           resolution: resolution || null,
           aspectRatio: aspectRatio || null,
           duration: duration || null,
           generateAudio: capabilities.supportsAudio ? audio : null,
-        },
-      }),
-    [config, prompt, references, model, resolution, aspectRatio, duration, audio, capabilities],
-  );
+        }),
+        null as string | null,
+      ] as const;
+    } catch (error) {
+      return [
+        build({ resolution: null, aspectRatio: null, duration: null, generateAudio: null }),
+        error instanceof Error ? error.message : "This option is not available on this model",
+      ] as const;
+    }
+  }, [config, prompt, references, model, resolution, aspectRatio, duration, audio, capabilities]);
+
 
   /* Load the project's revision history (append-only, oldest first). */
   useEffect(() => {
@@ -228,7 +257,8 @@ export default function CinemaComposer({
   }, [pendingIds]);
 
   const finalPrompt = promptOverride ?? compiled.finalPrompt;
-  const canGenerate = !generating && finalPrompt.trim().length > 0;
+  const canGenerate = !generating && !compileError && finalPrompt.trim().length > 0;
+
 
   const onGenerate = async () => {
     if (!canGenerate) return;
@@ -394,8 +424,9 @@ export default function CinemaComposer({
             {generating ? "STARTING…" : "GENERATE"}
           </Button>
           <span className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
-            {MODEL_LABELS[model]}
+            {compileError ?? MODEL_LABELS[model]}
           </span>
+
         </div>
       </div>
 
