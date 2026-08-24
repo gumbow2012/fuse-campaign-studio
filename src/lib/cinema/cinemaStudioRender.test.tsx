@@ -24,10 +24,11 @@ describe("cinema", () => {
     });
     expect(document.body.textContent).toContain("FUSE Cinema");
     const chips = Array.from(document.querySelectorAll("button")).filter((b) =>
-      ["References","Presets","Film Setup","Camera","Movement","Composition","Lighting","Color","Optics","Atmosphere"]
+      ["References","Presets","Film Setup","Camera","Lens","Movement","Composition","Light","Color","Optics","Atmosphere"]
         .some((l) => b.textContent?.includes(l)),
     );
-    expect(chips.length).toBeGreaterThanOrEqual(10);
+    expect(chips.length).toBeGreaterThanOrEqual(11);
+
     for (const chip of chips) {
       await act(async () => {
         chip.dispatchEvent(new MouseEvent("click", { bubbles: true }));
