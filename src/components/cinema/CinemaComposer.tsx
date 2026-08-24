@@ -257,7 +257,8 @@ export default function CinemaComposer({
   }, [pendingIds]);
 
   const finalPrompt = promptOverride ?? compiled.finalPrompt;
-  const canGenerate = !generating && finalPrompt.trim().length > 0;
+  const canGenerate = !generating && !compileError && finalPrompt.trim().length > 0;
+
 
   const onGenerate = async () => {
     if (!canGenerate) return;
