@@ -160,10 +160,10 @@ export default function CinemaComposer({
   cinemaProjectId = null,
 }: CinemaComposerProps) {
   const [openChip, setOpenChip] = useState<ChipKey | null>(null);
-  const [model, setModel] = useState<CinemaVideoModelKey>("kling-3.0-pro");
-  const [resolution, setResolution] = useState<string>("");
-  const [aspectRatio, setAspectRatio] = useState<string>("9:16");
-  const [duration, setDuration] = useState("5");
+  const [model, setModel] = useState<CinemaVideoModelKey>(DEFAULT_MODEL);
+  const [resolution, setResolution] = useState<string>(() => defaultResolution(DEFAULT_MODEL));
+  const [aspectRatio, setAspectRatio] = useState<string>(() => defaultAspect(DEFAULT_MODEL));
+  const [duration, setDuration] = useState<string>(() => defaultDuration(DEFAULT_MODEL));
   const [audio, setAudio] = useState(false);
   const [promptOverride, setPromptOverride] = useState<string | null>(null);
   const [generating, setGenerating] = useState(false);
@@ -188,27 +188,34 @@ export default function CinemaComposer({
       return capabilities.aspectRatios.includes(prev) ? prev : capabilities.aspectRatios[0];
     });
     setDuration((prev) =>
-      capabilities.durations.includes(prev) ? prev : capabilities.durations[0],
+      capabilities.durations.includes(prev) ? prev : (capabilities.durations[0] ?? ""),
     );
     if (!capabilities.supportsAudio) setAudio(false);
   }, [capabilities]);
 
-  const compiled = useMemo(
-    () =>
-      cinemaPromptCompiler({
-        resolvedConfig: config,
-        prompt,
-        references,
-        model,
-        request: {
+  /* The adapter rejects any option the selected model cannot do. Surface that
+     as a message instead of letting it unmount the studio. */
+  const [compiled, compileError] = useMemo(() => {
+    const build = (request: Parameters<typeof cinemaPromptCompiler>[0]["request"]) =>
+      cinemaPromptCompiler({ resolvedConfig: config, prompt, references, model, request });
+    try {
+      return [
+        build({
           resolution: resolution || null,
           aspectRatio: aspectRatio || null,
           duration: duration || null,
           generateAudio: capabilities.supportsAudio ? audio : null,
-        },
-      }),
-    [config, prompt, references, model, resolution, aspectRatio, duration, audio, capabilities],
-  );
+        }),
+        null as string | null,
+      ] as const;
+    } catch (error) {
+      return [
+        build({ resolution: null, aspectRatio: null, duration: null, generateAudio: null }),
+        error instanceof Error ? error.message : "This option is not available on this model",
+      ] as const;
+    }
+  }, [config, prompt, references, model, resolution, aspectRatio, duration, audio, capabilities]);
+
 
   /* Load the project's revision history (append-only, oldest first). */
   useEffect(() => {
