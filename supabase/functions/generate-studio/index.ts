@@ -251,9 +251,25 @@ async function startGeneration(admin: AdminClient, args: { input: StartInput; us
     const duration = clampSeedanceDuration(input.duration ?? 5, videoModel);
     const generateAudio = videoModel.supportsAudio ? input.generateAudio !== false : null;
     // Only forward params the selected model supports; everything else is dropped.
-    const resolution = videoModel.resolutions?.includes(String(input.resolution ?? "").toLowerCase())
-      ? String(input.resolution).toLowerCase()
-      : (videoModel.resolutions?.length ? "720p" : null);
+    // Truthfulness: a resolution is only accepted for models that have the
+    // field, and an unsupported value is rejected instead of silently clamped.
+    const requestedVideoResolution = String(input.resolution ?? "").trim().toLowerCase();
+    if (requestedVideoResolution && !videoModel.resolutions?.length) {
+      throw new Error(`${videoModel.label} has no resolution setting — its output is provider-fixed`);
+    }
+    if (
+      requestedVideoResolution && videoModel.resolutions?.length &&
+      !videoModel.resolutions.includes(requestedVideoResolution)
+    ) {
+      throw new Error(
+        `${videoModel.label} cannot render ${requestedVideoResolution.toUpperCase()} — supported: ${
+          videoModel.resolutions.map((value) => value.toUpperCase()).join(", ")
+        }`,
+      );
+    }
+    const resolution = videoModel.resolutions?.length
+      ? (requestedVideoResolution || "720p")
+      : null;
     const aspect = requestedAspect(input.aspectRatio);
     const aspectRatio = videoModel.fixedAspect
       ? videoModel.fixedAspect
