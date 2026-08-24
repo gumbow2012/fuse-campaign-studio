@@ -119,13 +119,40 @@ export async function getFalQueueResult(endpointId: string, requestId: string) {
   }
 }
 
+/**
+ * RESOLUTION TRUTHFULNESS — nano-banana-pro (edit + text-to-image) exposes a
+ * real `resolution` enum in the live fal OpenAPI schema: 1K | 2K | 4K
+ * (default 1K). nano-banana (NB2) has NO resolution field, so its payload must
+ * never carry one.
+ */
+export const IMAGE_RESOLUTIONS = ["1K", "2K", "4K"] as const;
+export type ImageResolution = typeof IMAGE_RESOLUTIONS[number];
+
+/**
+ * Validates a requested nano-banana-pro resolution. Empty/absent → provider
+ * default "1K". A non-empty unsupported value is REJECTED (never silently
+ * downgraded), so requested === submitted.
+ */
+export function normalizeImageResolution(value: unknown): ImageResolution {
+  const raw = String(value ?? "").trim().toUpperCase();
+  if (!raw || raw === "AUTO") return "1K";
+  if ((IMAGE_RESOLUTIONS as readonly string[]).includes(raw)) return raw as ImageResolution;
+  throw new Error(
+    `Unsupported image resolution "${raw}" — supported: ${IMAGE_RESOLUTIONS.join(", ")}`,
+  );
+}
+
 export async function submitImageJob(args: {
   prompt: string;
   imageUrls: string[];
   aspectRatio?: string;
+  /** "1K" | "2K" | "4K" — validated, defaults to the provider default "1K". */
+  resolution?: string;
   webhookUrl: string;
 }) {
   if (!args.imageUrls.length) throw new Error("Image edit requires at least one image");
+
+  const resolution = normalizeImageResolution(args.resolution);
 
   let queued: unknown;
   try {
@@ -135,6 +162,7 @@ export async function submitImageJob(args: {
         image_urls: args.imageUrls,
         aspect_ratio: args.aspectRatio ?? "9:16",
         output_format: "png",
+        resolution,
       },
       webhookUrl: args.webhookUrl,
     });
@@ -148,8 +176,15 @@ export async function submitImageJob(args: {
   return requestId as string;
 }
 
-export async function runImageEdit(prompt: string, imageUrls: string[], aspectRatio = "9:16") {
+export async function runImageEdit(
+  prompt: string,
+  imageUrls: string[],
+  aspectRatio = "9:16",
+  resolutionRequest?: string,
+) {
   if (!imageUrls.length) throw new Error("Image edit requires at least one image");
+
+  const resolution = normalizeImageResolution(resolutionRequest);
 
   let result: unknown;
   try {
@@ -159,6 +194,7 @@ export async function runImageEdit(prompt: string, imageUrls: string[], aspectRa
         image_urls: imageUrls,
         aspect_ratio: aspectRatio,
         output_format: "png",
+        resolution,
       },
     });
   } catch (error) {
@@ -172,6 +208,7 @@ export async function runImageEdit(prompt: string, imageUrls: string[], aspectRa
 
   return imageUrl as string;
 }
+
 
 export async function submitVideoJob(args: {
   prompt: string;
@@ -212,10 +249,15 @@ export async function submitVideoJob(args: {
   return requestId as string;
 }
 
+/** LIVE schema: kling v2.5-turbo image-to-video duration enum is ONLY 5 or 10. */
+export const KLING25_DURATIONS = [5, 10] as const;
+
 export function normalizeVideoDuration(value: unknown) {
   const duration = Number(value ?? MAX_VIDEO_DURATION_SECONDS);
-  return Number.isFinite(duration) && duration > 0
-    ? Math.min(duration, MAX_VIDEO_DURATION_SECONDS)
+  if (!Number.isFinite(duration) || duration <= 0) return MAX_VIDEO_DURATION_SECONDS;
+  // Guard only — the enum is not expanded; anything else falls back to 5s.
+  return (KLING25_DURATIONS as readonly number[]).includes(duration)
+    ? duration
     : MAX_VIDEO_DURATION_SECONDS;
 }
 
@@ -301,7 +343,8 @@ export const VIDEO_MODELS: Record<VideoModelKey, VideoModelDefinition> = {
     family: "seedance",
     supportsAudio: true,
     durationRange: { min: 4, max: 15 },
-    resolutions: ["480p", "720p", "1080p", "4k"],
+    // LIVE schema: the FAST image-to-video endpoint only accepts 480p / 720p.
+    resolutions: ["480p", "720p"],
     aspectRatios: ["9:16", "16:9", "1:1", "4:3", "3:4", "21:9"],
     fallbackUsdPerSecond: 0.2419,
     supportsMultiReference: true,
@@ -425,8 +468,23 @@ export async function submitFalJob(
 export const SEEDANCE_REFERENCE_TO_VIDEO = "bytedance/seedance-2.0/reference-to-video";
 export const SEEDANCE_FAST_REFERENCE_TO_VIDEO = "bytedance/seedance-2.0/fast/reference-to-video";
 
-/** Reference-to-video endpoints only support these resolutions. */
+/**
+ * Reference-to-video resolutions per VARIANT (live fal OpenAPI schema):
+ *   bytedance/seedance-2.0/reference-to-video      → 480p, 720p, 1080p, 4k
+ *   bytedance/seedance-2.0/fast/reference-to-video → 480p, 720p
+ */
+export const REFERENCE_VIDEO_RESOLUTIONS_BY_ENDPOINT: Record<string, string[]> = {
+  [SEEDANCE_REFERENCE_TO_VIDEO]: ["480p", "720p", "1080p", "4k"],
+  [SEEDANCE_FAST_REFERENCE_TO_VIDEO]: ["480p", "720p"],
+};
+
+/** Conservative set valid for BOTH variants (kept for existing callers). */
 export const REFERENCE_VIDEO_RESOLUTIONS = ["480p", "720p"];
+
+/** Resolutions the given reference-to-video endpoint truly accepts. */
+export function referenceVideoResolutions(endpointId: string) {
+  return REFERENCE_VIDEO_RESOLUTIONS_BY_ENDPOINT[endpointId] ?? REFERENCE_VIDEO_RESOLUTIONS;
+}
 
 /** Map a Seedance model key to its reference-to-video endpoint. */
 export function referenceToVideoEndpoint(modelKey: unknown) {
@@ -463,11 +521,18 @@ export function buildSeedanceReferenceInput(args: {
 
   const endpointId = referenceToVideoEndpoint(model.key);
   const duration = String(clampSeedanceDuration(args.duration ?? 5, model));
-  // reference-to-video endpoints only accept 480p or 720p (image-to-video is unaffected).
-  const requestedResolution = String(args.resolution ?? "").toLowerCase();
-  const resolution = REFERENCE_VIDEO_RESOLUTIONS.includes(requestedResolution)
-    ? requestedResolution
-    : "720p";
+  // VARIANT-AWARE: the fast reference endpoint is 480p/720p only, the standard
+  // one also accepts 1080p/4k. Nothing requested → 720p default (unchanged).
+  const supportedResolutions = referenceVideoResolutions(endpointId);
+  const requestedResolution = String(args.resolution ?? "").trim().toLowerCase();
+  if (requestedResolution && !supportedResolutions.includes(requestedResolution)) {
+    throw new Error(
+      `${model.label} reference video cannot render ${requestedResolution.toUpperCase()} — supported: ${
+        supportedResolutions.map((value) => value.toUpperCase()).join(", ")
+      }`,
+    );
+  }
+  const resolution = requestedResolution || "720p";
   const aspectRatio = model.aspectRatios?.includes(String(args.aspectRatio ?? ""))
     ? String(args.aspectRatio)
     : VERTICAL_VIDEO_ASPECT_RATIO;

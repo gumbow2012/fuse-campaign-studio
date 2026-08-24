@@ -1173,6 +1173,9 @@ export async function runGraphJob(admin: AdminClient, jobId: string) {
             prompt,
             imageUrls: effectiveInputs,
             aspectRatio: String(node.prompt_config?.aspect_ratio ?? "9:16"),
+            // nano-banana-pro really accepts 1K/2K/4K — pass the chosen value
+            // through instead of silently rendering at the 1K default.
+            resolution: node.prompt_config?.resolution as string | undefined,
             webhookUrl: `${Deno.env.get("SUPABASE_URL")}/functions/v1/fal-webhook?jobId=${encodeURIComponent(job.id)}&stepId=${encodeURIComponent(step.id)}`,
           });
 

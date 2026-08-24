@@ -16,6 +16,7 @@ import {
   getVideoModel,
   IMAGE_MODEL,
   IMAGE_MODEL_ALT,
+  normalizeImageResolution,
   referenceToVideoEndpoint,
   submitFalJob,
   videoFallbackUsdPerSecond,
@@ -2275,7 +2276,9 @@ async function startCanonicalMaster(admin: AdminClient, args: {
     });
 
     const aspect = String(args.aspectRatio ?? "").trim();
-    const resolution = String(args.resolution ?? "").trim().toUpperCase();
+    // Pro accepts 1K/2K/4K; an unsupported request is rejected, never
+    // silently downgraded to 1K. NB2 has no resolution field at all.
+    const resolution = imageModelKey === "nb2" ? "" : normalizeImageResolution(args.resolution);
     const falInput: Record<string, unknown> = imageModelKey === "nb2"
       ? {
         prompt,
@@ -2317,6 +2320,9 @@ async function startCanonicalMaster(admin: AdminClient, args: {
           nano_quality: imageModelKey === "pro" && ["2K", "4K"].includes(resolution)
             ? resolution.toLowerCase()
             : null,
+          // requested === submitted for the Pro path; null for NB2 (no field).
+          requested_resolution: imageModelKey === "pro" ? resolution : null,
+          submitted_resolution: imageModelKey === "pro" ? resolution : null,
           master_product_lock: masterLock,
           master_product_lock_summary: masterLockSummaryLine(masterLock),
           material_appearance_authority: materialAuthority,
@@ -2448,7 +2454,9 @@ async function startMatchedPair(admin: AdminClient, args: {
     });
 
     const aspect = String(args.aspectRatio ?? "").trim();
-    const resolution = String(args.resolution ?? "").trim().toUpperCase();
+    // Pro accepts 1K/2K/4K; an unsupported request is rejected, never
+    // silently downgraded to 1K. NB2 has no resolution field at all.
+    const resolution = imageModelKey === "nb2" ? "" : normalizeImageResolution(args.resolution);
     const falInput: Record<string, unknown> = imageModelKey === "nb2"
       ? {
         prompt,
@@ -2493,6 +2501,9 @@ async function startMatchedPair(admin: AdminClient, args: {
           nano_quality: imageModelKey === "pro" && ["2K", "4K"].includes(resolution)
             ? resolution.toLowerCase()
             : null,
+          // requested === submitted for the Pro path; null for NB2 (no field).
+          requested_resolution: imageModelKey === "pro" ? resolution : null,
+          submitted_resolution: imageModelKey === "pro" ? resolution : null,
           master_product_lock: masterLock,
           master_product_lock_summary: masterLockSummaryLine(masterLock),
           material_appearance_authority: materialAuthority,
@@ -2674,7 +2685,9 @@ async function startSwapFrame(admin: AdminClient, args: {
     });
 
     const aspect = String(args.aspectRatio ?? "").trim();
-    const resolution = String(args.resolution ?? "").trim().toUpperCase();
+    // Pro accepts 1K/2K/4K; an unsupported request is rejected, never
+    // silently downgraded to 1K. NB2 has no resolution field at all.
+    const resolution = imageModelKey === "nb2" ? "" : normalizeImageResolution(args.resolution);
     // The standard nano-banana edit endpoint rejects Pro-only fields (resolution,
     // aspect_ratio) with a 422 — the alt path sends only the supported fields.
     const falInput: Record<string, unknown> = imageModelKey === "nb2"
@@ -2714,6 +2727,9 @@ async function startSwapFrame(admin: AdminClient, args: {
           nano_quality: imageModelKey === "pro" && ["2K", "4K"].includes(resolution)
             ? resolution.toLowerCase()
             : null,
+          // requested === submitted for the Pro path; null for NB2 (no field).
+          requested_resolution: imageModelKey === "pro" ? resolution : null,
+          submitted_resolution: imageModelKey === "pro" ? resolution : null,
           geometry_fidelity: "strict",
 
           // DIAMOND OPTICS telemetry (analysed × controls, no media).

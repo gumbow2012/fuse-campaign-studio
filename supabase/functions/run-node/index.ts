@@ -18,6 +18,7 @@ import {
   IMAGE_MODEL,
   normalizeVideoDuration,
   submitImageJob,
+  normalizeImageResolution,
   submitVideoJob,
   VERTICAL_VIDEO_ASPECT_RATIO,
   videoFallbackUsdPerSecond,
@@ -255,10 +256,12 @@ async function startRun(admin: AdminClient, args: { versionId: string; nodeId: s
         fallbackFlatUsd: IMAGE_FALLBACK_USD,
       });
 
+      const imageResolution = normalizeImageResolution(node.prompt_config?.resolution);
       const requestId = await submitImageJob({
         prompt,
         imageUrls: imageInputs,
         aspectRatio: String(node.prompt_config?.aspect_ratio ?? VERTICAL_VIDEO_ASPECT_RATIO),
+        resolution: imageResolution,
         webhookUrl: `${webhookUrl}${encodeURIComponent(inserted.id)}`,
       });
 
@@ -270,7 +273,13 @@ async function startRun(admin: AdminClient, args: { versionId: string; nodeId: s
           provider_request_id: requestId,
           estimated_cost_usd: estimatedCostUsd,
           estimated_credits: creditsFromUsd(estimatedCostUsd),
-          input_payload: { prompt, image_urls: imageInputs },
+          input_payload: {
+            prompt,
+            image_urls: imageInputs,
+            // requested === submitted (validated, never clamped).
+            requested_resolution: imageResolution,
+            submitted_resolution: imageResolution,
+          },
         })
         .eq("id", inserted.id)
         .select("*")

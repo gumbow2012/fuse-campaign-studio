@@ -107,9 +107,17 @@ type StudioModel = {
   supportsEndFrame?: boolean;
 };
 
+/**
+ * RESOLUTION TRUTHFULNESS — these lists mirror the live fal OpenAPI schemas:
+ *   nano-banana-pro (edit + text)        → 1K, 2K, 4K
+ *   kling 3.0 pro/standard               → NO resolution field (provider-fixed)
+ *   seedance 2.0 image-to-video          → 480p, 720p, 1080p, 4k
+ *   seedance 2.0 FAST image-to-video     → 480p, 720p ONLY
+ */
 const IMAGE_RESOLUTIONS = ["1K", "2K", "4K"];
-const KLING_RESOLUTIONS = ["720p", "1080p", "4K"];
-const SEEDANCE_RESOLUTIONS = ["480p", "720p", "1080p", "4K"];
+const KLING_RESOLUTIONS: string[] = [];
+const SEEDANCE_RESOLUTIONS = ["480p", "720p", "1080p", "4k"];
+const SEEDANCE_FAST_RESOLUTIONS = ["480p", "720p"];
 
 const ASPECT_OPTIONS: { value: string; note: string }[] = [
   { value: "auto", note: "Let the model decide" },
@@ -185,7 +193,7 @@ const STUDIO_MODELS: StudioModel[] = [
     blurb: "Faster, lower-cost Seedance pass",
     usdPerSecond: 0.2419,
     durationRange: { min: 4, max: 15 },
-    resolutions: SEEDANCE_RESOLUTIONS,
+    resolutions: SEEDANCE_FAST_RESOLUTIONS,
     supportsAudio: true,
   },
 ];
@@ -758,7 +766,8 @@ export default function GenerationStudio() {
         Math.min(model.durationRange!.max, Math.max(model.durationRange!.min, prev))
       );
     }
-    setQuality((prev) => (model.resolutions.includes(prev) ? prev : model.resolutions[0]));
+    // Models with no resolution field keep an empty value — nothing is sent.
+    setQuality((prev) => (model.resolutions.includes(prev) ? prev : (model.resolutions[0] ?? "")));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [modelKey]);
 
@@ -1061,7 +1070,8 @@ export default function GenerationStudio() {
       kind: model.kind,
       model: model.key,
       prompt: text,
-      resolution: quality,
+      // Only send a resolution when the selected model truly accepts one.
+      ...(model.resolutions.length && quality ? { resolution: quality } : {}),
       aspectRatio,
       ...(urls.length ? { imageUrls: urls, startImageUrl: urls[0] } : {}),
       ...(isVideo
@@ -1616,12 +1626,18 @@ export default function GenerationStudio() {
 
               <div>
                 <SectionTitle>QUALITY</SectionTitle>
-                <SegmentedControl
-                  ariaLabel="Quality"
-                  value={quality}
-                  onChange={setQuality}
-                  options={model.resolutions.map((option) => ({ value: option, label: option }))}
-                />
+                {model.resolutions.length ? (
+                  <SegmentedControl
+                    ariaLabel="Quality"
+                    value={quality}
+                    onChange={setQuality}
+                    options={model.resolutions.map((option) => ({ value: option, label: option }))}
+                  />
+                ) : (
+                  <p className="text-[12px] leading-relaxed text-muted-foreground">
+                    Provider-fixed — this model has no resolution setting.
+                  </p>
+                )}
               </div>
 
               {isVideo && model.supportsAudio ? (
@@ -1681,7 +1697,7 @@ export default function GenerationStudio() {
                   <p>Direction is sent verbatim to the provider.</p>
                   <p>provider model: {model.key}</p>
                   <p>kind: {model.kind}</p>
-                  <p>resolution: {quality}</p>
+                  <p>resolution: {model.resolutions.length ? quality : "provider-fixed"}</p>
                   <p>aspect_ratio: {aspectRatio}</p>
                   {isVideo ? <p>duration: {duration}s · audio: {String(generateAudio)}</p> : null}
                   <p>reference order: {references.map((_, index) => index + 1).join(" → ") || "—"}</p>
