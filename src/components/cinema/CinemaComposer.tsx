@@ -73,6 +73,28 @@ const MODEL_LABELS: Record<CinemaVideoModelKey, string> = {
 
 const MODEL_KEYS = CINEMA_MODEL_KEYS;
 const POLL_INTERVAL_MS = 6000;
+const DEFAULT_MODEL: CinemaVideoModelKey = "kling-3.0-pro";
+
+/* Bottom-bar defaults must come from the model's own schema — a hardcoded
+   default (e.g. "9:16") would be submitted to a model that has no such
+   setting and the adapter rejects it. */
+function defaultResolution(model: CinemaVideoModelKey): string {
+  return CINEMA_MODEL_CAPABILITIES[model].resolutions[0] ?? "";
+}
+
+function defaultAspect(model: CinemaVideoModelKey): string {
+  const caps = CINEMA_MODEL_CAPABILITIES[model];
+  if (caps.fixedAspect) return caps.fixedAspect;
+  if (!caps.aspectRatios.length) return "";
+  return caps.aspectRatios.includes("9:16") ? "9:16" : caps.aspectRatios[0];
+}
+
+function defaultDuration(model: CinemaVideoModelKey): string {
+  const durations = CINEMA_MODEL_CAPABILITIES[model].durations;
+  if (!durations.length) return "";
+  return durations.includes("5") ? "5" : durations[0];
+}
+
 
 function summarize(key: ChipKey, config: DirectorConfig, referenceCount: number): string {
   if (key === "references") {
