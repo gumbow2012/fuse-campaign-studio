@@ -77,6 +77,7 @@ export default function ColorPanel({ config, updateField, advanced }: ColorPanel
   const [favoritesOnly, setFavoritesOnly] = useState(false);
   const [favorites, setFavorites] = useState<string[]>([]);
   const [customs, setCustoms] = useState<CustomPalette[]>([]);
+  const compare = useCompareSelection<CinemaColorPreset>();
   const [analyzing, setAnalyzing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [lastReference, setLastReference] = useState<{ name: string; palette: ColorPalette } | null>(
