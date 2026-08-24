@@ -24,7 +24,7 @@ describe("cinema", () => {
     });
     expect(document.body.textContent).toContain("FUSE Cinema");
     const chips = Array.from(document.querySelectorAll("button")).filter((b) =>
-      ["References","Presets","Film Setup","Camera","Lens","Movement","Composition","Light","Color","Optics","Atmosphere"]
+      ["References","Presets","Film Setup","Camera","Lens","Movement","Composition","Light","Color","Optics","Atmosphere","Character"]
         .some((l) => b.textContent?.includes(l)),
     );
     expect(chips.length).toBeGreaterThanOrEqual(11);
@@ -34,5 +34,14 @@ describe("cinema", () => {
         chip.dispatchEvent(new MouseEvent("click", { bubbles: true }));
       });
     }
+
+    const characterTile = Array.from(document.querySelectorAll("button")).find((b) =>
+      b.textContent?.includes("Character"),
+    );
+    expect(characterTile).toBeTruthy();
+    await act(async () => {
+      characterTile!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    expect(document.body.textContent).toContain("Intimidating");
   });
 });
