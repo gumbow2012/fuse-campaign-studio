@@ -140,8 +140,8 @@ export function buildPreviewManifest(): PreviewManifest {
 
 /** Compact one-line-per-category readout for dev/admin surfaces. */
 export function formatPreviewManifest(manifest = buildPreviewManifest()): string[] {
-  return manifest.counts.map(
-    (count) =>
-      `${count.category}: ${count.required} ${count.kind}${count.required === 1 ? "" : "s"} required · ${count.missing} missing`,
-  );
+  return manifest.counts.map((count) => {
+    const label = count.kind === "still-swatches" ? "swatch sets" : `${count.kind}s`;
+    return `${count.category}: ${count.required} ${label} required · ${count.missing} missing`;
+  });
 }
