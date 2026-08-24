@@ -242,6 +242,41 @@ export type AtmosphereSetup = {
   intensity?: number;
 };
 
+/**
+ * CHARACTER / PERFORMANCE direction (CV5).
+ * Every field is PROMPT_BASED on every current model — no model exposes native
+ * performance controls, so this compiles to model-safe prose only.
+ */
+export type CharacterConfig = {
+  /** Ids of CinemaReferences carrying the "Character" role that drive identity. */
+  identityReferenceIds: string[];
+  /** Face/performance description (usually seeded by the chosen emotion). */
+  expression: string;
+  /** Emotion preset id, e.g. "confident". */
+  emotion: string;
+  /** 0–100 */
+  emotionIntensity: number;
+  eyeLine: string;
+  bodyLanguage: string;
+  /** Overall performance energy, 0–100. */
+  energy: number;
+  blocking: string;
+  motion: string;
+  /** How much the subject engages other subjects / the product, 0–100. */
+  interactionLevel: number;
+  wardrobeAuthority: string;
+  /* Performance parameters — all 0–100. */
+  eyeContact: number;
+  headMovement: number;
+  gestureLevel: number;
+  bodyTension: number;
+  walkingSpeed: number;
+  performanceIntensity: number;
+  stillness: number;
+};
+
+
+
 
 /* ------------------------------------------------------------------ */
 /* Director config                                                     */
