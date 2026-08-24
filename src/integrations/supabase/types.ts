@@ -59,6 +59,60 @@ export type Database = {
           },
         ]
       }
+      cinema_control_tests: {
+        Row: {
+          category: string
+          consistency_score: number | null
+          created_at: string
+          difference_score: number | null
+          evaluator_notes: string | null
+          id: string
+          model: string
+          outputs: Json
+          preset_id: string
+          promotion: string | null
+          support_type: string | null
+          test_date: string
+          user_id: string
+          variable_a: string
+          variable_b: string
+        }
+        Insert: {
+          category: string
+          consistency_score?: number | null
+          created_at?: string
+          difference_score?: number | null
+          evaluator_notes?: string | null
+          id?: string
+          model: string
+          outputs?: Json
+          preset_id: string
+          promotion?: string | null
+          support_type?: string | null
+          test_date?: string
+          user_id: string
+          variable_a: string
+          variable_b: string
+        }
+        Update: {
+          category?: string
+          consistency_score?: number | null
+          created_at?: string
+          difference_score?: number | null
+          evaluator_notes?: string | null
+          id?: string
+          model?: string
+          outputs?: Json
+          preset_id?: string
+          promotion?: string | null
+          support_type?: string | null
+          test_date?: string
+          user_id?: string
+          variable_a?: string
+          variable_b?: string
+        }
+        Relationships: []
+      }
       cinema_presets: {
         Row: {
           builtin: boolean
