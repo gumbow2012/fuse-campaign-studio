@@ -19,6 +19,7 @@ import {
   submitSeedanceReferenceVideoJob,
   submitVideoJob,
   TEXT_IMAGE_MODEL,
+  normalizeImageResolution,
   textToVideoEndpoint,
   VERTICAL_VIDEO_ASPECT_RATIO,
   videoFallbackUsdPerSecond,
@@ -160,10 +161,12 @@ function collectImageUrls(input: StartInput) {
   return urls;
 }
 
-/** Normalize an image-model resolution request; unsupported values are dropped. */
+/**
+ * nano-banana-pro (edit + text-to-image) really accepts 1K/2K/4K. Validate and
+ * pass it through: unsupported values are rejected, never downgraded to 1K.
+ */
 function imageResolution(value: unknown) {
-  const raw = String(value ?? "").trim().toUpperCase();
-  return raw === "1K" || raw === "2K" || raw === "4K" ? raw : null;
+  return normalizeImageResolution(value);
 }
 
 function requestedAspect(value: unknown) {
@@ -217,7 +220,8 @@ async function startGeneration(admin: AdminClient, args: { input: StartInput; us
         output_format: "png",
         ...(referenceUrls.length ? { image_urls: referenceUrls } : {}),
         ...(aspect ? { aspect_ratio: aspect } : {}),
-        ...(resolution ? { resolution } : {}),
+        // requested === submitted (both nano-banana-pro endpoints accept it).
+        resolution,
       };
 
       const requestId = await submitFalJob(endpointId, falInput, webhookUrl);
@@ -230,7 +234,11 @@ async function startGeneration(admin: AdminClient, args: { input: StartInput; us
           provider_request_id: requestId,
           estimated_cost_usd: estimatedCostUsd,
           estimated_credits: creditsFromUsd(estimatedCostUsd),
-          input_payload: falInput,
+          input_payload: {
+            ...falInput,
+            requested_resolution: resolution,
+            submitted_resolution: resolution,
+          },
         })
         .eq("id", inserted.id)
         .select("*")

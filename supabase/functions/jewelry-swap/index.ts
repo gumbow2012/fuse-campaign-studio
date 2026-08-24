@@ -16,6 +16,7 @@ import {
   getVideoModel,
   IMAGE_MODEL,
   IMAGE_MODEL_ALT,
+  normalizeImageResolution,
   referenceToVideoEndpoint,
   submitFalJob,
   videoFallbackUsdPerSecond,
