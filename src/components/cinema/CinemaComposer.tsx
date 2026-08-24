@@ -137,6 +137,22 @@ export interface CinemaComposerProps {
   /** Saved FINISH grade metadata per generation id (non-destructive). */
   finishes?: Record<string, CinemaFinish>;
   onFinishesChange?: (finishes: Record<string, CinemaFinish>) => void;
+  /** CV8 — multi-shot board binding (omit for a single-shot workspace). */
+  shotBoard?: {
+    shots: CinemaShot[];
+    activeShotId: string;
+    sceneName: string;
+    continuityLock: boolean;
+    resolveShotConfig: (shotId: string) => DirectorConfig;
+    onSelectShot: (shotId: string) => void;
+    onAddShot: () => void;
+    onDuplicateShot: (shotId: string) => void;
+    onDeleteShot: (shotId: string) => void;
+    onReorder: (from: number, to: number) => void;
+    onToggleContinuity: (value: boolean) => void;
+  };
+  /** Records a newly created generation id onto the active shot. */
+  onGenerationCreated?: (generationId: string) => void;
 }
 
 export default function CinemaComposer({
@@ -153,7 +169,10 @@ export default function CinemaComposer({
   cinemaProjectId = null,
   finishes = {},
   onFinishesChange,
+  shotBoard,
+  onGenerationCreated,
 }: CinemaComposerProps) {
+
   const [openChip, setOpenChip] = useState<ChipKey | null>(null);
   const [model, setModel] = useState<CinemaVideoModelKey>(DEFAULT_MODEL);
   const [resolution, setResolution] = useState<string>(() => defaultResolution(DEFAULT_MODEL));
