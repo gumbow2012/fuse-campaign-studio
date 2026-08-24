@@ -6,9 +6,9 @@
  * whole ("Apply All") or partially ("Camera Only", "Lighting Only", …).
  */
 
+import type { CinemaControlValidation, PreviewMedia } from "@/lib/cinema/previewTypes";
 import type {
-
-import type { CinemaControlValidation, PreviewMedia } from "@/lib/cinema/previewTypes";  ApertureSetup,
+  ApertureSetup,
   AtmosphereSetup,
   CameraSetup,
   CinemaLight,
