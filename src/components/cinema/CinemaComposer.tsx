@@ -16,6 +16,9 @@ import CameraPanel from "./CameraPanel";
 import MovementPanel from "./MovementPanel";
 import LightingPanel from "./LightingPanel";
 import ColorPanel from "./ColorPanel";
+import CompositionPanel from "./CompositionPanel";
+import OpticsPanel from "./OpticsPanel";
+import AtmospherePanel from "./AtmospherePanel";
 import type { ConfigSource, DirectorConfig, DirectorConfigField } from "@/lib/cinema/types";
 import { CINEMA_MODEL_ADAPTERS, type CinemaVideoModelKey } from "@/lib/cinema/modelAdapters";
 
@@ -247,6 +250,12 @@ export default function CinemaComposer({
           <LightingPanel config={config} updateField={updateField} advanced={advanced} />
         ) : openChip === "color" ? (
           <ColorPanel config={config} updateField={updateField} advanced={advanced} />
+        ) : openChip === "composition" ? (
+          <CompositionPanel config={config} updateField={updateField} advanced={advanced} />
+        ) : openChip === "optics" ? (
+          <OpticsPanel config={config} updateField={updateField} advanced={advanced} />
+        ) : openChip === "atmosphere" ? (
+          <AtmospherePanel config={config} updateField={updateField} advanced={advanced} />
         ) : undefined}
       </ChipModal>
     </div>

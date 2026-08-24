@@ -166,12 +166,44 @@ export type CompositionSetup = {
   leadRoom?: string;
   subjectPlacement: string;
   horizon?: string;
+  /* Additive advanced controls (0–100 normalized unless noted). */
+  subjectX?: number;
+  subjectY?: number;
+  horizonPosition?: number;
+  headroomAmount?: number;
+  leadRoomAmount?: number;
+  negativeSpace?: number;
+  framingScale?: number;
+  cameraHeight?: number;
+  /** Dutch tilt in degrees, negative = counter-clockwise. */
+  tiltDegrees?: number;
 };
 
 export type FocusSetup = {
   focusTarget: string;
   focusMode: "locked" | "rack" | "follow";
   focusPlaneDepth?: string;
+  /** Additive: id/name of the selected Cinema focus preset. */
+  presetId?: string;
+  presetName?: string;
+  /** Rack direction when focusMode is "rack". */
+  rackDirection?: "near-to-far" | "far-to-near" | "none";
+  /** 0–100 depth-of-field tightness hint. */
+  depthOfFieldTightness?: number;
+  /** 0–100 lens breathing character. */
+  breathing?: number;
+  focusStack?: boolean;
+};
+
+export type CinemaJewelryOptics = {
+  sparkle: number;
+  whiteBrilliance: number;
+  rainbowFire: number;
+  glintSize: number;
+  glintCoverage: number;
+  bloom: number;
+  starburst: number;
+  fireSaturation: number;
 };
 
 export type OpticsSetup = {
@@ -181,6 +213,15 @@ export type OpticsSetup = {
   chromaticAberration: number;
   vignette: number;
   distortion: number;
+  /* Additive general optics. */
+  bloom?: number;
+  bokeh?: string;
+  highlightBehavior?: "clipped" | "rolled-off" | "bloomed" | "neutral";
+  /**
+   * Cinema-LOCAL jewelry optics. Deliberately separate from the Jewelry Swap
+   * Diamond Optics profile — no shared code or imports.
+   */
+  jewelry?: CinemaJewelryOptics;
 };
 
 export type AtmosphereSetup = {
@@ -189,7 +230,12 @@ export type AtmosphereSetup = {
   particles: string;
   weather: string;
   timeOfDay: string;
+  /* Additive: selected atmosphere preset + its intensity (0–100). */
+  presetId?: string;
+  presetName?: string;
+  intensity?: number;
 };
+
 
 /* ------------------------------------------------------------------ */
 /* Director config                                                     */
