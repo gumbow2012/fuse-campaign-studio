@@ -1,4 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
+import type { Json } from "@/integrations/supabase/types";
 import type {
   CinemaProjectState,
   CinemaProjectSummary,
@@ -109,6 +110,11 @@ export async function detectReferenceRoles(imageDataUrl: string): Promise<Detect
 /* Project persistence (cinema_projects — RLS own-row)                 */
 /* ------------------------------------------------------------------ */
 
+/** Plain-JSON round-trip so the jsonb column receives a serializable value. */
+function toJson(state: CinemaProjectState): Json {
+  return JSON.parse(JSON.stringify(state)) as Json;
+}
+
 export async function listCinemaProjects(): Promise<CinemaProjectSummary[]> {
   const { data, error } = await supabase
     .from("cinema_projects")
@@ -137,7 +143,7 @@ export async function createCinemaProject(
       {
         user_id: userId,
         name: name.trim().slice(0, 120) || "Untitled Project",
-        project_state: state as unknown as Record<string, unknown>,
+        project_state: toJson(state),
       },
     ])
     .select("id, name, updated_at")
@@ -156,7 +162,7 @@ export async function saveCinemaProject(
   name?: string,
 ): Promise<void> {
   const patch: Record<string, unknown> = {
-    project_state: state as unknown as Record<string, unknown>,
+    project_state: toJson(state),
     updated_at: new Date().toISOString(),
   };
   if (name !== undefined) patch.name = name.trim().slice(0, 120) || "Untitled Project";
