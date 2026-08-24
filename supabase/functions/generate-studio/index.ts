@@ -13,13 +13,12 @@ import {
   getFalQueueResult,
   getFalQueueStatus,
   getVideoModel,
-  IMAGE_MODEL,
   referenceToVideoEndpoint,
   submitFalJob,
   submitSeedanceReferenceVideoJob,
   submitVideoJob,
-  TEXT_IMAGE_MODEL,
-  normalizeImageResolution,
+  buildImageModelInput,
+  getImageModel,
   textToVideoEndpoint,
   VERTICAL_VIDEO_ASPECT_RATIO,
   videoFallbackUsdPerSecond,
@@ -136,6 +135,10 @@ type StartInput = {
   imageUrls?: string[];
   duration?: number | string;
   resolution?: string;
+  /** gpt-image-2 only. */
+  quality?: string;
+  /** seedream-v4 only ("1K" | "2K" | "4K" | "2K VERTICAL"). */
+  imageSize?: string;
   generateAudio?: boolean;
   aspectRatio?: string;
 };
@@ -159,14 +162,6 @@ function collectImageUrls(input: StartInput) {
     if (urls.length >= MAX_REFERENCE_IMAGES) break;
   }
   return urls;
-}
-
-/**
- * nano-banana-pro (edit + text-to-image) really accepts 1K/2K/4K. Validate and
- * pass it through: unsupported values are rejected, never downgraded to 1K.
- */
-function imageResolution(value: unknown) {
-  return normalizeImageResolution(value);
 }
 
 function requestedAspect(value: unknown) {
