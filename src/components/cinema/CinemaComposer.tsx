@@ -423,11 +423,10 @@ export default function CinemaComposer({
         presetIds: [],
         cinemaProjectId,
       });
-      setGenerations((prev) => {
-        const next = [...prev, created];
-        setRevisionIndex(next.length - 1);
-        return next;
-      });
+      onGenerationCreated?.(created.id);
+      setGenerations((prev) => [...prev, created]);
+      setRevisionIndex(shotGenerations.length);
+
       setSeed(null);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Continuation could not be started");
