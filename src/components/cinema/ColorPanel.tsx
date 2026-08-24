@@ -171,6 +171,16 @@ export default function ColorPanel({ config, updateField, advanced }: ColorPanel
         </p>
       </div>
 
+      {/* Preset library (builtin + mine, search / favorites / recent) --- */}
+      <PresetLibrarySection
+        type="color"
+        builtin={COLOR_LIBRARY}
+        categories={COLOR_LIBRARY_CATEGORIES}
+        config={config}
+        updateField={updateField as unknown as PresetUpdateField}
+        saveLabel="Save color preset"
+      />
+
       {/* Library ------------------------------------------------------- */}
       <div className="flex flex-col gap-3">
         <div className="flex flex-wrap items-center gap-2">

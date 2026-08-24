@@ -35,6 +35,13 @@ export type LibraryPreset = {
 /* Partial application                                                 */
 /* ------------------------------------------------------------------ */
 
+/** The write signature the preset library uses (source-aware). */
+export type PresetUpdateField = (
+  field: DirectorConfigField,
+  value: unknown,
+  source?: ConfigSource,
+) => void;
+
 export type ApplyScope = "all" | "camera" | "lighting" | "color" | "movement";
 
 export const SCOPE_FIELDS: Record<Exclude<ApplyScope, "all">, DirectorConfigField[]> = {
