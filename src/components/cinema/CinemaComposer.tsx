@@ -29,6 +29,8 @@ import FullPresetPanel from "./FullPresetPanel";
 import ReferenceManager from "./ReferenceManager";
 import ReferenceBoard from "./ReferenceBoard";
 import FinishWorkspace, { type ContinuationDirection } from "./FinishWorkspace";
+import ShotBoard, { type ShotThumb } from "./ShotBoard";
+
 
 import CinemaProjectPicker, { type CinemaProjectPickerProps } from "./CinemaProjectPicker";
 import type {
