@@ -326,11 +326,11 @@ export default function CinemaComposer({
               onClick={() => {
                 setFocusKey(tile.key);
                 if (tile.opens === "references") {
-                  document
-                    .getElementById("cinema-reference-board")
-                    ?.scrollIntoView({ behavior: "smooth", block: "center" });
+                  const board = document.getElementById("cinema-reference-board");
+                  board?.scrollIntoView?.({ behavior: "smooth", block: "center" });
                   return;
                 }
+
                 setOpenChip(tile.opens);
               }}
             />
