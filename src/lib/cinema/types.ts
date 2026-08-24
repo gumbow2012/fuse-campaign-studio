@@ -338,7 +338,13 @@ export type CinemaProjectState = {
   scenes: CinemaScene[];
   shots: CinemaShot[];
   advanced: boolean;
+  /**
+   * FINISH metadata per generation id — non-destructive grade only.
+   * Never implies the generation was re-rendered.
+   */
+  finishes?: Record<string, import("./finish").CinemaFinish>;
 };
+
 
 export type CinemaProjectSummary = {
   id: string;
