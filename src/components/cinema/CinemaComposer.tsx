@@ -298,6 +298,13 @@ export default function CinemaComposer({
         focusTile={focusTile}
       />
 
+      {/* 1b — VISIBLE REFERENCE BOARD (same reference state as the modal) */}
+      <ReferenceBoard
+        references={references}
+        onChange={onReferencesChange}
+        advanced={advanced}
+      />
+
       {/* 2 — ACTIVE CONFIG STRIP (visual selections over the existing panels) */}
       <div className="fuse-panel rounded-2xl p-3">
         <div className="mb-2 flex items-center justify-between gap-3 px-1">
@@ -316,12 +323,19 @@ export default function CinemaComposer({
               active={openChip === tile.opens || focusKey === tile.key}
               onClick={() => {
                 setFocusKey(tile.key);
+                if (tile.opens === "references") {
+                  document
+                    .getElementById("cinema-reference-board")
+                    ?.scrollIntoView({ behavior: "smooth", block: "center" });
+                  return;
+                }
                 setOpenChip(tile.opens);
               }}
             />
           ))}
         </div>
       </div>
+
 
       {/* 3 — secondary scene prompt */}
       <div className="fuse-panel rounded-2xl p-3">
