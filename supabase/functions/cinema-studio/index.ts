@@ -5,7 +5,7 @@
 // PATTERN (@google/genai + GEMINI_ANALYSIS_MODEL). ANALYSIS ONLY — it never
 // generates imagery and never spends generation credits.
 //
-// Actions implemented: "extract-palette", "auto-director".
+// Actions implemented: "extract-palette", "auto-director", "detect-roles".
 
 import { GoogleGenAI, Type } from "https://esm.sh/@google/genai@1.29.0";
 import { corsHeaders, errorMessage, json, requireUser } from "../_shared/supabase-admin.ts";
@@ -684,6 +684,121 @@ async function handleAutoDirector(body: any, apiKey?: string) {
   });
 }
 
+/* ------------------------------------------------------------------ */
+/* Action: detect-roles (Gemini suggests reference roles)              */
+/* ------------------------------------------------------------------ */
+
+const REFERENCE_ROLES = [
+  "Character",
+  "Location",
+  "Product",
+  "Camera",
+  "Composition",
+  "Lighting",
+  "Palette",
+  "Environment",
+  "Texture",
+  "Motion",
+];
+
+const ROLES_SCHEMA = {
+  type: Type.OBJECT,
+  properties: {
+    roles: {
+      type: Type.ARRAY,
+      items: {
+        type: Type.OBJECT,
+        properties: {
+          role: { type: Type.STRING, enum: REFERENCE_ROLES },
+          strength: { type: Type.NUMBER, description: "0-100 usefulness for that role" },
+        },
+        required: ["role"],
+      },
+    },
+    note: { type: Type.STRING, description: "One short sentence, max 140 chars" },
+  },
+  required: ["roles"],
+} as const;
+
+const ROLES_INSTRUCTIONS = `You classify ONE reference image for a cinematography workspace.
+Decide which roles this reference can credibly serve, from this closed list:
+Character, Location, Product, Camera, Composition, Lighting, Palette, Environment, Texture, Motion.
+Rules:
+* Return 1-4 roles, strongest first, each with strength 0-100.
+* Only assign a role the pixels actually support (do not guess Motion from a still unless motion blur/trails are visible).
+* Never describe identities, brands or people; classify usefulness only.
+* note: one short sentence on what this reference is best used for.
+Output strict JSON matching the schema.`;
+
+async function handleDetectRoles(body: any, apiKey?: string) {
+  if (!apiKey) {
+    return json({ error: "Role detection is unavailable (analysis key not configured)" }, 503);
+  }
+
+  const imageDataUrl = typeof body?.imageDataUrl === "string" ? body.imageDataUrl : "";
+  if (!imageDataUrl) return json({ error: "imageDataUrl is required" }, 400);
+  if (imageDataUrl.length > 12_000_000) {
+    return json({ error: "Reference image is too large — use an image under ~8 MB" }, 400);
+  }
+
+  let inline: { mimeType: string; data: string };
+  try {
+    inline = parseDataUrl(imageDataUrl);
+  } catch (error) {
+    return json({ error: errorMessage(error) }, 400);
+  }
+  if (!inline.mimeType.startsWith("image/")) {
+    return json({ error: "Reference must be an image file" }, 400);
+  }
+
+  const ai = new GoogleGenAI({ apiKey });
+  const response = await ai.models.generateContent({
+    model: GEMINI_ANALYSIS_MODEL,
+    contents: [
+      {
+        role: "user",
+        parts: [
+          { text: ROLES_INSTRUCTIONS },
+          { inlineData: { mimeType: inline.mimeType, data: inline.data } },
+        ],
+      },
+    ],
+    config: {
+      responseMimeType: "application/json",
+      responseSchema: ROLES_SCHEMA as unknown as Record<string, unknown>,
+      temperature: 0.2,
+    },
+  });
+
+  let raw: any;
+  try {
+    raw = JSON.parse(response.text ?? "");
+  } catch {
+    return json({ error: "Role detection returned an unreadable response — please retry." }, 502);
+  }
+
+  const seen = new Set<string>();
+  const roles: Array<{ role: string; strength: number }> = [];
+  for (const entry of Array.isArray(raw?.roles) ? raw.roles : []) {
+    const role = String(entry?.role ?? "").trim();
+    if (!REFERENCE_ROLES.includes(role) || seen.has(role)) continue;
+    seen.add(role);
+    roles.push({ role, strength: Math.round(num(entry?.strength, 0, 100, 70)) });
+    if (roles.length >= 4) break;
+  }
+
+  if (!roles.length) {
+    return json({ error: "Could not classify that reference — assign roles manually." }, 422);
+  }
+
+  return json({
+    roles,
+    note:
+      typeof raw?.note === "string" && raw.note.trim() ? raw.note.trim().slice(0, 200) : undefined,
+    model: GEMINI_ANALYSIS_MODEL,
+  });
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
@@ -709,6 +824,8 @@ Deno.serve(async (req) => {
         return await handleExtractPalette(body, apiKey);
       case "auto-director":
         return await handleAutoDirector(body, apiKey);
+      case "detect-roles":
+        return await handleDetectRoles(body, apiKey);
       default:
         return json({ error: `Unknown action: ${action || "(none)"}` }, 400);
     }
