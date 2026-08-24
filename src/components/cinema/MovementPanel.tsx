@@ -225,11 +225,55 @@ export default function MovementPanel({ config, updateField, advanced }: Movemen
                       )}
                     />
                   </button>
+                  <button
+                    type="button"
+                    aria-label={compare.isA(preset.id) ? "Marked as A" : "Compare with…"}
+                    onClick={() => compare.pick(preset)}
+                    className="absolute right-1.5 top-8 rounded-md bg-background/70 p-1 backdrop-blur"
+                  >
+                    <ArrowLeftRight
+                      className={cn(
+                        "h-3 w-3",
+                        compare.isA(preset.id) ? "text-primary" : "text-muted-foreground",
+                      )}
+                    />
+                  </button>
                 </div>
               ))}
             </div>
           </div>
         ))}
+
+        {compare.a && compare.b ? (
+          <CompareDialog
+            open
+            onOpenChange={(open) => {
+              if (!open) compare.closeCompare();
+            }}
+            title="Compare movement"
+            description="Both loops play simultaneously — gradient placeholders show where real loops are still pending."
+            a={{
+              media: resolvePreviewMedia({ category: "MOVEMENT", preset: compare.a }),
+              label: compare.a.name,
+              sublabel: compare.a.tags.slice(0, 3).join(" · "),
+            }}
+            b={{
+              media: resolvePreviewMedia({ category: "MOVEMENT", preset: compare.b }),
+              label: compare.b.name,
+              sublabel: compare.b.tags.slice(0, 3).join(" · "),
+            }}
+            modes={["side-by-side", "wipe", "hold"]}
+            onApplyA={() => {
+              if (compare.a) applyPreset(compare.a);
+              compare.reset();
+            }}
+            onApplyB={() => {
+              if (compare.b) applyPreset(compare.b);
+              compare.reset();
+            }}
+          />
+        ) : null}
+
 
         <Separator className="bg-border/60" />
 
