@@ -26,6 +26,8 @@ import DirectorAgentPanel from "./DirectorAgentPanel";
 import FilmSetupPanel from "./FilmSetupPanel";
 import FullPresetPanel from "./FullPresetPanel";
 import ReferenceManager from "./ReferenceManager";
+import ReferenceBoard from "./ReferenceBoard";
+
 import CinemaProjectPicker, { type CinemaProjectPickerProps } from "./CinemaProjectPicker";
 import type {
   CinemaReference,
