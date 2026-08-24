@@ -8,6 +8,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { OPTICS_FLARE_OPTIONS } from "@/lib/cinema/presets/opticsPresets";
 import type {
   CinemaJewelryOptics,
   ConfigSource,
