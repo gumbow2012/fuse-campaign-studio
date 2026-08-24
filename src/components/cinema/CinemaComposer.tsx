@@ -346,11 +346,9 @@ export default function CinemaComposer({
         presetIds: [],
         cinemaProjectId,
       });
-      setGenerations((prev) => {
-        const next = [...prev, created];
-        setRevisionIndex(next.length - 1);
-        return next;
-      });
+      onGenerationCreated?.(created.id);
+      setGenerations((prev) => [...prev, created]);
+      setRevisionIndex(shotGenerations.length);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Generation could not be started");
     } finally {
@@ -360,7 +358,9 @@ export default function CinemaComposer({
 
   /* ---------------- CV7: FINISH + generative continuation ---------------- */
 
-  const selected = generations[Math.min(Math.max(revisionIndex, 0), generations.length - 1)];
+  const selected =
+    shotGenerations[Math.min(Math.max(revisionIndex, 0), shotGenerations.length - 1)];
+
   const selectedFinish: CinemaFinish = (selected && finishes[selected.id]) ?? NEUTRAL_FINISH;
 
   const onFinishChange = (next: CinemaFinish) => {
