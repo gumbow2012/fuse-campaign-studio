@@ -610,7 +610,6 @@ export const SEEDREAM_IMAGE_SIZES: Record<string, { width: number; height: numbe
   "1K": { width: 1024, height: 1024 },
   "2K": { width: 2048, height: 2048 },
   "4K": { width: 4096, height: 4096 },
-  "2K VERTICAL": { width: 1536, height: 2048 },
 };
 
 export const GPT_IMAGE_2_QUALITIES = ["auto", "low", "medium", "high"] as const;

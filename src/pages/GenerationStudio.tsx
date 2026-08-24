@@ -126,7 +126,7 @@ const IMAGE_RESOLUTIONS = ["1K", "2K", "4K"];
 /** LIVE fal schema: fal-ai/gpt-image-2(/edit) quality enum. No resolution, no aspect_ratio. */
 const GPT_IMAGE_2_QUALITIES = ["auto", "low", "medium", "high"];
 /** LIVE fal schema: seedream v4 takes image_size {width,height} — these tiers map to real dims. */
-const SEEDREAM_SIZES = ["1K", "2K", "4K", "2K VERTICAL"];
+const SEEDREAM_SIZES = ["1K", "2K", "4K"];
 const KLING_RESOLUTIONS: string[] = [];
 const SEEDANCE_RESOLUTIONS = ["480p", "720p", "1080p", "4k"];
 const SEEDANCE_FAST_RESOLUTIONS = ["480p", "720p"];
