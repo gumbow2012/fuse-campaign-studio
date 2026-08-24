@@ -1,10 +1,15 @@
 import PresetPreview from "./PresetPreview";
 import { resolvePreviewMedia } from "@/lib/cinema/previewTypes";
+import { CompareDialog, useCompareSelection } from "./CompareView";
+import FocalStrip from "./FocalStrip";
+import { ArrowLeftRight } from "lucide-react";
 import { useMemo } from "react";
+import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 import { ScrollArea } from "@/components/ui/scroll-area";
+
 import { cn } from "@/lib/utils";
 import type {
   ApertureSetup,
