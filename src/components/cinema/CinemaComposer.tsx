@@ -457,9 +457,28 @@ export default function CinemaComposer({
         </div>
       </div>
 
+      {/* 0 — CV8 SHOT BOARD: scene sequencing + active-shot switching */}
+      {shotBoard ? (
+        <ShotBoard
+          shots={shotBoard.shots}
+          activeShotId={shotBoard.activeShotId}
+          sceneName={shotBoard.sceneName}
+          continuityLock={shotBoard.continuityLock}
+          resolveShotConfig={shotBoard.resolveShotConfig}
+          thumbnailFor={thumbnailFor}
+          onSelectShot={shotBoard.onSelectShot}
+          onAddShot={shotBoard.onAddShot}
+          onDuplicateShot={shotBoard.onDuplicateShot}
+          onDeleteShot={shotBoard.onDeleteShot}
+          onReorder={shotBoard.onReorder}
+          onToggleContinuity={shotBoard.onToggleContinuity}
+        />
+      ) : null}
+
       {/* 1 — VISUAL STAGE (hero) */}
       <CinemaStage
-        generations={generations}
+        generations={shotGenerations}
+
         index={revisionIndex}
         onIndexChange={setRevisionIndex}
         references={references}
