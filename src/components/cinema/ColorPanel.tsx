@@ -1,5 +1,6 @@
 import { useMemo, useRef, useState } from "react";
-import { Loader2, Star, Upload } from "lucide-react";
+import { ArrowLeftRight, Loader2, Star, Upload } from "lucide-react";
+import { CompareDialog, useCompareSelection } from "./CompareView";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
