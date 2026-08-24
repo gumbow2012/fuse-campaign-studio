@@ -14,6 +14,7 @@ import {
   clampSeedanceDuration,
   getFalQueueResult,
   getFalQueueStatus,
+  buildVideoModelInput,
   getVideoModel,
   submitFalJob,
   submitSeedanceReferenceVideoJob,
@@ -298,14 +299,15 @@ export async function handleGenerate(body: any, userId: string) {
       endpointId = submitted.endpointId;
       payload = submitted.input;
     } else {
-      payload = {
+      // Record the exact payload the generic builder produces for this model.
+      payload = buildVideoModelInput(videoModel.key, {
+        imageUrl: referenceUrls[0],
         prompt,
-        image_url: referenceUrls[0],
-        duration: String(durationParam),
+        duration: durationParam as unknown as number,
         ...(native.resolution ? { resolution: native.resolution } : {}),
-        ...(native.aspectRatio ? { aspect_ratio: native.aspectRatio } : {}),
-        ...(native.generateAudio === null ? {} : { generate_audio: native.generateAudio }),
-      };
+        ...(native.aspectRatio ? { aspectRatio: native.aspectRatio } : {}),
+        ...(native.generateAudio === null ? {} : { generateAudio: native.generateAudio }),
+      }) as unknown as Record<string, unknown>;
       requestId = await submitVideoJob({
         prompt,
         initImageUrl: referenceUrls[0],
@@ -480,15 +482,13 @@ export async function handleGenerationHistory(body: any, userId: string) {
   const projectId = String(body?.cinemaProjectId ?? "").trim();
   const limit = Math.min(100, Math.max(1, Number(body?.limit ?? 50)));
 
-  let query = admin
+  const { data: rows, error } = await admin
     .from("studio_generations")
     .select("*")
     .eq("user_id", userId)
     .eq("kind", "video")
     .order("created_at", { ascending: true })
     .limit(limit);
-
-  const { data: rows, error } = await query;
   if (error) throw new Error(error.message);
 
   const generations = (rows ?? [])
