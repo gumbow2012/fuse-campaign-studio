@@ -11,7 +11,12 @@ export interface CinemaResultsProps {
   generations: CinemaGeneration[];
   index: number;
   onIndexChange: (index: number) => void;
+  /** Optional non-destructive FINISH preview (CSS only) for the shown version. */
+  finishCss?: string;
+  /** 0–1 grain overlay opacity from the saved finish. */
+  finishGrain?: number;
 }
+
 
 const STATUS_COPY: Record<string, string> = {
   queued: "Queued",
