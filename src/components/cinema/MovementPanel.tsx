@@ -62,6 +62,8 @@ export default function MovementPanel({ config, updateField, advanced }: Movemen
   const [category, setCategory] = useState<MovementPresetCategory | "All">("All");
   const [favoritesOnly, setFavoritesOnly] = useState(false);
   const [favorites, setFavorites] = useState<string[]>([]);
+  const compare = useCompareSelection<CinemaMovementPreset>();
+
 
   const setMovement = (patch: Partial<MovementPreset>) =>
     updateField("movement", { ...movement, ...patch });
@@ -149,9 +151,31 @@ export default function MovementPanel({ config, updateField, advanced }: Movemen
           </div>
         </div>
 
+        {/* CV4: optional compare flow — movement comparisons play both loops. */}
+        <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border/60 bg-card/40 px-2.5 py-1.5">
+          <ArrowLeftRight className="h-3 w-3 text-primary" />
+          <span className="text-[11px] text-muted-foreground">
+            {compare.a
+              ? `A: ${compare.a.name} — tap ⇄ on another movement to compare`
+              : "Tap ⇄ on a movement to mark it A, then compare with another."}
+          </span>
+          {compare.a ? (
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              className="h-6 text-[11px]"
+              onClick={compare.reset}
+            >
+              Clear
+            </Button>
+          ) : null}
+        </div>
+
         {grouped.length === 0 ? (
           <p className="text-sm text-muted-foreground">No movements match that filter.</p>
         ) : null}
+
 
         {grouped.map(({ category: cat, presets }) => (
           <div key={cat} className="space-y-2">
