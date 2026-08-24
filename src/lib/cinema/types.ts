@@ -397,19 +397,26 @@ export type CinemaGeneration = {
 
 export type CinemaShot = {
   id: string;
+  /** Optional display label; the board falls back to SHOT 01, SHOT 02, … */
+  name?: string;
   prompt: string;
   directorOverrides?: PartialDirectorConfig;
-  modelConfig: CinemaModelConfig;
+  modelConfig?: CinemaModelConfig;
   references: CinemaReference[];
   generations: CinemaGeneration[];
+  /** Ids of generations belonging to THIS shot (history is stored server-side). */
+  generationIds?: string[];
 };
 
 export type CinemaScene = {
   id: string;
   name: string;
   sceneDefaults?: PartialDirectorConfig;
+  /** CV8 — LOCK SCENE CONTINUITY: pins continuity fields at scene level. */
+  continuityLock?: boolean;
   shots: CinemaShot[];
 };
+
 
 export type CinemaProject = {
   id: string;
