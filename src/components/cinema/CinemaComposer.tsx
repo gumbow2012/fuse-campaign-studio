@@ -292,6 +292,12 @@ export default function CinemaComposer({
     }
   };
 
+  const tiles = useMemo(() => buildActiveConfigTiles(config, references), [config, references]);
+  const focusTile =
+    tiles.find((tile) => tile.key === focusKey) ??
+    tiles.find((tile) => tile.key === "camera") ??
+    tiles[0];
+
   return (
     <div className="space-y-5">
       <div className="flex items-center justify-between gap-4">
@@ -308,24 +314,54 @@ export default function CinemaComposer({
         </div>
       </div>
 
-      <div className="flex flex-wrap gap-2">
-        {CHIPS.map((chip) => (
-          <DirectorChip
-            key={chip.key}
-            label={chip.label}
-            summary={summarize(chip.key, config, references.length)}
-            active={openChip === chip.key}
-            onClick={() => setOpenChip(chip.key)}
-          />
-        ))}
+      {/* 1 — VISUAL STAGE (hero) */}
+      <CinemaStage
+        generations={generations}
+        index={revisionIndex}
+        onIndexChange={setRevisionIndex}
+        references={references}
+        focusTile={focusTile}
+      />
+
+      {/* 2 — ACTIVE CONFIG STRIP (visual selections over the existing panels) */}
+      <div className="fuse-panel rounded-2xl p-3">
+        <div className="mb-2 flex items-center justify-between gap-3 px-1">
+          <span className="font-display text-[10px] uppercase tracking-[0.28em] text-muted-foreground">
+            Shot setup
+          </span>
+          <span className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
+            {MODEL_LABELS[model]}
+          </span>
+        </div>
+        <div className="flex gap-2 overflow-x-auto pb-1">
+          {tiles.map((tile) => (
+            <ConfigTile
+              key={tile.key}
+              tile={tile}
+              active={openChip === tile.opens || focusKey === tile.key}
+              onClick={() => {
+                setFocusKey(tile.key);
+                setOpenChip(tile.opens);
+              }}
+            />
+          ))}
+        </div>
       </div>
 
-      <div className="fuse-panel rounded-2xl p-4">
+      {/* 3 — secondary scene prompt */}
+      <div className="fuse-panel rounded-2xl p-3">
+        <Label
+          htmlFor="cinema-scene-prompt"
+          className="px-1 font-display text-[10px] uppercase tracking-[0.28em] text-muted-foreground"
+        >
+          Scene
+        </Label>
         <Textarea
+          id="cinema-scene-prompt"
           value={prompt}
           onChange={(e) => onPromptChange(e.target.value)}
           placeholder="Describe your scene…"
-          className="min-h-[220px] resize-none border-0 bg-transparent text-base focus-visible:ring-0"
+          className="min-h-[84px] resize-none border-0 bg-transparent text-sm focus-visible:ring-0"
         />
       </div>
 
@@ -335,6 +371,7 @@ export default function CinemaComposer({
         model={model}
         onApply={onApplyDirectorProposal}
       />
+
 
       <div className="fuse-panel flex flex-wrap items-end gap-3 rounded-2xl p-4">
         <ControlBlock label="Model">
