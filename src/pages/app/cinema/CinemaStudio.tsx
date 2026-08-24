@@ -17,6 +17,7 @@ import type {
   DirectorConfigField,
   PartialDirectorConfig,
 } from "@/lib/cinema/types";
+import type { CinemaFinish } from "@/lib/cinema/finish";
 
 const AUTOSAVE_DELAY_MS = 1200;
 
@@ -25,6 +26,8 @@ export default function CinemaStudio() {
   const [prompt, setPrompt] = useState("");
   const [advanced, setAdvanced] = useState(false);
   const [references, setReferences] = useState<CinemaReference[]>([]);
+  /** Non-destructive FINISH grade metadata, keyed by generation id. */
+  const [finishes, setFinishes] = useState<Record<string, CinemaFinish>>({});
 
   const [projects, setProjects] = useState<CinemaProjectSummary[]>([]);
   const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
@@ -52,8 +55,8 @@ export default function CinemaStudio() {
   }, []);
 
   const workingState = useMemo<CinemaProjectState>(
-    () => ({ version: 1, prompt, config, references, scenes: [], shots: [], advanced }),
-    [prompt, config, references, advanced],
+    () => ({ version: 1, prompt, config, references, scenes: [], shots: [], advanced, finishes }),
+    [prompt, config, references, advanced, finishes],
   );
 
   useEffect(() => {
@@ -85,11 +88,13 @@ export default function CinemaStudio() {
         scenes: [],
         shots: [],
         advanced: false,
+        finishes: {},
       });
       restoringRef.current = true;
       setConfig({ ...SYSTEM_DEFAULT_CONFIG });
       setPrompt("");
       setReferences([]);
+      setFinishes({});
       setAdvanced(false);
       setActiveProjectId(created.id);
       setActiveName(created.name);
@@ -114,6 +119,9 @@ export default function CinemaStudio() {
         setConfig({ ...SYSTEM_DEFAULT_CONFIG, ...state.config });
         setReferences(Array.isArray(state.references) ? state.references : []);
         setAdvanced(Boolean(state.advanced));
+        setFinishes(
+          state.finishes && typeof state.finishes === "object" ? state.finishes : {},
+        );
       }
       setSaveState("saved");
     } catch {
@@ -157,6 +165,8 @@ export default function CinemaStudio() {
           updateField={updateField}
           onApplyDirectorProposal={onApplyDirectorProposal}
           cinemaProjectId={activeProjectId}
+          finishes={finishes}
+          onFinishesChange={setFinishes}
           projectPicker={{
             projects,
             activeProjectId,

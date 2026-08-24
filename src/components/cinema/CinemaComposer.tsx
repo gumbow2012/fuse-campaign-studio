@@ -28,6 +28,7 @@ import FilmSetupPanel from "./FilmSetupPanel";
 import FullPresetPanel from "./FullPresetPanel";
 import ReferenceManager from "./ReferenceManager";
 import ReferenceBoard from "./ReferenceBoard";
+import FinishWorkspace, { type ContinuationDirection } from "./FinishWorkspace";
 
 import CinemaProjectPicker, { type CinemaProjectPickerProps } from "./CinemaProjectPicker";
 import type {
@@ -53,6 +54,14 @@ import {
   type CinemaGeneration,
 } from "@/services/cinemaStudio";
 import { toast } from "sonner";
+import {
+  NEUTRAL_FINISH,
+  finishGrainOpacity,
+  finishToCssFilter,
+  type CinemaFinish,
+} from "@/lib/cinema/finish";
+import { captureFrameAt, loadVideo, readMeta } from "@/lib/videoFrames";
+import { uploadToStorage } from "@/services/storageUpload";
 
 type ChipKey = "references" | "presets" | DirectorConfigField;
 
@@ -123,6 +132,9 @@ export interface CinemaComposerProps {
   onApplyDirectorProposal: (proposal: PartialDirectorConfig) => void;
   /** Generations are tagged with the active project (null = unsaved workspace). */
   cinemaProjectId?: string | null;
+  /** Saved FINISH grade metadata per generation id (non-destructive). */
+  finishes?: Record<string, CinemaFinish>;
+  onFinishesChange?: (finishes: Record<string, CinemaFinish>) => void;
 }
 
 export default function CinemaComposer({
@@ -137,6 +149,8 @@ export default function CinemaComposer({
   updateField,
   onApplyDirectorProposal,
   cinemaProjectId = null,
+  finishes = {},
+  onFinishesChange,
 }: CinemaComposerProps) {
   const [openChip, setOpenChip] = useState<ChipKey | null>(null);
   const [model, setModel] = useState<CinemaVideoModelKey>(DEFAULT_MODEL);
@@ -149,6 +163,8 @@ export default function CinemaComposer({
   const [generations, setGenerations] = useState<CinemaGeneration[]>([]);
   const [revisionIndex, setRevisionIndex] = useState(0);
   const [focusKey, setFocusKey] = useState<ChipKey | null>(null);
+  const [seed, setSeed] = useState<{ url: string; direction: ContinuationDirection } | null>(null);
+  const [seedBusy, setSeedBusy] = useState(false);
 
   const activeChip = CHIPS.find((c) => c.key === openChip) ?? null;
 
@@ -271,6 +287,84 @@ export default function CinemaComposer({
     }
   };
 
+  /* ---------------- CV7: FINISH + generative continuation ---------------- */
+
+  const selected = generations[Math.min(Math.max(revisionIndex, 0), generations.length - 1)];
+  const selectedFinish: CinemaFinish = (selected && finishes[selected.id]) ?? NEUTRAL_FINISH;
+
+  const onFinishChange = (next: CinemaFinish) => {
+    if (!selected || !onFinishesChange) return;
+    onFinishesChange({ ...finishes, [selected.id]: next });
+  };
+
+  /** Grabs the end/start frame of the selected version as a continuation seed. */
+  const onPrepareSeed = async (direction: ContinuationDirection) => {
+    if (!selected?.outputUrl) return;
+    setSeedBusy(true);
+    try {
+      if (selected.outputType !== "video") {
+        setSeed({ url: selected.outputUrl, direction });
+        return;
+      }
+      const video = await loadVideo(selected.outputUrl);
+      const meta = readMeta(video);
+      const time = direction === "forward" ? Math.max(0, meta.duration - 0.08) : 0;
+      const frame = await captureFrameAt(video, time);
+      const folder = `system/cinema-continuation/${crypto.randomUUID()}`;
+      const { url } = await uploadToStorage(folder, frame, frame.name);
+      setSeed({ url, direction });
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Could not read that frame — please retry",
+      );
+    } finally {
+      setSeedBusy(false);
+    }
+  };
+
+  /**
+   * Starts a NEW generation seeded from the end/start frame. This is a fresh
+   * render through the existing generate path — not native frame extension.
+   */
+  const onGenerateContinuation = async () => {
+    if (!seed || generating || compileError) return;
+    setGenerating(true);
+    try {
+      const note =
+        seed.direction === "forward"
+          ? "Continue the action forward from the supplied seed frame, matching its framing, lighting and grade."
+          : "Lead into the supplied seed frame, ending on that exact framing, lighting and grade.";
+      const created = await startCinemaGeneration({
+        model,
+        prompt: `${finalPrompt}\n\nCONTINUATION: ${note}`,
+        promptSource: promptOverride === null ? "COMPILED" : "USER_EDITED",
+        nativeParams: compiled.nativeParams,
+        resolvedConfig: config,
+        references: [
+          { url: seed.url, name: `continuation-${seed.direction}-seed`, roles: [] },
+          ...references.map((ref) => ({
+            url: ref.url,
+            name: ref.name ?? null,
+            roles: ref.roles,
+          })),
+        ],
+        referenceUrls: [seed.url, ...references.map((ref) => ref.url).filter(Boolean)],
+        presetIds: [],
+        cinemaProjectId,
+      });
+      setGenerations((prev) => {
+        const next = [...prev, created];
+        setRevisionIndex(next.length - 1);
+        return next;
+      });
+      setSeed(null);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Continuation could not be started");
+    } finally {
+      setGenerating(false);
+    }
+  };
+
   const tiles = useMemo(() => buildActiveConfigTiles(config, references), [config, references]);
   const focusTile =
     tiles.find((tile) => tile.key === focusKey) ??
@@ -300,7 +394,24 @@ export default function CinemaComposer({
         onIndexChange={setRevisionIndex}
         references={references}
         focusTile={focusTile}
+        finishCss={finishToCssFilter(selectedFinish)}
+        finishGrain={finishGrainOpacity(selectedFinish)}
       />
+
+      {/* 1a — FINISH workspace: GENERATE → SELECT → FINISH */}
+      {selected ? (
+        <FinishWorkspace
+          generation={selected}
+          finish={selectedFinish}
+          onFinishChange={onFinishChange}
+          seed={seed}
+          seedBusy={seedBusy}
+          onPrepareSeed={onPrepareSeed}
+          onClearSeed={() => setSeed(null)}
+          onGenerateContinuation={onGenerateContinuation}
+          continuationBusy={generating}
+        />
+      ) : null}
 
       {/* 1b — VISIBLE REFERENCE BOARD (same reference state as the modal) */}
       <ReferenceBoard

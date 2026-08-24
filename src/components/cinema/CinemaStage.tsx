@@ -12,6 +12,9 @@ export interface CinemaStageProps {
   references: CinemaReference[];
   /** The most recently focused config tile, used as the fallback visual. */
   focusTile?: ActiveConfigTile;
+  /** Non-destructive FINISH preview (CSS filter) for the shown version. */
+  finishCss?: string;
+  finishGrain?: number;
 }
 
 /**
@@ -31,6 +34,8 @@ export default function CinemaStage({
   onIndexChange,
   references,
   focusTile,
+  finishCss,
+  finishGrain,
 }: CinemaStageProps) {
   const hasGeneration = generations.length > 0;
   const reference = references[0];
@@ -53,7 +58,13 @@ export default function CinemaStage({
       </header>
 
       {hasGeneration ? (
-        <CinemaResults generations={generations} index={index} onIndexChange={onIndexChange} />
+        <CinemaResults
+          generations={generations}
+          index={index}
+          onIndexChange={onIndexChange}
+          finishCss={finishCss}
+          finishGrain={finishGrain}
+        />
       ) : reference ? (
         <figure className="overflow-hidden rounded-2xl bg-black">
           <img

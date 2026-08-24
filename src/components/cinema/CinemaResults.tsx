@@ -11,7 +11,12 @@ export interface CinemaResultsProps {
   generations: CinemaGeneration[];
   index: number;
   onIndexChange: (index: number) => void;
+  /** Optional non-destructive FINISH preview (CSS only) for the shown version. */
+  finishCss?: string;
+  /** 0–1 grain overlay opacity from the saved finish. */
+  finishGrain?: number;
 }
+
 
 const STATUS_COPY: Record<string, string> = {
   queued: "Queued",
@@ -24,7 +29,10 @@ export default function CinemaResults({
   generations,
   index,
   onIndexChange,
+  finishCss,
+  finishGrain = 0,
 }: CinemaResultsProps) {
+
   if (!generations.length) return null;
 
   const safeIndex = Math.min(Math.max(index, 0), generations.length - 1);
@@ -66,21 +74,33 @@ export default function CinemaResults({
       </div>
 
       {current.outputUrl && current.outputType === "video" ? (
-        <video
-          key={current.id}
-          src={current.outputUrl}
-          controls
-          playsInline
-          className="w-full rounded-xl bg-black"
-        />
+        <div className="relative overflow-hidden rounded-xl bg-black">
+          <video
+            key={current.id}
+            src={current.outputUrl}
+            controls
+            playsInline
+            className="w-full"
+            style={{ filter: finishCss }}
+          />
+          {finishGrain > 0 ? (
+            <div
+              aria-hidden
+              className="pointer-events-none absolute inset-0 bg-foreground/10 mix-blend-overlay"
+              style={{ opacity: finishGrain }}
+            />
+          ) : null}
+        </div>
       ) : current.outputUrl ? (
         <img
           src={current.outputUrl}
           alt="Cinema generation result"
           className="w-full rounded-xl"
           loading="lazy"
+          style={{ filter: finishCss }}
         />
       ) : (
+
         <div className="flex min-h-[160px] items-center justify-center rounded-xl border border-border/60 bg-background/40 p-4 text-center text-[12px] text-muted-foreground">
           {pending
             ? "Generating — this usually takes a couple of minutes."
