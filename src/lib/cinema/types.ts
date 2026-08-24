@@ -115,6 +115,8 @@ export type FilmSetup = {
 export type CameraSetup = {
   body: string;
   sensor: string;
+  /** Advanced-only: ISO / sensor-noise character ("auto" when unset). */
+  sensorNoise?: string;
   aspectRatio: string;
   height: string;
   angle: string;

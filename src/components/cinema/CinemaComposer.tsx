@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/select";
 import DirectorChip from "./DirectorChip";
 import ChipModal from "./ChipModal";
+import CameraPanel from "./CameraPanel";
 import type { DirectorConfig, DirectorConfigField } from "@/lib/cinema/types";
 import { CINEMA_MODEL_ADAPTERS, type CinemaVideoModelKey } from "@/lib/cinema/modelAdapters";
 
@@ -49,7 +50,7 @@ function summarize(key: ChipKey, config: DirectorConfig, referenceCount: number)
     case "filmSetup":
       return String(value.format ?? "Auto");
     case "camera":
-      return String(value.distance ?? "Auto");
+      return String(value.body ?? "Auto");
     case "movement":
       return String(value.motionType ?? "Auto");
     case "composition":
@@ -74,6 +75,11 @@ export interface CinemaComposerProps {
   advanced: boolean;
   onAdvancedChange: (value: boolean) => void;
   referenceCount?: number;
+  /** Writes config[field] = { value, source: "USER" }. */
+  updateField: <F extends DirectorConfigField>(
+    field: F,
+    value: DirectorConfig[F]["value"],
+  ) => void;
 }
 
 export default function CinemaComposer({
@@ -83,6 +89,7 @@ export default function CinemaComposer({
   advanced,
   onAdvancedChange,
   referenceCount = 0,
+  updateField,
 }: CinemaComposerProps) {
   const [openChip, setOpenChip] = useState<ChipKey | null>(null);
   const [model, setModel] = useState<CinemaVideoModelKey>("kling-3.0-pro");
@@ -227,7 +234,11 @@ export default function CinemaComposer({
         onOpenChange={(open) => !open && setOpenChip(null)}
         title={activeChip?.label ?? ""}
         description={advanced ? "Advanced mode enabled." : undefined}
-      />
+      >
+        {openChip === "camera" ? (
+          <CameraPanel config={config} updateField={updateField} advanced={advanced} />
+        ) : undefined}
+      </ChipModal>
     </div>
   );
 }
