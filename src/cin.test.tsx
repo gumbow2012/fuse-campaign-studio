@@ -5,6 +5,9 @@ import { MemoryRouter } from "react-router-dom";
 import { HelmetProvider } from "react-helmet-async";
 import CinemaStudio from "@/pages/app/cinema/CinemaStudio";
 
+(globalThis as any).ResizeObserver = class { observe(){} unobserve(){} disconnect(){} };
+(globalThis as any).DOMRect = (globalThis as any).DOMRect ?? class {};
+
 describe("cinema", () => {
   it("renders and opens every chip", async () => {
     const el = document.createElement("div");
