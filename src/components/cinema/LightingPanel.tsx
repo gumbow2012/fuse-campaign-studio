@@ -171,9 +171,31 @@ export default function LightingPanel({ config, updateField }: LightingPanelProp
           </div>
         </div>
 
+        {/* CV4: optional compare flow — mark A, then compare with any other preset. */}
+        <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border/60 bg-card/40 px-2.5 py-1.5">
+          <ArrowLeftRight className="h-3 w-3 text-primary" />
+          <span className="text-[11px] text-muted-foreground">
+            {compare.a
+              ? `A: ${compare.a.name} — tap ⇄ on another preset to compare`
+              : "Tap ⇄ on a preset to mark it A, then compare with another."}
+          </span>
+          {compare.a ? (
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              className="h-6 text-[11px]"
+              onClick={compare.reset}
+            >
+              Clear
+            </Button>
+          ) : null}
+        </div>
+
         {grouped.length === 0 ? (
           <p className="text-sm text-muted-foreground">No lighting presets match that filter.</p>
         ) : null}
+
 
         {grouped.map(({ category: cat, presets }) => (
           <div key={cat} className="space-y-2">
