@@ -133,6 +133,12 @@ export type FilmSetup = {
   gate?: string;
   frameRate?: number;
   shutterAngle?: number;
+  /* Additive Film Setup selectors (CINEMA 9). */
+  productionType?: string;
+  genre?: string;
+  era?: string;
+  tempo?: string;
+  productionValue?: string;
 };
 
 export type CameraSetup = {
@@ -281,6 +287,26 @@ export type CinemaReference = {
   roles: ReferenceRole[];
   strengths: Partial<Record<ReferenceRole, number>>;
   roleSource: ConfigSource;
+  /** Storage path (fuse-assets) and display name. Order carries NO authority. */
+  path?: string;
+  name?: string;
+};
+
+/** Persisted Cinema workspace (cinema_projects.project_state). */
+export type CinemaProjectState = {
+  version: 1;
+  prompt: string;
+  config: DirectorConfig;
+  references: CinemaReference[];
+  scenes: CinemaScene[];
+  shots: CinemaShot[];
+  advanced: boolean;
+};
+
+export type CinemaProjectSummary = {
+  id: string;
+  name: string;
+  updatedAt: string;
 };
 
 export type CinemaPresetType = "camera" | "lighting" | "color" | "movement" | "full";
