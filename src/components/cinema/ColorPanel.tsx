@@ -268,20 +268,36 @@ export default function ColorPanel({ config, updateField, advanced }: ColorPanel
                         <span className="truncate text-[10px] text-muted-foreground">
                           {preset.tags.slice(0, 2).join(" · ")}
                         </span>
-                        <button
-                          type="button"
-                          aria-label="Favorite palette"
-                          onClick={() => toggleFavorite(preset.id)}
-                        >
-                          <Star
-                            className={cn(
-                              "h-3.5 w-3.5",
-                              favorites.includes(preset.id)
-                                ? "fill-primary text-primary"
-                                : "text-muted-foreground",
-                            )}
-                          />
-                        </button>
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            type="button"
+                            aria-label={
+                              compare.isA(preset.id) ? "Marked as A" : "Compare with…"
+                            }
+                            onClick={() => compare.pick(preset)}
+                          >
+                            <ArrowLeftRight
+                              className={cn(
+                                "h-3.5 w-3.5",
+                                compare.isA(preset.id) ? "text-primary" : "text-muted-foreground",
+                              )}
+                            />
+                          </button>
+                          <button
+                            type="button"
+                            aria-label="Favorite palette"
+                            onClick={() => toggleFavorite(preset.id)}
+                          >
+                            <Star
+                              className={cn(
+                                "h-3.5 w-3.5",
+                                favorites.includes(preset.id)
+                                  ? "fill-primary text-primary"
+                                  : "text-muted-foreground",
+                              )}
+                            />
+                          </button>
+                        </div>
                       </div>
                     </div>
                   ))}
@@ -291,6 +307,37 @@ export default function ColorPanel({ config, updateField, advanced }: ColorPanel
             {grouped.length === 0 ? (
               <p className="text-xs text-muted-foreground">No palettes match that search.</p>
             ) : null}
+
+            {compare.a && compare.b ? (
+              <CompareDialog
+                open
+                onOpenChange={(open) => {
+                  if (!open) compare.closeCompare();
+                }}
+                title="Compare palettes"
+                description="Swatch bars for both palettes, side by side."
+                a={{
+                  media: { kind: "still-swatches", swatches: presetSwatches(compare.a) },
+                  label: compare.a.name,
+                  sublabel: compare.a.tags.slice(0, 3).join(" · "),
+                }}
+                b={{
+                  media: { kind: "still-swatches", swatches: presetSwatches(compare.b) },
+                  label: compare.b.name,
+                  sublabel: compare.b.tags.slice(0, 3).join(" · "),
+                }}
+                modes={["side-by-side", "wipe"]}
+                onApplyA={() => {
+                  if (compare.a) applyPreset(compare.a);
+                  compare.reset();
+                }}
+                onApplyB={() => {
+                  if (compare.b) applyPreset(compare.b);
+                  compare.reset();
+                }}
+              />
+            ) : null}
+
           </div>
         </ScrollArea>
       </div>
