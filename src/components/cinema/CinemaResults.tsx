@@ -29,7 +29,10 @@ export default function CinemaResults({
   generations,
   index,
   onIndexChange,
+  finishCss,
+  finishGrain = 0,
 }: CinemaResultsProps) {
+
   if (!generations.length) return null;
 
   const safeIndex = Math.min(Math.max(index, 0), generations.length - 1);
