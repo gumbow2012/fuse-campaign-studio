@@ -207,22 +207,23 @@ async function startGeneration(admin: AdminClient, args: { input: StartInput; us
   try {
     if (kind === "image") {
       const aspect = requestedAspect(input.aspectRatio);
-      const resolution = imageResolution(input.resolution);
-      const endpointId = referenceUrls.length ? IMAGE_MODEL : TEXT_IMAGE_MODEL;
+      const imageModel = getImageModel(input.model);
+      const built = buildImageModelInput(imageModel.key, {
+        prompt,
+        imageUrls: referenceUrls,
+        aspectRatio: aspect,
+        resolution: imageModel.paramKind === "resolution" ? input.resolution : undefined,
+        quality: imageModel.paramKind === "quality" ? input.quality : undefined,
+        imageSize: imageModel.paramKind === "image_size" ? input.imageSize : undefined,
+      });
+      const endpointId = built.endpointId;
 
       const estimatedCostUsd = await estimateUsd({
         endpointId,
-        fallbackFlatUsd: IMAGE_FALLBACK_USD,
+        fallbackFlatUsd: imageModel.fallbackFlatUsd ?? IMAGE_FALLBACK_USD,
       });
 
-      const falInput: Record<string, unknown> = {
-        prompt,
-        output_format: "png",
-        ...(referenceUrls.length ? { image_urls: referenceUrls } : {}),
-        ...(aspect ? { aspect_ratio: aspect } : {}),
-        // requested === submitted (both nano-banana-pro endpoints accept it).
-        resolution,
-      };
+      const falInput = built.input;
 
       const requestId = await submitFalJob(endpointId, falInput, webhookUrl);
 
@@ -236,8 +237,10 @@ async function startGeneration(admin: AdminClient, args: { input: StartInput; us
           estimated_credits: creditsFromUsd(estimatedCostUsd),
           input_payload: {
             ...falInput,
-            requested_resolution: resolution,
-            submitted_resolution: resolution,
+            image_model: imageModel.key,
+            image_param_kind: imageModel.paramKind,
+            [`requested_${imageModel.paramKind}`]: built.requestedOption,
+            [`submitted_${imageModel.paramKind}`]: built.submittedOption,
           },
         })
         .eq("id", inserted.id)
@@ -246,6 +249,7 @@ async function startGeneration(admin: AdminClient, args: { input: StartInput; us
 
       return serializeGeneration(updated ?? inserted);
     }
+
 
     const videoModel = getVideoModel(input.model);
     const duration = clampSeedanceDuration(input.duration ?? 5, videoModel);
