@@ -30,11 +30,20 @@ export const CANONICAL_SCENE_LOCKS: Record<CanonicalScene, string> = {
     "Same physical piece on the same stand, same macro camera position and framing.",
 };
 
+/** One encoding of a preview asset (avif/webp still, webm/mp4 loop, …). */
+export type PreviewSource = { src: string; type?: string };
+
 export type PreviewMedia = {
   kind: PreviewKind;
   canonicalScene: CanonicalScene;
+  /** The preset this media belongs to (enables registry lookups downstream). */
+  presetId?: string;
   /** Image or video URL. When absent, the gradient fallback is used. */
   src?: string;
+  /** Preferred encodings in priority order (avif → webp, webm → mp4). */
+  sources?: PreviewSource[];
+  /** Small derivative used for grid tiles when available. */
+  thumbSrc?: string;
   /** Poster frame for `loop` previews. */
   poster?: string;
   /** Hex swatches for `still-swatches` previews. */
@@ -42,6 +51,21 @@ export type PreviewMedia = {
   /** Temporary CSS gradient — fallback ONLY. */
   fallbackGradient?: string;
 };
+
+/** Fields the CV10 registry may override for a preset. */
+export type PreviewMediaOverride = Partial<
+  Pick<PreviewMedia, "src" | "sources" | "thumbSrc" | "poster" | "swatches">
+>;
+
+/** Injected by `previewRegistry` so hosted media reaches every existing call site. */
+type PreviewMediaLookup = (presetId: string) => (PreviewMediaOverride & { kind?: PreviewKind }) | undefined;
+
+let previewMediaLookup: PreviewMediaLookup | null = null;
+
+export function setPreviewMediaLookup(lookup: PreviewMediaLookup | null) {
+  previewMediaLookup = lookup;
+}
+
 
 /** Per-control-category preview taxonomy. */
 export type CinemaPreviewCategory =
@@ -142,6 +166,7 @@ export type PreviewablePreset = {
 export function resolvePreviewMedia(args: {
   category: CinemaPreviewCategory;
   preset: {
+    id?: string;
     category?: string;
     tags?: string[];
     thumbnail?: string;
@@ -151,17 +176,22 @@ export function resolvePreviewMedia(args: {
   swatches?: string[];
 }): PreviewMedia {
   const { category, preset } = args;
-  const kind = preset.preview?.kind ?? primaryPreviewKind(category);
-  const swatches = preset.preview?.swatches ?? args.swatches;
+  const registered = preset.id ? previewMediaLookup?.(preset.id) : undefined;
+  const kind = registered?.kind ?? preset.preview?.kind ?? primaryPreviewKind(category);
+  const swatches = registered?.swatches ?? preset.preview?.swatches ?? args.swatches;
   return {
     kind,
     canonicalScene: preset.preview?.canonicalScene ?? defaultCanonicalScene(category, preset),
-    src: preset.preview?.src,
-    poster: preset.preview?.poster,
+    presetId: preset.id,
+    src: registered?.src ?? preset.preview?.src,
+    sources: registered?.sources?.length ? registered.sources : preset.preview?.sources,
+    thumbSrc: registered?.thumbSrc ?? preset.preview?.thumbSrc,
+    poster: registered?.poster ?? preset.preview?.poster,
     swatches,
     fallbackGradient: preset.preview?.fallbackGradient ?? preset.thumbnail,
   };
 }
+
 
 /** True when the preview still needs a real media asset produced. */
 export function needsMedia(media: PreviewMedia): boolean {

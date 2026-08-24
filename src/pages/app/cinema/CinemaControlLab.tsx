@@ -37,6 +37,7 @@ import type {
 } from "@/lib/cinema/controlLab";
 import type { CinemaVideoModelKey } from "@/lib/cinema/modelAdapters";
 import { syncCinemaGeneration } from "@/services/cinemaStudio";
+import AttachPreviewPanel from "@/components/cinema/AttachPreviewPanel";
 
 const SUPPORT_TYPES: PresetSupportType[] = [
   "NATIVE",
@@ -341,6 +342,8 @@ export default function CinemaControlLab() {
             </div>
           )}
         </section>
+
+        <AttachPreviewPanel />
 
         {/* --------------------- Promotion / validation --------------------- */}
         <section className="space-y-4 rounded-xl border border-border bg-card/50 p-5">
