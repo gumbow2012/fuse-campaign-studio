@@ -269,6 +269,37 @@ export default function LightingPanel({ config, updateField }: LightingPanelProp
           </div>
         ))}
 
+        {compare.a && compare.b ? (
+          <CompareDialog
+            open
+            onOpenChange={(open) => {
+              if (!open) compare.closeCompare();
+            }}
+            title="Compare lighting"
+            a={{
+              media: resolvePreviewMedia({ category: "LIGHTING", preset: compare.a }),
+              label: compare.a.name,
+              sublabel: compare.a.illuminationStyle,
+            }}
+            b={{
+              media: resolvePreviewMedia({ category: "LIGHTING", preset: compare.b }),
+              label: compare.b.name,
+              sublabel: compare.b.illuminationStyle,
+            }}
+            modes={["side-by-side", "wipe", "hold"]}
+            onApplyA={() => {
+              if (compare.a) applyPreset(compare.a);
+              compare.reset();
+            }}
+            onApplyB={() => {
+              if (compare.b) applyPreset(compare.b);
+              compare.reset();
+            }}
+          />
+        ) : null}
+
+
+
         <Separator className="bg-border/60" />
 
         {/* --------------------------- CURRENT RIG ---------------------------- */}
