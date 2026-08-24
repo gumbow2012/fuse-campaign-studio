@@ -7,6 +7,7 @@
  * `src/lib/cinema` / `src/components/cinema`.
  */
 
+import type { CinemaControlValidation, PreviewMedia } from "./previewTypes";
 import type {
   CinemaPresetType,
   ConfigSource,
