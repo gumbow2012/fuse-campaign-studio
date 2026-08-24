@@ -45,7 +45,18 @@ export type CinemaLightType =
   | "bounce"
   | "ambient"
   | "background"
-  | "kicker";
+  | "kicker"
+  // Additive fixture vocabulary (manual rig builder).
+  | "softbox"
+  | "strip"
+  | "point"
+  | "fresnel"
+  | "spotlight"
+  | "window"
+  | "negative-fill"
+  | "led-panel"
+  | "tube"
+  | "neon";
 
 export type CinemaLight = {
   id: string;
