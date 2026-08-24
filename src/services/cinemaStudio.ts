@@ -325,3 +325,73 @@ export async function recordPresetUse(
   const userId = await requireUserId();
   return pushRecent(userId, type, presetId);
 }
+
+/* ------------------------------------------------------------------ */
+/* Generation (CINEMA 10) — reuses the fal + credit path server-side  */
+/* ------------------------------------------------------------------ */
+
+export type CinemaGeneration = {
+  id: string;
+  status: "queued" | "running" | "complete" | "failed" | string;
+  outputUrl: string | null;
+  outputType: string | null;
+  error: string | null;
+  estimatedCredits: number | null;
+  providerModel: string | null;
+  requestId: string | null;
+  createdAt: string | null;
+  completedAt: string | null;
+  /** Immutable snapshot of exactly what drove this generation. */
+  snapshot: {
+    prompt: string;
+    model: string;
+    nativeParams: Record<string, unknown>;
+    resolvedConfig: unknown;
+    references: unknown;
+    presetIds: string[];
+    directorAgentState: unknown;
+    promptSource: "COMPILED" | "USER_EDITED";
+    compiledAt: string;
+  } | null;
+  cinemaProjectId: string | null;
+  sceneId: string | null;
+  shotId: string | null;
+};
+
+/** Starts one generation. Append-only: never overwrites an earlier revision. */
+export async function startCinemaGeneration(payload: {
+  model: string;
+  prompt: string;
+  promptSource: "COMPILED" | "USER_EDITED";
+  nativeParams: Record<string, unknown>;
+  resolvedConfig: unknown;
+  references: Array<{ url?: string | null; name?: string | null; roles?: ReferenceRole[] }>;
+  referenceUrls: string[];
+  presetIds?: string[];
+  directorAgentState?: unknown;
+  cinemaProjectId?: string | null;
+  sceneId?: string | null;
+  shotId?: string | null;
+}): Promise<CinemaGeneration> {
+  const result = await invokeCinemaStudio<{ generation: CinemaGeneration }>("generate", payload);
+  return result.generation;
+}
+
+/** Polls one generation; stores nothing client-side. */
+export async function syncCinemaGeneration(generationId: string): Promise<CinemaGeneration> {
+  const result = await invokeCinemaStudio<{ generation: CinemaGeneration }>("generation-status", {
+    generationId,
+  });
+  return result.generation;
+}
+
+/** Full revision history for a cinema project, oldest first. */
+export async function listCinemaGenerations(
+  cinemaProjectId?: string | null,
+): Promise<CinemaGeneration[]> {
+  const result = await invokeCinemaStudio<{ generations: CinemaGeneration[] }>(
+    "generation-history",
+    { cinemaProjectId: cinemaProjectId ?? null },
+  );
+  return result.generations ?? [];
+}
