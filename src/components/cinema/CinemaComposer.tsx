@@ -22,6 +22,7 @@ import ColorPanel from "./ColorPanel";
 import CompositionPanel from "./CompositionPanel";
 import OpticsPanel from "./OpticsPanel";
 import AtmospherePanel from "./AtmospherePanel";
+import CharacterPanel from "./CharacterPanel";
 import DirectorAgentPanel from "./DirectorAgentPanel";
 import FilmSetupPanel from "./FilmSetupPanel";
 import FullPresetPanel from "./FullPresetPanel";
@@ -60,6 +61,7 @@ const CHIPS: Array<{ key: ChipKey; label: string }> = [
   { key: "presets", label: "Presets" },
   { key: "filmSetup", label: "Film Setup" },
   { key: "camera", label: "Camera" },
+  { key: "character", label: "Character" },
   { key: "movement", label: "Movement" },
   { key: "composition", label: "Composition" },
   { key: "lighting", label: "Lighting" },
@@ -497,6 +499,13 @@ export default function CinemaComposer({
           <CompositionPanel config={config} updateField={updateField} advanced={advanced} />
         ) : openChip === "optics" ? (
           <OpticsPanel config={config} updateField={updateField} advanced={advanced} />
+        ) : openChip === "character" ? (
+          <CharacterPanel
+            config={config}
+            updateField={updateField}
+            advanced={advanced}
+            references={references}
+          />
         ) : openChip === "atmosphere" ? (
           <AtmospherePanel config={config} updateField={updateField} advanced={advanced} />
         ) : undefined}

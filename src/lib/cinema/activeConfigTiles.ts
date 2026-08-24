@@ -16,6 +16,7 @@ import { COMPOSITION_PRESETS } from "./presets/compositionPresets";
 import { ATMOSPHERE_PRESETS } from "./presets/atmospherePresets";
 import { OPTICS_PRESETS } from "./presets/opticsPresets";
 import { MOVEMENT_PRESETS } from "./presets/movementPresets";
+import { EMOTION_PRESETS, findEmotionPreset } from "./presets/characterPresets";
 import type { CinemaReference, DirectorConfig, DirectorConfigField } from "./types";
 
 /** Modal keys understood by the composer (config fields + the two browsers). */
@@ -57,6 +58,8 @@ export function buildActiveConfigTiles(
   const color = config.color.value;
   const optics = config.optics.value;
   const atmosphere = config.atmosphere.value;
+  const character = config.character?.value;
+  const emotionPreset = findEmotionPreset(character?.emotion) ?? EMOTION_PRESETS[0];
 
   const cameraPreset = CAMERA_PRESETS.find((p) => p.config.camera?.value.body === camera.body);
   const lensPreset = LENS_PRESETS.find(
@@ -156,6 +159,13 @@ export function buildActiveConfigTiles(
       label: "Optics",
       summary: opticsPreset?.name ?? titleCase(optics.flare ?? "Auto"),
       media: media("OPTICS", opticsPreset),
+    },
+    {
+      key: "character",
+      opens: "character",
+      label: "Character",
+      summary: character?.emotion ? emotionPreset.name : "Auto",
+      media: media("CHARACTER", character?.emotion ? emotionPreset : undefined),
     },
     {
       key: "filmSetup",

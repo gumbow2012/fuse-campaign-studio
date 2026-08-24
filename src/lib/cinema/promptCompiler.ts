@@ -32,6 +32,7 @@ export type CompiledSectionName =
   | "COLOR"
   | "OPTICS"
   | "ATMOSPHERE"
+  | "CHARACTER"
   | "REFERENCES"
   | "HARD LOCKS";
 
@@ -83,6 +84,7 @@ const SECTION_SPECS: SectionSpec[] = [
   { name: "COLOR", priority: 75, fields: ["color"] },
   { name: "OPTICS", priority: 45, fields: ["optics"] },
   { name: "ATMOSPHERE", priority: 50, fields: ["atmosphere"] },
+  { name: "CHARACTER", priority: 88, fields: ["character"] },
   { name: "REFERENCES", priority: 70, fields: [] },
   { name: "HARD LOCKS", priority: 99, fields: [] },
 ];

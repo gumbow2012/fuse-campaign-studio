@@ -31,6 +31,7 @@ import { ATMOSPHERE_PRESETS } from "./presets/atmospherePresets";
 import { OPTICS_PRESETS } from "./presets/opticsPresets";
 import { MOVEMENT_PRESETS } from "./presets/movementPresets";
 import { FULL_PRESETS } from "./presets/fullPresets";
+import { EMOTION_PRESETS } from "./presets/characterPresets";
 
 export type PreviewManifestEntry = {
   presetId: string;
@@ -98,6 +99,7 @@ function collectSources(): Array<{ category: CinemaPreviewCategory; presets: Sou
     { category: "ATMOSPHERE", presets: ATMOSPHERE_PRESETS },
     { category: "OPTICS", presets: OPTICS_PRESETS },
     { category: "MOVEMENT", presets: MOVEMENT_PRESETS },
+    { category: "CHARACTER", presets: EMOTION_PRESETS },
     { category: "FULL", presets: FULL_PRESETS },
   ];
 }
