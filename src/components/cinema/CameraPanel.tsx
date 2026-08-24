@@ -25,6 +25,7 @@ import type {
 import {
   CAMERA_PRESETS,
   CAMERA_PRESET_CATEGORIES,
+  type CinemaCameraPreset,
 } from "@/lib/cinema/presets/cameraPresets";
 import {
   APERTURE_OPTIONS,
@@ -33,7 +34,9 @@ import {
   FOCAL_LENGTH_PRESETS,
   LENS_PRESETS,
   LENS_PRESET_CATEGORIES,
+  type CinemaLensPreset,
 } from "@/lib/cinema/presets/lensPresets";
+
 import PresetLibrarySection from "./PresetLibrarySection";
 import {
   CAMERA_LIBRARY,
