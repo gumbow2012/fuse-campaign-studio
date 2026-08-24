@@ -166,6 +166,7 @@ export type PreviewablePreset = {
 export function resolvePreviewMedia(args: {
   category: CinemaPreviewCategory;
   preset: {
+    id?: string;
     category?: string;
     tags?: string[];
     thumbnail?: string;
@@ -175,17 +176,22 @@ export function resolvePreviewMedia(args: {
   swatches?: string[];
 }): PreviewMedia {
   const { category, preset } = args;
-  const kind = preset.preview?.kind ?? primaryPreviewKind(category);
-  const swatches = preset.preview?.swatches ?? args.swatches;
+  const registered = preset.id ? previewMediaLookup?.(preset.id) : undefined;
+  const kind = registered?.kind ?? preset.preview?.kind ?? primaryPreviewKind(category);
+  const swatches = registered?.swatches ?? preset.preview?.swatches ?? args.swatches;
   return {
     kind,
     canonicalScene: preset.preview?.canonicalScene ?? defaultCanonicalScene(category, preset),
-    src: preset.preview?.src,
-    poster: preset.preview?.poster,
+    presetId: preset.id,
+    src: registered?.src ?? preset.preview?.src,
+    sources: registered?.sources?.length ? registered.sources : preset.preview?.sources,
+    thumbSrc: registered?.thumbSrc ?? preset.preview?.thumbSrc,
+    poster: registered?.poster ?? preset.preview?.poster,
     swatches,
     fallbackGradient: preset.preview?.fallbackGradient ?? preset.thumbnail,
   };
 }
+
 
 /** True when the preview still needs a real media asset produced. */
 export function needsMedia(media: PreviewMedia): boolean {
