@@ -249,6 +249,20 @@ export default function LightingPanel({ config, updateField }: LightingPanelProp
                       )}
                     />
                   </button>
+                  <button
+                    type="button"
+                    aria-label={compare.isA(preset.id) ? "Marked as A" : "Compare with…"}
+                    onClick={() => compare.pick(preset)}
+                    className="absolute right-1.5 top-8 rounded-md bg-background/70 p-1 backdrop-blur"
+                  >
+                    <ArrowLeftRight
+                      className={cn(
+                        "h-3 w-3",
+                        compare.isA(preset.id) ? "text-primary" : "text-muted-foreground",
+                      )}
+                    />
+                  </button>
+
                 </div>
               ))}
             </div>
