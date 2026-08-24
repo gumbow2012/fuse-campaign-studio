@@ -16,6 +16,7 @@ import AdminTemplates from "@/pages/AdminTemplates";
 import FlowEmbed from "@/pages/FlowEmbed";
 import FlowTest from "@/pages/FlowTest";
 import GenerationStudio from "@/pages/GenerationStudio";
+import CinemaStudio from "@/pages/app/cinema/CinemaStudio";
 import OutfitSwap from "@/pages/OutfitSwap";
 import JewelrySwap from "@/pages/JewelrySwap";
 import NanoRun from "@/pages/NanoRun";
@@ -105,6 +106,15 @@ const App = () => (
               }
             />
             <Route
+              path="/app/lab/cinema"
+              element={
+                <BuilderRoute>
+                  <CinemaStudio />
+                </BuilderRoute>
+              }
+            />
+            <Route
+
               path="/app/lab/outfit-swap"
               element={
                 <BuilderRoute>
