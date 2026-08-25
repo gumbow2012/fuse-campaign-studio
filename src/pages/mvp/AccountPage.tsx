@@ -32,30 +32,6 @@ export default function AccountPage() {
   }, []);
 
 
-  useEffect(() => {
-    if (!user) return;
-
-    let cancelled = false;
-    setHistoryLoading(true);
-    setHistoryError(null);
-
-    loadCreditHistory(user.id)
-      .then((rows) => {
-        if (!cancelled) setHistory(rows);
-      })
-      .catch((error) => {
-        if (!cancelled) {
-          setHistoryError(error instanceof Error ? error.message : "Could not load credit history.");
-        }
-      })
-      .finally(() => {
-        if (!cancelled) setHistoryLoading(false);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [user]);
 
   const handleSaveName = async () => {
     if (!user) return;
