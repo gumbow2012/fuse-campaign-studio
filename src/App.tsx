@@ -14,6 +14,7 @@ import Admin from "@/pages/Admin";
 import AdminAudits from "@/pages/AdminAudits";
 import AdminAnalytics from "@/pages/AdminAnalytics";
 import AdminCreators from "@/pages/AdminCreators";
+import AdminCreatorProgram from "@/pages/AdminCreatorProgram";
 import AdminTemplateImport from "@/pages/AdminTemplateImport";
 import AdminTemplates from "@/pages/AdminTemplates";
 import FlowEmbed from "@/pages/FlowEmbed";
@@ -189,6 +190,14 @@ const App = () => (
               element={
                 <AdminRoute>
                   <AdminCreators />
+                </AdminRoute>
+              }
+            />
+            <Route
+              path="/admin/creator-program"
+              element={
+                <AdminRoute>
+                  <AdminCreatorProgram />
                 </AdminRoute>
               }
             />
