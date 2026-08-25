@@ -750,6 +750,14 @@ export default function TemplateStudioPage() {
   const costDisplay = isPrivilegedUser ? "Bypassed for team access" : `${creditsRequired} credits`;
   const isPublicTemplateBrowser = !user;
   const selectedTemplateCheckoutPath = selectedTemplate ? buildTemplateCheckoutPath(selectedTemplate) : "/pricing";
+  const detailTemplate = templates.find((template) => template.id === detailTemplateId) ?? null;
+  const creditShortfall = Math.max(0, creditsRequired - displayedCreditBalance);
+  const blockedByCredits = !!user && !isPrivilegedUser && !!profile && creditShortfall > 0;
+  const builderSteps = buildCampaignSteps({
+    hasRequirements: inputFields.length > 0,
+    assetsReady: requiredInputsAreReady,
+    canGenerate: requiredInputsAreReady && (isPrivilegedUser || !blockedByCredits),
+  });
 
   const handleTemplateSelect = (templateId: string) => {
     setSelectedTemplateId(templateId);
