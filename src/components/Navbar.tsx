@@ -210,8 +210,9 @@ const MobileMenu = ({ onClose }: { onClose: () => void }) => {
 const Navbar = () => {
   const [scrolled, setScrolled] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
-  const { user } = useAuth();
+  const { user, roles } = useAuth();
   const { pathname } = useLocation();
+  const isAdminOrDev = roles.includes("admin") || roles.includes("dev");
 
   const handleScroll = useCallback(() => {
     setScrolled(window.scrollY > 50);
