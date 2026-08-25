@@ -47,7 +47,10 @@ interface InputField {
   type: string;
   required: boolean;
   hint?: string;
+  /** FT2: optional rich metadata authored on the template input. */
+  requirement?: TemplateAssetRequirement;
 }
+
 
 interface RunnerOutput {
   type: string;
