@@ -240,12 +240,12 @@ export default function BillingPage() {
               {isTemplateCheckout ? "Checkout" : "Membership"}
             </p>
             <h1 className="mt-3 font-display text-2xl font-bold leading-tight text-white sm:text-4xl">
-              {isTemplateCheckout ? "Unlock this template." : "Campaign-Grade Creative. Fraction of the Cost."}
+              {isTemplateCheckout ? "Unlock this template." : "Never start a campaign from scratch again."}
             </h1>
             <p className="mt-4 max-w-3xl text-base leading-7 text-slate-300">
               {isTemplateCheckout
                 ? "Tell us where to send your studio access, choose the plan that covers this campaign, and continue to payment."
-                : "A single lookbook shoot runs $2,000–$5,000. A Fuse campaign takes 5 minutes."}
+                : "Pick a proven template. Add your brand. FUSE does the rest."}
             </p>
           </div>
           {user ? (
