@@ -38,8 +38,25 @@ import { fetchTemplateDetail, fetchTemplates, type ApiTemplate, type RunFeedback
 import { uploadRunInputFile } from "@/services/runInputUpload";
 import { getStaticInputs } from "@/services/templateInputMap";
 import { trackEvent } from "@/lib/metaPixel";
+import {
+  formatAssetTypeLabel,
+  type TemplateAssetRequirement,
+} from "@/lib/templateAssetRequirements";
 
 type RunnerStatus = "queued" | "running" | "video_pending" | "complete" | "failed";
+
+/** FT2: short hint line assembled from optional requirement metadata. */
+function describeRequirement(requirement: TemplateAssetRequirement) {
+  const notes: string[] = [];
+  if (requirement.maxFiles > 1) {
+    notes.push(`${requirement.minFiles}-${requirement.maxFiles} files`);
+  }
+  if (requirement.recommendedAspect) notes.push(requirement.recommendedAspect);
+  if (requirement.recommendedResolution) notes.push(requirement.recommendedResolution);
+  if (requirement.transparencyRecommended) notes.push("transparent PNG preferred");
+  return notes;
+}
+
 
 interface InputField {
   key: string;
