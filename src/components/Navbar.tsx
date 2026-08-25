@@ -153,81 +153,27 @@ const Navbar = () => {
           <img src={FUSE_WORDMARK_SRC} alt="FUSE" className="h-6 w-auto object-contain" />
         </Link>
 
-        {/* Center nav */}
-        <div className="hidden lg:flex items-center gap-6">
-          {/* Drops dropdown */}
-          <NavDropdown
-            label="Drops"
-            pill={
-              <span className="ml-1 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-primary/20 text-[9px] font-bold uppercase tracking-wider text-primary">
-                <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
-                Live
-              </span>
-            }
+        {/* Center nav — real product destinations */}
+        <div className="hidden lg:flex items-center gap-1">
+          {DESTINATIONS.map((item) => (
+            <NavItem key={item.label} item={item} active={item.match(pathname)} />
+          ))}
+          <Link
+            to="/pricing"
+            aria-current={pathname === "/pricing" ? "page" : undefined}
+            className={`ml-2 rounded-lg px-3 py-1.5 text-sm transition-colors duration-200 ${
+              pathname === "/pricing"
+                ? "bg-primary/10 font-semibold text-foreground"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
           >
-            <DropdownItem label="🔥 Live Drop — VOL 01 RAW STREET" href="#drops" />
-            <DropdownItem label="New This Week" />
-            <DropdownItem label="Trending Packs" />
-            <DropdownItem label="Seasonal Drops" />
-            <DropdownDivider />
-            <DropdownItem label="Archive (VOL 00–12)" />
-          </NavDropdown>
-
-          {/* Create dropdown */}
-          <NavDropdown label="Create">
-            <DropdownItem label="Run a Drop" href="#create" />
-            <DropdownItem label="Build a Campaign Pack" />
-            <DropdownItem label="Generate Product Photos" />
-            <DropdownItem label="Generate UGC Variations" />
-            <DropdownItem label="Make a Lookbook Grid" />
-            <DropdownItem label="Create Store Assets" />
-          </NavDropdown>
-
-          {/* Templates mega menu */}
-          <TemplatesMegaMenu />
-
-          {/* Vault */}
-          <Link to="#" className="text-sm text-muted-foreground hover:text-foreground transition-colors duration-200">
-            Vault
-          </Link>
-
-          {/* Boards — locked */}
-          <Link to="#" className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors duration-200">
-            Boards
-            <span className="inline-flex items-center gap-0.5 text-[9px] text-muted-foreground/60">
-              <Lock size={9} /> Pro
-            </span>
-          </Link>
-
-          {/* Explore */}
-          <Link to="#" className="text-sm text-muted-foreground hover:text-foreground transition-colors duration-200">
-            Explore
-          </Link>
-
-          {/* Pricing */}
-          <Link to="/pricing" className="text-sm text-muted-foreground hover:text-foreground transition-colors duration-200">
             Pricing
           </Link>
         </div>
 
         {/* Right side */}
         <div className="flex items-center gap-2">
-          {/* Mode switch */}
-          <div className="hidden xl:flex items-center gap-0.5 mr-3 px-1 py-0.5 rounded-full bg-secondary/50 border border-border/40">
-            {modes.map((mode) => (
-              <button
-                key={mode}
-                onClick={() => setActiveMode(mode)}
-                className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-[0.1em] transition-all ${
-                  activeMode === mode
-                    ? "bg-primary text-primary-foreground shadow-sm"
-                    : "text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                {mode}
-              </button>
-            ))}
-          </div>
+
 
           {/* Mobile menu */}
           <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
