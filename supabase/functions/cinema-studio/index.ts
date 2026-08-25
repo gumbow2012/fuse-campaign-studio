@@ -8,13 +8,25 @@
 // Actions implemented: "extract-palette", "auto-director", "detect-roles".
 
 import { GoogleGenAI, Type } from "https://esm.sh/@google/genai@1.29.0";
-import { corsHeaders, errorMessage, json, requireUser } from "../_shared/supabase-admin.ts";
+import {
+  corsHeaders,
+  errorMessage,
+  json,
+  requireAdminUser,
+  requireUser,
+} from "../_shared/supabase-admin.ts";
 import {
   handleGenerate,
   handleGenerateCallback,
   handleGenerationHistory,
   handleGenerationStatus,
 } from "./generate.ts";
+import {
+  handlePreviewBase,
+  handlePreviewGenerate,
+  handlePreviewInventory,
+} from "./previews.ts";
+
 
 const GEMINI_ANALYSIS_MODEL = Deno.env.get("GEMINI_ANALYSIS_MODEL")?.trim() || "gemini-3.6-flash";
 
