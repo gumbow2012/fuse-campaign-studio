@@ -3,6 +3,8 @@ import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
 import { loadCreditUsage, type CreditUsageSummary } from "@/services/creditUsage";
 import { STRIPE_TIERS, type StripeTierKey } from "@/lib/stripe-config";
+import { useAnimatedNumber } from "@/hooks/useAnimatedNumber";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 const TYPE_LABEL: Record<string, string> = {
   run_template: "Template runs",
@@ -50,9 +52,11 @@ export default function UsageProjectionPanel({ onNavigateTab }: Props) {
         : null;
 
   const used = summary?.creditsUsed ?? 0;
+  const animatedUsed = useAnimatedNumber(used);
   const pct = planAllotment ? Math.min(100, (used / planAllotment) * 100) : null;
   const projected = summary?.projectedCredits ?? null;
   const shortfall = planAllotment && projected ? projected - planAllotment : null;
+  const animatedProjected = useAnimatedNumber(projected ?? 0);
 
   return (
     <section className="rounded-[2rem] border border-white/10 bg-white/[0.03] p-6 md:p-8">
@@ -60,7 +64,7 @@ export default function UsageProjectionPanel({ onNavigateTab }: Props) {
         {summary?.cycleSource === "subscription" ? "This billing cycle" : "Last 30 days"}
       </p>
       <h2 className="mt-2 font-display text-2xl font-semibold tracking-[-0.03em] text-white">
-        {loading ? "Loading usage…" : `${fmt(used)} credits used`}
+        {loading ? "Loading usage…" : `${fmt(animatedUsed)} credits used`}
       </h2>
 
       {error ? (
@@ -78,7 +82,14 @@ export default function UsageProjectionPanel({ onNavigateTab }: Props) {
                 />
               </div>
               <p className="mt-2 text-xs text-slate-400">
-                {fmt(used)} of {fmt(planAllotment)} plan credits ({Math.round(pct ?? 0)}%)
+                {fmt(animatedUsed)} of {fmt(planAllotment)}{" "}
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span className="underline decoration-dotted underline-offset-2">plan credits</span>
+                  </TooltipTrigger>
+                  <TooltipContent>Your plan's monthly allotment for this billing cycle.</TooltipContent>
+                </Tooltip>{" "}
+                ({Math.round(pct ?? 0)}%)
               </p>
             </div>
           ) : (
@@ -137,7 +148,17 @@ export default function UsageProjectionPanel({ onNavigateTab }: Props) {
               <>
                 <p className="mt-2 text-sm text-slate-300">
                   At your current pace you're projected to use{" "}
-                  <span className="font-semibold text-white">~{fmt(projected)}</span> credits by the end of this{" "}
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <span className="font-semibold text-white underline decoration-dotted underline-offset-2">
+                        ~{fmt(animatedProjected)}
+                      </span>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      An estimate from your pace so far in this period, not a guarantee.
+                    </TooltipContent>
+                  </Tooltip>{" "}
+                  credits by the end of this{" "}
                   {summary?.cycleSource === "subscription" ? "cycle" : "30-day window"} (approx).
                 </p>
                 {planAllotment && shortfall !== null && shortfall > 0 ? (
