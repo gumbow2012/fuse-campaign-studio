@@ -66,8 +66,6 @@ export default function BillingPage() {
   const [brandName, setBrandName] = useState("");
   const [billingCycle, setBillingCycle] = useState<"monthly" | "annual">("monthly");
 
-  const [billingCycle, setBillingCycle] = useState<"monthly" | "annual">("monthly");
-
   const selectedTemplateId = searchParams.get("template") ?? "";
   const selectedTemplateName = searchParams.get("templateName") ?? selectedTemplateId;
   const selectedTemplateCredits = Number(searchParams.get("credits") ?? 0);
