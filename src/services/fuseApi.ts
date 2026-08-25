@@ -21,7 +21,9 @@ type TemplateDetailField = {
   type?: string | null;
   required?: boolean | null;
   hint?: unknown;
+  requirement?: Record<string, unknown> | null;
 };
+
 
 type TemplateDetailNodePayload = {
   id?: unknown;
