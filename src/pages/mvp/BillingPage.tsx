@@ -11,6 +11,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { CREDIT_PACKS, STRIPE_TIERS } from "@/lib/stripe-config";
 import {
+  checkoutEventId,
   clearPendingCheckout,
   readPendingCheckout,
   rememberPendingCheckout,

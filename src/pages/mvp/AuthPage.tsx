@@ -9,7 +9,7 @@ import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { getAbsoluteSiteUrl } from "@/lib/site-url";
-import { clearPendingCheckout, readPendingCheckout, trackEvent, trackEventOnce } from "@/lib/metaPixel";
+import { checkoutEventId, clearPendingCheckout, readPendingCheckout, trackEvent, trackEventOnce } from "@/lib/metaPixel";
 
 function authErrorDescription(error: unknown, fallback: string) {
   if (!(error instanceof Error)) return fallback;
