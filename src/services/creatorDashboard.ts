@@ -118,3 +118,35 @@ export async function countCreatorTemplatesPublic(input: {
   const count = (data as { publishedCount?: unknown } | null)?.publishedCount;
   return typeof count === "number" ? count : 0;
 }
+
+export type CreatorReward = {
+  id: string;
+  amount: number;
+  description: string | null;
+  created_at: string | null;
+};
+
+/**
+ * READ-ONLY creator reward ledger rows. The `creator_reward` ledger type does
+ * not exist yet, so this legitimately returns an empty array today.
+ */
+export async function loadCreatorRewards(userId: string): Promise<CreatorReward[]> {
+  try {
+    const { data, error } = await supabase
+      .from("credit_ledger")
+      .select("id, amount, description, created_at")
+      .eq("user_id", userId)
+      .eq("type", "creator_reward" as never)
+      .order("created_at", { ascending: false });
+    if (error || !Array.isArray(data)) return [];
+    return data.map((row) => ({
+      id: String(row.id),
+      amount: Number(row.amount ?? 0),
+      description: row.description ?? null,
+      created_at: row.created_at ?? null,
+    }));
+  } catch {
+    return [];
+  }
+}
+
