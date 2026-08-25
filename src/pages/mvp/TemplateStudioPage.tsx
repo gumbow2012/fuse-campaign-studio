@@ -1258,7 +1258,7 @@ export default function TemplateStudioPage() {
                   <div className="rounded-[1.5rem] border border-white/8 bg-black/20 p-4">
                     <div className="flex flex-wrap items-center justify-between gap-3">
                       <div>
-                        <p className="text-[11px] uppercase tracking-[0.24em] text-muted-foreground">Run cost</p>
+                        <p className="text-[11px] uppercase tracking-[0.24em] text-muted-foreground">Review</p>
                         <p className="mt-2 text-2xl font-semibold text-white">{costDisplay}</p>
                         {isPrivilegedUser ? (
                           <p className="mt-2 text-xs text-slate-500">
@@ -1268,16 +1268,24 @@ export default function TemplateStudioPage() {
                       </div>
                       <Button
                         onClick={() => void handleRun()}
-                        disabled={submitting || isRunning || (!!user && !requiredInputsAreReady)}
-                        className="min-w-[180px] rounded-full bg-cyan-300 text-slate-950 hover:bg-cyan-200"
+                        disabled={submitting || isRunning || (!!user && (!requiredInputsAreReady || blockedByCredits))}
+                        className="min-w-[200px] rounded-full bg-cyan-300 text-[12px] font-semibold uppercase tracking-[0.14em] text-slate-950 hover:bg-cyan-200"
                       >
-                        {checkingCredits ? "Checking credits..." : submitting || isRunning ? "Running..." : user ? "Run template" : "Sign in to run"}
+                        {checkingCredits
+                          ? "Checking credits..."
+                          : submitting || isRunning
+                            ? "Generating..."
+                            : !user
+                              ? "Sign in to generate"
+                              : isPrivilegedUser
+                                ? "Generate campaign"
+                                : `Generate campaign · ${creditsRequired} cr`}
                       </Button>
                     </div>
 
                     {!user ? (
                       <p className="mt-3 text-sm leading-6 text-cyan-100">
-                        Sign in or create an account before running templates or buying credits.
+                        Sign in or create an account before generating campaigns or buying credits.
                         {" "}
                         <Link to="/auth?mode=signup" className="underline underline-offset-4">
                           Create account
@@ -1289,7 +1297,7 @@ export default function TemplateStudioPage() {
                       </p>
                     ) : !hasActiveMembership ? (
                       <p className="mt-3 text-sm leading-6 text-amber-100">
-                        Active membership required before running templates.
+                        Active membership required before generating campaigns.
                         {" "}
                         <Link to="/pricing" className="underline underline-offset-4">
                           Open membership
@@ -1297,11 +1305,22 @@ export default function TemplateStudioPage() {
                       </p>
                     ) : null}
 
-                    {!isPrivilegedUser && hasActiveMembership && !canAfford ? (
-                      <p className="mt-3 text-sm leading-6 text-rose-100">
-                        This run costs {creditsRequired} credits and your balance is {displayedCreditBalance}.
-                      </p>
+                    {blockedByCredits ? (
+                      <div className="mt-3 flex flex-wrap items-center gap-3 text-sm leading-6 text-rose-100">
+                        <span>
+                          You need {creditShortfall} more credit{creditShortfall === 1 ? "" : "s"}
+                        </span>
+                        <Button
+                          asChild
+                          size="sm"
+                          variant="outline"
+                          className="rounded-full border-white/15 bg-white/5 text-xs text-foreground hover:bg-white/10"
+                        >
+                          <Link to="/membership?tab=credits">Buy Credits</Link>
+                        </Button>
+                      </div>
                     ) : null}
+
                   </div>
                     </>
                   )}
