@@ -988,23 +988,23 @@ export function createStripeWebhookHandler(mode: StripeBillingMode) {
             profile,
           });
 
-          // Additive analytics only — fire-and-forget, never blocks or fails the webhook.
+          // Additive analytics only — never blocks or fails the webhook.
           try {
             if (mode === "live") {
-              sendMetaCapiEvent({
-                eventName: "Purchase",
-                eventId: metaCheckoutEventId("Purchase", String(session.id)),
-                value: typeof session.amount_total === "number" ? session.amount_total / 100 : pack.amountCents / 100,
-                currency: (session.currency ?? pack.currency ?? "usd").toUpperCase(),
+              await sendMetaCapiPurchase({
                 email: customerEmail,
-                externalId: profile?.user_id ?? null,
-                orderId: String(session.id),
-                contentType: "product",
+                value: typeof session.amount_total === "number"
+                  ? session.amount_total / 100
+                  : pack.amountCents / 100,
+                currency: (session.currency ?? pack.currency ?? "usd").toUpperCase(),
+                eventId: metaCheckoutEventId("Purchase", String(session.id)),
+                eventSourceUrl: "https://fuse-us.com",
               });
             }
           } catch (_capiError) {
             // analytics must never affect billing
           }
+
 
           return json({ received: true, granted: grantResult.granted }, 200);
         }
