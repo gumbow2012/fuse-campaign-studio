@@ -1,144 +1,63 @@
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Button } from "@/components/ui/button";
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import { Sheet, SheetContent, SheetTrigger, SheetTitle } from "@/components/ui/sheet";
-import { Star, FolderArchive, FileText, Bell, User, Search, Lock, ChevronDown, LayoutDashboard, Zap, Menu } from "lucide-react";
+import { User, LayoutGrid, ImageIcon, Clapperboard, Zap, Menu } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { AccountPopover, AccountMenuContent } from "@/components/AccountMenu";
 
 const FUSE_ICON_SRC = "/fuse-icon.png?v=20260519";
 const FUSE_WORDMARK_SRC = "/fuse-wordmark.png?v=20260519";
 
-/* ─── Mode options ─── */
-const modes = ["Streetwear", "Luxury", "Ecom", "UGC"] as const;
-
-/* ─── Dropdown wrapper ─── */
-const NavDropdown = ({
-  label,
-  children,
-  pill,
-}: {
+/* ─── Primary product destinations (real routes only) ───
+   Note: "Video" is handled by the same Generation Studio route, so it is not
+   duplicated here. "Madden Media" has no route yet and is intentionally omitted. */
+type NavDestination = {
   label: string;
-  children: React.ReactNode;
-  pill?: React.ReactNode;
-}) => {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const handler = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
-    };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, []);
-
-  return (
-    <div ref={ref} className="relative">
-      <button
-        onClick={() => setOpen(!open)}
-        className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors duration-200"
-      >
-        {label}
-        {pill}
-        <ChevronDown size={12} className={`transition-transform ${open ? "rotate-180" : ""}`} />
-      </button>
-      {open && (
-        <div className="absolute top-full left-0 mt-2 min-w-[220px] rounded-lg border border-border bg-card shadow-xl z-[100] py-2">
-          {children}
-        </div>
-      )}
-    </div>
-  );
+  to: string;
+  icon: typeof ImageIcon;
+  match: (pathname: string) => boolean;
 };
 
-const DropdownItem = ({
-  label,
-  locked,
-  tier,
-  href = "#",
-}: {
-  label: string;
-  locked?: boolean;
-  tier?: string;
-  href?: string;
-}) => (
-  <Link
-    to={href}
-    className="flex items-center justify-between px-4 py-2 text-sm text-foreground/80 hover:bg-secondary/60 hover:text-foreground transition-colors"
-  >
-    <span>{label}</span>
-    {locked && (
-      <span className="flex items-center gap-1 text-[10px] text-muted-foreground">
-        <Lock size={10} /> {tier}
-      </span>
-    )}
-  </Link>
-);
+const DESTINATIONS: NavDestination[] = [
+  {
+    label: "Explore",
+    to: "/app/templates",
+    icon: LayoutGrid,
+    match: (p) => p === "/app/templates",
+  },
+  {
+    label: "Image",
+    to: "/app/lab/studio",
+    icon: ImageIcon,
+    match: (p) => p.startsWith("/app/lab/studio"),
+  },
+  {
+    label: "Cinema",
+    to: "/app/lab/cinema",
+    icon: Clapperboard,
+    match: (p) => p.startsWith("/app/lab/cinema"),
+  },
+];
 
-const DropdownDivider = () => <div className="my-1.5 border-t border-border/50" />;
-const DropdownLabel = ({ children }: { children: React.ReactNode }) => (
-  <p className="px-4 pt-2 pb-1 text-[10px] font-bold uppercase tracking-[0.15em] text-muted-foreground">{children}</p>
-);
-
-/* ─── Templates Mega Menu ─── */
-const TemplatesMegaMenu = () => {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const handler = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
-    };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, []);
-
+const NavItem = ({ item, active }: { item: NavDestination; active: boolean }) => {
+  const Icon = item.icon;
   return (
-    <div ref={ref} className="relative">
-      <button
-        onClick={() => setOpen(!open)}
-        className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors duration-200"
-      >
-        Templates
-        <ChevronDown size={12} className={`transition-transform ${open ? "rotate-180" : ""}`} />
-      </button>
-      {open && (
-        <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 w-[580px] rounded-xl border border-border bg-card shadow-2xl z-[100] p-5 grid grid-cols-3 gap-6">
-          {/* Col 1 */}
-          <div>
-            <DropdownLabel>By Aesthetic</DropdownLabel>
-            {["Raw Street", "Luxe Editorial", "Viral POV", "Underground", "Clean Commerce"].map((t) => (
-              <Link key={t} to="#" className="block px-2 py-1.5 text-sm text-foreground/80 hover:text-foreground hover:bg-secondary/40 rounded transition-colors">
-                {t}
-              </Link>
-            ))}
-          </div>
-          {/* Col 2 */}
-          <div>
-            <DropdownLabel>By Output Type</DropdownLabel>
-            {["On-model", "Closeups", "Editorial", "Motion-ready", "Lookbook"].map((t) => (
-              <Link key={t} to="#" className="block px-2 py-1.5 text-sm text-foreground/80 hover:text-foreground hover:bg-secondary/40 rounded transition-colors">
-                {t}
-              </Link>
-            ))}
-          </div>
-          {/* Col 3 */}
-          <div>
-            <DropdownLabel>Featured</DropdownLabel>
-            {["VOL 01 Pack", "Most Run This Week", "New Additions"].map((t) => (
-              <Link key={t} to="#" className="block px-2 py-1.5 text-sm text-foreground/80 hover:text-foreground hover:bg-secondary/40 rounded transition-colors">
-                {t}
-              </Link>
-            ))}
-            <DropdownDivider />
-            <Link to="#" className="block px-2 py-1.5 text-sm text-primary hover:text-primary/80 font-medium transition-colors">
-              Browse All Templates →
-            </Link>
-          </div>
-        </div>
+    <Link
+      to={item.to}
+      aria-current={active ? "page" : undefined}
+      className={`group relative flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm transition-colors duration-200 ${
+        active
+          ? "bg-primary/10 font-semibold text-foreground"
+          : "text-muted-foreground hover:bg-white/5 hover:text-foreground"
+      }`}
+    >
+      <Icon size={15} className={active ? "text-primary" : "text-muted-foreground/70 group-hover:text-foreground"} />
+      {item.label}
+      {active && (
+        <span className="absolute inset-x-2 -bottom-[1px] h-[2px] rounded-full bg-primary shadow-[0_0_8px_hsl(var(--primary)/0.8)]" />
       )}
-    </div>
+    </Link>
   );
 };
 
@@ -161,11 +80,11 @@ const MobileMenu = ({ onClose }: { onClose: () => void }) => {
         <div className="space-y-1">
           <p className="px-3 text-[10px] font-bold uppercase tracking-[0.15em] text-muted-foreground">Browse</p>
           <Link to="/" onClick={onClose} className={linkClass}>Home</Link>
-          <Link to="#drops" onClick={onClose} className={linkClass}>Drops</Link>
-          <Link to="#create" onClick={onClose} className={linkClass}>Create</Link>
-          <Link to="#" onClick={onClose} className={linkClass}>Templates</Link>
-          <Link to="#" onClick={onClose} className={linkClass}>Vault</Link>
+          {DESTINATIONS.map((d) => (
+            <Link key={d.label} to={d.to} onClick={onClose} className={linkClass}>{d.label}</Link>
+          ))}
           <Link to="/pricing" onClick={onClose} className={linkClass}>Pricing</Link>
+
         </div>
 
         {user ? (
@@ -204,10 +123,10 @@ const MobileMenu = ({ onClose }: { onClose: () => void }) => {
 
 /* ─── Main Navbar ─── */
 const Navbar = () => {
-  const [activeMode, setActiveMode] = useState<typeof modes[number]>("Streetwear");
   const [scrolled, setScrolled] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const { user, profile } = useAuth();
+  const { pathname } = useLocation();
 
   const handleScroll = useCallback(() => {
     setScrolled(window.scrollY > 50);
@@ -234,81 +153,27 @@ const Navbar = () => {
           <img src={FUSE_WORDMARK_SRC} alt="FUSE" className="h-6 w-auto object-contain" />
         </Link>
 
-        {/* Center nav */}
-        <div className="hidden lg:flex items-center gap-6">
-          {/* Drops dropdown */}
-          <NavDropdown
-            label="Drops"
-            pill={
-              <span className="ml-1 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-primary/20 text-[9px] font-bold uppercase tracking-wider text-primary">
-                <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
-                Live
-              </span>
-            }
+        {/* Center nav — real product destinations */}
+        <div className="hidden lg:flex items-center gap-1">
+          {DESTINATIONS.map((item) => (
+            <NavItem key={item.label} item={item} active={item.match(pathname)} />
+          ))}
+          <Link
+            to="/pricing"
+            aria-current={pathname === "/pricing" ? "page" : undefined}
+            className={`ml-2 rounded-lg px-3 py-1.5 text-sm transition-colors duration-200 ${
+              pathname === "/pricing"
+                ? "bg-primary/10 font-semibold text-foreground"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
           >
-            <DropdownItem label="🔥 Live Drop — VOL 01 RAW STREET" href="#drops" />
-            <DropdownItem label="New This Week" />
-            <DropdownItem label="Trending Packs" />
-            <DropdownItem label="Seasonal Drops" />
-            <DropdownDivider />
-            <DropdownItem label="Archive (VOL 00–12)" />
-          </NavDropdown>
-
-          {/* Create dropdown */}
-          <NavDropdown label="Create">
-            <DropdownItem label="Run a Drop" href="#create" />
-            <DropdownItem label="Build a Campaign Pack" />
-            <DropdownItem label="Generate Product Photos" />
-            <DropdownItem label="Generate UGC Variations" />
-            <DropdownItem label="Make a Lookbook Grid" />
-            <DropdownItem label="Create Store Assets" />
-          </NavDropdown>
-
-          {/* Templates mega menu */}
-          <TemplatesMegaMenu />
-
-          {/* Vault */}
-          <Link to="#" className="text-sm text-muted-foreground hover:text-foreground transition-colors duration-200">
-            Vault
-          </Link>
-
-          {/* Boards — locked */}
-          <Link to="#" className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors duration-200">
-            Boards
-            <span className="inline-flex items-center gap-0.5 text-[9px] text-muted-foreground/60">
-              <Lock size={9} /> Pro
-            </span>
-          </Link>
-
-          {/* Explore */}
-          <Link to="#" className="text-sm text-muted-foreground hover:text-foreground transition-colors duration-200">
-            Explore
-          </Link>
-
-          {/* Pricing */}
-          <Link to="/pricing" className="text-sm text-muted-foreground hover:text-foreground transition-colors duration-200">
             Pricing
           </Link>
         </div>
 
         {/* Right side */}
         <div className="flex items-center gap-2">
-          {/* Mode switch */}
-          <div className="hidden xl:flex items-center gap-0.5 mr-3 px-1 py-0.5 rounded-full bg-secondary/50 border border-border/40">
-            {modes.map((mode) => (
-              <button
-                key={mode}
-                onClick={() => setActiveMode(mode)}
-                className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-[0.1em] transition-all ${
-                  activeMode === mode
-                    ? "bg-primary text-primary-foreground shadow-sm"
-                    : "text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                {mode}
-              </button>
-            ))}
-          </div>
+
 
           {/* Mobile menu */}
           <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
@@ -334,56 +199,11 @@ const Navbar = () => {
                 <span className="text-[10px] font-bold text-foreground">{profile?.credits_balance ?? 0}</span>
               </div>
 
-              {/* Quick action icons */}
-              <div className="hidden md:flex items-center gap-1">
-                {[
-                  { icon: Search, label: "Search" },
-                  { icon: Bell, label: "Updates" },
-                  { icon: FolderArchive, label: "Vault" },
-                ].map(({ icon: Icon, label }) => (
-                  <button
-                    key={label}
-                    title={label}
-                    className="p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-secondary/40 transition-colors"
-                  >
-                    <Icon size={16} />
-                  </button>
-                ))}
-              </div>
-
-              <div className="w-px h-6 bg-border/40 mx-1 hidden md:block" />
-
-              <Link to="/dashboard" className="hidden sm:block">
-                <Button variant="outline" size="sm" className="rounded-full border-border/60 text-foreground hover:text-foreground hover:border-foreground/30 bg-transparent px-4 text-xs">
-                  <LayoutDashboard size={14} className="mr-1.5" />
-                  Dashboard
-                </Button>
-              </Link>
 
               <AccountPopover />
             </>
           ) : (
             <>
-              {/* Quick action icons */}
-              <div className="hidden md:flex items-center gap-1">
-                {[
-                  { icon: Search, label: "Search" },
-                  { icon: Bell, label: "Updates" },
-                  { icon: Star, label: "Saved" },
-                  { icon: FolderArchive, label: "Vault" },
-                  { icon: FileText, label: "Runs" },
-                ].map(({ icon: Icon, label }) => (
-                  <button
-                    key={label}
-                    title={label}
-                    className="p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-secondary/40 transition-colors"
-                  >
-                    <Icon size={16} />
-                  </button>
-                ))}
-              </div>
-
-              <div className="w-px h-6 bg-border/40 mx-1 hidden md:block" />
 
               <Link to="/auth">
                 <Button
@@ -400,7 +220,7 @@ const Navbar = () => {
                   size="sm"
                   className="rounded-full gradient-primary text-primary-foreground font-bold glow-blue-sm hover:opacity-90 transition-opacity border-0 px-5 text-xs tracking-wide"
                 >
-                  Launch Drop
+                  Get started
                 </Button>
               </Link>
             </>
