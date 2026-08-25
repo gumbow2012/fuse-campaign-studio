@@ -1,14 +1,14 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import { ArrowRight, Check, Loader2, Settings, ShieldCheck, Zap } from "lucide-react";
+import { Loader2, Settings, ShieldCheck } from "lucide-react";
 import SiteShell from "@/components/mvp/SiteShell";
 import PageMeta from "@/components/mvp/PageMeta";
+import CompactAccountBar from "@/components/mvp/membership/CompactAccountBar";
 import PlanTierCards from "@/components/mvp/membership/PlanTierCards";
 import CreditPackCards from "@/components/mvp/membership/CreditPackCards";
 import PlanComparisonMatrix from "@/components/mvp/membership/PlanComparisonMatrix";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { toast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { useMembershipCheckout } from "@/hooks/useMembershipCheckout";
