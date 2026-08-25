@@ -18,7 +18,7 @@ import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
 import { accentStyle, resolveAccent } from "@/lib/creatorAccents";
 import {
-  countCreatorTemplates,
+  countCreatorTemplatesByHandle,
   getCreatorProfileByHandle,
   type CreatorProfile as CreatorProfileRow,
 } from "@/services/creatorProfile";
@@ -52,7 +52,7 @@ export default function CreatorProfile() {
         if (cancelled) return;
         setProfile(row);
         if (row) {
-          const count = await countCreatorTemplates(row.user_id);
+          const count = await countCreatorTemplatesByHandle(row.handle);
           if (!cancelled) setTemplateCount(count);
         }
       })

@@ -31,10 +31,21 @@ type PortfolioTemplate = {
   name: string | null;
   description: string | null;
   preview_url: string | null;
-  preview_asset_type: string | null;
   created_at: string | null;
   updated_at: string | null;
   review_status: string | null;
+};
+
+const emptyPortfolio = {
+  templates: [],
+  publishedCount: 0,
+  buckets: {
+    draft: 0,
+    submitted: 0,
+    approved: 0,
+    rejected: 0,
+  },
+  reviewStatusTracked: false,
 };
 
 function toBucket(status: string | null): ReviewBucket | null {
@@ -52,7 +63,7 @@ function toBucket(status: string | null): ReviewBucket | null {
 async function loadTemplates(admin: ReturnType<typeof createAdminClient>, userId: string) {
   const { data, error } = await admin
     .from("fuse_templates")
-    .select("id,name,description,preview_url,preview_asset_type,created_at,updated_at")
+    .select("id,name,description,preview_url,created_at,updated_at")
     .eq("created_by", userId)
     .order("updated_at", { ascending: false });
 
@@ -67,7 +78,7 @@ async function loadTemplates(admin: ReturnType<typeof createAdminClient>, userId
   if (ids.length) {
     const { data: versions, error: versionError } = await admin
       .from("template_versions")
-      .select("template_id,review_status,reviewed_at,created_at")
+      .select("template_id,review_status,reviewed_at")
       .in("template_id", ids);
 
     if (!versionError) {
@@ -76,7 +87,7 @@ async function loadTemplates(admin: ReturnType<typeof createAdminClient>, userId
         const templateId = version.template_id ? String(version.template_id) : null;
         const status = version.review_status ? String(version.review_status) : null;
         if (!templateId || !status) continue;
-        const stamp = String(version.reviewed_at ?? version.created_at ?? "");
+        const stamp = String(version.reviewed_at ?? "");
         if (!latestAt[templateId] || stamp >= latestAt[templateId]) {
           latestAt[templateId] = stamp;
           statuses[templateId] = status;
@@ -93,7 +104,6 @@ async function loadTemplates(admin: ReturnType<typeof createAdminClient>, userId
       name: row.name ? String(row.name) : null,
       description: row.description ? String(row.description) : null,
       preview_url: row.preview_url ? String(row.preview_url) : null,
-      preview_asset_type: row.preview_asset_type ? String(row.preview_asset_type) : null,
       created_at: row.created_at ? String(row.created_at) : null,
       updated_at: row.updated_at ? String(row.updated_at) : null,
       review_status: statuses[id] ?? null,
@@ -119,6 +129,49 @@ async function loadTemplates(admin: ReturnType<typeof createAdminClient>, userId
   };
 }
 
+async function hasCreatorRole(admin: ReturnType<typeof createAdminClient>, userId: string) {
+  const { data, error } = await admin
+    .from("user_roles")
+    .select("role")
+    .eq("user_id", userId)
+    .eq("role", "creator")
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  return Boolean(data);
+}
+
+async function resolvePublicUserId(
+  admin: ReturnType<typeof createAdminClient>,
+  input: { handle?: unknown; user_id?: unknown },
+) {
+  const handle = typeof input.handle === "string" ? input.handle.trim().toLowerCase() : "";
+  const requestedUserId = typeof input.user_id === "string" ? input.user_id.trim() : "";
+
+  if (handle) {
+    const { data, error } = await admin
+      .from("creator_profiles")
+      .select("user_id,is_public")
+      .eq("handle", handle)
+      .maybeSingle();
+    if (error) throw new Error(error.message);
+    if (!data || data.is_public === false) return null;
+    return String(data.user_id);
+  }
+
+  if (requestedUserId) {
+    const { data, error } = await admin
+      .from("creator_profiles")
+      .select("user_id,is_public")
+      .eq("user_id", requestedUserId)
+      .maybeSingle();
+    if (error) throw new Error(error.message);
+    if (!data || data.is_public === false) return null;
+    return String(data.user_id);
+  }
+
+  return null;
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
@@ -128,45 +181,32 @@ Deno.serve(async (req) => {
     const mode = String((body as Record<string, unknown>).mode ?? "own");
 
     if (mode === "public") {
-      const handle = (body as Record<string, unknown>).handle;
-      const requestedUserId = (body as Record<string, unknown>).user_id;
-
-      let userId: string | null = requestedUserId ? String(requestedUserId) : null;
-      if (!userId && handle) {
-        const { data, error } = await admin
-          .from("creator_profiles")
-          .select("user_id,is_public")
-          .eq("handle", String(handle).trim().toLowerCase())
-          .maybeSingle();
-        if (error) throw new Error(error.message);
-        if (!data || data.is_public === false) {
-          return json({ templates: [], publishedCount: 0, buckets: null, reviewStatusTracked: false });
-        }
-        userId = String(data.user_id);
-      }
-
-      if (!userId) return json({ error: "handle or user_id required" }, 400);
+      const userId = await resolvePublicUserId(admin, body as Record<string, unknown>);
+      if (!userId) return json(emptyPortfolio);
+      if (!(await hasCreatorRole(admin, userId))) return json(emptyPortfolio);
 
       const result = await loadTemplates(admin, userId);
-      // Public mode: public-safe template fields + count only. No author PII,
-      // no email, no roles, no review buckets.
+      // Public mode: public-safe template/review fields only. No author PII,
+      // no email, no private roles/profile/billing data.
       return json({
         templates: result.templates.map((template) => ({
           id: template.id,
           name: template.name,
           description: template.description,
           preview_url: template.preview_url,
-          preview_asset_type: template.preview_asset_type,
           created_at: template.created_at,
+          updated_at: template.updated_at,
+          review_status: template.review_status,
         })),
         publishedCount: result.publishedCount,
-        buckets: null,
-        reviewStatusTracked: false,
+        buckets: result.buckets,
+        reviewStatusTracked: result.reviewStatusTracked,
       });
     }
 
     const user = await getOptionalUser(req, admin);
     if (!user) return json({ error: "Authentication required" }, 401);
+    if (!(await hasCreatorRole(admin, user.id))) return json({ error: "Creator access required" }, 403);
 
     const result = await loadTemplates(admin, user.id);
     return json(result);

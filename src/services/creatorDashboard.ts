@@ -20,7 +20,6 @@ export type CreatorTemplate = {
   name: string | null;
   description: string | null;
   preview_url: string | null;
-  preview_asset_type: string | null;
   created_at: string | null;
   updated_at: string | null;
   /** Latest `template_versions.review_status`, or null when not tracked. */
@@ -28,6 +27,15 @@ export type CreatorTemplate = {
 };
 
 export type ReviewBucket = "draft" | "submitted" | "approved" | "rejected";
+
+export type ReviewBucketCounts = Record<ReviewBucket, number>;
+
+const EMPTY_BUCKETS: ReviewBucketCounts = {
+  draft: 0,
+  submitted: 0,
+  approved: 0,
+  rejected: 0,
+};
 
 /** Maps whatever review_status production reports onto the four buckets. */
 export function toReviewBucket(status: string | null | undefined): ReviewBucket | null {
@@ -44,6 +52,10 @@ export function toReviewBucket(status: string | null | undefined): ReviewBucket 
 
 export type CreatorDashboardData = {
   templates: CreatorTemplate[];
+  /** Real count from `fuse_templates.created_by` via `creator-portfolio`. */
+  publishedCount: number;
+  /** Latest `template_versions.review_status` collapsed into review buckets. */
+  reviewBuckets: ReviewBucketCounts;
   /** True when review status data could be resolved for this creator. */
   reviewStatusTracked: boolean;
   /** Sum of creator reward credits in the ledger (no reward type yet → 0). */
@@ -52,13 +64,26 @@ export type CreatorDashboardData = {
 
 type PortfolioResponse = {
   templates?: CreatorTemplate[];
+  publishedCount?: number;
+  buckets?: Partial<ReviewBucketCounts> | null;
   reviewStatusTracked?: boolean;
   error?: string;
 };
 
+function normalizeBuckets(input: PortfolioResponse["buckets"]): ReviewBucketCounts {
+  return {
+    draft: Number(input?.draft ?? 0),
+    submitted: Number(input?.submitted ?? 0),
+    approved: Number(input?.approved ?? 0),
+    rejected: Number(input?.rejected ?? 0),
+  };
+}
+
 export async function loadCreatorDashboard(_userId: string): Promise<CreatorDashboardData> {
   const empty: CreatorDashboardData = {
     templates: [],
+    publishedCount: 0,
+    reviewBuckets: { ...EMPTY_BUCKETS },
     reviewStatusTracked: false,
     creditsEarned: 0,
   };
@@ -73,6 +98,9 @@ export async function loadCreatorDashboard(_userId: string): Promise<CreatorDash
 
   return {
     templates: payload.templates,
+    publishedCount:
+      typeof payload.publishedCount === "number" ? payload.publishedCount : payload.templates.length,
+    reviewBuckets: normalizeBuckets(payload.buckets),
     reviewStatusTracked: !!payload.reviewStatusTracked,
     creditsEarned: 0,
   };
