@@ -113,6 +113,8 @@ export default function MembershipPage() {
               }}
             />
 
+            <PromoCodeEntry />
+
             <div>
               <Button
                 variant="outline"
