@@ -9,6 +9,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { ADMIN_VISUAL_BUDGET_TOTAL, getAdminVisualCreditsRemaining, getAdminVisualCreditsSpent } from "@/lib/adminBudget";
 import { updateAccountProfile } from "@/services/account";
+import { loadCreditHistory, type CreditLedgerRow } from "@/services/creditHistory";
 
 export default function AccountPage() {
   const { isAdmin, profile, refreshProfile, user } = useAuth();
@@ -17,11 +18,24 @@ export default function AccountPage() {
   const [savingName, setSavingName] = useState(false);
   const [savingPassword, setSavingPassword] = useState(false);
   const [adminVisualSpent, setAdminVisualSpent] = useState(0);
+  const [history, setHistory] = useState<CreditLedgerRow[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyError, setHistoryError] = useState<string | null>(null);
   const trimmedName = name.trim();
   const creditsLabel = isAdmin ? "Access" : "Credits";
   const creditsValue = isAdmin ? "∞" : String(profile?.credits_balance ?? 0);
   const planValue = isAdmin ? "Admin" : profile?.plan ?? "free";
   const adminVisualRemaining = getAdminVisualCreditsRemaining();
+
+  const typeLabel: Record<string, string> = {
+    run_template: "Template run",
+    rerun_step: "Rerun step",
+    topup: "Top-up",
+    monthly_grant: "Monthly credits",
+    refund: "Refund",
+    adjustment: "Adjustment",
+    creator_reward: "Creator reward",
+  };
 
   useEffect(() => {
     setName(profile?.name ?? "");
@@ -30,6 +44,31 @@ export default function AccountPage() {
   useEffect(() => {
     setAdminVisualSpent(getAdminVisualCreditsSpent());
   }, []);
+
+  useEffect(() => {
+    if (!user) return;
+
+    let cancelled = false;
+    setHistoryLoading(true);
+    setHistoryError(null);
+
+    loadCreditHistory(user.id)
+      .then((rows) => {
+        if (!cancelled) setHistory(rows);
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          setHistoryError(error instanceof Error ? error.message : "Could not load credit history.");
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setHistoryLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [user]);
 
   const handleSaveName = async () => {
     if (!user) return;
@@ -166,6 +205,60 @@ export default function AccountPage() {
               >
                 <Link to="/pricing">Buy more credits</Link>
               </Button>
+            </section>
+
+            <section className="rounded-[2rem] border border-white/10 bg-slate-950/75 p-6 shadow-[0_24px_80px_rgba(0,0,0,0.35)] backdrop-blur-xl">
+              <p className="text-[11px] uppercase tracking-[0.24em] text-muted-foreground">Usage & history</p>
+
+              {historyLoading ? (
+                <p className="mt-5 text-sm text-slate-400">Loading activity...</p>
+              ) : historyError ? (
+                <p className="mt-5 text-sm text-red-300">{historyError}</p>
+              ) : history.length === 0 ? (
+                <p className="mt-5 text-sm text-slate-400">No credit activity yet.</p>
+              ) : (
+                <>
+                  <div className="mt-5 overflow-hidden rounded-2xl border border-white/10">
+                    <table className="w-full text-sm">
+                      <thead className="bg-white/[0.04] text-xs uppercase tracking-wider text-muted-foreground">
+                        <tr>
+                          <th className="px-4 py-3 text-left font-medium">Date</th>
+                          <th className="px-4 py-3 text-left font-medium">Type</th>
+                          <th className="px-4 py-3 text-left font-medium">Description</th>
+                          <th className="px-4 py-3 text-right font-medium">Amount</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-white/10">
+                        {history.map((row) => {
+                          const isNegative = row.amount < 0;
+                          return (
+                            <tr key={row.id} className="hover:bg-white/[0.02]">
+                              <td className="px-4 py-3 text-slate-300">
+                                {new Date(row.created_at).toLocaleDateString(undefined, {
+                                  month: "short",
+                                  day: "numeric",
+                                  year: "numeric",
+                                })}
+                              </td>
+                              <td className="px-4 py-3 text-slate-200">{typeLabel[row.type] ?? row.type}</td>
+                              <td className="px-4 py-3 text-slate-400">{row.description ?? "—"}</td>
+                              <td
+                                className={`px-4 py-3 text-right font-medium ${
+                                  isNegative ? "text-red-300" : "text-cyan-300"
+                                }`}
+                              >
+                                {isNegative ? "−" : "+"}
+                                {Math.abs(row.amount).toLocaleString()}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                  <p className="mt-3 text-xs text-slate-500">Showing recent activity</p>
+                </>
+              )}
             </section>
 
             <section className="rounded-[2rem] border border-white/10 bg-slate-950/75 p-6 shadow-[0_24px_80px_rgba(0,0,0,0.35)] backdrop-blur-xl">
