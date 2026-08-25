@@ -1,8 +1,8 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { Button } from "@/components/ui/button";
-import { Link, useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
 import { Sheet, SheetContent, SheetTrigger, SheetTitle } from "@/components/ui/sheet";
-import { Star, FolderArchive, FileText, Bell, User, Search, Lock, ChevronDown, LogOut, LayoutDashboard, Zap, Menu, X } from "lucide-react";
+import { Star, FolderArchive, FileText, Bell, User, Search, Lock, ChevronDown, LayoutDashboard, Zap, Menu } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { AccountPopover, AccountMenuContent } from "@/components/AccountMenu";
 
