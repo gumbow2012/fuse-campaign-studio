@@ -80,11 +80,11 @@ const MobileMenu = ({ onClose }: { onClose: () => void }) => {
         <div className="space-y-1">
           <p className="px-3 text-[10px] font-bold uppercase tracking-[0.15em] text-muted-foreground">Browse</p>
           <Link to="/" onClick={onClose} className={linkClass}>Home</Link>
-          <Link to="#drops" onClick={onClose} className={linkClass}>Drops</Link>
-          <Link to="#create" onClick={onClose} className={linkClass}>Create</Link>
-          <Link to="#" onClick={onClose} className={linkClass}>Templates</Link>
-          <Link to="#" onClick={onClose} className={linkClass}>Vault</Link>
+          {DESTINATIONS.map((d) => (
+            <Link key={d.label} to={d.to} onClick={onClose} className={linkClass}>{d.label}</Link>
+          ))}
           <Link to="/pricing" onClick={onClose} className={linkClass}>Pricing</Link>
+
         </div>
 
         {user ? (
