@@ -8,6 +8,7 @@
 
 import { supabase } from "@/integrations/supabase/client";
 import { DEFAULT_ACCENT, resolveAccent } from "@/lib/creatorAccents";
+import { countCreatorTemplatesPublic } from "@/services/creatorDashboard";
 
 export type CreatorProfile = {
   id: string;
@@ -123,23 +124,14 @@ export async function getOwnCreatorProfile() {
 
 /**
  * REAL DATA ONLY: the number of templates this creator actually owns.
- * Nothing is invented — uses / likes / followers are not tracked and are
- * deliberately not returned.
+ *
+ * PRODUCTION SCHEMA: authorship is `fuse_templates.created_by`, which the
+ * browser client cannot read, so this goes through the `creator-portfolio`
+ * edge function (service role, real prod tables). Nothing is invented —
+ * uses / likes / followers are not tracked and are never returned.
  */
 export async function countCreatorTemplates(userId: string) {
-  const { data: creatorRows, error: creatorError } = await supabase
-    .from("creators")
-    .select("id")
-    .eq("user_id", userId);
-  if (creatorError) return 0;
-  const ids = (creatorRows ?? []).map((row) => row.id);
-  if (!ids.length) return 0;
-  const { count, error } = await supabase
-    .from("templates")
-    .select("id", { count: "exact", head: true })
-    .in("creator_id", ids);
-  if (error) return 0;
-  return count ?? 0;
+  return countCreatorTemplatesPublic({ userId });
 }
 
 /* --------------------------------- writes -------------------------------- */
