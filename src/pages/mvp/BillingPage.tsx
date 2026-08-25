@@ -77,10 +77,12 @@ export default function BillingPage() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { isAdmin, user, profile, refreshSubscription } = useAuth();
-  const [loading, setLoading] = useState<string | null>(null);
+  const { loading, setLoading, startPlanCheckout, startCreditCheckout } = useMembershipCheckout();
   const [creditPackSmoke, setCreditPackSmoke] = useState<CreditPackSmokeResult | null>(null);
   const [checkoutEmail, setCheckoutEmail] = useState("");
   const [brandName, setBrandName] = useState("");
+  const [billingCycle, setBillingCycle] = useState<"monthly" | "annual">("monthly");
+
   const [billingCycle, setBillingCycle] = useState<"monthly" | "annual">("monthly");
 
   const selectedTemplateId = searchParams.get("template") ?? "";
