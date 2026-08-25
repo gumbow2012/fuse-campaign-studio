@@ -727,7 +727,6 @@ export default function TemplateStudioPage() {
   const creditBalance = profile?.credits_balance ?? null;
   const displayedCreditBalance = creditBalance ?? 0;
   const profileIsResolving = !!user && !isPrivilegedUser && !profile;
-  const canAfford = isPrivilegedUser || (!!profile && displayedCreditBalance >= creditsRequired);
   const hasActiveMembership =
     isPrivilegedUser ||
     profile?.subscription_status === "active" ||
