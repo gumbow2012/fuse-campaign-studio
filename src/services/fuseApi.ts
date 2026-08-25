@@ -116,6 +116,7 @@ type CatalogTemplate = {
   previewUrl?: string | null;
   previewAssetType?: "image" | "video" | null;
   reviewStatus?: string | null;
+  createdAt?: string | null;
 };
 
 type CatalogTemplateInput = {
@@ -163,6 +164,7 @@ export interface ApiTemplate {
     imageOutputs: number;
     videoOutputs: number;
   } | null;
+  created_at?: string | null;
 }
 
 export async function fetchTemplates(token: string): Promise<ApiTemplate[]> {
@@ -206,6 +208,7 @@ export async function fetchTemplates(token: string): Promise<ApiTemplate[]> {
               required: true,
             }))
           : [],
+        created_at: template.createdAt ?? null,
         preview_url: template.previewUrl ?? null,
         preview_asset_type: template.previewAssetType ?? null,
         tags: null,

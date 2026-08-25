@@ -61,7 +61,7 @@ Deno.serve(async (req) => {
   try {
     const { data: templates, error: templateError } = await admin
       .from("fuse_templates")
-      .select("id, name, description, preview_url, preview_asset_type");
+      .select("id, name, description, preview_url, preview_asset_type, created_at");
     if (templateError) throw new Error(templateError.message);
 
     const { data: versions, error: versionError } = await admin
@@ -228,6 +228,7 @@ Deno.serve(async (req) => {
           versionId: version.id,
           versionNumber: version.version_number,
           reviewStatus: version.review_status ?? "Unreviewed",
+          createdAt: template?.created_at ?? null,
           previewUrl: cover.url,
           previewAssetType: cover.type,
           estimatedCreditsPerRun: getTemplateCreditCost(template?.name, counts),
