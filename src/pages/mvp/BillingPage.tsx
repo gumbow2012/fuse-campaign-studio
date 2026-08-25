@@ -47,14 +47,6 @@ type CreditPackSmokeResult = {
   error?: string;
 };
 
-function formatBillingDate(value: string | null | undefined) {
-  if (!value) return "Not set";
-  return new Date(value).toLocaleDateString([], {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
-}
 
 export default function BillingPage() {
   const navigate = useNavigate();
