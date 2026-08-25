@@ -5,7 +5,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { LogOut, User, CreditCard, Star, Shield, Zap, ArrowUpRight, Ticket, LayoutDashboard } from "lucide-react";
+import { ArrowUpRight, Boxes, CreditCard, LayoutDashboard, LogOut, Shield, Star, Ticket, User, Zap } from "lucide-react";
 import { FuseCore } from "@/components/fuse/FuseCore";
 
 const panelClass =
@@ -141,6 +141,11 @@ export function AccountMenuContent({ onNavigate }: { onNavigate?: () => void }) 
           <User size={14} />
           Manage Account
         </Link>
+        <Link to="/app/brand" onClick={onNavigate} className={linkClass}>
+          <Boxes size={14} />
+          Brand &amp; Products
+        </Link>
+
         <Link to="/membership?tab=usage" onClick={onNavigate} className={linkClass}>
           <Zap size={14} />
           Usage & Credits

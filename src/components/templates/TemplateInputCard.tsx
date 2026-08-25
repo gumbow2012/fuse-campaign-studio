@@ -10,6 +10,7 @@ import { AlertTriangle, CheckCircle2, Images, Loader2, Upload, XCircle } from "l
 import { Button } from "@/components/ui/button";
 import UploadGuide from "@/components/templates/UploadGuide";
 import LibraryPickerDialog from "@/components/templates/LibraryPickerDialog";
+import ProfileAssetPicker from "@/components/templates/ProfileAssetPicker";
 import { libraryKindForAssetType } from "@/services/libraryAssets";
 import { getUploadGuide } from "@/lib/uploadGuides";
 import { runUploadChecks, type UploadCheckResult, type UploadCheckState } from "@/lib/uploadChecks";
@@ -233,6 +234,10 @@ export default function TemplateInputCard({
                 Library · Soon
               </Button>
             )}
+
+            {onLibrarySelect ? (
+              <ProfileAssetPicker assetType={requirement?.assetType} onSelect={onLibrarySelect} />
+            ) : null}
 
             <UploadGuide slotLabel={label} requirement={requirement} />
           </div>
