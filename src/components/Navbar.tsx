@@ -1,144 +1,63 @@
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Button } from "@/components/ui/button";
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import { Sheet, SheetContent, SheetTrigger, SheetTitle } from "@/components/ui/sheet";
-import { Star, FolderArchive, FileText, Bell, User, Search, Lock, ChevronDown, LayoutDashboard, Zap, Menu } from "lucide-react";
+import { User, LayoutGrid, ImageIcon, Clapperboard, Zap, Menu } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { AccountPopover, AccountMenuContent } from "@/components/AccountMenu";
 
 const FUSE_ICON_SRC = "/fuse-icon.png?v=20260519";
 const FUSE_WORDMARK_SRC = "/fuse-wordmark.png?v=20260519";
 
-/* ─── Mode options ─── */
-const modes = ["Streetwear", "Luxury", "Ecom", "UGC"] as const;
-
-/* ─── Dropdown wrapper ─── */
-const NavDropdown = ({
-  label,
-  children,
-  pill,
-}: {
+/* ─── Primary product destinations (real routes only) ───
+   Note: "Video" is handled by the same Generation Studio route, so it is not
+   duplicated here. "Madden Media" has no route yet and is intentionally omitted. */
+type NavDestination = {
   label: string;
-  children: React.ReactNode;
-  pill?: React.ReactNode;
-}) => {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const handler = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
-    };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, []);
-
-  return (
-    <div ref={ref} className="relative">
-      <button
-        onClick={() => setOpen(!open)}
-        className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors duration-200"
-      >
-        {label}
-        {pill}
-        <ChevronDown size={12} className={`transition-transform ${open ? "rotate-180" : ""}`} />
-      </button>
-      {open && (
-        <div className="absolute top-full left-0 mt-2 min-w-[220px] rounded-lg border border-border bg-card shadow-xl z-[100] py-2">
-          {children}
-        </div>
-      )}
-    </div>
-  );
+  to: string;
+  icon: typeof ImageIcon;
+  match: (pathname: string) => boolean;
 };
 
-const DropdownItem = ({
-  label,
-  locked,
-  tier,
-  href = "#",
-}: {
-  label: string;
-  locked?: boolean;
-  tier?: string;
-  href?: string;
-}) => (
-  <Link
-    to={href}
-    className="flex items-center justify-between px-4 py-2 text-sm text-foreground/80 hover:bg-secondary/60 hover:text-foreground transition-colors"
-  >
-    <span>{label}</span>
-    {locked && (
-      <span className="flex items-center gap-1 text-[10px] text-muted-foreground">
-        <Lock size={10} /> {tier}
-      </span>
-    )}
-  </Link>
-);
+const DESTINATIONS: NavDestination[] = [
+  {
+    label: "Explore",
+    to: "/app/templates",
+    icon: LayoutGrid,
+    match: (p) => p === "/app/templates",
+  },
+  {
+    label: "Image",
+    to: "/app/lab/studio",
+    icon: ImageIcon,
+    match: (p) => p.startsWith("/app/lab/studio"),
+  },
+  {
+    label: "Cinema",
+    to: "/app/lab/cinema",
+    icon: Clapperboard,
+    match: (p) => p.startsWith("/app/lab/cinema"),
+  },
+];
 
-const DropdownDivider = () => <div className="my-1.5 border-t border-border/50" />;
-const DropdownLabel = ({ children }: { children: React.ReactNode }) => (
-  <p className="px-4 pt-2 pb-1 text-[10px] font-bold uppercase tracking-[0.15em] text-muted-foreground">{children}</p>
-);
-
-/* ─── Templates Mega Menu ─── */
-const TemplatesMegaMenu = () => {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const handler = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
-    };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, []);
-
+const NavItem = ({ item, active }: { item: NavDestination; active: boolean }) => {
+  const Icon = item.icon;
   return (
-    <div ref={ref} className="relative">
-      <button
-        onClick={() => setOpen(!open)}
-        className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors duration-200"
-      >
-        Templates
-        <ChevronDown size={12} className={`transition-transform ${open ? "rotate-180" : ""}`} />
-      </button>
-      {open && (
-        <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 w-[580px] rounded-xl border border-border bg-card shadow-2xl z-[100] p-5 grid grid-cols-3 gap-6">
-          {/* Col 1 */}
-          <div>
-            <DropdownLabel>By Aesthetic</DropdownLabel>
-            {["Raw Street", "Luxe Editorial", "Viral POV", "Underground", "Clean Commerce"].map((t) => (
-              <Link key={t} to="#" className="block px-2 py-1.5 text-sm text-foreground/80 hover:text-foreground hover:bg-secondary/40 rounded transition-colors">
-                {t}
-              </Link>
-            ))}
-          </div>
-          {/* Col 2 */}
-          <div>
-            <DropdownLabel>By Output Type</DropdownLabel>
-            {["On-model", "Closeups", "Editorial", "Motion-ready", "Lookbook"].map((t) => (
-              <Link key={t} to="#" className="block px-2 py-1.5 text-sm text-foreground/80 hover:text-foreground hover:bg-secondary/40 rounded transition-colors">
-                {t}
-              </Link>
-            ))}
-          </div>
-          {/* Col 3 */}
-          <div>
-            <DropdownLabel>Featured</DropdownLabel>
-            {["VOL 01 Pack", "Most Run This Week", "New Additions"].map((t) => (
-              <Link key={t} to="#" className="block px-2 py-1.5 text-sm text-foreground/80 hover:text-foreground hover:bg-secondary/40 rounded transition-colors">
-                {t}
-              </Link>
-            ))}
-            <DropdownDivider />
-            <Link to="#" className="block px-2 py-1.5 text-sm text-primary hover:text-primary/80 font-medium transition-colors">
-              Browse All Templates →
-            </Link>
-          </div>
-        </div>
+    <Link
+      to={item.to}
+      aria-current={active ? "page" : undefined}
+      className={`group relative flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm transition-colors duration-200 ${
+        active
+          ? "bg-primary/10 font-semibold text-foreground"
+          : "text-muted-foreground hover:bg-white/5 hover:text-foreground"
+      }`}
+    >
+      <Icon size={15} className={active ? "text-primary" : "text-muted-foreground/70 group-hover:text-foreground"} />
+      {item.label}
+      {active && (
+        <span className="absolute inset-x-2 -bottom-[1px] h-[2px] rounded-full bg-primary shadow-[0_0_8px_hsl(var(--primary)/0.8)]" />
       )}
-    </div>
+    </Link>
   );
 };
 
