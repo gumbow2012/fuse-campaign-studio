@@ -2,7 +2,10 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import SiteShell from "@/components/mvp/SiteShell";
 import PageMeta from "@/components/mvp/PageMeta";
-import AccountHeader from "@/components/mvp/AccountHeader";
+import CompactAccountBar from "@/components/mvp/membership/CompactAccountBar";
+import TemplatePreviewCarousel from "@/components/mvp/membership/TemplatePreviewCarousel";
+import FindYourPlan from "@/components/mvp/membership/FindYourPlan";
+import MembershipFaq from "@/components/mvp/membership/MembershipFaq";
 import PlanTierCards, { type BillingCycle } from "@/components/mvp/membership/PlanTierCards";
 import CreditPackCards from "@/components/mvp/membership/CreditPackCards";
 import CreditSliderPanel from "@/components/mvp/membership/CreditSliderPanel";
@@ -71,12 +74,16 @@ export default function MembershipPage() {
       />
       <section className="container py-12 md:py-16">
         <p className="text-[11px] font-semibold uppercase tracking-[0.3em] text-cyan-100">Membership</p>
-        <h1 className="mt-3 font-display text-3xl font-bold tracking-[-0.04em] text-white sm:text-4xl">
-          FUSE Membership &amp; Credits
+        <h1 className="mt-3 font-display text-3xl font-bold tracking-[-0.04em] text-white sm:text-5xl">
+          One membership. A new campaign every day.
         </h1>
+        <p className="mt-4 max-w-2xl text-sm leading-6 text-slate-300 sm:text-base">
+          Get access to the FUSE template marketplace. Pick a campaign, upload your brand, and generate. No prompting
+          required.
+        </p>
 
         <div className="mt-6">
-          <AccountHeader />
+          <CompactAccountBar onManage={() => selectTab("upgrade")} />
         </div>
 
         {/* Sticky mode selector — full-width segmented control on mobile */}
@@ -115,6 +122,10 @@ export default function MembershipPage() {
               }}
             />
 
+            <TemplatePreviewCarousel />
+
+            <FindYourPlan />
+
             <PromoCodeEntry />
 
             <div>
@@ -123,22 +134,24 @@ export default function MembershipPage() {
                 onClick={() => setShowComparison((open) => !open)}
                 className="rounded-full border-white/15 bg-white/5 text-foreground hover:bg-white/10"
               >
-                {showComparison ? "Hide comparison" : "Compare all plans"}
+                {showComparison ? "Hide comparison" : "Compare everything"}
               </Button>
             </div>
 
             {showComparison ? (
               <section className="rounded-[2rem] border border-white/10 bg-white/[0.03] p-6 md:p-8">
-                <p className="text-[11px] uppercase tracking-[0.24em] text-muted-foreground">Compare plans</p>
+                <p className="text-[11px] uppercase tracking-[0.24em] text-muted-foreground">Compare everything</p>
                 <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-300">
-                  All memberships unlock the same tools and templates. The only difference is how many credits you get
-                  each month.
+                  Every campaign in the marketplace is included from Starter up. Higher tiers add campaign capacity,
+                  Cast, avatars, priority turnaround and team workspaces.
                 </p>
                 <div className="mt-6">
                   <PlanComparisonMatrix plan={profile?.plan} subscriptionStatus={profile?.subscription_status} />
                 </div>
               </section>
             ) : null}
+
+            <MembershipFaq />
           </div>
         ) : null}
 
@@ -166,7 +179,7 @@ export default function MembershipPage() {
                   />
                 </div>
 
-                <p className="mt-8 text-[11px] uppercase tracking-[0.24em] text-muted-foreground">Quick top-ups</p>
+                <p className="mt-8 text-[11px] uppercase tracking-[0.24em] text-muted-foreground">Buy extra credits</p>
                 <div className="mt-4">
                   <CreditPackCards
                     loading={loading}
