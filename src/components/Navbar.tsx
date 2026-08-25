@@ -1,8 +1,10 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { Button } from "@/components/ui/button";
-import { Link, useNavigate } from "react-router-dom";
-import { Star, FolderArchive, FileText, Bell, User, Search, Lock, ChevronDown, LogOut, LayoutDashboard, Zap } from "lucide-react";
+import { Link } from "react-router-dom";
+import { Sheet, SheetContent, SheetTrigger, SheetTitle } from "@/components/ui/sheet";
+import { Star, FolderArchive, FileText, Bell, User, Search, Lock, ChevronDown, LayoutDashboard, Zap, Menu } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
+import { AccountPopover, AccountMenuContent } from "@/components/AccountMenu";
 
 const FUSE_ICON_SRC = "/fuse-icon.png?v=20260519";
 const FUSE_WORDMARK_SRC = "/fuse-wordmark.png?v=20260519";
@@ -140,12 +142,72 @@ const TemplatesMegaMenu = () => {
   );
 };
 
+/* ─── Mobile menu content ─── */
+const MobileMenu = ({ onClose }: { onClose: () => void }) => {
+  const { user, isCreator, roles } = useAuth();
+  const isAdminOrDev = roles.includes("admin") || roles.includes("dev");
+
+  const linkClass =
+    "block rounded-lg px-3 py-2 text-sm text-foreground/80 hover:bg-white/5 hover:text-foreground transition-colors";
+
+  return (
+    <div className="flex h-full flex-col">
+      <div className="flex items-center justify-between border-b border-white/10 px-4 py-3">
+        <span className="font-display text-sm font-black uppercase tracking-wider text-foreground">Menu</span>
+      </div>
+
+      <div className="flex-1 overflow-auto px-4 py-4 space-y-6">
+        {/* Main nav */}
+        <div className="space-y-1">
+          <p className="px-3 text-[10px] font-bold uppercase tracking-[0.15em] text-muted-foreground">Browse</p>
+          <Link to="/" onClick={onClose} className={linkClass}>Home</Link>
+          <Link to="#drops" onClick={onClose} className={linkClass}>Drops</Link>
+          <Link to="#create" onClick={onClose} className={linkClass}>Create</Link>
+          <Link to="#" onClick={onClose} className={linkClass}>Templates</Link>
+          <Link to="#" onClick={onClose} className={linkClass}>Vault</Link>
+          <Link to="/pricing" onClick={onClose} className={linkClass}>Pricing</Link>
+        </div>
+
+        {user ? (
+          <>
+            <div className="space-y-1">
+              <p className="px-3 text-[10px] font-bold uppercase tracking-[0.15em] text-muted-foreground">Account</p>
+              <Link to="/dashboard" onClick={onClose} className={linkClass}>Dashboard</Link>
+              <Link to="/account" onClick={onClose} className={linkClass}>Account</Link>
+              <Link to="/pricing" onClick={onClose} className={linkClass}>Plans & Billing</Link>
+              {isCreator && <Link to="/app/creator" onClick={onClose} className={linkClass}>Creator Studio</Link>}
+              {isAdminOrDev && <Link to="/admin" onClick={onClose} className={linkClass}>Admin</Link>}
+            </div>
+
+            <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 backdrop-blur-sm">
+              <AccountMenuContent onNavigate={onClose} />
+            </div>
+          </>
+        ) : (
+          <div className="space-y-2 pt-4">
+            <Link to="/auth" onClick={onClose}>
+              <Button variant="outline" className="w-full rounded-full border-white/15 bg-white/5 text-foreground hover:bg-white/10">
+                Login
+              </Button>
+            </Link>
+            <Link to="/auth" onClick={onClose}>
+              <Button className="w-full rounded-full gradient-primary text-primary-foreground font-bold border-0">
+                Launch Drop
+              </Button>
+            </Link>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
 /* ─── Main Navbar ─── */
 const Navbar = () => {
   const [activeMode, setActiveMode] = useState<typeof modes[number]>("Streetwear");
   const [scrolled, setScrolled] = useState(false);
-  const { user, profile, signOut, hasAppAccess } = useAuth();
-  const navigate = useNavigate();
+  const [mobileOpen, setMobileOpen] = useState(false);
+  const { user, profile } = useAuth();
 
   const handleScroll = useCallback(() => {
     setScrolled(window.scrollY > 50);
@@ -248,6 +310,22 @@ const Navbar = () => {
             ))}
           </div>
 
+          {/* Mobile menu */}
+          <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
+            <SheetTrigger asChild>
+              <button
+                className="lg:hidden p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-secondary/40 transition-colors"
+                aria-label="Open menu"
+              >
+                <Menu size={20} />
+              </button>
+            </SheetTrigger>
+            <SheetContent side="right" className="w-[300px] border-white/10 bg-[#0B1120]/95 p-0">
+              <SheetTitle className="sr-only">Navigation menu</SheetTitle>
+              <MobileMenu onClose={() => setMobileOpen(false)} />
+            </SheetContent>
+          </Sheet>
+
           {user ? (
             <>
               {/* Credits badge */}
@@ -275,54 +353,14 @@ const Navbar = () => {
 
               <div className="w-px h-6 bg-border/40 mx-1 hidden md:block" />
 
-              <Link to="/dashboard">
+              <Link to="/dashboard" className="hidden sm:block">
                 <Button variant="outline" size="sm" className="rounded-full border-border/60 text-foreground hover:text-foreground hover:border-foreground/30 bg-transparent px-4 text-xs">
                   <LayoutDashboard size={14} className="mr-1.5" />
                   Dashboard
                 </Button>
               </Link>
-              {hasAppAccess ? (
-                <div className="flex items-center gap-2">
-                  <Link to="/app/lab/templates">
-                    <Button variant="outline" size="sm" className="rounded-full border-border/60 text-foreground hover:text-foreground hover:border-foreground/30 bg-transparent px-4 text-xs">
-                      Template Runner
-                    </Button>
-                  </Link>
-                  <Link to="/admin/audits">
-                    <Button variant="outline" size="sm" className="rounded-full border-border/60 text-foreground hover:text-foreground hover:border-foreground/30 bg-transparent px-4 text-xs">
-                      Developer Runs
-                    </Button>
-                  </Link>
-                  <Link to="/app/lab/canvas">
-                    <Button variant="outline" size="sm" className="rounded-full border-border/60 text-foreground hover:text-foreground hover:border-foreground/30 bg-transparent px-4 text-xs">
-                      Template Canvas
-                    </Button>
-                  </Link>
-                  <Link to="/app/lab/outfit-swap">
-                    <Button variant="outline" size="sm" className="rounded-full border-border/60 text-foreground hover:text-foreground hover:border-foreground/30 bg-transparent px-4 text-xs">
-                      Outfit Swap
-                    </Button>
-                  </Link>
-                  <Link to="/app/lab/jewelry-swap">
-                    <Button variant="outline" size="sm" className="rounded-full border-border/60 text-foreground hover:text-foreground hover:border-foreground/30 bg-transparent px-4 text-xs">
-                      Jewelry Swap
-                    </Button>
-                  </Link>
-                  <Link to="/app/lab/studio">
-                    <Button variant="outline" size="sm" className="rounded-full border-border/60 text-foreground hover:text-foreground hover:border-foreground/30 bg-transparent px-4 text-xs">
-                      Generation Studio
-                    </Button>
-                  </Link>
-                </div>
-              ) : null}
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => { signOut(); navigate("/"); }}
-                className="rounded-full text-muted-foreground hover:text-foreground px-3 text-xs"
-              >
-                <LogOut size={14} />
-              </Button>
+
+              <AccountPopover />
             </>
           ) : (
             <>
