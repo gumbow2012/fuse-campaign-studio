@@ -98,17 +98,21 @@ export default function BillingPage() {
 
     if (success) {
       const pending = readPendingCheckout();
-      const onceKey = `purchase.${pending?.startedAt ?? searchParams.toString()}`;
-      trackEventOnce(onceKey, "Purchase", {
-        value: pending?.value,
-        currency: "USD",
-        content_type: "product",
-      });
+      const sessionId = searchParams.get("session_id");
+      const onceKey = `purchase.${sessionId ?? pending?.startedAt ?? searchParams.toString()}`;
+      trackEventOnce(
+        onceKey,
+        "Purchase",
+        { value: pending?.value, currency: "USD", content_type: "product" },
+        sessionId ? checkoutEventId("Purchase", sessionId) : undefined,
+      );
       if (!pending || pending.mode === "subscription") {
-        trackEventOnce(`subscribe.${pending?.startedAt ?? searchParams.toString()}`, "Subscribe", {
-          value: pending?.value,
-          currency: "USD",
-        });
+        trackEventOnce(
+          `subscribe.${sessionId ?? pending?.startedAt ?? searchParams.toString()}`,
+          "Subscribe",
+          { value: pending?.value, currency: "USD" },
+          sessionId ? checkoutEventId("Subscribe", sessionId) : undefined,
+        );
       }
       clearPendingCheckout();
       setLoading("refresh");
