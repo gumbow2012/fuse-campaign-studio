@@ -39,7 +39,12 @@ type PortfolioTemplate = {
 const emptyPortfolio = {
   templates: [],
   publishedCount: 0,
-  buckets: null,
+  buckets: {
+    draft: 0,
+    submitted: 0,
+    approved: 0,
+    rejected: 0,
+  },
   reviewStatusTracked: false,
 };
 
@@ -181,8 +186,8 @@ Deno.serve(async (req) => {
       if (!(await hasCreatorRole(admin, userId))) return json(emptyPortfolio);
 
       const result = await loadTemplates(admin, userId);
-      // Public mode: public-safe template fields + count only. No author PII,
-      // no email, no roles, no review buckets.
+      // Public mode: public-safe template/review fields only. No author PII,
+      // no email, no private roles/profile/billing data.
       return json({
         templates: result.templates.map((template) => ({
           id: template.id,
@@ -190,10 +195,12 @@ Deno.serve(async (req) => {
           description: template.description,
           preview_url: template.preview_url,
           created_at: template.created_at,
+          updated_at: template.updated_at,
+          review_status: template.review_status,
         })),
         publishedCount: result.publishedCount,
-        buckets: null,
-        reviewStatusTracked: false,
+        buckets: result.buckets,
+        reviewStatusTracked: result.reviewStatusTracked,
       });
     }
 
