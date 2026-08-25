@@ -139,6 +139,9 @@ export default function CreatorDashboard() {
   const [reviewStatusTracked, setReviewStatusTracked] = useState(false);
   const [creditsEarned, setCreditsEarned] = useState(0);
   const [rewards, setRewards] = useState<CreatorReward[]>([]);
+  const [analytics, setAnalytics] = useState<CreatorAnalytics | null>(null);
+  const [analyticsLoading, setAnalyticsLoading] = useState(false);
+  const [analyticsError, setAnalyticsError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [section, setSection] = useState<SectionId>("overview");
   const [onboardingBannerDismissed, setOnboardingBannerDismissed] = useState(true);
@@ -146,6 +149,26 @@ export default function CreatorDashboard() {
   useEffect(() => {
     setOnboardingBannerDismissed(window.localStorage.getItem(ONBOARDING_BANNER_KEY) === "1");
   }, []);
+
+  const loadAnalytics = useCallback(async () => {
+    setAnalyticsLoading(true);
+    setAnalyticsError(null);
+    try {
+      setAnalytics(await loadCreatorAnalytics());
+    } catch (error) {
+      setAnalytics(null);
+      setAnalyticsError(error instanceof Error ? error.message : "Unknown error");
+    } finally {
+      setAnalyticsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (section === "analytics" && !analytics && !analyticsLoading && !analyticsError) {
+      void loadAnalytics();
+    }
+  }, [section, analytics, analyticsLoading, analyticsError, loadAnalytics]);
+
 
   const load = useCallback(async () => {
     if (!user) return;
