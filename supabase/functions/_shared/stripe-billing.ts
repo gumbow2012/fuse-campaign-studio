@@ -27,6 +27,7 @@ import {
   getStripeSecretKey,
   getStripeWebhookSecret,
 } from "./stripe.ts";
+import { metaCheckoutEventId, sendMetaCapiEvent } from "./meta-capi-dispatch.ts";
 
 type StripeObject = Record<string, any>;
 
@@ -139,6 +140,11 @@ function billingReturnUrl(
   }
   if (mode === "test") {
     url.searchParams.set("billing_mode", "test");
+  }
+  // Analytics only: Stripe substitutes the session id so the client pixel can share a
+  // deterministic event_id with the server-side CAPI event. Appended raw (unencoded braces).
+  if (outcome === "success") {
+    return `${url.toString()}&session_id={CHECKOUT_SESSION_ID}`;
   }
   return url.toString();
 }
@@ -982,6 +988,24 @@ export function createStripeWebhookHandler(mode: StripeBillingMode) {
             profile,
           });
 
+          // Additive analytics only — fire-and-forget, never blocks or fails the webhook.
+          try {
+            if (mode === "live") {
+              sendMetaCapiEvent({
+                eventName: "Purchase",
+                eventId: metaCheckoutEventId("Purchase", String(session.id)),
+                value: typeof session.amount_total === "number" ? session.amount_total / 100 : pack.amountCents / 100,
+                currency: (session.currency ?? pack.currency ?? "usd").toUpperCase(),
+                email: customerEmail,
+                externalId: profile?.user_id ?? null,
+                orderId: String(session.id),
+                contentType: "product",
+              });
+            }
+          } catch (_capiError) {
+            // analytics must never affect billing
+          }
+
           return json({ received: true, granted: grantResult.granted }, 200);
         }
 
@@ -1005,6 +1029,36 @@ export function createStripeWebhookHandler(mode: StripeBillingMode) {
             stripe_subscription_id: subscriptionId ?? profile.stripe_subscription_id,
             stripe_price_id: plan?.priceId ?? profile.stripe_price_id,
           });
+        }
+        // Additive analytics only — fire-and-forget, never blocks or fails the webhook.
+        try {
+          if (mode === "live") {
+            const purchaseValue = typeof session.amount_total === "number"
+              ? session.amount_total / 100
+              : (plan?.price ?? null);
+            const currency = String(session.currency ?? "usd").toUpperCase();
+            sendMetaCapiEvent({
+              eventName: "Purchase",
+              eventId: metaCheckoutEventId("Purchase", String(session.id)),
+              value: purchaseValue,
+              currency,
+              email: customerEmail,
+              externalId: profile?.user_id ?? null,
+              orderId: String(session.id),
+              contentType: "product",
+            });
+            sendMetaCapiEvent({
+              eventName: "Subscribe",
+              eventId: metaCheckoutEventId("Subscribe", String(session.id)),
+              value: purchaseValue,
+              currency,
+              email: customerEmail,
+              externalId: profile?.user_id ?? null,
+              orderId: String(session.id),
+            });
+          }
+        } catch (_capiError) {
+          // analytics must never affect billing
         }
         return json({ received: true }, 200);
       }

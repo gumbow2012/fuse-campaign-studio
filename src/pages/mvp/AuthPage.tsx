@@ -9,7 +9,7 @@ import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { getAbsoluteSiteUrl } from "@/lib/site-url";
-import { clearPendingCheckout, readPendingCheckout, trackEvent, trackEventOnce } from "@/lib/metaPixel";
+import { checkoutEventId, clearPendingCheckout, readPendingCheckout, trackEvent, trackEventOnce } from "@/lib/metaPixel";
 
 function authErrorDescription(error: unknown, fallback: string) {
   if (!(error instanceof Error)) return fallback;
@@ -52,17 +52,21 @@ export default function AuthPage() {
   useEffect(() => {
     if (searchParams.get("success") !== "true" && !paidAccess) return;
     const pending = readPendingCheckout();
-    const onceKey = pending?.startedAt ?? searchParams.toString();
-    trackEventOnce(`purchase.${onceKey}`, "Purchase", {
-      value: pending?.value,
-      currency: "USD",
-      content_type: "product",
-    });
+    const sessionId = searchParams.get("session_id");
+    const onceKey = sessionId ?? pending?.startedAt ?? searchParams.toString();
+    trackEventOnce(
+      `purchase.${onceKey}`,
+      "Purchase",
+      { value: pending?.value, currency: "USD", content_type: "product" },
+      sessionId ? checkoutEventId("Purchase", sessionId) : undefined,
+    );
     if (!pending || pending.mode === "subscription") {
-      trackEventOnce(`subscribe.${onceKey}`, "Subscribe", {
-        value: pending?.value,
-        currency: "USD",
-      });
+      trackEventOnce(
+        `subscribe.${onceKey}`,
+        "Subscribe",
+        { value: pending?.value, currency: "USD" },
+        sessionId ? checkoutEventId("Subscribe", sessionId) : undefined,
+      );
     }
     clearPendingCheckout();
   }, [paidAccess, searchParams]);
