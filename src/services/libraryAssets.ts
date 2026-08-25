@@ -70,12 +70,22 @@ export function libraryKindForAssetType(assetType?: TemplateAssetType | null): L
 }
 
 // The table is not part of the generated types on every backend, so go through
-// an untyped client handle.
-function table() {
-  return (supabase as unknown as {
-    from: (name: string) => Record<string, (...args: unknown[]) => unknown>;
-  }).from("library_assets") as never;
+// a minimally-typed client handle.
+interface LooseQuery extends PromiseLike<{ data: unknown; error: unknown }> {
+  select: (columns: string) => LooseQuery;
+  insert: (values: Record<string, unknown>) => LooseQuery;
+  delete: () => LooseQuery;
+  eq: (column: string, value: unknown) => LooseQuery;
+  in: (column: string, values: unknown[]) => LooseQuery;
+  order: (column: string, options: { ascending: boolean }) => LooseQuery;
+  limit: (count: number) => LooseQuery;
+  maybeSingle: () => PromiseLike<{ data: Record<string, unknown> | null; error: unknown }>;
 }
+
+function table(): LooseQuery {
+  return (supabase as unknown as { from: (name: string) => LooseQuery }).from("library_assets");
+}
+
 
 function normalize(row: Record<string, unknown>): LibraryAsset {
   return {
