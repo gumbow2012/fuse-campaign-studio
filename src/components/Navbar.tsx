@@ -142,10 +142,71 @@ const TemplatesMegaMenu = () => {
   );
 };
 
+/* ─── Mobile menu content ─── */
+const MobileMenu = ({ onClose }: { onClose: () => void }) => {
+  const { user, isCreator, roles } = useAuth();
+  const isAdminOrDev = roles.includes("admin") || roles.includes("dev");
+
+  const linkClass =
+    "block rounded-lg px-3 py-2 text-sm text-foreground/80 hover:bg-white/5 hover:text-foreground transition-colors";
+
+  return (
+    <div className="flex h-full flex-col">
+      <div className="flex items-center justify-between border-b border-white/10 px-4 py-3">
+        <span className="font-display text-sm font-black uppercase tracking-wider text-foreground">Menu</span>
+      </div>
+
+      <div className="flex-1 overflow-auto px-4 py-4 space-y-6">
+        {/* Main nav */}
+        <div className="space-y-1">
+          <p className="px-3 text-[10px] font-bold uppercase tracking-[0.15em] text-muted-foreground">Browse</p>
+          <Link to="/" onClick={onClose} className={linkClass}>Home</Link>
+          <Link to="#drops" onClick={onClose} className={linkClass}>Drops</Link>
+          <Link to="#create" onClick={onClose} className={linkClass}>Create</Link>
+          <Link to="#" onClick={onClose} className={linkClass}>Templates</Link>
+          <Link to="#" onClick={onClose} className={linkClass}>Vault</Link>
+          <Link to="/pricing" onClick={onClose} className={linkClass}>Pricing</Link>
+        </div>
+
+        {user ? (
+          <>
+            <div className="space-y-1">
+              <p className="px-3 text-[10px] font-bold uppercase tracking-[0.15em] text-muted-foreground">Account</p>
+              <Link to="/dashboard" onClick={onClose} className={linkClass}>Dashboard</Link>
+              <Link to="/account" onClick={onClose} className={linkClass}>Account</Link>
+              <Link to="/pricing" onClick={onClose} className={linkClass}>Plans & Billing</Link>
+              {isCreator && <Link to="/app/creator" onClick={onClose} className={linkClass}>Creator Studio</Link>}
+              {isAdminOrDev && <Link to="/admin" onClick={onClose} className={linkClass}>Admin</Link>}
+            </div>
+
+            <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 backdrop-blur-sm">
+              <AccountMenuContent onNavigate={onClose} />
+            </div>
+          </>
+        ) : (
+          <div className="space-y-2 pt-4">
+            <Link to="/auth" onClick={onClose}>
+              <Button variant="outline" className="w-full rounded-full border-white/15 bg-white/5 text-foreground hover:bg-white/10">
+                Login
+              </Button>
+            </Link>
+            <Link to="/auth" onClick={onClose}>
+              <Button className="w-full rounded-full gradient-primary text-primary-foreground font-bold border-0">
+                Launch Drop
+              </Button>
+            </Link>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
 /* ─── Main Navbar ─── */
 const Navbar = () => {
   const [activeMode, setActiveMode] = useState<typeof modes[number]>("Streetwear");
   const [scrolled, setScrolled] = useState(false);
+  const [mobileOpen, setMobileOpen] = useState(false);
   const { user, profile, signOut, hasAppAccess } = useAuth();
   const navigate = useNavigate();
 
