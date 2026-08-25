@@ -11,6 +11,8 @@ import PlanComparisonMatrix from "@/components/mvp/membership/PlanComparisonMatr
 import CreditsOverviewCard from "@/components/mvp/membership/CreditsOverviewCard";
 import CreditUsageHistory from "@/components/mvp/membership/CreditUsageHistory";
 import UsageProjectionPanel from "@/components/mvp/membership/UsageProjectionPanel";
+import PromoCodeEntry from "@/components/mvp/membership/PromoCodeEntry";
+
 
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
