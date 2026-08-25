@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import SiteShell from "@/components/mvp/SiteShell";
+import AccountHeader from "@/components/mvp/AccountHeader";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -22,10 +23,8 @@ export default function AccountPage() {
   const [historyLoading, setHistoryLoading] = useState(false);
   const [historyError, setHistoryError] = useState<string | null>(null);
   const trimmedName = name.trim();
-  const creditsLabel = isAdmin ? "Access" : "Credits";
-  const creditsValue = isAdmin ? "∞" : String(profile?.credits_balance ?? 0);
-  const planValue = isAdmin ? "Admin" : profile?.plan ?? "free";
   const adminVisualRemaining = getAdminVisualCreditsRemaining();
+
 
   const typeLabel: Record<string, string> = {
     run_template: "Template run",
