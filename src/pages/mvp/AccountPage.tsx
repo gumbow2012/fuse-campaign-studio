@@ -208,6 +208,60 @@ export default function AccountPage() {
             </section>
 
             <section className="rounded-[2rem] border border-white/10 bg-slate-950/75 p-6 shadow-[0_24px_80px_rgba(0,0,0,0.35)] backdrop-blur-xl">
+              <p className="text-[11px] uppercase tracking-[0.24em] text-muted-foreground">Usage & history</p>
+
+              {historyLoading ? (
+                <p className="mt-5 text-sm text-slate-400">Loading activity...</p>
+              ) : historyError ? (
+                <p className="mt-5 text-sm text-red-300">{historyError}</p>
+              ) : history.length === 0 ? (
+                <p className="mt-5 text-sm text-slate-400">No credit activity yet.</p>
+              ) : (
+                <>
+                  <div className="mt-5 overflow-hidden rounded-2xl border border-white/10">
+                    <table className="w-full text-sm">
+                      <thead className="bg-white/[0.04] text-xs uppercase tracking-wider text-muted-foreground">
+                        <tr>
+                          <th className="px-4 py-3 text-left font-medium">Date</th>
+                          <th className="px-4 py-3 text-left font-medium">Type</th>
+                          <th className="px-4 py-3 text-left font-medium">Description</th>
+                          <th className="px-4 py-3 text-right font-medium">Amount</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-white/10">
+                        {history.map((row) => {
+                          const isNegative = row.amount < 0;
+                          return (
+                            <tr key={row.id} className="hover:bg-white/[0.02]">
+                              <td className="px-4 py-3 text-slate-300">
+                                {new Date(row.created_at).toLocaleDateString(undefined, {
+                                  month: "short",
+                                  day: "numeric",
+                                  year: "numeric",
+                                })}
+                              </td>
+                              <td className="px-4 py-3 text-slate-200">{typeLabel[row.type] ?? row.type}</td>
+                              <td className="px-4 py-3 text-slate-400">{row.description ?? "—"}</td>
+                              <td
+                                className={`px-4 py-3 text-right font-medium ${
+                                  isNegative ? "text-red-300" : "text-cyan-300"
+                                }`}
+                              >
+                                {isNegative ? "−" : "+"}
+                                {Math.abs(row.amount).toLocaleString()}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                  <p className="mt-3 text-xs text-slate-500">Showing recent activity</p>
+                </>
+              )}
+            </section>
+
+            <section className="rounded-[2rem] border border-white/10 bg-slate-950/75 p-6 shadow-[0_24px_80px_rgba(0,0,0,0.35)] backdrop-blur-xl">
               <p className="text-[11px] uppercase tracking-[0.24em] text-muted-foreground">Profile</p>
               <div className="mt-5 grid gap-5 sm:grid-cols-2">
                 <div className="space-y-2">
