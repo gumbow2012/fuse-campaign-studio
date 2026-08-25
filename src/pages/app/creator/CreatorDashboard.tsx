@@ -17,6 +17,7 @@ import {
   Loader2,
   Send,
   UserRound,
+  X,
 } from "lucide-react";
 import SiteShell from "@/components/mvp/SiteShell";
 import PageMeta from "@/components/mvp/PageMeta";
@@ -123,6 +124,8 @@ function ComingLater({ title, note }: { title: string; note: string }) {
   );
 }
 
+const ONBOARDING_BANNER_KEY = "fuse.creatorDashboard.onboardingBanner.dismissed";
+
 export default function CreatorDashboard() {
   const { user, profile } = useAuth();
   const [creatorProfile, setCreatorProfile] = useState<CreatorProfile | null>(null);
@@ -132,6 +135,11 @@ export default function CreatorDashboard() {
   const [creditsEarned, setCreditsEarned] = useState(0);
   const [loading, setLoading] = useState(true);
   const [section, setSection] = useState<SectionId>("overview");
+  const [onboardingBannerDismissed, setOnboardingBannerDismissed] = useState(true);
+
+  useEffect(() => {
+    setOnboardingBannerDismissed(window.localStorage.getItem(ONBOARDING_BANNER_KEY) === "1");
+  }, []);
 
   const load = useCallback(async () => {
     if (!user) return;
@@ -199,6 +207,43 @@ export default function CreatorDashboard() {
       />
 
       <div className="mx-auto max-w-6xl px-6 py-12">
+        {!loading && !creatorProfile && !onboardingBannerDismissed ? (
+          <section className="relative mb-8 rounded-2xl border border-cyan-200/20 bg-cyan-200/[0.06] p-5 backdrop-blur-sm">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="text-xs uppercase tracking-[0.28em] text-cyan-200/80">Getting started</p>
+                <h2 className="mt-1 font-display text-lg font-bold text-foreground">
+                  Finish setting up your creator profile
+                </h2>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Your public profile and workspace checklist are one step away.
+                </p>
+              </div>
+              <div className="flex items-center gap-3">
+                <Button
+                  asChild
+                  className="rounded-full bg-cyan-300 px-5 text-slate-950 hover:bg-cyan-200"
+                >
+                  <Link to="/app/creator/welcome">Open onboarding</Link>
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  aria-label="Dismiss"
+                  onClick={() => {
+                    window.localStorage.setItem(ONBOARDING_BANNER_KEY, "1");
+                    setOnboardingBannerDismissed(true);
+                  }}
+                  className="h-9 w-9 rounded-full border-white/15 bg-white/5 text-foreground hover:bg-white/10"
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+          </section>
+        ) : null}
+
         <header>
           <p className="text-xs uppercase tracking-[0.28em] text-cyan-200/70">Creator Studio</p>
           <h1 className="mt-2 font-display text-3xl font-black text-foreground sm:text-4xl">
