@@ -123,11 +123,11 @@ export default function TemplateInputCard({
       >
         <div className="relative min-h-0 flex-1 overflow-hidden">
           {previewUrl || libraryAsset?.url ? (
-            <img src={previewUrl ?? libraryAsset!.url} alt={`${label} preview`} className="h-full w-full object-cover" />
-          ) : null}
-          {false ? (
-
-            <img src={previewUrl} alt={`${label} preview`} className="h-full w-full object-cover" />
+            <img
+              src={previewUrl ?? libraryAsset?.url ?? ""}
+              alt={`${label} preview`}
+              className="h-full w-full object-cover"
+            />
           ) : (
             <div className="flex h-full w-full items-center justify-center bg-[radial-gradient(circle_at_top,rgba(34,211,238,0.1),transparent_42%),linear-gradient(180deg,rgba(15,23,42,0.6),rgba(2,6,23,0.92))]">
               <img
@@ -139,6 +139,7 @@ export default function TemplateInputCard({
               />
             </div>
           )}
+
           {(state === "uploading" || state === "checking") && previewUrl ? (
             <div className="absolute inset-0 flex items-center justify-center gap-2 bg-slate-950/70 text-xs uppercase tracking-[0.2em] text-cyan-100">
               <Loader2 className="h-4 w-4 animate-spin" />
