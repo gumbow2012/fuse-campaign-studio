@@ -210,6 +210,16 @@ export default function SiteShell({ children }: { children: ReactNode }) {
               </nav>
             ) : null}
 
+            {user && isCreator ? (
+              <nav className="flex w-full flex-wrap items-center justify-center gap-1.5 md:w-auto md:justify-end" aria-label="Creator">
+                <NavLink to="/app/creator" className={adminNavLinkClass}>
+                  <Star className="h-3.5 w-3.5" />
+                  Creator Studio
+                </NavLink>
+              </nav>
+            ) : null}
+
+
             <div className="flex flex-wrap items-center gap-2">
               {user && !isAdmin ? (
                 <>
