@@ -125,33 +125,18 @@ export default function AccountPage() {
           </Button>
         </div>
 
-        <div className="mt-8 grid gap-6 lg:grid-cols-[0.7fr_1.3fr]">
-          <aside className="space-y-4 rounded-[2rem] border border-white/10 bg-white/[0.03] p-6">
-            <div>
-              <p className="text-[11px] uppercase tracking-[0.24em] text-muted-foreground">Current user</p>
-              <p className="mt-3 text-xl font-semibold text-white">{profile?.name || "Unnamed account"}</p>
-              <p className="mt-1 text-sm text-slate-400">{profile?.email ?? user?.email ?? "No email available"}</p>
-            </div>
+        <div className="mt-8">
+          <AccountHeader />
+        </div>
 
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-1">
-              <div className="rounded-[1.5rem] border border-white/8 bg-black/20 p-4">
-                <p className="text-[11px] uppercase tracking-[0.24em] text-muted-foreground">{creditsLabel}</p>
-                <p className="mt-2 text-3xl font-semibold text-white">{creditsValue}</p>
-                <p className="mt-2 text-sm text-slate-400">
-                  {isAdmin ? "Admin accounts bypass credit locks for template runs." : "Credits are deducted when customer runs start."}
-                </p>
-                {isAdmin ? (
-                  <p className="mt-2 text-xs text-slate-500">
-                    Visual budget {adminVisualRemaining}/{ADMIN_VISUAL_BUDGET_TOTAL} remaining. Spent {adminVisualSpent}.
-                  </p>
-                ) : null}
-              </div>
-              <div className="rounded-[1.5rem] border border-white/8 bg-black/20 p-4">
-                <p className="text-[11px] uppercase tracking-[0.24em] text-muted-foreground">Plan</p>
-                <p className="mt-2 text-2xl font-semibold capitalize text-white">{planValue}</p>
-              </div>
-            </div>
-          </aside>
+        {isAdmin ? (
+          <p className="mt-3 text-xs text-slate-500">
+            Admin accounts bypass credit locks. Visual budget {adminVisualRemaining}/{ADMIN_VISUAL_BUDGET_TOTAL} remaining. Spent {adminVisualSpent}.
+          </p>
+        ) : null}
+
+        <div className="mt-6 grid gap-6">
+
 
           <div className="space-y-6">
             <section className="rounded-[2rem] border border-white/10 bg-slate-950/75 p-6 shadow-[0_24px_80px_rgba(0,0,0,0.35)] backdrop-blur-xl">
