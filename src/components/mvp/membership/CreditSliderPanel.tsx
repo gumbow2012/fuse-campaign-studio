@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ArrowRight, Coins } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
@@ -54,11 +54,17 @@ type Props = {
   loading: string | null;
   isAdmin: boolean;
   onCheckout: (packKey: PackKey) => void;
+  /** Reports the currently selected credit amount (used by the mix calculator). */
+  onAmountChange?: (amount: number) => void;
 };
 
-export default function CreditSliderPanel({ loading, isAdmin, onCheckout }: Props) {
+export default function CreditSliderPanel({ loading, isAdmin, onCheckout, onAmountChange }: Props) {
   const { profile } = useAuth();
   const [amount, setAmount] = useState<number>(CREDIT_PACKS.growth.credits);
+
+  useEffect(() => {
+    onAmountChange?.(amount);
+  }, [amount, onAmountChange]);
 
   const exactPackKey = useMemo(
     () => PACK_KEYS.find((key) => CREDIT_PACKS[key].credits === amount) ?? null,
