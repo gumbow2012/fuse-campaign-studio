@@ -38,6 +38,7 @@ import { cn } from "@/lib/utils";
 import { sortTemplatesForStudio } from "@/lib/templateOrdering";
 import { fetchTemplateDetail, fetchTemplates, type ApiTemplate, type RunFeedbackRecord, type TemplateDetail } from "@/services/fuseApi";
 import { uploadRunInputFile } from "@/services/runInputUpload";
+import { libraryKindForAssetType, saveLibraryAsset } from "@/services/libraryAssets";
 import { getStaticInputs } from "@/services/templateInputMap";
 import { trackEvent } from "@/lib/metaPixel";
 import {
@@ -450,6 +451,8 @@ export default function TemplateStudioPage() {
     return window.localStorage.getItem(TEMPLATE_SELECTION_KEY) ?? "";
   });
   const [files, setFiles] = useState<Record<string, File | null>>({});
+  /** FT4: assets picked from the reusable library (already stored URLs). */
+  const [libraryAssets, setLibraryAssets] = useState<Record<string, { url: string; name?: string | null } | null>>({});
   const [textInputs, setTextInputs] = useState<Record<string, string>>({});
   const [jobId, setJobId] = useState<string | null>(null);
   const [result, setResult] = useState<RunnerResult | null>(null);
@@ -704,7 +707,11 @@ export default function TemplateStudioPage() {
 
   const requiredInputsAreReady = inputFields
     .filter((field) => field.required)
-    .every((field) => (field.type === "image" ? !!files[field.key] : !!textInputs[field.key]?.trim()));
+    .every((field) =>
+      field.type === "image"
+        ? !!files[field.key] || !!libraryAssets[field.key]?.url
+        : !!textInputs[field.key]?.trim(),
+    );
 
   const creditsRequired = selectedTemplate?.estimated_credits_per_run ?? 0;
   const selectedTemplateOutputCount = getTemplateOutputCount(selectedTemplate);
@@ -745,6 +752,7 @@ export default function TemplateStudioPage() {
   const handleTemplateSelect = (templateId: string) => {
     setSelectedTemplateId(templateId);
     setFiles({});
+    setLibraryAssets({});
     setTextInputs({});
     setJobId(null);
     setResult(null);
@@ -815,10 +823,21 @@ export default function TemplateStudioPage() {
       const uploadedImageInputs = Object.fromEntries(
         await Promise.all(
           inputFields
-            .filter((field) => field.type === "image" && files[field.key])
+            .filter((field) => field.type === "image" && (files[field.key] || libraryAssets[field.key]?.url))
             .map(async (field) => {
-              const file = files[field.key]!;
+              const file = files[field.key];
+              if (!file) {
+                // FT4: reuse an asset already stored in the user's library.
+                return [field.key, libraryAssets[field.key]!.url];
+              }
               const url = await uploadRunInputFile(file);
+              // FT4: best-effort save so this asset is reusable later.
+              void saveLibraryAsset({
+                kind: libraryKindForAssetType(field.requirement?.assetType),
+                url,
+                name: file.name,
+                metadata: { source: "template_input", input_key: field.key },
+              });
               return [field.key, url];
             }),
         ),
@@ -1144,7 +1163,9 @@ export default function TemplateStudioPage() {
                       <p className="text-[11px] uppercase tracking-[0.24em] text-muted-foreground">Requirements</p>
                       <ul className="mt-3 grid gap-2 sm:grid-cols-2">
                         {inputFields.map((field) => {
-                          const provided = field.type === "image" ? !!files[field.key] : !!textInputs[field.key]?.trim();
+                          const provided = field.type === "image"
+                            ? !!files[field.key] || !!libraryAssets[field.key]?.url
+                            : !!textInputs[field.key]?.trim();
                           const requirement = field.requirement;
                           const notes = requirement ? describeRequirement(requirement) : [];
                           return (
@@ -1198,9 +1219,19 @@ export default function TemplateStudioPage() {
                             UPLOAD_PLACEHOLDER_ASSETS[getUploadIllustrationKind(field.label)] ??
                             UPLOAD_PLACEHOLDER_ASSETS.shirt
                           }
-                          onFileChange={(nextFile) =>
-                            setFiles((current) => ({ ...current, [field.key]: nextFile }))
-                          }
+                          onFileChange={(nextFile) => {
+                            setFiles((current) => ({ ...current, [field.key]: nextFile }));
+                            setLibraryAssets((current) => ({ ...current, [field.key]: null }));
+                          }}
+                          libraryAsset={libraryAssets[field.key] ?? null}
+                          onLibrarySelect={(asset) => {
+                            setFiles((current) => ({ ...current, [field.key]: null }));
+                            setLibraryAssets((current) => ({ ...current, [field.key]: asset }));
+                          }}
+                          onClear={() => {
+                            setFiles((current) => ({ ...current, [field.key]: null }));
+                            setLibraryAssets((current) => ({ ...current, [field.key]: null }));
+                          }}
                         />
                       ) : (
                         <div key={field.key} className="rounded-[1.5rem] border border-white/8 bg-black/20 p-4">
