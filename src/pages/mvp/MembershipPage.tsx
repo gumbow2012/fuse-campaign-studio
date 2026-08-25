@@ -10,6 +10,8 @@ import CreditMixCalculator from "@/components/mvp/membership/CreditMixCalculator
 import PlanComparisonMatrix from "@/components/mvp/membership/PlanComparisonMatrix";
 import CreditsOverviewCard from "@/components/mvp/membership/CreditsOverviewCard";
 import CreditUsageHistory from "@/components/mvp/membership/CreditUsageHistory";
+import UsageProjectionPanel from "@/components/mvp/membership/UsageProjectionPanel";
+
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
 import { useMembershipCheckout } from "@/hooks/useMembershipCheckout";
@@ -202,7 +204,9 @@ export default function MembershipPage() {
         {activeTab === "usage" ? (
           <div className="mt-6 space-y-6">
             <CreditsOverviewCard buyCreditsHref="/membership?tab=credits" />
+            <UsageProjectionPanel onNavigateTab={selectTab} />
             <CreditUsageHistory />
+
             <p className="text-xs text-slate-500">
               Need profile or password settings?{" "}
               <Link to="/account" className="text-cyan-300 hover:text-cyan-200">
