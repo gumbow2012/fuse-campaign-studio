@@ -38,8 +38,25 @@ import { fetchTemplateDetail, fetchTemplates, type ApiTemplate, type RunFeedback
 import { uploadRunInputFile } from "@/services/runInputUpload";
 import { getStaticInputs } from "@/services/templateInputMap";
 import { trackEvent } from "@/lib/metaPixel";
+import {
+  formatAssetTypeLabel,
+  type TemplateAssetRequirement,
+} from "@/lib/templateAssetRequirements";
 
 type RunnerStatus = "queued" | "running" | "video_pending" | "complete" | "failed";
+
+/** FT2: short hint line assembled from optional requirement metadata. */
+function describeRequirement(requirement: TemplateAssetRequirement) {
+  const notes: string[] = [];
+  if (requirement.maxFiles > 1) {
+    notes.push(`${requirement.minFiles}-${requirement.maxFiles} files`);
+  }
+  if (requirement.recommendedAspect) notes.push(requirement.recommendedAspect);
+  if (requirement.recommendedResolution) notes.push(requirement.recommendedResolution);
+  if (requirement.transparencyRecommended) notes.push("transparent PNG preferred");
+  return notes;
+}
+
 
 interface InputField {
   key: string;
@@ -47,7 +64,10 @@ interface InputField {
   type: string;
   required: boolean;
   hint?: string;
+  /** FT2: optional rich metadata authored on the template input. */
+  requirement?: TemplateAssetRequirement;
 }
+
 
 interface RunnerOutput {
   type: string;
@@ -697,8 +717,10 @@ export default function TemplateStudioPage() {
         type: field.type || "image",
         required: field.required ?? true,
         hint: field.hint,
+        requirement: field.requirement,
       }));
     }
+
 
     if (selectedTemplate?.input_schema?.length) {
       return selectedTemplate.input_schema.map((field) => ({
@@ -1161,27 +1183,43 @@ export default function TemplateStudioPage() {
                       <ul className="mt-3 grid gap-2 sm:grid-cols-2">
                         {inputFields.map((field) => {
                           const provided = field.type === "image" ? !!files[field.key] : !!textInputs[field.key]?.trim();
+                          const requirement = field.requirement;
+                          const notes = requirement ? describeRequirement(requirement) : [];
                           return (
                             <li
                               key={`req-${field.key}`}
                               className={cn(
-                                "flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs",
+                                "rounded-2xl border px-3 py-2 text-xs",
                                 field.required
                                   ? "border-cyan-300/25 bg-cyan-300/[0.07] text-white"
                                   : "border-white/10 bg-white/[0.03] text-slate-400",
                               )}
                             >
-                              <span className={cn("text-sm", provided ? "text-emerald-200" : field.required ? "text-cyan-100" : "text-slate-500")}>
-                                {field.required ? "✓" : "○"}
-                              </span>
-                              <span className="truncate">{field.label}</span>
-                              <span className="ml-auto shrink-0 text-[9px] uppercase tracking-[0.18em] text-slate-500">
-                                {field.required ? "Required" : "Optional"}
-                              </span>
+                              <div className="flex items-center gap-2">
+                                <span className={cn("text-sm", provided ? "text-emerald-200" : field.required ? "text-cyan-100" : "text-slate-500")}>
+                                  {field.required ? "✓" : "○"}
+                                </span>
+                                <span className="truncate">{field.label}</span>
+                                {requirement?.assetType ? (
+                                  <span className="shrink-0 rounded-full border border-white/10 px-2 py-0.5 text-[9px] uppercase tracking-[0.18em] text-slate-400">
+                                    {formatAssetTypeLabel(requirement.assetType)}
+                                  </span>
+                                ) : null}
+                                <span className="ml-auto shrink-0 text-[9px] uppercase tracking-[0.18em] text-slate-500">
+                                  {field.required ? "Required" : "Optional"}
+                                </span>
+                              </div>
+                              {requirement?.shortInstruction ? (
+                                <p className="mt-1.5 text-[11px] leading-relaxed text-slate-400">{requirement.shortInstruction}</p>
+                              ) : null}
+                              {notes.length ? (
+                                <p className="mt-1 text-[10px] uppercase tracking-[0.14em] text-slate-500">{notes.join(" · ")}</p>
+                              ) : null}
                             </li>
                           );
                         })}
                       </ul>
+
                     </div>
                   ) : null}
 
@@ -1202,7 +1240,18 @@ export default function TemplateStudioPage() {
                                   {files[field.key] ? files[field.key]?.name : "Upload image"}
                                 </span>
                               </span>
+                              {field.requirement?.shortInstruction ? (
+                                <span className="mt-2 block text-[11px] leading-relaxed text-slate-400">
+                                  {field.requirement.shortInstruction}
+                                </span>
+                              ) : null}
+                              {field.requirement && describeRequirement(field.requirement).length ? (
+                                <span className="mt-1 block text-[10px] uppercase tracking-[0.14em] text-slate-500">
+                                  {describeRequirement(field.requirement).join(" · ")}
+                                </span>
+                              ) : null}
                             </div>
+
                             <input
                               type="file"
                               accept="image/*"

@@ -96,6 +96,71 @@ function getEditorMode(node: InputNodeLike): EditorMode | null {
   return null;
 }
 
+const ASSET_TYPES = [
+  "garment-front",
+  "garment-back",
+  "logo",
+  "product",
+  "avatar",
+  "jewelry",
+  "packaging",
+  "reference",
+  "image",
+  "video",
+];
+
+function getBool(record: Record<string, unknown>, key: string): boolean | null {
+  const value = record[key];
+  if (typeof value === "boolean") return value;
+  if (value === "true") return true;
+  if (value === "false") return false;
+  return null;
+}
+
+function getCount(record: Record<string, unknown>, key: string): number | null {
+  const raw = record[key];
+  const parsed = typeof raw === "number" ? raw : Number.parseInt(String(raw ?? ""), 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+}
+
+function getStringList(record: Record<string, unknown>, key: string): string[] | null {
+  const raw = record[key];
+  if (!Array.isArray(raw)) return null;
+  const items = raw
+    .map((item) => (typeof item === "string" && item.trim() ? item.trim() : null))
+    .filter((item): item is string => !!item);
+  return items.length ? items : null;
+}
+
+/**
+ * FT2 — additive asset-requirement metadata stored on prompt_config.
+ * Every field is optional; absent metadata yields safe defaults so legacy
+ * templates keep their existing behavior.
+ */
+export function getNodeAssetRequirement(node: InputNodeLike) {
+  const config = (node.prompt_config ?? {}) as Record<string, unknown>;
+  const rawAssetType = getText(config, "asset_type")?.toLowerCase() ?? null;
+  const minFiles = getCount(config, "min_files") ?? 1;
+  const maxFiles = Math.max(minFiles, getCount(config, "max_files") ?? 1);
+
+  return {
+    assetType: rawAssetType && ASSET_TYPES.includes(rawAssetType) ? rawAssetType : null,
+    required: getBool(config, "required"),
+    minFiles,
+    maxFiles,
+    shortInstruction: getText(config, "short_instruction"),
+    detailedInstructions: getStringList(config, "detailed_instructions"),
+    recommendedAspect: getText(config, "recommended_aspect"),
+    recommendedResolution: getText(config, "recommended_resolution"),
+    transparencyRecommended: getBool(config, "transparency_recommended"),
+    guidePreview: getText(config, "guide_preview"),
+    goodExamples: getStringList(config, "good_examples"),
+    badExamples: getStringList(config, "bad_examples"),
+    allowUpload: getBool(config, "allow_upload") ?? true,
+    allowLibrary: getBool(config, "allow_library") ?? false,
+  };
+}
+
 export function getNodeEditorConfig(node: InputNodeLike) {
   const promptConfig = node.prompt_config ?? {};
   return {
@@ -105,8 +170,10 @@ export function getNodeEditorConfig(node: InputNodeLike) {
     expected: getText(promptConfig, "editor_expected") ?? getText(promptConfig, "expected"),
     rawExpected: getText(promptConfig, "expected"),
     sampleUrl: getText(promptConfig, "sample_url"),
+    requirement: getNodeAssetRequirement(node),
   };
 }
+
 
 export function buildTemplateEditorSeed(templateName: string, nodes: InputNodeLike[]): EditorSeedPatch[] {
   const visibleNodes = nodes

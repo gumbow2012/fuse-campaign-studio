@@ -5,6 +5,10 @@
  * legacy worker only when older internal screens still need it.
  */
 import { supabase } from "@/integrations/supabase/client";
+import {
+  readTemplateAssetRequirement,
+  type TemplateAssetRequirement,
+} from "@/lib/templateAssetRequirements";
 
 type ApiErrorPayload = {
   error?: string;
@@ -21,7 +25,9 @@ type TemplateDetailField = {
   type?: string | null;
   required?: boolean | null;
   hint?: unknown;
+  requirement?: Record<string, unknown> | null;
 };
+
 
 type TemplateDetailNodePayload = {
   id?: unknown;
@@ -257,7 +263,10 @@ export interface TemplateDetail {
     type: string;
     required: boolean;
     hint?: string;
+    /** FT2: additive metadata, present only when authored on the input. */
+    requirement?: TemplateAssetRequirement;
   }[];
+
   locked_images?: Record<string, string>;
   prompt?: string;
   video_prompt?: string;
@@ -284,15 +293,22 @@ export async function fetchTemplateDetail(
         : [];
       if (projectedInputs.length) {
         return {
-          user_inputs: projectedInputs.map((field) => ({
-            key: String(field.key),
-            label: String(field.label),
-            type: normalizeInputType(field.type),
-            required: field.required ?? true,
-            hint: typeof field.hint === "string" ? field.hint : undefined,
-          })),
+          user_inputs: projectedInputs.map((field) => {
+            const requirement = field.requirement
+              ? readTemplateAssetRequirement(field.requirement, { required: field.required ?? true })
+              : undefined;
+            return {
+              key: String(field.key),
+              label: String(field.label),
+              type: normalizeInputType(field.type),
+              required: requirement?.required ?? field.required ?? true,
+              hint: typeof field.hint === "string" ? field.hint : undefined,
+              requirement,
+            };
+          }),
         };
       }
+
 
       const nodes = Array.isArray(detailData?.nodes)
         ? detailData.nodes
