@@ -84,7 +84,6 @@ function TemplateRow({ template }: { template: CreatorTemplate }) {
           {template.name ?? "Untitled template"}
         </p>
         <p className="mt-0.5 text-xs text-muted-foreground">
-          {template.preview_asset_type ? `${template.preview_asset_type} · ` : ""}
           {template.updated_at
             ? `updated ${new Date(template.updated_at).toLocaleDateString()}`
             : "no update date"}
@@ -128,6 +127,7 @@ export default function CreatorDashboard() {
   const { user, profile } = useAuth();
   const [creatorProfile, setCreatorProfile] = useState<CreatorProfile | null>(null);
   const [templates, setTemplates] = useState<CreatorTemplate[]>([]);
+  const [publishedCount, setPublishedCount] = useState(0);
   const [reviewStatusTracked, setReviewStatusTracked] = useState(false);
   const [creditsEarned, setCreditsEarned] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -143,6 +143,7 @@ export default function CreatorDashboard() {
       ]);
       setCreatorProfile(own);
       setTemplates(dashboard.templates);
+      setPublishedCount(dashboard.publishedCount);
       setReviewStatusTracked(dashboard.reviewStatusTracked);
       setCreditsEarned(dashboard.creditsEarned);
     } finally {
@@ -208,7 +209,7 @@ export default function CreatorDashboard() {
         <div className="mt-8 grid gap-4 sm:grid-cols-3">
           <StatTile
             label="Templates Published"
-            value={loading ? "—" : String(templates.length)}
+            value={loading ? "—" : String(publishedCount)}
             hint="Templates you own in FUSE"
           />
           <StatTile label="Creator Level" value="Creator" hint="Levels arrive in a later release" />

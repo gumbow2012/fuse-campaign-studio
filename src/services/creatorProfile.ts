@@ -134,6 +134,10 @@ export async function countCreatorTemplates(userId: string) {
   return countCreatorTemplatesPublic({ userId });
 }
 
+export async function countCreatorTemplatesByHandle(handle: string) {
+  return countCreatorTemplatesPublic({ handle });
+}
+
 /* --------------------------------- writes -------------------------------- */
 
 function cleanText(value: string | null | undefined) {
