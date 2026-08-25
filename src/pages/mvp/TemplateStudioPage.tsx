@@ -1156,7 +1156,38 @@ export default function TemplateStudioPage() {
                     </div>
                   ) : (
                     <>
+                  {inputFields.length ? (
+                    <div className="rounded-[1.5rem] border border-white/8 bg-black/20 p-4">
+                      <p className="text-[11px] uppercase tracking-[0.24em] text-muted-foreground">Requirements</p>
+                      <ul className="mt-3 grid gap-2 sm:grid-cols-2">
+                        {inputFields.map((field) => {
+                          const provided = field.type === "image" ? !!files[field.key] : !!textInputs[field.key]?.trim();
+                          return (
+                            <li
+                              key={`req-${field.key}`}
+                              className={cn(
+                                "flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs",
+                                field.required
+                                  ? "border-cyan-300/25 bg-cyan-300/[0.07] text-white"
+                                  : "border-white/10 bg-white/[0.03] text-slate-400",
+                              )}
+                            >
+                              <span className={cn("text-sm", provided ? "text-emerald-200" : field.required ? "text-cyan-100" : "text-slate-500")}>
+                                {field.required ? "✓" : "○"}
+                              </span>
+                              <span className="truncate">{field.label}</span>
+                              <span className="ml-auto shrink-0 text-[9px] uppercase tracking-[0.18em] text-slate-500">
+                                {field.required ? "Required" : "Optional"}
+                              </span>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    </div>
+                  ) : null}
+
                   <div className="grid gap-4 md:grid-cols-2">
+
                     {inputFields.map((field) => (
                       <div key={field.key} className="rounded-[1.5rem] border border-white/8 bg-black/20 p-4">
                         {field.type === "image" ? (
