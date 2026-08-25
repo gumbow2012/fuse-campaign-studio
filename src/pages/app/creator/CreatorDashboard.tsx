@@ -49,6 +49,7 @@ type SectionId =
   | "approved"
   | "rejected"
   | "analytics"
+  | "challenges"
   | "rewards"
   | "profile";
 
@@ -60,9 +61,11 @@ const SECTIONS: Array<{ id: SectionId; label: string }> = [
   { id: "approved", label: "Approved" },
   { id: "rejected", label: "Needs Changes" },
   { id: "analytics", label: "Analytics" },
+  { id: "challenges", label: "Challenges" },
   { id: "rewards", label: "Levels & Rewards" },
   { id: "profile", label: "Profile" },
 ];
+
 
 const panelClass =
   "rounded-2xl border border-white/10 bg-white/[0.03] p-5 backdrop-blur-sm";
