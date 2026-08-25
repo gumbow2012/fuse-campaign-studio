@@ -1226,81 +1226,46 @@ export default function TemplateStudioPage() {
                   <div className="grid gap-4 md:grid-cols-2">
 
                     {inputFields.map((field) => (
-                      <div key={field.key} className="rounded-[1.5rem] border border-white/8 bg-black/20 p-4">
-                        {field.type === "image" ? (
-                          <label className="group/upload flex aspect-[9/16] cursor-pointer flex-col overflow-hidden rounded-[1.25rem] border border-dashed border-white/14 bg-white/[0.03] transition hover:border-cyan-200/45 hover:bg-cyan-300/[0.06]">
-                            <div className="min-h-0 flex-1 overflow-hidden">
-                              <UploadPlaceholderIllustration file={files[field.key] ?? null} label={field.label} />
-                            </div>
-                            <div className="border-t border-white/10 bg-black/30 p-3">
-                              <span className="block truncate text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-300">{field.label}</span>
-                              <span className="mt-2 flex min-w-0 items-center gap-2 text-sm font-medium text-white">
-                                <Upload className="h-4 w-4 shrink-0 text-cyan-100" />
-                                <span className="truncate">
-                                  {files[field.key] ? files[field.key]?.name : "Upload image"}
-                                </span>
-                              </span>
-                              {field.requirement?.shortInstruction ? (
-                                <span className="mt-2 block text-[11px] leading-relaxed text-slate-400">
-                                  {field.requirement.shortInstruction}
-                                </span>
-                              ) : null}
-                              {field.requirement && describeRequirement(field.requirement).length ? (
-                                <span className="mt-1 block text-[10px] uppercase tracking-[0.14em] text-slate-500">
-                                  {describeRequirement(field.requirement).join(" · ")}
-                                </span>
-                              ) : null}
-                            </div>
-
-                            <input
-                              type="file"
-                              accept="image/*"
-                              className="hidden"
+                      field.type === "image" ? (
+                        <TemplateInputCard
+                          key={field.key}
+                          label={field.label}
+                          file={files[field.key] ?? null}
+                          requirement={field.requirement}
+                          fallbackPlaceholderSrc={
+                            UPLOAD_PLACEHOLDER_ASSETS[getUploadIllustrationKind(field.label)] ??
+                            UPLOAD_PLACEHOLDER_ASSETS.shirt
+                          }
+                          onFileChange={(nextFile) =>
+                            setFiles((current) => ({ ...current, [field.key]: nextFile }))
+                          }
+                        />
+                      ) : (
+                        <div key={field.key} className="rounded-[1.5rem] border border-white/8 bg-black/20 p-4">
+                          {field.type === "prompt" ? (
+                            <Textarea
+                              value={textInputs[field.key] ?? ""}
                               onChange={(event) =>
-                                setFiles((current) => ({
-                                  ...current,
-                                  [field.key]: event.target.files?.[0] ?? null,
-                                }))
+                                setTextInputs((current) => ({ ...current, [field.key]: event.target.value }))
                               }
+                              rows={5}
+                              placeholder={field.label}
+                              className="min-h-[180px] rounded-[1.25rem] border-white/10 bg-white/[0.03] text-white"
                             />
-                          </label>
-                        ) : field.type === "prompt" ? (
-                          <Textarea
-                            value={textInputs[field.key] ?? ""}
-                            onChange={(event) =>
-                              setTextInputs((current) => ({ ...current, [field.key]: event.target.value }))
-                            }
-                            rows={5}
-                            placeholder={field.label}
-                            className="min-h-[180px] rounded-[1.25rem] border-white/10 bg-white/[0.03] text-white"
-                          />
-                        ) : (
-                          <Input
-                            value={textInputs[field.key] ?? ""}
-                            onChange={(event) =>
-                              setTextInputs((current) => ({ ...current, [field.key]: event.target.value }))
-                            }
-                            placeholder={field.label}
-                            className="h-14 rounded-[1.25rem] border-white/10 bg-white/[0.03] text-white"
-                          />
-                        )}
-
-                        {files[field.key] ? (
-                          <button
-                            type="button"
-                            onClick={() =>
-                              setFiles((current) => ({
-                                ...current,
-                                [field.key]: null,
-                              }))
-                            }
-                            className="mt-3 text-xs uppercase tracking-[0.18em] text-slate-500 hover:text-white"
-                          >
-                            Clear
-                          </button>
-                        ) : null}
-                      </div>
+                          ) : (
+                            <Input
+                              value={textInputs[field.key] ?? ""}
+                              onChange={(event) =>
+                                setTextInputs((current) => ({ ...current, [field.key]: event.target.value }))
+                              }
+                              placeholder={field.label}
+                              className="h-14 rounded-[1.25rem] border-white/10 bg-white/[0.03] text-white"
+                            />
+                          )}
+                        </div>
+                      )
                     ))}
+
                   </div>
 
                   <div className="rounded-[1.5rem] border border-white/8 bg-black/20 p-4">
