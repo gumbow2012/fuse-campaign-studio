@@ -35,6 +35,7 @@ function PlanCard({
   isAdmin,
   compact,
   wide,
+  className,
   onSelect,
 }: {
   entry: PlanLadderEntry;
@@ -44,6 +45,7 @@ function PlanCard({
   isAdmin: boolean;
   compact?: boolean;
   wide?: boolean;
+  className?: string;
   onSelect: () => void;
 }) {
   const Icon = entry.icon;
