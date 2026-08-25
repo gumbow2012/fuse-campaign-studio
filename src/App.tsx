@@ -6,6 +6,7 @@ import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { PageTracking } from "@/hooks/usePageTracking";
 import CustomerRoute from "@/components/CustomerRoute";
+import BrandProfilesPage from "@/pages/BrandProfilesPage";
 import AdminRoute from "@/components/AdminRoute";
 import BuilderRoute from "@/components/BuilderRoute";
 import CreatorRoute from "@/components/CreatorRoute";
@@ -72,6 +73,14 @@ const App = () => (
               element={
                 <CustomerRoute>
                   <AccountPage />
+                </CustomerRoute>
+              }
+            />
+            <Route
+              path="/app/brand"
+              element={
+                <CustomerRoute>
+                  <BrandProfilesPage />
                 </CustomerRoute>
               }
             />
