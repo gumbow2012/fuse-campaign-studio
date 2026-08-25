@@ -1080,9 +1080,10 @@ export default function TemplateStudioPage() {
                 <div className="flex min-h-[220px] items-center justify-center text-slate-400">Select a template to begin.</div>
               ) : (
                 <div className="space-y-6">
+                  <CampaignBuilderSteps steps={builderSteps} />
                   <div className="flex flex-wrap items-end justify-between gap-4">
                     <div>
-                      <p className="text-[11px] uppercase tracking-[0.24em] text-muted-foreground">Selected Template</p>
+                      <p className="text-[11px] uppercase tracking-[0.24em] text-muted-foreground">Campaign Builder</p>
                       <h2 className="mt-2 font-display text-3xl font-bold tracking-[-0.04em] text-white">
                         {selectedTemplate.name}
                       </h2>
