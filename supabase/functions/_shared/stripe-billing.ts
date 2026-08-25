@@ -27,6 +27,7 @@ import {
   getStripeSecretKey,
   getStripeWebhookSecret,
 } from "./stripe.ts";
+import { metaCheckoutEventId, sendMetaCapiEvent } from "./meta-capi-dispatch.ts";
 
 type StripeObject = Record<string, any>;
 
@@ -130,6 +131,8 @@ function billingReturnUrl(
   url.searchParams.set(outcome, "true");
   if (outcome === "success") {
     url.searchParams.set("paid", "true");
+    // Analytics only: lets the client pixel share a deterministic event_id with CAPI.
+    url.searchParams.set("session_id", "{CHECKOUT_SESSION_ID}");
   }
   if (intent?.templateId) {
     url.searchParams.set("template", intent.templateId);
