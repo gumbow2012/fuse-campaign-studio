@@ -1,8 +1,9 @@
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { ArrowRight, Check } from "lucide-react";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { PLAN_LADDER, type PlanLadderEntry } from "@/lib/planLadder";
+import PlanCalculator from "@/components/mvp/membership/PlanCalculator";
 import { CREDITS_PER_IMAGE, approxOutputLabel } from "@/lib/creditOutputs";
 import type { STRIPE_TIERS } from "@/lib/stripe-config";
 
@@ -134,8 +135,15 @@ export default function PlanTierCards({
   onCheckout,
 }: Props) {
   const [useCase, setUseCase] = useState<UseCaseId | null>(null);
+  const [calcRecommended, setCalcRecommended] = useState<string | null>(null);
+  const [calcActive, setCalcActive] = useState(false);
+  const handleRecommend = useCallback((key: string | null) => {
+    setCalcRecommended(key);
+    setCalcActive(true);
+  }, []);
   const activeUseCase = USE_CASES.find((option) => option.id === useCase) ?? null;
-  const suggestedKey = activeUseCase?.suggests ?? "pro";
+  // Calculator result wins over the use-case chip when the user has used it.
+  const suggestedKey = calcActive ? calcRecommended : (activeUseCase?.suggests ?? "pro");
   const hasActivePaidPlan =
     currentPlan !== "free" && (subscriptionStatus === "active" || subscriptionStatus === "trialing");
 
@@ -199,6 +207,7 @@ export default function PlanTierCards({
         )}
       </div>
 
+      <PlanCalculator onRecommend={handleRecommend} />
 
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         {PLAN_LADDER.map((entry) => {
@@ -236,7 +245,7 @@ export default function PlanTierCards({
                   isSuggested ? "bg-cyan-300 text-slate-950" : "border border-white/15 bg-white/5 text-slate-200"
                 }`}
               >
-                {isSuggested && activeUseCase ? "Suggested" : entry.badge}
+                {isSuggested && (activeUseCase || calcActive) ? "Suggested" : entry.badge}
               </span>
 
 
