@@ -20,7 +20,8 @@ describe("public template studio access", () => {
 
     expect(studioSource).toContain('navigate("/auth?mode=signup", { state: { redirectTo: "/app/templates" } })');
     expect(studioSource).toContain('"Checking credits..."');
-    expect(studioSource).toContain('submitting || isRunning ? "Running..." : user ? "Run template" : "Sign in to run"');
+    expect(studioSource).toContain('"Sign in to generate"');
+    expect(studioSource).toContain('"Generate campaign"');
     expect(studioSource).toContain("enabled: !!user");
     expect(billingSource).toContain('navigate("/auth?mode=signup")');
   });

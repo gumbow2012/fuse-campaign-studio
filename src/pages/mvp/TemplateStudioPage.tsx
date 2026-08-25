@@ -21,6 +21,8 @@ import {
 import SiteShell from "@/components/mvp/SiteShell";
 import RunFeedbackCard from "@/components/mvp/RunFeedbackCard";
 import CreditPackDialog from "@/components/mvp/CreditPackDialog";
+import TemplateDetailDialog, { readTemplateAspectRatio } from "@/components/mvp/TemplateDetailDialog";
+import CampaignBuilderSteps, { buildCampaignSteps } from "@/components/mvp/CampaignBuilderSteps";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -475,6 +477,7 @@ export default function TemplateStudioPage() {
   const [expandedRuns, setExpandedRuns] = useState<Record<string, boolean>>({});
   const [feedbackOverrides, setFeedbackOverrides] = useState<Record<string, RunFeedbackRecord | null>>({});
   const [recentRefreshCooldown, setRecentRefreshCooldown] = useState(0);
+  const [detailTemplateId, setDetailTemplateId] = useState<string | null>(null);
   const runnerSectionRef = useRef<HTMLElement | null>(null);
   const isPrivilegedUser = hasAppAccess;
 
@@ -724,7 +727,6 @@ export default function TemplateStudioPage() {
   const creditBalance = profile?.credits_balance ?? null;
   const displayedCreditBalance = creditBalance ?? 0;
   const profileIsResolving = !!user && !isPrivilegedUser && !profile;
-  const canAfford = isPrivilegedUser || (!!profile && displayedCreditBalance >= creditsRequired);
   const hasActiveMembership =
     isPrivilegedUser ||
     profile?.subscription_status === "active" ||
@@ -747,6 +749,14 @@ export default function TemplateStudioPage() {
   const costDisplay = isPrivilegedUser ? "Bypassed for team access" : `${creditsRequired} credits`;
   const isPublicTemplateBrowser = !user;
   const selectedTemplateCheckoutPath = selectedTemplate ? buildTemplateCheckoutPath(selectedTemplate) : "/pricing";
+  const detailTemplate = templates.find((template) => template.id === detailTemplateId) ?? null;
+  const creditShortfall = Math.max(0, creditsRequired - displayedCreditBalance);
+  const blockedByCredits = !!user && !isPrivilegedUser && !!profile && creditShortfall > 0;
+  const builderSteps = buildCampaignSteps({
+    hasRequirements: inputFields.length > 0,
+    assetsReady: requiredInputsAreReady,
+    canGenerate: requiredInputsAreReady && (isPrivilegedUser || !blockedByCredits),
+  });
 
   const handleTemplateSelect = (templateId: string) => {
     setSelectedTemplateId(templateId);
@@ -978,11 +988,18 @@ export default function TemplateStudioPage() {
                 const outputCount = getTemplateOutputCount(template);
 
                 return (
-                  <button
+                  <div
                     key={template.id}
-                    type="button"
+                    role="button"
+                    tabIndex={0}
                     onClick={() => handleTemplateSelect(template.id)}
-                    className={`group overflow-hidden rounded-[1.5rem] border text-left transition-colors ${
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault();
+                        handleTemplateSelect(template.id);
+                      }
+                    }}
+                    className={`group cursor-pointer overflow-hidden rounded-[1.5rem] border text-left transition-colors ${
                       selected
                         ? "border-cyan-300/50 bg-cyan-300/10"
                         : "border-white/8 bg-black/20 hover:border-white/20 hover:bg-white/[0.05]"
@@ -997,7 +1014,18 @@ export default function TemplateStudioPage() {
                       <div className="absolute bottom-3 left-3 rounded-full border border-white/15 bg-black/45 px-2.5 py-1 text-[9px] uppercase tracking-[0.18em] text-white/80 backdrop-blur">
                         Vibe
                       </div>
+                      <button
+                        type="button"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          setDetailTemplateId(template.id);
+                        }}
+                        className="absolute right-3 top-3 rounded-full border border-white/15 bg-black/55 px-3 py-1 text-[9px] font-semibold uppercase tracking-[0.18em] text-white/85 backdrop-blur transition-colors hover:bg-black/80"
+                      >
+                        Details
+                      </button>
                     </div>
+
 
                     <div className="space-y-3 p-4">
                       <div className="flex items-start justify-between gap-3">
@@ -1036,7 +1064,7 @@ export default function TemplateStudioPage() {
                         {selected ? "Selected" : "Use this template"}
                       </span>
                     </div>
-                  </button>
+                  </div>
                 );
               })}
             </div>
@@ -1051,9 +1079,10 @@ export default function TemplateStudioPage() {
                 <div className="flex min-h-[220px] items-center justify-center text-slate-400">Select a template to begin.</div>
               ) : (
                 <div className="space-y-6">
+                  <CampaignBuilderSteps steps={builderSteps} />
                   <div className="flex flex-wrap items-end justify-between gap-4">
                     <div>
-                      <p className="text-[11px] uppercase tracking-[0.24em] text-muted-foreground">Selected Template</p>
+                      <p className="text-[11px] uppercase tracking-[0.24em] text-muted-foreground">Campaign Builder</p>
                       <h2 className="mt-2 font-display text-3xl font-bold tracking-[-0.04em] text-white">
                         {selectedTemplate.name}
                       </h2>
@@ -1126,7 +1155,38 @@ export default function TemplateStudioPage() {
                     </div>
                   ) : (
                     <>
+                  {inputFields.length ? (
+                    <div className="rounded-[1.5rem] border border-white/8 bg-black/20 p-4">
+                      <p className="text-[11px] uppercase tracking-[0.24em] text-muted-foreground">Requirements</p>
+                      <ul className="mt-3 grid gap-2 sm:grid-cols-2">
+                        {inputFields.map((field) => {
+                          const provided = field.type === "image" ? !!files[field.key] : !!textInputs[field.key]?.trim();
+                          return (
+                            <li
+                              key={`req-${field.key}`}
+                              className={cn(
+                                "flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs",
+                                field.required
+                                  ? "border-cyan-300/25 bg-cyan-300/[0.07] text-white"
+                                  : "border-white/10 bg-white/[0.03] text-slate-400",
+                              )}
+                            >
+                              <span className={cn("text-sm", provided ? "text-emerald-200" : field.required ? "text-cyan-100" : "text-slate-500")}>
+                                {field.required ? "✓" : "○"}
+                              </span>
+                              <span className="truncate">{field.label}</span>
+                              <span className="ml-auto shrink-0 text-[9px] uppercase tracking-[0.18em] text-slate-500">
+                                {field.required ? "Required" : "Optional"}
+                              </span>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    </div>
+                  ) : null}
+
                   <div className="grid gap-4 md:grid-cols-2">
+
                     {inputFields.map((field) => (
                       <div key={field.key} className="rounded-[1.5rem] border border-white/8 bg-black/20 p-4">
                         {field.type === "image" ? (
@@ -1197,7 +1257,7 @@ export default function TemplateStudioPage() {
                   <div className="rounded-[1.5rem] border border-white/8 bg-black/20 p-4">
                     <div className="flex flex-wrap items-center justify-between gap-3">
                       <div>
-                        <p className="text-[11px] uppercase tracking-[0.24em] text-muted-foreground">Run cost</p>
+                        <p className="text-[11px] uppercase tracking-[0.24em] text-muted-foreground">Review</p>
                         <p className="mt-2 text-2xl font-semibold text-white">{costDisplay}</p>
                         {isPrivilegedUser ? (
                           <p className="mt-2 text-xs text-slate-500">
@@ -1207,16 +1267,24 @@ export default function TemplateStudioPage() {
                       </div>
                       <Button
                         onClick={() => void handleRun()}
-                        disabled={submitting || isRunning || (!!user && !requiredInputsAreReady)}
-                        className="min-w-[180px] rounded-full bg-cyan-300 text-slate-950 hover:bg-cyan-200"
+                        disabled={submitting || isRunning || (!!user && (!requiredInputsAreReady || blockedByCredits))}
+                        className="min-w-[200px] rounded-full bg-cyan-300 text-[12px] font-semibold uppercase tracking-[0.14em] text-slate-950 hover:bg-cyan-200"
                       >
-                        {checkingCredits ? "Checking credits..." : submitting || isRunning ? "Running..." : user ? "Run template" : "Sign in to run"}
+                        {checkingCredits
+                          ? "Checking credits..."
+                          : submitting || isRunning
+                            ? "Generating..."
+                            : !user
+                              ? "Sign in to generate"
+                              : isPrivilegedUser
+                                ? "Generate campaign"
+                                : `Generate campaign · ${creditsRequired} cr`}
                       </Button>
                     </div>
 
                     {!user ? (
                       <p className="mt-3 text-sm leading-6 text-cyan-100">
-                        Sign in or create an account before running templates or buying credits.
+                        Sign in or create an account before generating campaigns or buying credits.
                         {" "}
                         <Link to="/auth?mode=signup" className="underline underline-offset-4">
                           Create account
@@ -1228,7 +1296,7 @@ export default function TemplateStudioPage() {
                       </p>
                     ) : !hasActiveMembership ? (
                       <p className="mt-3 text-sm leading-6 text-amber-100">
-                        Active membership required before running templates.
+                        Active membership required before generating campaigns.
                         {" "}
                         <Link to="/pricing" className="underline underline-offset-4">
                           Open membership
@@ -1236,11 +1304,22 @@ export default function TemplateStudioPage() {
                       </p>
                     ) : null}
 
-                    {!isPrivilegedUser && hasActiveMembership && !canAfford ? (
-                      <p className="mt-3 text-sm leading-6 text-rose-100">
-                        This run costs {creditsRequired} credits and your balance is {displayedCreditBalance}.
-                      </p>
+                    {blockedByCredits ? (
+                      <div className="mt-3 flex flex-wrap items-center gap-3 text-sm leading-6 text-rose-100">
+                        <span>
+                          You need {creditShortfall} more credit{creditShortfall === 1 ? "" : "s"}
+                        </span>
+                        <Button
+                          asChild
+                          size="sm"
+                          variant="outline"
+                          className="rounded-full border-white/15 bg-white/5 text-xs text-foreground hover:bg-white/10"
+                        >
+                          <Link to="/membership?tab=credits">Buy Credits</Link>
+                        </Button>
+                      </div>
                     ) : null}
+
                   </div>
                     </>
                   )}
@@ -1528,6 +1607,26 @@ export default function TemplateStudioPage() {
           </aside>
         </div>
       </section>
+
+      <TemplateDetailDialog
+        template={detailTemplate}
+        open={!!detailTemplate}
+        onOpenChange={(next) => {
+          if (!next) setDetailTemplateId(null);
+        }}
+        facts={{
+          inputCount: detailTemplate ? getTemplateInputCount(detailTemplate) : 0,
+          outputCount: getTemplateOutputCount(detailTemplate),
+          aspectRatio: readTemplateAspectRatio(detailTemplate),
+          costLabel: isPrivilegedUser
+            ? "Bypassed for team access"
+            : `${detailTemplate?.estimated_credits_per_run ?? 0} credits`,
+        }}
+        onUseTemplate={() => {
+          if (detailTemplate) handleTemplateSelect(detailTemplate.id);
+        }}
+      />
     </SiteShell>
+
   );
 }
