@@ -63,7 +63,7 @@ function PlanCard({
           : entry.recommended
             ? "border-lime-300/35 bg-white/[0.05] shadow-[0_0_50px_-14px_rgba(190,242,100,0.28)]"
             : "border-white/10 bg-white/[0.03]"
-      }`}
+      } ${className ?? ""}`}
     >
       <span
         className={`absolute right-4 top-4 rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider ${
