@@ -107,6 +107,21 @@ export async function getCreatorProfileByHandle(handle: string) {
   return (data as CreatorProfile | null) ?? null;
 }
 
+/**
+ * Public creator directory (READ-ONLY). Returns only rows the creator has
+ * explicitly made public. Never invents counts, uses or earnings.
+ */
+export async function listPublicCreatorProfiles(limit = 6) {
+  const { data, error } = await supabase
+    .from("creator_profiles")
+    .select(PUBLIC_FIELDS)
+    .eq("is_public", true)
+    .order("created_at", { ascending: false })
+    .limit(limit);
+  if (error) throw new Error(error.message);
+  return (data as CreatorProfile[] | null) ?? [];
+}
+
 export async function getOwnCreatorProfile() {
   const {
     data: { session },
