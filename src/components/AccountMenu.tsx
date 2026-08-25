@@ -141,6 +141,11 @@ export function AccountMenuContent({ onNavigate }: { onNavigate?: () => void }) 
           <User size={14} />
           Manage Account
         </Link>
+        <Link to="/app/brand" onClick={onNavigate} className={linkClass}>
+          <Boxes size={14} />
+          Brand &amp; Products
+        </Link>
+
         <Link to="/membership?tab=usage" onClick={onNavigate} className={linkClass}>
           <Zap size={14} />
           Usage & Credits
