@@ -131,8 +131,6 @@ function billingReturnUrl(
   url.searchParams.set(outcome, "true");
   if (outcome === "success") {
     url.searchParams.set("paid", "true");
-    // Analytics only: lets the client pixel share a deterministic event_id with CAPI.
-    url.searchParams.set("session_id", "{CHECKOUT_SESSION_ID}");
   }
   if (intent?.templateId) {
     url.searchParams.set("template", intent.templateId);
@@ -142,6 +140,11 @@ function billingReturnUrl(
   }
   if (mode === "test") {
     url.searchParams.set("billing_mode", "test");
+  }
+  // Analytics only: Stripe substitutes the session id so the client pixel can share a
+  // deterministic event_id with the server-side CAPI event. Appended raw (unencoded braces).
+  if (outcome === "success") {
+    return `${url.toString()}&session_id={CHECKOUT_SESSION_ID}`;
   }
   return url.toString();
 }
