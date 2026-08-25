@@ -207,8 +207,7 @@ const Navbar = () => {
   const [activeMode, setActiveMode] = useState<typeof modes[number]>("Streetwear");
   const [scrolled, setScrolled] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
-  const { user, profile, signOut, hasAppAccess } = useAuth();
-  const navigate = useNavigate();
+  const { user, profile } = useAuth();
 
   const handleScroll = useCallback(() => {
     setScrolled(window.scrollY > 50);
