@@ -269,7 +269,15 @@ export default function CreatorDashboard() {
             value={loading ? "—" : String(publishedCount)}
             hint="Templates you own in FUSE"
           />
-          <StatTile label="Creator Level" value="Creator" hint="Levels arrive in a later release" />
+          <StatTile
+            label="Creator Level"
+            value={loading ? "—" : level.current.name}
+            hint={
+              reviewStatusTracked
+                ? `${approvedCount} approved template${approvedCount === 1 ? "" : "s"}`
+                : "Review status not tracked yet"
+            }
+          />
           <StatTile
             label="Credits Earned"
             value={loading ? "—" : creditsEarned.toLocaleString()}
