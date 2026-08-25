@@ -119,6 +119,7 @@ export default function CreatorProfile() {
           profile?.bio?.slice(0, 155) ??
           "A FUSE creator profile: specialties, portfolio links and published templates."
         }
+        path={`/creator/${handle}`}
       />
 
       <div className="mx-auto w-full max-w-4xl space-y-6 px-4 py-8" style={accentStyle(accent)}>

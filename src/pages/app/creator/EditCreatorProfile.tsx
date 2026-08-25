@@ -198,6 +198,7 @@ export default function EditCreatorProfile() {
       <PageMeta
         title="Edit creator profile · FUSE"
         description="Customize your public FUSE creator profile: avatar, banner, bio, specialties and accent."
+        path={"/creator/settings/edit"}
       />
       <div className="mx-auto w-full max-w-3xl space-y-6 px-4 py-8" style={accentStyle(accent)}>
         <header className="space-y-1">
