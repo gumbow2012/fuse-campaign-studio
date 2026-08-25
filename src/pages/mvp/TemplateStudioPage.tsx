@@ -477,6 +477,7 @@ export default function TemplateStudioPage() {
   const [expandedRuns, setExpandedRuns] = useState<Record<string, boolean>>({});
   const [feedbackOverrides, setFeedbackOverrides] = useState<Record<string, RunFeedbackRecord | null>>({});
   const [recentRefreshCooldown, setRecentRefreshCooldown] = useState(0);
+  const [detailTemplateId, setDetailTemplateId] = useState<string | null>(null);
   const runnerSectionRef = useRef<HTMLElement | null>(null);
   const isPrivilegedUser = hasAppAccess;
 
