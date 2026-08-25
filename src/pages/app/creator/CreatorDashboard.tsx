@@ -393,11 +393,102 @@ export default function CreatorDashboard() {
             {section === "rejected" ? renderBucket("rejected", "Rejected / Needs Changes") : null}
 
             {section === "analytics" ? (
-              <ComingLater
-                title="Analytics"
-                note="Creator analytics — template runs, revenue attribution and audience breakdowns — ships in a later release. Nothing is estimated here in the meantime."
-              />
+              <div className={panelClass}>
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <h2 className="font-display text-lg font-bold text-foreground">Analytics</h2>
+                  <p className="text-[11px] uppercase tracking-[0.24em] text-muted-foreground">
+                    Real template runs
+                  </p>
+                </div>
+
+                {analyticsLoading ? (
+                  <div className="mt-6 flex items-center gap-2 text-sm text-muted-foreground">
+                    <Loader2 className="h-4 w-4 animate-spin" /> Loading analytics…
+                  </div>
+                ) : analyticsError ? (
+                  <div className="mt-6 space-y-3">
+                    <EmptyNote>Analytics couldn't be loaded: {analyticsError}</EmptyNote>
+                    <Button variant="outline" size="sm" onClick={() => void loadAnalytics()}>
+                      Retry
+                    </Button>
+                  </div>
+                ) : !analytics || analytics.totalRuns === 0 ? (
+                  <div className="mt-6">
+                    <EmptyNote>
+                      No template runs yet. Once customers run your published templates, analytics
+                      appear here.
+                    </EmptyNote>
+                  </div>
+                ) : (
+                  <div className="mt-6 space-y-6">
+                    <div className="grid gap-4 sm:grid-cols-3">
+                      <StatTile label="Total runs" value={String(analytics.totalRuns)} />
+                      <StatTile label="Runs (30d)" value={String(analytics.runsLast30d)} hint={`${analytics.runsLast7d} in last 7 days`} />
+                      <StatTile
+                        label="Success rate"
+                        value={`${Math.round(analytics.successRate * 100)}%`}
+                        hint={`${analytics.successfulRuns} complete · ${analytics.failedRuns} failed`}
+                      />
+                    </div>
+
+                    <div>
+                      <p className="text-[11px] uppercase tracking-[0.24em] text-muted-foreground">
+                        Last 30 days
+                      </p>
+                      <div className="mt-3 flex h-24 items-end gap-1">
+                        {analytics.daily.map((point) => {
+                          const max = Math.max(...analytics.daily.map((d) => d.runs), 1);
+                          const height = point.runs > 0 ? Math.max(6, (point.runs / max) * 100) : 2;
+                          return (
+                            <div
+                              key={point.date}
+                              title={`${point.date}: ${point.runs} run${point.runs === 1 ? "" : "s"}`}
+                              className={cn(
+                                "flex-1 rounded-sm",
+                                point.runs > 0 ? "bg-cyan-300/70" : "bg-white/10",
+                              )}
+                              style={{ height: `${height}%` }}
+                            />
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    <div>
+                      <p className="text-[11px] uppercase tracking-[0.24em] text-muted-foreground">
+                        Per template
+                      </p>
+                      <div className="mt-3 space-y-2">
+                        {analytics.perTemplate.map((row) => (
+                          <div
+                            key={row.template_id}
+                            className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-white/10 bg-black/30 px-4 py-3"
+                          >
+                            <div className="min-w-0">
+                              <p className="truncate font-display text-sm font-semibold text-foreground">
+                                {row.name ?? "Untitled template"}
+                              </p>
+                              <p className="mt-0.5 text-xs text-muted-foreground">
+                                {row.lastRunAt
+                                  ? `last run ${new Date(row.lastRunAt).toLocaleDateString()}`
+                                  : "no runs yet"}
+                              </p>
+                            </div>
+                            <Badge
+                              variant="outline"
+                              className="border-white/15 text-[11px] text-muted-foreground"
+                            >
+                              {row.runs} run{row.runs === 1 ? "" : "s"}
+                            </Badge>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
             ) : null}
+
 
             {section === "rewards" ? (
               <div className="space-y-4">
