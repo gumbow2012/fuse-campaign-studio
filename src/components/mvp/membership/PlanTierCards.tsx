@@ -218,24 +218,27 @@ export default function PlanTierCards({
                 ? "Loading..."
                 : liveCtaLabel;
 
+          const isSuggested = entry.key === suggestedKey;
+
           return (
             <article
               key={entry.key}
-              className={`relative overflow-hidden rounded-2xl border p-6 backdrop-blur-sm ${
+              className={`group relative overflow-hidden rounded-2xl border p-6 backdrop-blur-sm transition-transform duration-300 hover:-translate-y-1 motion-reduce:transform-none motion-reduce:transition-none ${
                 isCurrentActive || isCurrentFree
                   ? "border-cyan-300/40 bg-cyan-300/[0.08]"
-                  : entry.recommended
+                  : isSuggested
                     ? "border-cyan-300/30 bg-white/[0.04] shadow-[0_0_40px_-12px_rgba(34,211,238,0.18)]"
                     : "border-white/10 bg-white/[0.03]"
               } ${!isLive && !entry.isFreeState ? "opacity-80" : ""}`}
             >
               <span
                 className={`absolute right-4 top-4 rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider ${
-                  entry.recommended ? "bg-cyan-300 text-slate-950" : "border border-white/15 bg-white/5 text-slate-200"
+                  isSuggested ? "bg-cyan-300 text-slate-950" : "border border-white/15 bg-white/5 text-slate-200"
                 }`}
               >
-                {entry.badge}
+                {isSuggested && activeUseCase ? "Suggested" : entry.badge}
               </span>
+
 
               <div className="flex items-center gap-2">
                 <div className="flex h-8 w-8 items-center justify-center rounded-full border border-white/10 bg-white/[0.04]">
