@@ -81,6 +81,7 @@ export default function BillingPage() {
   const [creditPackSmoke, setCreditPackSmoke] = useState<CreditPackSmokeResult | null>(null);
   const [checkoutEmail, setCheckoutEmail] = useState("");
   const [brandName, setBrandName] = useState("");
+  const [billingCycle, setBillingCycle] = useState<"monthly" | "annual">("monthly");
 
   const selectedTemplateId = searchParams.get("template") ?? "";
   const selectedTemplateName = searchParams.get("templateName") ?? selectedTemplateId;
@@ -458,7 +459,30 @@ export default function BillingPage() {
             ) : null}
           </section>
 
-          <section className="grid gap-4 md:grid-cols-3">
+          <div className="space-y-4">
+            <div className="flex flex-col items-start justify-between gap-3 sm:flex-row sm:items-center">
+              <div className="inline-flex rounded-full border border-white/10 bg-white/[0.03] p-1">
+                {(["monthly", "annual"] as const).map((cycle) => (
+                  <button
+                    key={cycle}
+                    type="button"
+                    onClick={() => setBillingCycle(cycle)}
+                    className={`rounded-full px-4 py-1.5 text-sm font-medium transition-colors ${
+                      billingCycle === cycle
+                        ? "bg-cyan-300 text-slate-950"
+                        : "text-slate-300 hover:text-white"
+                    }`}
+                  >
+                    {cycle === "monthly" ? "Monthly" : "Annual"}
+                  </button>
+                ))}
+              </div>
+              {billingCycle === "annual" ? (
+                <p className="text-sm text-slate-300">Annual plans are coming soon.</p>
+              ) : null}
+            </div>
+
+            <section className="grid gap-4 md:grid-cols-3">
             {(Object.keys(STRIPE_TIERS) as Array<keyof typeof STRIPE_TIERS>).map((tierKey) => {
               const tier = STRIPE_TIERS[tierKey];
               const tierMeta = tierCopy[tierKey];
@@ -515,13 +539,27 @@ export default function BillingPage() {
                   <p className="mt-3 text-sm leading-6 text-slate-300">{tierMeta.description}</p>
 
                   <div className="mt-5">
-                    <p className="font-display text-4xl font-black tracking-[-0.04em] text-white">
-                      ${tier.price}
-                      <span className="ml-1 text-sm font-medium text-slate-400">/ month</span>
-                    </p>
-                    <p className="mt-1 text-sm text-cyan-100/90">
-                      {tier.monthlyCredits.toLocaleString()} credits/mo
-                    </p>
+                    {billingCycle === "annual" ? (
+                      // GATED: annual requires real Stripe annual prices to be created before enabling checkout.
+                      <>
+                        <p className="font-display text-2xl font-black tracking-[-0.04em] text-white">
+                          Annual billing coming soon
+                        </p>
+                        <p className="mt-1 text-sm text-slate-400">
+                          {tier.monthlyCredits.toLocaleString()} credits/mo when launched
+                        </p>
+                      </>
+                    ) : (
+                      <>
+                        <p className="font-display text-4xl font-black tracking-[-0.04em] text-white">
+                          ${tier.price}
+                          <span className="ml-1 text-sm font-medium text-slate-400">/ month</span>
+                        </p>
+                        <p className="mt-1 text-sm text-cyan-100/90">
+                          {tier.monthlyCredits.toLocaleString()} credits/mo
+                        </p>
+                      </>
+                    )}
                   </div>
 
                   {isCurrentActive ? (
@@ -540,21 +578,28 @@ export default function BillingPage() {
                   </ul>
 
                   <Button
-                    onClick={() => void handleCheckout(tierKey)}
-                    disabled={isAdmin || isCurrentActive || !!loading}
+                    onClick={() => {
+                      // GATED: annual requires real Stripe annual prices to be created before enabling checkout.
+                      if (billingCycle === "annual") return;
+                      void handleCheckout(tierKey);
+                    }}
+                    disabled={billingCycle === "annual" || isAdmin || isCurrentActive || !!loading}
                     className={`mt-6 w-full rounded-full font-semibold ${
-                      isCurrentActive || isAdmin
+                      isCurrentActive || isAdmin || billingCycle === "annual"
                         ? "bg-white/10 text-white hover:bg-white/10"
                         : "bg-cyan-300 text-slate-950 hover:bg-cyan-200"
                     }`}
                   >
-                    {ctaLabel}
-                    {!isCurrentActive && !isAdmin ? <ArrowRight className="h-4 w-4" /> : null}
+                    {billingCycle === "annual"
+                      ? "Coming soon"
+                      : ctaLabel}
+                    {billingCycle !== "annual" && !isCurrentActive && !isAdmin ? <ArrowRight className="h-4 w-4" /> : null}
                   </Button>
                 </article>
               );
             })}
           </section>
+          </div>
         </div>
 
         {hasActivePaidMembership || isAdmin ? (
