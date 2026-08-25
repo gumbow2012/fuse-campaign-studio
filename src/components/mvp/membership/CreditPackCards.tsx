@@ -1,6 +1,7 @@
 import { ArrowRight, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { CREDIT_PACKS } from "@/lib/stripe-config";
+import { BEST_VALUE_PACK, costPer1k, packApproxLabel } from "@/components/mvp/membership/CreditSliderPanel";
 
 type Props = {
   loading: string | null;
@@ -14,6 +15,8 @@ export default function CreditPackCards({ loading, isAdmin, onCheckout }: Props)
       {(Object.keys(CREDIT_PACKS) as Array<keyof typeof CREDIT_PACKS>).map((packKey) => {
         const pack = CREDIT_PACKS[packKey];
         const isPopular = packKey === "growth";
+        // "Best value" is computed from the real price / credits ratio, not a marketing label.
+        const isBestValue = packKey === BEST_VALUE_PACK;
         return (
           <article
             key={packKey}
@@ -23,8 +26,12 @@ export default function CreditPackCards({ loading, isAdmin, onCheckout }: Props)
                 : "border-white/10 bg-white/[0.03]"
             }`}
           >
-            {isPopular ? (
+            {isBestValue ? (
               <span className="absolute right-4 top-4 rounded-full bg-cyan-300 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider text-slate-950">
+                Best value
+              </span>
+            ) : isPopular ? (
+              <span className="absolute right-4 top-4 rounded-full border border-white/15 bg-white/5 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider text-slate-200">
                 Most popular
               </span>
             ) : null}
@@ -37,6 +44,10 @@ export default function CreditPackCards({ loading, isAdmin, onCheckout }: Props)
                 <span className="ml-1 text-sm font-medium text-slate-400">one-time</span>
               </p>
               <p className="mt-1 text-sm text-cyan-100/90">{pack.credits.toLocaleString()} credits</p>
+              <p className="mt-1 text-xs text-slate-400">
+                ${costPer1k(pack.price, pack.credits).toFixed(2)} per 1,000 credits
+              </p>
+              <p className="mt-1 text-xs text-slate-400">{packApproxLabel(pack.credits)}</p>
             </div>
 
             <ul className="mt-5 space-y-3 text-sm text-slate-200">
