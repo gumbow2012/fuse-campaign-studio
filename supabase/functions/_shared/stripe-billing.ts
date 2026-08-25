@@ -28,6 +28,8 @@ import {
   getStripeWebhookSecret,
 } from "./stripe.ts";
 import { metaCheckoutEventId, sendMetaCapiEvent } from "./meta-capi-dispatch.ts";
+import { sendMetaCapiPurchase } from "./metaCapi.ts";
+
 
 type StripeObject = Record<string, any>;
 
@@ -988,23 +990,23 @@ export function createStripeWebhookHandler(mode: StripeBillingMode) {
             profile,
           });
 
-          // Additive analytics only — fire-and-forget, never blocks or fails the webhook.
+          // Additive analytics only — never blocks or fails the webhook.
           try {
             if (mode === "live") {
-              sendMetaCapiEvent({
-                eventName: "Purchase",
-                eventId: metaCheckoutEventId("Purchase", String(session.id)),
-                value: typeof session.amount_total === "number" ? session.amount_total / 100 : pack.amountCents / 100,
-                currency: (session.currency ?? pack.currency ?? "usd").toUpperCase(),
+              await sendMetaCapiPurchase({
                 email: customerEmail,
-                externalId: profile?.user_id ?? null,
-                orderId: String(session.id),
-                contentType: "product",
+                value: typeof session.amount_total === "number"
+                  ? session.amount_total / 100
+                  : pack.amountCents / 100,
+                currency: (session.currency ?? pack.currency ?? "usd").toUpperCase(),
+                eventId: metaCheckoutEventId("Purchase", String(session.id)),
+                eventSourceUrl: "https://fuse-us.com",
               });
             }
           } catch (_capiError) {
             // analytics must never affect billing
           }
+
 
           return json({ received: true, granted: grantResult.granted }, 200);
         }
@@ -1223,7 +1225,29 @@ export function createStripeWebhookHandler(mode: StripeBillingMode) {
           profile,
         });
 
+        // Additive analytics only — never blocks or fails the webhook.
+        try {
+          if (mode === "live") {
+            const amountPaidCents = integerCents(invoice.amount_paid) ?? 0;
+            const invoiceEventId = typeof invoice.id === "string" && invoice.id
+              ? invoice.id
+              : (typeof invoice.payment_intent === "string" && invoice.payment_intent
+                ? invoice.payment_intent
+                : `sub_${subscription.id}_${event.id}`);
+            await sendMetaCapiPurchase({
+              email: customerEmail,
+              value: amountPaidCents / 100,
+              currency: String(invoice.currency ?? "usd").toUpperCase(),
+              eventId: invoiceEventId,
+              eventSourceUrl: "https://fuse-us.com",
+            });
+          }
+        } catch (_capiError) {
+          // analytics must never affect billing
+        }
+
         return json({ received: true, granted: grantResult?.granted ?? false }, 200);
+
       }
 
       if (event.type === "invoice.payment_failed") {
