@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import SiteShell from "@/components/mvp/SiteShell";
 import AccountHeader from "@/components/mvp/AccountHeader";
+import CreditsOverviewCard from "@/components/mvp/membership/CreditsOverviewCard";
+import CreditUsageHistory from "@/components/mvp/membership/CreditUsageHistory";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -10,7 +12,6 @@ import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { ADMIN_VISUAL_BUDGET_TOTAL, getAdminVisualCreditsRemaining, getAdminVisualCreditsSpent } from "@/lib/adminBudget";
 import { updateAccountProfile } from "@/services/account";
-import { loadCreditHistory, type CreditLedgerRow } from "@/services/creditHistory";
 
 export default function AccountPage() {
   const { isAdmin, profile, refreshProfile, user } = useAuth();
@@ -19,22 +20,8 @@ export default function AccountPage() {
   const [savingName, setSavingName] = useState(false);
   const [savingPassword, setSavingPassword] = useState(false);
   const [adminVisualSpent, setAdminVisualSpent] = useState(0);
-  const [history, setHistory] = useState<CreditLedgerRow[]>([]);
-  const [historyLoading, setHistoryLoading] = useState(false);
-  const [historyError, setHistoryError] = useState<string | null>(null);
   const trimmedName = name.trim();
   const adminVisualRemaining = getAdminVisualCreditsRemaining();
-
-
-  const typeLabel: Record<string, string> = {
-    run_template: "Template run",
-    rerun_step: "Rerun step",
-    topup: "Top-up",
-    monthly_grant: "Monthly credits",
-    refund: "Refund",
-    adjustment: "Adjustment",
-    creator_reward: "Creator reward",
-  };
 
   useEffect(() => {
     setName(profile?.name ?? "");
@@ -43,6 +30,7 @@ export default function AccountPage() {
   useEffect(() => {
     setAdminVisualSpent(getAdminVisualCreditsSpent());
   }, []);
+
 
   useEffect(() => {
     if (!user) return;
