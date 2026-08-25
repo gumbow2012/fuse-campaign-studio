@@ -101,13 +101,13 @@ Deno.serve(async (req) => {
     return ok({ skipped: "invalid_body" });
   }
 
-  // Admin-gated test ping: sends a dummy Purchase using META_CAPI_TEST_EVENT_CODE.
+  // Authenticated test ping: sends a dummy Purchase using META_CAPI_TEST_EVENT_CODE.
   if (body.action === "test") {
     try {
-      await requireAdminUser(req);
+      await requireUser(req);
     } catch (_error) {
-      return new Response(JSON.stringify({ ok: false, error: "Admin access required" }), {
-        status: 403,
+      return new Response(JSON.stringify({ ok: false, error: "Authentication required" }), {
+        status: 401,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
@@ -120,7 +120,14 @@ Deno.serve(async (req) => {
       eventSourceUrl: "https://fuse-us.com",
     });
 
-    return ok({ test: true, ...result });
+    let metaResponse: unknown = result.body;
+    try {
+      metaResponse = JSON.parse(result.body);
+    } catch {
+      // leave as raw string if not valid JSON
+    }
+
+    return ok({ ok: result.ok, httpStatus: result.status, metaResponse });
   }
 
   const eventName = typeof body.event_name === "string" ? body.event_name.trim() : "";
