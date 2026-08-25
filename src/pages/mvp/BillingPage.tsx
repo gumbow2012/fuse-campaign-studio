@@ -463,42 +463,75 @@ export default function BillingPage() {
               const tier = STRIPE_TIERS[tierKey];
               const tierMeta = tierCopy[tierKey];
               const Icon = tierMeta.icon;
-              const isCurrent = currentPlan === tierKey;
+              const isRecommended = tierKey === "pro";
+              const isCurrentActive =
+                currentPlan === tierKey &&
+                (profile?.subscription_status === "active" || profile?.subscription_status === "trialing");
               const tierCtaLabel =
                 tierKey === "starter" ? "Start Creating" : tierKey === "pro" ? "Launch Your Drops" : "Contact Us";
               const ctaLabel = isAdmin
                 ? "Admin access"
-                  : isCurrent
-                    ? "Current plan"
-                    : loading === tierKey
-                      ? "Loading..."
+                : isCurrentActive
+                  ? "Current plan"
+                  : loading === tierKey
+                    ? "Loading..."
                     : tierCtaLabel;
+
+              const per1k = (tier.price / tier.monthlyCredits * 1000).toFixed(2);
+              const tierFeatures = [
+                `${tier.monthlyCredits.toLocaleString()} credits/mo`,
+                `~$${per1k} per 1,000 credits`,
+                tierKey === "starter"
+                  ? "Great for your first campaigns"
+                  : tierKey === "pro"
+                    ? "Built for a regular drop calendar"
+                    : "For teams & multi-brand studios",
+              ];
 
               return (
                 <article
                   key={tierKey}
-                  className={`rounded-[2rem] border p-6 ${
-                    isCurrent
-                      ? "border-cyan-300/40 bg-cyan-300/10"
-                      : "border-white/10 bg-slate-950/75"
+                  className={`relative overflow-hidden rounded-2xl border p-6 backdrop-blur-sm ${
+                    isCurrentActive
+                      ? "border-cyan-300/40 bg-cyan-300/[0.08]"
+                      : isRecommended
+                        ? "border-cyan-300/30 bg-white/[0.04] shadow-[0_0_40px_-12px_rgba(34,211,238,0.18)]"
+                        : "border-white/10 bg-white/[0.03]"
                   }`}
                 >
+                  {isRecommended ? (
+                    <span className="absolute right-4 top-4 rounded-full bg-cyan-300 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider text-slate-950">
+                      Recommended
+                    </span>
+                  ) : null}
+
                   <div className="flex items-center gap-2">
-                    <Icon className="h-4 w-4 text-cyan-100" />
+                    <div className="flex h-8 w-8 items-center justify-center rounded-full border border-white/10 bg-white/[0.04]">
+                      <Icon className="h-4 w-4 text-cyan-100" />
+                    </div>
                     <p className="font-display text-xl font-semibold text-white">{tier.name}</p>
                   </div>
+
                   <p className="mt-3 text-sm leading-6 text-slate-300">{tierMeta.description}</p>
-                  <p className="mt-5 text-4xl font-semibold text-white">
-                    ${tier.price}
-                    <span className="ml-1 text-sm font-normal text-slate-400">/mo</span>
-                  </p>
-                  <p className="mt-2 text-sm text-slate-300">{tier.monthlyCredits.toLocaleString()} credits each cycle</p>
-                  <p className="mt-3 rounded-xl border border-cyan-300/15 bg-cyan-300/[0.06] px-3 py-2 text-xs leading-5 text-cyan-50">
-                    Have a discount code? Enter it in Stripe Checkout.
-                  </p>
+
+                  <div className="mt-5">
+                    <p className="font-display text-4xl font-black tracking-[-0.04em] text-white">
+                      ${tier.price}
+                      <span className="ml-1 text-sm font-medium text-slate-400">/ month</span>
+                    </p>
+                    <p className="mt-1 text-sm text-cyan-100/90">
+                      {tier.monthlyCredits.toLocaleString()} credits/mo
+                    </p>
+                  </div>
+
+                  {isCurrentActive ? (
+                    <p className="mt-3 inline-flex items-center rounded-full border border-cyan-300/20 bg-cyan-300/10 px-2.5 py-1 text-xs font-medium text-cyan-50">
+                      Current plan
+                    </p>
+                  ) : null}
 
                   <ul className="mt-5 space-y-3 text-sm text-slate-200">
-                    {tierMeta.features.map((feature) => (
+                    {tierFeatures.map((feature) => (
                       <li key={feature} className="flex items-start gap-2">
                         <Check className="mt-0.5 h-4 w-4 text-cyan-200" />
                         <span>{feature}</span>
@@ -508,15 +541,15 @@ export default function BillingPage() {
 
                   <Button
                     onClick={() => void handleCheckout(tierKey)}
-                    disabled={isAdmin || isCurrent || !!loading}
-                    className={`mt-6 w-full rounded-full ${
-                      isCurrent || isAdmin
+                    disabled={isAdmin || isCurrentActive || !!loading}
+                    className={`mt-6 w-full rounded-full font-semibold ${
+                      isCurrentActive || isAdmin
                         ? "bg-white/10 text-white hover:bg-white/10"
                         : "bg-cyan-300 text-slate-950 hover:bg-cyan-200"
                     }`}
                   >
                     {ctaLabel}
-                    {!isCurrent && !isAdmin ? <ArrowRight className="h-4 w-4" /> : null}
+                    {!isCurrentActive && !isAdmin ? <ArrowRight className="h-4 w-4" /> : null}
                   </Button>
                 </article>
               );
