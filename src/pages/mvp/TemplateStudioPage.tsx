@@ -23,6 +23,8 @@ import RunFeedbackCard from "@/components/mvp/RunFeedbackCard";
 import CreditPackDialog from "@/components/mvp/CreditPackDialog";
 import TemplateDetailDialog, { readTemplateAspectRatio } from "@/components/mvp/TemplateDetailDialog";
 import CampaignBuilderSteps, { buildCampaignSteps } from "@/components/mvp/CampaignBuilderSteps";
+import TemplateInputCard from "@/components/templates/TemplateInputCard";
+
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
