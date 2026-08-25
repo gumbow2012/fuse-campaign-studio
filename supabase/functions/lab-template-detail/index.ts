@@ -234,13 +234,20 @@ Deno.serve(async (req) => {
       };
     });
 
-    const userInputs = inputPlan.slots.map((slot) => ({
-      key: slot.id,
-      label: slot.name,
-      type: slot.expected ?? "image",
-      required: true,
-      hint: `${slot.name} is required for this template.`,
-    }));
+    const userInputs = inputPlan.slots.map((slot) => {
+      const slotNode = slot.nodeIds.map((nodeId: string) => nodeMap.get(nodeId)).find(Boolean) ?? null;
+      // FT2: additive metadata only — absent metadata keeps the legacy shape.
+      const requirement = slotNode ? getNodeAssetRequirement(slotNode) : null;
+      return {
+        key: slot.id,
+        label: slot.name,
+        type: slot.expected ?? "image",
+        required: requirement?.required ?? true,
+        hint: requirement?.shortInstruction ?? `${slot.name} is required for this template.`,
+        requirement,
+      };
+    });
+
 
     // Creators may only inspect the graph of templates they created themselves.
     const ownsTemplate = (version as any).fuse_templates.created_by === user.id;
