@@ -123,7 +123,7 @@ const MobileMenu = ({ onClose }: { onClose: () => void }) => {
 
 /* ─── Main Navbar ─── */
 const Navbar = () => {
-  const [activeMode, setActiveMode] = useState<typeof modes[number]>("Streetwear");
+  const [scrolled, setScrolled] = useState(false);
   const [scrolled, setScrolled] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const { user, profile } = useAuth();
