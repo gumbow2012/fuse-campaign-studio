@@ -36,6 +36,9 @@ interface TemplateInputCardProps {
   /** Legacy label-derived placeholder — last-resort fallback only. */
   fallbackPlaceholderSrc: string;
   onFileChange: (file: File | null) => void;
+  /** FT4: asset picked from the reusable library (already stored, has a URL). */
+  libraryAsset?: { url: string; name?: string | null } | null;
+  onLibrarySelect?: (asset: { url: string; name?: string | null }) => void;
 }
 
 export default function TemplateInputCard({
@@ -44,7 +47,10 @@ export default function TemplateInputCard({
   requirement,
   fallbackPlaceholderSrc,
   onFileChange,
+  libraryAsset,
+  onLibrarySelect,
 }: TemplateInputCardProps) {
+
   const inputRef = useRef<HTMLInputElement>(null);
   const [state, setState] = useState<UploadCheckState | "idle">("idle");
   const [checks, setChecks] = useState<UploadCheckResult | null>(null);
