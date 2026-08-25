@@ -1223,7 +1223,18 @@ export default function TemplateStudioPage() {
                                   {files[field.key] ? files[field.key]?.name : "Upload image"}
                                 </span>
                               </span>
+                              {field.requirement?.shortInstruction ? (
+                                <span className="mt-2 block text-[11px] leading-relaxed text-slate-400">
+                                  {field.requirement.shortInstruction}
+                                </span>
+                              ) : null}
+                              {field.requirement && describeRequirement(field.requirement).length ? (
+                                <span className="mt-1 block text-[10px] uppercase tracking-[0.14em] text-slate-500">
+                                  {describeRequirement(field.requirement).join(" · ")}
+                                </span>
+                              ) : null}
                             </div>
+
                             <input
                               type="file"
                               accept="image/*"
