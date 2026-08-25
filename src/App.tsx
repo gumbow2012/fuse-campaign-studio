@@ -19,6 +19,8 @@ import FlowTest from "@/pages/FlowTest";
 import GenerationStudio from "@/pages/GenerationStudio";
 import CinemaStudio from "@/pages/app/cinema/CinemaStudio";
 import CinemaControlLab from "@/pages/app/cinema/CinemaControlLab";
+import CreatorProfile from "@/pages/app/creator/CreatorProfile";
+import EditCreatorProfile from "@/pages/app/creator/EditCreatorProfile";
 import OutfitSwap from "@/pages/OutfitSwap";
 import JewelrySwap from "@/pages/JewelrySwap";
 import NanoRun from "@/pages/NanoRun";
@@ -206,6 +208,8 @@ const App = () => (
               }
             />
 
+            <Route path="/creator/settings/edit" element={<EditCreatorProfile />} />
+            <Route path="/creator/:handle" element={<CreatorProfile />} />
             <Route path="*" element={<NotFoundPage />} />
           </Routes>
         </BrowserRouter>

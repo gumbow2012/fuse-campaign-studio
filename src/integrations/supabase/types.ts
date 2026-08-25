@@ -224,6 +224,72 @@ export type Database = {
         }
         Relationships: []
       }
+      creator_profiles: {
+        Row: {
+          accent: string
+          avatar_url: string | null
+          banner_url: string | null
+          bio: string | null
+          created_at: string
+          description: string | null
+          display_name: string
+          handle: string
+          id: string
+          instagram: string | null
+          is_public: boolean
+          location: string | null
+          portfolio_url: string | null
+          specialties: string[]
+          tiktok: string | null
+          updated_at: string
+          user_id: string
+          website: string | null
+          x_handle: string | null
+        }
+        Insert: {
+          accent?: string
+          avatar_url?: string | null
+          banner_url?: string | null
+          bio?: string | null
+          created_at?: string
+          description?: string | null
+          display_name?: string
+          handle: string
+          id?: string
+          instagram?: string | null
+          is_public?: boolean
+          location?: string | null
+          portfolio_url?: string | null
+          specialties?: string[]
+          tiktok?: string | null
+          updated_at?: string
+          user_id: string
+          website?: string | null
+          x_handle?: string | null
+        }
+        Update: {
+          accent?: string
+          avatar_url?: string | null
+          banner_url?: string | null
+          bio?: string | null
+          created_at?: string
+          description?: string | null
+          display_name?: string
+          handle?: string
+          id?: string
+          instagram?: string | null
+          is_public?: boolean
+          location?: string | null
+          portfolio_url?: string | null
+          specialties?: string[]
+          tiktok?: string | null
+          updated_at?: string
+          user_id?: string
+          website?: string | null
+          x_handle?: string | null
+        }
+        Relationships: []
+      }
       creators: {
         Row: {
           connect_status: string
