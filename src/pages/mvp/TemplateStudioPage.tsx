@@ -1166,27 +1166,43 @@ export default function TemplateStudioPage() {
                       <ul className="mt-3 grid gap-2 sm:grid-cols-2">
                         {inputFields.map((field) => {
                           const provided = field.type === "image" ? !!files[field.key] : !!textInputs[field.key]?.trim();
+                          const requirement = field.requirement;
+                          const notes = requirement ? describeRequirement(requirement) : [];
                           return (
                             <li
                               key={`req-${field.key}`}
                               className={cn(
-                                "flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs",
+                                "rounded-2xl border px-3 py-2 text-xs",
                                 field.required
                                   ? "border-cyan-300/25 bg-cyan-300/[0.07] text-white"
                                   : "border-white/10 bg-white/[0.03] text-slate-400",
                               )}
                             >
-                              <span className={cn("text-sm", provided ? "text-emerald-200" : field.required ? "text-cyan-100" : "text-slate-500")}>
-                                {field.required ? "✓" : "○"}
-                              </span>
-                              <span className="truncate">{field.label}</span>
-                              <span className="ml-auto shrink-0 text-[9px] uppercase tracking-[0.18em] text-slate-500">
-                                {field.required ? "Required" : "Optional"}
-                              </span>
+                              <div className="flex items-center gap-2">
+                                <span className={cn("text-sm", provided ? "text-emerald-200" : field.required ? "text-cyan-100" : "text-slate-500")}>
+                                  {field.required ? "✓" : "○"}
+                                </span>
+                                <span className="truncate">{field.label}</span>
+                                {requirement?.assetType ? (
+                                  <span className="shrink-0 rounded-full border border-white/10 px-2 py-0.5 text-[9px] uppercase tracking-[0.18em] text-slate-400">
+                                    {formatAssetTypeLabel(requirement.assetType)}
+                                  </span>
+                                ) : null}
+                                <span className="ml-auto shrink-0 text-[9px] uppercase tracking-[0.18em] text-slate-500">
+                                  {field.required ? "Required" : "Optional"}
+                                </span>
+                              </div>
+                              {requirement?.shortInstruction ? (
+                                <p className="mt-1.5 text-[11px] leading-relaxed text-slate-400">{requirement.shortInstruction}</p>
+                              ) : null}
+                              {notes.length ? (
+                                <p className="mt-1 text-[10px] uppercase tracking-[0.14em] text-slate-500">{notes.join(" · ")}</p>
+                              ) : null}
                             </li>
                           );
                         })}
                       </ul>
+
                     </div>
                   ) : null}
 
