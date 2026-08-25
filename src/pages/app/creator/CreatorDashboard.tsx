@@ -185,8 +185,12 @@ export default function CreatorDashboard() {
     return grouped;
   }, [templates]);
 
+  const approvedCount = reviewStatusTracked ? buckets.approved.length : 0;
+  const level = useMemo(() => getCreatorLevel(approvedCount), [approvedCount]);
+
   const displayName =
     creatorProfile?.display_name || profile?.name || user?.email?.split("@")[0] || "creator";
+
 
   const renderBucket = (bucket: ReviewBucket, label: string) => (
     <div className={panelClass}>
