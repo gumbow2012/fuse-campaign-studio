@@ -101,8 +101,31 @@ Deno.serve(async (req) => {
     return ok({ skipped: "invalid_body" });
   }
 
+  // Admin-gated test ping: sends a dummy Purchase using META_CAPI_TEST_EVENT_CODE.
+  if (body.action === "test") {
+    try {
+      await requireAdminUser(req);
+    } catch (_error) {
+      return new Response(JSON.stringify({ ok: false, error: "Admin access required" }), {
+        status: 403,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    const result = await sendMetaCapiPurchase({
+      email: typeof body.email === "string" && body.email ? body.email : "capi-test@fuse-us.com",
+      value: typeof body.value === "number" && Number.isFinite(body.value) ? body.value : 1,
+      currency: typeof body.currency === "string" ? body.currency : "USD",
+      eventId: `fuse_capi_test_${Date.now()}`,
+      eventSourceUrl: "https://fuse-us.com",
+    });
+
+    return ok({ test: true, ...result });
+  }
+
   const eventName = typeof body.event_name === "string" ? body.event_name.trim() : "";
   if (!eventName) return ok({ skipped: "missing_event_name" });
+
 
   try {
     const customDataInput = (body.custom_data ?? {}) as Record<string, unknown>;
