@@ -35,11 +35,13 @@ import AccountPage from "@/pages/mvp/AccountPage";
 import AuthPage from "@/pages/mvp/AuthPage";
 import BillingPage from "@/pages/mvp/BillingPage";
 import ContactPage from "@/pages/mvp/ContactPage";
+import CreatorProgramPage from "@/pages/mvp/CreatorProgramPage";
 import ForgotPasswordPage from "@/pages/mvp/ForgotPasswordPage";
 import HomePage from "@/pages/mvp/HomePage";
 import NotFoundPage from "@/pages/mvp/NotFoundPage";
 import ResetPasswordPage from "@/pages/mvp/ResetPasswordPage";
 import TemplateStudioPage from "@/pages/mvp/TemplateStudioPage";
+import CreatorOnboarding from "@/pages/app/creator/CreatorOnboarding";
 
 const queryClient = new QueryClient();
 
@@ -56,6 +58,7 @@ const App = () => (
             <Route path="/about" element={<AboutPage />} />
             <Route path="/pricing" element={<BillingPage />} />
             <Route path="/contact" element={<ContactPage />} />
+            <Route path="/creators" element={<CreatorProgramPage />} />
             <Route path="/auth" element={<AuthPage />} />
             <Route path="/forgot-password" element={<ForgotPasswordPage />} />
             <Route path="/reset-password" element={<ResetPasswordPage />} />
@@ -217,6 +220,14 @@ const App = () => (
               element={
                 <CreatorRoute>
                   <CreatorDashboard />
+                </CreatorRoute>
+              }
+            />
+            <Route
+              path="/app/creator/welcome"
+              element={
+                <CreatorRoute>
+                  <CreatorOnboarding />
                 </CreatorRoute>
               }
             />
