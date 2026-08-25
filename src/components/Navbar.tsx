@@ -124,7 +124,6 @@ const MobileMenu = ({ onClose }: { onClose: () => void }) => {
 /* ─── Main Navbar ─── */
 const Navbar = () => {
   const [scrolled, setScrolled] = useState(false);
-  const [scrolled, setScrolled] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const { user, profile } = useAuth();
   const { pathname } = useLocation();
