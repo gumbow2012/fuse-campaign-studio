@@ -58,7 +58,7 @@ export default function CreatorProgramPage() {
               variant="outline"
               className="rounded-full border-white/15 bg-white/5 px-6 text-foreground hover:bg-white/10"
             >
-              <Link to="/contact">
+              <Link to="/creators/apply">
                 <Mail className="h-4 w-4" />
                 Request an invite
               </Link>
