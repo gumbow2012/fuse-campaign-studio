@@ -291,9 +291,12 @@ export default function PlanTierCards({
                 )}
               </div>
 
+              <VolumeModule entry={entry} />
+
               {isCurrentActive || isCurrentFree ? (
                 <p className="mt-3 inline-flex items-center rounded-full border border-cyan-300/20 bg-cyan-300/10 px-2.5 py-1 text-xs font-medium text-cyan-50">
                   Current
+
                 </p>
               ) : null}
 
