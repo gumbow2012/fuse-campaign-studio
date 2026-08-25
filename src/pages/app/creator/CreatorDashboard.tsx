@@ -80,10 +80,14 @@ function TemplateRow({ template }: { template: CreatorTemplate }) {
   return (
     <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-white/10 bg-black/30 px-4 py-3">
       <div className="min-w-0">
-        <p className="truncate font-display text-sm font-semibold text-foreground">{template.name}</p>
+        <p className="truncate font-display text-sm font-semibold text-foreground">
+          {template.name ?? "Untitled template"}
+        </p>
         <p className="mt-0.5 text-xs text-muted-foreground">
-          {[template.category, template.output_type].filter(Boolean).join(" · ") || "Template"} ·
-          updated {new Date(template.updated_at).toLocaleDateString()}
+          {template.preview_asset_type ? `${template.preview_asset_type} · ` : ""}
+          {template.updated_at
+            ? `updated ${new Date(template.updated_at).toLocaleDateString()}`
+            : "no update date"}
         </p>
       </div>
       <div className="flex items-center gap-2">
@@ -91,17 +95,13 @@ function TemplateRow({ template }: { template: CreatorTemplate }) {
           <Badge variant="outline" className="border-white/15 text-[11px] text-muted-foreground">
             {template.review_status}
           </Badge>
-        ) : null}
-        <Badge
-          variant="outline"
-          className={cn(
-            "border-white/15 text-[11px]",
-            template.is_active ? "text-cyan-200" : "text-muted-foreground",
-          )}
-        >
-          {template.is_active ? "Live" : "Inactive"}
-        </Badge>
+        ) : (
+          <Badge variant="outline" className="border-white/15 text-[11px] text-muted-foreground">
+            no review status
+          </Badge>
+        )}
       </div>
+
     </div>
   );
 }
