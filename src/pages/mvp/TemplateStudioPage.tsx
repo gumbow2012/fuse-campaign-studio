@@ -700,8 +700,10 @@ export default function TemplateStudioPage() {
         type: field.type || "image",
         required: field.required ?? true,
         hint: field.hint,
+        requirement: field.requirement,
       }));
     }
+
 
     if (selectedTemplate?.input_schema?.length) {
       return selectedTemplate.input_schema.map((field) => ({
