@@ -9,6 +9,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { AlertTriangle, CheckCircle2, Images, Loader2, Upload, XCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import UploadGuide from "@/components/templates/UploadGuide";
+import LibraryPickerDialog from "@/components/templates/LibraryPickerDialog";
+import { libraryKindForAssetType } from "@/services/libraryAssets";
 import { getUploadGuide } from "@/lib/uploadGuides";
 import { runUploadChecks, type UploadCheckResult, type UploadCheckState } from "@/lib/uploadChecks";
 import {
@@ -282,7 +284,7 @@ export default function TemplateInputCard({
         </div>
       ) : null}
 
-      {file ? (
+      {file || libraryAsset ? (
         <button
           type="button"
           onClick={() => onFileChange(null)}
