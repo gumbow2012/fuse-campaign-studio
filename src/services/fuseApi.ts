@@ -289,15 +289,22 @@ export async function fetchTemplateDetail(
         : [];
       if (projectedInputs.length) {
         return {
-          user_inputs: projectedInputs.map((field) => ({
-            key: String(field.key),
-            label: String(field.label),
-            type: normalizeInputType(field.type),
-            required: field.required ?? true,
-            hint: typeof field.hint === "string" ? field.hint : undefined,
-          })),
+          user_inputs: projectedInputs.map((field) => {
+            const requirement = field.requirement
+              ? readTemplateAssetRequirement(field.requirement, { required: field.required ?? true })
+              : undefined;
+            return {
+              key: String(field.key),
+              label: String(field.label),
+              type: normalizeInputType(field.type),
+              required: requirement?.required ?? field.required ?? true,
+              hint: typeof field.hint === "string" ? field.hint : undefined,
+              requirement,
+            };
+          }),
         };
       }
+
 
       const nodes = Array.isArray(detailData?.nodes)
         ? detailData.nodes
