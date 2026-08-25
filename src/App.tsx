@@ -22,7 +22,9 @@ import GenerationStudio from "@/pages/GenerationStudio";
 import CinemaStudio from "@/pages/app/cinema/CinemaStudio";
 import CinemaControlLab from "@/pages/app/cinema/CinemaControlLab";
 import CreatorProfile from "@/pages/app/creator/CreatorProfile";
+import CreatorDashboard from "@/pages/app/creator/CreatorDashboard";
 import EditCreatorProfile from "@/pages/app/creator/EditCreatorProfile";
+
 import OutfitSwap from "@/pages/OutfitSwap";
 import JewelrySwap from "@/pages/JewelrySwap";
 import NanoRun from "@/pages/NanoRun";
