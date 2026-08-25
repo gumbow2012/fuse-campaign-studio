@@ -208,8 +208,17 @@ const App = () => (
               }
             />
 
+            <Route
+              path="/app/creator"
+              element={
+                <CreatorRoute>
+                  <CreatorDashboard />
+                </CreatorRoute>
+              }
+            />
             <Route path="/creator/settings/edit" element={<EditCreatorProfile />} />
             <Route path="/creator/:handle" element={<CreatorProfile />} />
+
             <Route path="*" element={<NotFoundPage />} />
           </Routes>
         </BrowserRouter>
