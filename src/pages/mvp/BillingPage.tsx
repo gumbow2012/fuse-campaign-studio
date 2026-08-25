@@ -603,15 +603,15 @@ export default function BillingPage() {
         </div>
 
         {hasActivePaidMembership || isAdmin ? (
-        <section className="mt-8 rounded-[2rem] border border-white/10 bg-white/[0.03] p-6">
+        <section className="mt-8 rounded-[2rem] border border-white/10 bg-white/[0.03] p-6 md:p-8">
           <div className="flex flex-wrap items-end justify-between gap-4">
             <div>
-              <p className="text-[11px] uppercase tracking-[0.24em] text-muted-foreground">Credit packs</p>
+              <p className="text-[11px] uppercase tracking-[0.24em] text-muted-foreground">Top up credits</p>
               <h2 className="mt-2 font-display text-3xl font-semibold tracking-[-0.04em] text-white">
-                Top up without changing your plan.
+                One-time credit packs.
               </h2>
               <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-300">
-                Active members can buy one-time top-ups. Credits post automatically after payment clears. Promo codes work here too.
+                Active members can buy one-time top-ups without changing their plan. Credits post automatically after payment clears.
               </p>
             </div>
           </div>
@@ -619,18 +619,55 @@ export default function BillingPage() {
           <div className="mt-6 grid gap-4 md:grid-cols-3">
             {(Object.keys(CREDIT_PACKS) as Array<keyof typeof CREDIT_PACKS>).map((packKey) => {
               const pack = CREDIT_PACKS[packKey];
+              const isPopular = packKey === "growth";
               return (
-                <article key={packKey} className="rounded-[1.5rem] border border-white/10 bg-slate-950/75 p-5">
+                <article
+                  key={packKey}
+                  className={`relative overflow-hidden rounded-2xl border p-6 backdrop-blur-sm ${
+                    isPopular
+                      ? "border-cyan-300/30 bg-white/[0.04] shadow-[0_0_40px_-12px_rgba(34,211,238,0.18)]"
+                      : "border-white/10 bg-white/[0.03]"
+                  }`}
+                >
+                  {isPopular ? (
+                    <span className="absolute right-4 top-4 rounded-full bg-cyan-300 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider text-slate-950">
+                      Most popular
+                    </span>
+                  ) : null}
+
                   <p className="font-display text-xl font-semibold text-white">{pack.name}</p>
-                  <p className="mt-3 text-4xl font-semibold text-white">
-                    ${pack.price}
-                    <span className="ml-1 text-sm font-normal text-slate-400">one-time</span>
-                  </p>
-                  <p className="mt-2 text-sm text-slate-300">{pack.credits} credits</p>
+
+                  <div className="mt-5">
+                    <p className="font-display text-4xl font-black tracking-[-0.04em] text-white">
+                      ${pack.price}
+                      <span className="ml-1 text-sm font-medium text-slate-400">one-time</span>
+                    </p>
+                    <p className="mt-1 text-sm text-cyan-100/90">
+                      {pack.credits.toLocaleString()} credits
+                    </p>
+                  </div>
+
+                  <ul className="mt-5 space-y-3 text-sm text-slate-200">
+                    <li className="flex items-start gap-2">
+                      <Check className="mt-0.5 h-4 w-4 text-cyan-200" />
+                      <span>{pack.credits.toLocaleString()} credits</span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <Check className="mt-0.5 h-4 w-4 text-cyan-200" />
+                      <span>One-time top-up</span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <Check className="mt-0.5 h-4 w-4 text-cyan-200" />
+                      <span>Credits post after payment clears</span>
+                    </li>
+                  </ul>
+
                   <Button
                     onClick={() => void handleCreditCheckout(packKey)}
                     disabled={isAdmin || !!loading}
-                    className="mt-6 w-full rounded-full bg-cyan-300 text-slate-950 hover:bg-cyan-200"
+                    className={`mt-6 w-full rounded-full font-semibold ${
+                      isAdmin ? "bg-white/10 text-white hover:bg-white/10" : "bg-cyan-300 text-slate-950 hover:bg-cyan-200"
+                    }`}
                   >
                     {isAdmin ? "Admin access" : loading === packKey ? "Loading..." : "Buy credits"}
                     {!isAdmin ? <ArrowRight className="h-4 w-4" /> : null}
