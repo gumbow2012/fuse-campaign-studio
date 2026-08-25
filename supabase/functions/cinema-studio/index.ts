@@ -864,8 +864,19 @@ Deno.serve(async (req) => {
         return await handleGenerationStatus(body, user.id);
       case "generation-history":
         return await handleGenerationHistory(body, user.id);
+      // Preview batch generation — ADMIN ONLY, and only on an explicit click.
+      case "preview-inventory":
+        await requireAdminUser(req);
+        return await handlePreviewInventory();
+      case "preview-base":
+        await requireAdminUser(req);
+        return await handlePreviewBase(body);
+      case "preview-generate":
+        await requireAdminUser(req);
+        return await handlePreviewGenerate(body);
       default:
         return json({ error: `Unknown action: ${action || "(none)"}` }, 400);
+
     }
   } catch (error) {
     console.error("[cinema-studio] failed", action, errorMessage(error).slice(0, 800));
