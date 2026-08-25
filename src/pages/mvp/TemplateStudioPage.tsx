@@ -1608,6 +1608,26 @@ export default function TemplateStudioPage() {
           </aside>
         </div>
       </section>
+
+      <TemplateDetailDialog
+        template={detailTemplate}
+        open={!!detailTemplate}
+        onOpenChange={(next) => {
+          if (!next) setDetailTemplateId(null);
+        }}
+        facts={{
+          inputCount: detailTemplate ? getTemplateInputCount(detailTemplate) : 0,
+          outputCount: getTemplateOutputCount(detailTemplate),
+          aspectRatio: readTemplateAspectRatio(detailTemplate),
+          costLabel: isPrivilegedUser
+            ? "Bypassed for team access"
+            : `${detailTemplate?.estimated_credits_per_run ?? 0} credits`,
+        }}
+        onUseTemplate={() => {
+          if (detailTemplate) handleTemplateSelect(detailTemplate.id);
+        }}
+      />
     </SiteShell>
+
   );
 }
