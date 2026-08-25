@@ -30,14 +30,17 @@ import { getCreatorLevel } from "@/lib/creatorLevels";
 import { getOwnCreatorProfile, type CreatorProfile } from "@/services/creatorProfile";
 import {
   loadCreatorAnalytics,
+  loadCreatorChallenges,
   loadCreatorDashboard,
   loadCreatorRewards,
   toReviewBucket,
   type CreatorAnalytics,
+  type CreatorChallenge,
   type CreatorReward,
   type CreatorTemplate,
   type ReviewBucket,
 } from "@/services/creatorDashboard";
+
 
 
 
@@ -49,6 +52,7 @@ type SectionId =
   | "approved"
   | "rejected"
   | "analytics"
+  | "challenges"
   | "rewards"
   | "profile";
 
@@ -60,9 +64,11 @@ const SECTIONS: Array<{ id: SectionId; label: string }> = [
   { id: "approved", label: "Approved" },
   { id: "rejected", label: "Needs Changes" },
   { id: "analytics", label: "Analytics" },
+  { id: "challenges", label: "Challenges" },
   { id: "rewards", label: "Levels & Rewards" },
   { id: "profile", label: "Profile" },
 ];
+
 
 const panelClass =
   "rounded-2xl border border-white/10 bg-white/[0.03] p-5 backdrop-blur-sm";
@@ -145,6 +151,9 @@ export default function CreatorDashboard() {
   const [analytics, setAnalytics] = useState<CreatorAnalytics | null>(null);
   const [analyticsLoading, setAnalyticsLoading] = useState(false);
   const [analyticsError, setAnalyticsError] = useState<string | null>(null);
+  const [challenges, setChallenges] = useState<CreatorChallenge[] | null>(null);
+  const [challengesLoading, setChallengesLoading] = useState(false);
+  const [challengesError, setChallengesError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [section, setSection] = useState<SectionId>("overview");
   const [onboardingBannerDismissed, setOnboardingBannerDismissed] = useState(true);
@@ -165,6 +174,26 @@ export default function CreatorDashboard() {
       setAnalyticsLoading(false);
     }
   }, []);
+
+  const loadChallenges = useCallback(async () => {
+    setChallengesLoading(true);
+    setChallengesError(null);
+    try {
+      setChallenges(await loadCreatorChallenges());
+    } catch (error) {
+      setChallenges(null);
+      setChallengesError(error instanceof Error ? error.message : "Unknown error");
+    } finally {
+      setChallengesLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (section === "challenges" && !challenges && !challengesLoading && !challengesError) {
+      void loadChallenges();
+    }
+  }, [section, challenges, challengesLoading, challengesError, loadChallenges]);
+
 
   useEffect(() => {
     if (section === "analytics" && !analytics && !analyticsLoading && !analyticsError) {
@@ -516,7 +545,63 @@ export default function CreatorDashboard() {
             ) : null}
 
 
+            {section === "challenges" ? (
+              <div className={panelClass}>
+                <h2 className="font-display text-lg font-bold text-foreground">Challenges</h2>
+                {challengesLoading ? (
+                  <div className="mt-6 flex items-center gap-2 text-sm text-muted-foreground">
+                    <Loader2 className="h-4 w-4 animate-spin" /> Loading challenges…
+                  </div>
+                ) : challengesError ? (
+                  <div className="mt-6 space-y-3">
+                    <EmptyNote>Challenges couldn't be loaded: {challengesError}</EmptyNote>
+                    <Button variant="outline" size="sm" onClick={() => void loadChallenges()}>
+                      Retry
+                    </Button>
+                  </div>
+                ) : challenges && challenges.length ? (
+                  <div className="mt-5 space-y-3">
+                    {challenges.map((challenge) => (
+                      <div
+                        key={challenge.id}
+                        className="rounded-xl border border-white/10 bg-black/30 px-4 py-4"
+                      >
+                        <p className="font-display text-sm font-semibold text-foreground">
+                          {challenge.title ?? "Untitled challenge"}
+                        </p>
+                        {challenge.description ? (
+                          <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+                            {challenge.description}
+                          </p>
+                        ) : null}
+                        {challenge.brief ? (
+                          <p className="mt-2 whitespace-pre-line text-sm leading-relaxed text-muted-foreground">
+                            {challenge.brief}
+                          </p>
+                        ) : null}
+                        {challenge.reward_note ? (
+                          <p className="mt-3 text-xs uppercase tracking-[0.2em] text-cyan-200/80">
+                            {challenge.reward_note}
+                          </p>
+                        ) : null}
+                        {challenge.ends_at ? (
+                          <p className="mt-2 text-xs text-muted-foreground">
+                            ends {new Date(challenge.ends_at).toLocaleDateString()}
+                          </p>
+                        ) : null}
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="mt-6">
+                    <EmptyNote>No active challenges right now — check back soon.</EmptyNote>
+                  </div>
+                )}
+              </div>
+            ) : null}
+
             {section === "rewards" ? (
+
               <div className="space-y-4">
                 <div className={panelClass}>
                   <div className="flex items-center gap-2">

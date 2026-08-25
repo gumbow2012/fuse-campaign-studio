@@ -197,3 +197,54 @@ export async function loadCreatorAnalytics(): Promise<CreatorAnalytics> {
     templateCount: Number(payload.templateCount ?? 0),
   };
 }
+
+export type CreatorChallenge = {
+  id: string;
+  title: string | null;
+  description: string | null;
+  brief: string | null;
+  reward_note: string | null;
+  starts_at: string | null;
+  ends_at: string | null;
+  created_at: string | null;
+};
+
+/**
+ * READ-ONLY active challenges from `public.creator_challenges` (public SELECT
+ * is limited to status='active' by RLS). Preview types don't include the table,
+ * so the client is loosely typed here.
+ */
+export async function loadCreatorChallenges(): Promise<CreatorChallenge[]> {
+  const client = supabase as unknown as {
+    from: (table: string) => {
+      select: (columns: string) => {
+        eq: (column: string, value: string) => {
+          order: (
+            column: string,
+            options: { ascending: boolean },
+          ) => Promise<{ data: unknown; error: { message: string } | null }>;
+        };
+      };
+    };
+  };
+
+  const { data, error } = await client
+    .from("creator_challenges")
+    .select("id,title,description,brief,reward_note,starts_at,ends_at,created_at")
+    .eq("status", "active")
+    .order("created_at", { ascending: false });
+
+  if (error) throw new Error(error.message);
+  if (!Array.isArray(data)) return [];
+
+  return (data as Array<Record<string, unknown>>).map((row) => ({
+    id: String(row.id),
+    title: row.title ? String(row.title) : null,
+    description: row.description ? String(row.description) : null,
+    brief: row.brief ? String(row.brief) : null,
+    reward_note: row.reward_note ? String(row.reward_note) : null,
+    starts_at: row.starts_at ? String(row.starts_at) : null,
+    ends_at: row.ends_at ? String(row.ends_at) : null,
+    created_at: row.created_at ? String(row.created_at) : null,
+  }));
+}
