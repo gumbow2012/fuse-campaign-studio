@@ -127,6 +127,7 @@ const Navbar = () => {
   const [scrolled, setScrolled] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const { user, profile } = useAuth();
+  const { pathname } = useLocation();
 
   const handleScroll = useCallback(() => {
     setScrolled(window.scrollY > 50);
@@ -204,26 +205,6 @@ const Navbar = () => {
             </>
           ) : (
             <>
-              {/* Quick action icons */}
-              <div className="hidden md:flex items-center gap-1">
-                {[
-                  { icon: Search, label: "Search" },
-                  { icon: Bell, label: "Updates" },
-                  { icon: Star, label: "Saved" },
-                  { icon: FolderArchive, label: "Vault" },
-                  { icon: FileText, label: "Runs" },
-                ].map(({ icon: Icon, label }) => (
-                  <button
-                    key={label}
-                    title={label}
-                    className="p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-secondary/40 transition-colors"
-                  >
-                    <Icon size={16} />
-                  </button>
-                ))}
-              </div>
-
-              <div className="w-px h-6 bg-border/40 mx-1 hidden md:block" />
 
               <Link to="/auth">
                 <Button
@@ -240,7 +221,7 @@ const Navbar = () => {
                   size="sm"
                   className="rounded-full gradient-primary text-primary-foreground font-bold glow-blue-sm hover:opacity-90 transition-opacity border-0 px-5 text-xs tracking-wide"
                 >
-                  Launch Drop
+                  Get started
                 </Button>
               </Link>
             </>
