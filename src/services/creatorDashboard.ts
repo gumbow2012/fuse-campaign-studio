@@ -150,3 +150,50 @@ export async function loadCreatorRewards(userId: string): Promise<CreatorReward[
   }
 }
 
+
+export type CreatorAnalyticsTemplate = {
+  template_id: string;
+  name: string | null;
+  runs: number;
+  successfulRuns: number;
+  lastRunAt: string | null;
+};
+
+export type CreatorAnalytics = {
+  totalRuns: number;
+  runsLast30d: number;
+  runsLast7d: number;
+  successfulRuns: number;
+  failedRuns: number;
+  successRate: number;
+  perTemplate: CreatorAnalyticsTemplate[];
+  daily: Array<{ date: string; runs: number }>;
+  templateCount: number;
+};
+
+/**
+ * READ-ONLY run attribution for the creator's own templates, aggregated
+ * server-side by the `creator-analytics` edge function (execution_jobs is
+ * RLS-scoped per running user, so it cannot be aggregated in the browser).
+ */
+export async function loadCreatorAnalytics(): Promise<CreatorAnalytics> {
+  const { data, error } = await supabase.functions.invoke("creator-analytics", {
+    body: {},
+  });
+  if (error) throw new Error(error.message);
+
+  const payload = (data ?? {}) as Partial<CreatorAnalytics> & { error?: string };
+  if (payload.error) throw new Error(payload.error);
+
+  return {
+    totalRuns: Number(payload.totalRuns ?? 0),
+    runsLast30d: Number(payload.runsLast30d ?? 0),
+    runsLast7d: Number(payload.runsLast7d ?? 0),
+    successfulRuns: Number(payload.successfulRuns ?? 0),
+    failedRuns: Number(payload.failedRuns ?? 0),
+    successRate: Number(payload.successRate ?? 0),
+    perTemplate: Array.isArray(payload.perTemplate) ? payload.perTemplate : [],
+    daily: Array.isArray(payload.daily) ? payload.daily : [],
+    templateCount: Number(payload.templateCount ?? 0),
+  };
+}
