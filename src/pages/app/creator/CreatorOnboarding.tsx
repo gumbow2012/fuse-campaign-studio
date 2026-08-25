@@ -143,7 +143,7 @@ export default function CreatorOnboarding() {
                   </div>
                 </div>
               </div>
-            )))
+            ))
           )}
         </div>
 
