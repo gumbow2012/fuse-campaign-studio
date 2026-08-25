@@ -16,6 +16,7 @@ import {
   Layers3,
   Loader2,
   Send,
+  Trophy,
   UserRound,
   X,
 } from "lucide-react";
@@ -25,13 +26,17 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/contexts/AuthContext";
 import { cn } from "@/lib/utils";
+import { getCreatorLevel } from "@/lib/creatorLevels";
 import { getOwnCreatorProfile, type CreatorProfile } from "@/services/creatorProfile";
 import {
   loadCreatorDashboard,
+  loadCreatorRewards,
   toReviewBucket,
+  type CreatorReward,
   type CreatorTemplate,
   type ReviewBucket,
 } from "@/services/creatorDashboard";
+
 
 type SectionId =
   | "overview"
