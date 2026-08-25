@@ -650,7 +650,7 @@ export default function HomePage() {
             size="sm"
             className="self-start rounded-full text-xs text-cyan-100 hover:text-white md:self-auto"
           >
-            <Link to={user ? "/app/cinema" : "/auth?mode=signup"}>Explore advanced tools</Link>
+            <Link to={user ? "/app/lab/cinema" : "/auth?mode=signup"}>Explore advanced tools</Link>
           </Button>
         </div>
       </section>
