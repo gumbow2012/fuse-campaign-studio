@@ -539,13 +539,27 @@ export default function BillingPage() {
                   <p className="mt-3 text-sm leading-6 text-slate-300">{tierMeta.description}</p>
 
                   <div className="mt-5">
-                    <p className="font-display text-4xl font-black tracking-[-0.04em] text-white">
-                      ${tier.price}
-                      <span className="ml-1 text-sm font-medium text-slate-400">/ month</span>
-                    </p>
-                    <p className="mt-1 text-sm text-cyan-100/90">
-                      {tier.monthlyCredits.toLocaleString()} credits/mo
-                    </p>
+                    {billingCycle === "annual" ? (
+                      // GATED: annual requires real Stripe annual prices to be created before enabling checkout.
+                      <>
+                        <p className="font-display text-2xl font-black tracking-[-0.04em] text-white">
+                          Annual billing coming soon
+                        </p>
+                        <p className="mt-1 text-sm text-slate-400">
+                          {tier.monthlyCredits.toLocaleString()} credits/mo when launched
+                        </p>
+                      </>
+                    ) : (
+                      <>
+                        <p className="font-display text-4xl font-black tracking-[-0.04em] text-white">
+                          ${tier.price}
+                          <span className="ml-1 text-sm font-medium text-slate-400">/ month</span>
+                        </p>
+                        <p className="mt-1 text-sm text-cyan-100/90">
+                          {tier.monthlyCredits.toLocaleString()} credits/mo
+                        </p>
+                      </>
+                    )}
                   </div>
 
                   {isCurrentActive ? (
