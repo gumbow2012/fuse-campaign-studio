@@ -18,11 +18,24 @@ export default function AccountPage() {
   const [savingName, setSavingName] = useState(false);
   const [savingPassword, setSavingPassword] = useState(false);
   const [adminVisualSpent, setAdminVisualSpent] = useState(0);
+  const [history, setHistory] = useState<CreditLedgerRow[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyError, setHistoryError] = useState<string | null>(null);
   const trimmedName = name.trim();
   const creditsLabel = isAdmin ? "Access" : "Credits";
   const creditsValue = isAdmin ? "∞" : String(profile?.credits_balance ?? 0);
   const planValue = isAdmin ? "Admin" : profile?.plan ?? "free";
   const adminVisualRemaining = getAdminVisualCreditsRemaining();
+
+  const typeLabel: Record<string, string> = {
+    run_template: "Template run",
+    rerun_step: "Rerun step",
+    topup: "Top-up",
+    monthly_grant: "Monthly credits",
+    refund: "Refund",
+    adjustment: "Adjustment",
+    creator_reward: "Creator reward",
+  };
 
   useEffect(() => {
     setName(profile?.name ?? "");
@@ -31,6 +44,31 @@ export default function AccountPage() {
   useEffect(() => {
     setAdminVisualSpent(getAdminVisualCreditsSpent());
   }, []);
+
+  useEffect(() => {
+    if (!user) return;
+
+    let cancelled = false;
+    setHistoryLoading(true);
+    setHistoryError(null);
+
+    loadCreditHistory(user.id)
+      .then((rows) => {
+        if (!cancelled) setHistory(rows);
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          setHistoryError(error instanceof Error ? error.message : "Could not load credit history.");
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setHistoryLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [user]);
 
   const handleSaveName = async () => {
     if (!user) return;
