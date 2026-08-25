@@ -542,7 +542,63 @@ export default function CreatorDashboard() {
             ) : null}
 
 
+            {section === "challenges" ? (
+              <div className={panelClass}>
+                <h2 className="font-display text-lg font-bold text-foreground">Challenges</h2>
+                {challengesLoading ? (
+                  <div className="mt-6 flex items-center gap-2 text-sm text-muted-foreground">
+                    <Loader2 className="h-4 w-4 animate-spin" /> Loading challenges…
+                  </div>
+                ) : challengesError ? (
+                  <div className="mt-6 space-y-3">
+                    <EmptyNote>Challenges couldn't be loaded: {challengesError}</EmptyNote>
+                    <Button variant="outline" size="sm" onClick={() => void loadChallenges()}>
+                      Retry
+                    </Button>
+                  </div>
+                ) : challenges && challenges.length ? (
+                  <div className="mt-5 space-y-3">
+                    {challenges.map((challenge) => (
+                      <div
+                        key={challenge.id}
+                        className="rounded-xl border border-white/10 bg-black/30 px-4 py-4"
+                      >
+                        <p className="font-display text-sm font-semibold text-foreground">
+                          {challenge.title ?? "Untitled challenge"}
+                        </p>
+                        {challenge.description ? (
+                          <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+                            {challenge.description}
+                          </p>
+                        ) : null}
+                        {challenge.brief ? (
+                          <p className="mt-2 whitespace-pre-line text-sm leading-relaxed text-muted-foreground">
+                            {challenge.brief}
+                          </p>
+                        ) : null}
+                        {challenge.reward_note ? (
+                          <p className="mt-3 text-xs uppercase tracking-[0.2em] text-cyan-200/80">
+                            {challenge.reward_note}
+                          </p>
+                        ) : null}
+                        {challenge.ends_at ? (
+                          <p className="mt-2 text-xs text-muted-foreground">
+                            ends {new Date(challenge.ends_at).toLocaleDateString()}
+                          </p>
+                        ) : null}
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="mt-6">
+                    <EmptyNote>No active challenges right now — check back soon.</EmptyNote>
+                  </div>
+                )}
+              </div>
+            ) : null}
+
             {section === "rewards" ? (
+
               <div className="space-y-4">
                 <div className={panelClass}>
                   <div className="flex items-center gap-2">
