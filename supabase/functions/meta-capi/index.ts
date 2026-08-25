@@ -3,7 +3,7 @@
 // Fully non-blocking / resilient: always answers 200 with { ok }.
 // Also exposes an admin-gated { action: "test" } Purchase ping for Events Manager.
 
-import { requireAdminUser } from "../_shared/supabase-admin.ts";
+import { requireUser } from "../_shared/supabase-admin.ts";
 import { sendMetaCapiPurchase } from "../_shared/metaCapi.ts";
 
 const DATASET_ID = "1739016657301589";
