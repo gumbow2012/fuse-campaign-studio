@@ -173,11 +173,17 @@ export default function TemplateInputCard({
               )}
               <span className="truncate">{file.name}</span>
             </p>
+          ) : libraryAsset ? (
+            <p className="mt-2 flex min-w-0 items-center gap-2 text-sm font-medium text-white">
+              <Images className="h-4 w-4 shrink-0 text-cyan-100" />
+              <span className="truncate">{libraryAsset.name ?? "From library"}</span>
+            </p>
           ) : (
             <p className="mt-2 text-[11px] leading-relaxed text-slate-400">
               <span className="text-slate-300">Best results:</span> {bestResults}
             </p>
           )}
+
 
           {notes.length ? (
             <p className="mt-1 text-[10px] uppercase tracking-[0.14em] text-slate-500">{notes.join(" · ")}</p>
