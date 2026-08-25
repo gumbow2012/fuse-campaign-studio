@@ -1,14 +1,14 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import { ArrowRight, Check, Loader2, Settings, ShieldCheck, Zap } from "lucide-react";
+import { Loader2, Settings, ShieldCheck } from "lucide-react";
 import SiteShell from "@/components/mvp/SiteShell";
 import PageMeta from "@/components/mvp/PageMeta";
+import CompactAccountBar from "@/components/mvp/membership/CompactAccountBar";
 import PlanTierCards from "@/components/mvp/membership/PlanTierCards";
 import CreditPackCards from "@/components/mvp/membership/CreditPackCards";
 import PlanComparisonMatrix from "@/components/mvp/membership/PlanComparisonMatrix";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { toast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { useMembershipCheckout } from "@/hooks/useMembershipCheckout";
@@ -47,14 +47,6 @@ type CreditPackSmokeResult = {
   error?: string;
 };
 
-function formatBillingDate(value: string | null | undefined) {
-  if (!value) return "Not set";
-  return new Date(value).toLocaleDateString([], {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
-}
 
 export default function BillingPage() {
   const navigate = useNavigate();
@@ -219,9 +211,6 @@ export default function BillingPage() {
 
   const currentPlan = profile?.plan ?? "free";
   const currentTier = currentPlan === "free" ? null : STRIPE_TIERS[currentPlan as keyof typeof STRIPE_TIERS];
-  const creditValue = isAdmin ? "∞" : String(profile?.credits_balance ?? 0);
-  const currentPlanLabel = isAdmin ? "admin" : currentPlan;
-  const subscriptionLabel = isAdmin ? "bypass enabled" : profile?.subscription_status ?? "inactive";
   const hasActivePaidMembership =
     currentPlan !== "free" &&
     (profile?.subscription_status === "active" || profile?.subscription_status === "trialing");
@@ -240,12 +229,12 @@ export default function BillingPage() {
               {isTemplateCheckout ? "Checkout" : "Membership"}
             </p>
             <h1 className="mt-3 font-display text-2xl font-bold leading-tight text-white sm:text-4xl">
-              {isTemplateCheckout ? "Unlock this template." : "Campaign-Grade Creative. Fraction of the Cost."}
+              {isTemplateCheckout ? "Unlock this template." : "Never start a campaign from scratch again."}
             </h1>
             <p className="mt-4 max-w-3xl text-base leading-7 text-slate-300">
               {isTemplateCheckout
                 ? "Tell us where to send your studio access, choose the plan that covers this campaign, and continue to payment."
-                : "A single lookbook shoot runs $2,000–$5,000. A Fuse campaign takes 5 minutes."}
+                : "Pick a proven template. Add your brand. FUSE does the rest."}
             </p>
           </div>
           {user ? (
@@ -269,143 +258,55 @@ export default function BillingPage() {
           )}
         </div>
 
-        <div className="mt-8 grid gap-6 lg:grid-cols-[0.9fr_1.1fr]">
-          <section className="rounded-[2rem] border border-white/10 bg-white/[0.03] p-6">
-            <p className="text-[11px] uppercase tracking-[0.24em] text-muted-foreground">
-              {isTemplateCheckout ? "Order summary" : user ? "Current state" : "Get started"}
-            </p>
-            {isTemplateCheckout ? (
-              <div className="mt-5 rounded-[1.5rem] border border-cyan-300/20 bg-cyan-300/[0.08] p-4">
-                <p className="text-sm text-cyan-50">Template</p>
-                <p className="mt-2 font-display text-3xl font-semibold tracking-[-0.04em] text-white">
-                  {selectedTemplateName || "Selected template"}
-                </p>
-                <div className="mt-4 grid gap-3 text-sm text-slate-200 sm:grid-cols-2">
-                  <div className="rounded-2xl border border-white/10 bg-black/20 p-3">
-                    Output: {selectedTemplateOutputs ? `${selectedTemplateOutputs} vertical videos` : "Included with template"}
-                  </div>
-                  <div className="rounded-2xl border border-white/10 bg-black/20 p-3">
-                    Required: {selectedTemplateCredits ? `${selectedTemplateCredits} credits` : "Plan credits"}
-                  </div>
-                </div>
+        {/* Compact context strip — membership state, order summary, or guest intake. */}
+        <div className="mt-8 space-y-4">
+          {user ? (
+            <CompactAccountBar onManage={() => void navigate("/membership")} />
+          ) : null}
+
+          {isTemplateCheckout ? (
+            <div className="flex flex-col gap-3 rounded-2xl border border-cyan-300/20 bg-cyan-300/[0.08] px-4 py-3 sm:flex-row sm:items-center sm:gap-x-4">
+              <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-cyan-100">Order summary</span>
+              <span className="font-display text-sm font-bold text-white">
+                {selectedTemplateName || "Selected template"}
+              </span>
+              <span className="hidden text-slate-500 sm:inline">·</span>
+              <span className="text-sm text-slate-200">
+                {selectedTemplateOutputs ? `${selectedTemplateOutputs} vertical videos` : "Included with template"}
+              </span>
+              <span className="hidden text-slate-500 sm:inline">·</span>
+              <span className="text-sm text-slate-200">
+                {selectedTemplateCredits ? `${selectedTemplateCredits} credits required` : "Plan credits"}
+              </span>
+            </div>
+          ) : null}
+
+          {!user ? (
+            <div className="flex flex-col gap-3 rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3 sm:flex-row sm:items-center sm:gap-x-4">
+              <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-muted-foreground">Get started</span>
+              <div className="flex flex-1 flex-col gap-3 sm:flex-row sm:items-center">
+                <Input
+                  type="email"
+                  value={checkoutEmail}
+                  onChange={(event) => setCheckoutEmail(event.target.value)}
+                  required
+                  placeholder="you@brand.com"
+                  className="h-10 rounded-xl border-white/10 bg-white/[0.03] text-white sm:max-w-xs"
+                />
+                <Input
+                  value={brandName}
+                  onChange={(event) => setBrandName(event.target.value)}
+                  placeholder="Brand name (optional)"
+                  className="h-10 rounded-xl border-white/10 bg-white/[0.03] text-white sm:max-w-xs"
+                />
               </div>
-            ) : null}
+            </div>
+          ) : null}
+        </div>
 
-            {!user ? (
-              <div className="mt-5 space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="checkout-email" className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
-                    Where should we send your studio access?
-                  </Label>
-                  <Input
-                    id="checkout-email"
-                    type="email"
-                    value={checkoutEmail}
-                    onChange={(event) => setCheckoutEmail(event.target.value)}
-                    required
-                    placeholder="you@brand.com"
-                    className="h-12 rounded-2xl border-white/10 bg-white/[0.03] text-white"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="brand-name" className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
-                    Brand name optional
-                  </Label>
-                  <Input
-                    id="brand-name"
-                    value={brandName}
-                    onChange={(event) => setBrandName(event.target.value)}
-                    placeholder="Brand"
-                    className="h-12 rounded-2xl border-white/10 bg-white/[0.03] text-white"
-                  />
-                </div>
-              </div>
-            ) : null}
-
-            {user ? (
-              <div className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-1">
-                <div className="rounded-[1.5rem] border border-white/8 bg-black/20 p-4">
-                  <p className="text-[11px] uppercase tracking-[0.24em] text-muted-foreground">Plan</p>
-                  <p className="mt-2 text-3xl font-semibold capitalize text-white">{currentPlanLabel}</p>
-                </div>
-                <div className="rounded-[1.5rem] border border-white/8 bg-black/20 p-4">
-                  <p className="text-[11px] uppercase tracking-[0.24em] text-muted-foreground">Credits</p>
-                  <p className="mt-2 text-3xl font-semibold text-white">{creditValue}</p>
-                </div>
-                <div className="rounded-[1.5rem] border border-white/8 bg-black/20 p-4">
-                  <p className="text-[11px] uppercase tracking-[0.24em] text-muted-foreground">Subscription</p>
-                  <p className="mt-2 text-xl font-semibold capitalize text-white">{subscriptionLabel}</p>
-                </div>
-                <div className="rounded-[1.5rem] border border-white/8 bg-black/20 p-4">
-                  <p className="text-[11px] uppercase tracking-[0.24em] text-muted-foreground">Period ends</p>
-                  <p className="mt-2 text-xl font-semibold text-white">{formatBillingDate(profile?.subscription_period_end)}</p>
-                </div>
-              </div>
-            ) : (
-              <p className="mt-5 text-sm leading-6 text-slate-300">
-                Pick a plan on the right to start generating drop campaigns. Full commercial rights, no watermarks.
-              </p>
-            )}
-
-
-            {isAdmin ? (
-              <div className="mt-6 rounded-[1.5rem] border border-cyan-300/20 bg-cyan-300/10 p-4 text-sm leading-6 text-cyan-50">
-                Admin accounts bypass membership and credit locks inside the runner. Use a normal user account when you want to test the real customer subscription flow.
-              </div>
-            ) : null}
-
-            {isAdmin ? (
-              <div className="mt-6 rounded-[1.5rem] border border-white/10 bg-black/20 p-4">
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div>
-                    <p className="text-[11px] uppercase tracking-[0.24em] text-muted-foreground">Billing QA</p>
-                    <p className="mt-2 text-sm leading-6 text-slate-300">
-                      Runs a signed Stripe test webhook against a temporary user, confirms the credit ledger top-up, then cleans up.
-                    </p>
-                  </div>
-                  <Button
-                    type="button"
-                    onClick={() => void handleCreditPackSmoke()}
-                    disabled={loading === "credit-pack-smoke"}
-                    className="rounded-full bg-cyan-300 text-slate-950 hover:bg-cyan-200"
-                  >
-                    {loading === "credit-pack-smoke" ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />}
-                    Run credit smoke
-                  </Button>
-                </div>
-                {creditPackSmoke ? (
-                  <div className="mt-4 grid gap-2 text-xs text-slate-200 sm:grid-cols-4">
-                    <div className="rounded-xl border border-white/10 bg-slate-950/80 px-3 py-2">
-                      Webhook {creditPackSmoke.first_webhook?.status ?? "?"}
-                    </div>
-                    <div className="rounded-xl border border-white/10 bg-slate-950/80 px-3 py-2">
-                      Duplicate {creditPackSmoke.duplicate_webhook?.status ?? "?"}
-                    </div>
-                    <div className="rounded-xl border border-white/10 bg-slate-950/80 px-3 py-2">
-                      {creditPackSmoke.profile?.credits_balance ?? 0} credits
-                    </div>
-                    <div className="rounded-xl border border-white/10 bg-slate-950/80 px-3 py-2">
-                      {creditPackSmoke.purchase?.status ?? "unknown"}
-                    </div>
-                  </div>
-                ) : null}
-              </div>
-            ) : null}
-
-            {user && currentTier && !isAdmin ? (
-              <Button
-                onClick={() => void handlePortal()}
-                disabled={loading === "portal"}
-                variant="outline"
-                className="mt-6 rounded-full border-white/15 bg-white/5 text-foreground hover:bg-white/10"
-              >
-                <Settings className="h-4 w-4" />
-                {loading === "portal" ? "Opening portal..." : "Manage subscription"}
-              </Button>
-            ) : null}
-          </section>
-
+        <div className="mt-6">
           <PlanTierCards
+            hero
             billingCycle={billingCycle}
             onBillingCycleChange={setBillingCycle}
             loading={loading}
@@ -414,8 +315,59 @@ export default function BillingPage() {
             subscriptionStatus={profile?.subscription_status}
             onCheckout={(tierKey) => void handleCheckout(tierKey)}
           />
-
         </div>
+
+        {isAdmin ? (
+          <section className="mt-8 rounded-[2rem] border border-white/10 bg-white/[0.03] p-6">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <p className="text-[11px] uppercase tracking-[0.24em] text-muted-foreground">Billing QA</p>
+                <p className="mt-2 text-sm leading-6 text-slate-300">
+                  Runs a signed Stripe test webhook against a temporary user, confirms the credit ledger top-up, then cleans up.
+                </p>
+              </div>
+              <Button
+                type="button"
+                onClick={() => void handleCreditPackSmoke()}
+                disabled={loading === "credit-pack-smoke"}
+                className="rounded-full bg-cyan-300 text-slate-950 hover:bg-cyan-200"
+              >
+                {loading === "credit-pack-smoke" ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />}
+                Run credit smoke
+              </Button>
+            </div>
+            {creditPackSmoke ? (
+              <div className="mt-4 grid gap-2 text-xs text-slate-200 sm:grid-cols-4">
+                <div className="rounded-xl border border-white/10 bg-slate-950/80 px-3 py-2">
+                  Webhook {creditPackSmoke.first_webhook?.status ?? "?"}
+                </div>
+                <div className="rounded-xl border border-white/10 bg-slate-950/80 px-3 py-2">
+                  Duplicate {creditPackSmoke.duplicate_webhook?.status ?? "?"}
+                </div>
+                <div className="rounded-xl border border-white/10 bg-slate-950/80 px-3 py-2">
+                  {creditPackSmoke.profile?.credits_balance ?? 0} credits
+                </div>
+                <div className="rounded-xl border border-white/10 bg-slate-950/80 px-3 py-2">
+                  {creditPackSmoke.purchase?.status ?? "unknown"}
+                </div>
+              </div>
+            ) : null}
+          </section>
+        ) : null}
+
+        {user && currentTier && !isAdmin ? (
+          <div className="mt-6 flex justify-center">
+            <Button
+              onClick={() => void handlePortal()}
+              disabled={loading === "portal"}
+              variant="outline"
+              className="rounded-full border-white/15 bg-white/5 text-foreground hover:bg-white/10"
+            >
+              <Settings className="h-4 w-4" />
+              {loading === "portal" ? "Opening portal..." : "Manage subscription"}
+            </Button>
+          </div>
+        ) : null}
 
         <section className="mt-8 rounded-[2rem] border border-white/10 bg-white/[0.03] p-6 md:p-8">
           <div className="flex flex-wrap items-end justify-between gap-4">

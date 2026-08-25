@@ -75,11 +75,10 @@ export default function MembershipPage() {
       <section className="container py-12 md:py-16">
         <p className="text-[11px] font-semibold uppercase tracking-[0.3em] text-cyan-100">Membership</p>
         <h1 className="mt-3 font-display text-3xl font-bold tracking-[-0.04em] text-white sm:text-5xl">
-          One membership. A new campaign every day.
+          Never start a campaign from scratch again.
         </h1>
         <p className="mt-4 max-w-2xl text-sm leading-6 text-slate-300 sm:text-base">
-          Get access to the FUSE template marketplace. Pick a campaign, upload your brand, and generate. No prompting
-          required.
+          Pick a proven template. Add your brand. FUSE does the rest.
         </p>
 
         <div className="mt-6">
@@ -110,6 +109,7 @@ export default function MembershipPage() {
         {activeTab === "upgrade" ? (
           <div className="mt-6 space-y-6">
             <PlanTierCards
+              hero
               billingCycle={billingCycle}
               onBillingCycleChange={setBillingCycle}
               loading={loading}
