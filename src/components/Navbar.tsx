@@ -311,6 +311,22 @@ const Navbar = () => {
             ))}
           </div>
 
+          {/* Mobile menu */}
+          <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
+            <SheetTrigger asChild>
+              <button
+                className="lg:hidden p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-secondary/40 transition-colors"
+                aria-label="Open menu"
+              >
+                <Menu size={20} />
+              </button>
+            </SheetTrigger>
+            <SheetContent side="right" className="w-[300px] border-white/10 bg-[#0B1120]/95 p-0">
+              <SheetTitle className="sr-only">Navigation menu</SheetTitle>
+              <MobileMenu onClose={() => setMobileOpen(false)} />
+            </SheetContent>
+          </Sheet>
+
           {user ? (
             <>
               {/* Credits badge */}
@@ -338,54 +354,14 @@ const Navbar = () => {
 
               <div className="w-px h-6 bg-border/40 mx-1 hidden md:block" />
 
-              <Link to="/dashboard">
+              <Link to="/dashboard" className="hidden sm:block">
                 <Button variant="outline" size="sm" className="rounded-full border-border/60 text-foreground hover:text-foreground hover:border-foreground/30 bg-transparent px-4 text-xs">
                   <LayoutDashboard size={14} className="mr-1.5" />
                   Dashboard
                 </Button>
               </Link>
-              {hasAppAccess ? (
-                <div className="flex items-center gap-2">
-                  <Link to="/app/lab/templates">
-                    <Button variant="outline" size="sm" className="rounded-full border-border/60 text-foreground hover:text-foreground hover:border-foreground/30 bg-transparent px-4 text-xs">
-                      Template Runner
-                    </Button>
-                  </Link>
-                  <Link to="/admin/audits">
-                    <Button variant="outline" size="sm" className="rounded-full border-border/60 text-foreground hover:text-foreground hover:border-foreground/30 bg-transparent px-4 text-xs">
-                      Developer Runs
-                    </Button>
-                  </Link>
-                  <Link to="/app/lab/canvas">
-                    <Button variant="outline" size="sm" className="rounded-full border-border/60 text-foreground hover:text-foreground hover:border-foreground/30 bg-transparent px-4 text-xs">
-                      Template Canvas
-                    </Button>
-                  </Link>
-                  <Link to="/app/lab/outfit-swap">
-                    <Button variant="outline" size="sm" className="rounded-full border-border/60 text-foreground hover:text-foreground hover:border-foreground/30 bg-transparent px-4 text-xs">
-                      Outfit Swap
-                    </Button>
-                  </Link>
-                  <Link to="/app/lab/jewelry-swap">
-                    <Button variant="outline" size="sm" className="rounded-full border-border/60 text-foreground hover:text-foreground hover:border-foreground/30 bg-transparent px-4 text-xs">
-                      Jewelry Swap
-                    </Button>
-                  </Link>
-                  <Link to="/app/lab/studio">
-                    <Button variant="outline" size="sm" className="rounded-full border-border/60 text-foreground hover:text-foreground hover:border-foreground/30 bg-transparent px-4 text-xs">
-                      Generation Studio
-                    </Button>
-                  </Link>
-                </div>
-              ) : null}
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => { signOut(); navigate("/"); }}
-                className="rounded-full text-muted-foreground hover:text-foreground px-3 text-xs"
-              >
-                <LogOut size={14} />
-              </Button>
+
+              <AccountPopover />
             </>
           ) : (
             <>
