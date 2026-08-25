@@ -8,6 +8,8 @@ import { PageTracking } from "@/hooks/usePageTracking";
 import CustomerRoute from "@/components/CustomerRoute";
 import AdminRoute from "@/components/AdminRoute";
 import BuilderRoute from "@/components/BuilderRoute";
+import CreatorRoute from "@/components/CreatorRoute";
+
 import Admin from "@/pages/Admin";
 import AdminAudits from "@/pages/AdminAudits";
 import AdminAnalytics from "@/pages/AdminAnalytics";
@@ -20,7 +22,9 @@ import GenerationStudio from "@/pages/GenerationStudio";
 import CinemaStudio from "@/pages/app/cinema/CinemaStudio";
 import CinemaControlLab from "@/pages/app/cinema/CinemaControlLab";
 import CreatorProfile from "@/pages/app/creator/CreatorProfile";
+import CreatorDashboard from "@/pages/app/creator/CreatorDashboard";
 import EditCreatorProfile from "@/pages/app/creator/EditCreatorProfile";
+
 import OutfitSwap from "@/pages/OutfitSwap";
 import JewelrySwap from "@/pages/JewelrySwap";
 import NanoRun from "@/pages/NanoRun";
@@ -208,8 +212,17 @@ const App = () => (
               }
             />
 
+            <Route
+              path="/app/creator"
+              element={
+                <CreatorRoute>
+                  <CreatorDashboard />
+                </CreatorRoute>
+              }
+            />
             <Route path="/creator/settings/edit" element={<EditCreatorProfile />} />
             <Route path="/creator/:handle" element={<CreatorProfile />} />
+
             <Route path="*" element={<NotFoundPage />} />
           </Routes>
         </BrowserRouter>
