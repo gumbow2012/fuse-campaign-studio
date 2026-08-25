@@ -34,7 +34,7 @@ type BillingCorrectionNotice = {
 
 export default function SiteShell({ children }: { children: ReactNode }) {
   const navigate = useNavigate();
-  const { user, profile, isAdmin, hasAppAccess, signOut, refreshProfile } = useAuth();
+  const { user, profile, isAdmin, isCreator, hasAppAccess, signOut, refreshProfile } = useAuth();
   const [refreshingCredits, setRefreshingCredits] = useState(false);
   const [billingCorrectionNotice, setBillingCorrectionNotice] = useState<BillingCorrectionNotice | null>(null);
   const accountLabel = isAdmin ? "Admin account" : "Account";
