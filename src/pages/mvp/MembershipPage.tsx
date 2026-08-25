@@ -10,6 +10,8 @@ import CreditMixCalculator from "@/components/mvp/membership/CreditMixCalculator
 import PlanComparisonMatrix from "@/components/mvp/membership/PlanComparisonMatrix";
 import CreditsOverviewCard from "@/components/mvp/membership/CreditsOverviewCard";
 import CreditUsageHistory from "@/components/mvp/membership/CreditUsageHistory";
+import UsageProjectionPanel from "@/components/mvp/membership/UsageProjectionPanel";
+
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
 import { useMembershipCheckout } from "@/hooks/useMembershipCheckout";
