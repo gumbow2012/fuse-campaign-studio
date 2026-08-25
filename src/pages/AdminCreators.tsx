@@ -216,10 +216,15 @@ const AdminCreators = () => {
               before anything reaches customers.
             </p>
           </div>
-          <Button type="button" variant="outline" onClick={() => void loadAll()} disabled={loading}>
+          <div className="flex items-center gap-2">
+            <Button asChild type="button" variant="ghost">
+              <Link to="/admin/creator-program">Program: applications &amp; challenges</Link>
+            </Button>
+            <Button type="button" variant="outline" onClick={() => void loadAll()} disabled={loading}>
             {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
-            Refresh
-          </Button>
+              Refresh
+            </Button>
+          </div>
         </header>
 
         <section className="mt-8 rounded-3xl border border-white/10 bg-white/[0.04] p-5 shadow-sm backdrop-blur">
