@@ -65,7 +65,7 @@ function useAnimatedNumber(target: number, reduced: boolean) {
 
 type Props = {
   /** Reports the recommended live tier key (or null when volume exceeds every plan). */
-  onRecommend: (key: string | null) => void;
+  onRecommend?: (key: string | null) => void;
 };
 
 export default function PlanCalculator({ onRecommend }: Props) {
@@ -93,7 +93,7 @@ export default function PlanCalculator({ onRecommend }: Props) {
   const largest = LIVE_TIERS[LIVE_TIERS.length - 1];
 
   useEffect(() => {
-    onRecommend(recommended?.key ?? null);
+    onRecommend?.(recommended?.key ?? null);
   }, [recommended?.key, onRecommend]);
 
   // Clamp duration into the selected model's real accepted range.
