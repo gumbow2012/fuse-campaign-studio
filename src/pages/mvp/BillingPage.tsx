@@ -219,9 +219,6 @@ export default function BillingPage() {
 
   const currentPlan = profile?.plan ?? "free";
   const currentTier = currentPlan === "free" ? null : STRIPE_TIERS[currentPlan as keyof typeof STRIPE_TIERS];
-  const creditValue = isAdmin ? "∞" : String(profile?.credits_balance ?? 0);
-  const currentPlanLabel = isAdmin ? "admin" : currentPlan;
-  const subscriptionLabel = isAdmin ? "bypass enabled" : profile?.subscription_status ?? "inactive";
   const hasActivePaidMembership =
     currentPlan !== "free" &&
     (profile?.subscription_status === "active" || profile?.subscription_status === "trialing");
