@@ -41,6 +41,8 @@ interface TemplateInputCardProps {
   /** FT4: asset picked from the reusable library (already stored, has a URL). */
   libraryAsset?: { url: string; name?: string | null } | null;
   onLibrarySelect?: (asset: { url: string; name?: string | null }) => void;
+  /** Clears both a picked file and a library selection. */
+  onClear?: () => void;
 }
 
 export default function TemplateInputCard({
@@ -51,6 +53,7 @@ export default function TemplateInputCard({
   onFileChange,
   libraryAsset,
   onLibrarySelect,
+  onClear,
 }: TemplateInputCardProps) {
 
   const inputRef = useRef<HTMLInputElement>(null);
@@ -287,7 +290,7 @@ export default function TemplateInputCard({
       {file || libraryAsset ? (
         <button
           type="button"
-          onClick={() => onFileChange(null)}
+          onClick={() => (onClear ? onClear() : onFileChange(null))}
           className="mt-3 text-xs uppercase tracking-[0.18em] text-slate-500 hover:text-white"
         >
           Clear
