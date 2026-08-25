@@ -381,16 +381,89 @@ export default function CreatorDashboard() {
 
             {section === "rewards" ? (
               <div className="space-y-4">
-                <ComingLater
-                  title="Rewards"
-                  note="Creator reward payouts ship in a later release. Your ledger currently contains no creator reward entries."
-                />
-                <div className={cn(panelClass, "flex items-center gap-2 text-sm text-muted-foreground")}>
-                  <Gift className="h-4 w-4" />
-                  Credits earned to date: {creditsEarned.toLocaleString()}
+                <div className={panelClass}>
+                  <div className="flex items-center gap-2">
+                    <Trophy className="h-4 w-4 text-cyan-200" />
+                    <h2 className="font-display text-lg font-bold text-foreground">Creator Level</h2>
+                  </div>
+                  <div className="mt-4 flex flex-wrap items-center gap-3">
+                    <Badge className="rounded-full bg-cyan-300 text-slate-950 hover:bg-cyan-300">
+                      {level.current.name}
+                    </Badge>
+                    <span className="text-sm text-muted-foreground">
+                      {approvedCount} approved template{approvedCount === 1 ? "" : "s"}
+                    </span>
+                  </div>
+                  {level.next ? (
+                    <div className="mt-4">
+                      <div className="flex items-center justify-between text-xs text-muted-foreground">
+                        <span>Next: {level.next.name}</span>
+                        <span>
+                          {level.toNext} more approved template{level.toNext === 1 ? "" : "s"}
+                        </span>
+                      </div>
+                      <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-white/10">
+                        <div
+                          className="h-full rounded-full bg-cyan-300"
+                          style={{
+                            width: `${Math.min(
+                              100,
+                              Math.round((approvedCount / Math.max(1, level.next.minApproved)) * 100),
+                            )}%`,
+                          }}
+                        />
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="mt-4 text-sm text-muted-foreground">
+                      You've reached the highest level on the current ladder.
+                    </p>
+                  )}
+                  {!reviewStatusTracked ? (
+                    <p className="mt-4 text-xs text-muted-foreground">
+                      Review status isn't tracked for your templates yet, so your level falls back to
+                      Creator rather than showing an estimated tier.
+                    </p>
+                  ) : null}
+                </div>
+
+                <div className={panelClass}>
+                  <div className="flex items-center gap-2">
+                    <Gift className="h-4 w-4 text-cyan-200" />
+                    <h2 className="font-display text-lg font-bold text-foreground">Rewards</h2>
+                  </div>
+                  <div className="mt-4 space-y-2">
+                    {rewards.length ? (
+                      rewards.map((reward) => (
+                        <div
+                          key={reward.id}
+                          className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-white/10 bg-black/30 px-4 py-3"
+                        >
+                          <div className="min-w-0">
+                            <p className="truncate text-sm text-foreground">
+                              {reward.description ?? "Creator reward"}
+                            </p>
+                            <p className="mt-0.5 text-xs text-muted-foreground">
+                              {reward.created_at
+                                ? new Date(reward.created_at).toLocaleDateString()
+                                : "no date"}
+                            </p>
+                          </div>
+                          <span className="font-display text-sm font-bold text-cyan-200">
+                            {reward.amount.toLocaleString()} credits
+                          </span>
+                        </div>
+                      ))
+                    ) : (
+                      <EmptyNote>
+                        No creator rewards have been issued yet. Reward payouts are coming soon.
+                      </EmptyNote>
+                    )}
+                  </div>
                 </div>
               </div>
             ) : null}
+
 
             {section === "profile" ? (
               <div className={panelClass}>
