@@ -197,19 +197,38 @@ export default function TemplateInputCard({
               className="h-8 rounded-full bg-cyan-300 px-3 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-950 hover:bg-cyan-200"
             >
               <Upload className="h-3.5 w-3.5" />
-              {file ? "Replace" : "Upload New"}
+              {file || libraryAsset ? "Replace" : "Upload New"}
             </Button>
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              disabled
-              title="Coming soon"
-              className="h-8 rounded-full border-white/12 bg-white/[0.03] px-3 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400"
-            >
-              <Images className="h-3.5 w-3.5" />
-              Library · Soon
-            </Button>
+            {onLibrarySelect ? (
+              <LibraryPickerDialog
+                kinds={[libraryKindForAssetType(requirement?.assetType)]}
+                onSelect={(asset) => onLibrarySelect({ url: asset.url, name: asset.name })}
+                trigger={
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className="h-8 rounded-full border-white/12 bg-white/[0.03] px-3 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-200 hover:text-white"
+                  >
+                    <Images className="h-3.5 w-3.5" />
+                    Choose From Library
+                  </Button>
+                }
+              />
+            ) : (
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                disabled
+                title="Coming soon"
+                className="h-8 rounded-full border-white/12 bg-white/[0.03] px-3 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400"
+              >
+                <Images className="h-3.5 w-3.5" />
+                Library · Soon
+              </Button>
+            )}
+
             <UploadGuide slotLabel={label} requirement={requirement} />
           </div>
 
