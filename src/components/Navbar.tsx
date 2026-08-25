@@ -2,9 +2,10 @@ import { useState, useEffect, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Link, useLocation } from "react-router-dom";
 import { Sheet, SheetContent, SheetTrigger, SheetTitle } from "@/components/ui/sheet";
-import { User, LayoutGrid, ImageIcon, Clapperboard, Zap, Menu } from "lucide-react";
+import { User, LayoutGrid, ImageIcon, Clapperboard, Menu } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { AccountPopover, AccountMenuContent } from "@/components/AccountMenu";
+import { CreditChip } from "@/components/CreditChip";
 
 const FUSE_ICON_SRC = "/fuse-icon.png?v=20260519";
 const FUSE_WORDMARK_SRC = "/fuse-wordmark.png?v=20260519";
@@ -125,7 +126,7 @@ const MobileMenu = ({ onClose }: { onClose: () => void }) => {
 const Navbar = () => {
   const [scrolled, setScrolled] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
-  const { user, profile } = useAuth();
+  const { user } = useAuth();
   const { pathname } = useLocation();
 
   const handleScroll = useCallback(() => {
@@ -193,13 +194,7 @@ const Navbar = () => {
 
           {user ? (
             <>
-              {/* Credits badge */}
-              <div className="hidden md:flex items-center gap-1 px-3 py-1.5 rounded-full bg-secondary/50 border border-border/40">
-                <Zap size={12} className="text-primary" />
-                <span className="text-[10px] font-bold text-foreground">{profile?.credits_balance ?? 0}</span>
-              </div>
-
-
+              <CreditChip />
               <AccountPopover />
             </>
           ) : (
