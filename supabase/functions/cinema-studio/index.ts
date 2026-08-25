@@ -8,13 +8,25 @@
 // Actions implemented: "extract-palette", "auto-director", "detect-roles".
 
 import { GoogleGenAI, Type } from "https://esm.sh/@google/genai@1.29.0";
-import { corsHeaders, errorMessage, json, requireUser } from "../_shared/supabase-admin.ts";
+import {
+  corsHeaders,
+  errorMessage,
+  json,
+  requireAdminUser,
+  requireUser,
+} from "../_shared/supabase-admin.ts";
 import {
   handleGenerate,
   handleGenerateCallback,
   handleGenerationHistory,
   handleGenerationStatus,
 } from "./generate.ts";
+import {
+  handlePreviewBase,
+  handlePreviewGenerate,
+  handlePreviewInventory,
+} from "./previews.ts";
+
 
 const GEMINI_ANALYSIS_MODEL = Deno.env.get("GEMINI_ANALYSIS_MODEL")?.trim() || "gemini-3.6-flash";
 
@@ -852,8 +864,19 @@ Deno.serve(async (req) => {
         return await handleGenerationStatus(body, user.id);
       case "generation-history":
         return await handleGenerationHistory(body, user.id);
+      // Preview batch generation — ADMIN ONLY, and only on an explicit click.
+      case "preview-inventory":
+        await requireAdminUser(req);
+        return await handlePreviewInventory();
+      case "preview-base":
+        await requireAdminUser(req);
+        return await handlePreviewBase(body);
+      case "preview-generate":
+        await requireAdminUser(req);
+        return await handlePreviewGenerate(body);
       default:
         return json({ error: `Unknown action: ${action || "(none)"}` }, 400);
+
     }
   } catch (error) {
     console.error("[cinema-studio] failed", action, errorMessage(error).slice(0, 800));

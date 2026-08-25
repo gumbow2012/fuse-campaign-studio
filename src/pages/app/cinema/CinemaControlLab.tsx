@@ -38,6 +38,7 @@ import type {
 import type { CinemaVideoModelKey } from "@/lib/cinema/modelAdapters";
 import { syncCinemaGeneration } from "@/services/cinemaStudio";
 import AttachPreviewPanel from "@/components/cinema/AttachPreviewPanel";
+import PreviewBatchPanel from "@/components/cinema/PreviewBatchPanel";
 
 const SUPPORT_TYPES: PresetSupportType[] = [
   "NATIVE",
@@ -342,6 +343,8 @@ export default function CinemaControlLab() {
             </div>
           )}
         </section>
+
+        <PreviewBatchPanel />
 
         <AttachPreviewPanel />
 
