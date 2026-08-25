@@ -138,6 +138,7 @@ export default function CreatorDashboard() {
   const [publishedCount, setPublishedCount] = useState(0);
   const [reviewStatusTracked, setReviewStatusTracked] = useState(false);
   const [creditsEarned, setCreditsEarned] = useState(0);
+  const [rewards, setRewards] = useState<CreatorReward[]>([]);
   const [loading, setLoading] = useState(true);
   const [section, setSection] = useState<SectionId>("overview");
   const [onboardingBannerDismissed, setOnboardingBannerDismissed] = useState(true);
@@ -150,15 +151,17 @@ export default function CreatorDashboard() {
     if (!user) return;
     setLoading(true);
     try {
-      const [own, dashboard] = await Promise.all([
+      const [own, dashboard, rewardRows] = await Promise.all([
         getOwnCreatorProfile().catch(() => null),
         loadCreatorDashboard(user.id),
+        loadCreatorRewards(user.id).catch(() => []),
       ]);
       setCreatorProfile(own);
       setTemplates(dashboard.templates);
       setPublishedCount(dashboard.publishedCount);
       setReviewStatusTracked(dashboard.reviewStatusTracked);
       setCreditsEarned(dashboard.creditsEarned);
+      setRewards(rewardRows);
     } finally {
       setLoading(false);
     }
