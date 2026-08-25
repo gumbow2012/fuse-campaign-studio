@@ -3,6 +3,8 @@ import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useAuth } from "@/contexts/AuthContext";
+import { useAnimatedNumber } from "@/hooks/useAnimatedNumber";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 const ACTIVE_STATUSES = ["active", "trialing"];
 
@@ -35,6 +37,7 @@ export default function AccountHeader() {
   const balance = profile?.credits_balance ?? 0;
   const cycleCredits = profile?.subscription_cycle_credits ?? 0;
   const hasCycle = cycleCredits > 0;
+  const animatedBalance = useAnimatedNumber(balance);
   const ratio = hasCycle ? Math.min(1, Math.max(0, balance / cycleCredits)) : 0;
 
   const chips: string[] = [];
@@ -45,7 +48,7 @@ export default function AccountHeader() {
 
   return (
     <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-5 backdrop-blur-xl sm:p-6">
-      <div className="flex flex-wrap items-start justify-between gap-5">
+      <div className="flex flex-col items-start justify-between gap-5 sm:flex-row sm:flex-wrap">
         <div className="flex min-w-0 items-center gap-4">
           <Avatar className="h-14 w-14 rounded-2xl border border-white/10">
             <AvatarImage src={avatarUrl || ""} alt={displayName} />
@@ -76,7 +79,7 @@ export default function AccountHeader() {
           </div>
         </div>
 
-        <Button asChild className="rounded-full bg-cyan-300 text-slate-950 hover:bg-cyan-200">
+        <Button asChild className="w-full rounded-full bg-cyan-300 text-slate-950 hover:bg-cyan-200 sm:w-auto">
           <Link to="/membership?tab=upgrade">Manage plan</Link>
         </Button>
       </div>
@@ -84,7 +87,7 @@ export default function AccountHeader() {
       <div className="mt-6">
         <div className="flex flex-wrap items-end justify-between gap-2">
           <p className="font-display text-3xl font-black tracking-tight text-white">
-            {balance.toLocaleString()}
+            {animatedBalance.toLocaleString()}
             <span className="ml-2 font-sans text-xs font-medium uppercase tracking-[0.2em] text-slate-400">credits</span>
           </p>
           {profile?.subscription_period_end && isActivePlan ? (
@@ -107,9 +110,23 @@ export default function AccountHeader() {
         </div>
 
         <p className="mt-2 text-xs text-slate-400">
-          {hasCycle
-            ? `${balance.toLocaleString()} credits · monthly allotment ${cycleCredits.toLocaleString()}`
-            : `${balance.toLocaleString()} credits available`}
+          {hasCycle ? (
+            <>
+              {balance.toLocaleString()} credits ·{" "}
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span className="underline decoration-dotted underline-offset-2">monthly allotment</span>
+                </TooltipTrigger>
+                <TooltipContent>
+                  The credits your plan grants each billing cycle. Unused plan credits do not stack up as extra
+                  allotment.
+                </TooltipContent>
+              </Tooltip>{" "}
+              {cycleCredits.toLocaleString()}
+            </>
+          ) : (
+            `${balance.toLocaleString()} credits available`
+          )}
         </p>
       </div>
     </div>

@@ -11,6 +11,8 @@ import PlanComparisonMatrix from "@/components/mvp/membership/PlanComparisonMatr
 import CreditsOverviewCard from "@/components/mvp/membership/CreditsOverviewCard";
 import CreditUsageHistory from "@/components/mvp/membership/CreditUsageHistory";
 import UsageProjectionPanel from "@/components/mvp/membership/UsageProjectionPanel";
+import PromoCodeEntry from "@/components/mvp/membership/PromoCodeEntry";
+
 
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
@@ -77,15 +79,15 @@ export default function MembershipPage() {
           <AccountHeader />
         </div>
 
-        {/* Sticky mode selector */}
+        {/* Sticky mode selector — full-width segmented control on mobile */}
         <div className="sticky top-16 z-30 -mx-2 mt-6 px-2 py-3 backdrop-blur-xl">
-          <div className="inline-flex flex-wrap gap-1 rounded-2xl border border-white/10 bg-white/[0.03] p-1">
+          <div className="grid w-full grid-cols-3 gap-1 rounded-2xl border border-white/10 bg-white/[0.03] p-1 sm:inline-grid sm:w-auto sm:grid-flow-col sm:auto-cols-max">
             {TABS.map((tab) => (
               <button
                 key={tab.id}
                 type="button"
                 onClick={() => selectTab(tab.id)}
-                className={`rounded-xl px-4 py-2 font-display text-xs font-bold uppercase tracking-[0.14em] transition-colors ${
+                className={`rounded-xl px-2 py-2 text-center font-display text-[10px] font-bold uppercase leading-tight tracking-[0.1em] transition-colors duration-200 motion-reduce:transition-none sm:px-4 sm:text-xs sm:tracking-[0.14em] ${
                   activeTab === tab.id
                     ? "bg-cyan-300 text-slate-950"
                     : "text-slate-300 hover:bg-white/5 hover:text-white"
@@ -94,6 +96,7 @@ export default function MembershipPage() {
                 {tab.label}
               </button>
             ))}
+
           </div>
         </div>
 
@@ -111,6 +114,8 @@ export default function MembershipPage() {
                 void startPlanCheckout(tierKey);
               }}
             />
+
+            <PromoCodeEntry />
 
             <div>
               <Button
