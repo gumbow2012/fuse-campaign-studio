@@ -1065,7 +1065,7 @@ export default function TemplateStudioPage() {
                         {selected ? "Selected" : "Use this template"}
                       </span>
                     </div>
-                  </button>
+                  </div>
                 );
               })}
             </div>
