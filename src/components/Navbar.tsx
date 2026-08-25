@@ -194,13 +194,7 @@ const Navbar = () => {
 
           {user ? (
             <>
-              {/* Credits badge */}
-              <div className="hidden md:flex items-center gap-1 px-3 py-1.5 rounded-full bg-secondary/50 border border-border/40">
-                <Zap size={12} className="text-primary" />
-                <span className="text-[10px] font-bold text-foreground">{profile?.credits_balance ?? 0}</span>
-              </div>
-
-
+              <CreditChip />
               <AccountPopover />
             </>
           ) : (
