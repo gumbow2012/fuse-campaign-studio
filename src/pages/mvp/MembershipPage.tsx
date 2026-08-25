@@ -1,0 +1,192 @@
+import { useEffect, useMemo, useState } from "react";
+import { Link, useSearchParams } from "react-router-dom";
+import SiteShell from "@/components/mvp/SiteShell";
+import PageMeta from "@/components/mvp/PageMeta";
+import AccountHeader from "@/components/mvp/AccountHeader";
+import PlanTierCards, { type BillingCycle } from "@/components/mvp/membership/PlanTierCards";
+import CreditPackCards from "@/components/mvp/membership/CreditPackCards";
+import PlanComparisonMatrix from "@/components/mvp/membership/PlanComparisonMatrix";
+import CreditsOverviewCard from "@/components/mvp/membership/CreditsOverviewCard";
+import CreditUsageHistory from "@/components/mvp/membership/CreditUsageHistory";
+import { Button } from "@/components/ui/button";
+import { useAuth } from "@/contexts/AuthContext";
+import { useMembershipCheckout } from "@/hooks/useMembershipCheckout";
+
+// Structured as data so extra modes (e.g. "Model Access") can be appended later.
+const TABS = [
+  { id: "upgrade", label: "Upgrade Plan" },
+  { id: "credits", label: "Buy Credits" },
+  { id: "usage", label: "Usage & Benefits" },
+] as const;
+
+type TabId = (typeof TABS)[number]["id"];
+
+const isTabId = (value: string | null): value is TabId =>
+  Boolean(value) && TABS.some((tab) => tab.id === value);
+
+export default function MembershipPage() {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const { isAdmin, profile } = useAuth();
+  const { loading, startPlanCheckout, startCreditCheckout } = useMembershipCheckout();
+  const [billingCycle, setBillingCycle] = useState<BillingCycle>("monthly");
+  const [showComparison, setShowComparison] = useState(false);
+
+  const paramTab = searchParams.get("tab");
+  const [activeTab, setActiveTab] = useState<TabId>(isTabId(paramTab) ? paramTab : "upgrade");
+
+  useEffect(() => {
+    if (isTabId(paramTab) && paramTab !== activeTab) setActiveTab(paramTab);
+  }, [paramTab, activeTab]);
+
+  const selectTab = (tab: TabId) => {
+    setActiveTab(tab);
+    const next = new URLSearchParams(searchParams);
+    next.set("tab", tab);
+    setSearchParams(next, { replace: true });
+  };
+
+  const currentPlan = profile?.plan ?? "free";
+  const hasActivePaidMembership = useMemo(
+    () =>
+      currentPlan !== "free" &&
+      (profile?.subscription_status === "active" || profile?.subscription_status === "trialing"),
+    [currentPlan, profile?.subscription_status],
+  );
+
+  return (
+    <SiteShell>
+      <PageMeta
+        title="Membership & Credits — FUSE"
+        description="Manage your FUSE membership, top up credits, and review your credit usage."
+        path="/membership"
+      />
+      <section className="container py-12 md:py-16">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.3em] text-cyan-100">Membership</p>
+        <h1 className="mt-3 font-display text-3xl font-bold tracking-[-0.04em] text-white sm:text-4xl">
+          FUSE Membership &amp; Credits
+        </h1>
+
+        <div className="mt-6">
+          <AccountHeader />
+        </div>
+
+        {/* Sticky mode selector */}
+        <div className="sticky top-16 z-30 -mx-2 mt-6 px-2 py-3 backdrop-blur-xl">
+          <div className="inline-flex flex-wrap gap-1 rounded-2xl border border-white/10 bg-white/[0.03] p-1">
+            {TABS.map((tab) => (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => selectTab(tab.id)}
+                className={`rounded-xl px-4 py-2 font-display text-xs font-bold uppercase tracking-[0.14em] transition-colors ${
+                  activeTab === tab.id
+                    ? "bg-cyan-300 text-slate-950"
+                    : "text-slate-300 hover:bg-white/5 hover:text-white"
+                }`}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {activeTab === "upgrade" ? (
+          <div className="mt-6 space-y-6">
+            <PlanTierCards
+              billingCycle={billingCycle}
+              onBillingCycleChange={setBillingCycle}
+              loading={loading}
+              isAdmin={isAdmin}
+              currentPlan={currentPlan}
+              subscriptionStatus={profile?.subscription_status}
+              onCheckout={(tierKey) => {
+                if (isAdmin) return;
+                void startPlanCheckout(tierKey);
+              }}
+            />
+
+            <div>
+              <Button
+                variant="outline"
+                onClick={() => setShowComparison((open) => !open)}
+                className="rounded-full border-white/15 bg-white/5 text-foreground hover:bg-white/10"
+              >
+                {showComparison ? "Hide comparison" : "Compare all plans"}
+              </Button>
+            </div>
+
+            {showComparison ? (
+              <section className="rounded-[2rem] border border-white/10 bg-white/[0.03] p-6 md:p-8">
+                <p className="text-[11px] uppercase tracking-[0.24em] text-muted-foreground">Compare plans</p>
+                <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-300">
+                  All memberships unlock the same tools and templates. The only difference is how many credits you get
+                  each month.
+                </p>
+                <div className="mt-6">
+                  <PlanComparisonMatrix plan={profile?.plan} subscriptionStatus={profile?.subscription_status} />
+                </div>
+              </section>
+            ) : null}
+          </div>
+        ) : null}
+
+        {activeTab === "credits" ? (
+          <div className="mt-6">
+            {hasActivePaidMembership || isAdmin ? (
+              <section className="rounded-[2rem] border border-white/10 bg-white/[0.03] p-6 md:p-8">
+                <p className="text-[11px] uppercase tracking-[0.24em] text-muted-foreground">Top up credits</p>
+                <h2 className="mt-2 font-display text-3xl font-semibold tracking-[-0.04em] text-white">
+                  One-time credit packs.
+                </h2>
+                <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-300">
+                  Active members can buy one-time top-ups without changing their plan. Credits post automatically after
+                  payment clears.
+                </p>
+                <div className="mt-6">
+                  <CreditPackCards
+                    loading={loading}
+                    isAdmin={isAdmin}
+                    onCheckout={(packKey) => {
+                      if (isAdmin) return;
+                      void startCreditCheckout(packKey);
+                    }}
+                  />
+                </div>
+              </section>
+            ) : (
+              <section className="rounded-[2rem] border border-amber-300/20 bg-amber-300/[0.06] p-6">
+                <p className="text-[11px] uppercase tracking-[0.24em] text-amber-100">Membership first</p>
+                <h2 className="mt-2 font-display text-3xl font-semibold tracking-[-0.04em] text-white">
+                  Choose a membership to start running templates.
+                </h2>
+                <p className="mt-3 max-w-2xl text-sm leading-6 text-amber-50/90">
+                  One-time credit packs are only available after an active membership is set up, because credits alone
+                  do not unlock the runner.
+                </p>
+                <Button
+                  onClick={() => selectTab("upgrade")}
+                  className="mt-5 rounded-full bg-cyan-300 text-slate-950 hover:bg-cyan-200"
+                >
+                  See plans
+                </Button>
+              </section>
+            )}
+          </div>
+        ) : null}
+
+        {activeTab === "usage" ? (
+          <div className="mt-6 space-y-6">
+            <CreditsOverviewCard buyCreditsHref="/membership?tab=credits" />
+            <CreditUsageHistory />
+            <p className="text-xs text-slate-500">
+              Need profile or password settings?{" "}
+              <Link to="/account" className="text-cyan-300 hover:text-cyan-200">
+                Go to account settings →
+              </Link>
+            </p>
+          </div>
+        ) : null}
+      </section>
+    </SiteShell>
+  );
+}

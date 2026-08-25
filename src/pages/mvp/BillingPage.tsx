@@ -1,44 +1,27 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import { ArrowRight, Check, Crown, Loader2, Rocket, Settings, ShieldCheck, Zap } from "lucide-react";
+import { ArrowRight, Check, Loader2, Settings, ShieldCheck, Zap } from "lucide-react";
 import SiteShell from "@/components/mvp/SiteShell";
 import PageMeta from "@/components/mvp/PageMeta";
+import PlanTierCards from "@/components/mvp/membership/PlanTierCards";
+import CreditPackCards from "@/components/mvp/membership/CreditPackCards";
+import PlanComparisonMatrix from "@/components/mvp/membership/PlanComparisonMatrix";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
+import { useMembershipCheckout } from "@/hooks/useMembershipCheckout";
 import { supabase } from "@/integrations/supabase/client";
 import { CREDIT_PACKS, STRIPE_TIERS } from "@/lib/stripe-config";
 import {
   checkoutEventId,
   clearPendingCheckout,
   readPendingCheckout,
-  rememberPendingCheckout,
   trackEvent,
   trackEventOnce,
 } from "@/lib/metaPixel";
 
-const tierCopy = {
-  starter: {
-    icon: Zap,
-    description:
-      "For brands getting started. Full template library. Standard processing. Everything you need to launch your first drops with real campaign visuals.",
-    features: ["Full campaign template library", "Standard processing", "Commercial rights on every asset"],
-  },
-  pro: {
-    icon: Rocket,
-    description:
-      "For brands that drop regularly. Priority processing. Faster turnaround. The full creative toolkit for brands running a real drop calendar.",
-    features: ["Priority processing", "Faster turnaround on every vibe", "Full campaign template library"],
-  },
-  studio: {
-    icon: Crown,
-    description:
-      "For teams and agencies. Fastest processing. Largest volume. Built for brands running multiple lines or managing client drops.",
-    features: ["Fastest processing", "Largest monthly volume", "Built for multi-brand and client work"],
-  },
-} as const;
 
 
 type CreditPackSmokeResult = {
@@ -77,7 +60,7 @@ export default function BillingPage() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { isAdmin, user, profile, refreshSubscription } = useAuth();
-  const [loading, setLoading] = useState<string | null>(null);
+  const { loading, setLoading, startPlanCheckout, startCreditCheckout } = useMembershipCheckout();
   const [creditPackSmoke, setCreditPackSmoke] = useState<CreditPackSmokeResult | null>(null);
   const [checkoutEmail, setCheckoutEmail] = useState("");
   const [brandName, setBrandName] = useState("");
@@ -159,42 +142,20 @@ export default function BillingPage() {
     }
     if (isAdmin) return;
 
-    const tierForPixel = STRIPE_TIERS[tierKey];
-    trackEvent("AddToCart", { value: tierForPixel.price, currency: "USD", content_name: tierForPixel.name });
-    trackEvent("InitiateCheckout", { value: tierForPixel.price, currency: "USD", content_name: tierForPixel.name });
-    // Stripe Checkout is hosted off-domain, so this is the closest observable proxy.
-    trackEvent("AddPaymentInfo", { value: tierForPixel.price, currency: "USD", content_name: tierForPixel.name });
-    rememberPendingCheckout({ mode: "subscription", value: tierForPixel.price, contentName: tierForPixel.name });
-
-    setLoading(tierKey);
-    try {
-      const { data, error } = await supabase.functions.invoke("create-checkout", {
-        body: {
-          planKey: tierKey,
-          email: user ? undefined : normalizedEmail,
-          brandName: brandName.trim() || undefined,
-          templateId: selectedTemplateId || undefined,
-          templateName: selectedTemplateName || undefined,
-        },
-      });
-      if (error) throw error;
-      if (!data?.url) throw new Error("Stripe checkout URL not returned.");
-      if (!user && typeof window !== "undefined") {
-        window.localStorage.setItem("fuse.checkoutAccessEmail", normalizedEmail);
-        if (selectedTemplateId) {
-          window.localStorage.setItem("fuse.checkoutTemplate", selectedTemplateId);
+    await startPlanCheckout(tierKey, {
+      email: user ? undefined : normalizedEmail,
+      brandName: brandName.trim() || undefined,
+      templateId: selectedTemplateId || undefined,
+      templateName: selectedTemplateName || undefined,
+      onRedirect: () => {
+        if (!user && typeof window !== "undefined") {
+          window.localStorage.setItem("fuse.checkoutAccessEmail", normalizedEmail);
+          if (selectedTemplateId) {
+            window.localStorage.setItem("fuse.checkoutTemplate", selectedTemplateId);
+          }
         }
-      }
-      window.location.assign(data.url);
-    } catch (error) {
-      toast({
-        title: "Checkout failed",
-        description: error instanceof Error ? error.message : "Could not start Stripe checkout.",
-        variant: "destructive",
-      });
-    } finally {
-      setLoading(null);
-    }
+      },
+    });
   };
 
   const handlePortal = async () => {
@@ -222,30 +183,9 @@ export default function BillingPage() {
     }
     if (isAdmin) return;
 
-    const packForPixel = CREDIT_PACKS[packKey];
-    trackEvent("AddToCart", { value: packForPixel.price, currency: "USD", content_name: `${packForPixel.name} credit pack` });
-    trackEvent("InitiateCheckout", { value: packForPixel.price, currency: "USD", content_name: `${packForPixel.name} credit pack` });
-    trackEvent("AddPaymentInfo", { value: packForPixel.price, currency: "USD", content_name: `${packForPixel.name} credit pack` });
-    rememberPendingCheckout({ mode: "credits", value: packForPixel.price, contentName: `${packForPixel.name} credit pack` });
-
-    setLoading(packKey);
-    try {
-      const { data, error } = await supabase.functions.invoke("create-credit-checkout", {
-        body: { packKey },
-      });
-      if (error) throw error;
-      if (!data?.url) throw new Error("Stripe checkout URL not returned.");
-      window.location.assign(data.url);
-    } catch (error) {
-      toast({
-        title: "Credit checkout failed",
-        description: error instanceof Error ? error.message : "Could not start credit checkout.",
-        variant: "destructive",
-      });
-    } finally {
-      setLoading(null);
-    }
+    await startCreditCheckout(packKey);
   };
+
 
   const handleCreditPackSmoke = async () => {
     if (!isAdmin) return;
@@ -309,13 +249,19 @@ export default function BillingPage() {
             </p>
           </div>
           {user ? (
-            <Button
-              variant="outline"
-              onClick={() => void refreshSubscription()}
-              className="rounded-full border-white/15 bg-white/5 text-foreground hover:bg-white/10"
-            >
-              Refresh status
-            </Button>
+            <div className="flex flex-wrap items-center gap-3">
+              <Link to="/membership" className="text-sm text-cyan-300 hover:text-cyan-200">
+                Go to your Membership Center →
+              </Link>
+              <Button
+                variant="outline"
+                onClick={() => void refreshSubscription()}
+                className="rounded-full border-white/15 bg-white/5 text-foreground hover:bg-white/10"
+              >
+                Refresh status
+              </Button>
+            </div>
+
           ) : (
             <Button asChild className="rounded-full bg-cyan-300 text-slate-950 hover:bg-cyan-200">
               <Link to="/app/templates">Browse templates</Link>
@@ -459,147 +405,16 @@ export default function BillingPage() {
             ) : null}
           </section>
 
-          <div className="space-y-4">
-            <div className="flex flex-col items-start justify-between gap-3 sm:flex-row sm:items-center">
-              <div className="inline-flex rounded-full border border-white/10 bg-white/[0.03] p-1">
-                {(["monthly", "annual"] as const).map((cycle) => (
-                  <button
-                    key={cycle}
-                    type="button"
-                    onClick={() => setBillingCycle(cycle)}
-                    className={`rounded-full px-4 py-1.5 text-sm font-medium transition-colors ${
-                      billingCycle === cycle
-                        ? "bg-cyan-300 text-slate-950"
-                        : "text-slate-300 hover:text-white"
-                    }`}
-                  >
-                    {cycle === "monthly" ? "Monthly" : "Annual"}
-                  </button>
-                ))}
-              </div>
-              {billingCycle === "annual" ? (
-                <p className="text-sm text-slate-300">Annual plans are coming soon.</p>
-              ) : null}
-            </div>
+          <PlanTierCards
+            billingCycle={billingCycle}
+            onBillingCycleChange={setBillingCycle}
+            loading={loading}
+            isAdmin={isAdmin}
+            currentPlan={currentPlan}
+            subscriptionStatus={profile?.subscription_status}
+            onCheckout={(tierKey) => void handleCheckout(tierKey)}
+          />
 
-            <section className="grid gap-4 md:grid-cols-3">
-            {(Object.keys(STRIPE_TIERS) as Array<keyof typeof STRIPE_TIERS>).map((tierKey) => {
-              const tier = STRIPE_TIERS[tierKey];
-              const tierMeta = tierCopy[tierKey];
-              const Icon = tierMeta.icon;
-              const isRecommended = tierKey === "pro";
-              const isCurrentActive =
-                currentPlan === tierKey &&
-                (profile?.subscription_status === "active" || profile?.subscription_status === "trialing");
-              const tierCtaLabel =
-                tierKey === "starter" ? "Start Creating" : tierKey === "pro" ? "Launch Your Drops" : "Contact Us";
-              const ctaLabel = isAdmin
-                ? "Admin access"
-                : isCurrentActive
-                  ? "Current plan"
-                  : loading === tierKey
-                    ? "Loading..."
-                    : tierCtaLabel;
-
-              const per1k = (tier.price / tier.monthlyCredits * 1000).toFixed(2);
-              const tierFeatures = [
-                `${tier.monthlyCredits.toLocaleString()} credits/mo`,
-                `~$${per1k} per 1,000 credits`,
-                tierKey === "starter"
-                  ? "Great for your first campaigns"
-                  : tierKey === "pro"
-                    ? "Built for a regular drop calendar"
-                    : "For teams & multi-brand studios",
-              ];
-
-              return (
-                <article
-                  key={tierKey}
-                  className={`relative overflow-hidden rounded-2xl border p-6 backdrop-blur-sm ${
-                    isCurrentActive
-                      ? "border-cyan-300/40 bg-cyan-300/[0.08]"
-                      : isRecommended
-                        ? "border-cyan-300/30 bg-white/[0.04] shadow-[0_0_40px_-12px_rgba(34,211,238,0.18)]"
-                        : "border-white/10 bg-white/[0.03]"
-                  }`}
-                >
-                  {isRecommended ? (
-                    <span className="absolute right-4 top-4 rounded-full bg-cyan-300 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider text-slate-950">
-                      Recommended
-                    </span>
-                  ) : null}
-
-                  <div className="flex items-center gap-2">
-                    <div className="flex h-8 w-8 items-center justify-center rounded-full border border-white/10 bg-white/[0.04]">
-                      <Icon className="h-4 w-4 text-cyan-100" />
-                    </div>
-                    <p className="font-display text-xl font-semibold text-white">{tier.name}</p>
-                  </div>
-
-                  <p className="mt-3 text-sm leading-6 text-slate-300">{tierMeta.description}</p>
-
-                  <div className="mt-5">
-                    {billingCycle === "annual" ? (
-                      // GATED: annual requires real Stripe annual prices to be created before enabling checkout.
-                      <>
-                        <p className="font-display text-2xl font-black tracking-[-0.04em] text-white">
-                          Annual billing coming soon
-                        </p>
-                        <p className="mt-1 text-sm text-slate-400">
-                          {tier.monthlyCredits.toLocaleString()} credits/mo when launched
-                        </p>
-                      </>
-                    ) : (
-                      <>
-                        <p className="font-display text-4xl font-black tracking-[-0.04em] text-white">
-                          ${tier.price}
-                          <span className="ml-1 text-sm font-medium text-slate-400">/ month</span>
-                        </p>
-                        <p className="mt-1 text-sm text-cyan-100/90">
-                          {tier.monthlyCredits.toLocaleString()} credits/mo
-                        </p>
-                      </>
-                    )}
-                  </div>
-
-                  {isCurrentActive ? (
-                    <p className="mt-3 inline-flex items-center rounded-full border border-cyan-300/20 bg-cyan-300/10 px-2.5 py-1 text-xs font-medium text-cyan-50">
-                      Current plan
-                    </p>
-                  ) : null}
-
-                  <ul className="mt-5 space-y-3 text-sm text-slate-200">
-                    {tierFeatures.map((feature) => (
-                      <li key={feature} className="flex items-start gap-2">
-                        <Check className="mt-0.5 h-4 w-4 text-cyan-200" />
-                        <span>{feature}</span>
-                      </li>
-                    ))}
-                  </ul>
-
-                  <Button
-                    onClick={() => {
-                      // GATED: annual requires real Stripe annual prices to be created before enabling checkout.
-                      if (billingCycle === "annual") return;
-                      void handleCheckout(tierKey);
-                    }}
-                    disabled={billingCycle === "annual" || isAdmin || isCurrentActive || !!loading}
-                    className={`mt-6 w-full rounded-full font-semibold ${
-                      isCurrentActive || isAdmin || billingCycle === "annual"
-                        ? "bg-white/10 text-white hover:bg-white/10"
-                        : "bg-cyan-300 text-slate-950 hover:bg-cyan-200"
-                    }`}
-                  >
-                    {billingCycle === "annual"
-                      ? "Coming soon"
-                      : ctaLabel}
-                    {billingCycle !== "annual" && !isCurrentActive && !isAdmin ? <ArrowRight className="h-4 w-4" /> : null}
-                  </Button>
-                </article>
-              );
-            })}
-          </section>
-          </div>
         </div>
 
         <section className="mt-8 rounded-[2rem] border border-white/10 bg-white/[0.03] p-6 md:p-8">
@@ -615,128 +430,11 @@ export default function BillingPage() {
             </div>
           </div>
 
-          <div className="mt-6 overflow-x-auto rounded-2xl border border-white/10">
-            <table className="w-full min-w-[600px] text-sm">
-              <thead>
-                <tr className="border-b border-white/10 bg-white/[0.04]">
-                  <th className="px-4 py-4 text-left font-display text-sm font-medium uppercase tracking-wider text-muted-foreground">
-                    Feature
-                  </th>
-                  {(Object.keys(STRIPE_TIERS) as Array<keyof typeof STRIPE_TIERS>).map((tierKey) => {
-                    const tier = STRIPE_TIERS[tierKey];
-                    const isCurrentActive =
-                      profile?.plan === tierKey &&
-                      (profile?.subscription_status === "active" || profile?.subscription_status === "trialing");
-                    const isPro = tierKey === "pro";
-                    return (
-                      <th
-                        key={tierKey}
-                        className={`px-4 py-4 text-center font-display text-sm font-semibold uppercase tracking-wider ${
-                          isPro ? "text-cyan-300" : "text-white"
-                        } ${isCurrentActive ? "bg-cyan-300/10" : ""}`}
-                      >
-                        <div className="flex flex-col items-center gap-1">
-                          <span>{tier.name}</span>
-                          {isCurrentActive ? (
-                            <span className="rounded-full border border-cyan-300/20 bg-cyan-300/10 px-2 py-0.5 text-[10px] font-medium normal-case text-cyan-50">
-                              Current
-                            </span>
-                          ) : null}
-                          {isPro && !isCurrentActive ? (
-                            <span className="rounded-full border border-cyan-300/20 bg-cyan-300/10 px-2 py-0.5 text-[10px] font-medium normal-case text-cyan-50">
-                              Recommended
-                            </span>
-                          ) : null}
-                        </div>
-                      </th>
-                    );
-                  })}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-white/10">
-                <tr>
-                  <td className="px-4 py-4 text-slate-300">Monthly price</td>
-                  {(Object.keys(STRIPE_TIERS) as Array<keyof typeof STRIPE_TIERS>).map((tierKey) => {
-                    const tier = STRIPE_TIERS[tierKey];
-                    const isPro = tierKey === "pro";
-                    return (
-                      <td
-                        key={tierKey}
-                        className={`px-4 py-4 text-center ${isPro ? "bg-cyan-300/[0.04] font-semibold text-white" : "text-slate-200"}`}
-                      >
-                        ${tier.price}
-                      </td>
-                    );
-                  })}
-                </tr>
-                <tr>
-                  <td className="px-4 py-4 text-slate-300">Credits per month</td>
-                  {(Object.keys(STRIPE_TIERS) as Array<keyof typeof STRIPE_TIERS>).map((tierKey) => {
-                    const tier = STRIPE_TIERS[tierKey];
-                    const isPro = tierKey === "pro";
-                    return (
-                      <td
-                        key={tierKey}
-                        className={`px-4 py-4 text-center ${isPro ? "bg-cyan-300/[0.04] font-semibold text-white" : "text-slate-200"}`}
-                      >
-                        {tier.monthlyCredits.toLocaleString()}
-                      </td>
-                    );
-                  })}
-                </tr>
-                <tr>
-                  <td className="px-4 py-4 text-slate-300">Top-ups available</td>
-                  {(Object.keys(STRIPE_TIERS) as Array<keyof typeof STRIPE_TIERS>).map((tierKey) => {
-                    const isPro = tierKey === "pro";
-                    return (
-                      <td
-                        key={tierKey}
-                        className={`px-4 py-4 text-center ${isPro ? "bg-cyan-300/[0.04] text-white" : "text-slate-200"}`}
-                      >
-                        Boost, Growth, Bulk
-                      </td>
-                    );
-                  })}
-                </tr>
-                <tr>
-                  <td className="px-4 py-4 text-slate-300">Access to all FUSE tools & templates</td>
-                  {(Object.keys(STRIPE_TIERS) as Array<keyof typeof STRIPE_TIERS>).map((tierKey) => {
-                    const isPro = tierKey === "pro";
-                    return (
-                      <td
-                        key={tierKey}
-                        className={`px-4 py-4 text-center ${isPro ? "bg-cyan-300/[0.04] text-white" : "text-slate-200"}`}
-                      >
-                        Included
-                      </td>
-                    );
-                  })}
-                </tr>
-                <tr>
-                  <td className="px-4 py-4 text-slate-300">Best for</td>
-                  {(Object.keys(STRIPE_TIERS) as Array<keyof typeof STRIPE_TIERS>).map((tierKey) => {
-                    const tier = STRIPE_TIERS[tierKey];
-                    const isPro = tierKey === "pro";
-                    const description =
-                      tierKey === "starter"
-                        ? "First drops and small campaigns"
-                        : tierKey === "pro"
-                          ? "Regular drops and more campaigns per month"
-                          : "High-volume teams and multi-brand work";
-                    return (
-                      <td
-                        key={tierKey}
-                        className={`px-4 py-4 text-center ${isPro ? "bg-cyan-300/[0.04] text-white" : "text-slate-200"}`}
-                      >
-                        {description}
-                      </td>
-                    );
-                  })}
-                </tr>
-              </tbody>
-            </table>
+          <div className="mt-6">
+            <PlanComparisonMatrix plan={profile?.plan} subscriptionStatus={profile?.subscription_status} />
           </div>
         </section>
+
 
         {hasActivePaidMembership || isAdmin ? (
         <section className="mt-8 rounded-[2rem] border border-white/10 bg-white/[0.03] p-6 md:p-8">
@@ -752,66 +450,14 @@ export default function BillingPage() {
             </div>
           </div>
 
-          <div className="mt-6 grid gap-4 md:grid-cols-3">
-            {(Object.keys(CREDIT_PACKS) as Array<keyof typeof CREDIT_PACKS>).map((packKey) => {
-              const pack = CREDIT_PACKS[packKey];
-              const isPopular = packKey === "growth";
-              return (
-                <article
-                  key={packKey}
-                  className={`relative overflow-hidden rounded-2xl border p-6 backdrop-blur-sm ${
-                    isPopular
-                      ? "border-cyan-300/30 bg-white/[0.04] shadow-[0_0_40px_-12px_rgba(34,211,238,0.18)]"
-                      : "border-white/10 bg-white/[0.03]"
-                  }`}
-                >
-                  {isPopular ? (
-                    <span className="absolute right-4 top-4 rounded-full bg-cyan-300 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider text-slate-950">
-                      Most popular
-                    </span>
-                  ) : null}
-
-                  <p className="font-display text-xl font-semibold text-white">{pack.name}</p>
-
-                  <div className="mt-5">
-                    <p className="font-display text-4xl font-black tracking-[-0.04em] text-white">
-                      ${pack.price}
-                      <span className="ml-1 text-sm font-medium text-slate-400">one-time</span>
-                    </p>
-                    <p className="mt-1 text-sm text-cyan-100/90">
-                      {pack.credits.toLocaleString()} credits
-                    </p>
-                  </div>
-
-                  <ul className="mt-5 space-y-3 text-sm text-slate-200">
-                    <li className="flex items-start gap-2">
-                      <Check className="mt-0.5 h-4 w-4 text-cyan-200" />
-                      <span>{pack.credits.toLocaleString()} credits</span>
-                    </li>
-                    <li className="flex items-start gap-2">
-                      <Check className="mt-0.5 h-4 w-4 text-cyan-200" />
-                      <span>One-time top-up</span>
-                    </li>
-                    <li className="flex items-start gap-2">
-                      <Check className="mt-0.5 h-4 w-4 text-cyan-200" />
-                      <span>Credits post after payment clears</span>
-                    </li>
-                  </ul>
-
-                  <Button
-                    onClick={() => void handleCreditCheckout(packKey)}
-                    disabled={isAdmin || !!loading}
-                    className={`mt-6 w-full rounded-full font-semibold ${
-                      isAdmin ? "bg-white/10 text-white hover:bg-white/10" : "bg-cyan-300 text-slate-950 hover:bg-cyan-200"
-                    }`}
-                  >
-                    {isAdmin ? "Admin access" : loading === packKey ? "Loading..." : "Buy credits"}
-                    {!isAdmin ? <ArrowRight className="h-4 w-4" /> : null}
-                  </Button>
-                </article>
-              );
-            })}
+          <div className="mt-6">
+            <CreditPackCards
+              loading={loading}
+              isAdmin={isAdmin}
+              onCheckout={(packKey) => void handleCreditCheckout(packKey)}
+            />
           </div>
+
         </section>
         ) : (
           <section className="mt-8 rounded-[2rem] border border-amber-300/20 bg-amber-300/[0.06] p-6">

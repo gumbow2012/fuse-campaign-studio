@@ -35,6 +35,7 @@ import AboutPage from "@/pages/mvp/AboutPage";
 import AccountPage from "@/pages/mvp/AccountPage";
 import AuthPage from "@/pages/mvp/AuthPage";
 import BillingPage from "@/pages/mvp/BillingPage";
+import MembershipPage from "@/pages/mvp/MembershipPage";
 import ContactPage from "@/pages/mvp/ContactPage";
 import CreatorProgramPage from "@/pages/mvp/CreatorProgramPage";
 import CreatorApplyPage from "@/pages/mvp/CreatorApplyPage";
@@ -74,6 +75,15 @@ const App = () => (
                 </CustomerRoute>
               }
             />
+            <Route
+              path="/membership"
+              element={
+                <CustomerRoute>
+                  <MembershipPage />
+                </CustomerRoute>
+              }
+            />
+
             <Route path="/billing" element={<Navigate to="/pricing" replace />} />
             <Route path="/app/templates" element={<TemplateStudioPage />} />
 
