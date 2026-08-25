@@ -322,46 +322,6 @@ function getUploadIllustrationKind(label: string) {
   return "shirt";
 }
 
-function UploadPlaceholderIllustration({
-  file,
-  label,
-}: {
-  file: File | null;
-  label: string;
-}) {
-  const previewUrl = useMemo(() => (file ? URL.createObjectURL(file) : null), [file]);
-
-  useEffect(() => {
-    return () => {
-      if (previewUrl) URL.revokeObjectURL(previewUrl);
-    };
-  }, [previewUrl]);
-
-  if (previewUrl) {
-    return (
-      <img
-        src={previewUrl}
-        alt={`${label} preview`}
-        className="h-full w-full object-cover"
-      />
-    );
-  }
-
-  const kind = getUploadIllustrationKind(label);
-  const assetUrl = UPLOAD_PLACEHOLDER_ASSETS[kind] ?? UPLOAD_PLACEHOLDER_ASSETS.shirt;
-
-  return (
-    <div className="flex h-full w-full items-center justify-center bg-[radial-gradient(circle_at_top,rgba(34,211,238,0.1),transparent_42%),linear-gradient(180deg,rgba(15,23,42,0.6),rgba(2,6,23,0.92))]">
-      <img
-        src={assetUrl}
-        alt=""
-        aria-hidden="true"
-        className="h-full w-full object-contain opacity-80 saturate-125 transition duration-300 group-hover/upload:scale-[1.02] group-hover/upload:opacity-95"
-        loading="lazy"
-      />
-    </div>
-  );
-}
 
 function CreditRemainingMeter({
   label,
