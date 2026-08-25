@@ -5,6 +5,10 @@
  * legacy worker only when older internal screens still need it.
  */
 import { supabase } from "@/integrations/supabase/client";
+import {
+  readTemplateAssetRequirement,
+  type TemplateAssetRequirement,
+} from "@/lib/templateAssetRequirements";
 
 type ApiErrorPayload = {
   error?: string;
