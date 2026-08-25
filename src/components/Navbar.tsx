@@ -259,7 +259,7 @@ const Navbar = () => {
 
         {/* Right side */}
         <div className="flex items-center gap-2">
-
+          {user && isAdminOrDev && <AdminMenu />}
 
           {/* Mobile menu */}
           <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
