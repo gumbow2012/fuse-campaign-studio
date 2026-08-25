@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { Fragment, useState } from "react";
 import { ChevronDown } from "lucide-react";
 import { PLAN_LADDER, type PlanLadderEntry } from "@/lib/planLadder";
 
@@ -146,8 +146,8 @@ export default function PlanComparisonMatrix({ plan, subscriptionStatus }: Props
           {GROUPS.map((group) => {
             const isOpen = open[group.id] ?? false;
             return (
-              <>
-                <tr key={group.id} className="border-t border-white/10">
+              <Fragment key={group.id}>
+                <tr className="border-t border-white/10">
                   <td colSpan={PLAN_LADDER.length + 1} className="px-3 py-2">
                     <button
                       type="button"
@@ -178,7 +178,7 @@ export default function PlanComparisonMatrix({ plan, subscriptionStatus }: Props
                       </tr>
                     ))
                   : null}
-              </>
+              </Fragment>
             );
           })}
         </tbody>
