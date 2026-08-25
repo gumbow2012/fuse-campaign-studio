@@ -81,6 +81,7 @@ export default function BillingPage() {
   const [creditPackSmoke, setCreditPackSmoke] = useState<CreditPackSmokeResult | null>(null);
   const [checkoutEmail, setCheckoutEmail] = useState("");
   const [brandName, setBrandName] = useState("");
+  const [billingCycle, setBillingCycle] = useState<"monthly" | "annual">("monthly");
 
   const selectedTemplateId = searchParams.get("template") ?? "";
   const selectedTemplateName = searchParams.get("templateName") ?? selectedTemplateId;
