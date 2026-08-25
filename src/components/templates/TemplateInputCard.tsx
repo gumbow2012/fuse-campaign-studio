@@ -9,6 +9,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { AlertTriangle, CheckCircle2, Images, Loader2, Upload, XCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import UploadGuide from "@/components/templates/UploadGuide";
+import LibraryPickerDialog from "@/components/templates/LibraryPickerDialog";
+import { libraryKindForAssetType } from "@/services/libraryAssets";
 import { getUploadGuide } from "@/lib/uploadGuides";
 import { runUploadChecks, type UploadCheckResult, type UploadCheckState } from "@/lib/uploadChecks";
 import {
@@ -36,6 +38,11 @@ interface TemplateInputCardProps {
   /** Legacy label-derived placeholder — last-resort fallback only. */
   fallbackPlaceholderSrc: string;
   onFileChange: (file: File | null) => void;
+  /** FT4: asset picked from the reusable library (already stored, has a URL). */
+  libraryAsset?: { url: string; name?: string | null } | null;
+  onLibrarySelect?: (asset: { url: string; name?: string | null }) => void;
+  /** Clears both a picked file and a library selection. */
+  onClear?: () => void;
 }
 
 export default function TemplateInputCard({
@@ -44,7 +51,11 @@ export default function TemplateInputCard({
   requirement,
   fallbackPlaceholderSrc,
   onFileChange,
+  libraryAsset,
+  onLibrarySelect,
+  onClear,
 }: TemplateInputCardProps) {
+
   const inputRef = useRef<HTMLInputElement>(null);
   const [state, setState] = useState<UploadCheckState | "idle">("idle");
   const [checks, setChecks] = useState<UploadCheckResult | null>(null);
@@ -116,8 +127,12 @@ export default function TemplateInputCard({
         )}
       >
         <div className="relative min-h-0 flex-1 overflow-hidden">
-          {previewUrl ? (
-            <img src={previewUrl} alt={`${label} preview`} className="h-full w-full object-cover" />
+          {previewUrl || libraryAsset?.url ? (
+            <img
+              src={previewUrl ?? libraryAsset?.url ?? ""}
+              alt={`${label} preview`}
+              className="h-full w-full object-cover"
+            />
           ) : (
             <div className="flex h-full w-full items-center justify-center bg-[radial-gradient(circle_at_top,rgba(34,211,238,0.1),transparent_42%),linear-gradient(180deg,rgba(15,23,42,0.6),rgba(2,6,23,0.92))]">
               <img
@@ -129,6 +144,7 @@ export default function TemplateInputCard({
               />
             </div>
           )}
+
           {(state === "uploading" || state === "checking") && previewUrl ? (
             <div className="absolute inset-0 flex items-center justify-center gap-2 bg-slate-950/70 text-xs uppercase tracking-[0.2em] text-cyan-100">
               <Loader2 className="h-4 w-4 animate-spin" />
@@ -162,11 +178,17 @@ export default function TemplateInputCard({
               )}
               <span className="truncate">{file.name}</span>
             </p>
+          ) : libraryAsset ? (
+            <p className="mt-2 flex min-w-0 items-center gap-2 text-sm font-medium text-white">
+              <Images className="h-4 w-4 shrink-0 text-cyan-100" />
+              <span className="truncate">{libraryAsset.name ?? "From library"}</span>
+            </p>
           ) : (
             <p className="mt-2 text-[11px] leading-relaxed text-slate-400">
               <span className="text-slate-300">Best results:</span> {bestResults}
             </p>
           )}
+
 
           {notes.length ? (
             <p className="mt-1 text-[10px] uppercase tracking-[0.14em] text-slate-500">{notes.join(" · ")}</p>
@@ -180,19 +202,38 @@ export default function TemplateInputCard({
               className="h-8 rounded-full bg-cyan-300 px-3 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-950 hover:bg-cyan-200"
             >
               <Upload className="h-3.5 w-3.5" />
-              {file ? "Replace" : "Upload New"}
+              {file || libraryAsset ? "Replace" : "Upload New"}
             </Button>
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              disabled
-              title="Coming soon"
-              className="h-8 rounded-full border-white/12 bg-white/[0.03] px-3 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400"
-            >
-              <Images className="h-3.5 w-3.5" />
-              Library · Soon
-            </Button>
+            {onLibrarySelect ? (
+              <LibraryPickerDialog
+                kinds={[libraryKindForAssetType(requirement?.assetType)]}
+                onSelect={(asset) => onLibrarySelect({ url: asset.url, name: asset.name })}
+                trigger={
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className="h-8 rounded-full border-white/12 bg-white/[0.03] px-3 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-200 hover:text-white"
+                  >
+                    <Images className="h-3.5 w-3.5" />
+                    Choose From Library
+                  </Button>
+                }
+              />
+            ) : (
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                disabled
+                title="Coming soon"
+                className="h-8 rounded-full border-white/12 bg-white/[0.03] px-3 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400"
+              >
+                <Images className="h-3.5 w-3.5" />
+                Library · Soon
+              </Button>
+            )}
+
             <UploadGuide slotLabel={label} requirement={requirement} />
           </div>
 
@@ -246,10 +287,10 @@ export default function TemplateInputCard({
         </div>
       ) : null}
 
-      {file ? (
+      {file || libraryAsset ? (
         <button
           type="button"
-          onClick={() => onFileChange(null)}
+          onClick={() => (onClear ? onClear() : onFileChange(null))}
           className="mt-3 text-xs uppercase tracking-[0.18em] text-slate-500 hover:text-white"
         >
           Clear
