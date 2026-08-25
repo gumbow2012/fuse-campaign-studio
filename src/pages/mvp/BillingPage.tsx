@@ -578,16 +578,22 @@ export default function BillingPage() {
                   </ul>
 
                   <Button
-                    onClick={() => void handleCheckout(tierKey)}
-                    disabled={isAdmin || isCurrentActive || !!loading}
+                    onClick={() => {
+                      // GATED: annual requires real Stripe annual prices to be created before enabling checkout.
+                      if (billingCycle === "annual") return;
+                      void handleCheckout(tierKey);
+                    }}
+                    disabled={billingCycle === "annual" || isAdmin || isCurrentActive || !!loading}
                     className={`mt-6 w-full rounded-full font-semibold ${
-                      isCurrentActive || isAdmin
+                      isCurrentActive || isAdmin || billingCycle === "annual"
                         ? "bg-white/10 text-white hover:bg-white/10"
                         : "bg-cyan-300 text-slate-950 hover:bg-cyan-200"
                     }`}
                   >
-                    {ctaLabel}
-                    {!isCurrentActive && !isAdmin ? <ArrowRight className="h-4 w-4" /> : null}
+                    {billingCycle === "annual"
+                      ? "Coming soon"
+                      : ctaLabel}
+                    {billingCycle !== "annual" && !isCurrentActive && !isAdmin ? <ArrowRight className="h-4 w-4" /> : null}
                   </Button>
                 </article>
               );
