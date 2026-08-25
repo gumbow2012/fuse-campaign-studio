@@ -157,3 +157,6 @@ verify_jwt = false
 
 [functions.creator-portfolio]
 verify_jwt = true
+
+[functions.creator-analytics]
+verify_jwt = true
