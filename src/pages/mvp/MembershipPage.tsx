@@ -202,7 +202,9 @@ export default function MembershipPage() {
         {activeTab === "usage" ? (
           <div className="mt-6 space-y-6">
             <CreditsOverviewCard buyCreditsHref="/membership?tab=credits" />
+            <UsageProjectionPanel onNavigateTab={selectTab} />
             <CreditUsageHistory />
+
             <p className="text-xs text-slate-500">
               Need profile or password settings?{" "}
               <Link to="/account" className="text-cyan-300 hover:text-cyan-200">
