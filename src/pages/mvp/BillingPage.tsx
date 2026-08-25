@@ -159,42 +159,20 @@ export default function BillingPage() {
     }
     if (isAdmin) return;
 
-    const tierForPixel = STRIPE_TIERS[tierKey];
-    trackEvent("AddToCart", { value: tierForPixel.price, currency: "USD", content_name: tierForPixel.name });
-    trackEvent("InitiateCheckout", { value: tierForPixel.price, currency: "USD", content_name: tierForPixel.name });
-    // Stripe Checkout is hosted off-domain, so this is the closest observable proxy.
-    trackEvent("AddPaymentInfo", { value: tierForPixel.price, currency: "USD", content_name: tierForPixel.name });
-    rememberPendingCheckout({ mode: "subscription", value: tierForPixel.price, contentName: tierForPixel.name });
-
-    setLoading(tierKey);
-    try {
-      const { data, error } = await supabase.functions.invoke("create-checkout", {
-        body: {
-          planKey: tierKey,
-          email: user ? undefined : normalizedEmail,
-          brandName: brandName.trim() || undefined,
-          templateId: selectedTemplateId || undefined,
-          templateName: selectedTemplateName || undefined,
-        },
-      });
-      if (error) throw error;
-      if (!data?.url) throw new Error("Stripe checkout URL not returned.");
-      if (!user && typeof window !== "undefined") {
-        window.localStorage.setItem("fuse.checkoutAccessEmail", normalizedEmail);
-        if (selectedTemplateId) {
-          window.localStorage.setItem("fuse.checkoutTemplate", selectedTemplateId);
+    await startPlanCheckout(tierKey, {
+      email: user ? undefined : normalizedEmail,
+      brandName: brandName.trim() || undefined,
+      templateId: selectedTemplateId || undefined,
+      templateName: selectedTemplateName || undefined,
+      onRedirect: () => {
+        if (!user && typeof window !== "undefined") {
+          window.localStorage.setItem("fuse.checkoutAccessEmail", normalizedEmail);
+          if (selectedTemplateId) {
+            window.localStorage.setItem("fuse.checkoutTemplate", selectedTemplateId);
+          }
         }
-      }
-      window.location.assign(data.url);
-    } catch (error) {
-      toast({
-        title: "Checkout failed",
-        description: error instanceof Error ? error.message : "Could not start Stripe checkout.",
-        variant: "destructive",
-      });
-    } finally {
-      setLoading(null);
-    }
+      },
+    });
   };
 
   const handlePortal = async () => {
@@ -222,30 +200,9 @@ export default function BillingPage() {
     }
     if (isAdmin) return;
 
-    const packForPixel = CREDIT_PACKS[packKey];
-    trackEvent("AddToCart", { value: packForPixel.price, currency: "USD", content_name: `${packForPixel.name} credit pack` });
-    trackEvent("InitiateCheckout", { value: packForPixel.price, currency: "USD", content_name: `${packForPixel.name} credit pack` });
-    trackEvent("AddPaymentInfo", { value: packForPixel.price, currency: "USD", content_name: `${packForPixel.name} credit pack` });
-    rememberPendingCheckout({ mode: "credits", value: packForPixel.price, contentName: `${packForPixel.name} credit pack` });
-
-    setLoading(packKey);
-    try {
-      const { data, error } = await supabase.functions.invoke("create-credit-checkout", {
-        body: { packKey },
-      });
-      if (error) throw error;
-      if (!data?.url) throw new Error("Stripe checkout URL not returned.");
-      window.location.assign(data.url);
-    } catch (error) {
-      toast({
-        title: "Credit checkout failed",
-        description: error instanceof Error ? error.message : "Could not start credit checkout.",
-        variant: "destructive",
-      });
-    } finally {
-      setLoading(null);
-    }
+    await startCreditCheckout(packKey);
   };
+
 
   const handleCreditPackSmoke = async () => {
     if (!isAdmin) return;
