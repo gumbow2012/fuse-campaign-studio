@@ -199,31 +199,6 @@ const Navbar = () => {
                 <span className="text-[10px] font-bold text-foreground">{profile?.credits_balance ?? 0}</span>
               </div>
 
-              {/* Quick action icons */}
-              <div className="hidden md:flex items-center gap-1">
-                {[
-                  { icon: Search, label: "Search" },
-                  { icon: Bell, label: "Updates" },
-                  { icon: FolderArchive, label: "Vault" },
-                ].map(({ icon: Icon, label }) => (
-                  <button
-                    key={label}
-                    title={label}
-                    className="p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-secondary/40 transition-colors"
-                  >
-                    <Icon size={16} />
-                  </button>
-                ))}
-              </div>
-
-              <div className="w-px h-6 bg-border/40 mx-1 hidden md:block" />
-
-              <Link to="/dashboard" className="hidden sm:block">
-                <Button variant="outline" size="sm" className="rounded-full border-border/60 text-foreground hover:text-foreground hover:border-foreground/30 bg-transparent px-4 text-xs">
-                  <LayoutDashboard size={14} className="mr-1.5" />
-                  Dashboard
-                </Button>
-              </Link>
 
               <AccountPopover />
             </>
