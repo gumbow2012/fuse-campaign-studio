@@ -3,7 +3,7 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { corsHeaders, createAdminClient, errorMessage, getUserRoles, json, requireUser } from "../_shared/supabase-admin.ts";
 import { buildTemplateInputPlan } from "../_shared/template-inputs.ts";
 import { readEdgeOrder, sortEdgesByExecutionOrder } from "../_shared/edge-order.ts";
-import { getNodeEditorConfig } from "../_shared/template-editor.ts";
+import { getNodeAssetRequirement, getNodeEditorConfig } from "../_shared/template-editor.ts";
 
 function readNodeSortOrder(node: any, fallbackIndex = 999) {
   const raw = node?.prompt_config?.sort_order;
