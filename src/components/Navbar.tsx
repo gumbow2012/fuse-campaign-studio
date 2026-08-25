@@ -171,7 +171,16 @@ const MobileMenu = ({ onClose }: { onClose: () => void }) => {
               <Link to="/account" onClick={onClose} className={linkClass}>Account</Link>
               <Link to="/pricing" onClick={onClose} className={linkClass}>Plans & Billing</Link>
               {isCreator && <Link to="/app/creator" onClick={onClose} className={linkClass}>Creator Studio</Link>}
-              {isAdminOrDev && <Link to="/admin" onClick={onClose} className={linkClass}>Admin</Link>}
+              {isAdminOrDev && (
+                <div className="space-y-1">
+                  <p className="px-3 text-[10px] font-bold uppercase tracking-[0.15em] text-muted-foreground">Admin</p>
+                  {ADMIN_LINKS.map((link) => (
+                    <Link key={link.to} to={link.to} onClick={onClose} className={linkClass}>
+                      {link.label}
+                    </Link>
+                  ))}
+                </div>
+              )}
             </div>
 
             <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 backdrop-blur-sm">
