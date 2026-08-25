@@ -1,10 +1,16 @@
-import { useCallback, useState } from "react";
+import { useState } from "react";
 import { ArrowRight, Check } from "lucide-react";
-import { Link } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { PLAN_LADDER, type PlanLadderEntry } from "@/lib/planLadder";
-import PlanCalculator from "@/components/mvp/membership/PlanCalculator";
-import { CREDITS_PER_IMAGE, approxOutputLabel } from "@/lib/creditOutputs";
+import GatedPlanDialog from "@/components/mvp/membership/GatedPlanDialog";
+import {
+  ANNUAL_SAVINGS_LABEL,
+  PLAN_LADDER,
+  isCheckoutLive,
+  planPrice,
+  type PlanLadderEntry,
+} from "@/lib/planLadder";
+import { approxOutputLabel } from "@/lib/creditOutputs";
 import type { STRIPE_TIERS } from "@/lib/stripe-config";
 
 export type BillingCycle = "monthly" | "annual";
@@ -19,109 +25,112 @@ type Props = {
   onCheckout: (tierKey: keyof typeof STRIPE_TIERS) => void;
 };
 
-/**
- * Presentation-only personalization. Selecting a use case changes which TRUE benefits
- * are surfaced and which plan is visually suggested. It never changes prices, credit
- * amounts, or implies feature gating between tiers.
- */
-const USE_CASES = [
-  {
-    id: "clothing",
-    label: "Clothing Brand",
-    suggests: "starter",
-    benefits: [
-      "Product + campaign imagery from your own flats and photos",
-      "Every template and model included on any paid plan",
-      "Credits cover images and video — spend them however you drop",
-    ],
-  },
-  {
-    id: "jewelry",
-    label: "Jewelry Brand",
-    suggests: "starter",
-    benefits: [
-      "Jewelry Swap reconstruction on your real product references",
-      "Every template and model included on any paid plan",
-      "Top-up credit packs available any time",
-    ],
-  },
-  {
-    id: "creator",
-    label: "Creator",
-    suggests: "pro",
-    benefits: [
-      "Cinema director controls and the full template library",
-      "Creator Program: publish templates and earn",
-      "Every template and model included on any paid plan",
-    ],
-  },
-  {
-    id: "agency",
-    label: "Agency",
-    suggests: "studio",
-    benefits: [
-      "Largest monthly credit pool for multi-client volume",
-      "Top-up credit packs when a month runs hot",
-      "Team seats and shared workspaces are coming soon (not built yet)",
-    ],
-  },
-  {
-    id: "team",
-    label: "Team",
-    suggests: "studio",
-    benefits: [
-      "Biggest credit pool for shared output",
-      "Team seats and shared workspaces are coming soon (not built yet)",
-      "Every template and model included on any paid plan",
-    ],
-  },
-] as const;
-
-type UseCaseId = (typeof USE_CASES)[number]["id"];
-
-const LIVE_MAX_CREDITS = Math.max(
-  ...PLAN_LADDER.filter((entry) => entry.monthlyCredits).map((entry) => entry.monthlyCredits as number),
-);
-
-function planFeatures(entry: PlanLadderEntry): string[] {
-  if (entry.checkout === "live" && entry.price !== null && entry.monthlyCredits !== null) {
-    const per1k = ((entry.price / entry.monthlyCredits) * 1000).toFixed(2);
-    return [
-      `${entry.monthlyCredits.toLocaleString()} credits/mo`,
-      `~$${per1k} per 1,000 credits`,
-      "All templates, tools and models included",
-    ];
-  }
-  if (entry.isFreeState) {
-    return ["Browse templates and the studio", "No monthly credits", "Upgrade any time"];
-  }
-  return [entry.tagline, "Pricing not published yet", "No credits allotted yet"];
-}
-
-/** Honest volume module: bar width is purely credits-derived, never a feature "level". */
-function VolumeModule({ entry }: { entry: PlanLadderEntry }) {
-  const credits = entry.monthlyCredits;
-  const pct = credits ? Math.max(6, Math.round((credits / LIVE_MAX_CREDITS) * 100)) : 0;
-  const outputs = approxOutputLabel(credits);
+function PlanCard({
+  entry,
+  billingCycle,
+  isCurrent,
+  loading,
+  isAdmin,
+  compact,
+  onSelect,
+}: {
+  entry: PlanLadderEntry;
+  billingCycle: BillingCycle;
+  isCurrent: boolean;
+  loading: string | null;
+  isAdmin: boolean;
+  compact?: boolean;
+  onSelect: () => void;
+}) {
+  const Icon = entry.icon;
+  const price = planPrice(entry, billingCycle);
+  const live = isCheckoutLive(entry, billingCycle);
+  const approx = entry.monthlyCredits ? approxOutputLabel(entry.monthlyCredits) : null;
 
   return (
-    <div className="mt-5 rounded-xl border border-white/10 bg-white/[0.02] p-3">
-      <div className="flex items-center justify-between text-[10px] uppercase tracking-[0.18em] text-slate-400">
-        <span>Campaign volume</span>
-        <span>{credits ? `${credits.toLocaleString()} cr` : "—"}</span>
+    <article
+      className={`relative overflow-hidden rounded-2xl border backdrop-blur-sm transition-transform duration-200 hover:-translate-y-1 motion-reduce:transform-none motion-reduce:transition-none ${
+        compact ? "p-5" : "p-6"
+      } ${
+        isCurrent
+          ? "border-cyan-300/45 bg-cyan-300/[0.08]"
+          : entry.recommended
+            ? "border-lime-300/35 bg-white/[0.05] shadow-[0_0_50px_-14px_rgba(190,242,100,0.28)]"
+            : "border-white/10 bg-white/[0.03]"
+      }`}
+    >
+      <span
+        className={`absolute right-4 top-4 rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider ${
+          entry.recommended ? "bg-lime-300 text-slate-950" : "border border-white/15 bg-white/5 text-slate-200"
+        }`}
+      >
+        {entry.badge}
+      </span>
+
+      <div className="flex items-center gap-2">
+        <div className="flex h-8 w-8 items-center justify-center rounded-full border border-white/10 bg-white/[0.04]">
+          <Icon className="h-4 w-4 text-cyan-100" />
+        </div>
+        <p className={`font-display font-semibold text-white ${compact ? "text-lg" : "text-xl"}`}>{entry.name}</p>
       </div>
-      <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-white/10">
-        <div
-          className="h-full rounded-full bg-cyan-300 transition-[width] duration-700 ease-out motion-reduce:transition-none"
-          style={{ width: credits ? `${pct}%` : "0%" }}
-        />
+
+      <p className="mt-1 text-[11px] uppercase tracking-[0.2em] text-cyan-100/80">{entry.tagline}</p>
+      {compact ? null : <p className="mt-3 text-sm leading-6 text-slate-300">{entry.description}</p>}
+
+      <div className="mt-5">
+        <p className={`font-display font-black tracking-[-0.04em] text-white ${compact ? "text-3xl" : "text-4xl"}`}>
+          ${price}
+          <span className="ml-1 text-sm font-medium text-slate-400">/ month</span>
+        </p>
+        {billingCycle === "annual" && price > 0 ? (
+          <p className="mt-1 inline-flex items-center rounded-full bg-violet-400/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.14em] text-violet-200">
+            {ANNUAL_SAVINGS_LABEL} · billed annually
+          </p>
+        ) : null}
+        <p className="mt-2 text-sm text-slate-300">{entry.goodFor}</p>
       </div>
-      <p className="mt-2 text-xs text-slate-400">
-        {outputs
-          ? `Roughly enough for ${outputs} (${CREDITS_PER_IMAGE} credits per image)`
-          : "No credit allotment to estimate yet"}
+
+      {isCurrent ? (
+        <p className="mt-3 inline-flex items-center rounded-full border border-cyan-300/20 bg-cyan-300/10 px-2.5 py-1 text-xs font-medium text-cyan-50">
+          Your plan
+        </p>
+      ) : null}
+
+      <ul className={`mt-5 space-y-2.5 text-sm text-slate-200 ${compact ? "" : "space-y-3"}`}>
+        {entry.benefits.slice(0, compact ? 4 : 6).map((benefit) => (
+          <li key={benefit} className="flex items-start gap-2">
+            <Check className="mt-0.5 h-4 w-4 shrink-0 text-cyan-200" />
+            <span>{benefit}</span>
+          </li>
+        ))}
+      </ul>
+
+      <Button
+        onClick={onSelect}
+        disabled={isAdmin || isCurrent || !!loading}
+        className={`mt-6 w-full rounded-full font-semibold ${
+          isCurrent || isAdmin
+            ? "bg-white/10 text-white hover:bg-white/10"
+            : entry.recommended
+              ? "bg-lime-300 text-slate-950 hover:bg-lime-200"
+              : "bg-cyan-300 text-slate-950 hover:bg-cyan-200"
+        }`}
+      >
+        {isAdmin
+          ? "Admin access"
+          : isCurrent
+            ? "Current plan"
+            : live && loading === entry.stripeTierKey
+              ? "Loading..."
+              : entry.ctaLabel}
+        {!isCurrent && !isAdmin ? <ArrowRight className="h-4 w-4" /> : null}
+      </Button>
+
+      <p className="mt-3 text-[11px] text-slate-500">
+        {entry.creditsLabel}
+        {approx ? ` · approx ${approx}` : ""}
       </p>
-    </div>
+    </article>
   );
 }
 
@@ -134,29 +143,40 @@ export default function PlanTierCards({
   subscriptionStatus,
   onCheckout,
 }: Props) {
-  const [useCase, setUseCase] = useState<UseCaseId | null>(null);
-  const [calcRecommended, setCalcRecommended] = useState<string | null>(null);
-  const [calcActive, setCalcActive] = useState(false);
-  const handleRecommend = useCallback((key: string | null) => {
-    setCalcRecommended(key);
-    setCalcActive(true);
-  }, []);
-  const activeUseCase = USE_CASES.find((option) => option.id === useCase) ?? null;
-  // Calculator result wins over the use-case chip when the user has used it.
-  const suggestedKey = calcActive ? calcRecommended : (activeUseCase?.suggests ?? "pro");
+  const navigate = useNavigate();
+  const [showAll, setShowAll] = useState(false);
+  const [gatedPlan, setGatedPlan] = useState<PlanLadderEntry | null>(null);
+
   const hasActivePaidPlan =
     currentPlan !== "free" && (subscriptionStatus === "active" || subscriptionStatus === "trialing");
 
+  const visible = showAll ? PLAN_LADDER : PLAN_LADDER.filter((entry) => entry.featured);
+
+  const handleSelect = (entry: PlanLadderEntry) => {
+    if (isAdmin) return;
+    if (entry.checkout === "none") {
+      navigate("/app/templates");
+      return;
+    }
+    if (isCheckoutLive(entry, billingCycle) && entry.stripeTierKey) {
+      onCheckout(entry.stripeTierKey);
+      return;
+    }
+    // No Stripe price for this plan/interval — graceful early-access action only.
+    setGatedPlan(entry);
+  };
+
   return (
-    <div className="space-y-4">
-      <div className="flex flex-col items-start justify-between gap-3 sm:flex-row sm:items-center">
+    <div className="space-y-5">
+      {/* Billing interval */}
+      <div className="flex flex-col items-start gap-2 sm:flex-row sm:items-center sm:gap-3">
         <div className="inline-flex rounded-full border border-white/10 bg-white/[0.03] p-1">
           {(["monthly", "annual"] as const).map((cycle) => (
             <button
               key={cycle}
               type="button"
               onClick={() => onBillingCycleChange(cycle)}
-              className={`rounded-full px-4 py-1.5 text-sm font-medium transition-colors ${
+              className={`rounded-full px-4 py-1.5 text-sm font-medium transition-colors motion-reduce:transition-none ${
                 billingCycle === cycle ? "bg-cyan-300 text-slate-950" : "text-slate-300 hover:text-white"
               }`}
             >
@@ -164,199 +184,42 @@ export default function PlanTierCards({
             </button>
           ))}
         </div>
-        {billingCycle === "annual" ? (
-          <p className="text-sm text-slate-300">Annual plans are coming soon.</p>
-        ) : null}
+        <span className="text-xs font-bold uppercase tracking-[0.16em] text-violet-200">{ANNUAL_SAVINGS_LABEL} annually</span>
       </div>
 
-      {/* Presentation-only personalization — no pricing or entitlement effect. */}
-      <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
-        <p className="text-[11px] uppercase tracking-[0.24em] text-muted-foreground">What are you using FUSE for?</p>
-        <div className="mt-3 flex flex-wrap gap-2">
-          {USE_CASES.map((option) => {
-            const isActive = useCase === option.id;
-            return (
-              <button
-                key={option.id}
-                type="button"
-                onClick={() => setUseCase(isActive ? null : option.id)}
-                className={`rounded-full border px-3.5 py-1.5 text-xs font-medium transition-colors ${
-                  isActive
-                    ? "border-cyan-300/50 bg-cyan-300/15 text-cyan-50"
-                    : "border-white/10 bg-white/[0.03] text-slate-300 hover:bg-white/[0.06] hover:text-white"
-                }`}
-              >
-                {option.label}
-              </button>
-            );
-          })}
-        </div>
-        {activeUseCase ? (
-          <ul className="mt-4 space-y-2 text-sm text-slate-300">
-            {activeUseCase.benefits.map((benefit) => (
-              <li key={benefit} className="flex items-start gap-2">
-                <Check className="mt-0.5 h-4 w-4 text-cyan-200" />
-                <span>{benefit}</span>
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <p className="mt-3 text-xs text-slate-500">
-            Plans differ only by monthly credit volume — every template, tool and model is included on any paid plan.
-          </p>
-        )}
-      </div>
-
-      <PlanCalculator onRecommend={handleRecommend} />
-
-      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-        {PLAN_LADDER.map((entry) => {
-          const Icon = entry.icon;
-          const isLive = entry.checkout === "live" && !!entry.stripeTierKey;
-          const isCurrentActive = isLive && currentPlan === entry.stripeTierKey && hasActivePaidPlan;
-          const isCurrentFree = !!entry.isFreeState && !hasActivePaidPlan;
-          const annualGated = billingCycle === "annual";
-
-          const liveCtaLabel =
-            entry.key === "starter" ? "Start Creating" : entry.key === "pro" ? "Launch Your Drops" : "Get Studio";
-          const ctaLabel = isAdmin
-            ? "Admin access"
-            : isCurrentActive
-              ? "Current plan"
-              : loading === entry.stripeTierKey
-                ? "Loading..."
-                : liveCtaLabel;
-
-          const isSuggested = entry.key === suggestedKey;
-
-          return (
-            <article
-              key={entry.key}
-              className={`group relative overflow-hidden rounded-2xl border p-6 backdrop-blur-sm transition-transform duration-300 hover:-translate-y-1 motion-reduce:transform-none motion-reduce:transition-none ${
-                isCurrentActive || isCurrentFree
-                  ? "border-cyan-300/40 bg-cyan-300/[0.08]"
-                  : isSuggested
-                    ? "border-cyan-300/30 bg-white/[0.04] shadow-[0_0_40px_-12px_rgba(34,211,238,0.18)]"
-                    : "border-white/10 bg-white/[0.03]"
-              } ${!isLive && !entry.isFreeState ? "opacity-80" : ""}`}
-            >
-              <span
-                className={`absolute right-4 top-4 rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider ${
-                  isSuggested ? "bg-cyan-300 text-slate-950" : "border border-white/15 bg-white/5 text-slate-200"
-                }`}
-              >
-                {isSuggested && (activeUseCase || calcActive) ? "Suggested" : entry.badge}
-              </span>
-
-
-              <div className="flex items-center gap-2">
-                <div className="flex h-8 w-8 items-center justify-center rounded-full border border-white/10 bg-white/[0.04]">
-                  <Icon className="h-4 w-4 text-cyan-100" />
-                </div>
-                <p className="font-display text-xl font-semibold text-white">{entry.name}</p>
-              </div>
-
-              <p className="mt-1 text-[11px] uppercase tracking-[0.2em] text-cyan-100/80">{entry.tagline}</p>
-              <p className="mt-3 text-sm leading-6 text-slate-300">{entry.description}</p>
-
-              <div className="mt-5">
-                {isLive && annualGated ? (
-                  // GATED: annual requires real Stripe annual prices to be created before enabling checkout.
-                  <>
-                    <p className="font-display text-2xl font-black tracking-[-0.04em] text-white">
-                      Annual billing coming soon
-                    </p>
-                    <p className="mt-1 text-sm text-slate-400">
-                      {entry.monthlyCredits?.toLocaleString()} credits/mo when launched
-                    </p>
-                  </>
-                ) : isLive ? (
-                  <>
-                    <p className="font-display text-4xl font-black tracking-[-0.04em] text-white">
-                      ${entry.price}
-                      <span className="ml-1 text-sm font-medium text-slate-400">/ month</span>
-                    </p>
-                    <p className="mt-1 text-sm text-cyan-100/90">
-                      {entry.monthlyCredits?.toLocaleString()} credits/mo
-                    </p>
-                  </>
-                ) : entry.isFreeState ? (
-                  <>
-                    <p className="font-display text-4xl font-black tracking-[-0.04em] text-white">
-                      $0
-                      <span className="ml-1 text-sm font-medium text-slate-400">/ month</span>
-                    </p>
-                    <p className="mt-1 text-sm text-slate-400">No monthly credits</p>
-                  </>
-                ) : (
-                  <>
-                    <p className="font-display text-3xl font-black tracking-[-0.04em] text-white">
-                      {entry.key === "team" ? "Custom" : "—"}
-                    </p>
-                    <p className="mt-1 text-sm text-slate-400">
-                      {entry.key === "team" ? "Contact for pricing" : "Not available yet"}
-                    </p>
-                  </>
-                )}
-              </div>
-
-              <VolumeModule entry={entry} />
-
-              {isCurrentActive || isCurrentFree ? (
-                <p className="mt-3 inline-flex items-center rounded-full border border-cyan-300/20 bg-cyan-300/10 px-2.5 py-1 text-xs font-medium text-cyan-50">
-                  Current
-
-                </p>
-              ) : null}
-
-              <ul className="mt-5 space-y-3 text-sm text-slate-200">
-                {planFeatures(entry).map((feature) => (
-                  <li key={feature} className="flex items-start gap-2">
-                    <Check className="mt-0.5 h-4 w-4 text-cyan-200" />
-                    <span>{feature}</span>
-                  </li>
-                ))}
-              </ul>
-
-              {isLive ? (
-                <Button
-                  onClick={() => {
-                    // GATED: annual requires real Stripe annual prices to be created before enabling checkout.
-                    if (annualGated) return;
-                    onCheckout(entry.stripeTierKey as keyof typeof STRIPE_TIERS);
-                  }}
-                  disabled={annualGated || isAdmin || isCurrentActive || !!loading}
-                  className={`mt-6 w-full rounded-full font-semibold ${
-                    isCurrentActive || isAdmin || annualGated
-                      ? "bg-white/10 text-white hover:bg-white/10"
-                      : "bg-cyan-300 text-slate-950 hover:bg-cyan-200"
-                  }`}
-                >
-                  {annualGated ? "Coming soon" : ctaLabel}
-                  {!annualGated && !isCurrentActive && !isAdmin ? <ArrowRight className="h-4 w-4" /> : null}
-                </Button>
-              ) : entry.isFreeState ? (
-                <Button disabled className="mt-6 w-full rounded-full bg-white/10 font-semibold text-white hover:bg-white/10">
-                  {isCurrentFree ? "Your current state" : "Free state"}
-                </Button>
-              ) : entry.gatedCta?.href ? (
-                <Button
-                  asChild
-                  variant="outline"
-                  className="mt-6 w-full rounded-full border-white/15 bg-white/5 font-semibold text-foreground hover:bg-white/10"
-                >
-                  <Link to={entry.gatedCta.href}>{entry.gatedCta.label}</Link>
-                </Button>
-              ) : (
-                <Button disabled className="mt-6 w-full rounded-full bg-white/10 font-semibold text-white hover:bg-white/10">
-                  {entry.gatedCta?.label ?? "Coming soon"}
-                </Button>
-              )}
-            </article>
-          );
-        })}
+      <section className={`grid gap-4 ${showAll ? "sm:grid-cols-2 xl:grid-cols-3" : "md:grid-cols-3"}`}>
+        {visible.map((entry) => (
+          <PlanCard
+            key={entry.key}
+            entry={entry}
+            billingCycle={billingCycle}
+            compact={showAll}
+            isCurrent={
+              entry.stripeTierKey
+                ? currentPlan === entry.stripeTierKey && hasActivePaidPlan
+                : !!entry.isFreeState && !hasActivePaidPlan
+            }
+            loading={loading}
+            isAdmin={isAdmin}
+            onSelect={() => handleSelect(entry)}
+          />
+        ))}
       </section>
+
+      <Button
+        variant="outline"
+        onClick={() => setShowAll((open) => !open)}
+        className="rounded-full border-white/15 bg-white/5 text-foreground hover:bg-white/10"
+      >
+        {showAll ? "Show featured plans" : "View all plans"}
+      </Button>
+
+      <GatedPlanDialog
+        open={!!gatedPlan}
+        onOpenChange={(open) => !open && setGatedPlan(null)}
+        planName={gatedPlan?.name ?? null}
+        interval={billingCycle}
+      />
     </div>
   );
 }
-
