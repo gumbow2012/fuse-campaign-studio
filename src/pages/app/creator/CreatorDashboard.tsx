@@ -29,6 +29,11 @@ import { cn } from "@/lib/utils";
 import { getCreatorLevel } from "@/lib/creatorLevels";
 import { getOwnCreatorProfile, type CreatorProfile } from "@/services/creatorProfile";
 import {
+  loadCreatorChallenges,
+  type CreatorChallenge,
+} from "@/services/creatorDashboard";
+import {
+
   loadCreatorAnalytics,
   loadCreatorDashboard,
   loadCreatorRewards,
