@@ -259,7 +259,10 @@ export interface TemplateDetail {
     type: string;
     required: boolean;
     hint?: string;
+    /** FT2: additive metadata, present only when authored on the input. */
+    requirement?: TemplateAssetRequirement;
   }[];
+
   locked_images?: Record<string, string>;
   prompt?: string;
   video_prompt?: string;
