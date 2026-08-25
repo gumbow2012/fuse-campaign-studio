@@ -8,6 +8,8 @@ import { PageTracking } from "@/hooks/usePageTracking";
 import CustomerRoute from "@/components/CustomerRoute";
 import AdminRoute from "@/components/AdminRoute";
 import BuilderRoute from "@/components/BuilderRoute";
+import CreatorRoute from "@/components/CreatorRoute";
+
 import Admin from "@/pages/Admin";
 import AdminAudits from "@/pages/AdminAudits";
 import AdminAnalytics from "@/pages/AdminAnalytics";
