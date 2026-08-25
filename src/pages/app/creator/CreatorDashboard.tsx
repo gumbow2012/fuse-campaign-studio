@@ -57,7 +57,7 @@ const SECTIONS: Array<{ id: SectionId; label: string }> = [
   { id: "approved", label: "Approved" },
   { id: "rejected", label: "Needs Changes" },
   { id: "analytics", label: "Analytics" },
-  { id: "rewards", label: "Rewards" },
+  { id: "rewards", label: "Levels & Rewards" },
   { id: "profile", label: "Profile" },
 ];
 
