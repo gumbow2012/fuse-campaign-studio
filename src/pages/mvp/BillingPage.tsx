@@ -602,6 +602,142 @@ export default function BillingPage() {
           </div>
         </div>
 
+        <section className="mt-8 rounded-[2rem] border border-white/10 bg-white/[0.03] p-6 md:p-8">
+          <div className="flex flex-wrap items-end justify-between gap-4">
+            <div>
+              <p className="text-[11px] uppercase tracking-[0.24em] text-muted-foreground">Compare plans</p>
+              <h2 className="mt-2 font-display text-3xl font-semibold tracking-[-0.04em] text-white">
+                Membership comparison.
+              </h2>
+              <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-300">
+                All memberships unlock the same tools and templates. The only difference is how many credits you get each month.
+              </p>
+            </div>
+          </div>
+
+          <div className="mt-6 overflow-x-auto rounded-2xl border border-white/10">
+            <table className="w-full min-w-[600px] text-sm">
+              <thead>
+                <tr className="border-b border-white/10 bg-white/[0.04]">
+                  <th className="px-4 py-4 text-left font-display text-sm font-medium uppercase tracking-wider text-muted-foreground">
+                    Feature
+                  </th>
+                  {(Object.keys(STRIPE_TIERS) as Array<keyof typeof STRIPE_TIERS>).map((tierKey) => {
+                    const tier = STRIPE_TIERS[tierKey];
+                    const isCurrentActive =
+                      profile?.plan === tierKey &&
+                      (profile?.subscription_status === "active" || profile?.subscription_status === "trialing");
+                    const isPro = tierKey === "pro";
+                    return (
+                      <th
+                        key={tierKey}
+                        className={`px-4 py-4 text-center font-display text-sm font-semibold uppercase tracking-wider ${
+                          isPro ? "text-cyan-300" : "text-white"
+                        } ${isCurrentActive ? "bg-cyan-300/10" : ""}`}
+                      >
+                        <div className="flex flex-col items-center gap-1">
+                          <span>{tier.name}</span>
+                          {isCurrentActive ? (
+                            <span className="rounded-full border border-cyan-300/20 bg-cyan-300/10 px-2 py-0.5 text-[10px] font-medium normal-case text-cyan-50">
+                              Current
+                            </span>
+                          ) : null}
+                          {isPro && !isCurrentActive ? (
+                            <span className="rounded-full border border-cyan-300/20 bg-cyan-300/10 px-2 py-0.5 text-[10px] font-medium normal-case text-cyan-50">
+                              Recommended
+                            </span>
+                          ) : null}
+                        </div>
+                      </th>
+                    );
+                  })}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-white/10">
+                <tr>
+                  <td className="px-4 py-4 text-slate-300">Monthly price</td>
+                  {(Object.keys(STRIPE_TIERS) as Array<keyof typeof STRIPE_TIERS>).map((tierKey) => {
+                    const tier = STRIPE_TIERS[tierKey];
+                    const isPro = tierKey === "pro";
+                    return (
+                      <td
+                        key={tierKey}
+                        className={`px-4 py-4 text-center ${isPro ? "bg-cyan-300/[0.04] font-semibold text-white" : "text-slate-200"}`}
+                      >
+                        ${tier.price}
+                      </td>
+                    );
+                  })}
+                </tr>
+                <tr>
+                  <td className="px-4 py-4 text-slate-300">Credits per month</td>
+                  {(Object.keys(STRIPE_TIERS) as Array<keyof typeof STRIPE_TIERS>).map((tierKey) => {
+                    const tier = STRIPE_TIERS[tierKey];
+                    const isPro = tierKey === "pro";
+                    return (
+                      <td
+                        key={tierKey}
+                        className={`px-4 py-4 text-center ${isPro ? "bg-cyan-300/[0.04] font-semibold text-white" : "text-slate-200"}`}
+                      >
+                        {tier.monthlyCredits.toLocaleString()}
+                      </td>
+                    );
+                  })}
+                </tr>
+                <tr>
+                  <td className="px-4 py-4 text-slate-300">Top-ups available</td>
+                  {(Object.keys(STRIPE_TIERS) as Array<keyof typeof STRIPE_TIERS>).map((tierKey) => {
+                    const isPro = tierKey === "pro";
+                    return (
+                      <td
+                        key={tierKey}
+                        className={`px-4 py-4 text-center ${isPro ? "bg-cyan-300/[0.04] text-white" : "text-slate-200"}`}
+                      >
+                        Boost, Growth, Bulk
+                      </td>
+                    );
+                  })}
+                </tr>
+                <tr>
+                  <td className="px-4 py-4 text-slate-300">Access to all FUSE tools & templates</td>
+                  {(Object.keys(STRIPE_TIERS) as Array<keyof typeof STRIPE_TIERS>).map((tierKey) => {
+                    const isPro = tierKey === "pro";
+                    return (
+                      <td
+                        key={tierKey}
+                        className={`px-4 py-4 text-center ${isPro ? "bg-cyan-300/[0.04] text-white" : "text-slate-200"}`}
+                      >
+                        Included
+                      </td>
+                    );
+                  })}
+                </tr>
+                <tr>
+                  <td className="px-4 py-4 text-slate-300">Best for</td>
+                  {(Object.keys(STRIPE_TIERS) as Array<keyof typeof STRIPE_TIERS>).map((tierKey) => {
+                    const tier = STRIPE_TIERS[tierKey];
+                    const isPro = tierKey === "pro";
+                    const description =
+                      tierKey === "starter"
+                        ? "First drops and small campaigns"
+                        : tierKey === "pro"
+                          ? "Regular drops and more campaigns per month"
+                          : "High-volume teams and multi-brand work";
+                    return (
+                      <td
+                        key={tierKey}
+                        className={`px-4 py-4 text-center ${isPro ? "bg-cyan-300/[0.04] text-white" : "text-slate-200"}`}
+                      >
+                        {description}
+                      </td>
+                    );
+                  })}
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
         {hasActivePaidMembership || isAdmin ? (
         <section className="mt-8 rounded-[2rem] border border-white/10 bg-white/[0.03] p-6 md:p-8">
           <div className="flex flex-wrap items-end justify-between gap-4">
