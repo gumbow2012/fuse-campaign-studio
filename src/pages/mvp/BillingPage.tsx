@@ -459,7 +459,30 @@ export default function BillingPage() {
             ) : null}
           </section>
 
-          <section className="grid gap-4 md:grid-cols-3">
+          <div className="space-y-4">
+            <div className="flex flex-col items-start justify-between gap-3 sm:flex-row sm:items-center">
+              <div className="inline-flex rounded-full border border-white/10 bg-white/[0.03] p-1">
+                {(["monthly", "annual"] as const).map((cycle) => (
+                  <button
+                    key={cycle}
+                    type="button"
+                    onClick={() => setBillingCycle(cycle)}
+                    className={`rounded-full px-4 py-1.5 text-sm font-medium transition-colors ${
+                      billingCycle === cycle
+                        ? "bg-cyan-300 text-slate-950"
+                        : "text-slate-300 hover:text-white"
+                    }`}
+                  >
+                    {cycle === "monthly" ? "Monthly" : "Annual"}
+                  </button>
+                ))}
+              </div>
+              {billingCycle === "annual" ? (
+                <p className="text-sm text-slate-300">Annual plans are coming soon.</p>
+              ) : null}
+            </div>
+
+            <section className="grid gap-4 md:grid-cols-3">
             {(Object.keys(STRIPE_TIERS) as Array<keyof typeof STRIPE_TIERS>).map((tierKey) => {
               const tier = STRIPE_TIERS[tierKey];
               const tierMeta = tierCopy[tierKey];
