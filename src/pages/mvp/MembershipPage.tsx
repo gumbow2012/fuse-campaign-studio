@@ -6,6 +6,7 @@ import AccountHeader from "@/components/mvp/AccountHeader";
 import PlanTierCards, { type BillingCycle } from "@/components/mvp/membership/PlanTierCards";
 import CreditPackCards from "@/components/mvp/membership/CreditPackCards";
 import CreditSliderPanel from "@/components/mvp/membership/CreditSliderPanel";
+import CreditMixCalculator from "@/components/mvp/membership/CreditMixCalculator";
 import PlanComparisonMatrix from "@/components/mvp/membership/PlanComparisonMatrix";
 import CreditsOverviewCard from "@/components/mvp/membership/CreditsOverviewCard";
 import CreditUsageHistory from "@/components/mvp/membership/CreditUsageHistory";
@@ -31,6 +32,7 @@ export default function MembershipPage() {
   const { loading, startPlanCheckout, startCreditCheckout } = useMembershipCheckout();
   const [billingCycle, setBillingCycle] = useState<BillingCycle>("monthly");
   const [showComparison, setShowComparison] = useState(false);
+  const [selectedCreditAmount, setSelectedCreditAmount] = useState<number | null>(null);
 
   const paramTab = searchParams.get("tab");
   const [activeTab, setActiveTab] = useState<TabId>(isTabId(paramTab) ? paramTab : "upgrade");
@@ -53,6 +55,8 @@ export default function MembershipPage() {
       (profile?.subscription_status === "active" || profile?.subscription_status === "trialing"),
     [currentPlan, profile?.subscription_status],
   );
+
+  const mixBudget = selectedCreditAmount ?? Number(profile?.credits_balance ?? 0);
 
   return (
     <SiteShell>
@@ -147,6 +151,7 @@ export default function MembershipPage() {
                   <CreditSliderPanel
                     loading={loading}
                     isAdmin={isAdmin}
+                    onAmountChange={setSelectedCreditAmount}
                     onCheckout={(packKey) => {
                       if (isAdmin) return;
                       void startCreditCheckout(packKey);
@@ -163,6 +168,13 @@ export default function MembershipPage() {
                       if (isAdmin) return;
                       void startCreditCheckout(packKey);
                     }}
+                  />
+                </div>
+
+                <div className="mt-8">
+                  <CreditMixCalculator
+                    budget={mixBudget}
+                    budgetSource={selectedCreditAmount ? "pack" : "balance"}
                   />
                 </div>
               </section>
