@@ -126,7 +126,7 @@ const MobileMenu = ({ onClose }: { onClose: () => void }) => {
 const Navbar = () => {
   const [scrolled, setScrolled] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
-  const { user, profile } = useAuth();
+  const { user } = useAuth();
   const { pathname } = useLocation();
 
   const handleScroll = useCallback(() => {
