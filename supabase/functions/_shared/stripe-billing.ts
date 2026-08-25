@@ -28,6 +28,8 @@ import {
   getStripeWebhookSecret,
 } from "./stripe.ts";
 import { metaCheckoutEventId, sendMetaCapiEvent } from "./meta-capi-dispatch.ts";
+import { sendMetaCapiPurchase } from "./metaCapi.ts";
+
 
 type StripeObject = Record<string, any>;
 
