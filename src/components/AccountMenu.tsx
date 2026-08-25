@@ -5,7 +5,8 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { LogOut, User, CreditCard, Star, Shield, Zap, ChevronDown, ArrowUpRight, Ticket } from "lucide-react";
+import { LogOut, User, CreditCard, Star, Shield, Zap, ArrowUpRight, Ticket, LayoutDashboard } from "lucide-react";
+import { FuseCore } from "@/components/fuse/FuseCore";
 
 const panelClass =
   "rounded-2xl border border-white/10 bg-white/[0.03] p-4 backdrop-blur-sm";
@@ -40,6 +41,13 @@ export function AccountMenuContent({ onNavigate }: { onNavigate?: () => void }) 
   const ratio = hasCycle ? Math.min(1, Math.max(0, credits / cycleCredits)) : credits > 0 ? 1 : 0;
   const isAdminOrDev = roles.includes("admin") || roles.includes("dev");
   const avatarUrl = user?.user_metadata?.avatar_url as string | undefined;
+  const periodEnd = profile?.subscription_period_end
+    ? new Date(profile.subscription_period_end)
+    : null;
+  const resetLabel =
+    periodEnd && !Number.isNaN(periodEnd.getTime())
+      ? periodEnd.toLocaleDateString(undefined, { month: "short", day: "numeric" })
+      : null;
 
   const roleLine = [
     plan && isActivePlan ? plan : null,
@@ -96,31 +104,50 @@ export function AccountMenuContent({ onNavigate }: { onNavigate?: () => void }) 
             Monthly allotment {cycleCredits.toLocaleString()}
           </p>
         ) : null}
+        {resetLabel ? (
+          <p className="mt-1 text-[10px] text-muted-foreground">Monthly reset {resetLabel}</p>
+        ) : null}
         <Button
           asChild
           size="sm"
           className="mt-3 w-full rounded-full bg-cyan-300 text-slate-950 hover:bg-cyan-200"
           onClick={onNavigate}
         >
-          <Link to="/membership?tab=credits">Buy Credits</Link>
+          <Link to="/membership?tab=credits">+ Buy Credits</Link>
         </Button>
       </div>
 
       {/* Links */}
-      <div className="mt-3 space-y-1">
+      <div className="my-3 h-px bg-white/10" />
+      <div className="space-y-1">
+        {isCreator ? (
+          <Link to="/app/creator" onClick={onNavigate} className={linkClass}>
+            <Star size={14} />
+            View Profile
+          </Link>
+        ) : (
+          <Link to="/account" onClick={onNavigate} className={linkClass}>
+            <User size={14} />
+            View Profile
+          </Link>
+        )}
+        {isCreator && (
+          <Link to="/app/creator" onClick={onNavigate} className={linkClass}>
+            <LayoutDashboard size={14} />
+            Creator Dashboard
+          </Link>
+        )}
+        <Link to="/account" onClick={onNavigate} className={linkClass}>
+          <User size={14} />
+          Manage Account
+        </Link>
+        <Link to="/membership?tab=usage" onClick={onNavigate} className={linkClass}>
+          <Zap size={14} />
+          Usage & Credits
+        </Link>
         <Link to="/membership?tab=upgrade" onClick={onNavigate} className={linkClass}>
           <ArrowUpRight size={14} />
           Upgrade Plan
-        </Link>
-        {isCreator && (
-          <Link to="/app/creator" onClick={onNavigate} className={linkClass}>
-            <Star size={14} />
-            Creator Profile
-          </Link>
-        )}
-        <Link to="/membership?tab=usage" onClick={onNavigate} className={linkClass}>
-          <User size={14} />
-          Usage
         </Link>
         <Link to="/membership?tab=upgrade" onClick={onNavigate} className={linkClass}>
           <CreditCard size={14} />
@@ -130,13 +157,20 @@ export function AccountMenuContent({ onNavigate }: { onNavigate?: () => void }) 
           <Ticket size={14} />
           Promo Code
         </Link>
-        {isAdminOrDev && (
-          <Link to="/admin" onClick={onNavigate} className={linkClass}>
-            <Shield size={14} />
-            Admin
-          </Link>
-        )}
       </div>
+
+      {isAdminOrDev && (
+        <>
+          <div className="my-2 h-px bg-white/10" />
+          <Link to="/admin" onClick={onNavigate} className={cn(linkClass, "justify-between")}>
+            <span className="flex items-center gap-2">
+              <Shield size={14} />
+              Admin
+            </span>
+            <span className="text-muted-foreground">&rsaquo;</span>
+          </Link>
+        </>
+      )}
 
       <div className="my-2 h-px bg-white/10" />
 
@@ -150,28 +184,17 @@ export function AccountMenuContent({ onNavigate }: { onNavigate?: () => void }) 
 
 
 export function AccountPopover() {
-  const { user, profile } = useAuth();
-  const email = user?.email || profile?.email || "";
-  const displayName = profile?.name || email.split("@")[0] || "Account";
-  const avatarUrl = user?.user_metadata?.avatar_url as string | undefined;
+  const [open, setOpen] = useState(false);
 
   return (
-    <Popover>
+    <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <button
-          className="flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.03] px-3 py-1.5 backdrop-blur-sm hover:bg-white/[0.06] transition-colors"
+          className="group flex items-center justify-center rounded-full border border-white/10 bg-white/[0.03] p-1.5 backdrop-blur-sm transition-colors hover:bg-white/[0.07]"
           aria-label="Open account menu"
+          aria-expanded={open}
         >
-          <Avatar className="h-7 w-7 rounded-full">
-            <AvatarImage src={avatarUrl || ""} alt={displayName} />
-            <AvatarFallback className="bg-cyan-200/10 text-cyan-300 text-[10px] font-bold">
-              {getInitials(displayName)}
-            </AvatarFallback>
-          </Avatar>
-          <span className="hidden md:inline max-w-[120px] truncate text-xs font-medium text-foreground">
-            {displayName}
-          </span>
-          <ChevronDown size={12} className="text-muted-foreground" />
+          <FuseCore size={28} active={open} />
         </button>
       </PopoverTrigger>
       <PopoverContent
@@ -179,7 +202,7 @@ export function AccountPopover() {
         sideOffset={8}
         className="rounded-2xl border-white/10 bg-[#0B1120]/95 p-4 backdrop-blur-xl shadow-2xl w-auto"
       >
-        <AccountMenuContent />
+        <AccountMenuContent onNavigate={() => setOpen(false)} />
       </PopoverContent>
     </Popover>
   );
