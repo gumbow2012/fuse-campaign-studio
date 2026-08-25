@@ -64,6 +64,79 @@ const NavItem = ({ item, active }: { item: NavDestination; active: boolean }) =>
   );
 };
 
+/* ─── Admin tools — demoted into a single quiet group (admin/dev only) ─── */
+const ADMIN_LINKS = [
+  { label: "Admin Home", to: "/admin" },
+  { label: "Analytics", to: "/admin/analytics" },
+  { label: "Template Builder", to: "/app/lab/canvas" },
+  { label: "Template Import", to: "/admin/templates/import" },
+  { label: "Creators", to: "/admin/creators" },
+  { label: "Creator Program", to: "/admin/creator-program" },
+  { label: "Output Audit", to: "/admin/audits" },
+];
+
+const AdminMenu = () => {
+  const [open, setOpen] = useState(false);
+  const { pathname } = useLocation();
+  const isActive = pathname.startsWith("/admin") || pathname === "/app/lab/canvas";
+
+  useEffect(() => {
+    setOpen(false);
+  }, [pathname]);
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button
+          className={cn(
+            "hidden lg:inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors",
+            isActive
+              ? "border-white/15 bg-white/[0.08] text-foreground"
+              : "border-white/10 bg-white/[0.03] text-muted-foreground hover:border-white/15 hover:bg-white/[0.06] hover:text-foreground"
+          )}
+          aria-label="Admin menu"
+          aria-expanded={open}
+        >
+          <Shield size={14} />
+          Admin
+          <ChevronDown
+            size={12}
+            className={cn("transition-transform duration-200", open && "rotate-180")}
+          />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent
+        align="end"
+        sideOffset={8}
+        className="w-56 rounded-2xl border-white/10 bg-[#0B1120]/95 p-2 backdrop-blur-xl shadow-2xl"
+      >
+        <div className="space-y-0.5">
+          {ADMIN_LINKS.map((link) => {
+            const active =
+              pathname === link.to || (link.to !== "/admin" && pathname.startsWith(link.to));
+            return (
+              <Link
+                key={link.to}
+                to={link.to}
+                onClick={() => setOpen(false)}
+                className={cn(
+                  "flex items-center justify-between rounded-lg px-3 py-2 text-sm transition-colors",
+                  active
+                    ? "bg-white/[0.08] text-foreground"
+                    : "text-muted-foreground hover:bg-white/5 hover:text-foreground"
+                )}
+              >
+                {link.label}
+                {active && <span className="h-1.5 w-1.5 rounded-full bg-primary" />}
+              </Link>
+            );
+          })}
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+};
+
 /* ─── Mobile menu content ─── */
 const MobileMenu = ({ onClose }: { onClose: () => void }) => {
   const { user, isCreator, roles } = useAuth();
