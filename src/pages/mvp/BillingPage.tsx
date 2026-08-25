@@ -249,13 +249,19 @@ export default function BillingPage() {
             </p>
           </div>
           {user ? (
-            <Button
-              variant="outline"
-              onClick={() => void refreshSubscription()}
-              className="rounded-full border-white/15 bg-white/5 text-foreground hover:bg-white/10"
-            >
-              Refresh status
-            </Button>
+            <div className="flex flex-wrap items-center gap-3">
+              <Link to="/membership" className="text-sm text-cyan-300 hover:text-cyan-200">
+                Go to your Membership Center →
+              </Link>
+              <Button
+                variant="outline"
+                onClick={() => void refreshSubscription()}
+                className="rounded-full border-white/15 bg-white/5 text-foreground hover:bg-white/10"
+              >
+                Refresh status
+              </Button>
+            </div>
+
           ) : (
             <Button asChild className="rounded-full bg-cyan-300 text-slate-950 hover:bg-cyan-200">
               <Link to="/app/templates">Browse templates</Link>

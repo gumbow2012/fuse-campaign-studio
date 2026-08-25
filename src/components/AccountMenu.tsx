@@ -102,13 +102,13 @@ export function AccountMenuContent({ onNavigate }: { onNavigate?: () => void }) 
           className="mt-3 w-full rounded-full bg-cyan-300 text-slate-950 hover:bg-cyan-200"
           onClick={onNavigate}
         >
-          <Link to="/pricing#credits">Buy Credits</Link>
+          <Link to="/membership?tab=credits">Buy Credits</Link>
         </Button>
       </div>
 
       {/* Links */}
       <div className="mt-3 space-y-1">
-        <Link to="/pricing" onClick={onNavigate} className={linkClass}>
+        <Link to="/membership?tab=upgrade" onClick={onNavigate} className={linkClass}>
           <ArrowUpRight size={14} />
           Upgrade Plan
         </Link>
@@ -118,15 +118,15 @@ export function AccountMenuContent({ onNavigate }: { onNavigate?: () => void }) 
             Creator Profile
           </Link>
         )}
-        <Link to="/account" onClick={onNavigate} className={linkClass}>
+        <Link to="/membership?tab=usage" onClick={onNavigate} className={linkClass}>
           <User size={14} />
           Usage
         </Link>
-        <Link to="/pricing" onClick={onNavigate} className={linkClass}>
+        <Link to="/membership?tab=upgrade" onClick={onNavigate} className={linkClass}>
           <CreditCard size={14} />
           Billing
         </Link>
-        <Link to="/pricing#credits" onClick={onNavigate} className={linkClass}>
+        <Link to="/membership?tab=credits" onClick={onNavigate} className={linkClass}>
           <Ticket size={14} />
           Promo Code
         </Link>

@@ -77,7 +77,7 @@ export default function AccountHeader() {
         </div>
 
         <Button asChild className="rounded-full bg-cyan-300 text-slate-950 hover:bg-cyan-200">
-          <Link to="/pricing">Manage plan</Link>
+          <Link to="/membership?tab=upgrade">Manage plan</Link>
         </Button>
       </div>
 
