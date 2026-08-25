@@ -73,8 +73,8 @@ export function libraryKindForAssetType(assetType?: TemplateAssetType | null): L
 // an untyped client handle.
 function table() {
   return (supabase as unknown as {
-    from: (name: string) => any;
-  }).from("library_assets");
+    from: (name: string) => Record<string, (...args: unknown[]) => unknown>;
+  }).from("library_assets") as never;
 }
 
 function normalize(row: Record<string, unknown>): LibraryAsset {

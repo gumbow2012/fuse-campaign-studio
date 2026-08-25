@@ -43,10 +43,12 @@ export default function LibraryPickerDialog({ kinds = [], onSelect, trigger }: L
     staleTime: 30_000,
   });
 
-  const assets = assetsQuery.data ?? [];
   const compatible = useMemo(
-    () => (kinds.length ? assets.filter((asset) => kinds.includes(asset.kind)) : assets),
-    [assets, kinds],
+    () => {
+      const assets = assetsQuery.data ?? [];
+      return kinds.length ? assets.filter((asset) => kinds.includes(asset.kind)) : assets;
+    },
+    [assetsQuery.data, kinds],
   );
   const visible = useMemo(
     () => (activeKind === "all" ? compatible : compatible.filter((asset) => asset.kind === activeKind)),
