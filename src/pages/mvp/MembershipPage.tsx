@@ -5,6 +5,7 @@ import PageMeta from "@/components/mvp/PageMeta";
 import AccountHeader from "@/components/mvp/AccountHeader";
 import PlanTierCards, { type BillingCycle } from "@/components/mvp/membership/PlanTierCards";
 import CreditPackCards from "@/components/mvp/membership/CreditPackCards";
+import CreditSliderPanel from "@/components/mvp/membership/CreditSliderPanel";
 import PlanComparisonMatrix from "@/components/mvp/membership/PlanComparisonMatrix";
 import CreditsOverviewCard from "@/components/mvp/membership/CreditsOverviewCard";
 import CreditUsageHistory from "@/components/mvp/membership/CreditUsageHistory";
@@ -143,6 +144,18 @@ export default function MembershipPage() {
                   payment clears.
                 </p>
                 <div className="mt-6">
+                  <CreditSliderPanel
+                    loading={loading}
+                    isAdmin={isAdmin}
+                    onCheckout={(packKey) => {
+                      if (isAdmin) return;
+                      void startCreditCheckout(packKey);
+                    }}
+                  />
+                </div>
+
+                <p className="mt-8 text-[11px] uppercase tracking-[0.24em] text-muted-foreground">Quick top-ups</p>
+                <div className="mt-4">
                   <CreditPackCards
                     loading={loading}
                     isAdmin={isAdmin}
