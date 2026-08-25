@@ -1030,6 +1030,36 @@ export function createStripeWebhookHandler(mode: StripeBillingMode) {
             stripe_price_id: plan?.priceId ?? profile.stripe_price_id,
           });
         }
+        // Additive analytics only — fire-and-forget, never blocks or fails the webhook.
+        try {
+          if (mode === "live") {
+            const purchaseValue = typeof session.amount_total === "number"
+              ? session.amount_total / 100
+              : (plan?.price ?? null);
+            const currency = String(session.currency ?? "usd").toUpperCase();
+            sendMetaCapiEvent({
+              eventName: "Purchase",
+              eventId: metaCheckoutEventId("Purchase", String(session.id)),
+              value: purchaseValue,
+              currency,
+              email: customerEmail,
+              externalId: profile?.user_id ?? null,
+              orderId: String(session.id),
+              contentType: "product",
+            });
+            sendMetaCapiEvent({
+              eventName: "Subscribe",
+              eventId: metaCheckoutEventId("Subscribe", String(session.id)),
+              value: purchaseValue,
+              currency,
+              email: customerEmail,
+              externalId: profile?.user_id ?? null,
+              orderId: String(session.id),
+            });
+          }
+        } catch (_capiError) {
+          // analytics must never affect billing
+        }
         return json({ received: true }, 200);
       }
 
