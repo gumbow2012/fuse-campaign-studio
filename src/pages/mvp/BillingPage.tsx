@@ -10,6 +10,13 @@ import { toast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { CREDIT_PACKS, STRIPE_TIERS } from "@/lib/stripe-config";
+import {
+  clearPendingCheckout,
+  readPendingCheckout,
+  rememberPendingCheckout,
+  trackEvent,
+  trackEventOnce,
+} from "@/lib/metaPixel";
 
 const tierCopy = {
   starter: {
@@ -81,11 +88,29 @@ export default function BillingPage() {
   const isTemplateCheckout = Boolean(selectedTemplateId || selectedTemplateName);
 
   useEffect(() => {
+    trackEvent("ViewContent", { content_name: "Pricing" });
+  }, []);
+
+  useEffect(() => {
     const success = searchParams.get("success");
     const canceled = searchParams.get("canceled");
     if (!success && !canceled) return;
 
     if (success) {
+      const pending = readPendingCheckout();
+      const onceKey = `purchase.${pending?.startedAt ?? searchParams.toString()}`;
+      trackEventOnce(onceKey, "Purchase", {
+        value: pending?.value,
+        currency: "USD",
+        content_type: "product",
+      });
+      if (!pending || pending.mode === "subscription") {
+        trackEventOnce(`subscribe.${pending?.startedAt ?? searchParams.toString()}`, "Subscribe", {
+          value: pending?.value,
+          currency: "USD",
+        });
+      }
+      clearPendingCheckout();
       setLoading("refresh");
       void refreshSubscription()
         .then(() => {
@@ -127,6 +152,13 @@ export default function BillingPage() {
       return;
     }
     if (isAdmin) return;
+
+    const tierForPixel = STRIPE_TIERS[tierKey];
+    trackEvent("AddToCart", { value: tierForPixel.price, currency: "USD", content_name: tierForPixel.name });
+    trackEvent("InitiateCheckout", { value: tierForPixel.price, currency: "USD", content_name: tierForPixel.name });
+    // Stripe Checkout is hosted off-domain, so this is the closest observable proxy.
+    trackEvent("AddPaymentInfo", { value: tierForPixel.price, currency: "USD", content_name: tierForPixel.name });
+    rememberPendingCheckout({ mode: "subscription", value: tierForPixel.price, contentName: tierForPixel.name });
 
     setLoading(tierKey);
     try {
@@ -183,6 +215,12 @@ export default function BillingPage() {
       return;
     }
     if (isAdmin) return;
+
+    const packForPixel = CREDIT_PACKS[packKey];
+    trackEvent("AddToCart", { value: packForPixel.price, currency: "USD", content_name: `${packForPixel.name} credit pack` });
+    trackEvent("InitiateCheckout", { value: packForPixel.price, currency: "USD", content_name: `${packForPixel.name} credit pack` });
+    trackEvent("AddPaymentInfo", { value: packForPixel.price, currency: "USD", content_name: `${packForPixel.name} credit pack` });
+    rememberPendingCheckout({ mode: "credits", value: packForPixel.price, contentName: `${packForPixel.name} credit pack` });
 
     setLoading(packKey);
     try {

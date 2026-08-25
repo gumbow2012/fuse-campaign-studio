@@ -14,6 +14,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { CREDIT_PACKS, type CreditPackKey } from "@/lib/stripe-config";
+import { rememberPendingCheckout, trackEvent } from "@/lib/metaPixel";
 
 interface CreditPackDialogProps {
   trigger: ReactNode;
@@ -30,6 +31,14 @@ export default function CreditPackDialog({ trigger }: CreditPackDialogProps) {
       return;
     }
     if (isAdmin) return;
+
+    const pack = CREDIT_PACKS[packKey];
+    const packParams = { value: pack.price, currency: "USD", content_name: `${pack.name} credit pack` };
+    trackEvent("AddToCart", packParams);
+    trackEvent("InitiateCheckout", packParams);
+    // Proxy for card entry: Stripe Checkout is hosted on Stripe's domain.
+    trackEvent("AddPaymentInfo", packParams);
+    rememberPendingCheckout({ mode: "credits", value: pack.price, contentName: `${pack.name} credit pack` });
 
     setLoading(packKey);
     try {
