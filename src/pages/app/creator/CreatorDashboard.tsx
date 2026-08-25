@@ -148,6 +148,9 @@ export default function CreatorDashboard() {
   const [analytics, setAnalytics] = useState<CreatorAnalytics | null>(null);
   const [analyticsLoading, setAnalyticsLoading] = useState(false);
   const [analyticsError, setAnalyticsError] = useState<string | null>(null);
+  const [challenges, setChallenges] = useState<CreatorChallenge[] | null>(null);
+  const [challengesLoading, setChallengesLoading] = useState(false);
+  const [challengesError, setChallengesError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [section, setSection] = useState<SectionId>("overview");
   const [onboardingBannerDismissed, setOnboardingBannerDismissed] = useState(true);
@@ -168,6 +171,26 @@ export default function CreatorDashboard() {
       setAnalyticsLoading(false);
     }
   }, []);
+
+  const loadChallenges = useCallback(async () => {
+    setChallengesLoading(true);
+    setChallengesError(null);
+    try {
+      setChallenges(await loadCreatorChallenges());
+    } catch (error) {
+      setChallenges(null);
+      setChallengesError(error instanceof Error ? error.message : "Unknown error");
+    } finally {
+      setChallengesLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (section === "challenges" && !challenges && !challengesLoading && !challengesError) {
+      void loadChallenges();
+    }
+  }, [section, challenges, challengesLoading, challengesError, loadChallenges]);
+
 
   useEffect(() => {
     if (section === "analytics" && !analytics && !analyticsLoading && !analyticsError) {
