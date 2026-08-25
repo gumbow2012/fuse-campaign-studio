@@ -35,6 +35,7 @@ import { sortTemplatesForStudio } from "@/lib/templateOrdering";
 import { fetchTemplateDetail, fetchTemplates, type ApiTemplate, type RunFeedbackRecord, type TemplateDetail } from "@/services/fuseApi";
 import { uploadRunInputFile } from "@/services/runInputUpload";
 import { getStaticInputs } from "@/services/templateInputMap";
+import { trackEvent } from "@/lib/metaPixel";
 
 type RunnerStatus = "queued" | "running" | "video_pending" | "complete" | "failed";
 
@@ -521,6 +522,11 @@ export default function TemplateStudioPage() {
   }, [selectedTemplateId]);
 
   const selectedTemplate = templates.find((template) => template.id === selectedTemplateId) ?? null;
+
+  useEffect(() => {
+    if (!selectedTemplate) return;
+    trackEvent("ViewContent", { content_name: selectedTemplate.name, content_type: "product" });
+  }, [selectedTemplate?.id]);
   const selectedTemplateDetailCacheId = selectedTemplate
     ? getTemplateDetailCacheId(selectedTemplate)
     : null;

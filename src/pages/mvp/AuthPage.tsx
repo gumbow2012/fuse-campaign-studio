@@ -9,6 +9,7 @@ import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { getAbsoluteSiteUrl } from "@/lib/site-url";
+import { clearPendingCheckout, readPendingCheckout, trackEvent, trackEventOnce } from "@/lib/metaPixel";
 
 function authErrorDescription(error: unknown, fallback: string) {
   if (!(error instanceof Error)) return fallback;
@@ -46,6 +47,24 @@ export default function AuthPage() {
     setStep("request");
     setToken("");
     setResendCooldown(0);
+  }, [paidAccess, searchParams]);
+
+  useEffect(() => {
+    if (searchParams.get("success") !== "true" && !paidAccess) return;
+    const pending = readPendingCheckout();
+    const onceKey = pending?.startedAt ?? searchParams.toString();
+    trackEventOnce(`purchase.${onceKey}`, "Purchase", {
+      value: pending?.value,
+      currency: "USD",
+      content_type: "product",
+    });
+    if (!pending || pending.mode === "subscription") {
+      trackEventOnce(`subscribe.${onceKey}`, "Subscribe", {
+        value: pending?.value,
+        currency: "USD",
+      });
+    }
+    clearPendingCheckout();
   }, [paidAccess, searchParams]);
 
   useEffect(() => {
@@ -99,12 +118,21 @@ export default function AuthPage() {
         });
         setResendCooldown(60);
       } else {
-        const { error } = await supabase.auth.verifyOtp({
+        const { data: verified, error } = await supabase.auth.verifyOtp({
           email,
           token,
           type: "email",
         });
         if (error) throw error;
+
+        const verifiedUser = verified?.user;
+        if (verifiedUser?.created_at) {
+          const createdAt = new Date(verifiedUser.created_at).getTime();
+          const isNewAccount = Number.isFinite(createdAt) && Date.now() - createdAt < 5 * 60 * 1000;
+          if (isNewAccount) {
+            trackEventOnce(`completeRegistration.${verifiedUser.id}`, "CompleteRegistration");
+          }
+        }
         toast({
           title: "Verified",
           description: paidAccess ? "Opening your Fuse studio." : "Your access is active.",
