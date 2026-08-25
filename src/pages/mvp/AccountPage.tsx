@@ -9,6 +9,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { ADMIN_VISUAL_BUDGET_TOTAL, getAdminVisualCreditsRemaining, getAdminVisualCreditsSpent } from "@/lib/adminBudget";
 import { updateAccountProfile } from "@/services/account";
+import { loadCreditHistory, type CreditLedgerRow } from "@/services/creditHistory";
 
 export default function AccountPage() {
   const { isAdmin, profile, refreshProfile, user } = useAuth();
