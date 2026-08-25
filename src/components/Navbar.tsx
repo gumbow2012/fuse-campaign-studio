@@ -1,8 +1,10 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Link, useNavigate } from "react-router-dom";
-import { Star, FolderArchive, FileText, Bell, User, Search, Lock, ChevronDown, LogOut, LayoutDashboard, Zap } from "lucide-react";
+import { Sheet, SheetContent, SheetTrigger, SheetTitle } from "@/components/ui/sheet";
+import { Star, FolderArchive, FileText, Bell, User, Search, Lock, ChevronDown, LogOut, LayoutDashboard, Zap, Menu, X } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
+import { AccountPopover, AccountMenuContent } from "@/components/AccountMenu";
 
 const FUSE_ICON_SRC = "/fuse-icon.png?v=20260519";
 const FUSE_WORDMARK_SRC = "/fuse-wordmark.png?v=20260519";
