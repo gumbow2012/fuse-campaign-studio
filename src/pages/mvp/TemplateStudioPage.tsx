@@ -989,11 +989,18 @@ export default function TemplateStudioPage() {
                 const outputCount = getTemplateOutputCount(template);
 
                 return (
-                  <button
+                  <div
                     key={template.id}
-                    type="button"
+                    role="button"
+                    tabIndex={0}
                     onClick={() => handleTemplateSelect(template.id)}
-                    className={`group overflow-hidden rounded-[1.5rem] border text-left transition-colors ${
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault();
+                        handleTemplateSelect(template.id);
+                      }
+                    }}
+                    className={`group cursor-pointer overflow-hidden rounded-[1.5rem] border text-left transition-colors ${
                       selected
                         ? "border-cyan-300/50 bg-cyan-300/10"
                         : "border-white/8 bg-black/20 hover:border-white/20 hover:bg-white/[0.05]"
@@ -1008,7 +1015,18 @@ export default function TemplateStudioPage() {
                       <div className="absolute bottom-3 left-3 rounded-full border border-white/15 bg-black/45 px-2.5 py-1 text-[9px] uppercase tracking-[0.18em] text-white/80 backdrop-blur">
                         Vibe
                       </div>
+                      <button
+                        type="button"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          setDetailTemplateId(template.id);
+                        }}
+                        className="absolute right-3 top-3 rounded-full border border-white/15 bg-black/55 px-3 py-1 text-[9px] font-semibold uppercase tracking-[0.18em] text-white/85 backdrop-blur transition-colors hover:bg-black/80"
+                      >
+                        Details
+                      </button>
                     </div>
+
 
                     <div className="space-y-3 p-4">
                       <div className="flex items-start justify-between gap-3">
