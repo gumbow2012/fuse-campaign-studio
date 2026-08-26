@@ -28,12 +28,27 @@ interface LibraryPickerDialogProps {
   /** Compatible kinds for this input; empty means show everything. */
   kinds?: LibraryAssetKind[];
   onSelect: (asset: LibraryAsset) => void;
-  trigger?: ReactNode;
+  /** Pass `null` to render no trigger (controlled usage). */
+  trigger?: ReactNode | null;
+  /** Optional controlled open state — used by the compact "Add asset" dialog. */
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }
 
-export default function LibraryPickerDialog({ kinds = [], onSelect, trigger }: LibraryPickerDialogProps) {
+export default function LibraryPickerDialog({
+  kinds = [],
+  onSelect,
+  trigger,
+  open: openProp,
+  onOpenChange,
+}: LibraryPickerDialogProps) {
   const { user } = useAuth();
-  const [open, setOpen] = useState(false);
+  const [internalOpen, setInternalOpen] = useState(false);
+  const open = openProp ?? internalOpen;
+  const setOpen = (next: boolean) => {
+    setInternalOpen(next);
+    onOpenChange?.(next);
+  };
   const [activeKind, setActiveKind] = useState<LibraryAssetKind | "all">(kinds[0] ?? "all");
 
   const assetsQuery = useQuery({
@@ -42,6 +57,7 @@ export default function LibraryPickerDialog({ kinds = [], onSelect, trigger }: L
     enabled: !!user?.id && open,
     staleTime: 30_000,
   });
+
 
   const compatible = useMemo(
     () => {
@@ -61,13 +77,16 @@ export default function LibraryPickerDialog({ kinds = [], onSelect, trigger }: L
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        {trigger ?? (
-          <button type="button" className="text-[11px] uppercase tracking-[0.16em] text-cyan-200">
-            Choose From Library
-          </button>
-        )}
-      </DialogTrigger>
+      {trigger === null ? null : (
+        <DialogTrigger asChild>
+          {trigger ?? (
+            <button type="button" className="text-[11px] uppercase tracking-[0.16em] text-cyan-200">
+              Choose From Library
+            </button>
+          )}
+        </DialogTrigger>
+      )}
+
       <DialogContent className="max-w-3xl border-white/10 bg-slate-950/95 text-white">
         <DialogHeader>
           <DialogTitle className="font-display text-2xl tracking-[-0.02em]">Your asset library</DialogTitle>

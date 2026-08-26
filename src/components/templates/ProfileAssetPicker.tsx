@@ -4,7 +4,7 @@
  * normal asset URL (same as an uploaded or library asset).
  */
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Boxes, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -25,6 +25,12 @@ import { cn } from "@/lib/utils";
 interface ProfileAssetPickerProps {
   assetType?: TemplateAssetType | null;
   onSelect: (asset: { url: string; name?: string | null }) => void;
+  /** Pass `null` to render no trigger (controlled usage). */
+  trigger?: ReactNode | null;
+  /** Optional controlled open state — used by the compact "Add asset" dialog. */
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+  title?: string;
 }
 
 /** Roles that best match an FT2 assetType — used only to sort suggestions. */
@@ -53,9 +59,21 @@ interface ProfileGroup {
   assets: { role: string; url: string }[];
 }
 
-export default function ProfileAssetPicker({ assetType, onSelect }: ProfileAssetPickerProps) {
+export default function ProfileAssetPicker({
+  assetType,
+  onSelect,
+  trigger,
+  open: openProp,
+  onOpenChange,
+  title,
+}: ProfileAssetPickerProps) {
   const { user } = useAuth();
-  const [open, setOpen] = useState(false);
+  const [internalOpen, setInternalOpen] = useState(false);
+  const open = openProp ?? internalOpen;
+  const setOpen = (next: boolean) => {
+    setInternalOpen(next);
+    onOpenChange?.(next);
+  };
 
   const brandsQuery = useQuery({
     queryKey: ["brand-profiles", user?.id ?? "anon"],
@@ -106,20 +124,24 @@ export default function ProfileAssetPicker({ assetType, onSelect }: ProfileAsset
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        <Button
-          type="button"
-          size="sm"
-          variant="outline"
-          className="h-8 rounded-full border-white/12 bg-white/[0.03] px-3 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-200 hover:text-white"
-        >
-          <Boxes className="h-3.5 w-3.5" />
-          Use assets from
-        </Button>
-      </DialogTrigger>
+      {trigger === null ? null : (
+        <DialogTrigger asChild>
+          {trigger ?? (
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="h-8 rounded-full border-white/12 bg-white/[0.03] px-3 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-200 hover:text-white"
+            >
+              <Boxes className="h-3.5 w-3.5" />
+              Use assets from
+            </Button>
+          )}
+        </DialogTrigger>
+      )}
       <DialogContent className="max-w-3xl border-white/10 bg-slate-950/95 text-white">
         <DialogHeader>
-          <DialogTitle className="font-display text-2xl tracking-[-0.02em]">Use assets from a profile</DialogTitle>
+          <DialogTitle className="font-display text-2xl tracking-[-0.02em]">{title ?? "Use assets from a profile"}</DialogTitle>
           <DialogDescription className="text-slate-400">
             Pull a saved brand, product or garment image into this slot.
           </DialogDescription>
