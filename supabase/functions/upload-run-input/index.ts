@@ -82,7 +82,23 @@ Deno.serve(async (req) => {
     const user = runnerAccess ? await getOptionalUser(req, admin) : await requireUser(req, admin);
     if (!user && !runnerAccess) throw new Error("Authentication required.");
     const body = await req.json() as UploadRunInputBody;
+
+    // Direct-to-storage authorization: mint a signed upload URL. Bytes never
+    // pass through this function.
+    if (body.action === "sign") {
+      const safeName = sanitizeName(body.filename);
+      const extension = body.filename?.match(/\.([a-z0-9]+)$/i)?.[1]?.toLowerCase() ?? "png";
+      const ownerKey = user?.id ?? "runner";
+      const storagePath = `${ownerKey}/run-inputs/${crypto.randomUUID()}/${safeName}.${extension}`;
+      const { data, error } = await admin.storage
+        .from("fuse-assets")
+        .createSignedUploadUrl(storagePath);
+      if (error || !data) throw new Error(error?.message ?? "Could not authorize upload.");
+      return json({ path: data.path ?? storagePath, token: data.token });
+    }
+
     if (!body.dataUrl) throw new Error("Missing image payload.");
+
 
     const { bytes, contentType, extension } = parseDataUrl(body.dataUrl);
     const safeName = sanitizeName(body.filename);
