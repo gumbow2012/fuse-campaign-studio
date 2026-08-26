@@ -453,7 +453,7 @@ async function applyCreditPackTopup(args: {
     p_user_id: args.profile.user_id,
     p_amount: pack.credits,
     p_type: "topup",
-    p_description: `Stripe credit pack: ${pack.name}`,
+    p_description: args.ledgerDescription ?? `Stripe credit pack: ${pack.name}`,
     p_template_id: null,
     p_project_id: null,
     p_step_id: null,
@@ -662,9 +662,31 @@ export function createCreditCheckoutHandler(mode: StripeBillingMode) {
       userEmail = user.email ?? null;
       if (!user.email) throw new Error("User not authenticated");
 
-      const body = await req.json().catch(() => ({})) as { packKey?: string };
-      const pack = creditPackFromKey(typeof body.packKey === "string" ? body.packKey : null);
-      if (!pack) throw new Error("Unsupported credit pack");
+      const body = await req.json().catch(() => ({})) as { packKey?: string; credits?: number | string };
+
+      // New flow: the client submits ONLY a credits integer; the server is the
+      // sole price authority via quoteCreditTopUp. Legacy { packKey } flow is
+      // preserved unchanged for older clients.
+      const hasCredits = body.credits !== undefined && body.credits !== null && body.credits !== "";
+      let pack: CreditPackDefinition;
+      let purchaseType: "preset" | "custom" | null = null;
+      let pricingVersion: string | null = null;
+      if (hasCredits) {
+        const quote = quoteCreditTopUp(body.credits);
+        purchaseType = creditTopUpPurchaseType(quote.credits);
+        pricingVersion = quote.pricingVersion;
+        pack = {
+          key: purchaseType === "preset" ? `preset_${quote.credits}` : "custom",
+          name: `${quote.credits.toLocaleString("en-US")} FUSE Credits`,
+          credits: quote.credits,
+          amountCents: quote.amountCents,
+          currency: "usd",
+        } as CreditPackDefinition;
+      } else {
+        const legacyPack = creditPackFromKey(typeof body.packKey === "string" ? body.packKey : null);
+        if (!legacyPack) throw new Error("Unsupported credit pack");
+        pack = legacyPack;
+      }
 
       const stripe = createStripeClient(getStripeSecretKey(mode));
       const { data: profile } = await admin
