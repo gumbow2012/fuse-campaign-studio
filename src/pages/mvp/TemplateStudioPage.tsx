@@ -801,6 +801,35 @@ export default function TemplateStudioPage() {
         : !!textInputs[field.key]?.trim(),
     );
 
+  /** Presentation only: readiness counter for the compact builder header. */
+  const isFieldFilled = (field: InputField) =>
+    field.type === "image"
+      ? !!files[field.key] || !!libraryAssets[field.key]?.url
+      : !!textInputs[field.key]?.trim();
+  const readyInputCount = inputFields.filter(isFieldFilled).length;
+  const totalInputCount = inputFields.length;
+  const readinessPercent = totalInputCount ? Math.round((readyInputCount / totalInputCount) * 100) : 0;
+
+  /** Auto-advance to the next unfilled slot after one is satisfied. */
+  const advanceFromInput = (filledKey: string) => {
+    const order = inputFields.map((field) => field.key);
+    const startIndex = order.indexOf(filledKey);
+    const next = inputFields
+      .slice(startIndex + 1)
+      .concat(inputFields.slice(0, Math.max(startIndex, 0)))
+      .find((field) => field.key !== filledKey && !isFieldFilled(field));
+    if (!next) {
+      setFocusedInputKey(null);
+      return;
+    }
+    setFocusedInputKey(next.key);
+    window.requestAnimationFrame(() => {
+      slotRefs.current[next.key]?.scrollIntoView({ behavior: "smooth", block: "center" });
+    });
+  };
+
+
+
   const creditsRequired = selectedTemplate?.estimated_credits_per_run ?? 0;
   const selectedTemplateOutputCount = getTemplateOutputCount(selectedTemplate);
   const creditBalance = profile?.credits_balance ?? null;
