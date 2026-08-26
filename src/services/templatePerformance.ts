@@ -147,3 +147,159 @@ export function formatSpend(value: number | null | undefined) {
   if (value >= 1_000) return `$${Math.round(value / 1_000)}k`;
   return `$${Math.round(value).toLocaleString("en-US")}`;
 }
+
+/* ------------------------------------------------------------------ */
+/* Part 2 — detail rows, earned badges, marketplace filter predicates  */
+/* ------------------------------------------------------------------ */
+
+export function formatCpa(value: number | null | undefined) {
+  if (value === null || value === undefined) return null;
+  return `$${Math.round(value).toLocaleString("en-US")}`;
+}
+
+export function formatRevenue(value: number | null | undefined) {
+  if (value === null || value === undefined) return null;
+  if (value >= 1_000_000) return `$${(value / 1_000_000).toFixed(1)}m`;
+  if (value >= 10_000) return `$${Math.round(value / 1_000)}k`;
+  return `$${Math.round(value).toLocaleString("en-US")}`;
+}
+
+export function formatVerifiedDate(value: string | null | undefined) {
+  if (!value) return null;
+  const time = new Date(value).getTime();
+  if (Number.isNaN(time)) return null;
+  return new Date(time).toLocaleDateString("en-US", {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  });
+}
+
+/** Purchase CVR computed from the row's own counts — never estimated. */
+export function computeCvrFromCounts(row: TemplatePerformanceRow) {
+  if (!row.purchases || !row.landing_page_views) return null;
+  if (row.landing_page_views <= 0) return null;
+  return row.purchases / row.landing_page_views;
+}
+
+export function formatAttributionWindow(row: TemplatePerformanceRow) {
+  const start = row.date_start ? new Date(row.date_start) : null;
+  const end = row.date_end ? new Date(row.date_end) : null;
+  const fmt = (date: Date) =>
+    date.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  if (start && !Number.isNaN(start.getTime()) && end && !Number.isNaN(end.getTime())) {
+    return `${fmt(start)} – ${fmt(end)}`;
+  }
+  if (start && !Number.isNaN(start.getTime())) return `From ${fmt(start)}`;
+  if (end && !Number.isNaN(end.getTime())) return `Through ${fmt(end)}`;
+  return null;
+}
+
+export type PerformanceBadgeKey =
+  | "META_VERIFIED"
+  | "SPEND_10K"
+  | "REVENUE_100K"
+  | "MEDIAN_ROAS_3X"
+  | "HIGH_AOV"
+  | "HIGH_CONVERSION";
+
+export interface PerformanceBadge {
+  key: PerformanceBadgeKey;
+  label: string;
+  tone: "verified" | "performance" | "neutral";
+}
+
+/** Every badge is derived from the stored row. Nothing here can be set by hand. */
+export function earnedBadges(row: TemplatePerformanceRow | null | undefined): PerformanceBadge[] {
+  if (!row) return [];
+  const badges: PerformanceBadge[] = [];
+  if (isVerified(row)) badges.push({ key: "META_VERIFIED", label: "Meta verified", tone: "verified" });
+  if ((row.spend ?? 0) >= 10_000) badges.push({ key: "SPEND_10K", label: "$10k+ tested", tone: "neutral" });
+  if ((row.revenue ?? 0) >= 100_000)
+    badges.push({ key: "REVENUE_100K", label: "$100k+ revenue tracked", tone: "neutral" });
+  if ((row.roas ?? 0) >= 3)
+    badges.push({ key: "MEDIAN_ROAS_3X", label: "3×+ median ROAS", tone: "performance" });
+  if ((row.aov ?? 0) >= 150) badges.push({ key: "HIGH_AOV", label: "High AOV", tone: "neutral" });
+  const cvr = row.purchase_cvr_lpv ?? computeCvrFromCounts(row);
+  const cvrRatio = cvr === null || cvr === undefined ? null : cvr > 1 ? cvr / 100 : cvr;
+  if (cvrRatio !== null && cvrRatio >= 0.05)
+    badges.push({ key: "HIGH_CONVERSION", label: "High conversion", tone: "performance" });
+  return badges;
+}
+
+export interface PerformanceRange {
+  bestRoas: number;
+  medianRoas: number;
+  campaignsMeasured: number;
+}
+
+/**
+ * A range is only shown when the underlying data genuinely supports it:
+ * two or more measured rows, or a single row covering 3+ campaigns.
+ */
+export function computePerformanceRange(rows: TemplatePerformanceRow[]): PerformanceRange | null {
+  const roasValues = rows
+    .map((row) => row.roas)
+    .filter((value): value is number => value !== null && value !== undefined);
+  const campaigns = rows.reduce((total, row) => total + (row.campaign_count ?? 0), 0);
+  const enough = roasValues.length >= 2 || (roasValues.length === 1 && campaigns >= 3);
+  if (!enough || !roasValues.length) return null;
+  const sorted = [...roasValues].sort((a, b) => a - b);
+  const middle = Math.floor(sorted.length / 2);
+  const median =
+    sorted.length % 2 === 0 ? (sorted[middle - 1] + sorted[middle]) / 2 : sorted[middle];
+  return {
+    bestRoas: sorted[sorted.length - 1],
+    medianRoas: median,
+    campaignsMeasured: campaigns || roasValues.length,
+  };
+}
+
+/** All rows for a single template, newest first. Empty on missing/blocked table. */
+export async function loadTemplatePerformanceRows(
+  templateId: string,
+): Promise<TemplatePerformanceRow[]> {
+  if (!templateId) return [];
+  try {
+    const { data, error } = await looseTable("template_performance")
+      .select("*")
+      .eq("template_id", templateId);
+    if (error || !Array.isArray(data)) return [];
+    return (data as Array<Record<string, unknown>>)
+      .map(normalize)
+      .filter((row): row is TemplatePerformanceRow => !!row)
+      .sort((a, b) => rowTime(b) - rowTime(a));
+  } catch {
+    return [];
+  }
+}
+
+/* ---------------------------- filters ---------------------------- */
+
+export const ROAS_FILTERS = ["2×+", "3×+", "4×+", "5×+"] as const;
+export const AOV_FILTERS = ["<$50", "$50–100", "$100–200", "$200+"] as const;
+export const SPEND_FILTERS = ["$1K+", "$5K+", "$10K+", "$25K+"] as const;
+
+export function matchesRoasFilter(row: TemplatePerformanceRow | null | undefined, filter: string) {
+  const value = row?.roas;
+  if (value === null || value === undefined) return false;
+  const threshold = Number(filter.replace(/[^\d.]/g, ""));
+  return Number.isFinite(threshold) ? value >= threshold : true;
+}
+
+export function matchesAovFilter(row: TemplatePerformanceRow | null | undefined, filter: string) {
+  const value = row?.aov;
+  if (value === null || value === undefined) return false;
+  if (filter === "<$50") return value < 50;
+  if (filter === "$50–100") return value >= 50 && value < 100;
+  if (filter === "$100–200") return value >= 100 && value < 200;
+  if (filter === "$200+") return value >= 200;
+  return true;
+}
+
+export function matchesSpendFilter(row: TemplatePerformanceRow | null | undefined, filter: string) {
+  const value = row?.spend;
+  if (value === null || value === undefined) return false;
+  const thousands = Number(filter.replace(/[^\d.]/g, ""));
+  return Number.isFinite(thousands) ? value >= thousands * 1_000 : true;
+}

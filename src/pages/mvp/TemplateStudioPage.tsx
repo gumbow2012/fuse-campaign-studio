@@ -43,7 +43,16 @@ import { libraryKindForAssetType, saveLibraryAsset } from "@/services/libraryAss
 import { getStaticInputs } from "@/services/templateInputMap";
 import { trackEvent } from "@/lib/metaPixel";
 import { loadTemplatePerformance, type TemplatePerformanceMap } from "@/services/templatePerformance";
-import { PerformanceBlock, PerformanceDisclaimer } from "@/components/TemplatePerformance";
+import { PerformanceBlock, PerformanceBadges, PerformanceDisclaimer } from "@/components/TemplatePerformance";
+import FilterDropdown, { type FilterOption } from "@/components/templates/FilterDropdown";
+import {
+  AOV_FILTERS,
+  ROAS_FILTERS,
+  SPEND_FILTERS,
+  matchesAovFilter,
+  matchesRoasFilter,
+  matchesSpendFilter,
+} from "@/services/templatePerformance";
 
 import {
   formatAssetTypeLabel,
@@ -496,6 +505,59 @@ export default function TemplateStudioPage() {
   });
 
   const hasAnyPerformance = Object.keys(performanceMap).length > 0;
+
+  /** Perf filters only ever match templates that already have a real row. */
+  const [perfFilters, setPerfFilters] = useState<Record<string, string | null>>({
+    roas: null,
+    aov: null,
+    spend: null,
+    category: null,
+  });
+
+  const categoryOptions = useMemo(() => {
+    const preferred = ["Streetwear", "Jewelry", "Product", "Artist", "Cinematic"];
+    const present = new Set(
+      templates.map((template) => (template.category ?? "").trim()).filter(Boolean),
+    );
+    const ordered = preferred.filter((option) =>
+      Array.from(present).some((value) => value.toLowerCase() === option.toLowerCase()),
+    );
+    const extras = Array.from(present).filter(
+      (value) => !preferred.some((option) => option.toLowerCase() === value.toLowerCase()),
+    );
+    return [...ordered, ...extras];
+  }, [templates]);
+
+  const filterDefinitions = useMemo<FilterOption[]>(() => {
+    const definitions: FilterOption[] = [
+      { key: "roas", label: "ROAS", icon: "📈", options: [...ROAS_FILTERS] },
+      { key: "aov", label: "AOV", icon: "🧾", options: [...AOV_FILTERS] },
+      { key: "spend", label: "Tested spend", icon: "💳", options: [...SPEND_FILTERS] },
+    ];
+    if (categoryOptions.length) {
+      definitions.push({ key: "category", label: "Category", icon: "✦", options: categoryOptions });
+    }
+    return definitions;
+  }, [categoryOptions]);
+
+  const activeFilterCount = Object.values(perfFilters).filter(Boolean).length;
+
+  const visibleTemplates = useMemo(() => {
+    if (!activeFilterCount) return templates;
+    return templates.filter((template) => {
+      const row = performanceMap[String(template.id ?? "")] ?? null;
+      if (perfFilters.roas && !matchesRoasFilter(row, perfFilters.roas)) return false;
+      if (perfFilters.aov && !matchesAovFilter(row, perfFilters.aov)) return false;
+      if (perfFilters.spend && !matchesSpendFilter(row, perfFilters.spend)) return false;
+      if (
+        perfFilters.category &&
+        (template.category ?? "").trim().toLowerCase() !== perfFilters.category.toLowerCase()
+      ) {
+        return false;
+      }
+      return true;
+    });
+  }, [activeFilterCount, perfFilters, performanceMap, templates]);
 
 
   useEffect(() => {
@@ -1007,6 +1069,28 @@ export default function TemplateStudioPage() {
               </div>
             ) : null}
 
+            <div className="mt-4 flex flex-wrap items-center gap-2">
+              {filterDefinitions.map((filter) => (
+                <FilterDropdown
+                  key={filter.key}
+                  filter={filter}
+                  value={perfFilters[filter.key] ?? null}
+                  onChange={(value) =>
+                    setPerfFilters((previous) => ({ ...previous, [filter.key]: value }))
+                  }
+                />
+              ))}
+              {activeFilterCount ? (
+                <button
+                  type="button"
+                  onClick={() => setPerfFilters({ roas: null, aov: null, spend: null, category: null })}
+                  className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-400 hover:text-white"
+                >
+                  Clear
+                </button>
+              ) : null}
+            </div>
+
             {!templatesQuery.isFetching && !templates.length ? (
               <div className="mt-5 rounded-[1.5rem] border border-white/8 bg-black/20 p-4 text-sm text-slate-300">
                 No active templates were returned.
@@ -1014,7 +1098,7 @@ export default function TemplateStudioPage() {
             ) : null}
 
             <div className={cn("mt-5 grid gap-4 sm:grid-cols-2", hasExpandedRecentRun ? "2xl:grid-cols-2" : "lg:grid-cols-3")}>
-              {templates.map((template) => {
+              {visibleTemplates.map((template) => {
                 const selected = template.id === selectedTemplateId;
                 const credits = template.estimated_credits_per_run || 0;
                 const inputCount = getTemplateInputCount(template);
@@ -1065,6 +1149,7 @@ export default function TemplateStudioPage() {
 
                     <div className="space-y-3 p-4">
                       {performance ? <PerformanceBlock row={performance} /> : null}
+                      {performance ? <PerformanceBadges row={performance} limit={3} /> : null}
                       <div className="flex items-start justify-between gap-3">
 
                         <div className="min-w-0">
@@ -1106,6 +1191,11 @@ export default function TemplateStudioPage() {
                 );
               })}
             </div>
+            {activeFilterCount && templates.length && !visibleTemplates.length ? (
+              <div className="mt-5 rounded-[1.5rem] border border-white/8 bg-black/20 p-4 text-sm text-slate-300">
+                No templates match these performance filters yet.
+              </div>
+            ) : null}
             {hasAnyPerformance ? <PerformanceDisclaimer className="mt-4" /> : null}
           </section>
 
@@ -1675,6 +1765,7 @@ export default function TemplateStudioPage() {
             ? "Bypassed for team access"
             : `${detailTemplate?.estimated_credits_per_run ?? 0} credits`,
         }}
+        performance={detailTemplate ? performanceMap[String(detailTemplate.id ?? "")] ?? null : null}
         onUseTemplate={() => {
           if (detailTemplate) handleTemplateSelect(detailTemplate.id);
         }}
