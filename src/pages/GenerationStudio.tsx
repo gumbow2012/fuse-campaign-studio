@@ -517,7 +517,9 @@ function GenerationCard({
             >
               {isImage ? (
                 near ? (
+                  <img
                     src={tileSrc as string}
+
 
                     alt={generation.prompt ?? generation.promptPreview ?? "Generated result"}
                     loading={priority ? "eager" : "lazy"}
