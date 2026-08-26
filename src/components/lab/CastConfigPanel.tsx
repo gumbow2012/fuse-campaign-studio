@@ -68,28 +68,33 @@ export default function CastConfigPanel({
   ]);
 
   const castEnabled = mode !== "NO_CASTING";
-  const canSave = !disabled && !saving && (!castEnabled || !!nodeId);
+  const locked = isActiveVersion === true;
+  const busy = !!saving || !!cloning;
+  const canSave = !locked && !disabled && !busy && (!castEnabled || !!nodeId);
+  const canClone = locked && !disabled && !busy && castEnabled && !!nodeId && !!onCloneForCast;
+
+  const buildConfig = (): CastConfig => ({
+    supported: true,
+    required: mode === "REQUIRED",
+    slots: [
+      {
+        id: PRIMARY_CAST_SLOT_ID,
+        label: "Cast A",
+        nodeId,
+        preservePose,
+        preserveComposition,
+        preserveEnvironment,
+        identityStrength,
+      },
+    ],
+  });
 
   const submit = () => {
     if (!castEnabled) {
       void onSave(null);
       return;
     }
-    void onSave({
-      supported: true,
-      required: mode === "REQUIRED",
-      slots: [
-        {
-          id: PRIMARY_CAST_SLOT_ID,
-          label: "Cast A",
-          nodeId,
-          preservePose,
-          preserveComposition,
-          preserveEnvironment,
-          identityStrength,
-        },
-      ],
-    });
+    void onSave(buildConfig());
   };
 
   return (
@@ -97,10 +102,22 @@ export default function CastConfigPanel({
       <div className="flex items-center gap-2">
         <Users className="h-4 w-4 text-cyan-200" />
         <p className="text-xs font-semibold uppercase tracking-[0.15em] text-foreground/80">Cast</p>
+        <span
+          className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] ${
+            locked
+              ? "bg-amber-300/10 text-amber-100"
+              : "bg-cyan-300/10 text-cyan-100"
+          }`}
+        >
+          {locked ? "Live version — protected" : "Draft test version"}
+        </span>
       </div>
       <p className="mt-1 text-xs text-muted-foreground">
-        Casting metadata only — the runner is unchanged. No casting keeps this version exactly as today.
+        {locked
+          ? "This version is live. Pick the cast settings below and clone it into a draft test version — the live graph is never touched."
+          : "Casting metadata only — the runner is unchanged. No casting keeps this version exactly as today."}
       </p>
+
 
       <div className="mt-3 grid gap-3 md:grid-cols-2">
         <div className="space-y-2">
