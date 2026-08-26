@@ -1773,9 +1773,8 @@ export default function TemplateStudioPage() {
                           </div>
 
                           {!ACTIVE_RUN_STATUSES.has(run.status) ? (
-                            <RunFeedbackCard
+                            <RunFeedbackInline
                               jobId={run.id}
-                              compact
                               initialFeedback={resolveFeedback(run.id, run.feedback)}
                               onSaved={(feedback) => handleFeedbackSaved(run.id, feedback)}
                               className="mt-4"
