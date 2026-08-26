@@ -1572,50 +1572,52 @@ export default function TemplateStudioPage() {
                 </div>
               ) : null}
 
-              {result && ACTIVE_RUN_STATUSES.has(result.status) ? (
+              {/* P0: the workflow graph stays attached for the ENTIRE run lifecycle —
+                  queued → running → video_pending → complete / failed. */}
+              {result && result.publicGraph && result.publicGraph.nodes.length > 0 ? (
                 <div className="mt-6 space-y-4">
-                  {result.publicGraph && result.publicGraph.nodes.length > 0 ? (
-                    <CampaignBuildGraph
-                      graph={result.publicGraph}
-                      statusMessage={result.statusMessage}
-                      progress={result.progress}
-                    />
-                  ) : (
-                    <RunProgressBeacon progress={result.progress} status={result.status} />
-                  )}
+                  <CampaignBuildGraph
+                    graph={result.publicGraph}
+                    runStatus={result.status}
+                    statusMessage={result.statusMessage}
+                    progress={result.progress}
+                    canCustomizeWorkflow={canCustomizeWorkflow}
+                    onCustomizeWorkflow={handleCustomizeWorkflow}
+                    onLockedCustomize={() => setWorkflowUpgradeDialogOpen(true)}
+                  />
+                  {ACTIVE_RUN_STATUSES.has(result.status) ? (
+                    <CampaignOutputsPanel graph={result.publicGraph} outputs={result.outputs} />
+                  ) : null}
+                </div>
+              ) : null}
+
+              {result && !result.publicGraph?.nodes.length && ACTIVE_RUN_STATUSES.has(result.status) ? (
+                <div className="mt-6 space-y-4">
+                  <RunProgressBeacon progress={result.progress} status={result.status} />
                   <CampaignOutputsPanel graph={result.publicGraph} outputs={result.outputs} />
                 </div>
               ) : null}
 
-              {result?.status === "failed" ? (
+              {result?.status === "failed" && !result.publicGraph?.nodes.length ? (
                 <div className="mt-6 rounded-[1.5rem] border border-rose-400/20 bg-rose-400/10 p-5">
-                  <div className="flex items-center gap-3">
-                    <AlertTriangle className="h-5 w-5 text-rose-100" />
-                    <p className="text-sm text-rose-50">{result.error || "The run failed."}</p>
-                  </div>
+                  <p className="text-sm text-rose-50">Generation interrupted — try again.</p>
                 </div>
               ) : null}
 
               {result?.status === "complete" ? (
                 <div className="mt-6 space-y-5">
-                  <div className="flex items-center gap-3 rounded-[1.5rem] border border-emerald-400/20 bg-emerald-400/10 p-4">
-                    <CheckCircle2 className="h-5 w-5 text-emerald-100" />
-                    <p className="text-sm text-emerald-50">The template completed successfully.</p>
-                  </div>
-
-                  {jobId ? (
-                    <RunFeedbackCard
-                      jobId={jobId}
-                      initialFeedback={currentResultFeedback}
-                      onSaved={(feedback) => handleFeedbackSaved(jobId, feedback)}
-                    />
-                  ) : null}
-
                   <CampaignResults
                     outputs={result.outputs}
                     onDownload={handleDownloadSingleOutput}
                   />
 
+                  {jobId ? (
+                    <RunFeedbackInline
+                      jobId={jobId}
+                      initialFeedback={currentResultFeedback}
+                      onSaved={(feedback) => handleFeedbackSaved(jobId, feedback)}
+                    />
+                  ) : null}
                 </div>
               ) : null}
 
