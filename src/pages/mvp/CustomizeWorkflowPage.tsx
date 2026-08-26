@@ -6,14 +6,13 @@
  * attribution, versioning or admin test runs. Hidden creator prompts never
  * arrive here (server strips them for prompt-hidden forks).
  */
-import { useEffect, useMemo, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { Loader2, RotateCcw, Copy, Play, Save } from "lucide-react";
 import SiteShell from "@/components/mvp/SiteShell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -28,8 +27,10 @@ import { toast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import {
   createFork,
+  estimateForkRun,
   getFork,
   resetFork,
+  runFork,
   updateFork,
   type PersonalGraph,
   type PersonalGraphNode,
@@ -69,6 +70,30 @@ export default function CustomizeWorkflowPage() {
   const [duplicating, setDuplicating] = useState(false);
   const [resetOpen, setResetOpen] = useState(false);
   const [accessDenied, setAccessDenied] = useState(false);
+  const [estimatedCredits, setEstimatedCredits] = useState<number | null>(null);
+  const [estimating, setEstimating] = useState(false);
+  const [running, setRunning] = useState(false);
+  const [needsCredits, setNeedsCredits] = useState(false);
+  const runKeyRef = useRef<string | null>(null);
+
+  /** TR10b — server-authoritative dry-run cost (no charge, no job). */
+  const refreshEstimate = useCallback(async () => {
+    if (!forkId) return;
+    setEstimating(true);
+    try {
+      const { estimatedCredits: credits } = await estimateForkRun(forkId);
+      setEstimatedCredits(credits);
+    } catch {
+      setEstimatedCredits(null);
+    } finally {
+      setEstimating(false);
+    }
+  }, [forkId]);
+
+  useEffect(() => {
+    if (!forkId || accessDenied) return;
+    void refreshEstimate();
+  }, [forkId, accessDenied, refreshEstimate]);
 
   useEffect(() => {
     if (authLoading) return;
@@ -140,10 +165,47 @@ export default function CustomizeWorkflowPage() {
     try {
       await updateFork(forkId, graph);
       toast({ title: "Saved", description: "Your private version is up to date." });
+      await refreshEstimate();
     } catch {
       toast({ title: "Couldn't save your changes", variant: "destructive" });
     } finally {
       setSaving(false);
+    }
+  };
+
+  /**
+   * TR10b — auto-save, then run the private fork. Inputs are omitted so the
+   * server reuses the originating run's assets (owner-scoped, server-priced).
+   */
+  const handleRun = async () => {
+    if (!forkId || running) return;
+    setRunning(true);
+    setNeedsCredits(false);
+    try {
+      if (graph) await updateFork(forkId, graph);
+      // One key per fork run attempt — a double-click can never double-charge.
+      if (!runKeyRef.current) runKeyRef.current = crypto.randomUUID();
+      const { jobId } = await runFork(forkId, runKeyRef.current);
+      runKeyRef.current = null;
+      navigate(`/app/templates?run=${jobId}`);
+    } catch (error) {
+      const code = (error as { code?: string })?.code ?? "";
+      if (code === "INSUFFICIENT_CREDITS" || code === "HTTP_402" || code === "MEMBERSHIP_REQUIRED") {
+        setNeedsCredits(true);
+      } else if (code === "PRO_REQUIRED" || code === "FORBIDDEN" || code === "HTTP_403") {
+        toast({
+          title: "Pro membership required",
+          description: "Personal versions run on Pro and above.",
+        });
+      } else {
+        toast({
+          title: "Couldn't start your run",
+          description: (error as Error)?.message ?? undefined,
+          variant: "destructive",
+        });
+      }
+    } finally {
+      setRunning(false);
     }
   };
 
@@ -156,6 +218,7 @@ export default function CustomizeWorkflowPage() {
       setFork(refreshed);
       setGraph(refreshed.personalGraph);
       toast({ title: "Reset", description: "Back to the original template." });
+      await refreshEstimate();
     } catch {
       toast({ title: "Couldn't reset this version", variant: "destructive" });
     } finally {
@@ -227,17 +290,43 @@ export default function CustomizeWorkflowPage() {
               {duplicating ? <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" /> : <Copy className="h-4 w-4" />}
               Duplicate personal version
             </Button>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <span className="inline-flex">
-                  <Button variant="secondary" className="gap-2" disabled>
-                    <Play className="h-4 w-4" />
-                    Run personal version
-                  </Button>
-                </span>
-              </TooltipTrigger>
-              <TooltipContent>Coming soon</TooltipContent>
-            </Tooltip>
+          </div>
+
+          <div className="mt-6 border-t border-white/10 pt-5">
+            <p className="text-xs uppercase tracking-[0.16em] text-slate-400">
+              Estimated run cost:{" "}
+              <span className="font-semibold text-slate-100">
+                {estimating && estimatedCredits === null
+                  ? "calculating…"
+                  : estimatedCredits === null
+                    ? "unavailable"
+                    : `${estimatedCredits.toLocaleString()} credits`}
+              </span>
+            </p>
+            <Button
+              className="mt-3 gap-2"
+              onClick={() => void handleRun()}
+              disabled={running || saving || estimatedCredits === null}
+            >
+              {running
+                ? <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" />
+                : <Play className="h-4 w-4" />}
+              <span className="font-display tracking-[0.14em]">
+                RUN MY VERSION{estimatedCredits !== null ? ` · ${estimatedCredits.toLocaleString()} CR` : ""}
+              </span>
+            </Button>
+            {needsCredits && (
+              <p className="mt-3 text-sm text-amber-200">
+                You don't have enough credits for this run.{" "}
+                <Link to="/app/membership" className="underline">
+                  Top up your credits
+                </Link>{" "}
+                and try again.
+              </p>
+            )}
+            <p className="mt-3 text-xs text-slate-500">
+              This reuses the assets from the run you customized — no re-uploading needed.
+            </p>
           </div>
         </header>
 

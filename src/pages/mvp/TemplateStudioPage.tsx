@@ -551,6 +551,16 @@ export default function TemplateStudioPage() {
   }, [activeFilterCount, perfFilters, performanceMap, templates]);
 
 
+  // TR10b — deep-link straight into the running workspace for a specific run
+  // (used after launching a personal fork from the workflow editor).
+  useEffect(() => {
+    const requestedRun = searchParams.get("run");
+    if (!requestedRun || requestedRun === jobId) return;
+    setOpenedHistoricalRun(null);
+    setInputsExpanded(false);
+    setJobId(requestedRun);
+  }, [searchParams, jobId]);
+
   useEffect(() => {
     const requestedTemplate = searchParams.get("template");
     if (!requestedTemplate || !templates.length) return;
@@ -919,7 +929,9 @@ export default function TemplateStudioPage() {
     if (creatingFork) return;
     setCreatingFork(true);
     try {
-      const { forkId } = await createFork(sourceTemplateId);
+      // TR10b — remember the run this fork came from so "RUN MY VERSION" can
+      // reuse the assets already uploaded for it.
+      const { forkId } = await createFork(sourceTemplateId, { sourceJobId: activeRunId });
       navigate(`/app/templates/customize/${forkId}`);
     } catch (error) {
       const code = (error as { code?: string })?.code ?? "";

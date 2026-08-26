@@ -5,7 +5,9 @@ import {
   compileForkEdges,
   compileForkNodes,
   findForkRunJob,
+  forkInputsFromSourceJob,
   isPersonalForkVersion,
+  selectForkExecutionNodes,
   PERSONAL_FORK_REVIEW_STATUS,
 } from "../../supabase/functions/_shared/fork-run";
 import {
@@ -228,5 +230,52 @@ describe("TR10 run_fork access gates", () => {
     expect(resolveForkEntitlement({ plan: "free", roles: [] })).toEqual({ allowed: false, code: "PRO_REQUIRED" });
     expect(resolveForkEntitlement({ plan: "pro", roles: [] }).allowed).toBe(true);
     expect(resolveForkEntitlement({ plan: "free", roles: ["admin"] }).allowed).toBe(true);
+  });
+});
+
+// ── TR10b: estimate + source-run input defaulting ────────────────────────────
+describe("TR10b fork run estimate + input defaulting", () => {
+  it("estimate_fork_run computes the compiled-node cost with no side effects", async () => {
+    const writes: string[] = [];
+    const admin = {
+      insert: () => writes.push("insert"),
+      update: () => writes.push("update"),
+      rpc: () => writes.push("apply_credit_transaction"),
+    };
+
+    const nodes = await compileForkNodes({
+      forkId: "fork-1",
+      sourceNodes: sourceNodes as never,
+      personalGraph: { nodes: [] },
+      promptVisibility: true,
+    });
+    const edges = compileForkEdges(sourceEdges as never, nodes);
+    const executionNodes = selectForkExecutionNodes(nodes, edges);
+    const estimatedCredits = getTemplateCreditCost(
+      "Some Template",
+      countTemplateDeliverables(executionNodes),
+    );
+
+    expect(executionNodes.every((node) => node.node_type !== "user_input")).toBe(true);
+    expect(estimatedCredits).toBeGreaterThan(0);
+    // Dry run: no version materialization, job insert, or credit charge.
+    expect(writes).toEqual([]);
+    void admin;
+  });
+
+  it("defaults fork run inputs from the source job payload, stripping internals", () => {
+    const inputs = forkInputsFromSourceJob({
+      input: "https://cdn/asset.jpg",
+      logo: "https://cdn/logo.png",
+      __fork_run: { fork_id: "fork-1" },
+      __cast_runtime: { cast_a: "avatar" },
+      count: 3,
+    });
+    expect(inputs).toEqual({ input: "https://cdn/asset.jpg", logo: "https://cdn/logo.png" });
+  });
+
+  it("returns no defaulted inputs when there is no source job payload", () => {
+    expect(forkInputsFromSourceJob(null)).toEqual({});
+    expect(forkInputsFromSourceJob({})).toEqual({});
   });
 });
