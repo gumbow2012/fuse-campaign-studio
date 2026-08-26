@@ -241,7 +241,7 @@ export default function TemplateInputCard({
             {busy ? (
               <div className="absolute inset-0 flex items-center justify-center gap-2 bg-slate-950/70 text-[10px] uppercase tracking-[0.2em] text-cyan-100">
                 <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                {state === "uploading" ? "Uploading" : "Checking"}
+                Checking asset...
               </div>
             ) : null}
           </div>
@@ -278,7 +278,7 @@ export default function TemplateInputCard({
           <span className="flex h-7 w-7 items-center justify-center rounded-full border border-cyan-200/35 text-cyan-100">
             <Plus className="h-3.5 w-3.5" />
           </span>
-          <span className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-200">
+          <span className="font-display text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-200">
             Add {roleWord}
           </span>
         </button>
