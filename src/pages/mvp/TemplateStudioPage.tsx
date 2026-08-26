@@ -2,19 +2,16 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import {
+  ArrowLeft,
   ArrowRight,
-  ChevronDown,
   ChevronRight,
-  Download,
-  Eye,
   Film,
   GitBranch,
-  Image as ImageIcon,
   Loader2,
+  Lock,
   Network,
   RefreshCw,
   Sparkles,
-  
 } from "lucide-react";
 import SiteShell from "@/components/mvp/SiteShell";
 import RunFeedbackInline from "@/components/mvp/RunFeedbackInline";
@@ -29,7 +26,7 @@ import CampaignResults from "@/components/templates/CampaignResults";
 
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+
 import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
 import { Textarea } from "@/components/ui/textarea";
