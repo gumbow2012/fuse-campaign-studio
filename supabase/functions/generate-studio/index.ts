@@ -153,7 +153,6 @@ function serializeGenerationListItem(row: any) {
     outputUrl: row.output_url ?? null,
     previewUrl: (row.preview_url ?? null) as string | null,
     posterUrl: (row.poster_url ?? null) as string | null,
-
     outputType: row.output_type ?? null,
     estimatedCredits: row.estimated_credits ?? null,
     estimatedCostUsd: row.estimated_cost_usd ? Number(row.estimated_cost_usd) : null,
@@ -163,6 +162,66 @@ function serializeGenerationListItem(row: any) {
     completedAt: row.completed_at ?? null,
   };
 }
+
+/**
+ * GS-PERF6: small gallery preview for completed IMAGE generations.
+ * The master `output_url` is never touched or re-encoded — this only writes a
+ * separate 480px JPEG into fuse-assets and fills `preview_url`.
+ * Fully best-effort: it must never throw, never block, never affect credits.
+ */
+const PREVIEW_BUCKET = "fuse-assets";
+const PREVIEW_MAX_EDGE = 480;
+
+async function generatePreviewThumbnail(admin: AdminClient, row: any): Promise<boolean> {
+  try {
+    if (!row?.id) return false;
+    if (row.status !== "complete") return false;
+    if ((row.output_type ?? "image") !== "image") return false;
+    const source = String(row.output_url ?? "").trim();
+    if (!source) return false;
+    if (row.preview_url) return false;
+
+    const { default: Image } = await import(
+      "https://deno.land/x/imagescript@1.2.17/mod.ts"
+    );
+
+    const res = await fetch(source);
+    if (!res.ok) return false;
+    const bytes = new Uint8Array(await res.arrayBuffer());
+
+    const decoded = await Image.decode(bytes);
+    const scale = Math.min(1, PREVIEW_MAX_EDGE / Math.max(decoded.width, decoded.height));
+    const width = Math.max(1, Math.round(decoded.width * scale));
+    const height = Math.max(1, Math.round(decoded.height * scale));
+    const resized = scale < 1 ? decoded.resize(width, height) : decoded;
+    const jpeg = await resized.encodeJPEG(80);
+
+    const path = `studio/previews/${row.id}.jpg`;
+    const { error: uploadError } = await admin.storage
+      .from(PREVIEW_BUCKET)
+      .upload(path, jpeg, { contentType: "image/jpeg", upsert: true });
+    if (uploadError) {
+      console.error("preview upload failed:", uploadError.message);
+      return false;
+    }
+
+    const { data: pub } = admin.storage.from(PREVIEW_BUCKET).getPublicUrl(path);
+    const previewUrl = pub?.publicUrl;
+    if (!previewUrl) return false;
+
+    await admin
+      .from("studio_generations")
+      .update({ preview_url: previewUrl })
+      .eq("id", row.id)
+      .is("preview_url", null);
+
+    return true;
+  } catch (error) {
+    console.error("generatePreviewThumbnail failed:", errorMessage(error));
+    return false;
+  }
+}
+
 
 type StartInput = {
   kind?: string;
