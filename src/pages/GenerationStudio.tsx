@@ -2220,7 +2220,7 @@ export default function GenerationStudio() {
                     <div className="mt-auto space-y-2 border-t border-white/10 pt-4">
                       <Button
                         variant="outline"
-                        onClick={() => recreate(lightbox)}
+                        onClick={() => void recreate(lightbox)}
                         className="w-full border-white/15 bg-white/[0.04]"
                       >
                         <RefreshCw size={15} className="mr-2" /> Recreate
