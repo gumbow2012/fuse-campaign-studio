@@ -11,12 +11,18 @@ import { listPublicCreatorProfiles, type CreatorProfile } from "@/services/creat
 import { cn } from "@/lib/utils";
 import {
   allocateHomeMedia,
-  BRAND_INPUT_ASSETS,
   FALLBACK_GIFS,
   outputLabel,
   type Entry,
   type TemplateMedia,
 } from "@/lib/homeMediaAllocator";
+import {
+  loadTemplatePerformance,
+  type TemplatePerformanceMap,
+  type TemplatePerformanceRow,
+} from "@/services/templatePerformance";
+import { PerformanceBlock, PerformanceDisclaimer } from "@/components/TemplatePerformance";
+
 
 /** Requirement chips derived from the template's real input schema. */
 function requirementChips(template: ApiTemplate) {
