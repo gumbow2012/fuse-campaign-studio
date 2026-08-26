@@ -15,6 +15,14 @@ const iconNavLinkClass = ({ isActive }: { isActive: boolean }) =>
       : "border-white/10 bg-white/[0.03] text-muted-foreground hover:border-white/20 hover:text-foreground",
   );
 
+const textNavLinkClass = ({ isActive }: { isActive: boolean }) =>
+  cn(
+    "inline-flex items-center rounded-full border px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.16em] transition-colors sm:text-xs",
+    isActive
+      ? "border-cyan-200/30 bg-white/10 text-cyan-100"
+      : "border-white/10 bg-white/[0.03] text-muted-foreground hover:border-white/20 hover:text-foreground",
+  );
+
 const adminNavLinkClass = ({ isActive }: { isActive: boolean }) =>
   cn(
     "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1.5 text-[11px] font-medium transition-colors sm:gap-2 sm:px-3 sm:text-xs",
@@ -117,18 +125,28 @@ export default function SiteShell({ children }: { children: ReactNode }) {
                 <NavLink to="/" className={iconNavLinkClass} end aria-label="Home" title="Home">
                   <Home className="h-4 w-4" />
                 </NavLink>
+                <NavLink to="/app/templates" className={textNavLinkClass}>
+                  Explore
+                </NavLink>
+                <a
+                  href="/#new-today"
+                  className="inline-flex items-center rounded-full border border-white/10 bg-white/[0.03] px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground transition-colors hover:border-white/20 hover:text-foreground sm:text-xs"
+                >
+                  New Drops
+                </a>
+                <NavLink to="/creators" className={textNavLinkClass}>
+                  Creators
+                </NavLink>
+                <NavLink to="/pricing" className={textNavLinkClass}>
+                  Pricing
+                </NavLink>
                 <NavLink to="/about" className={iconNavLinkClass} aria-label="About" title="About">
                   <Info className="h-4 w-4" />
-                </NavLink>
-                <NavLink to="/pricing" className={iconNavLinkClass} aria-label="Membership" title="Membership">
-                  <Star className="h-4 w-4" />
                 </NavLink>
                 <NavLink to="/contact" className={iconNavLinkClass} aria-label="Contact" title="Contact">
                   <Mail className="h-4 w-4" />
                 </NavLink>
-                <NavLink to="/app/templates" className={iconNavLinkClass} aria-label="Templates" title="Templates">
-                  <Layers3 className="h-4 w-4" />
-                </NavLink>
+
 
                 <div className="flex items-center gap-1.5">
                   {user ? (
@@ -175,7 +193,7 @@ export default function SiteShell({ children }: { children: ReactNode }) {
             </div>
 
             {user && hasAppAccess ? (
-              <nav className="flex w-full flex-wrap items-center justify-center gap-1.5 md:w-auto md:justify-end" aria-label="Admin">
+              <nav className="flex w-full flex-wrap items-center justify-center gap-1.5 md:w-auto md:justify-end" aria-label="Tools">
                 <NavLink to="/admin/templates" className={adminNavLinkClass}>
                   <Layers3 className="h-3.5 w-3.5" />
                   Admin Templates
