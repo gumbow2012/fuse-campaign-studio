@@ -57,6 +57,7 @@ import {
 import { type TemplateAssetRequirement } from "@/lib/templateAssetRequirements";
 import { resolveInputRole } from "@/lib/templateInputSources";
 import { readPublicFailure, type PublicGenerationFailure } from "@/lib/generationFailure";
+import { createFork } from "@/services/templateForks";
 
 type RunnerStatus = "queued" | "running" | "video_pending" | "complete" | "failed";
 
@@ -446,7 +447,7 @@ export default function TemplateStudioPage() {
   const [libraryAssets, setLibraryAssets] = useState<Record<string, { url: string; name?: string | null } | null>>({});
   const [textInputs, setTextInputs] = useState<Record<string, string>>({});
   const [jobId, setJobId] = useState<string | null>(null);
-  const [privateWorkflowDialogOpen, setPrivateWorkflowDialogOpen] = useState(false);
+  const [creatingFork, setCreatingFork] = useState(false);
   const [workflowUpgradeDialogOpen, setWorkflowUpgradeDialogOpen] = useState(false);
   const [result, setResult] = useState<RunnerResult | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -1840,7 +1841,7 @@ export default function TemplateStudioPage() {
                     statusMessage={result.statusMessage}
                     progress={result.progress}
                     canCustomizeWorkflow={canCustomizeWorkflow}
-                    onCustomizeWorkflow={handleCustomizeWorkflow}
+                    onCustomizeWorkflow={() => void handleCustomizeWorkflow()}
                     onLockedCustomize={() => setWorkflowUpgradeDialogOpen(true)}
                   />
                   {ACTIVE_RUN_STATUSES.has(result.status) ? (
