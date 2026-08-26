@@ -656,7 +656,19 @@ Deno.serve(async (req) => {
         })
         .eq("id", row.id);
 
+      // GS-PERF6: best-effort gallery thumbnail; failures are swallowed.
+      if (!row.preview_url) {
+        await generatePreviewThumbnail(admin, {
+          ...row,
+          status: "complete",
+          output_url: output.url,
+          output_type: output.type,
+          preview_url: null,
+        });
+      }
+
       return json({ ok: true });
+
     } catch (error) {
       console.error("generate-studio callback failed:", errorMessage(error));
       return json({ error: errorMessage(error) }, 500);
