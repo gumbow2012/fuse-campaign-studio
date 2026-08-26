@@ -695,16 +695,6 @@ export default function TemplateStudioPage() {
     }));
   };
 
-  const handleRefreshRecentRuns = () => {
-    if (!user || recentRunsQuery.isFetching || recentRefreshCooldown > 0) return;
-    setRecentRefreshCooldown(RECENT_RUNS_REFRESH_COOLDOWN_SECONDS);
-    void refetchRecentRuns();
-  };
-
-  const handleLoadMoreRuns = () => {
-    void recentRunsQuery.fetchNextPage();
-  };
-
   const handleDownloadSingleOutput = (output: RunnerOutput, index: number) => {
     const link = document.createElement("a");
     link.href = output.url;
@@ -715,6 +705,44 @@ export default function TemplateStudioPage() {
     link.click();
     link.remove();
   };
+
+  /** Campaign history: download every deliverable of a past campaign. */
+  const handleDownloadCampaign = (run: RecentRun) => {
+    (Array.isArray(run.outputs) ? run.outputs : []).forEach((output, index) => {
+      const link = document.createElement("a");
+      link.href = output.url;
+      link.download = getOutputDownloadName(run.templateName ?? "fuse-campaign", index, output);
+      link.target = "_blank";
+      link.rel = "noreferrer";
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+    });
+  };
+
+  /** Campaign history: remix = reload that campaign's template into the builder. */
+  const handleRemixCampaign = (run: RecentRun) => {
+    const match = templates.find(
+      (template) => template.name.toLowerCase() === (run.templateName ?? "").toLowerCase(),
+    );
+    setJobId(null);
+    setOpenedHistoricalRun(null);
+    setInputsExpanded(false);
+    setResult(null);
+    if (match) setSelectedTemplateId(match.id);
+    setHistoryOpen(false);
+    window.requestAnimationFrame(() => {
+      runnerSectionRef.current?.scrollIntoView({
+        behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth",
+        block: "start",
+      });
+    });
+  };
+
+  const previewUrlForTemplate = (templateName: string) =>
+    templates.find((template) => template.name.toLowerCase() === (templateName ?? "").toLowerCase())
+      ?.preview_url ?? null;
+
 
   /** Open a previous run directly into the expanded campaign workspace. */
   const handleOpenHistoricalRun = (run: RecentRun) => {
