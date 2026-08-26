@@ -6,7 +6,7 @@
  */
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { AlertTriangle, CheckCircle2, Images, Loader2, Upload, XCircle } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Images, Loader2, Plus, Upload, XCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import UploadGuide from "@/components/templates/UploadGuide";
 import LibraryPickerDialog from "@/components/templates/LibraryPickerDialog";
@@ -21,16 +21,20 @@ import {
 } from "@/lib/templateAssetRequirements";
 import { cn } from "@/lib/utils";
 
-const ASSET_TYPE_PLACEHOLDERS: Partial<Record<TemplateAssetType, string>> = {
-  "garment-front": "/template-placeholders/shirt.png?v=20260520",
-  "garment-back": "/template-placeholders/shirt.png?v=20260520",
-  logo: "/template-placeholders/logo.png?v=20260520",
-  product: "/template-placeholders/accessory.png?v=20260520",
-  jewelry: "/template-placeholders/chain.png?v=20260520",
-  packaging: "/template-placeholders/accessory.png?v=20260520",
-  avatar: "/template-placeholders/face.png?v=20260520",
-  reference: "/template-placeholders/model.png?v=20260520",
+/** Short role word used in the "+ ADD {ROLE}" empty state. */
+const ROLE_WORDS: Partial<Record<TemplateAssetType, string>> = {
+  "garment-front": "GARMENT",
+  "garment-back": "GARMENT",
+  logo: "LOGO",
+  product: "PRODUCT",
+  jewelry: "JEWELRY",
+  packaging: "PACKAGING",
+  avatar: "CAST",
+  reference: "REFERENCE",
+  image: "IMAGE",
+  video: "VIDEO",
 };
+
 
 interface TemplateInputCardProps {
   label: string;
@@ -50,7 +54,7 @@ export default function TemplateInputCard({
   label,
   file,
   requirement,
-  fallbackPlaceholderSrc,
+  fallbackPlaceholderSrc: _fallbackPlaceholderSrc,
   onFileChange,
   libraryAsset,
   onLibrarySelect,
@@ -101,11 +105,10 @@ export default function TemplateInputCard({
 
   const guide = getUploadGuide(requirement?.assetType);
   const bestResults = requirement?.shortInstruction ?? guide.bestResults;
-  const exampleSrc =
-    requirement?.guidePreview ??
-    requirement?.goodExamples?.[0] ??
-    (requirement?.assetType ? ASSET_TYPE_PLACEHOLDERS[requirement.assetType] : undefined) ??
-    fallbackPlaceholderSrc;
+  /** Only a real representative example is shown — never illustration clip-art. */
+  const exampleSrc = requirement?.guidePreview ?? requirement?.goodExamples?.[0];
+  const roleWord =
+    (requirement?.assetType ? ROLE_WORDS[requirement.assetType] : undefined) ?? label.toUpperCase();
 
   const notes: string[] = [];
   if (requirement && requirement.maxFiles > 1) notes.push(`${requirement.minFiles}-${requirement.maxFiles} files`);
@@ -114,6 +117,7 @@ export default function TemplateInputCard({
   if (requirement?.transparencyRecommended) notes.push("transparent PNG preferred");
 
   const showWarning = state === "warning" && !warningDismissed;
+  const isReady = !!(file ? state === "ready" : libraryAsset);
 
   return (
     <div className="rounded-[1.5rem] border border-white/8 bg-black/20 p-4">
@@ -124,7 +128,7 @@ export default function TemplateInputCard({
             ? "border-rose-300/45"
             : showWarning
               ? "border-amber-300/45"
-              : "border-white/14 hover:border-cyan-200/45",
+              : "border-cyan-200/20 hover:border-cyan-200/45",
         )}
       >
         <div className="relative min-h-0 flex-1 overflow-hidden">
@@ -135,15 +139,40 @@ export default function TemplateInputCard({
               className="h-full w-full object-cover"
             />
           ) : (
-            <div className="flex h-full w-full items-center justify-center bg-[radial-gradient(circle_at_top,rgba(34,211,238,0.1),transparent_42%),linear-gradient(180deg,rgba(15,23,42,0.6),rgba(2,6,23,0.92))]">
-              <img
-                src={exampleSrc}
-                alt=""
+            <button
+              type="button"
+              onClick={() => inputRef.current?.click()}
+              onDragOver={(event) => event.preventDefault()}
+              onDrop={(event) => {
+                event.preventDefault();
+                const dropped = event.dataTransfer?.files?.[0];
+                if (dropped) onFileChange(dropped);
+              }}
+              className="relative flex h-full w-full flex-col items-center justify-center gap-3 bg-[linear-gradient(180deg,rgba(15,23,42,0.72),rgba(2,6,23,0.94))] text-center"
+            >
+              <span
                 aria-hidden="true"
-                loading="lazy"
-                className="h-full w-full object-contain opacity-80 transition duration-300 group-hover/upload:scale-[1.02] group-hover/upload:opacity-95"
+                className="pointer-events-none absolute inset-0 opacity-[0.14] [background-image:linear-gradient(rgba(148,163,184,0.35)_1px,transparent_1px),linear-gradient(90deg,rgba(148,163,184,0.35)_1px,transparent_1px)] [background-size:28px_28px]"
               />
-            </div>
+              {exampleSrc ? (
+                <img
+                  src={exampleSrc}
+                  alt=""
+                  aria-hidden="true"
+                  loading="lazy"
+                  className="pointer-events-none absolute inset-0 h-full w-full object-cover opacity-20"
+                />
+              ) : null}
+              <span className="relative flex h-10 w-10 items-center justify-center rounded-full border border-cyan-200/30 bg-black/40 text-cyan-100">
+                <Plus className="h-4 w-4" />
+              </span>
+              <span className="relative text-[11px] font-semibold uppercase tracking-[0.28em] text-slate-300">
+                + Add {roleWord}
+              </span>
+              <span className="relative text-[10px] uppercase tracking-[0.18em] text-slate-500">
+                Drag &amp; drop or click
+              </span>
+            </button>
           )}
 
           {(state === "uploading" || state === "checking") && previewUrl ? (
@@ -157,13 +186,17 @@ export default function TemplateInputCard({
         <div className="border-t border-white/10 bg-black/30 p-3">
           <div className="flex items-center gap-2">
             <span className="block min-w-0 flex-1 truncate text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-300">
-              {label}
+              {requirement?.assetType ? formatAssetTypeLabel(requirement.assetType) : label}
             </span>
-            {requirement?.assetType ? (
-              <span className="shrink-0 rounded-full border border-white/10 px-2 py-0.5 text-[9px] uppercase tracking-[0.18em] text-slate-400">
-                {formatAssetTypeLabel(requirement.assetType)}
+            {isReady ? (
+              <span className="shrink-0 rounded-full border border-emerald-300/25 bg-emerald-300/10 px-2 py-0.5 text-[9px] uppercase tracking-[0.18em] text-emerald-200">
+                ✓ Ready
               </span>
-            ) : null}
+            ) : (
+              <span className="shrink-0 rounded-full border border-white/10 px-2 py-0.5 text-[9px] uppercase tracking-[0.18em] text-slate-400">
+                {label}
+              </span>
+            )}
           </div>
 
           {file ? (
@@ -189,6 +222,7 @@ export default function TemplateInputCard({
               <span className="text-slate-300">Best results:</span> {bestResults}
             </p>
           )}
+
 
 
           {notes.length ? (
