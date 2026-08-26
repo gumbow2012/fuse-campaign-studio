@@ -5,6 +5,7 @@
  * legacy worker only when older internal screens still need it.
  */
 import { supabase } from "@/integrations/supabase/client";
+import { parseCastConfig, type CastConfig } from "@/lib/castConfig";
 import {
   readTemplateAssetRequirement,
   type TemplateAssetRequirement,
