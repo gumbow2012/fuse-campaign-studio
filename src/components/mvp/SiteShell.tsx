@@ -1,11 +1,35 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { Link, NavLink, useNavigate } from "react-router-dom";
-import { Clapperboard, ClipboardCheck, Gem, Home, Info, Layers3, Mail, RefreshCw, Shirt, Sparkles, Star, UserRound, UsersRound } from "lucide-react";
+import { Clapperboard, ClipboardCheck, Gem, Home, Info, Layers3, Mail, Menu, RefreshCw, Shirt, Sparkles, Star, UserRound, UsersRound } from "lucide-react";
+import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import CreditPackDialog from "./CreditPackDialog";
+
+const focusRing =
+  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/80 focus-visible:ring-offset-2 focus-visible:ring-offset-background";
+
+type PrimaryLink = { label: string; to?: string; href?: string; end?: boolean };
+
+const PRIMARY_LINKS: PrimaryLink[] = [
+  { label: "Home", to: "/", end: true },
+  { label: "Explore", to: "/app/templates" },
+  { label: "New Drops", href: "/#new-today" },
+  { label: "Creators", to: "/creators" },
+  { label: "Pricing", to: "/pricing" },
+  { label: "About", to: "/about" },
+  { label: "Contact", to: "/contact" },
+];
+
+const drawerLinkClass = cn(
+  "flex min-h-11 items-center rounded-lg px-3 py-2.5 text-sm text-foreground/80 transition-colors hover:bg-white/5 hover:text-foreground motion-reduce:transition-none",
+  focusRing,
+);
+
+const drawerNavLinkClass = ({ isActive }: { isActive: boolean }) =>
+  cn(drawerLinkClass, isActive && "bg-white/[0.08] font-semibold text-foreground");
 
 const iconNavLinkClass = ({ isActive }: { isActive: boolean }) =>
   cn(
@@ -13,6 +37,7 @@ const iconNavLinkClass = ({ isActive }: { isActive: boolean }) =>
     isActive
       ? "border-cyan-200/30 bg-white/10 text-cyan-100"
       : "border-white/10 bg-white/[0.03] text-muted-foreground hover:border-white/20 hover:text-foreground",
+    focusRing,
   );
 
 const textNavLinkClass = ({ isActive }: { isActive: boolean }) =>
@@ -21,6 +46,7 @@ const textNavLinkClass = ({ isActive }: { isActive: boolean }) =>
     isActive
       ? "border-cyan-200/30 bg-white/10 text-cyan-100"
       : "border-white/10 bg-white/[0.03] text-muted-foreground hover:border-white/20 hover:text-foreground",
+    focusRing,
   );
 
 const adminNavLinkClass = ({ isActive }: { isActive: boolean }) =>
@@ -29,6 +55,7 @@ const adminNavLinkClass = ({ isActive }: { isActive: boolean }) =>
     isActive
       ? "border-cyan-200/30 bg-white/10 text-foreground"
       : "border-white/10 bg-white/[0.03] text-muted-foreground hover:border-white/20 hover:text-foreground",
+    focusRing,
   );
 
 const FUSE_ICON_SRC = "/fuse-icon.png?v=20260519";
@@ -44,6 +71,17 @@ export default function SiteShell({ children }: { children: ReactNode }) {
   const navigate = useNavigate();
   const { user, profile, isAdmin, isCreator, hasAppAccess, signOut, refreshProfile } = useAuth();
   const [refreshingCredits, setRefreshingCredits] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const closeMenu = () => setMenuOpen(false);
+  const toolLinks = [
+    { to: "/admin/templates", label: "Admin Templates", icon: Layers3 },
+    { to: "/app/lab/studio", label: "Generation Studio", icon: Sparkles },
+    { to: "/app/lab/cinema", label: "Cinema Studio", icon: Clapperboard },
+    { to: "/app/lab/outfit-swap", label: "Outfit Swap", icon: Shirt },
+    { to: "/app/lab/jewelry-swap", label: "Jewelry Swap", icon: Gem },
+    { to: "/admin/audits", label: "Output Audit", icon: ClipboardCheck },
+    ...(isAdmin ? [{ to: "/admin/creators", label: "Creators", icon: UsersRound }] : []),
+  ];
   const [billingCorrectionNotice, setBillingCorrectionNotice] = useState<BillingCorrectionNotice | null>(null);
   const accountLabel = isAdmin ? "Admin account" : "Account";
   const creditDisplay = profile ? `${profile.credits_balance.toLocaleString()} credits` : "Checking credits";
@@ -110,27 +148,167 @@ export default function SiteShell({ children }: { children: ReactNode }) {
     <div className="min-h-screen text-foreground">
       <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_top_left,rgba(34,211,238,0.18),transparent_28%),radial-gradient(circle_at_80%_20%,rgba(255,255,255,0.08),transparent_18%)]" />
       <header className="sticky top-0 z-40 border-b border-white/10 bg-background/75 backdrop-blur-xl">
-        <div className="mx-auto flex w-full max-w-7xl flex-col gap-2 px-3 py-3 sm:px-4 md:flex-row md:items-start md:justify-between md:px-6 md:py-4 lg:px-8">
-          <Link to="/" className="flex items-center justify-center gap-2.5 md:justify-start md:gap-3">
-            <img src={FUSE_ICON_SRC} alt="" className="h-8 w-8 rounded-xl object-contain sm:h-9 sm:w-9 md:h-10 md:w-10 lg:h-11 lg:w-11" />
-            <div>
+        <div className="mx-auto flex w-full max-w-7xl items-center justify-between gap-2 px-3 py-3 sm:px-4 md:px-6 md:py-4 lg:items-start lg:px-8">
+          <Link
+            to="/"
+            aria-label="FUSE home"
+            className={cn("flex min-w-0 shrink items-center gap-2.5 rounded-xl md:gap-3", focusRing)}
+          >
+            <img src={FUSE_ICON_SRC} alt="" className="h-8 w-8 shrink-0 rounded-xl object-contain sm:h-9 sm:w-9 md:h-10 md:w-10 lg:h-11 lg:w-11" />
+            <div className="min-w-0">
               <img src={FUSE_WORDMARK_SRC} alt="FUSE" className="h-4 w-auto object-contain sm:h-5" />
-              <p className="text-[9px] uppercase tracking-[0.22em] text-muted-foreground sm:text-[10px] sm:tracking-[0.28em]">AI Campaign Engine for Streetwear</p>
+              <p className="truncate text-[9px] uppercase tracking-[0.22em] text-muted-foreground sm:text-[10px] sm:tracking-[0.28em]">AI Campaign Engine for Streetwear</p>
             </div>
           </Link>
 
-          <div className="flex flex-col gap-2 md:items-end">
+          {/* ── Mobile / tablet cluster: credits + account + menu ── */}
+          <div className="flex shrink-0 items-center gap-1.5 lg:hidden">
+            {/* Tablet: key sections inline, everything else in the More menu */}
+            <nav className="hidden items-center gap-1.5 md:flex" aria-label="Primary">
+              <NavLink to="/app/templates" className={textNavLinkClass}>
+                Explore
+              </NavLink>
+              <NavLink to="/creators" className={textNavLinkClass}>
+                Creators
+              </NavLink>
+              <NavLink to="/pricing" className={textNavLinkClass}>
+                Pricing
+              </NavLink>
+            </nav>
+            {user && !isAdmin ? (
+              <span className="inline-flex min-h-11 items-center rounded-full border border-white/10 bg-white/5 px-3 text-[11px] font-semibold text-cyan-200">
+                <span className="sr-only">Credit balance: </span>
+                {profile ? profile.credits_balance.toLocaleString() : "—"}
+              </span>
+            ) : null}
+            {user ? (
+              <NavLink
+                to="/account"
+                aria-label={accountLabel}
+                title={accountLabel}
+                className={cn(
+                  "inline-flex min-h-11 min-w-11 items-center justify-center rounded-full bg-cyan-300 text-slate-950 transition-colors hover:bg-cyan-200 motion-reduce:transition-none",
+                  focusRing,
+                )}
+              >
+                <UserRound className="h-4 w-4" aria-hidden="true" />
+              </NavLink>
+            ) : (
+              <Button asChild className={cn("min-h-11 rounded-full bg-cyan-300 px-4 text-sm text-slate-950 hover:bg-cyan-200", focusRing)}>
+                <Link to="/auth">Sign in</Link>
+              </Button>
+            )}
+            <Sheet open={menuOpen} onOpenChange={setMenuOpen}>
+              <SheetTrigger asChild>
+                <button
+                  type="button"
+                  aria-label={menuOpen ? "Close navigation menu" : "Open navigation menu"}
+                  aria-expanded={menuOpen}
+                  className={cn(
+                    "inline-flex min-h-11 min-w-11 items-center justify-center rounded-full border border-white/10 bg-white/[0.03] text-muted-foreground transition-colors hover:text-foreground motion-reduce:transition-none",
+                    focusRing,
+                  )}
+                >
+                  <Menu className="h-5 w-5" aria-hidden="true" />
+                </button>
+              </SheetTrigger>
+              <SheetContent
+                side="right"
+                className="w-[min(340px,90vw)] overflow-y-auto border-white/10 bg-[#0B1120]/95 p-0 motion-reduce:animate-none motion-reduce:transition-none motion-reduce:duration-0"
+              >
+                <SheetTitle className="sr-only">Navigation menu</SheetTitle>
+                <div className="flex flex-col gap-6 px-4 py-6">
+                  <nav aria-label="Primary" className="space-y-1">
+                    <p className="px-3 text-[10px] font-bold uppercase tracking-[0.2em] text-muted-foreground">Browse</p>
+                    {PRIMARY_LINKS.map((link) =>
+                      link.href ? (
+                        <a key={link.label} href={link.href} onClick={closeMenu} className={drawerLinkClass}>
+                          {link.label}
+                        </a>
+                      ) : (
+                        <NavLink
+                          key={link.label}
+                          to={link.to!}
+                          end={link.end}
+                          onClick={closeMenu}
+                          className={drawerNavLinkClass}
+                        >
+                          {link.label}
+                        </NavLink>
+                      ),
+                    )}
+                  </nav>
+
+                  {user && hasAppAccess ? (
+                    <nav aria-label="Tools" className="space-y-1">
+                      <p className="px-3 text-[10px] font-bold uppercase tracking-[0.2em] text-muted-foreground">Tools</p>
+                      {toolLinks.map((link) => (
+                        <NavLink key={link.to} to={link.to} onClick={closeMenu} className={drawerNavLinkClass}>
+                          {link.label}
+                        </NavLink>
+                      ))}
+                    </nav>
+                  ) : null}
+
+                  {user && isCreator ? (
+                    <nav aria-label="Creator" className="space-y-1">
+                      <p className="px-3 text-[10px] font-bold uppercase tracking-[0.2em] text-muted-foreground">Creator</p>
+                      <NavLink to="/app/creator" onClick={closeMenu} className={drawerNavLinkClass}>
+                        Creator Studio
+                      </NavLink>
+                    </nav>
+                  ) : null}
+
+                  <div className="space-y-2">
+                    {user ? (
+                      <>
+                        <NavLink to="/account" onClick={closeMenu} className={drawerNavLinkClass}>
+                          {accountLabel}
+                        </NavLink>
+                        {!isAdmin ? (
+                          <p className="px-3 text-xs uppercase tracking-[0.22em] text-muted-foreground">{creditDisplay}</p>
+                        ) : null}
+                        <Button
+                          variant="outline"
+                          onClick={() => {
+                            closeMenu();
+                            void handleSignOut();
+                          }}
+                          className={cn("min-h-11 w-full rounded-full border-white/15 bg-white/5 text-foreground hover:bg-white/10", focusRing)}
+                        >
+                          Sign out
+                        </Button>
+                      </>
+                    ) : (
+                      <Button asChild className={cn("min-h-11 w-full rounded-full bg-cyan-300 text-slate-950 hover:bg-cyan-200", focusRing)}>
+                        <Link to="/app/templates" onClick={closeMenu}>
+                          <Layers3 className="h-4 w-4" aria-hidden="true" />
+                          Try templates
+                        </Link>
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              </SheetContent>
+            </Sheet>
+          </div>
+
+          {/* ── Desktop nav ── */}
+          <div className="hidden flex-col gap-2 lg:flex lg:items-end">
             <div className="flex flex-wrap items-center justify-end gap-2">
-              <nav className="flex w-full flex-wrap items-center justify-center gap-1.5 md:w-auto md:justify-end" aria-label="Primary">
+              <nav className="flex w-auto flex-wrap items-center justify-end gap-1.5" aria-label="Primary">
                 <NavLink to="/" className={iconNavLinkClass} end aria-label="Home" title="Home">
-                  <Home className="h-4 w-4" />
+                  <Home className="h-4 w-4" aria-hidden="true" />
                 </NavLink>
                 <NavLink to="/app/templates" className={textNavLinkClass}>
                   Explore
                 </NavLink>
                 <a
                   href="/#new-today"
-                  className="inline-flex items-center rounded-full border border-white/10 bg-white/[0.03] px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground transition-colors hover:border-white/20 hover:text-foreground sm:text-xs"
+                  className={cn(
+                    "inline-flex items-center rounded-full border border-white/10 bg-white/[0.03] px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground transition-colors hover:border-white/20 hover:text-foreground motion-reduce:transition-none sm:text-xs",
+                    focusRing,
+                  )}
                 >
                   New Drops
                 </a>
@@ -141,12 +319,11 @@ export default function SiteShell({ children }: { children: ReactNode }) {
                   Pricing
                 </NavLink>
                 <NavLink to="/about" className={iconNavLinkClass} aria-label="About" title="About">
-                  <Info className="h-4 w-4" />
+                  <Info className="h-4 w-4" aria-hidden="true" />
                 </NavLink>
                 <NavLink to="/contact" className={iconNavLinkClass} aria-label="Contact" title="Contact">
-                  <Mail className="h-4 w-4" />
+                  <Mail className="h-4 w-4" aria-hidden="true" />
                 </NavLink>
-
 
                 <div className="flex items-center gap-1.5">
                   {user ? (
@@ -155,18 +332,19 @@ export default function SiteShell({ children }: { children: ReactNode }) {
                         to="/account"
                         className={({ isActive }) =>
                           cn(
-                            "inline-flex h-9 items-center gap-1.5 rounded-full px-3 text-xs font-semibold transition-colors lg:h-10 lg:gap-2 lg:px-4 lg:text-sm",
+                            "inline-flex h-9 items-center gap-1.5 rounded-full px-3 text-xs font-semibold transition-colors motion-reduce:transition-none lg:h-10 lg:gap-2 lg:px-4 lg:text-sm",
+                            focusRing,
                             isActive ? "bg-cyan-200 text-slate-950" : "bg-cyan-300 text-slate-950 hover:bg-cyan-200",
                           )
                         }
                       >
-                        <UserRound className="h-3.5 w-3.5 lg:h-4 lg:w-4" />
+                        <UserRound className="h-3.5 w-3.5 lg:h-4 lg:w-4" aria-hidden="true" />
                         {accountLabel}
                       </NavLink>
                       <Button
                         variant="outline"
                         onClick={() => void handleSignOut()}
-                        className="h-9 rounded-full border-white/15 bg-white/5 px-3 text-xs text-foreground hover:bg-white/10 lg:h-10 lg:px-4 lg:text-sm"
+                        className={cn("h-9 rounded-full border-white/15 bg-white/5 px-3 text-xs text-foreground hover:bg-white/10 lg:h-10 lg:px-4 lg:text-sm", focusRing)}
                       >
                         Sign out
                       </Button>
@@ -176,13 +354,13 @@ export default function SiteShell({ children }: { children: ReactNode }) {
                       <Button
                         asChild
                         variant="outline"
-                        className="h-9 rounded-full border-white/15 bg-white/5 px-3 text-sm text-foreground hover:bg-white/10 sm:h-10 sm:px-4"
+                        className={cn("h-10 rounded-full border-white/15 bg-white/5 px-4 text-sm text-foreground hover:bg-white/10", focusRing)}
                       >
                         <Link to="/auth">Sign in</Link>
                       </Button>
-                      <Button asChild className="h-9 rounded-full bg-cyan-300 px-3 text-sm text-slate-950 hover:bg-cyan-200 sm:h-10 sm:px-4">
+                      <Button asChild className={cn("h-10 rounded-full bg-cyan-300 px-4 text-sm text-slate-950 hover:bg-cyan-200", focusRing)}>
                         <Link to="/app/templates">
-                          <Layers3 className="h-4 w-4" />
+                          <Layers3 className="h-4 w-4" aria-hidden="true" />
                           Try templates
                         </Link>
                       </Button>
@@ -193,50 +371,27 @@ export default function SiteShell({ children }: { children: ReactNode }) {
             </div>
 
             {user && hasAppAccess ? (
-              <nav className="flex w-full flex-wrap items-center justify-center gap-1.5 md:w-auto md:justify-end" aria-label="Tools">
-                <NavLink to="/admin/templates" className={adminNavLinkClass}>
-                  <Layers3 className="h-3.5 w-3.5" />
-                  Admin Templates
-                </NavLink>
-                <NavLink to="/app/lab/studio" className={adminNavLinkClass}>
-                  <Sparkles className="h-3.5 w-3.5" />
-                  Generation Studio
-                </NavLink>
-                <NavLink to="/app/lab/cinema" className={adminNavLinkClass}>
-                  <Clapperboard className="h-3.5 w-3.5" />
-                  Cinema Studio
-                </NavLink>
-
-                <NavLink to="/app/lab/outfit-swap" className={adminNavLinkClass}>
-                  <Shirt className="h-3.5 w-3.5" />
-                  Outfit Swap
-                </NavLink>
-                <NavLink to="/app/lab/jewelry-swap" className={adminNavLinkClass}>
-                  <Gem className="h-3.5 w-3.5" />
-                  Jewelry Swap
-                </NavLink>
-                <NavLink to="/admin/audits" className={adminNavLinkClass}>
-                  <ClipboardCheck className="h-3.5 w-3.5" />
-                  Output Audit
-                </NavLink>
-                {isAdmin ? (
-                  <NavLink to="/admin/creators" className={adminNavLinkClass}>
-                    <UsersRound className="h-3.5 w-3.5" />
-                    Creators
-                  </NavLink>
-                ) : null}
+              <nav className="flex w-auto flex-wrap items-center justify-end gap-1.5" aria-label="Tools">
+                {toolLinks.map((link) => {
+                  const Icon = link.icon;
+                  return (
+                    <NavLink key={link.to} to={link.to} className={adminNavLinkClass}>
+                      <Icon className="h-3.5 w-3.5" aria-hidden="true" />
+                      {link.label}
+                    </NavLink>
+                  );
+                })}
               </nav>
             ) : null}
 
             {user && isCreator ? (
-              <nav className="flex w-full flex-wrap items-center justify-center gap-1.5 md:w-auto md:justify-end" aria-label="Creator">
+              <nav className="flex w-auto flex-wrap items-center justify-end gap-1.5" aria-label="Creator">
                 <NavLink to="/app/creator" className={adminNavLinkClass}>
-                  <Star className="h-3.5 w-3.5" />
+                  <Star className="h-3.5 w-3.5" aria-hidden="true" />
                   Creator Studio
                 </NavLink>
               </nav>
             ) : null}
-
 
             <div className="flex flex-wrap items-center gap-2">
               {user && !isAdmin ? (
@@ -252,9 +407,9 @@ export default function SiteShell({ children }: { children: ReactNode }) {
                     aria-label="Refresh credits"
                     onClick={() => void handleRefreshCredits()}
                     disabled={refreshingCredits}
-                    className="h-9 w-9 rounded-full border-white/15 bg-white/5 text-foreground hover:bg-white/10"
+                    className={cn("h-9 w-9 rounded-full border-white/15 bg-white/5 text-foreground hover:bg-white/10", focusRing)}
                   >
-                    <RefreshCw className={`h-4 w-4 ${refreshingCredits ? "animate-spin" : ""}`} />
+                    <RefreshCw className={`h-4 w-4 ${refreshingCredits ? "animate-spin motion-reduce:animate-none" : ""}`} aria-hidden="true" />
                   </Button>
                   {shouldShowCreditTopUp ? (
                     <CreditPackDialog
@@ -270,6 +425,7 @@ export default function SiteShell({ children }: { children: ReactNode }) {
             </div>
           </div>
         </div>
+
       </header>
 
       {billingCorrectionNotice ? (

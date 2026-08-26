@@ -41,7 +41,9 @@ export function CreditChip() {
       <PopoverTrigger asChild>
         <button
           aria-label={`Credits: ${balance.toLocaleString()}`}
-          className={`group flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-semibold backdrop-blur-sm transition-all duration-200 hover:brightness-110 ${chipClass}`}
+          aria-haspopup="dialog"
+          aria-expanded={open}
+          className={`group flex min-h-11 items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-semibold backdrop-blur-sm transition-all duration-200 hover:brightness-110 motion-reduce:transition-none sm:min-h-0 sm:px-2.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/80 focus-visible:ring-offset-2 focus-visible:ring-offset-background ${chipClass}`}
         >
           <span aria-hidden="true">✦</span>
           <span>{balance.toLocaleString()}</span>
