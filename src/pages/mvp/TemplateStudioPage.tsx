@@ -461,7 +461,9 @@ export default function TemplateStudioPage() {
   /** Post-run: whether the full asset-input controls are re-expanded (Edit Inputs). */
   const [inputsExpanded, setInputsExpanded] = useState(false);
   const [feedbackOverrides, setFeedbackOverrides] = useState<Record<string, RunFeedbackRecord | null>>({});
-  const [recentRefreshCooldown, setRecentRefreshCooldown] = useState(0);
+  /** Campaign history drawer (replaces the old always-visible run list). */
+  const [historyOpen, setHistoryOpen] = useState(false);
+
   const [detailTemplateId, setDetailTemplateId] = useState<string | null>(null);
   const runnerSectionRef = useRef<HTMLElement | null>(null);
   const workspaceSectionRef = useRef<HTMLElement | null>(null);
