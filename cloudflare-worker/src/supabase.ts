@@ -179,7 +179,13 @@ export async function deductCredits(
   templateId: string | null,
   description: string,
 ): Promise<void> {
-  const key = env.SUPABASE_SERVICE_ROLE_KEY || env.SUPABASE_ANON_KEY;
+  // Financial mutation: require the service-role key explicitly and fail closed.
+  // Never fall back to the anon key for a credit mutation (decrement_credits is
+  // revoked from anon/authenticated at the DB layer; anon here would only 403).
+  const key = env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!key) {
+    throw new Error("deductCredits: SUPABASE_SERVICE_ROLE_KEY is required for credit mutations (refusing to proceed)");
+  }
 
   // Atomic decrement via RPC
   const rpcRes = await fetch(`${env.SUPABASE_URL}/rest/v1/rpc/decrement_credits`, {
