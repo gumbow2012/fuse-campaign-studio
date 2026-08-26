@@ -262,6 +262,18 @@ Deno.serve(async (req) => {
     }
   }
 
+  if (String(rawBody.action ?? "") === "run_fork") {
+    try {
+      return await handleRunFork(req, admin, rawBody, requestId);
+    } catch (error) {
+      if (error instanceof ForkRunError) {
+        return json({ error: error.message, code: error.code }, error.status);
+      }
+      return json({ error: errorMessage(error) }, 400);
+    }
+  }
+
+
   try {
     const runnerAccess = hasValidRunnerCode(req);
     const user = runnerAccess ? await getOptionalUser(req, admin) : await requireUser(req, admin);
