@@ -30,9 +30,8 @@ export function regenRefundDescription(args: {
   outputNumber: number | null;
   revision: number;
 }) {
-  return `Refund ${regenDebitDescription(args).charAt(0).toLowerCase()}${
-    regenDebitDescription(args).slice(1)
-  }`;
+  const debit = regenDebitDescription(args);
+  return `Refund ${debit.charAt(0).toLowerCase()}${debit.slice(1)}`;
 }
 
 export function regenDebitPattern(jobId: string) {
@@ -191,14 +190,18 @@ export async function performOutputRegeneration(
   // revision numbering for this output
   const { data: priorRevisions, error: priorError } = await admin
     .from("output_revisions")
-    .select("id, revision")
+    .select("id, revision, output_number")
     .eq("job_id", opts.jobId)
     .order("revision", { ascending: false })
-    .limit(50);
+    .limit(100);
   if (priorError) throw new Error(priorError.message);
-  const priorForOutput = (priorRevisions ?? []).filter((row: any) =>
-    outputNumber == null ? row.output_number == null : true
-  );
+  const priorForOutput = (priorRevisions ?? [])
+    .filter((row: any) =>
+      outputNumber == null
+        ? row.output_number == null
+        : Number(row.output_number) === Number(outputNumber)
+    )
+    .sort((a: any, b: any) => Number(b.revision ?? 0) - Number(a.revision ?? 0));
   const prior = priorForOutput[0] ?? null;
   const revision = Number(prior?.revision ?? 0) + 1;
   const parentRevisionId = prior?.id ? String(prior.id) : null;
