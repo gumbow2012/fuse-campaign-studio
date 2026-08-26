@@ -166,24 +166,7 @@ export default function CampaignResults({
                       <span className="absolute left-2 top-2 rounded-full bg-emerald-400/15 px-2 py-0.5 text-[9px] uppercase tracking-[0.16em] text-emerald-100">
                         {isLatest ? "✓ Ready" : `Version ${selected + 1}`}
                       </span>
-                      {versionCount > 1 ? (
-                        <span
-                          className="absolute right-2 top-2"
-                          onClick={(event) => {
-                            event.preventDefault();
-                            event.stopPropagation();
-                          }}
-                        >
-                          <OutputRevisionNav
-                            index={selected}
-                            total={versionCount}
-                            label={label}
-                            onChange={(next) => setVersionIndex((prev) => ({ ...prev, [number]: next }))}
-                          />
-                        </span>
-                      ) : null}
                     </button>
-
 
                     <div className="flex items-center justify-between gap-2 px-3 py-3">
                       <span className="inline-flex items-center gap-1.5 text-[11px] uppercase tracking-[0.14em] text-slate-300">
@@ -191,12 +174,19 @@ export default function CampaignResults({
                         {pad(number)} · {label}
                       </span>
                       <div className="flex items-center gap-1">
+                        <OutputRevisionNav
+                          index={selected}
+                          total={versionCount}
+                          label={label}
+                          onChange={(next) => setVersionIndex((prev) => ({ ...prev, [number]: next }))}
+                        />
                         <button
                           type="button"
-                          onClick={() => setLightbox({ output, index })}
+                          onClick={() => setLightbox({ output: shown, index })}
                           aria-label={`Expand ${label}`}
                           className="rounded-full p-1.5 text-slate-300 hover:bg-white/[0.08]"
                         >
+
                           <Expand className="h-3.5 w-3.5" />
                         </button>
                         {onDownload ? (
