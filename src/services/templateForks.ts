@@ -72,8 +72,15 @@ async function callForkFunction<T>(body: Record<string, unknown>): Promise<T> {
   return data as T;
 }
 
-export async function createFork(templateId: string): Promise<{ forkId: string; promptVisibility: boolean }> {
-  const data = await callForkFunction<Record<string, unknown>>({ action: "create_fork", templateId });
+export async function createFork(
+  templateId: string,
+  options?: { sourceJobId?: string | null },
+): Promise<{ forkId: string; promptVisibility: boolean }> {
+  const data = await callForkFunction<Record<string, unknown>>({
+    action: "create_fork",
+    templateId,
+    ...(options?.sourceJobId ? { sourceJobId: options.sourceJobId } : {}),
+  });
   return {
     forkId: String(data.forkId ?? ""),
     promptVisibility: data.promptVisibility === true,
@@ -91,4 +98,43 @@ export async function updateFork(forkId: string, personalGraph: PersonalGraph): 
 
 export async function resetFork(forkId: string): Promise<void> {
   await callForkFunction({ action: "reset_fork", forkId });
+}
+
+/** TR10b — dry-run cost estimate for running a private fork. Server-authoritative. */
+export async function estimateForkRun(forkId: string): Promise<{ estimatedCredits: number }> {
+  const data = await callForkFunction<Record<string, unknown>>({ action: "estimate_fork_run", forkId });
+  return { estimatedCredits: Number(data.estimatedCredits ?? 0) };
+}
+
+/** TR10b — run the private fork. Inputs are omitted: the server reuses the source run's assets. */
+export async function runFork(
+  forkId: string,
+  idempotencyKey: string,
+): Promise<{ jobId: string; credits: number }> {
+  const { data: sessionData } = await supabase.auth.getSession();
+  const token = sessionData.session?.access_token;
+  if (!token) throw new TemplateForkError("UNAUTHENTICATED", "Please sign in again.");
+
+  const response = await fetch(`${SUPABASE_URL}/functions/v1/start-template-run`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+      apikey: SUPABASE_PUBLISHABLE_KEY,
+    },
+    body: JSON.stringify({ action: "run_fork", forkId, idempotencyKey }),
+  });
+
+  const data = (await response.json().catch(() => null)) as
+    | (Record<string, unknown> & { error?: string; code?: string })
+    | null;
+
+  if (!response.ok || data?.error || !data?.jobId) {
+    const code = String(
+      data?.code ?? (response.status === 402 ? "INSUFFICIENT_CREDITS" : `HTTP_${response.status}`),
+    );
+    throw new TemplateForkError(code, String(data?.error ?? "Couldn't start your run."));
+  }
+
+  return { jobId: String(data.jobId), credits: Number(data.credits ?? 0) };
 }
