@@ -8,6 +8,12 @@
 
 export const LOW_RESOLUTION_THRESHOLD = 768;
 
+/** Real image transport ceiling — matches direct-to-storage upload limits. */
+export const MAX_IMAGE_BYTES = 12 * 1024 * 1024;
+/** Real video transport ceiling. */
+export const MAX_VIDEO_BYTES = 60 * 1024 * 1024;
+
+
 export type UploadCheckState = "uploading" | "checking" | "ready" | "warning" | "error";
 
 export interface UploadCheckResult {
