@@ -20,6 +20,11 @@ import {
   type CreditPackDefinition,
 } from "./stripe-credit-packs.ts";
 import {
+  creditTopUpPurchaseType,
+  quoteCreditTopUp,
+  resolveCreditTopUpPurchase,
+} from "./credit-pricing.ts";
+import {
   type StripeBillingMode,
   createStripeClient,
   findStripeCustomerId,
