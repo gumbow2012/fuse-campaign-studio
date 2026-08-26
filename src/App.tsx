@@ -17,6 +17,7 @@ import AdminAudits from "@/pages/AdminAudits";
 import AdminAnalytics from "@/pages/AdminAnalytics";
 import AdminCreators from "@/pages/AdminCreators";
 import AdminCreatorProgram from "@/pages/AdminCreatorProgram";
+import AdminFuseCast from "@/pages/AdminFuseCast";
 import AdminTemplateImport from "@/pages/AdminTemplateImport";
 import AdminTemplates from "@/pages/AdminTemplates";
 import FlowEmbed from "@/pages/FlowEmbed";
