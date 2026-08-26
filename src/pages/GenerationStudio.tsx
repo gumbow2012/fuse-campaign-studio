@@ -1006,12 +1006,23 @@ export default function GenerationStudio() {
   }, []);
 
   /** Restore prompt + reference stack (REF order preserved) from a past generation. */
-  const recreate = useCallback((generation: Generation) => {
-    const recipe = generationRecipe(generation);
+  const recreate = useCallback(async (generation: Generation) => {
+    // List rows are light — pull the full payload first if it hasn't loaded yet.
+    let full = generation;
+    if (!full.inputPayload) {
+      try {
+        const data = await callStudio({ action: "detail", generationId: generation.id });
+        if (data?.generation) full = { ...generation, ...(data.generation as Generation) };
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : "Could not load the recipe");
+        return;
+      }
+    }
+    const recipe = generationRecipe(full);
     setPrompt(recipe.prompt);
     setReferences(recipe.urls.slice(0, MAX_REFERENCES).map((url) => ({ url, label: "" })));
     if (recipe.aspect) setAspectRatio(recipe.aspect);
-    const plan = readShotPlan(generation.inputPayload);
+    const plan = readShotPlan(full.inputPayload ?? null);
     setShotPlan(plan);
     setDirectionExpanded(!(plan.length > 0 || recipe.prompt.length > 1200));
     setLightboxId(null);
