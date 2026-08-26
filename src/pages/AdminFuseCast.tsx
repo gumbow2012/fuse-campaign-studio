@@ -182,6 +182,10 @@ export default function AdminFuseCast() {
         </p>
       </header>
 
+      <div className="mb-8">
+        <LiveBillingProvisionCard />
+      </div>
+
       {loading ? (
         <p className="flex items-center gap-2 text-sm text-muted-foreground">
           <Loader2 className="h-4 w-4 animate-spin" /> Loading FUSE cast…
