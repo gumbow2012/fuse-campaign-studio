@@ -891,6 +891,8 @@ export default function GenerationStudio() {
   const PAGE_SIZE = 24;
   type ListCursor = { createdAt: string; id: string };
   const nextCursorRef = useRef<ListCursor | null>(null);
+  /** GS-PERF8: page-1 cursor, kept current by every loadQueue — used for the SWR cache. */
+  const page1CursorRef = useRef<ListCursor | null>(null);
   const pagedRef = useRef(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(false);
@@ -900,6 +902,7 @@ export default function GenerationStudio() {
       const data = await callStudio({ action: "queue", limit: PAGE_SIZE });
       const rows = (data?.generations ?? []) as Generation[];
       const cursor = (data?.nextCursor as ListCursor | null) ?? null;
+      page1CursorRef.current = cursor;
       setGenerations((prev) => {
         if (!prev.length) return rows;
         // In-place refresh: page-1 rows update by id and lead the list
