@@ -983,8 +983,10 @@ export default function TemplateStudioPage() {
       });
     } finally {
       setCheckingCredits(false);
+      setRunPhase("idle");
       setSubmitting(false);
     }
+
   };
 
   const isRunning = result?.status === "queued" || result?.status === "running" || result?.status === "video_pending";
