@@ -1129,6 +1129,19 @@ Deno.serve(async (req) => {
       if (!versionId) throw new Error("versionId is required");
       await assertVersionAccess(admin, access, versionId);
 
+      // FT9 — never mutate a live version; clone it into a draft first.
+      const { data: castVersionRow, error: castVersionError } = await admin
+        .from("template_versions")
+        .select("id, is_active")
+        .eq("id", versionId)
+        .single();
+      if (castVersionError || !castVersionRow) {
+        throw new Error(castVersionError?.message ?? "Template version not found");
+      }
+      if ((castVersionRow as any).is_active === true) {
+        throw new Error("Active versions are protected. Clone this version into a draft to configure cast.");
+      }
+
       const { data: versionNodes, error: versionNodesError } = await admin
         .from("nodes")
         .select("id")
@@ -1141,8 +1154,10 @@ Deno.serve(async (req) => {
       const { error: castError } = await admin
         .from("template_versions")
         .update({ cast_config: castConfig })
-        .eq("id", versionId);
+        .eq("id", versionId)
+        .eq("is_active", false);
       if (castError) throw new Error(castError.message);
+
 
       await logAuditEvent({
         eventType: "template_cast_config_updated",
