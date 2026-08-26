@@ -70,6 +70,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { uploadRunInputFile } from "@/services/runInputUpload";
 import { cn } from "@/lib/utils";
+import { useNearViewport } from "@/hooks/useNearViewport";
 import {
   FieldHelper,
   FusePanel,
@@ -491,7 +492,7 @@ function GenerationCard({
   useEffect(() => {
     setLoaded(false);
   }, [generation.outputUrl]);
-  const showSkeleton = done && !loaded;
+  const showSkeleton = done && (isImage ? !loaded : !near);
 
   return (
     <article className="group overflow-hidden rounded-2xl border border-white/10 bg-white/[0.03] backdrop-blur-xl transition-colors hover:border-cyan-200/30">
@@ -547,7 +548,7 @@ function GenerationCard({
                   }}
                   className={cn(
                     "h-full w-full bg-black/60 object-cover transition-opacity duration-150",
-                    loaded ? "opacity-100" : "opacity-0",
+                    near ? "opacity-100" : "opacity-0",
                   )}
                 />
               )}
@@ -2118,10 +2119,11 @@ export default function GenerationStudio() {
                 {visibleGenerations.length ? (
                   <>
                     <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-4">
-                      {visibleGenerations.map((generation) => (
+                      {visibleGenerations.map((generation, index) => (
                         <MemoizedGenerationCard
                           key={generation.id}
                           generation={generation}
+                          priority={index < 8}
                           onUseAsReference={useAsReference}
                           onExpand={handleCardExpand}
                           onDelete={handleCardDelete}
