@@ -6,7 +6,7 @@
  */
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { AlertTriangle, CheckCircle2, Images, Loader2, Upload, XCircle } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Images, Loader2, Plus, Upload, XCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import UploadGuide from "@/components/templates/UploadGuide";
 import LibraryPickerDialog from "@/components/templates/LibraryPickerDialog";
@@ -21,16 +21,20 @@ import {
 } from "@/lib/templateAssetRequirements";
 import { cn } from "@/lib/utils";
 
-const ASSET_TYPE_PLACEHOLDERS: Partial<Record<TemplateAssetType, string>> = {
-  "garment-front": "/template-placeholders/shirt.png?v=20260520",
-  "garment-back": "/template-placeholders/shirt.png?v=20260520",
-  logo: "/template-placeholders/logo.png?v=20260520",
-  product: "/template-placeholders/accessory.png?v=20260520",
-  jewelry: "/template-placeholders/chain.png?v=20260520",
-  packaging: "/template-placeholders/accessory.png?v=20260520",
-  avatar: "/template-placeholders/face.png?v=20260520",
-  reference: "/template-placeholders/model.png?v=20260520",
+/** Short role word used in the "+ ADD {ROLE}" empty state. */
+const ROLE_WORDS: Partial<Record<TemplateAssetType, string>> = {
+  "garment-front": "GARMENT",
+  "garment-back": "GARMENT",
+  logo: "LOGO",
+  product: "PRODUCT",
+  jewelry: "JEWELRY",
+  packaging: "PACKAGING",
+  avatar: "CAST",
+  reference: "REFERENCE",
+  image: "IMAGE",
+  video: "VIDEO",
 };
+
 
 interface TemplateInputCardProps {
   label: string;
