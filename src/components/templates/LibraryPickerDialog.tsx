@@ -77,13 +77,16 @@ export default function LibraryPickerDialog({
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        {trigger ?? (
-          <button type="button" className="text-[11px] uppercase tracking-[0.16em] text-cyan-200">
-            Choose From Library
-          </button>
-        )}
-      </DialogTrigger>
+      {trigger === null ? null : (
+        <DialogTrigger asChild>
+          {trigger ?? (
+            <button type="button" className="text-[11px] uppercase tracking-[0.16em] text-cyan-200">
+              Choose From Library
+            </button>
+          )}
+        </DialogTrigger>
+      )}
+
       <DialogContent className="max-w-3xl border-white/10 bg-slate-950/95 text-white">
         <DialogHeader>
           <DialogTitle className="font-display text-2xl tracking-[-0.02em]">Your asset library</DialogTitle>
