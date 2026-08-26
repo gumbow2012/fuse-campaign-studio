@@ -12,6 +12,8 @@ export type CastSlotConfig = {
   id: string;
   label: string;
   nodeId: string;
+  /** FT10 — admin-designated input key on the target node (MODE A). */
+  targetInputKey?: string;
   preservePose: boolean;
   preserveComposition: boolean;
   preserveEnvironment: boolean;
@@ -55,6 +57,9 @@ export function normalizeCastConfig(value: unknown, allowedNodeIds?: Set<string>
       id,
       label: typeof slot.label === "string" && slot.label.trim() ? slot.label.trim() : "Cast A",
       nodeId,
+      ...(typeof slot.targetInputKey === "string" && slot.targetInputKey.trim()
+        ? { targetInputKey: slot.targetInputKey.trim() }
+        : {}),
       preservePose: slot.preservePose === true,
       preserveComposition: slot.preserveComposition === true,
       preserveEnvironment: slot.preserveEnvironment === true,
