@@ -1167,6 +1167,22 @@ export default function TemplateStudioPage() {
           )}
         </div>
 
+        {/* Quiet history affordance — the builder stays dominant. */}
+        {user ? (
+          <div className="mt-6 flex justify-start">
+            <CampaignHistoryLauncher
+              campaigns={recentRuns}
+              onOpenDrawer={() => setHistoryOpen(true)}
+              onOpenCampaign={handleOpenHistoricalRun}
+              isError={recentRunsQuery.isError}
+              onRetry={() => void refetchRecentRuns()}
+              previewUrlForTemplate={previewUrlForTemplate}
+            />
+          </div>
+        ) : null}
+
+
+
         {isPrivilegedUser ? (
           <section className="mt-6 rounded-[1.75rem] border border-cyan-300/20 bg-cyan-300/[0.06] p-4">
             <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
