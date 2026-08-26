@@ -1584,32 +1584,11 @@ export default function TemplateStudioPage() {
                     />
                   ) : null}
 
-                  <div className="grid gap-4 md:grid-cols-2">
-                    {result.outputs.map((output, index) => (
-                      <article key={`${output.url}-${index}`} className="overflow-hidden rounded-[1.5rem] border border-white/8 bg-black/20">
-                        {output.type === "video" ? (
-                          <video src={output.url} controls className="aspect-[9/16] w-full bg-black object-cover" />
-                        ) : (
-                          <img src={output.url} alt={formatPublicOutputLabel(index)} className="aspect-[9/16] w-full object-cover" />
-                        )}
-                        <div className="flex items-center justify-between gap-3 p-4">
-                          <div className="flex items-center gap-2 text-sm text-slate-300">
-                            {output.type === "video" ? <Film className="h-4 w-4" /> : <ImageIcon className="h-4 w-4" />}
-                            <span>{formatPublicOutputLabel(index)}</span>
-                          </div>
-                          <a
-                            href={output.url}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="inline-flex items-center gap-2 rounded-full border border-white/10 px-3 py-1.5 text-xs uppercase tracking-[0.2em] text-slate-300 hover:bg-white/[0.06]"
-                          >
-                            <Download className="h-3.5 w-3.5" />
-                            Open
-                          </a>
-                        </div>
-                      </article>
-                    ))}
-                  </div>
+                  <CampaignResults
+                    outputs={result.outputs}
+                    onDownload={handleDownloadSingleOutput}
+                  />
+
                 </div>
               ) : null}
 
