@@ -1008,6 +1008,9 @@ export default function GenerationStudio() {
                       ...entry,
                       status: (row.status as Generation["status"]) ?? entry.status,
                       outputUrl: (row.output_url as string | null) ?? entry.outputUrl,
+                      previewUrl: (row.preview_url as string | null) ?? entry.previewUrl ?? null,
+                      posterUrl: (row.poster_url as string | null) ?? entry.posterUrl ?? null,
+
                       outputType: (row.output_type as string | null) ?? entry.outputType,
                       providerModel: (row.provider_model as string | null) ?? entry.providerModel,
                       estimatedCredits:
