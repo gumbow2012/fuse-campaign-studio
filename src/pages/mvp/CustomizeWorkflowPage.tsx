@@ -7,8 +7,7 @@
  * arrive here (server strips them for prompt-hidden forks).
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
-import { Link } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { Loader2, RotateCcw, Copy, Play, Save } from "lucide-react";
 import SiteShell from "@/components/mvp/SiteShell";
 import { Button } from "@/components/ui/button";
@@ -219,6 +218,7 @@ export default function CustomizeWorkflowPage() {
       setFork(refreshed);
       setGraph(refreshed.personalGraph);
       toast({ title: "Reset", description: "Back to the original template." });
+      await refreshEstimate();
     } catch {
       toast({ title: "Couldn't reset this version", variant: "destructive" });
     } finally {
