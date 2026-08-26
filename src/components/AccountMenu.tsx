@@ -30,7 +30,14 @@ const itemClass =
 const sectionLabelClass =
   "px-3 pb-1 font-display text-[9px] font-bold uppercase tracking-[0.2em] text-muted-foreground";
 
-export function AccountMenuContent({ onNavigate }: { onNavigate?: () => void }) {
+export function AccountMenuContent({
+  onNavigate,
+  onTopUp,
+}: {
+  onNavigate?: () => void;
+  /** Provided when the host renders the top-up dialog outside the menu surface. */
+  onTopUp?: () => void;
+}) {
   const { profile, signOut, isCreator, roles } = useAuth();
   const { email, displayName, avatarUrl, initials } = useAccountIdentity();
   const [mounted, setMounted] = useState(false);
@@ -114,10 +121,10 @@ export function AccountMenuContent({ onNavigate }: { onNavigate?: () => void }) 
             style={{ width: mounted ? `${ratio * 100}%` : "0%" }}
           />
         </div>
-        <CreditPackDialog open={topUpOpen} onOpenChange={setTopUpOpen} />
+        {onTopUp ? null : <CreditPackDialog open={topUpOpen} onOpenChange={setTopUpOpen} />}
         <Button
           size="sm"
-          onClick={() => setTopUpOpen(true)}
+          onClick={() => (onTopUp ? onTopUp() : setTopUpOpen(true))}
           className="mt-3 w-full rounded-full bg-cyan-300 font-sans text-xs font-bold uppercase tracking-[0.1em] text-slate-950 hover:bg-cyan-200"
         >
           Top up credits
@@ -165,6 +172,7 @@ export function AccountMenuContent({ onNavigate }: { onNavigate?: () => void }) 
 /** Account trigger — the user's real photo or their initials. Never the FUSE logo. */
 export function AccountPopover() {
   const [open, setOpen] = useState(false);
+  const [topUpOpen, setTopUpOpen] = useState(false);
   const location = useLocation();
   const isMobile = useIsMobile();
   const { profile } = useAuth();
@@ -197,28 +205,40 @@ export function AccountPopover() {
     </button>
   );
 
+  const openTopUp = () => {
+    setOpen(false);
+    setTopUpOpen(true);
+  };
+
   if (isMobile) {
     return (
-      <Sheet open={open} onOpenChange={setOpen}>
-        <SheetTrigger asChild>{trigger}</SheetTrigger>
-        <SheetContent side="right" className="w-[min(320px,92vw)] overflow-y-auto border-white/10 bg-[#0B1120]/97 p-4">
-          <SheetTitle className="sr-only">Account menu</SheetTitle>
-          <AccountMenuContent onNavigate={() => setOpen(false)} />
-        </SheetContent>
-      </Sheet>
+      <>
+        <CreditPackDialog open={topUpOpen} onOpenChange={setTopUpOpen} />
+        <Sheet open={open} onOpenChange={setOpen}>
+          <SheetTrigger asChild>{trigger}</SheetTrigger>
+          <SheetContent side="right" className="w-[min(320px,92vw)] overflow-y-auto border-white/10 bg-[#0B1120]/97 p-4">
+            <SheetTitle className="sr-only">Account menu</SheetTitle>
+            <AccountMenuContent onNavigate={() => setOpen(false)} onTopUp={openTopUp} />
+          </SheetContent>
+        </Sheet>
+      </>
     );
   }
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>{trigger}</PopoverTrigger>
-      <PopoverContent
-        align="end"
-        sideOffset={8}
-        className="w-auto rounded-2xl border-white/10 bg-[#0B1120]/95 p-4 font-sans shadow-2xl backdrop-blur-xl"
-      >
-        <AccountMenuContent onNavigate={() => setOpen(false)} />
-      </PopoverContent>
-    </Popover>
+    <>
+      {/* Outside the popover so closing the popover cannot unmount it. */}
+      <CreditPackDialog open={topUpOpen} onOpenChange={setTopUpOpen} />
+      <Popover open={open} onOpenChange={setOpen}>
+        <PopoverTrigger asChild>{trigger}</PopoverTrigger>
+        <PopoverContent
+          align="end"
+          sideOffset={8}
+          className="w-auto rounded-2xl border-white/10 bg-[#0B1120]/95 p-4 font-sans shadow-2xl backdrop-blur-xl"
+        >
+          <AccountMenuContent onNavigate={() => setOpen(false)} onTopUp={openTopUp} />
+        </PopoverContent>
+      </Popover>
+    </>
   );
 }
