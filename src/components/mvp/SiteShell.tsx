@@ -1,12 +1,16 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { Link, NavLink, useNavigate } from "react-router-dom";
-import { Clapperboard, ClipboardCheck, Gem, Home, Info, Layers3, Mail, Menu, RefreshCw, Shirt, Sparkles, Star, UserRound, UsersRound } from "lucide-react";
+import { Clapperboard, ClipboardCheck, Gem, Home, Info, Layers3, Mail, Menu, Shirt, Sparkles, Star, UsersRound } from "lucide-react";
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
-import CreditPackDialog from "./CreditPackDialog";
+import { CreditChip } from "@/components/CreditChip";
+import NotificationCenter from "@/components/NotificationCenter";
+import { AccountPopover } from "@/components/AccountMenu";
+import FeatureNewBadge from "@/components/FeatureNewBadge";
+import type { FeatureKey } from "@/lib/featureRegistry";
 
 const focusRing =
   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/80 focus-visible:ring-offset-2 focus-visible:ring-offset-background";
@@ -69,14 +73,13 @@ type BillingCorrectionNotice = {
 
 export default function SiteShell({ children }: { children: ReactNode }) {
   const navigate = useNavigate();
-  const { user, profile, isAdmin, isCreator, hasAppAccess, signOut, refreshProfile } = useAuth();
-  const [refreshingCredits, setRefreshingCredits] = useState(false);
+  const { user, profile, isAdmin, isCreator, hasAppAccess, signOut } = useAuth();
   const [menuOpen, setMenuOpen] = useState(false);
   const closeMenu = () => setMenuOpen(false);
-  const toolLinks = [
+  const toolLinks: Array<{ to: string; label: string; icon: typeof Layers3; featureKey?: FeatureKey }> = [
     { to: "/admin/templates", label: "Admin Templates", icon: Layers3 },
-    { to: "/app/lab/studio", label: "Generation Studio", icon: Sparkles },
-    { to: "/app/lab/cinema", label: "Cinema Studio", icon: Clapperboard },
+    { to: "/app/lab/studio", label: "Image Studio", icon: Sparkles },
+    { to: "/app/lab/cinema", label: "Cinema Studio", icon: Clapperboard, featureKey: "cinema_studio" },
     { to: "/app/lab/outfit-swap", label: "Outfit Swap", icon: Shirt },
     { to: "/app/lab/jewelry-swap", label: "Jewelry Swap", icon: Gem },
     { to: "/admin/audits", label: "Output Audit", icon: ClipboardCheck },
@@ -85,11 +88,6 @@ export default function SiteShell({ children }: { children: ReactNode }) {
   const [billingCorrectionNotice, setBillingCorrectionNotice] = useState<BillingCorrectionNotice | null>(null);
   const accountLabel = isAdmin ? "Admin account" : "Account";
   const creditDisplay = profile ? `${profile.credits_balance.toLocaleString()} credits` : "Checking credits";
-  const hasActivePaidMembership =
-    !!profile &&
-    profile.plan !== "free" &&
-    (profile.subscription_status === "active" || profile.subscription_status === "trialing");
-  const shouldShowCreditTopUp = !!user && !!profile && !isAdmin && hasActivePaidMembership && profile.credits_balance <= 0;
 
   useEffect(() => {
     if (!user || isAdmin) {
@@ -134,15 +132,6 @@ export default function SiteShell({ children }: { children: ReactNode }) {
     navigate("/", { replace: true });
   };
 
-  const handleRefreshCredits = async () => {
-    if (!user || isAdmin || refreshingCredits) return;
-    setRefreshingCredits(true);
-    try {
-      await refreshProfile();
-    } finally {
-      setRefreshingCredits(false);
-    }
-  };
 
   return (
     <div className="min-h-screen text-foreground">
@@ -175,26 +164,15 @@ export default function SiteShell({ children }: { children: ReactNode }) {
                 Pricing
               </NavLink>
             </nav>
-            {user && !isAdmin ? (
-              <span className="inline-flex min-h-11 items-center rounded-full border border-white/10 bg-white/5 px-3 text-[11px] font-semibold text-cyan-200">
-                <span className="sr-only">Credit balance: </span>
-                {profile ? profile.credits_balance.toLocaleString() : "—"}
-              </span>
-            ) : null}
             {user ? (
-              <NavLink
-                to="/account"
-                aria-label={accountLabel}
-                title={accountLabel}
-                className={cn(
-                  "inline-flex min-h-11 min-w-11 items-center justify-center rounded-full bg-cyan-300 text-slate-950 transition-colors hover:bg-cyan-200 motion-reduce:transition-none",
-                  focusRing,
-                )}
-              >
-                <UserRound className="h-4 w-4" aria-hidden="true" />
-              </NavLink>
+              /* ONE cohesive cluster: credits · notifications · account */
+              <div className="flex items-center gap-1.5">
+                <CreditChip />
+                <NotificationCenter />
+                <AccountPopover />
+              </div>
             ) : (
-              <Button asChild className={cn("min-h-11 rounded-full bg-cyan-300 px-4 text-sm text-slate-950 hover:bg-cyan-200", focusRing)}>
+              <Button asChild className={cn("h-9 rounded-full bg-cyan-300 px-4 text-sm text-slate-950 hover:bg-cyan-200", focusRing)}>
                 <Link to="/auth">Sign in</Link>
               </Button>
             )}
@@ -325,29 +303,13 @@ export default function SiteShell({ children }: { children: ReactNode }) {
                   <Mail className="h-4 w-4" aria-hidden="true" />
                 </NavLink>
 
-                <div className="flex items-center gap-1.5">
+                <div className="flex items-center gap-2">
                   {user ? (
+                    /* ONE cohesive cluster: credits · notifications · account */
                     <>
-                      <NavLink
-                        to="/account"
-                        className={({ isActive }) =>
-                          cn(
-                            "inline-flex h-9 items-center gap-1.5 rounded-full px-3 text-xs font-semibold transition-colors motion-reduce:transition-none lg:h-10 lg:gap-2 lg:px-4 lg:text-sm",
-                            focusRing,
-                            isActive ? "bg-cyan-200 text-slate-950" : "bg-cyan-300 text-slate-950 hover:bg-cyan-200",
-                          )
-                        }
-                      >
-                        <UserRound className="h-3.5 w-3.5 lg:h-4 lg:w-4" aria-hidden="true" />
-                        {accountLabel}
-                      </NavLink>
-                      <Button
-                        variant="outline"
-                        onClick={() => void handleSignOut()}
-                        className={cn("h-9 rounded-full border-white/15 bg-white/5 px-3 text-xs text-foreground hover:bg-white/10 lg:h-10 lg:px-4 lg:text-sm", focusRing)}
-                      >
-                        Sign out
-                      </Button>
+                      <CreditChip />
+                      <NotificationCenter />
+                      <AccountPopover />
                     </>
                   ) : (
                     <>
@@ -378,6 +340,7 @@ export default function SiteShell({ children }: { children: ReactNode }) {
                     <NavLink key={link.to} to={link.to} className={adminNavLinkClass}>
                       <Icon className="h-3.5 w-3.5" aria-hidden="true" />
                       {link.label}
+                      {link.featureKey ? <FeatureNewBadge featureKey={link.featureKey} /> : null}
                     </NavLink>
                   );
                 })}
@@ -393,36 +356,6 @@ export default function SiteShell({ children }: { children: ReactNode }) {
               </nav>
             ) : null}
 
-            <div className="flex flex-wrap items-center gap-2">
-              {user && !isAdmin ? (
-                <>
-                  <div className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-xs uppercase tracking-[0.22em] text-muted-foreground">
-                    {creditDisplay}
-                  </div>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="icon"
-                    title="Refresh credits"
-                    aria-label="Refresh credits"
-                    onClick={() => void handleRefreshCredits()}
-                    disabled={refreshingCredits}
-                    className={cn("h-9 w-9 rounded-full border-white/15 bg-white/5 text-foreground hover:bg-white/10", focusRing)}
-                  >
-                    <RefreshCw className={`h-4 w-4 ${refreshingCredits ? "animate-spin motion-reduce:animate-none" : ""}`} aria-hidden="true" />
-                  </Button>
-                  {shouldShowCreditTopUp ? (
-                    <CreditPackDialog
-                      trigger={
-                        <Button className="rounded-full bg-cyan-300 px-4 text-slate-950 hover:bg-cyan-200">
-                          Get credits
-                        </Button>
-                      }
-                    />
-                  ) : null}
-                </>
-              ) : null}
-            </div>
           </div>
         </div>
 

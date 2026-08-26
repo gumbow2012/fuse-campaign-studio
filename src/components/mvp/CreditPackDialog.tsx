@@ -17,10 +17,13 @@ import CreditTopUpModule from "@/components/mvp/membership/CreditTopUpModule";
 import { rememberPendingCreditTopUp } from "@/components/mvp/CreditTopUpSuccessWatcher";
 
 interface CreditPackDialogProps {
-  trigger: ReactNode;
+  /** Optional when the dialog is controlled (e.g. opened from a popover that unmounts). */
+  trigger?: ReactNode;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }
 
-export default function CreditPackDialog({ trigger }: CreditPackDialogProps) {
+export default function CreditPackDialog({ trigger, open, onOpenChange }: CreditPackDialogProps) {
   const navigate = useNavigate();
   const { isAdmin, user, profile } = useAuth();
   const [loading, setLoading] = useState<string | null>(null);
@@ -63,8 +66,8 @@ export default function CreditPackDialog({ trigger }: CreditPackDialogProps) {
   };
 
   return (
-    <Dialog>
-      <DialogTrigger asChild>{trigger}</DialogTrigger>
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      {trigger ? <DialogTrigger asChild>{trigger}</DialogTrigger> : null}
       <DialogContent className="border-white/10 bg-slate-950 text-white sm:max-w-lg">
         <DialogHeader>
           <DialogTitle className="font-display text-3xl tracking-[-0.04em]">Get credits</DialogTitle>

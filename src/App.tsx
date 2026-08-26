@@ -49,6 +49,7 @@ import NotFoundPage from "@/pages/mvp/NotFoundPage";
 import ResetPasswordPage from "@/pages/mvp/ResetPasswordPage";
 import TemplateStudioPage from "@/pages/mvp/TemplateStudioPage";
 import CampaignLibraryPage from "@/pages/mvp/CampaignLibraryPage";
+import NotificationsPage from "@/pages/mvp/NotificationsPage";
 import CustomizeWorkflowPage from "@/pages/mvp/CustomizeWorkflowPage";
 
 import CreatorOnboarding from "@/pages/app/creator/CreatorOnboarding";
@@ -110,6 +111,14 @@ const App = () => (
 
             <Route path="/billing" element={<Navigate to="/pricing" replace />} />
             <Route path="/app/templates" element={<TemplateStudioPage />} />
+            <Route
+              path="/app/notifications"
+              element={
+                <CustomerRoute>
+                  <NotificationsPage />
+                </CustomerRoute>
+              }
+            />
             <Route
               path="/app/campaigns"
               element={
