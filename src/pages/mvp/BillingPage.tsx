@@ -5,7 +5,7 @@ import SiteShell from "@/components/mvp/SiteShell";
 import PageMeta from "@/components/mvp/PageMeta";
 import CompactAccountBar from "@/components/mvp/membership/CompactAccountBar";
 import PlanTierCards from "@/components/mvp/membership/PlanTierCards";
-import CreditPackCards from "@/components/mvp/membership/CreditPackCards";
+import CreditTopUpModule from "@/components/mvp/membership/CreditTopUpModule";
 import PlanComparisonMatrix from "@/components/mvp/membership/PlanComparisonMatrix";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -52,7 +52,7 @@ export default function BillingPage() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { isAdmin, user, profile, refreshSubscription } = useAuth();
-  const { loading, setLoading, startPlanCheckout, startCreditCheckout } = useMembershipCheckout();
+  const { loading, setLoading, startPlanCheckout, startCreditTopUp } = useMembershipCheckout();
   const [creditPackSmoke, setCreditPackSmoke] = useState<CreditPackSmokeResult | null>(null);
   const [checkoutEmail, setCheckoutEmail] = useState("");
   const [brandName, setBrandName] = useState("");
@@ -168,14 +168,14 @@ export default function BillingPage() {
     }
   };
 
-  const handleCreditCheckout = async (packKey: keyof typeof CREDIT_PACKS) => {
+  const handleCreditCheckout = async (credits: number) => {
     if (!user) {
       navigate("/auth?mode=signup");
       return;
     }
     if (isAdmin) return;
 
-    await startCreditCheckout(packKey);
+    await startCreditTopUp(credits, { balanceBefore: Number(profile?.credits_balance ?? 0) });
   };
 
 
@@ -403,10 +403,10 @@ export default function BillingPage() {
           </div>
 
           <div className="mt-6">
-            <CreditPackCards
+            <CreditTopUpModule
               loading={loading}
               isAdmin={isAdmin}
-              onCheckout={(packKey) => void handleCreditCheckout(packKey)}
+              onCheckout={(credits) => void handleCreditCheckout(credits)}
             />
           </div>
 

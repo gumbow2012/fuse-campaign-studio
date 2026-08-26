@@ -7,8 +7,7 @@ import TemplatePreviewCarousel from "@/components/mvp/membership/TemplatePreview
 import FindYourPlan from "@/components/mvp/membership/FindYourPlan";
 import MembershipFaq from "@/components/mvp/membership/MembershipFaq";
 import PlanTierCards, { type BillingCycle } from "@/components/mvp/membership/PlanTierCards";
-import CreditPackCards from "@/components/mvp/membership/CreditPackCards";
-import CreditSliderPanel from "@/components/mvp/membership/CreditSliderPanel";
+import CreditTopUpModule from "@/components/mvp/membership/CreditTopUpModule";
 import CreditMixCalculator from "@/components/mvp/membership/CreditMixCalculator";
 import PlanComparisonMatrix from "@/components/mvp/membership/PlanComparisonMatrix";
 import CreditsOverviewCard from "@/components/mvp/membership/CreditsOverviewCard";
@@ -36,7 +35,7 @@ const isTabId = (value: string | null): value is TabId =>
 export default function MembershipPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const { isAdmin, profile } = useAuth();
-  const { loading, startPlanCheckout, startCreditCheckout } = useMembershipCheckout();
+  const { loading, startPlanCheckout, startCreditTopUp } = useMembershipCheckout();
   const [billingCycle, setBillingCycle] = useState<BillingCycle>("monthly");
   const [showComparison, setShowComparison] = useState(false);
   const [selectedCreditAmount, setSelectedCreditAmount] = useState<number | null>(null);
@@ -168,25 +167,15 @@ export default function MembershipPage() {
                   payment clears.
                 </p>
                 <div className="mt-6">
-                  <CreditSliderPanel
+                  <CreditTopUpModule
                     loading={loading}
                     isAdmin={isAdmin}
                     onAmountChange={setSelectedCreditAmount}
-                    onCheckout={(packKey) => {
+                    onCheckout={(credits) => {
                       if (isAdmin) return;
-                      void startCreditCheckout(packKey);
-                    }}
-                  />
-                </div>
-
-                <p className="mt-8 text-[11px] uppercase tracking-[0.24em] text-muted-foreground">Buy extra credits</p>
-                <div className="mt-4">
-                  <CreditPackCards
-                    loading={loading}
-                    isAdmin={isAdmin}
-                    onCheckout={(packKey) => {
-                      if (isAdmin) return;
-                      void startCreditCheckout(packKey);
+                      void startCreditTopUp(credits, {
+                        balanceBefore: Number(profile?.credits_balance ?? 0),
+                      });
                     }}
                   />
                 </div>

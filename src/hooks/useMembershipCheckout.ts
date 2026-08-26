@@ -2,7 +2,9 @@ import { useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 import { CREDIT_PACKS, STRIPE_TIERS } from "@/lib/stripe-config";
+import { quoteCreditTopUp } from "@/lib/creditPricing";
 import { rememberPendingCheckout, trackEvent } from "@/lib/metaPixel";
+import { rememberPendingCreditTopUp } from "@/components/mvp/CreditTopUpSuccessWatcher";
 
 type PlanCheckoutOptions = {
   email?: string;
@@ -82,5 +84,38 @@ export function useMembershipCheckout() {
     }
   };
 
-  return { loading, setLoading, startPlanCheckout, startCreditCheckout };
+  /**
+   * Credit top-up checkout. The client sends ONLY the credits integer — the
+   * server computes and owns the price.
+   */
+  const startCreditTopUp = async (credits: number, options: { balanceBefore?: number } = {}) => {
+    const quote = quoteCreditTopUp(credits);
+    const contentName = `${credits.toLocaleString()} FUSE credits`;
+    const params = { value: quote.dollars, currency: "USD", content_name: contentName };
+    trackEvent("AddToCart", params);
+    trackEvent("InitiateCheckout", params);
+    trackEvent("AddPaymentInfo", params);
+    rememberPendingCheckout({ mode: "credits", value: quote.dollars, contentName });
+    rememberPendingCreditTopUp(credits, options.balanceBefore ?? 0);
+
+    setLoading(String(credits));
+    try {
+      const { data, error } = await supabase.functions.invoke("create-credit-checkout", {
+        body: { credits },
+      });
+      if (error) throw error;
+      if (!data?.url) throw new Error("Stripe checkout URL not returned.");
+      window.location.assign(data.url);
+    } catch (error) {
+      toast({
+        title: "Credit checkout failed",
+        description: error instanceof Error ? error.message : "Could not start credit checkout.",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(null);
+    }
+  };
+
+  return { loading, setLoading, startPlanCheckout, startCreditCheckout, startCreditTopUp };
 }
