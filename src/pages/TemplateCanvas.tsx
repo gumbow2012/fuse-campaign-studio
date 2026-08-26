@@ -9,8 +9,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/hooks/use-toast";
+import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
 import { uploadRunInputFile } from "@/services/runInputUpload";
+import { listFuseAvatars, listMyAvatars, type AvatarProfile } from "@/services/avatarProfiles";
 import {
   MAX_TEMPLATE_BRANCHES,
   MAX_TEMPLATE_INPUTS,
@@ -519,7 +521,7 @@ function defaultPosition(laneIndex: number, nodeIndex: number): Point {
 }
 
 const TemplateCanvas = () => {
-  const { session, hasAppAccess } = useAuth();
+  const { session, hasAppAccess, user } = useAuth();
   const canPublishTemplates = hasAppAccess;
   const [searchParams, setSearchParams] = useSearchParams();
   const [templates, setTemplates] = useState<TemplateOption[]>([]);
@@ -539,6 +541,9 @@ const TemplateCanvas = () => {
   const [error, setError] = useState<string | null>(null);
   const [loadingLatestOutputs, setLoadingLatestOutputs] = useState(false);
   const [startingRun, setStartingRun] = useState(false);
+  const [castAvatars, setCastAvatars] = useState<AvatarProfile[]>([]);
+  const [castLoading, setCastLoading] = useState(false);
+  const [selectedCastAvatarId, setSelectedCastAvatarId] = useState<string | null>(null);
   const [mutating, setMutating] = useState<string | null>(null);
   const [newTemplateName, setNewTemplateName] = useState("");
   const [newTemplateDescription, setNewTemplateDescription] = useState("");
@@ -979,6 +984,41 @@ const TemplateCanvas = () => {
       });
     return [...slots.values()];
   }, [detail]);
+
+  useEffect(() => {
+    const castConfig = parseCastConfig(detail?.castConfig);
+    if (!castConfig || !user) {
+      setCastAvatars([]);
+      setSelectedCastAvatarId(null);
+      setCastLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setCastLoading(true);
+    Promise.all([listFuseAvatars(), listMyAvatars(user.id)])
+      .then(([fuse, mine]) => {
+        if (cancelled) return;
+        const seen = new Set<string>();
+        const next: AvatarProfile[] = [];
+        for (const avatar of [...mine, ...fuse]) {
+          if (!seen.has(avatar.id)) {
+            seen.add(avatar.id);
+            next.push(avatar);
+          }
+        }
+        setCastAvatars(next);
+        setSelectedCastAvatarId(null);
+      })
+      .catch(() => {
+        if (!cancelled) setCastAvatars([]);
+      })
+      .finally(() => {
+        if (!cancelled) setCastLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [detail?.castConfig, user]);
 
   const selectedNode = useMemo(
     () => detail?.nodes.find((node) => node.id === selectedNodeId) ?? detail?.nodes[0] ?? null,
@@ -1424,6 +1464,12 @@ const TemplateCanvas = () => {
         ),
       );
 
+      const castConfig = parseCastConfig(detail.castConfig);
+      const firstSlotId = castConfig?.slots[0]?.id;
+      const castBody = selectedCastAvatarId && firstSlotId
+        ? { cast: { [firstSlotId]: selectedCastAvatarId } }
+        : undefined;
+
       const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/start-template-run`, {
         method: "POST",
         headers: {
@@ -1433,6 +1479,7 @@ const TemplateCanvas = () => {
         body: JSON.stringify({
           versionId: detail.versionId,
           inputs: uploadedInputs,
+          ...castBody,
         }),
       });
       const data = await response.json();
@@ -1441,14 +1488,20 @@ const TemplateCanvas = () => {
       void fetchJobStatus(data.jobId, detail.versionId);
       pollJob(data.jobId, detail.versionId);
     } catch (runError) {
-      const message = runError instanceof Error ? runError.message : "Could not start template";
+      const rawMessage = runError instanceof Error ? runError.message : "Could not start template";
+      const isCastError = rawMessage.includes("CAST_CONFIGURATION_INVALID");
+      const message = isCastError ? rawMessage.replace(/^CAST_CONFIGURATION_INVALID:\s*/, "") : rawMessage;
       setPhase("error");
-      setError(message);
-      toast({ title: "Run failed", description: message, variant: "destructive" });
+      setError(rawMessage);
+      toast({
+        title: isCastError ? "Cast configuration invalid" : "Run failed",
+        description: message,
+        variant: "destructive",
+      });
     } finally {
       setStartingRun(false);
     }
-  }, [buildAuthHeaders, detail, fetchJobStatus, files, pollJob, runInputs]);
+  }, [buildAuthHeaders, detail, fetchJobStatus, files, pollJob, runInputs, selectedCastAvatarId]);
 
   const saveNode = useCallback(async () => {
     if (!detail || !selectedNode || !draft) return;
@@ -3409,6 +3462,64 @@ const TemplateCanvas = () => {
                 {!runInputs.length ? (
                   <div className="rounded-xl border border-border/50 bg-background/60 p-3 text-sm text-foreground/70">
                     This version has no user upload nodes.
+                  </div>
+                ) : null}
+                {parseCastConfig(detail.castConfig) ? (
+                  <div className="rounded-xl border border-cyan-300/20 bg-cyan-300/[0.05] p-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="text-xs font-semibold uppercase tracking-[0.15em] text-cyan-100">Cast (test)</p>
+                      {selectedCastAvatarId ? (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 px-2 text-[11px] text-foreground/70 hover:text-foreground"
+                          onClick={() => setSelectedCastAvatarId(null)}
+                        >
+                          Clear
+                        </Button>
+                      ) : null}
+                    </div>
+                    {castLoading ? (
+                      <p className="mt-2 flex items-center gap-2 text-xs text-foreground/70">
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading avatars…
+                      </p>
+                    ) : castAvatars.length === 0 ? (
+                      <p className="mt-2 text-xs text-foreground/70">
+                        No avatars yet — create one in My Avatars first.
+                      </p>
+                    ) : (
+                      <div className="mt-2 grid grid-cols-4 gap-2">
+                        {castAvatars.map((avatar) => (
+                          <button
+                            key={avatar.id}
+                            type="button"
+                            onClick={() => setSelectedCastAvatarId(avatar.id)}
+                            className={cn(
+                              "group relative overflow-hidden rounded-xl border bg-background text-left transition-colors",
+                              selectedCastAvatarId === avatar.id
+                                ? "border-cyan-300/70"
+                                : "border-border/50 hover:border-white/25",
+                            )}
+                          >
+                            <div className="relative aspect-square bg-black/40">
+                              {avatar.thumbnail_url ? (
+                                <img
+                                  src={avatar.thumbnail_url}
+                                  alt={avatar.name}
+                                  className="h-full w-full object-cover"
+                                />
+                              ) : (
+                                <div className="flex h-full items-center justify-center text-[10px] uppercase tracking-[0.12em] text-foreground/50">
+                                  No image
+                                </div>
+                              )}
+                            </div>
+                            <p className="truncate p-1.5 text-[10px] font-medium text-foreground">{avatar.name}</p>
+                          </button>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 ) : null}
                 <Button type="button" className="w-full" onClick={() => void handleRun()} disabled={startingRun}>
