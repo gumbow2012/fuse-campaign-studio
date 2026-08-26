@@ -1012,6 +1012,23 @@ export async function runGraphJob(admin: AdminClient, jobId: string) {
   const resolved = new Map<string, ResolvedOutput>();
   const jobInputs = (job.input_payload ?? {}) as Record<string, string>;
 
+  /**
+   * FT10 — cast is OFF unless the run persisted a cast runtime. Legacy jobs skip
+   * this entirely (no extra query, no behavior change).
+   */
+  const castRuntime: CastRuntime | null = parseCastRuntime((job.input_payload as any)?.[CAST_RUNTIME_KEY]);
+  let castConfigValue: unknown = null;
+  if (castRuntime) {
+    const { data: castVersion, error: castVersionError } = await admin
+      .from("template_versions")
+      .select("cast_config")
+      .eq("id", job.version_id)
+      .single();
+    if (castVersionError) throw new Error(castVersionError.message);
+    castConfigValue = (castVersion as any)?.cast_config ?? null;
+  }
+
+
   for (const node of nodes as NodeRow[]) {
     if (node.node_type !== "user_input") continue;
     const editorMode = typeof node.prompt_config?.editor_mode === "string"
