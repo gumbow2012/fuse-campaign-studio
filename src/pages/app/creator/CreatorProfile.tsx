@@ -18,6 +18,13 @@ import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
 import { accentStyle, resolveAccent } from "@/lib/creatorAccents";
 import { CreatorPerformanceProof } from "@/components/CreatorPerformance";
+import CreatorVerificationBadge from "@/components/CreatorVerificationBadge";
+import { toast } from "@/hooks/use-toast";
+import { followCreator, unfollowCreator } from "@/services/creatorFollows";
+import {
+  loadCreatorSocialPublic,
+  type CreatorSocialPublic,
+} from "@/services/creatorDashboard";
 import {
   EMPTY_CREATOR_PERFORMANCE,
   loadPublicCreatorPerformance,
@@ -51,12 +58,15 @@ export default function CreatorProfile() {
   );
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [social, setSocial] = useState<CreatorSocialPublic | null>(null);
+  const [followPending, setFollowPending] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
     setError(null);
     setPerformance(EMPTY_CREATOR_PERFORMANCE);
+    setSocial(null);
     getCreatorProfileByHandle(handle)
       .then(async (row) => {
         if (cancelled) return;
@@ -66,6 +76,8 @@ export default function CreatorProfile() {
           if (!cancelled) setTemplateCount(count);
           const aggregate = await loadPublicCreatorPerformance({ handle: row.handle });
           if (!cancelled) setPerformance(aggregate);
+          const socialData = await loadCreatorSocialPublic({ handle: row.handle });
+          if (!cancelled) setSocial(socialData);
         }
       })
       .catch((err) => {
@@ -82,6 +94,45 @@ export default function CreatorProfile() {
   const accent = useMemo(() => resolveAccent(profile?.accent), [profile?.accent]);
   const isOwner = Boolean(user && profile && user.id === profile.user_id);
   const joined = profile ? joinedLabel(profile.created_at) : null;
+  const isFollowing = social?.isFollowing ?? false;
+  const followerCount = social?.followerCount ?? 0;
+
+  /** Optimistic follow toggle — reverts the count and state on failure. */
+  const toggleFollow = async () => {
+    if (!profile) return;
+    if (!user) {
+      toast({
+        title: "Sign in to follow",
+        description: "Create a free FUSE account to follow creators.",
+      });
+      return;
+    }
+    const previous = social;
+    const next = isFollowing;
+    setFollowPending(true);
+    setSocial((current) =>
+      current
+        ? {
+            ...current,
+            isFollowing: !next,
+            followerCount: Math.max(0, current.followerCount + (next ? -1 : 1)),
+          }
+        : current,
+    );
+    try {
+      if (next) await unfollowCreator(profile.user_id);
+      else await followCreator(profile.user_id);
+    } catch (err) {
+      setSocial(previous);
+      toast({
+        title: next ? "Could not unfollow" : "Could not follow",
+        description: err instanceof Error ? err.message : "Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setFollowPending(false);
+    }
+  };
 
   const socials = profile
     ? [
@@ -187,7 +238,10 @@ export default function CreatorProfile() {
                   )}
                 </div>
                 <div className="space-y-1 pb-1">
-                  <h1 className="text-2xl font-semibold leading-tight">{profile.display_name}</h1>
+                  <h1 className="flex items-center gap-2 text-2xl font-semibold leading-tight">
+                    {profile.display_name}
+                    <CreatorVerificationBadge status={social?.verificationStatus} size={16} />
+                  </h1>
                   <p className="text-sm text-muted-foreground">@{profile.handle}</p>
                   {profile.location ? (
                     <p className="flex items-center gap-1 text-xs text-muted-foreground">
@@ -208,9 +262,24 @@ export default function CreatorProfile() {
                 >
                   <Link to={`/app/templates?creator=${profile.handle}`}>View Templates</Link>
                 </Button>
-                <Button variant="outline" disabled title="Follows aren't built yet">
-                  Follow · coming soon
-                </Button>
+                {!isOwner ? (
+                  <Button
+                    type="button"
+                    variant={isFollowing ? "secondary" : "outline"}
+                    onClick={() => void toggleFollow()}
+                    disabled={followPending}
+                    className={isFollowing ? "group" : undefined}
+                  >
+                    {isFollowing ? (
+                      <>
+                        <span className="group-hover:hidden">Following</span>
+                        <span className="hidden group-hover:inline">Unfollow</span>
+                      </>
+                    ) : (
+                      "Follow"
+                    )}
+                  </Button>
+                ) : null}
                 {isOwner ? (
                   <Button asChild variant="ghost">
                     <Link to="/creator/settings/edit">
@@ -246,6 +315,12 @@ export default function CreatorProfile() {
               <div>
                 <p className="text-lg font-semibold">{templateCount ?? "—"}</p>
                 <p className="text-xs text-muted-foreground">Templates published</p>
+              </div>
+              <div>
+                <p className="text-lg font-semibold">{social ? followerCount.toLocaleString() : "—"}</p>
+                <p className="text-xs text-muted-foreground">
+                  {followerCount === 1 ? "Follower" : "Followers"}
+                </p>
               </div>
               {joined ? (
                 <div>

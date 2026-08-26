@@ -6,13 +6,16 @@ import { Button } from "@/components/ui/button";
 import SiteShell from "@/components/mvp/SiteShell";
 import PageMeta from "@/components/mvp/PageMeta";
 import { useAuth } from "@/contexts/AuthContext";
-import { fetchTemplates } from "@/services/fuseApi";
+import { fetchTemplates, type ApiTemplate } from "@/services/fuseApi";
+import CreatorVerificationBadge from "@/components/CreatorVerificationBadge";
+import { listFollowedCreatorIds } from "@/services/creatorFollows";
 import { listPublicCreatorProfiles, type CreatorProfile } from "@/services/creatorProfile";
 import { cn } from "@/lib/utils";
 import {
   allocateHomeMedia,
   FALLBACK_GIFS,
   outputLabel,
+  resolveMedia,
   type Entry,
   type TemplateMedia,
 } from "@/lib/homeMediaAllocator";
@@ -137,6 +140,25 @@ function Badge({ tone, children }: { tone: "new" | "trending" | "creator"; child
   );
 }
 
+/** "by @handle" attribution — omitted when the author has no public profile. */
+function CreatorAttribution({ template }: { template: ApiTemplate }) {
+  const creator = template.creator;
+  if (!creator?.handle) return null;
+  return (
+    <p className="mt-1 flex items-center gap-1 text-[10px] text-slate-400">
+      <span>by</span>
+      <Link
+        to={`/creator/${creator.handle}`}
+        className="text-cyan-100 transition-colors hover:text-white"
+        onClick={(event) => event.stopPropagation()}
+      >
+        @{creator.handle}
+      </Link>
+      <CreatorVerificationBadge status={creator.verificationStatus} size={10} />
+    </p>
+  );
+}
+
 function TemplateCard({
   entry,
   badge,
@@ -179,7 +201,11 @@ function TemplateCard({
         <p className="mt-1 text-[10px] uppercase tracking-[0.16em] text-slate-400">
           {[vibe, outputs].filter(Boolean).join(" · ")}
         </p>
-        {creator && <p className="mt-1 text-[10px] text-slate-400">by {creator}</p>}
+        {creator ? (
+          <p className="mt-1 text-[10px] text-slate-400">by {creator}</p>
+        ) : (
+          <CreatorAttribution template={entry.template} />
+        )}
         <Button
           asChild
           size="sm"
@@ -254,12 +280,20 @@ function Shelf({
 /* ---------------------------------- page ---------------------------------- */
 
 export default function HomePage() {
-  const { isAdmin, isCreator } = useAuth();
+  const { user, isAdmin, isCreator } = useAuth();
 
   const { data: templates = [] } = useQuery({
     queryKey: ["mvp-templates"],
     queryFn: () => fetchTemplates(""),
     staleTime: 5 * 60 * 1000,
+  });
+
+  const { data: followedCreatorIds = [] } = useQuery({
+    queryKey: ["home-followed-creators"],
+    queryFn: listFollowedCreatorIds,
+    enabled: !!user,
+    staleTime: 60 * 1000,
+    retry: false,
   });
 
   const { data: creators = [] } = useQuery({
@@ -305,6 +339,20 @@ export default function HomePage() {
     perfMap[String(entry.template.id ?? "")];
 
   const heroPerf = original ? perfFor(original) : undefined;
+
+  /** Templates authored by creators the signed-in viewer follows. */
+  const followedEntries = useMemo<Entry[]>(() => {
+    if (!user || !followedCreatorIds.length) return [];
+    const followed = new Set(followedCreatorIds);
+    return templates
+      .filter((template) => template.creator?.userId && followed.has(template.creator.userId))
+      .map((template) => {
+        const media = resolveMedia(template);
+        return media ? { template, media } : null;
+      })
+      .filter(Boolean as unknown as (value: Entry | null) => value is Entry)
+      .slice(0, 12);
+  }, [templates, followedCreatorIds, user]);
 
   const topRoas = useMemo(
     () =>
@@ -529,6 +577,13 @@ export default function HomePage() {
       )}
 
       {/* 3 · SHELVES */}
+      <Shelf
+        id="from-creators-you-follow"
+        label="Your creators"
+        heading="From creators you follow"
+        entries={followedEntries}
+        perfMap={perfMap}
+      />
       <Shelf
         label="Top ROAS"
         heading="Highest returning campaigns"
