@@ -19,19 +19,18 @@ describe("template upload placeholders", () => {
     }
   });
 
-  it("maps Grillz-specific input labels away from generic shirt artwork", async () => {
+  it("keeps placeholder artwork out of the customer builder and maps Grillz labels to a grill slot", async () => {
     const source = await studioSource();
+    const sources = await readFile(resolve(process.cwd(), "src/lib/templateInputSources.ts"), "utf8");
 
-    expect(source).toContain('face: "/template-placeholders/face.png?v=20260520"');
-    expect(source).toContain('grillz: "/template-placeholders/grillz.png?v=20260520"');
-    expect(source).toContain('chain: "/template-placeholders/chain.png?v=20260520"');
-    expect(source).toContain('car: "/template-placeholders/car.png?v=20260520"');
-    expect(source).toContain('pants: "/template-placeholders/pants.png?v=20260520"');
-    expect(source).toContain('if (/(face|headshot|portrait|artist)/.test(normalized)) return "face";');
-    expect(source).toContain('if (/(grill|grillz|teeth|tooth|dental)/.test(normalized)) return "grillz";');
-    expect(source).toContain('if (/(chain|necklace|pendant)/.test(normalized)) return "chain";');
-    expect(source).toContain('if (/(car|vehicle|auto|automotive)/.test(normalized)) return "car";');
+    // The customer builder shows the real uploaded asset only — never placeholder art.
+    expect(source).not.toContain("/template-placeholders/");
+    // Grillz-style labels still resolve to a jewelry/grill slot, not a generic garment one.
+    expect(sources).toContain("grill|grillz|jewel|chain|pendant|ring|watch|diamond");
+    expect(sources).toContain('return /grill/i.test(label) ? "GRILL" : "JEWELRY";');
+    expect(sources).toContain('{ kind: "library", label: "Jewelry Library" }');
   });
+
 
   it("offers Grillz-specific slots in the draft builder", async () => {
     const source = await canvasSource();
