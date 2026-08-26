@@ -5,7 +5,7 @@
  */
 
 import { useEffect, useState } from "react";
-import { Loader2, Save, Users } from "lucide-react";
+import { Copy, Loader2, Save, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import {
