@@ -21,6 +21,15 @@ import {
   type CastRuntime,
 } from "../_shared/cast.ts";
 import { countTemplateDeliverables, getTemplateCreditCost } from "../_shared/template-pricing.ts";
+import {
+  assertRegenerationAccess,
+  resolveRegenerationSubgraph,
+} from "../_shared/regeneration.ts";
+import {
+  performOutputRegeneration,
+  RegenerationError,
+} from "../_shared/regeneration-run.ts";
+
 
 declare const EdgeRuntime: {
   waitUntil(promise: Promise<unknown>): void;
@@ -157,8 +166,78 @@ function expandInputsForTemplate(args: {
   return finalInputs;
 }
 
+/**
+ * TR7 — per-output regeneration execution. Lives here because this function
+ * already owns the credit-charge + run-kick pattern. The read-only
+ * `regenerate-estimate` function stays read-only.
+ */
+async function handleRegenerateOutput(
+  req: Request,
+  admin: ReturnType<typeof createAdminClient>,
+  body: Record<string, unknown>,
+) {
+  const user = await requireUser(req, admin);
+  if (!user) throw new Error("Authentication required");
+
+  const jobId = typeof body.jobId === "string" ? body.jobId.trim() : "";
+  if (!jobId) throw new Error("jobId is required");
+
+  const hasOutputNumber = Number.isFinite(Number(body.outputNumber));
+  const nodeId = typeof body.nodeId === "string" && body.nodeId.trim() ? body.nodeId.trim() : null;
+  if (!hasOutputNumber && !nodeId) throw new Error("outputNumber or nodeId is required");
+
+  const idempotencyKey = typeof body.idempotencyKey === "string" && body.idempotencyKey.trim()
+    ? body.idempotencyKey.trim()
+    : null;
+
+  // Server-side resolve — any client-supplied cost is ignored entirely.
+  const { job, estimate } = await resolveRegenerationSubgraph(admin, jobId, {
+    nodeId,
+    outputNumber: hasOutputNumber ? Number(body.outputNumber) : null,
+  });
+
+  const roles = await getUserRoles(user.id, admin);
+  assertRegenerationAccess({ jobUserId: job.user_id, userId: user.id, roles });
+  const privileged = roles.some((role) => role === "admin" || role === "dev");
+
+  try {
+    const result = await performOutputRegeneration(admin, {
+      jobId: job.id,
+      estimate,
+      userId: user.id,
+      privileged,
+      idempotencyKey,
+      runGraphJob: (client, id) => runGraphJob(client as never, id),
+    });
+
+    await logAuditEvent({
+      eventType: "template.output.regenerated",
+      message: `Regenerated output ${result.outputNumber ?? estimate.targetNodeId} (rev ${result.revision}).`,
+      source: "template-runner",
+      jobId: job.id,
+      templateId: job.template_id,
+      versionId: job.version_id,
+      metadata: {
+        user_id: user.id,
+        privileged,
+        idempotent: !!result.idempotent,
+        credits: result.estimatedCredits,
+        to_run_node_ids: result.toRunNodeIds,
+      },
+    }, admin);
+
+    return json(result, 200);
+  } catch (error) {
+    if (error instanceof RegenerationError) {
+      return json({ error: error.code, detail: error.message }, error.code === "INSUFFICIENT_CREDITS" ? 402 : 400);
+    }
+    throw error;
+  }
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: corsHeaders });
+
 
   const admin = createAdminClient();
   const requestId = crypto.randomUUID();
@@ -168,13 +247,29 @@ Deno.serve(async (req) => {
   let jobId: string | null = null;
   let chargedCredits = 0;
 
+  let rawBody: Record<string, unknown> = {};
+  try {
+    rawBody = (await req.json()) as Record<string, unknown>;
+  } catch {
+    rawBody = {};
+  }
+
+  if (String(rawBody.action ?? "") === "regenerate_output") {
+    try {
+      return await handleRegenerateOutput(req, admin, rawBody);
+    } catch (error) {
+      return json({ error: errorMessage(error) }, 400);
+    }
+  }
+
   try {
     const runnerAccess = hasValidRunnerCode(req);
     const user = runnerAccess ? await getOptionalUser(req, admin) : await requireUser(req, admin);
     if (!user && !runnerAccess) throw new Error("Authentication required");
     userId = user?.id ?? null;
 
-    const body = await req.json() as StartTemplateRunBody;
+    const body = rawBody as StartTemplateRunBody;
+
 
     versionId = body.versionId ?? PAPARAZZI_VERSION_ID;
     const inputs = { ...(body.inputs ?? {}) };

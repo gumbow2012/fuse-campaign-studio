@@ -16,7 +16,9 @@ import {
   submitVideoJob,
   submitSeedanceReferenceVideoJob,
 } from "./fal.ts";
+import { refundRegenCreditsIfNeeded } from "./regeneration-run.ts";
 import { sortEdgesByExecutionOrder, targetParamOrder } from "./edge-order.ts";
+
 import { isPromptNode, resolveNodePrompt } from "./prompt-nodes.ts";
 import {
   CAST_RUNTIME_KEY,
@@ -615,6 +617,15 @@ async function failJob(
     jobId,
     reason: errorMessage,
   });
+
+  // TR7 — a failed regeneration must not keep the user's credits. Scoped to
+  // regen debits only (type rerun_step + regen marker), never the run debit.
+  try {
+    await refundRegenCreditsIfNeeded(admin, { jobId, reason: errorMessage });
+  } catch (error) {
+    console.error("regen refund failed:", error instanceof Error ? error.message : String(error));
+  }
+
 }
 
 async function completeBlankPromptStep(
