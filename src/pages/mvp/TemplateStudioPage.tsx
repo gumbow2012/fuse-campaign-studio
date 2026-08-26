@@ -1,16 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import {
   ArrowLeft,
   ArrowRight,
-  ChevronRight,
   Film,
   GitBranch,
   Loader2,
   
   Network,
-  RefreshCw,
   Sparkles,
 } from "lucide-react";
 import SiteShell from "@/components/mvp/SiteShell";
@@ -59,6 +57,9 @@ import { type TemplateAssetRequirement } from "@/lib/templateAssetRequirements";
 import { resolveInputRole } from "@/lib/templateInputSources";
 import { readPublicFailure, type PublicGenerationFailure } from "@/lib/generationFailure";
 import { createFork } from "@/services/templateForks";
+import CampaignHistoryLauncher from "@/components/campaigns/CampaignHistoryLauncher";
+import CampaignHistoryDrawer from "@/components/campaigns/CampaignHistoryDrawer";
+import { useCampaignHistory } from "@/hooks/useCampaignHistory";
 
 type RunnerStatus = "queued" | "running" | "video_pending" | "complete" | "failed";
 
@@ -115,14 +116,7 @@ interface RecentRun {
   feedback: RunFeedbackRecord | null;
 }
 
-type RecentRunsPage = {
-  jobs: RecentRun[];
-  hasMore: boolean;
-  nextOffset: number | null;
-};
-
 const EMPTY_TEMPLATES: ApiTemplate[] = [];
-const EMPTY_RECENT_RUNS: RecentRun[] = [];
 
 const TEMPLATE_CACHE_KEY = "fuse.templateStudio.templates.v4";
 const TEMPLATE_DETAIL_CACHE_KEY = "fuse.templateStudio.templateDetails.v4";
@@ -130,8 +124,6 @@ const TEMPLATE_SELECTION_KEY = "fuse.templateStudio.selectedTemplateId";
 const ACTIVE_RUN_STATUSES = new Set<RunnerStatus>(["queued", "running", "video_pending"]);
 /** Authoritative layout mode for the studio: compact browse/setup vs expanded campaign workspace. */
 type CampaignStudioMode = "browse" | "setup" | "running" | "complete" | "failed";
-const RUN_CATALOG_PAGE_SIZE = 8;
-const RECENT_RUNS_REFRESH_COOLDOWN_SECONDS = 10;
 
 
 function getOutputDownloadName(templateName: string, index: number, output: RunnerOutput) {
@@ -212,30 +204,6 @@ async function fetchJobStatus(jobId: string) {
     publicGraph?: PublicGraph;
     statusMessage?: string;
     steps?: unknown[];
-  };
-}
-
-async function fetchRecentRuns(limit: number, offset: number): Promise<RecentRunsPage> {
-  const token = await getAccessToken();
-  const response = await fetch(
-    `${SUPABASE_URL}/functions/v1/list-recent-runs?limit=${limit}&offset=${offset}`,
-    {
-      headers: {
-        Authorization: `Bearer ${token}`,
-        apikey: SUPABASE_PUBLISHABLE_KEY,
-      },
-    },
-  );
-
-  const data = await response.json().catch(() => null);
-  if (!response.ok) {
-    throw new Error(data?.error ?? "Could not load recent runs.");
-  }
-
-  return {
-    jobs: Array.isArray(data?.jobs) ? (data.jobs as RecentRun[]) : [],
-    hasMore: Boolean(data?.hasMore),
-    nextOffset: typeof data?.nextOffset === "number" ? data.nextOffset : null,
   };
 }
 
@@ -461,7 +429,9 @@ export default function TemplateStudioPage() {
   /** Post-run: whether the full asset-input controls are re-expanded (Edit Inputs). */
   const [inputsExpanded, setInputsExpanded] = useState(false);
   const [feedbackOverrides, setFeedbackOverrides] = useState<Record<string, RunFeedbackRecord | null>>({});
-  const [recentRefreshCooldown, setRecentRefreshCooldown] = useState(0);
+  /** Campaign history drawer (replaces the old always-visible run list). */
+  const [historyOpen, setHistoryOpen] = useState(false);
+
   const [detailTemplateId, setDetailTemplateId] = useState<string | null>(null);
   const runnerSectionRef = useRef<HTMLElement | null>(null);
   const workspaceSectionRef = useRef<HTMLElement | null>(null);
@@ -621,25 +591,15 @@ export default function TemplateStudioPage() {
     },
   });
 
-  const recentRunsQuery = useInfiniteQuery<RecentRunsPage>({
-    queryKey: ["mvp-run-catalog"],
-    queryFn: ({ pageParam }) => fetchRecentRuns(RUN_CATALOG_PAGE_SIZE, Number(pageParam ?? 0)),
-    initialPageParam: 0,
-    getNextPageParam: (lastPage) => lastPage.nextOffset ?? undefined,
-    enabled: !!user,
-    staleTime: 5_000,
-    refetchInterval: (query) => {
-      const runs = query.state.data?.pages.flatMap((page) => page.jobs) ?? [];
-      return jobId || openedHistoricalRun || runs.some((run) => ACTIVE_RUN_STATUSES.has(run.status)) ? 5_000 : false;
-    },
+  /**
+   * Campaign history now lives in dedicated components (launcher + drawer +
+   * /app/campaigns) and shares one paginated query via useCampaignHistory.
+   */
+  const { query: recentRunsQuery, campaigns: recentRuns } = useCampaignHistory({
+    hasOpenWorkspace: Boolean(jobId) || Boolean(openedHistoricalRun),
   });
-
-  const recentRuns = useMemo(
-    () => recentRunsQuery.data?.pages.flatMap((page) => page.jobs) ?? EMPTY_RECENT_RUNS,
-    [recentRunsQuery.data],
-  );
   const refetchRecentRuns = recentRunsQuery.refetch;
-  const canLoadMoreRuns = !!recentRunsQuery.hasNextPage;
+
 
   // ---- Campaign studio layout state machine (single authoritative condition) ----
   const openedHistoricalRunId = openedHistoricalRun?.id ?? null;
@@ -689,11 +649,11 @@ export default function TemplateStudioPage() {
 
 
 
-  const currentResultFeedback = activeRunId
+  const currentResultFeedback: RunFeedbackRecord | null = activeRunId
     ? feedbackOverrides[activeRunId]
-      ?? recentRuns.find((run) => run.id === activeRunId)?.feedback
-      ?? null
+      ?? ((recentRuns.find((run) => run.id === activeRunId)?.feedback as RunFeedbackRecord | null | undefined) ?? null)
     : null;
+
 
   const resolveFeedback = (runId: string, fallback: RunFeedbackRecord | null) =>
     feedbackOverrides[runId] ?? fallback ?? null;
@@ -703,16 +663,6 @@ export default function TemplateStudioPage() {
       ...current,
       [runId]: feedback,
     }));
-  };
-
-  const handleRefreshRecentRuns = () => {
-    if (!user || recentRunsQuery.isFetching || recentRefreshCooldown > 0) return;
-    setRecentRefreshCooldown(RECENT_RUNS_REFRESH_COOLDOWN_SECONDS);
-    void refetchRecentRuns();
-  };
-
-  const handleLoadMoreRuns = () => {
-    void recentRunsQuery.fetchNextPage();
   };
 
   const handleDownloadSingleOutput = (output: RunnerOutput, index: number) => {
@@ -725,6 +675,44 @@ export default function TemplateStudioPage() {
     link.click();
     link.remove();
   };
+
+  /** Campaign history: download every deliverable of a past campaign. */
+  const handleDownloadCampaign = (run: RecentRun) => {
+    (Array.isArray(run.outputs) ? run.outputs : []).forEach((output, index) => {
+      const link = document.createElement("a");
+      link.href = output.url;
+      link.download = getOutputDownloadName(run.templateName ?? "fuse-campaign", index, output);
+      link.target = "_blank";
+      link.rel = "noreferrer";
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+    });
+  };
+
+  /** Campaign history: remix = reload that campaign's template into the builder. */
+  const handleRemixCampaign = (run: RecentRun) => {
+    const match = templates.find(
+      (template) => template.name.toLowerCase() === (run.templateName ?? "").toLowerCase(),
+    );
+    setJobId(null);
+    setOpenedHistoricalRun(null);
+    setInputsExpanded(false);
+    setResult(null);
+    if (match) setSelectedTemplateId(match.id);
+    setHistoryOpen(false);
+    window.requestAnimationFrame(() => {
+      runnerSectionRef.current?.scrollIntoView({
+        behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth",
+        block: "start",
+      });
+    });
+  };
+
+  const previewUrlForTemplate = (templateName: string) =>
+    templates.find((template) => template.name.toLowerCase() === (templateName ?? "").toLowerCase())
+      ?.preview_url ?? null;
+
 
   /** Open a previous run directly into the expanded campaign workspace. */
   const handleOpenHistoricalRun = (run: RecentRun) => {
@@ -755,15 +743,6 @@ export default function TemplateStudioPage() {
   };
 
 
-  useEffect(() => {
-    if (recentRefreshCooldown <= 0) return;
-
-    const timer = window.setTimeout(() => {
-      setRecentRefreshCooldown((current) => Math.max(current - 1, 0));
-    }, 1000);
-
-    return () => window.clearTimeout(timer);
-  }, [recentRefreshCooldown]);
 
   useEffect(() => {
     if (!activeRunId) return;
@@ -1155,6 +1134,22 @@ export default function TemplateStudioPage() {
             />
           )}
         </div>
+
+        {/* Quiet history affordance — the builder stays dominant. */}
+        {user ? (
+          <div className="mt-6 flex justify-start">
+            <CampaignHistoryLauncher
+              campaigns={recentRuns}
+              onOpenDrawer={() => setHistoryOpen(true)}
+              onOpenCampaign={handleOpenHistoricalRun}
+              isError={recentRunsQuery.isError}
+              onRetry={() => void refetchRecentRuns()}
+              previewUrlForTemplate={previewUrlForTemplate}
+            />
+          </div>
+        ) : null}
+
+
 
         {isPrivilegedUser ? (
           <section className="mt-6 rounded-[1.75rem] border border-cyan-300/20 bg-cyan-300/[0.06] p-4">
@@ -1715,105 +1710,9 @@ export default function TemplateStudioPage() {
               </div>
             ) : null}
 
-            <section className="rounded-[2rem] border border-white/10 bg-slate-950/75 p-6 shadow-[0_24px_80px_rgba(0,0,0,0.35)] backdrop-blur-xl">
-              <div>
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div>
-                    <p className="text-[11px] uppercase tracking-[0.24em] text-muted-foreground">Recent runs</p>
-                  <p className="mt-2 text-sm text-slate-300">
-                    {isPrivilegedUser
-                      ? "Run memory bank for this account. Select a run to open it in the workspace."
-                      : user
-                        ? "Run memory bank for this account. Load more to reach older generations."
-                        : "Sign in to save and review your completed runs."}
-                  </p>
-                  </div>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={handleRefreshRecentRuns}
-                    disabled={!user || recentRunsQuery.isFetching || recentRefreshCooldown > 0}
-                    className="rounded-full border-white/10 bg-white/[0.03] text-slate-200 hover:bg-white/[0.08]"
-                  >
-                    {recentRunsQuery.isFetching ? (
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    ) : (
-                      <RefreshCw className="mr-2 h-4 w-4" />
-                    )}
-                    {recentRefreshCooldown > 0 ? `Refresh in ${recentRefreshCooldown}s` : "Refresh"}
-                  </Button>
-                </div>
+            {/* Campaign history moved out of the Studio into the quiet
+                launcher + CampaignHistoryDrawer + /app/campaigns. */}
 
-                {recentRunsQuery.isError ? (
-                  <div className="mt-4 rounded-[1.5rem] border border-rose-400/20 bg-rose-400/10 p-4 text-sm text-rose-100">
-                    Could not load recent runs.
-                  </div>
-                ) : null}
-
-                {!recentRunsQuery.isError && !recentRuns.length ? (
-                  <div className="mt-4 rounded-[1.5rem] border border-dashed border-white/10 bg-black/20 p-4 text-sm text-slate-400">
-                    No saved runs yet for this account.
-                  </div>
-                ) : null}
-
-                <div className="mt-4 space-y-3">
-                  {recentRuns.map((run) => (
-                    <button
-                      key={run.id}
-                      type="button"
-                      onClick={() => handleOpenHistoricalRun(run)}
-                      className={cn(
-                        "flex w-full items-start justify-between gap-3 rounded-[1.25rem] border p-4 text-left transition-colors",
-                        activeRunId === run.id
-                          ? "border-cyan-300/40 bg-cyan-300/[0.06]"
-                          : "border-white/8 bg-black/20 hover:border-white/20 hover:bg-white/[0.05]",
-                      )}
-                    >
-                      <div className="min-w-0">
-                        <p className="truncate text-sm font-semibold text-white">{run.templateName}</p>
-                        <p className="mt-1 text-xs text-slate-400">
-                          {formatRunTimestamp(run.startedAt)} · {formatRunDuration(run.startedAt, run.completedAt)}
-                        </p>
-                        <p className="mt-1 text-[10px] uppercase tracking-[0.2em] text-slate-500">
-                          {run.outputs.length} deliverable{run.outputs.length === 1 ? "" : "s"}
-                        </p>
-                      </div>
-                      <div className="flex shrink-0 items-center gap-3">
-                        <div className="text-right">
-                          <p className={`text-[10px] uppercase tracking-[0.2em] ${
-                            run.status === "failed"
-                              ? "text-rose-200"
-                              : run.status === "complete"
-                                ? "text-emerald-200"
-                                : "text-cyan-100"
-                          }`}>
-                            {run.status === "failed" ? "Needs attention" : run.status.replace("_", " ")}
-                          </p>
-                          <p className="mt-1 text-xs text-slate-400">{run.progress}%</p>
-                        </div>
-                        <ChevronRight className="mt-0.5 h-4 w-4 text-slate-400" />
-                      </div>
-                    </button>
-                  ))}
-                </div>
-
-                {canLoadMoreRuns ? (
-                  <div className="mt-4 flex justify-center">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={handleLoadMoreRuns}
-                      disabled={recentRunsQuery.isFetchingNextPage}
-                      className="rounded-full border-white/10 bg-white/[0.03] text-slate-200 hover:bg-white/[0.08]"
-                    >
-                      {recentRunsQuery.isFetchingNextPage ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                      Load more runs
-                    </Button>
-                  </div>
-                ) : null}
-              </div>
-            </section>
           </aside>
 
           {/* Campaign workspace — rendered for the entire lifecycle once a real run exists. */}
@@ -1972,6 +1871,23 @@ export default function TemplateStudioPage() {
           </div>
         </DialogContent>
       </Dialog>
+
+      <CampaignHistoryDrawer
+        open={historyOpen}
+        onOpenChange={setHistoryOpen}
+        campaigns={recentRuns}
+        activeRunId={activeRunId}
+        isLoading={recentRunsQuery.isLoading}
+        isError={recentRunsQuery.isError}
+        hasNextPage={recentRunsQuery.hasNextPage}
+        isFetchingNextPage={recentRunsQuery.isFetchingNextPage}
+        onLoadMore={() => void recentRunsQuery.fetchNextPage()}
+        onRetry={() => void refetchRecentRuns()}
+        previewUrlForTemplate={previewUrlForTemplate}
+        onOpen={handleOpenHistoricalRun}
+        onDownload={handleDownloadCampaign}
+        onRemix={handleRemixCampaign}
+      />
     </SiteShell>
 
   );
