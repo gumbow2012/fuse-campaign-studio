@@ -1436,13 +1436,18 @@ export default function TemplateStudioPage() {
                       >
                         {checkingCredits
                           ? "Checking credits..."
-                          : submitting || isRunning
-                            ? "Generating..."
-                            : !user
-                              ? "Sign in to generate"
-                              : isPrivilegedUser
-                                ? "Generate campaign"
-                                : `Generate campaign · ${creditsRequired} cr`}
+                          : runPhase === "uploading"
+                            ? "Uploading assets..."
+                            : runPhase === "preparing"
+                              ? "Preparing campaign..."
+                              : submitting || isRunning
+                                ? "Generating..."
+                                : !user
+                                  ? "Sign in to generate"
+                                  : isPrivilegedUser
+                                    ? "Generate campaign"
+                                    : `Generate campaign · ${creditsRequired} cr`}
+
                       </Button>
                     </div>
 
