@@ -2,9 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import {
-  AlertTriangle,
   ArrowRight,
-  CheckCircle2,
   ChevronDown,
   ChevronRight,
   Download,
@@ -864,6 +862,18 @@ export default function TemplateStudioPage() {
     inputFields.find(
       (field) => field.type === "image" && resolveInputRole(field.label, field.requirement?.assetType) === "face",
     )?.key ?? null;
+
+  // P0 — plan tier gate for the "Customize workflow" entry point.
+  // Tier comes from profile.plan (billing-owned), matching the plan ladder keys
+  // (free / starter / plus / pro / studio / team); admin/dev always qualify.
+  const planKey = (profile?.plan ?? "free").toLowerCase();
+  const canCustomizeWorkflow =
+    isPrivilegedUser || planKey === "pro" || planKey === "studio" || planKey === "team";
+
+  /** P0: Pro entry point — the private-fork editor navigation lands here next phase. */
+  const handleCustomizeWorkflow = () => {
+    setPrivateWorkflowDialogOpen(true);
+  };
 
 
   const handleTemplateSelect = (templateId: string) => {
