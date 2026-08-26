@@ -156,12 +156,14 @@ function TemplateCard({
   creator,
   eager,
   index = 0,
+  performance,
 }: {
   entry: Entry;
   badge?: { tone: "new" | "trending" | "creator"; label: string };
   creator?: string | null;
   eager?: boolean;
   index?: number;
+  performance?: TemplatePerformanceRow;
 }) {
   const outputs = outputLabel(entry.template);
   const vibe = entry.template.category ?? entry.template.tags?.[0] ?? null;
@@ -175,7 +177,7 @@ function TemplateCard({
           staggerIndex={index}
           className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.04]"
         />
-        <div className="pointer-events-none absolute inset-x-0 bottom-0 h-1/2 bg-gradient-to-t from-black via-black/60 to-transparent" />
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 h-2/3 bg-gradient-to-t from-black via-black/70 to-transparent" />
         {badge && (
           <div className="absolute left-3 top-3">
             <Badge tone={badge.tone}>{badge.label}</Badge>
@@ -183,13 +185,14 @@ function TemplateCard({
         )}
       </div>
       <div className="absolute inset-x-0 bottom-0 p-4">
+        {performance && <PerformanceBlock row={performance} compact className="mb-3" />}
         <p className="font-display text-sm font-semibold uppercase tracking-[0.08em] text-white">
           {entry.template.name}
         </p>
-        <p className="mt-1 text-[11px] uppercase tracking-[0.16em] text-slate-300">
+        <p className="mt-1 text-[10px] uppercase tracking-[0.16em] text-slate-400">
           {[vibe, outputs].filter(Boolean).join(" · ")}
         </p>
-        {creator && <p className="mt-1 text-[11px] text-slate-400">by {creator}</p>}
+        {creator && <p className="mt-1 text-[10px] text-slate-400">by {creator}</p>}
         <Button
           asChild
           size="sm"
@@ -201,6 +204,7 @@ function TemplateCard({
     </article>
   );
 }
+
 
 function MediaShelf({ children }: { children: React.ReactNode }) {
   return (
