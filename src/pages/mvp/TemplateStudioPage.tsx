@@ -54,6 +54,7 @@ import {
 
 import { type TemplateAssetRequirement } from "@/lib/templateAssetRequirements";
 import { resolveInputRole } from "@/lib/templateInputSources";
+import { readPublicFailure, type PublicGenerationFailure } from "@/lib/generationFailure";
 
 type RunnerStatus = "queued" | "running" | "video_pending" | "complete" | "failed";
 
@@ -84,7 +85,10 @@ interface RunnerResult {
   status: RunnerStatus;
   progress: number;
   outputs: RunnerOutput[];
+  /** Privileged callers only — raw provider diagnostics. */
   error?: string;
+  /** P0: polished, customer-safe failure (never raw provider text). */
+  publicFailure?: PublicGenerationFailure | null;
   /** TR3: customer-safe live execution graph (no prompts/provider internals). */
   publicGraph?: PublicGraph;
   statusMessage?: string;
@@ -98,7 +102,10 @@ interface RecentRun {
   startedAt: string | null;
   completedAt: string | null;
   progress: number;
-  error: string | null;
+  /** Privileged callers only (admin/dev) — raw provider diagnostics. */
+  error?: string | null;
+  /** P0: polished, customer-safe failure copy. */
+  publicFailure?: PublicGenerationFailure | null;
   templateName: string;
   outputs: RunnerOutput[];
   feedback: RunFeedbackRecord | null;
@@ -197,6 +204,7 @@ async function fetchJobStatus(jobId: string) {
     progress?: number;
     outputs?: RunnerOutput[];
     error?: string | null;
+    publicFailure?: PublicGenerationFailure | null;
     publicGraph?: PublicGraph;
     statusMessage?: string;
     steps?: unknown[];
