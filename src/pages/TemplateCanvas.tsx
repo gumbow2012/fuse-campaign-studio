@@ -1802,6 +1802,32 @@ const TemplateCanvas = () => {
     }
   }, [detail?.versionId, invokeWorkbench, refreshAfterMutation]);
 
+  /** FT9 — clone the (protected) current version into a draft and seed cast on the draft only. */
+  const cloneVersionForCast = useCallback(async (nextCastConfig: CastConfig) => {
+    if (!detail?.versionId) return;
+    setMutating("clone-version-for-cast");
+    try {
+      const data = await invokeWorkbench({
+        action: "clone_version",
+        sourceVersionId: detail.versionId,
+        targetTemplateId: detail.templateId,
+        makeActive: false,
+        castConfig: nextCastConfig,
+      });
+      await refreshAfterMutation(String(data.versionId));
+      toast({
+        title: "Cast draft created",
+        description: `Draft v${data.versionNumber} has cast enabled. The live version is untouched.`,
+      });
+    } catch (cloneError) {
+      const message = cloneError instanceof Error ? cloneError.message : "Could not clone version for cast";
+      toast({ title: "Clone failed", description: message, variant: "destructive" });
+    } finally {
+      setMutating(null);
+    }
+  }, [detail?.templateId, detail?.versionId, invokeWorkbench, refreshAfterMutation]);
+
+
   const clearTemplateCover = useCallback(async () => {
     if (!selectedTemplate) return;
     setMutating("clear-template-cover");
