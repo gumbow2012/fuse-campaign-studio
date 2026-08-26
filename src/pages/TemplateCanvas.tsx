@@ -1463,6 +1463,12 @@ const TemplateCanvas = () => {
         ),
       );
 
+      const castConfig = parseCastConfig(detail.castConfig);
+      const firstSlotId = castConfig?.slots[0]?.id;
+      const castBody = selectedCastAvatarId && firstSlotId
+        ? { cast: { [firstSlotId]: selectedCastAvatarId } }
+        : undefined;
+
       const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/start-template-run`, {
         method: "POST",
         headers: {
@@ -1472,6 +1478,7 @@ const TemplateCanvas = () => {
         body: JSON.stringify({
           versionId: detail.versionId,
           inputs: uploadedInputs,
+          ...castBody,
         }),
       });
       const data = await response.json();
@@ -1480,14 +1487,20 @@ const TemplateCanvas = () => {
       void fetchJobStatus(data.jobId, detail.versionId);
       pollJob(data.jobId, detail.versionId);
     } catch (runError) {
-      const message = runError instanceof Error ? runError.message : "Could not start template";
+      const rawMessage = runError instanceof Error ? runError.message : "Could not start template";
+      const isCastError = rawMessage.includes("CAST_CONFIGURATION_INVALID");
+      const message = isCastError ? rawMessage.replace(/^CAST_CONFIGURATION_INVALID:\s*/, "") : rawMessage;
       setPhase("error");
-      setError(message);
-      toast({ title: "Run failed", description: message, variant: "destructive" });
+      setError(rawMessage);
+      toast({
+        title: isCastError ? "Cast configuration invalid" : "Run failed",
+        description: message,
+        variant: "destructive",
+      });
     } finally {
       setStartingRun(false);
     }
-  }, [buildAuthHeaders, detail, fetchJobStatus, files, pollJob, runInputs]);
+  }, [buildAuthHeaders, detail, fetchJobStatus, files, pollJob, runInputs, selectedCastAvatarId]);
 
   const saveNode = useCallback(async () => {
     if (!detail || !selectedNode || !draft) return;
