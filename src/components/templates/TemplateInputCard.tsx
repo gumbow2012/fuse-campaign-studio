@@ -170,7 +170,9 @@ export default function TemplateInputCard({
   const showWarning = state === "warning" && !warningDismissed;
   const filledUrl = previewUrl ?? libraryAsset?.url ?? null;
   const assetName = file?.name ?? libraryAsset?.name ?? null;
-  const busy = state === "uploading" || state === "checking";
+  /* Delayed loader: the overlay only exists past the 180ms mark, so fast
+     checks never flash a spinner. Local validation is NOT a server upload. */
+  const busy = state === "checking";
   const isFilled = Boolean(filledUrl);
 
   const handleSource = (kind: AssetSourceKind) => {
@@ -201,12 +203,12 @@ export default function TemplateInputCard({
     >
       <div className="flex items-start gap-2">
         <div className="min-w-0 flex-1">
-          <p className="truncate text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-200">
+          <p className="truncate font-display text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-200">
             {heading}
           </p>
           <span
             className={cn(
-              "mt-1 inline-block rounded-full border px-2 py-0.5 text-[9px] uppercase tracking-[0.18em]",
+              "mt-1 inline-block rounded-full border px-2 py-0.5 font-display text-[9px] uppercase tracking-[0.18em]",
               isFilled
                 ? "border-emerald-300/30 bg-emerald-300/10 text-emerald-200"
                 : required
