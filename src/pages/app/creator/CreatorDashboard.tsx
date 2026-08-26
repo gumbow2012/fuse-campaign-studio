@@ -554,6 +554,8 @@ export default function CreatorDashboard() {
                     </div>
                   </div>
                 )}
+
+                <CreatorPerformancePanel aggregate={performance} className="mt-8" />
               </div>
             ) : null}
 
