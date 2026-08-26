@@ -157,6 +157,9 @@ export default function CreatorDashboard() {
   const [analytics, setAnalytics] = useState<CreatorAnalytics | null>(null);
   const [analyticsLoading, setAnalyticsLoading] = useState(false);
   const [analyticsError, setAnalyticsError] = useState<string | null>(null);
+  const [performance, setPerformance] = useState<CreatorPerformanceAggregate>(
+    EMPTY_CREATOR_PERFORMANCE,
+  );
   const [challenges, setChallenges] = useState<CreatorChallenge[] | null>(null);
   const [challengesLoading, setChallengesLoading] = useState(false);
   const [challengesError, setChallengesError] = useState<string | null>(null);
