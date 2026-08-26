@@ -111,6 +111,14 @@ const App = () => (
             <Route path="/billing" element={<Navigate to="/pricing" replace />} />
             <Route path="/app/templates" element={<TemplateStudioPage />} />
             <Route
+              path="/app/campaigns"
+              element={
+                <CustomerRoute>
+                  <CampaignLibraryPage />
+                </CustomerRoute>
+              }
+            />
+            <Route
               path="/app/templates/customize/:forkId"
               element={
                 <CustomerRoute>
