@@ -539,14 +539,23 @@ function GenerationCard({
                   />
                 ) : null
               ) : (
+                /* GS-PERF7: poster frame without new infra. With a stored
+                   posterUrl we set it directly; otherwise preload="metadata"
+                   (only once near the viewport) plus a `#t=0.1` media fragment
+                   makes the browser fetch just enough to paint the first frame
+                   instead of a black rectangle. Offscreen cards keep
+                   preload="none" and no src. */
                 <video
                   ref={videoRef}
-                  src={near ? (generation.outputUrl as string) : undefined}
+                  src={near ? `${generation.outputUrl as string}#t=0.1` : undefined}
+                  poster={generation.posterUrl ?? undefined}
                   muted
                   loop
                   playsInline
-                  preload="none"
+                  preload={near ? "metadata" : "none"}
                   onLoadedData={() => setLoaded(true)}
+                  onLoadedMetadata={() => setLoaded(true)}
+                  onError={() => setLoaded(true)}
                   onMouseEnter={() => {
                     void videoRef.current?.play()?.catch(() => {});
                   }}
@@ -557,8 +566,8 @@ function GenerationCard({
                     el.currentTime = 0;
                   }}
                   className={cn(
-                    "h-full w-full bg-black/60 object-cover transition-opacity duration-150",
-                    near ? "opacity-100" : "opacity-0",
+                    "h-full w-full bg-black/60 object-cover transition-opacity duration-200",
+                    loaded ? "opacity-100" : "opacity-0",
                   )}
                 />
               )}
