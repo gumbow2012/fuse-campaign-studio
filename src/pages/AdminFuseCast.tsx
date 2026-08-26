@@ -19,6 +19,7 @@ import {
   isCanonicalReady,
 } from "@/lib/canonicalPortrait";
 import { listFuseAvatars, updateAvatar, type AvatarProfile } from "@/services/avatarProfiles";
+import LiveBillingProvisionCard from "@/components/admin/LiveBillingProvisionCard";
 
 type Draft = {
   generationId: string | null;
