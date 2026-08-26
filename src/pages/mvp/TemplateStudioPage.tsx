@@ -431,6 +431,8 @@ export default function TemplateStudioPage() {
   const [result, setResult] = useState<RunnerResult | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [checkingCredits, setCheckingCredits] = useState(false);
+  const [runPhase, setRunPhase] = useState<"idle" | "uploading" | "preparing">("idle");
+
   const [adminVisualSpent, setAdminVisualSpent] = useState(() => getAdminVisualCreditsSpent());
   const [expandedRuns, setExpandedRuns] = useState<Record<string, boolean>>({});
   const [feedbackOverrides, setFeedbackOverrides] = useState<Record<string, RunFeedbackRecord | null>>({});
