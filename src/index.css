@@ -149,7 +149,44 @@
     box-shadow: 0 24px 80px rgba(0, 0, 0, 0.28);
     backdrop-filter: blur(22px);
   }
+
+  /* GS-PERF5 — media skeleton: dark FUSE surface with a cyan scanning line */
+  .fuse-skeleton {
+    background: linear-gradient(180deg, hsl(var(--card) / 0.8), hsl(var(--navy-deep) / 0.9));
+    position: relative;
+    overflow: hidden;
+  }
+  .fuse-skeleton::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+      100deg,
+      transparent 20%,
+      hsl(var(--electric-cyan) / 0.12) 45%,
+      hsl(var(--electric-cyan) / 0.2) 50%,
+      hsl(var(--electric-cyan) / 0.12) 55%,
+      transparent 80%
+    );
+    background-size: 220% 100%;
+    animation: fuse-scan 1.6s ease-in-out infinite;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .fuse-skeleton::after {
+      animation: none;
+    }
+  }
 }
+
+@keyframes fuse-scan {
+  0% {
+    background-position: 140% 0;
+  }
+  100% {
+    background-position: -40% 0;
+  }
+}
+
 
 /* React Flow canvas theming (admin template builder) */
 .react-flow__controls {
