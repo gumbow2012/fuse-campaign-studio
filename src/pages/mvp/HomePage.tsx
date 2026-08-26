@@ -478,9 +478,24 @@ export default function HomePage() {
 
       {/* 3 · SHELVES */}
       <Shelf
+        label="Top ROAS"
+        heading="Highest returning campaigns"
+        entries={topRoas}
+        perfMap={perfMap}
+        showDisclaimer
+      />
+      <Shelf
+        label="Most tested"
+        heading="Proven on the most ad spend"
+        entries={mostTested}
+        perfMap={perfMap}
+        showDisclaimer
+      />
+      <Shelf
         label="Trending now"
         heading="What brands are using right now"
         entries={trending}
+        perfMap={perfMap}
         badge={{ tone: "trending", label: "Trending" }}
       />
       <Shelf
@@ -488,8 +503,10 @@ export default function HomePage() {
         label="New today"
         heading="Just added to the marketplace"
         entries={newToday}
+        perfMap={perfMap}
         badge={{ tone: "new", label: "New" }}
       />
+
       {creators.length > 0 && (
         <Shelf
           label="Creator drops"
