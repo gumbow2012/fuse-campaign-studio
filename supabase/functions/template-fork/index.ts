@@ -1,0 +1,198 @@
+import "jsr:@supabase/functions-js/edge-runtime.d.ts";
+
+import {
+  corsHeaders,
+  createAdminClient,
+  errorMessage,
+  getUserRoles,
+  json,
+  requireUser,
+} from "../_shared/supabase-admin.ts";
+import {
+  assertForkOwnership,
+  buildBasedOnLabel,
+  buildPersonalGraph,
+  defaultForkName,
+  resolveCustomizability,
+  resolveForkEntitlement,
+  sanitizePersonalGraphForClient,
+} from "../_shared/template-fork.ts";
+
+/**
+ * TR8 — Pro private template forks (create + read).
+ * Read-only against source templates; inserts only into template_user_forks.
+ */
+Deno.serve(async (req) => {
+  if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: corsHeaders });
+
+  const admin = createAdminClient();
+
+  try {
+    const user = await requireUser(req, admin);
+    const roles = await getUserRoles(user.id, admin);
+
+    const body = await req.json().catch(() => ({})) as {
+      action?: string;
+      templateId?: string;
+      forkId?: string;
+    };
+    const action = String(body.action ?? "");
+
+    if (action === "create_fork") {
+      const templateId = String(body.templateId ?? "").trim();
+      if (!templateId) throw new Error("templateId is required");
+
+      // ── Entitlement ──
+      const { data: profile, error: profileError } = await admin
+        .from("profiles")
+        .select("plan")
+        .eq("user_id", user.id)
+        .maybeSingle();
+      if (profileError) throw new Error(profileError.message);
+
+      const entitlement = resolveForkEntitlement({ plan: profile?.plan ?? null, roles });
+      if (!entitlement.allowed) {
+        return json({ error: "Pro membership required to customize workflows", code: entitlement.code }, 403);
+      }
+
+      // ── Source template + IP gate ──
+      const { data: template, error: templateError } = await admin
+        .from("fuse_templates")
+        .select("id, name, created_by, allow_customer_edit, allow_prompt_visibility")
+        .eq("id", templateId)
+        .maybeSingle();
+      if (templateError) throw new Error(templateError.message);
+      if (!template) throw new Error("Template not found");
+
+      const createdBy = (template as Record<string, unknown>).created_by as string | null;
+      const createdByRoles = createdBy ? await getUserRoles(createdBy, admin) : [];
+
+      const { customizable, promptVisibility } = resolveCustomizability({
+        allowCustomerEdit: (template as Record<string, unknown>).allow_customer_edit as boolean | null,
+        allowPromptVisibility: (template as Record<string, unknown>).allow_prompt_visibility as boolean | null,
+        createdByRoles,
+      });
+
+      if (!customizable) {
+        return json(
+          { error: "This template cannot be customized", code: "CUSTOMIZATION_NOT_ALLOWED" },
+          403,
+        );
+      }
+
+      // ── Snapshot the ACTIVE version graph ──
+      const { data: version, error: versionError } = await admin
+        .from("template_versions")
+        .select("id, version_number")
+        .eq("template_id", templateId)
+        .eq("is_active", true)
+        .maybeSingle();
+      if (versionError) throw new Error(versionError.message);
+      if (!version) throw new Error("Template has no active version");
+
+      const [nodesResult, edgesResult] = await Promise.all([
+        admin.from("nodes").select("id, name, node_type, prompt_config, default_asset_id")
+          .eq("version_id", version.id),
+        admin.from("edges").select("source_node_id, target_node_id, mapping_logic")
+          .eq("version_id", version.id),
+      ]);
+      if (nodesResult.error) throw new Error(nodesResult.error.message);
+      if (edgesResult.error) throw new Error(edgesResult.error.message);
+
+      const personalGraph = buildPersonalGraph({
+        nodes: (nodesResult.data ?? []) as never,
+        edges: (edgesResult.data ?? []) as never,
+        promptVisibility,
+      });
+
+      const { data: fork, error: insertError } = await admin
+        .from("template_user_forks")
+        .insert({
+          user_id: user.id,
+          source_template_id: templateId,
+          source_version_id: version.id,
+          name: defaultForkName((template as Record<string, unknown>).name as string),
+          personal_graph: personalGraph,
+          prompt_visibility: promptVisibility,
+        })
+        .select("id")
+        .single();
+      if (insertError) throw new Error(insertError.message);
+
+      return json({ forkId: fork.id, promptVisibility });
+    }
+
+    if (action === "get_fork") {
+      const forkId = String(body.forkId ?? "").trim();
+      if (!forkId) throw new Error("forkId is required");
+
+      const { data: fork, error: forkError } = await admin
+        .from("template_user_forks")
+        .select("id, user_id, name, source_template_id, source_version_id, personal_graph, prompt_visibility, created_at, updated_at")
+        .eq("id", forkId)
+        .maybeSingle();
+      if (forkError) throw new Error(forkError.message);
+      if (!fork) throw new Error("Fork not found");
+
+      assertForkOwnership({ forkUserId: fork.user_id as string, userId: user.id, roles });
+
+      const [{ data: template }, { data: version }] = await Promise.all([
+        admin.from("fuse_templates").select("id, name").eq("id", fork.source_template_id).maybeSingle(),
+        admin.from("template_versions").select("id, version_number").eq("id", fork.source_version_id).maybeSingle(),
+      ]);
+
+      const promptVisibility = fork.prompt_visibility === true;
+
+      return json({
+        fork: {
+          id: fork.id,
+          name: fork.name,
+          sourceTemplateId: fork.source_template_id,
+          sourceTemplateName: template?.name ?? null,
+          sourceVersionId: fork.source_version_id,
+          promptVisibility,
+          basedOn: buildBasedOnLabel(template?.name ?? null, version?.version_number),
+          personalGraph: sanitizePersonalGraphForClient(fork.personal_graph, promptVisibility),
+          createdAt: fork.created_at,
+          updatedAt: fork.updated_at,
+        },
+      });
+    }
+
+    if (action === "list_forks") {
+      const { data: forks, error: listError } = await admin
+        .from("template_user_forks")
+        .select("id, name, source_template_id, updated_at")
+        .eq("user_id", user.id)
+        .order("updated_at", { ascending: false });
+      if (listError) throw new Error(listError.message);
+
+      const templateIds = [...new Set((forks ?? []).map((f) => f.source_template_id).filter(Boolean))];
+      const nameById = new Map<string, string>();
+      if (templateIds.length) {
+        const { data: templates } = await admin
+          .from("fuse_templates")
+          .select("id, name")
+          .in("id", templateIds as string[]);
+        for (const t of templates ?? []) nameById.set(t.id as string, (t.name as string) ?? "");
+      }
+
+      return json({
+        forks: (forks ?? []).map((f) => ({
+          id: f.id,
+          name: f.name,
+          sourceTemplateId: f.source_template_id,
+          sourceTemplateName: nameById.get(f.source_template_id as string) ?? null,
+          updatedAt: f.updated_at,
+        })),
+      });
+    }
+
+    throw new Error("Unsupported action");
+  } catch (error) {
+    const message = errorMessage(error);
+    if (message === "Forbidden") return json({ error: "Forbidden", code: "FORBIDDEN" }, 403);
+    const status = /Authentication|authorization|bearer/i.test(message) ? 401 : 400;
+    return json({ error: message }, status);
+  }
+});
