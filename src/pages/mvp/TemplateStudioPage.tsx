@@ -26,6 +26,7 @@ import TemplateInputCard from "@/components/templates/TemplateInputCard";
 import CastSelector, { PRIMARY_CAST_SLOT, type CastSelection } from "@/components/templates/CastSelector";
 import { CampaignBuildGraph, type PublicGraph } from "@/components/templates/CampaignBuildGraph";
 import CampaignOutputsPanel from "@/components/templates/CampaignOutputsPanel";
+import CampaignResults from "@/components/templates/CampaignResults";
 
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
@@ -641,6 +642,17 @@ export default function TemplateStudioPage() {
 
   const handleLoadMoreRuns = () => {
     void recentRunsQuery.fetchNextPage();
+  };
+
+  const handleDownloadSingleOutput = (output: RunnerOutput, index: number) => {
+    const link = document.createElement("a");
+    link.href = output.url;
+    link.download = getOutputDownloadName(selectedTemplate?.name ?? "fuse-run", index, output);
+    link.target = "_blank";
+    link.rel = "noreferrer";
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
   };
 
   const handleDownloadRunOutputs = (run: RecentRun) => {
