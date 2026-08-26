@@ -649,11 +649,11 @@ export default function TemplateStudioPage() {
 
 
 
-  const currentResultFeedback = activeRunId
+  const currentResultFeedback: RunFeedbackRecord | null = activeRunId
     ? feedbackOverrides[activeRunId]
-      ?? recentRuns.find((run) => run.id === activeRunId)?.feedback
-      ?? null
+      ?? ((recentRuns.find((run) => run.id === activeRunId)?.feedback as RunFeedbackRecord | null | undefined) ?? null)
     : null;
+
 
   const resolveFeedback = (runId: string, fallback: RunFeedbackRecord | null) =>
     feedbackOverrides[runId] ?? fallback ?? null;
