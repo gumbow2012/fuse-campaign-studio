@@ -8,61 +8,15 @@ import PageMeta from "@/components/mvp/PageMeta";
 import { useAuth } from "@/contexts/AuthContext";
 import { fetchTemplates, type ApiTemplate } from "@/services/fuseApi";
 import { listPublicCreatorProfiles, type CreatorProfile } from "@/services/creatorProfile";
-import { sortTemplatesForStudio } from "@/lib/templateOrdering";
 import { cn } from "@/lib/utils";
-
-/* Curated existing media only — nothing is generated for the homepage. */
-const CURATED_PREVIEW_GIFS: Array<{ match: RegExp; src: string }> = [
-  { match: /ugc\s*mirror/i, src: "/template-previews/ugc-mirror.gif" },
-  { match: /paparazzi/i, src: "/template-previews/paparazzi.gif" },
-  { match: /unboxing/i, src: "/template-previews/unboxing.gif" },
-  { match: /amazon|delivery/i, src: "/template-previews/amazon-guy.gif" },
-  { match: /armored/i, src: "/template-previews/armored-truck.gif" },
-  { match: /blue\s*lab/i, src: "/template-previews/blue-lab.gif" },
-  { match: /doctor/i, src: "/template-previews/doctor.gif" },
-  { match: /garage/i, src: "/template-previews/garage.gif" },
-  { match: /jeans/i, src: "/template-previews/jeans.gif" },
-  { match: /raven/i, src: "/template-previews/raven.gif" },
-  { match: /skate/i, src: "/template-previews/skatepark.gif" },
-];
-
-const FALLBACK_GIFS = CURATED_PREVIEW_GIFS.map((entry) => entry.src);
-
-type TemplateMedia = { url: string; type: "image" | "video" };
-type Entry = { template: ApiTemplate; media: TemplateMedia };
-
-function curatedGifFor(name: string) {
-  return CURATED_PREVIEW_GIFS.find((entry) => entry.match.test(name))?.src ?? null;
-}
-
-function resolveMedia(template: ApiTemplate): TemplateMedia | null {
-  if (template.preview_url) {
-    const isVideo =
-      template.preview_asset_type === "video" || /\.(mp4|mov|webm)(\?|$)/i.test(template.preview_url);
-    return { url: template.preview_url, type: isVideo ? "video" : "image" };
-  }
-  const gif = curatedGifFor(template.name);
-  return gif ? { url: gif, type: "image" } : null;
-}
-
-function outputCount(template: ApiTemplate) {
-  const images = template.counts?.imageOutputs ?? 0;
-  const videos = template.counts?.videoOutputs ?? 0;
-  return images + videos;
-}
-
-function outputLabel(template: ApiTemplate) {
-  const total = outputCount(template);
-  if (total <= 0) return null;
-  return `${total} output${total === 1 ? "" : "s"}`;
-}
-
-function isRecent(template: ApiTemplate, days = 21) {
-  if (!template.created_at) return false;
-  const created = new Date(template.created_at).getTime();
-  if (Number.isNaN(created)) return false;
-  return Date.now() - created <= days * 24 * 60 * 60 * 1000;
-}
+import {
+  allocateHomeMedia,
+  BRAND_INPUT_ASSETS,
+  FALLBACK_GIFS,
+  outputLabel,
+  type Entry,
+  type TemplateMedia,
+} from "@/lib/homeMediaAllocator";
 
 /** Requirement chips derived from the template's real input schema. */
 function requirementChips(template: ApiTemplate) {
@@ -75,19 +29,6 @@ function requirementChips(template: ApiTemplate) {
   }
   if (template.castConfig?.supported) chips.push("Cast (optional)");
   return chips;
-}
-
-const CATEGORY_SHELVES: Array<{ title: string; match: RegExp }> = [
-  { title: "Streetwear", match: /street|apparel|outfit|garment|fashion/i },
-  { title: "Jewelry", match: /jewel|chain|diamond|ice/i },
-  { title: "Artist", match: /artist|music|rap|album/i },
-  { title: "Product", match: /product|packshot|ecom|unbox/i },
-  { title: "Cinematic", match: /cinema|film|cinematic|trailer/i },
-];
-
-function matchesCategory(template: ApiTemplate, match: RegExp) {
-  const haystack = [template.category ?? "", ...(template.tags ?? [])].join(" ");
-  return match.test(haystack);
 }
 
 /* --------------------------------- pieces --------------------------------- */
