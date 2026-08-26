@@ -1318,55 +1318,38 @@ export default function TemplateStudioPage() {
                     </div>
                   ) : (
                     <>
+                  {/* Compact readiness header — replaces the old requirements panel. */}
                   {inputFields.length ? (
-                    <div className="rounded-[1.5rem] border border-white/8 bg-black/20 p-4">
-                      <p className="text-[11px] uppercase tracking-[0.24em] text-muted-foreground">Requirements</p>
-                      <ul className="mt-3 grid gap-2 sm:grid-cols-2">
-                        {inputFields.map((field) => {
-                          const provided = field.type === "image"
-                            ? !!files[field.key] || !!libraryAssets[field.key]?.url
-                            : !!textInputs[field.key]?.trim();
-                          const requirement = field.requirement;
-                          const notes = requirement ? describeRequirement(requirement) : [];
-                          return (
-                            <li
-                              key={`req-${field.key}`}
-                              className={cn(
-                                "rounded-2xl border px-3 py-2 text-xs",
-                                field.required
-                                  ? "border-cyan-300/25 bg-cyan-300/[0.07] text-white"
-                                  : "border-white/10 bg-white/[0.03] text-slate-400",
-                              )}
-                            >
-                              <div className="flex items-center gap-2">
-                                <span className={cn("text-sm", provided ? "text-emerald-200" : field.required ? "text-cyan-100" : "text-slate-500")}>
-                                  {field.required ? "✓" : "○"}
-                                </span>
-                                <span className="truncate">{field.label}</span>
-                                {requirement?.assetType ? (
-                                  <span className="shrink-0 rounded-full border border-white/10 px-2 py-0.5 text-[9px] uppercase tracking-[0.18em] text-slate-400">
-                                    {formatAssetTypeLabel(requirement.assetType)}
-                                  </span>
-                                ) : null}
-                                <span className="ml-auto shrink-0 text-[9px] uppercase tracking-[0.18em] text-slate-500">
-                                  {field.required ? "Required" : "Optional"}
-                                </span>
-                              </div>
-                              {requirement?.shortInstruction ? (
-                                <p className="mt-1.5 text-[11px] leading-relaxed text-slate-400">{requirement.shortInstruction}</p>
-                              ) : null}
-                              {notes.length ? (
-                                <p className="mt-1 text-[10px] uppercase tracking-[0.14em] text-slate-500">{notes.join(" · ")}</p>
-                              ) : null}
-                            </li>
-                          );
-                        })}
-                      </ul>
-
+                    <div>
+                      <div className="flex flex-wrap items-center justify-between gap-3">
+                        <p className="text-[12px] font-semibold uppercase tracking-[0.22em] text-white">
+                          Add your campaign assets
+                        </p>
+                        <p
+                          className={cn(
+                            "text-[11px] font-semibold uppercase tracking-[0.2em]",
+                            requiredInputsAreReady ? "text-emerald-200" : "text-cyan-100",
+                          )}
+                        >
+                          {requiredInputsAreReady
+                            ? "✓ All assets ready"
+                            : `${readyInputCount} / ${totalInputCount} ready`}
+                        </p>
+                      </div>
+                      <div className="mt-2 h-1 overflow-hidden rounded-full bg-white/10">
+                        <div
+                          className={cn(
+                            "h-full rounded-full transition-[width] duration-300 motion-reduce:transition-none",
+                            requiredInputsAreReady ? "bg-emerald-300" : "bg-cyan-300",
+                          )}
+                          style={{ width: `${readinessPercent}%` }}
+                        />
+                      </div>
                     </div>
                   ) : null}
 
-                  {castEnabled ? (
+                  {/* Cast lives inside the face slot when a face slot exists. */}
+                  {castEnabled && !castSlotFieldKey ? (
                     <CastSelector
                       required={castRequired}
                       userId={user?.id ?? null}
@@ -1375,44 +1358,69 @@ export default function TemplateStudioPage() {
                     />
                   ) : null}
 
-                  <div className="grid gap-4 md:grid-cols-2">
+                  <div className="grid gap-3 md:grid-cols-2">
 
                     {inputFields.map((field) => (
                       field.type === "image" ? (
-                        <TemplateInputCard
+                        <div
                           key={field.key}
-                          label={field.label}
-                          file={files[field.key] ?? null}
-                          requirement={field.requirement}
-                          fallbackPlaceholderSrc={
-                            UPLOAD_PLACEHOLDER_ASSETS[getUploadIllustrationKind(field.label)] ??
-                            UPLOAD_PLACEHOLDER_ASSETS.shirt
-                          }
-                          onFileChange={(nextFile) => {
-                            setFiles((current) => ({ ...current, [field.key]: nextFile }));
-                            setLibraryAssets((current) => ({ ...current, [field.key]: null }));
+                          ref={(node) => {
+                            slotRefs.current[field.key] = node;
                           }}
-                          libraryAsset={libraryAssets[field.key] ?? null}
-                          onLibrarySelect={(asset) => {
-                            setFiles((current) => ({ ...current, [field.key]: null }));
-                            setLibraryAssets((current) => ({ ...current, [field.key]: asset }));
-                          }}
-                          onClear={() => {
-                            setFiles((current) => ({ ...current, [field.key]: null }));
-                            setLibraryAssets((current) => ({ ...current, [field.key]: null }));
-                          }}
-                        />
+                          className="scroll-mt-28"
+                        >
+                          <TemplateInputCard
+                            label={field.label}
+                            displayLabel={
+                              castEnabled && field.key === castSlotFieldKey
+                                ? "Who's in the campaign?"
+                                : undefined
+                            }
+                            required={field.required}
+                            highlighted={focusedInputKey === field.key}
+                            file={files[field.key] ?? null}
+                            requirement={field.requirement}
+                            castPanel={
+                              castEnabled && field.key === castSlotFieldKey ? (
+                                <CastSelector
+                                  required={castRequired}
+                                  userId={user?.id ?? null}
+                                  selection={castSelection}
+                                  onSelectionChange={setCastSelection}
+                                />
+                              ) : undefined
+                            }
+                            onFileChange={(nextFile) => {
+                              setFiles((current) => ({ ...current, [field.key]: nextFile }));
+                              setLibraryAssets((current) => ({ ...current, [field.key]: null }));
+                              if (nextFile) advanceFromInput(field.key);
+                            }}
+                            libraryAsset={libraryAssets[field.key] ?? null}
+                            onLibrarySelect={(asset) => {
+                              setFiles((current) => ({ ...current, [field.key]: null }));
+                              setLibraryAssets((current) => ({ ...current, [field.key]: asset }));
+                              advanceFromInput(field.key);
+                            }}
+                            onClear={() => {
+                              setFiles((current) => ({ ...current, [field.key]: null }));
+                              setLibraryAssets((current) => ({ ...current, [field.key]: null }));
+                            }}
+                          />
+                        </div>
                       ) : (
-                        <div key={field.key} className="rounded-[1.5rem] border border-white/8 bg-black/20 p-4">
+                        <div key={field.key} className="rounded-[1.25rem] border border-white/10 bg-black/25 p-3">
+                          <p className="mb-2 truncate text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-200">
+                            {field.label}
+                          </p>
                           {field.type === "prompt" ? (
                             <Textarea
                               value={textInputs[field.key] ?? ""}
                               onChange={(event) =>
                                 setTextInputs((current) => ({ ...current, [field.key]: event.target.value }))
                               }
-                              rows={5}
+                              rows={3}
                               placeholder={field.label}
-                              className="min-h-[180px] rounded-[1.25rem] border-white/10 bg-white/[0.03] text-white"
+                              className="min-h-[92px] rounded-[0.9rem] border-white/10 bg-white/[0.03] text-white"
                             />
                           ) : (
                             <Input
@@ -1421,7 +1429,7 @@ export default function TemplateStudioPage() {
                                 setTextInputs((current) => ({ ...current, [field.key]: event.target.value }))
                               }
                               placeholder={field.label}
-                              className="h-14 rounded-[1.25rem] border-white/10 bg-white/[0.03] text-white"
+                              className="h-11 rounded-[0.9rem] border-white/10 bg-white/[0.03] text-white"
                             />
                           )}
                         </div>
@@ -1430,16 +1438,19 @@ export default function TemplateStudioPage() {
 
                   </div>
 
-                  <div className="rounded-[1.5rem] border border-white/8 bg-black/20 p-4">
+                  {/* Sticky generate bar — same validation, same action, same cost. */}
+                  <div className="sticky bottom-0 z-20 -mx-6 mt-2 border-t border-white/10 bg-slate-950/95 px-6 py-4 backdrop-blur-xl">
                     <div className="flex flex-wrap items-center justify-between gap-3">
-                      <div>
-                        <p className="text-[11px] uppercase tracking-[0.24em] text-muted-foreground">Review</p>
-                        <p className="mt-2 text-2xl font-semibold text-white">{costDisplay}</p>
-                        {isPrivilegedUser ? (
-                          <p className="mt-2 text-xs text-slate-500">
-                            Visual team spend {adminVisualSpent}. Runs stay unblocked.
-                          </p>
-                        ) : null}
+                      <div className="min-w-0">
+                        <p
+                          className={cn(
+                            "text-[11px] font-semibold uppercase tracking-[0.2em]",
+                            requiredInputsAreReady ? "text-emerald-200" : "text-slate-400",
+                          )}
+                        >
+                          {requiredInputsAreReady ? "✓ Ready" : `${readyInputCount} / ${totalInputCount} ready`}
+                        </p>
+                        <p className="mt-1 text-sm text-slate-300">{costDisplay}</p>
                       </div>
                       <Button
                         onClick={() => void handleRun()}
@@ -1497,6 +1508,7 @@ export default function TemplateStudioPage() {
                     ) : null}
 
                   </div>
+
                     </>
                   )}
                 </div>
