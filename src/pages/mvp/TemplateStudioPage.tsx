@@ -22,7 +22,6 @@ import SiteShell from "@/components/mvp/SiteShell";
 import RunFeedbackCard from "@/components/mvp/RunFeedbackCard";
 import CreditPackDialog from "@/components/mvp/CreditPackDialog";
 import TemplateDetailDialog, { readTemplateAspectRatio } from "@/components/mvp/TemplateDetailDialog";
-import CampaignBuilderSteps, { buildCampaignSteps } from "@/components/mvp/CampaignBuilderSteps";
 import TemplateInputCard from "@/components/templates/TemplateInputCard";
 import CastSelector, { PRIMARY_CAST_SLOT, type CastSelection } from "@/components/templates/CastSelector";
 
@@ -832,13 +831,6 @@ export default function TemplateStudioPage() {
       (field) => field.type === "image" && resolveInputRole(field.label, field.requirement?.assetType) === "face",
     )?.key ?? null;
 
-  const builderSteps = buildCampaignSteps({
-    hasRequirements: inputFields.length > 0,
-    assetsReady: requiredInputsAreReady,
-    canGenerate: requiredInputsAreReady && (isPrivilegedUser || !blockedByCredits),
-    castEnabled,
-    castComplete: Boolean(castSelection[PRIMARY_CAST_SLOT]) || !castRequired,
-  });
 
   const handleTemplateSelect = (templateId: string) => {
     setSelectedTemplateId(templateId);
