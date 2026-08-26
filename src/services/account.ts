@@ -1,6 +1,12 @@
 import { SUPABASE_PUBLISHABLE_KEY, SUPABASE_URL, supabase } from "@/integrations/supabase/client";
 
-export async function updateAccountProfile(input: { name: string }) {
+export type AccountProfileInput = {
+  name: string;
+  /** Compact JPEG data URL from `fileToAvatarDataUrl`, or null to remove the photo. */
+  avatarDataUrl?: string | null;
+};
+
+export async function updateAccountProfile(input: AccountProfileInput) {
   let {
     data: { session },
   } = await supabase.auth.getSession();
@@ -24,7 +30,10 @@ export async function updateAccountProfile(input: { name: string }) {
       Authorization: `Bearer ${session.access_token}`,
       apikey: SUPABASE_PUBLISHABLE_KEY,
     },
-    body: JSON.stringify(input),
+    body: JSON.stringify({
+      name: input.name,
+      ...(input.avatarDataUrl === undefined ? {} : { avatar_data_url: input.avatarDataUrl }),
+    }),
   });
 
   const data = await response.json().catch(() => null);
@@ -37,5 +46,5 @@ export async function updateAccountProfile(input: { name: string }) {
     throw new Error(String(data.error));
   }
 
-  return data as { ok: true; profile: { name: string } };
+  return data as { ok: true; profile: { name: string; avatar_url: string | null } };
 }
