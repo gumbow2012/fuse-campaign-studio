@@ -38,7 +38,8 @@ describe("quoteCreditTopUp anchors", () => {
       expect(cents).toBeGreaterThanOrEqual(previous);
       previous = cents;
     }
-    expect(quoteCreditTopUp(1499 as never, )).toBeDefined; // placeholder guard
+    // Spot-check: 1499-equivalent boundary — 1400 must not cost more than 1500.
+    expect(quoteCreditTopUp(1400).amountCents).toBeLessThanOrEqual(quoteCreditTopUp(1500).amountCents);
   });
 
   it("returns integer cents and a pricing version", () => {
