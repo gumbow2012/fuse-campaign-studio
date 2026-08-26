@@ -123,6 +123,16 @@ export default function CampaignResults({
                 const label = output.label || `Output ${number}`;
                 const favorite = isFavorite?.(output, index) ?? false;
 
+                // TR7: revisions (oldest first) + the current output as the latest version.
+                const revisions = revisionsByOutput?.get(number) ?? [];
+                const versionCount = revisions.length + 1;
+                const selected = Math.min(versionIndex[number] ?? versionCount - 1, versionCount - 1);
+                const isLatest = selected === versionCount - 1;
+                const revision = isLatest ? null : revisions[selected] ?? null;
+                const shown: CampaignResultOutput = revision?.output_url
+                  ? { ...output, url: revision.output_url, type: revision.output_type || output.type }
+                  : output;
+
                 return (
                   <article
                     key={`${output.url}-${index}`}
@@ -130,13 +140,13 @@ export default function CampaignResults({
                   >
                     <button
                       type="button"
-                      onClick={() => setLightbox({ output, index })}
+                      onClick={() => setLightbox({ output: shown, index })}
                       aria-label={`Expand ${label}`}
                       className="relative block aspect-[9/16] w-full overflow-hidden bg-black"
                     >
-                      {output.type === "video" ? (
+                      {shown.type === "video" ? (
                         <video
-                          src={videoPosterSrc(output.url)}
+                          src={videoPosterSrc(shown.url)}
                           muted
                           playsInline
                           preload="metadata"
@@ -144,7 +154,7 @@ export default function CampaignResults({
                         />
                       ) : (
                         <img
-                          src={output.url}
+                          src={shown.url}
                           alt={label}
                           loading="lazy"
                           decoding="async"
@@ -154,9 +164,26 @@ export default function CampaignResults({
                         />
                       )}
                       <span className="absolute left-2 top-2 rounded-full bg-emerald-400/15 px-2 py-0.5 text-[9px] uppercase tracking-[0.16em] text-emerald-100">
-                        ✓ Ready
+                        {isLatest ? "✓ Ready" : `Version ${selected + 1}`}
                       </span>
+                      {versionCount > 1 ? (
+                        <span
+                          className="absolute right-2 top-2"
+                          onClick={(event) => {
+                            event.preventDefault();
+                            event.stopPropagation();
+                          }}
+                        >
+                          <OutputRevisionNav
+                            index={selected}
+                            total={versionCount}
+                            label={label}
+                            onChange={(next) => setVersionIndex((prev) => ({ ...prev, [number]: next }))}
+                          />
+                        </span>
+                      ) : null}
                     </button>
+
 
                     <div className="flex items-center justify-between gap-2 px-3 py-3">
                       <span className="inline-flex items-center gap-1.5 text-[11px] uppercase tracking-[0.14em] text-slate-300">
