@@ -599,6 +599,7 @@ Deno.serve(async (req) => {
       generationId?: string;
       generationIds?: string[];
       limit?: number;
+      cursor?: { createdAt?: unknown; id?: unknown };
     };
     const action = body.action ?? (body.generationId ? "status" : "start");
 
@@ -622,15 +623,49 @@ Deno.serve(async (req) => {
        * webhooks are the completion path; `reconcile` is the explicit fallback.
        */
       const limit = Math.min(200, Math.max(1, Number(body.limit ?? 20)));
-      const { data: rows, error } = await admin
+      /**
+       * GS-PERF2: stable keyset cursor. Ordering is (created_at DESC, id DESC);
+       * a cursor page keeps only rows strictly after it:
+       *   created_at < cursor.createdAt
+       *   OR (created_at = cursor.createdAt AND id < cursor.id)
+       * PostgREST: or(created_at.lt.<ts>,and(created_at.eq.<ts>,id.lt.<id>))
+       * (values URL-encoded — timestamps contain spaces/'+'). Fetch limit+1
+       * to detect the next page without a count query.
+       */
+      const cursorCreatedAt = typeof body.cursor?.createdAt === "string"
+        ? body.cursor.createdAt.trim()
+        : "";
+      const cursorId = typeof body.cursor?.id === "string" ? body.cursor.id.trim() : "";
+
+      let query = admin
         .from("studio_generations")
         .select(LIST_SELECT)
         .eq("user_id", user.id)
         .order("created_at", { ascending: false })
-        .limit(limit);
+        .order("id", { ascending: false })
+        .limit(limit + 1);
+
+      if (cursorCreatedAt && cursorId) {
+        query = query.or(
+          `created_at.lt.${encodeURIComponent(cursorCreatedAt)},` +
+            `and(created_at.eq.${encodeURIComponent(cursorCreatedAt)},id.lt.${encodeURIComponent(cursorId)})`,
+        );
+      }
+
+      const { data: rows, error } = await query;
       if (error) throw new Error(error.message);
 
-      return json({ generations: (rows ?? []).map(serializeGenerationListItem) });
+      const all = rows ?? [];
+      const page = all.slice(0, limit);
+      const last = page[page.length - 1] as { created_at?: string; id?: string } | undefined;
+      const nextCursor = all.length > limit && last?.created_at && last?.id
+        ? { createdAt: String(last.created_at), id: String(last.id) }
+        : null;
+
+      return json({
+        generations: page.map(serializeGenerationListItem),
+        nextCursor,
+      });
     }
 
     if (action === "detail") {
