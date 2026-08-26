@@ -886,20 +886,91 @@ export default function GenerationStudio() {
   }, []);
 
   const hasInFlight = generations.some((entry) => entry.status === "queued" || entry.status === "running");
-  useEffect(() => {
-    if (!hasInFlight) return;
-    const timer = setInterval(() => void loadQueue(), 5000);
-    return () => clearInterval(timer);
-  }, [hasInFlight, loadQueue]);
 
   /**
-   * Missed-webhook safety net (GS-PERF1): the gallery list is a pure DB read,
-   * so rows in flight > 2 minutes are reconciled explicitly, at most every 30s.
+   * GS-PERF3: Realtime is the primary completion path — one changed row updates
+   * one card. Replaces the old 5s full-gallery poll. Heavy fields stay out of
+   * gallery state (the lightbox still fetches them via action:"detail").
+   */
+  const { user } = useAuth();
+  useEffect(() => {
+    const userId = user?.id;
+    if (!userId) return;
+
+    let channel: ReturnType<typeof supabase.channel> | null = null;
+    try {
+      channel = supabase
+        .channel(`studio_generations:${userId}`)
+        .on(
+          "postgres_changes",
+          {
+            event: "UPDATE",
+            schema: "public",
+            table: "studio_generations",
+            filter: `user_id=eq.${userId}`,
+          },
+          (payload) => {
+            const row = payload.new as Record<string, unknown> | null;
+            if (!row?.id) return;
+            const rowId = String(row.id);
+            setGenerations((prev) => {
+              if (!prev.some((entry) => entry.id === rowId)) return prev;
+              return prev.map((entry) =>
+                entry.id === rowId
+                  ? {
+                      ...entry,
+                      status: (row.status as Generation["status"]) ?? entry.status,
+                      outputUrl: (row.output_url as string | null) ?? entry.outputUrl,
+                      outputType: (row.output_type as string | null) ?? entry.outputType,
+                      providerModel: (row.provider_model as string | null) ?? entry.providerModel,
+                      estimatedCredits:
+                        (row.estimated_credits as number | null) ?? entry.estimatedCredits,
+                      estimatedCostUsd:
+                        (row.estimated_cost_usd as number | null) ?? entry.estimatedCostUsd,
+                      favorited:
+                        typeof row.favorited === "boolean" ? row.favorited : entry.favorited,
+                      completedAt: (row.completed_at as string | null) ?? entry.completedAt,
+                    }
+                  : entry,
+              );
+            });
+          },
+        )
+        .subscribe();
+    } catch {
+      // Degrade gracefully — the reconcile fallback below still resolves jobs.
+      channel = null;
+    }
+
+    return () => {
+      if (channel) {
+        try {
+          void supabase.removeChannel(channel);
+        } catch {
+          // ignore teardown errors
+        }
+      }
+    };
+  }, [user?.id]);
+
+  /**
+   * Missed-webhook safety net (GS-PERF1): rows in flight > 2 minutes are
+   * reconciled explicitly, at most every 30s. Paused while the tab is hidden.
    */
   const lastReconcileRef = useRef(0);
+  const [tabVisible, setTabVisible] = useState(() =>
+    typeof document === "undefined" ? true : !document.hidden,
+  );
   useEffect(() => {
-    if (!hasInFlight) return;
+    const onVisibility = () => setTabVisible(!document.hidden);
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => document.removeEventListener("visibilitychange", onVisibility);
+  }, []);
+
+  useEffect(() => {
+    if (!hasInFlight || !tabVisible) return;
     const timer = setInterval(() => {
+      if (document.hidden) return;
       const now = Date.now();
       if (now - lastReconcileRef.current < 30_000) return;
       const staleIds = generations
@@ -927,7 +998,8 @@ export default function GenerationStudio() {
         .catch(() => null);
     }, 5000);
     return () => clearInterval(timer);
-  }, [hasInFlight, generations]);
+  }, [hasInFlight, tabVisible, generations]);
+
 
   const addReference = useCallback((url: string) => {
     setReferences((prev) => {
