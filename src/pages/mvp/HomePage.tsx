@@ -306,13 +306,18 @@ export default function HomePage() {
     retry: false,
   });
 
-  const withMedia = useMemo<Entry[]>(
-    () =>
-      sortTemplatesForStudio(templates)
-        .map((template) => ({ template, media: resolveMedia(template) }))
-        .filter((entry): entry is Entry => !!entry.media),
-    [templates],
-  );
+  const withMedia = useMemo<Entry[]>(() => {
+    const seen = new Set<string>();
+    return sortTemplatesForStudio(templates)
+      .map((template) => ({ template, media: resolveMedia(template) }))
+      .filter((entry): entry is Entry => !!entry.media)
+      .filter((entry) => {
+        const key = entry.template.name.trim().toLowerCase();
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+  }, [templates]);
 
   const heroPicks = useMemo(() => withMedia.slice(0, 4), [withMedia]);
   const [heroIndex, setHeroIndex] = useState(0);
@@ -441,8 +446,8 @@ export default function HomePage() {
           <div className="relative">
             {hero ? (
               <div>
-                <div className="overflow-hidden rounded-[1.5rem] border border-cyan-200/25 bg-black">
-                  <div className="aspect-[9/16] max-h-[560px]">
+                <div className="mx-auto w-full max-w-[330px] overflow-hidden rounded-[1.5rem] border border-cyan-200/25 bg-black">
+                  <div className="aspect-[9/16]">
                     <AutoMedia
                       media={hero.media}
                       eager
@@ -451,8 +456,8 @@ export default function HomePage() {
                   </div>
                 </div>
 
-                <div className="mt-3 space-y-2">
-                  <div className="flex flex-wrap items-center gap-2">
+                <div className="mx-auto mt-3 max-w-[420px] space-y-2 text-center">
+                  <div className="flex flex-wrap items-center justify-center gap-2">
                     <p className="font-display text-sm font-semibold uppercase tracking-[0.1em] text-white">
                       {hero.template.name}
                     </p>
@@ -463,7 +468,7 @@ export default function HomePage() {
                     )}
                   </div>
                   {heroRequirements.length > 0 && (
-                    <div className="flex flex-wrap items-center gap-1.5">
+                    <div className="flex flex-wrap items-center justify-center gap-1.5">
                       <span className="text-[10px] uppercase tracking-[0.2em] text-slate-500">
                         Requires
                       </span>
@@ -487,7 +492,7 @@ export default function HomePage() {
                 </div>
 
                 {heroPicks.length > 1 && (
-                  <div className="mt-4 flex gap-2">
+                  <div className="mt-4 flex justify-center gap-2">
                     {heroPicks.map((entry, index) => (
                       <button
                         key={entry.template.id}
