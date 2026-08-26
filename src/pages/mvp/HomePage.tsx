@@ -8,61 +8,15 @@ import PageMeta from "@/components/mvp/PageMeta";
 import { useAuth } from "@/contexts/AuthContext";
 import { fetchTemplates, type ApiTemplate } from "@/services/fuseApi";
 import { listPublicCreatorProfiles, type CreatorProfile } from "@/services/creatorProfile";
-import { sortTemplatesForStudio } from "@/lib/templateOrdering";
 import { cn } from "@/lib/utils";
-
-/* Curated existing media only — nothing is generated for the homepage. */
-const CURATED_PREVIEW_GIFS: Array<{ match: RegExp; src: string }> = [
-  { match: /ugc\s*mirror/i, src: "/template-previews/ugc-mirror.gif" },
-  { match: /paparazzi/i, src: "/template-previews/paparazzi.gif" },
-  { match: /unboxing/i, src: "/template-previews/unboxing.gif" },
-  { match: /amazon|delivery/i, src: "/template-previews/amazon-guy.gif" },
-  { match: /armored/i, src: "/template-previews/armored-truck.gif" },
-  { match: /blue\s*lab/i, src: "/template-previews/blue-lab.gif" },
-  { match: /doctor/i, src: "/template-previews/doctor.gif" },
-  { match: /garage/i, src: "/template-previews/garage.gif" },
-  { match: /jeans/i, src: "/template-previews/jeans.gif" },
-  { match: /raven/i, src: "/template-previews/raven.gif" },
-  { match: /skate/i, src: "/template-previews/skatepark.gif" },
-];
-
-const FALLBACK_GIFS = CURATED_PREVIEW_GIFS.map((entry) => entry.src);
-
-type TemplateMedia = { url: string; type: "image" | "video" };
-type Entry = { template: ApiTemplate; media: TemplateMedia };
-
-function curatedGifFor(name: string) {
-  return CURATED_PREVIEW_GIFS.find((entry) => entry.match.test(name))?.src ?? null;
-}
-
-function resolveMedia(template: ApiTemplate): TemplateMedia | null {
-  if (template.preview_url) {
-    const isVideo =
-      template.preview_asset_type === "video" || /\.(mp4|mov|webm)(\?|$)/i.test(template.preview_url);
-    return { url: template.preview_url, type: isVideo ? "video" : "image" };
-  }
-  const gif = curatedGifFor(template.name);
-  return gif ? { url: gif, type: "image" } : null;
-}
-
-function outputCount(template: ApiTemplate) {
-  const images = template.counts?.imageOutputs ?? 0;
-  const videos = template.counts?.videoOutputs ?? 0;
-  return images + videos;
-}
-
-function outputLabel(template: ApiTemplate) {
-  const total = outputCount(template);
-  if (total <= 0) return null;
-  return `${total} output${total === 1 ? "" : "s"}`;
-}
-
-function isRecent(template: ApiTemplate, days = 21) {
-  if (!template.created_at) return false;
-  const created = new Date(template.created_at).getTime();
-  if (Number.isNaN(created)) return false;
-  return Date.now() - created <= days * 24 * 60 * 60 * 1000;
-}
+import {
+  allocateHomeMedia,
+  BRAND_INPUT_ASSETS,
+  FALLBACK_GIFS,
+  outputLabel,
+  type Entry,
+  type TemplateMedia,
+} from "@/lib/homeMediaAllocator";
 
 /** Requirement chips derived from the template's real input schema. */
 function requirementChips(template: ApiTemplate) {
@@ -75,19 +29,6 @@ function requirementChips(template: ApiTemplate) {
   }
   if (template.castConfig?.supported) chips.push("Cast (optional)");
   return chips;
-}
-
-const CATEGORY_SHELVES: Array<{ title: string; match: RegExp }> = [
-  { title: "Streetwear", match: /street|apparel|outfit|garment|fashion/i },
-  { title: "Jewelry", match: /jewel|chain|diamond|ice/i },
-  { title: "Artist", match: /artist|music|rap|album/i },
-  { title: "Product", match: /product|packshot|ecom|unbox/i },
-  { title: "Cinematic", match: /cinema|film|cinematic|trailer/i },
-];
-
-function matchesCategory(template: ApiTemplate, match: RegExp) {
-  const haystack = [template.category ?? "", ...(template.tags ?? [])].join(" ");
-  return match.test(haystack);
 }
 
 /* --------------------------------- pieces --------------------------------- */
@@ -112,11 +53,14 @@ function AutoMedia({
   className,
   eager,
   active = true,
+  staggerIndex = 0,
 }: {
   media: TemplateMedia;
   className?: string;
   eager?: boolean;
   active?: boolean;
+  /** Deterministic playback offset so cards aren't mechanically synchronized. */
+  staggerIndex?: number;
 }) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const [visible, setVisible] = useState(false);
@@ -152,6 +96,17 @@ function AutoMedia({
         loop
         playsInline
         preload="metadata"
+        onLoadedMetadata={(event) => {
+          const node = event.currentTarget;
+          const offset = (staggerIndex % 5) * 0.6;
+          if (Number.isFinite(node.duration) && node.duration > offset + 0.2) {
+            try {
+              node.currentTime = offset;
+            } catch {
+              /* seeking not supported yet — ignore */
+            }
+          }
+        }}
         onMouseEnter={() => void videoRef.current?.play().catch(() => undefined)}
         onClick={() => {
           const node = videoRef.current;
@@ -194,11 +149,13 @@ function TemplateCard({
   badge,
   creator,
   eager,
+  index = 0,
 }: {
   entry: Entry;
   badge?: { tone: "new" | "trending" | "creator"; label: string };
   creator?: string | null;
   eager?: boolean;
+  index?: number;
 }) {
   const outputs = outputLabel(entry.template);
   const vibe = entry.template.category ?? entry.template.tags?.[0] ?? null;
@@ -209,6 +166,7 @@ function TemplateCard({
         <AutoMedia
           media={entry.media}
           eager={eager}
+          staggerIndex={index}
           className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.04]"
         />
         <div className="pointer-events-none absolute inset-x-0 bottom-0 h-1/2 bg-gradient-to-t from-black via-black/60 to-transparent" />
@@ -280,6 +238,7 @@ function Shelf({
             key={`${label}-${entry.template.id}-${index}`}
             entry={entry}
             badge={badge}
+            index={index}
             eager={index < 2}
           />
         ))}
@@ -306,55 +265,24 @@ export default function HomePage() {
     retry: false,
   });
 
-  const withMedia = useMemo<Entry[]>(() => {
-    const seen = new Set<string>();
-    return sortTemplatesForStudio(templates)
-      .map((template) => ({ template, media: resolveMedia(template) }))
-      .filter((entry): entry is Entry => !!entry.media)
-      .filter((entry) => {
-        const key = entry.template.name.trim().toLowerCase();
-        if (seen.has(key)) return false;
-        seen.add(key);
-        return true;
-      });
-  }, [templates]);
+  // Single dedup allocator — every section draws from here.
+  const allocation = useMemo(() => allocateHomeMedia(templates), [templates]);
+  const { hero: heroPair, trending, newToday, creatorDrops, categories, mediaWall } = allocation;
 
-  const heroPicks = useMemo(() => withMedia.slice(0, 4), [withMedia]);
-  const [heroIndex, setHeroIndex] = useState(0);
-  const hero = heroPicks[Math.min(heroIndex, Math.max(heroPicks.length - 1, 0))] ?? null;
+  const original = heroPair[0] ?? null;
+  const yourVersion = heroPair[1] ?? null;
+  const heroRequirements = original ? requirementChips(original.template) : [];
 
-  const trending = useMemo(() => withMedia.slice(0, 12), [withMedia]);
+  useEffect(() => {
+    if (!import.meta.env.DEV) return;
+    // eslint-disable-next-line no-console
+    console.info("[FUSE home media manifest]", {
+      ...allocation.manifest.sections,
+      duplicates: allocation.manifest.duplicates,
+      uniqueTemplates: allocation.manifest.totalUnique,
+    });
+  }, [allocation]);
 
-  const newToday = useMemo(
-    () =>
-      withMedia
-        .filter((entry) => isRecent(entry.template))
-        .sort(
-          (a, b) =>
-            new Date(b.template.created_at ?? 0).getTime() -
-            new Date(a.template.created_at ?? 0).getTime(),
-        )
-        .slice(0, 10),
-    [withMedia],
-  );
-
-  const categoryShelves = useMemo(
-    () =>
-      CATEGORY_SHELVES.map((shelf) => ({
-        ...shelf,
-        entries: withMedia.filter((entry) => matchesCategory(entry.template, shelf.match)).slice(0, 10),
-      })).filter((shelf) => shelf.entries.length >= 2),
-    [withMedia],
-  );
-
-  const mediaWall = useMemo(() => {
-    const urls = withMedia
-      .filter((entry) => entry.media.type === "image")
-      .map((entry) => entry.media.url);
-    return Array.from(new Set([...urls, ...FALLBACK_GIFS])).slice(0, 12);
-  }, [withMedia]);
-
-  const heroRequirements = hero ? requirementChips(hero.template) : [];
 
   return (
     <SiteShell>
@@ -442,28 +370,43 @@ export default function HomePage() {
             </p>
           </div>
 
-          {/* Interactive hero preview — real templates, curated existing media */}
+          {/* Hero story — ORIGINAL template → your brand input → your version */}
           <div className="relative">
-            {hero ? (
+            {original ? (
               <div>
-                <div className="mx-auto w-full max-w-[330px] overflow-hidden rounded-[1.5rem] border border-cyan-200/25 bg-black">
-                  <div className="aspect-[9/16]">
-                    <AutoMedia
-                      media={hero.media}
-                      eager
-                      className="h-full w-full object-cover"
-                    />
+                <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3">
+                  <HeroTile label="Original template" media={original.media} eager />
+                  <div className="space-y-2">
+                    <div className="grid grid-cols-2 gap-1.5">
+                      {BRAND_INPUT_ASSETS.map((src) => (
+                        <img
+                          key={src}
+                          src={src}
+                          alt=""
+                          loading="lazy"
+                          className="aspect-square w-10 rounded-md border border-white/10 object-cover sm:w-12"
+                        />
+                      ))}
+                    </div>
+                    <p className="text-center text-[9px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+                      Your brand
+                    </p>
                   </div>
+                  <HeroTile
+                    label="Your version"
+                    highlight
+                    media={yourVersion?.media ?? original.media}
+                  />
                 </div>
 
-                <div className="mx-auto mt-3 max-w-[420px] space-y-2 text-center">
+                <div className="mx-auto mt-4 max-w-[420px] space-y-2 text-center">
                   <div className="flex flex-wrap items-center justify-center gap-2">
                     <p className="font-display text-sm font-semibold uppercase tracking-[0.1em] text-white">
-                      {hero.template.name}
+                      {original.template.name}
                     </p>
-                    {outputLabel(hero.template) && (
+                    {outputLabel(original.template) && (
                       <span className="text-[11px] uppercase tracking-[0.18em] text-slate-400">
-                        · {outputLabel(hero.template)}
+                        · {outputLabel(original.template)}
                       </span>
                     )}
                   </div>
@@ -490,32 +433,6 @@ export default function HomePage() {
                     <Link to="/app/templates">Use this template</Link>
                   </Button>
                 </div>
-
-                {heroPicks.length > 1 && (
-                  <div className="mt-4 flex justify-center gap-2">
-                    {heroPicks.map((entry, index) => (
-                      <button
-                        key={entry.template.id}
-                        type="button"
-                        onClick={() => setHeroIndex(index)}
-                        aria-label={entry.template.name}
-                        className={cn(
-                          "h-20 w-14 overflow-hidden rounded-lg border bg-black transition-colors",
-                          index === heroIndex
-                            ? "border-cyan-200"
-                            : "border-white/10 hover:border-white/30",
-                        )}
-                      >
-                        <img
-                          src={entry.media.type === "image" ? entry.media.url : entry.media.url}
-                          alt=""
-                          loading="lazy"
-                          className="h-full w-full object-cover"
-                        />
-                      </button>
-                    ))}
-                  </div>
-                )}
               </div>
             ) : (
               <div className="overflow-hidden rounded-[1.5rem] border border-white/10 bg-black">
@@ -523,6 +440,7 @@ export default function HomePage() {
               </div>
             )}
           </div>
+
         </div>
       </section>
 
@@ -566,7 +484,14 @@ export default function HomePage() {
         entries={newToday}
         badge={{ tone: "new", label: "New" }}
       />
-      {categoryShelves.map((shelf) => (
+      {creators.length > 0 && (
+        <Shelf
+          label="Creator drops"
+          heading="Built by FUSE creators"
+          entries={creatorDrops}
+        />
+      )}
+      {categories.map((shelf) => (
         <Shelf
           key={shelf.title}
           label={shelf.title}
@@ -761,5 +686,35 @@ export default function HomePage() {
         </div>
       </section>
     </SiteShell>
+  );
+}
+
+function HeroTile({
+  label,
+  media,
+  highlight,
+  eager,
+}: {
+  label: string;
+  media: TemplateMedia;
+  highlight?: boolean;
+  eager?: boolean;
+}) {
+  return (
+    <div>
+      <div
+        className={cn(
+          "overflow-hidden rounded-[1.25rem] border bg-black",
+          highlight ? "border-cyan-200/40" : "border-white/10",
+        )}
+      >
+        <div className="aspect-[9/16]">
+          <AutoMedia media={media} eager={eager} className="h-full w-full object-cover" />
+        </div>
+      </div>
+      <p className="mt-2 text-center text-[9px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+        {label}
+      </p>
+    </div>
   );
 }
