@@ -20,6 +20,7 @@ import { accentStyle, resolveAccent } from "@/lib/creatorAccents";
 import { CreatorPerformanceProof } from "@/components/CreatorPerformance";
 import CreatorVerificationBadge from "@/components/CreatorVerificationBadge";
 import { toast } from "@/hooks/use-toast";
+import { evaluateAndAnnounce } from "@/services/achievements";
 import { followCreator, unfollowCreator } from "@/services/creatorFollows";
 import {
   loadCreatorSocialPublic,
@@ -122,6 +123,8 @@ export default function CreatorProfile() {
     try {
       if (next) await unfollowCreator(profile.user_id);
       else await followCreator(profile.user_id);
+      // Real action → recompute achievement progress (never grants credits).
+      void evaluateAndAnnounce();
     } catch (err) {
       setSocial(previous);
       toast({
