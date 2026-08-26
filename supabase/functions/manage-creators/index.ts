@@ -9,14 +9,19 @@ import {
   requireAdminUser,
 } from "../_shared/supabase-admin.ts";
 
-type Action = "list" | "invite" | "revoke" | "review_queue";
+type Action = "list" | "invite" | "revoke" | "review_queue" | "set_verification";
 
 type Body = {
   action?: Action;
   email?: string;
   userId?: string;
   inviteId?: string;
+  verificationStatus?: string;
+  verificationReason?: string | null;
 };
+
+const VERIFICATION_STATUSES = ["creator", "verified", "featured", "partner"] as const;
+
 
 function cleanEmail(value: unknown) {
   return typeof value === "string" ? value.trim().toLowerCase() : "";
@@ -47,11 +52,26 @@ Deno.serve(async (req) => {
       if (profileError) throw new Error(profileError.message);
 
       const profileById = new Map<string, any>((profiles ?? []).map((p: any) => [p.user_id, p]));
+
+      // Public verification fields only — verification_reason stays private.
+      const { data: creatorProfiles } = ids.length
+        ? await admin
+            .from("creator_profiles")
+            .select("user_id, handle, verification_status, verified_at")
+            .in("user_id", ids)
+        : { data: [] } as any;
+      const creatorProfileById = new Map<string, any>(
+        (creatorProfiles ?? []).map((row: any) => [row.user_id, row]),
+      );
+
       const creators = ids.map((id: string) => ({
         userId: id,
         email: profileById.get(id)?.email ?? null,
         name: profileById.get(id)?.name ?? null,
         createdAt: profileById.get(id)?.created_at ?? null,
+        handle: creatorProfileById.get(id)?.handle ?? null,
+        verificationStatus: creatorProfileById.get(id)?.verification_status ?? "creator",
+        verifiedAt: creatorProfileById.get(id)?.verified_at ?? null,
       }));
 
       const { data: invites, error: inviteError } = await admin
@@ -196,6 +216,32 @@ Deno.serve(async (req) => {
       });
 
       return json({ queue });
+    }
+
+    if (action === "set_verification") {
+      const userId = typeof body.userId === "string" ? body.userId.trim() : "";
+      const status = String(body.verificationStatus ?? "").trim().toLowerCase();
+      if (!userId) throw new Error("userId is required");
+      if (!(VERIFICATION_STATUSES as readonly string[]).includes(status)) {
+        throw new Error("Unknown verification status");
+      }
+
+      const patch: Record<string, unknown> = {
+        verification_status: status,
+        verified_at: status === "creator" ? null : new Date().toISOString(),
+      };
+      // Admin-only note; stored but never returned by any public read.
+      if (typeof body.verificationReason === "string" || body.verificationReason === null) {
+        patch.verification_reason = body.verificationReason || null;
+      }
+
+      const { error } = await admin
+        .from("creator_profiles")
+        .update(patch)
+        .eq("user_id", userId);
+      if (error) throw new Error(error.message);
+
+      return json({ ok: true, userId, verificationStatus: status });
     }
 
     throw new Error(`Unknown action: ${action}`);

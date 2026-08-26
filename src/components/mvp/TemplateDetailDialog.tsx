@@ -1,7 +1,9 @@
 import { useRef } from "react";
 import { ArrowRight, Film, Image as ImageIcon, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Link } from "react-router-dom";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
+import CreatorVerificationBadge from "@/components/CreatorVerificationBadge";
 import { useQuery } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
 import type { ApiTemplate } from "@/services/fuseApi";
@@ -118,6 +120,18 @@ export default function TemplateDetailDialog({
               <DialogTitle className="mt-2 font-display text-2xl font-bold tracking-[-0.02em] text-white">
                 {template.name}
               </DialogTitle>
+              {template.creator?.handle ? (
+                <p className="mt-2 flex items-center gap-1.5 text-xs text-slate-400">
+                  <span>by</span>
+                  <Link
+                    to={`/creator/${template.creator.handle}`}
+                    className="text-cyan-100 transition-colors hover:text-white"
+                  >
+                    @{template.creator.handle}
+                  </Link>
+                  <CreatorVerificationBadge status={template.creator.verificationStatus} size={11} />
+                </p>
+              ) : null}
               <DialogDescription className="mt-2 text-sm leading-6 text-slate-300">
                 {template.description ||
                   "Campaign drop template for ready-to-use vertical campaign assets."}

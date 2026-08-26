@@ -125,6 +125,7 @@ type CatalogTemplate = {
   reviewStatus?: string | null;
   createdAt?: string | null;
   castConfig?: unknown;
+  creator?: unknown;
 };
 
 type CatalogTemplateInput = {
@@ -179,8 +180,39 @@ export interface ApiTemplate {
    * `template_versions.cast_config` (null/absent = legacy behavior).
    */
   castConfig?: CastConfig | null;
+  /**
+   * Public creator attribution (`fuse_templates.created_by` ->
+   * `creator_profiles`). Null when the author has no public creator profile —
+   * never fabricate one. Never carries `verification_reason`.
+   */
+  creator?: TemplateCreatorAttribution | null;
 }
 
+
+export type TemplateCreatorAttribution = {
+  userId: string;
+  handle: string | null;
+  displayName: string | null;
+  avatarUrl: string | null;
+  verificationStatus: string;
+  verifiedAt: string | null;
+};
+
+function parseTemplateCreator(value: unknown): TemplateCreatorAttribution | null {
+  if (!value || typeof value !== "object") return null;
+  const row = value as Record<string, unknown>;
+  const userId = row.userId ? String(row.userId) : "";
+  const handle = row.handle ? String(row.handle) : null;
+  if (!userId || !handle) return null;
+  return {
+    userId,
+    handle,
+    displayName: row.displayName ? String(row.displayName) : null,
+    avatarUrl: row.avatarUrl ? String(row.avatarUrl) : null,
+    verificationStatus: String(row.verificationStatus ?? "creator"),
+    verifiedAt: row.verifiedAt ? String(row.verifiedAt) : null,
+  };
+}
 
 export async function fetchTemplates(token: string): Promise<ApiTemplate[]> {
   try {
@@ -230,6 +262,7 @@ export async function fetchTemplates(token: string): Promise<ApiTemplate[]> {
         tags: null,
         asset_requirements: null,
         review_status: template.reviewStatus ?? null,
+        creator: parseTemplateCreator(template.creator),
       }));
     }
   } catch {

@@ -172,6 +172,59 @@ async function resolvePublicUserId(
   return null;
 }
 
+/**
+ * SOCIAL (additive): public follower count + the viewer's own follow state +
+ * the PUBLIC verification fields.
+ *
+ * `verification_reason` is admin-only and is NEVER selected or returned here.
+ */
+const PUBLIC_VERIFICATION_FIELDS = "verification_status,verified_at";
+
+async function loadSocial(
+  admin: ReturnType<typeof createAdminClient>,
+  creatorUserId: string,
+  viewerUserId: string | null,
+) {
+  let followerCount = 0;
+  const { count, error: countError } = await admin
+    .from("creator_follows")
+    .select("follower_user_id", { count: "exact", head: true })
+    .eq("creator_user_id", creatorUserId);
+  if (!countError) followerCount = Number(count ?? 0);
+
+  let isFollowing = false;
+  if (viewerUserId && viewerUserId !== creatorUserId) {
+    const { data } = await admin
+      .from("creator_follows")
+      .select("follower_user_id")
+      .eq("creator_user_id", creatorUserId)
+      .eq("follower_user_id", viewerUserId)
+      .maybeSingle();
+    isFollowing = Boolean(data);
+  }
+
+  let verificationStatus = "creator";
+  let verifiedAt: string | null = null;
+  const { data: profile } = await admin
+    .from("creator_profiles")
+    .select(PUBLIC_VERIFICATION_FIELDS)
+    .eq("user_id", creatorUserId)
+    .maybeSingle();
+  if (profile) {
+    const status = String((profile as Record<string, unknown>).verification_status ?? "creator");
+    verificationStatus = ["verified", "featured", "partner"].includes(status) ? status : "creator";
+    const stamp = (profile as Record<string, unknown>).verified_at;
+    verifiedAt = stamp ? String(stamp) : null;
+  }
+
+  return {
+    followerCount,
+    isFollowing,
+    verification_status: verificationStatus,
+    verified_at: verifiedAt,
+  };
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
@@ -183,11 +236,17 @@ Deno.serve(async (req) => {
     if (mode === "public") {
       const userId = await resolvePublicUserId(admin, body as Record<string, unknown>);
       if (!userId) return json(emptyPortfolio);
-      if (!(await hasCreatorRole(admin, userId))) return json(emptyPortfolio);
+
+      // Viewer identity for `isFollowing` comes ONLY from the verified bearer
+      // token on this request — never from the request body.
+      const viewer = await getOptionalUser(req, admin);
+      const social = await loadSocial(admin, userId, viewer?.id ?? null);
+
+      if (!(await hasCreatorRole(admin, userId))) return json({ ...emptyPortfolio, ...social });
 
       const result = await loadTemplates(admin, userId);
       // Public mode: public-safe template/review fields only. No author PII,
-      // no email, no private roles/profile/billing data.
+      // no email, no private roles/profile/billing data, no verification_reason.
       return json({
         templates: result.templates.map((template) => ({
           id: template.id,
@@ -201,6 +260,7 @@ Deno.serve(async (req) => {
         publishedCount: result.publishedCount,
         buckets: result.buckets,
         reviewStatusTracked: result.reviewStatusTracked,
+        ...social,
       });
     }
 
@@ -209,8 +269,10 @@ Deno.serve(async (req) => {
     if (!(await hasCreatorRole(admin, user.id))) return json({ error: "Creator access required" }, 403);
 
     const result = await loadTemplates(admin, user.id);
-    return json(result);
+    const social = await loadSocial(admin, user.id, user.id);
+    return json({ ...result, ...social });
   } catch (error) {
     return json({ error: errorMessage(error) }, 400);
   }
 });
+
