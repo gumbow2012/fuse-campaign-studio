@@ -511,6 +511,8 @@ export default function TemplateStudioPage() {
   }, [selectedTemplateId]);
 
   const selectedTemplate = templates.find((template) => template.id === selectedTemplateId) ?? null;
+  /** FT7 — in-progress cast selection. Not sent to the runner in this phase. */
+  const [castSelection, setCastSelection] = useState<CastSelection>({});
 
   useEffect(() => {
     if (!selectedTemplate) return;

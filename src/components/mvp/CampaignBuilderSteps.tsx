@@ -11,25 +11,27 @@ export type BuilderStep = {
 };
 
 /**
- * Campaign builder steps as data. The Cast step is not built yet, so it is
- * disabled (auto-skipped) for every template until that phase ships.
+ * Campaign builder steps as data. The Cast step is gated on a template
+ * declaring cast support, so it stays auto-skipped until that flag arrives.
  */
 export function buildCampaignSteps({
   hasRequirements,
   assetsReady,
   canGenerate,
   castEnabled = false,
+  castComplete = false,
 }: {
   hasRequirements: boolean;
   assetsReady: boolean;
   canGenerate: boolean;
   castEnabled?: boolean;
+  castComplete?: boolean;
 }): BuilderStep[] {
   return [
     { id: "preview", label: "Preview", enabled: true, complete: true },
     { id: "requirements", label: "Requirements", enabled: true, complete: hasRequirements },
     { id: "assets", label: "Assets", enabled: true, complete: assetsReady },
-    { id: "cast", label: "Cast", enabled: castEnabled, complete: false },
+    { id: "cast", label: "Cast", enabled: castEnabled, complete: castComplete },
     { id: "review", label: "Review", enabled: true, complete: assetsReady },
     { id: "generate", label: "Generate", enabled: true, complete: canGenerate },
   ];
