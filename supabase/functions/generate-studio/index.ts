@@ -561,7 +561,14 @@ async function syncGeneration(admin: AdminClient, row: any) {
       .select("*")
       .single();
 
+    // GS-PERF6: best-effort gallery thumbnail (never blocks or fails the row).
+    const completed = updated ?? { ...row, status: "complete", output_url: output.url, output_type: output.type };
+    if (!completed.preview_url) {
+      await generatePreviewThumbnail(admin, completed);
+    }
+
     return serializeGeneration(updated ?? row);
+
   } catch (error) {
     // A hung/rate-limited provider call must never fail the row or the invocation.
     if (error instanceof ProviderTimeout) return serializeGeneration(row);
