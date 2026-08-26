@@ -171,7 +171,13 @@ export interface ApiTemplate {
     videoOutputs: number;
   } | null;
   created_at?: string | null;
+  /**
+   * FT7 — optional cast support flag. Undefined for every template today, so
+   * the Cast step stays skipped. Populated by a later phase (FT8).
+   */
+  castConfig?: { supported?: boolean; slots?: number } | null;
 }
+
 
 export async function fetchTemplates(token: string): Promise<ApiTemplate[]> {
   try {
