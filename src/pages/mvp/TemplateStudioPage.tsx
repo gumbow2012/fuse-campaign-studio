@@ -1903,6 +1903,23 @@ export default function TemplateStudioPage() {
           </div>
         </DialogContent>
       </Dialog>
+
+      <CampaignHistoryDrawer
+        open={historyOpen}
+        onOpenChange={setHistoryOpen}
+        campaigns={recentRuns}
+        activeRunId={activeRunId}
+        isLoading={recentRunsQuery.isLoading}
+        isError={recentRunsQuery.isError}
+        hasNextPage={recentRunsQuery.hasNextPage}
+        isFetchingNextPage={recentRunsQuery.isFetchingNextPage}
+        onLoadMore={() => void recentRunsQuery.fetchNextPage()}
+        onRetry={() => void refetchRecentRuns()}
+        previewUrlForTemplate={previewUrlForTemplate}
+        onOpen={handleOpenHistoricalRun}
+        onDownload={handleDownloadCampaign}
+        onRemix={handleRemixCampaign}
+      />
     </SiteShell>
 
   );
