@@ -1926,19 +1926,8 @@ export default function TemplateStudioPage() {
 
 
 
-      {/* P0: Pro entry point — placeholder until the private-fork editor lands.
-          Replacing this body with real navigation is a one-line swap in handleCustomizeWorkflow. */}
-      <Dialog open={privateWorkflowDialogOpen} onOpenChange={setPrivateWorkflowDialogOpen}>
-        <DialogContent className="border-white/10 bg-[#0c101c] text-slate-100 sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle className="font-display tracking-[0.12em]">Your private workflow</DialogTitle>
-            <DialogDescription className="text-sm text-slate-400">
-              Workflow customization is being set up for your account. Your private version will let
-              you adjust this campaign's workflow without ever affecting the original template.
-            </DialogDescription>
-          </DialogHeader>
-        </DialogContent>
-      </Dialog>
+
+
 
       {/* P0: locked upsell for Starter / Plus / Free — the graph itself is never hidden. */}
       <Dialog open={workflowUpgradeDialogOpen} onOpenChange={setWorkflowUpgradeDialogOpen}>
