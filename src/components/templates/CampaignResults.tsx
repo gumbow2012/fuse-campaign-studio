@@ -223,13 +223,15 @@ export default function CampaignResults({
                         {onRegenerate ? (
                           <button
                             type="button"
-                            onClick={() => onRegenerate(output, index)}
+                            onClick={() => onRegenerate(number)}
                             aria-label={`Regenerate ${label}`}
+                            title="Regenerate this output"
                             className="rounded-full p-1.5 text-slate-300 hover:bg-white/[0.08]"
                           >
                             <RefreshCw className="h-3.5 w-3.5" />
                           </button>
                         ) : null}
+
                       </div>
                     </div>
                   </article>
