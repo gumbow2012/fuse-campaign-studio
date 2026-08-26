@@ -43,7 +43,151 @@ function classifyHiddenReference(node: any) {
   return editor.mode === "reference" || !!node.default_asset_id;
 }
 
-export async function buildJobStatusResponse(admin: AdminClient, jobId: string, runnerAccess: boolean, userId: string | null) {
+/** TR2: public node types — deliberately generic, never derived from prompts. */
+export type PublicNodeType = "INPUT" | "PREPARE" | "IMAGE" | "VIDEO" | "OUTPUT" | "PROCESS";
+
+const PUBLIC_TYPE_BY_NODE_TYPE: Record<string, PublicNodeType> = {
+  user_input: "INPUT",
+  prompt: "PREPARE",
+  image_gen: "IMAGE",
+  video_gen: "VIDEO",
+};
+
+const PUBLIC_LABEL_BY_TYPE: Record<PublicNodeType, string> = {
+  INPUT: "Input",
+  PREPARE: "Prepare",
+  IMAGE: "Image",
+  VIDEO: "Video",
+  OUTPUT: "Output",
+  PROCESS: "Process",
+};
+
+const PUBLIC_STAGE_MESSAGE: Record<PublicNodeType, string> = {
+  INPUT: "Preparing assets",
+  PREPARE: "Preparing assets",
+  IMAGE: "Creating campaign frames",
+  VIDEO: "Building video",
+  OUTPUT: "Finalizing outputs",
+  PROCESS: "Processing",
+};
+
+type PublicGraphNode = {
+  id: string;
+  type: PublicNodeType;
+  label: string;
+  stage: number;
+  deps: string[];
+  status: "waiting" | "active" | "complete" | "failed";
+  outputNumber: number | null;
+};
+
+/**
+ * TR2 — customer-SAFE execution graph. Carries no prompt_config, no gen-node
+ * names, no mapping_logic, no provider internals, no input payloads and no
+ * private reference URLs. Only opaque node ids, generic types and dependencies.
+ */
+export function buildPublicExecutionGraph(
+  nodes: any[],
+  edges: any[],
+  steps: any[],
+  outputExposureByNodeId: Record<string, unknown> | Map<string, unknown>,
+  options: {
+    inputLabelByNodeId?: Record<string, string>;
+    outputNumberByNodeId?: Record<string, number>;
+  } = {},
+) {
+  const exposureLookup = (nodeId: string) =>
+    outputExposureByNodeId instanceof Map
+      ? outputExposureByNodeId.get(nodeId)
+      : (outputExposureByNodeId ?? {})[nodeId];
+
+  const nodeIds = new Set((nodes ?? []).map((node: any) => String(node.id)));
+  const links = (edges ?? [])
+    .filter((edge: any) => nodeIds.has(String(edge.source_node_id)) && nodeIds.has(String(edge.target_node_id)))
+    .map((edge: any) => ({ source: String(edge.source_node_id), target: String(edge.target_node_id) }));
+
+  const depsByNode = new Map<string, string[]>();
+  for (const id of nodeIds) depsByNode.set(id, []);
+  for (const link of links) depsByNode.get(link.target)!.push(link.source);
+
+  // Topological depth (0 = inputs / no dependencies). Cycle-safe via visit guard.
+  const stageCache = new Map<string, number>();
+  const stageOf = (id: string, seen = new Set<string>()): number => {
+    if (stageCache.has(id)) return stageCache.get(id)!;
+    if (seen.has(id)) return 0;
+    seen.add(id);
+    const deps = depsByNode.get(id) ?? [];
+    const stage = deps.length ? Math.max(...deps.map((dep) => stageOf(dep, seen) + 1)) : 0;
+    stageCache.set(id, stage);
+    return stage;
+  };
+
+  const stepByNodeId = new Map<string, any>();
+  for (const step of steps ?? []) {
+    // Last step for a node wins (retries supersede earlier attempts).
+    stepByNodeId.set(String(step.node_id), step);
+  }
+
+  const statusFor = (nodeId: string): PublicGraphNode["status"] => {
+    const step = stepByNodeId.get(nodeId);
+    if (!step) return "waiting";
+    if (step.status === "complete") return "complete";
+    if (step.status === "running") return "active";
+    if (step.status === "failed") return "failed";
+    return "waiting";
+  };
+
+  const publicNodes: PublicGraphNode[] = (nodes ?? []).map((node: any) => {
+    const id = String(node.id);
+    const outputNumber = options.outputNumberByNodeId?.[id] ?? null;
+    const isExposedOutput = outputNumber !== null || !!exposureLookup(id);
+    const baseType = PUBLIC_TYPE_BY_NODE_TYPE[String(node.node_type)] ?? "PROCESS";
+    const type: PublicNodeType = isExposedOutput && baseType !== "INPUT" ? "OUTPUT" : baseType;
+    const label = type === "INPUT"
+      ? (options.inputLabelByNodeId?.[id] ?? PUBLIC_LABEL_BY_TYPE.INPUT)
+      : PUBLIC_LABEL_BY_TYPE[type];
+
+    return {
+      id,
+      type,
+      label,
+      stage: stageOf(id),
+      deps: depsByNode.get(id) ?? [],
+      status: statusFor(id),
+      outputNumber,
+    };
+  });
+
+  return { nodes: publicNodes, links };
+}
+
+/** Friendly, non-revealing message for whatever stage is currently active. */
+function publicStageMessage(
+  graph: { nodes: PublicGraphNode[] },
+  jobStatus: string,
+  hasError: boolean,
+) {
+  if (hasError || jobStatus === "failed") return "Something went wrong";
+  if (jobStatus === "complete") return "Finalizing outputs";
+  const active = graph.nodes
+    .filter((node) => node.status === "active")
+    .sort((a, b) => a.stage - b.stage)[0];
+  if (active) return PUBLIC_STAGE_MESSAGE[active.type];
+  const nextWaiting = graph.nodes
+    .filter((node) => node.status === "waiting")
+    .sort((a, b) => a.stage - b.stage)[0];
+  if (nextWaiting) return PUBLIC_STAGE_MESSAGE[nextWaiting.type];
+  return "Preparing assets";
+}
+
+export async function buildJobStatusResponse(
+  admin: AdminClient,
+  jobId: string,
+  runnerAccess: boolean,
+  userId: string | null,
+  options: { includeSensitive?: boolean } = {},
+) {
+  const includeSensitive = options.includeSensitive === true;
   let { data: job, error: jobError } = await admin
     .from("execution_jobs")
     .select("id, user_id, template_id, version_id, status, progress, started_at, completed_at, input_payload, result_payload, error_log, fuse_templates!execution_jobs_template_id_fkey(id, name), template_versions!execution_jobs_version_id_fkey(id, version_number, review_status)")
@@ -51,6 +195,7 @@ export async function buildJobStatusResponse(admin: AdminClient, jobId: string, 
     .single();
   if (jobError || !job) throw new Error(jobError?.message ?? "Job not found");
   if (!runnerAccess && job.user_id !== userId) throw new Error("Forbidden");
+
 
   if (job.status === "running" || job.status === "queued") {
     await reconcileRunningSteps(admin, job.id);
