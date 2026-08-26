@@ -1001,16 +1001,44 @@ Deno.serve(async (req) => {
         makeActive,
       });
 
+      // FT9 — optionally seed cast metadata on the fresh DRAFT only.
+      let draftCastConfig: unknown = null;
+      if (body.castConfig) {
+        const raw = body.castConfig as Record<string, unknown>;
+        const rawSlots = Array.isArray(raw.slots) ? raw.slots : [];
+        const remapped = {
+          ...raw,
+          slots: rawSlots.map((slot: any) => {
+            const sourceNodeId = typeof slot?.nodeId === "string" ? slot.nodeId : "";
+            return { ...slot, nodeId: result.nodeIdMap[sourceNodeId] ?? sourceNodeId };
+          }),
+        };
+        const allowedNodeIds = new Set(Object.values(result.nodeIdMap));
+        draftCastConfig = normalizeCastConfig(remapped, allowedNodeIds);
+        const { error: draftCastError } = await admin
+          .from("template_versions")
+          .update({ cast_config: draftCastConfig })
+          .eq("id", result.versionId)
+          .eq("is_active", false);
+        if (draftCastError) throw new Error(draftCastError.message);
+      }
+
       await logAuditEvent({
         eventType: "template_version_cloned",
         message: `Admin cloned template version ${sourceVersionId}`,
         source: "admin-template-workbench",
         templateId: result.templateId,
         versionId: result.versionId,
-        metadata: { adminUserId: user.id, sourceVersionId, counts: result.counts },
+        metadata: {
+          adminUserId: user.id,
+          sourceVersionId,
+          counts: result.counts,
+          castSeeded: !!draftCastConfig,
+        },
       }, admin);
 
-      return json(result);
+      return json({ ...result, castConfig: draftCastConfig });
+
     }
 
     if (action === "activate_version") {
