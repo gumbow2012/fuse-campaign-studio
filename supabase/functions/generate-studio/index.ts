@@ -126,6 +126,38 @@ function serializeGeneration(row: any) {
   };
 }
 
+/**
+ * GS-PERF1: gallery list reads select ONLY these columns — never input_payload,
+ * never error_log, never full prompt bodies or reference arrays.
+ */
+const LIST_SELECT =
+  "id, status, kind, prompt, output_url, output_type, estimated_credits, estimated_cost_usd, provider_model, favorited, created_at, completed_at";
+
+function truncatePrompt(prompt: unknown, max = 160): string | null {
+  const text = String(prompt ?? "").trim();
+  if (!text) return null;
+  return text.length > max ? `${text.slice(0, max).trimEnd()}…` : text;
+}
+
+/** Lightweight per-row shape for the gallery list. Heavy fields stay in `detail`. */
+function serializeGenerationListItem(row: any) {
+  return {
+    id: row.id,
+    status: row.status as "queued" | "running" | "complete" | "failed",
+    kind: row.kind ?? null,
+    promptPreview: truncatePrompt(row.prompt),
+    outputUrl: row.output_url ?? null,
+    previewUrl: null as string | null,
+    outputType: row.output_type ?? null,
+    estimatedCredits: row.estimated_credits ?? null,
+    estimatedCostUsd: row.estimated_cost_usd ? Number(row.estimated_cost_usd) : null,
+    providerModel: row.provider_model ?? null,
+    favorited: row.favorited === true,
+    createdAt: row.created_at ?? null,
+    completedAt: row.completed_at ?? null,
+  };
+}
+
 type StartInput = {
   kind?: string;
   model?: string;
@@ -584,35 +616,68 @@ Deno.serve(async (req) => {
     }
 
     if (action === "list" || action === "queue") {
+      /**
+       * GS-PERF1 (P0/P1/P13): the gallery read is a FAST DB READ ONLY.
+       * No syncGeneration/FAL calls, no stuck-row expiry, no SELECT * —
+       * webhooks are the completion path; `reconcile` is the explicit fallback.
+       */
       const limit = Math.min(200, Math.max(1, Number(body.limit ?? 20)));
       const { data: rows, error } = await admin
         .from("studio_generations")
-        .select("*")
+        .select(LIST_SELECT)
         .eq("user_id", user.id)
         .order("created_at", { ascending: false })
         .limit(limit);
       if (error) throw new Error(error.message);
 
+      return json({ generations: (rows ?? []).map(serializeGenerationListItem) });
+    }
+
+    if (action === "detail") {
+      // Heavy single-row read for the lightbox: full prompt, payload, debug, error.
+      if (!body.generationId) throw new Error("generationId is required");
+      const { data: row, error } = await admin
+        .from("studio_generations")
+        .select("*")
+        .eq("id", body.generationId)
+        .eq("user_id", user.id)
+        .maybeSingle();
+      if (error) throw new Error(error.message);
+      if (!row) return json({ error: "Generation not found" }, 404);
+      return json({ generation: serializeGeneration(row) });
+    }
+
+    if (action === "reconcile") {
       /**
-       * Bounded reconciliation: expire dead rows, then poll at most
-       * MAX_RECONCILE_PER_CALL fresh in-flight rows sequentially. Anything else
-       * is returned as-is — its webhook completes it, or it expires above.
+       * Missed-webhook safety net ONLY — never invoked by ordinary gallery
+       * rendering. Reconciles an explicit id list with bounded concurrency;
+       * read-only against providers, never creates jobs (no duplicates).
        */
-      const results = new Map<string, ReturnType<typeof serializeGeneration>>();
-      let reconciled = 0;
-      for (const row of rows ?? []) {
-        if (!isInFlight(row)) continue;
-        if (isStuck(row)) {
-          results.set(row.id, await expireGeneration(admin, row));
-          continue;
-        }
-        if (reconciled >= MAX_RECONCILE_PER_CALL) continue;
-        reconciled += 1;
-        results.set(row.id, await syncGeneration(admin, row));
+      const ids = (Array.isArray(body.generationIds) ? body.generationIds : [])
+        .map((id) => String(id ?? "").trim())
+        .filter(Boolean)
+        .slice(0, MAX_RECONCILE_PER_CALL);
+      if (!ids.length) throw new Error("generationIds is required");
+
+      const { data: rows, error } = await admin
+        .from("studio_generations")
+        .select("*")
+        .eq("user_id", user.id)
+        .in("id", ids);
+      if (error) throw new Error(error.message);
+
+      const inFlightRows = (rows ?? []).filter(isInFlight);
+      const reconciled = new Map<string, ReturnType<typeof serializeGeneration>>();
+      const CONCURRENCY = 3;
+      for (let i = 0; i < inFlightRows.length; i += CONCURRENCY) {
+        const chunk = inFlightRows.slice(i, i + CONCURRENCY);
+        const settled = await Promise.all(chunk.map((row) => syncGeneration(admin, row)));
+        for (const entry of settled) reconciled.set(String(entry.id), entry);
       }
 
-      const generations = (rows ?? []).map((row) => results.get(row.id) ?? serializeGeneration(row));
-
+      const generations = (rows ?? []).map(
+        (row) => reconciled.get(row.id) ?? serializeGeneration(row),
+      );
       return json({ generations });
     }
 

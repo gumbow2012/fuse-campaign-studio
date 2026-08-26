@@ -239,18 +239,25 @@ const RESOLUTION_MULTIPLIER: Record<string, number> = {
   "4K": 3.5,
 };
 
+/**
+ * GS-PERF1: gallery rows come from the lightweight list action — heavy fields
+ * (prompt, inputPayload, error) are only present after a `detail` fetch or a
+ * reconcile merge, so they stay optional here.
+ */
 type Generation = {
   id: string;
   status: "queued" | "running" | "complete" | "failed";
   kind: string | null;
-  prompt: string | null;
+  prompt?: string | null;
+  promptPreview?: string | null;
   outputUrl: string | null;
+  previewUrl?: string | null;
   outputType: string | null;
-  error: string | null;
+  error?: string | null;
   estimatedCredits: number | null;
   estimatedCostUsd: number | null;
   providerModel: string | null;
-  inputPayload: Record<string, unknown> | null;
+  inputPayload?: Record<string, unknown> | null;
   favorited?: boolean;
   createdAt: string | null;
   completedAt: string | null;
@@ -488,7 +495,7 @@ function GenerationCard({
               {isImage ? (
                 <img
                   src={generation.outputUrl as string}
-                  alt={generation.prompt ?? "Generated result"}
+                  alt={generation.prompt ?? generation.promptPreview ?? "Generated result"}
                   className="h-full w-full object-cover"
                 />
               ) : (
@@ -854,6 +861,43 @@ export default function GenerationStudio() {
     return () => clearInterval(timer);
   }, [hasInFlight, loadQueue]);
 
+  /**
+   * Missed-webhook safety net (GS-PERF1): the gallery list is a pure DB read,
+   * so rows in flight > 2 minutes are reconciled explicitly, at most every 30s.
+   */
+  const lastReconcileRef = useRef(0);
+  useEffect(() => {
+    if (!hasInFlight) return;
+    const timer = setInterval(() => {
+      const now = Date.now();
+      if (now - lastReconcileRef.current < 30_000) return;
+      const staleIds = generations
+        .filter(
+          (entry) =>
+            (entry.status === "queued" || entry.status === "running") &&
+            entry.createdAt &&
+            now - Date.parse(entry.createdAt) > 120_000,
+        )
+        .map((entry) => entry.id)
+        .slice(0, 6);
+      if (!staleIds.length) return;
+      lastReconcileRef.current = now;
+      void callStudio({ action: "reconcile", generationIds: staleIds })
+        .then((data) => {
+          const reconciled = (data?.generations ?? []) as Generation[];
+          if (!reconciled.length) return;
+          setGenerations((prev) =>
+            prev.map((entry) => {
+              const update = reconciled.find((row) => row.id === entry.id);
+              return update ? { ...entry, ...update } : entry;
+            }),
+          );
+        })
+        .catch(() => null);
+    }, 5000);
+    return () => clearInterval(timer);
+  }, [hasInFlight, generations]);
+
   const addReference = useCallback((url: string) => {
     setReferences((prev) => {
       if (prev.some((entry) => entry.url === url)) return prev;
@@ -869,6 +913,29 @@ export default function GenerationStudio() {
     () => generations.find((entry) => entry.id === lightboxId) ?? null,
     [generations, lightboxId],
   );
+
+  /**
+   * GS-PERF1: the lightbox needs the FULL row (prompt, payload, references,
+   * error). List rows are light, so fetch `detail` on open and merge it in.
+   */
+  useEffect(() => {
+    if (!lightboxId) return;
+    const entry = generations.find((item) => item.id === lightboxId);
+    if (!entry || entry.inputPayload) return;
+    let cancelled = false;
+    void callStudio({ action: "detail", generationId: lightboxId })
+      .then((data) => {
+        const full = data?.generation as Generation | undefined;
+        if (cancelled || !full) return;
+        setGenerations((prev) =>
+          prev.map((item) => (item.id === lightboxId ? { ...item, ...full } : item)),
+        );
+      })
+      .catch(() => null);
+    return () => {
+      cancelled = true;
+    };
+  }, [lightboxId, generations]);
 
   const useAsReference = useCallback(
     (url: string) => {
@@ -939,12 +1006,23 @@ export default function GenerationStudio() {
   }, []);
 
   /** Restore prompt + reference stack (REF order preserved) from a past generation. */
-  const recreate = useCallback((generation: Generation) => {
-    const recipe = generationRecipe(generation);
+  const recreate = useCallback(async (generation: Generation) => {
+    // List rows are light — pull the full payload first if it hasn't loaded yet.
+    let full = generation;
+    if (!full.inputPayload) {
+      try {
+        const data = await callStudio({ action: "detail", generationId: generation.id });
+        if (data?.generation) full = { ...generation, ...(data.generation as Generation) };
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : "Could not load the recipe");
+        return;
+      }
+    }
+    const recipe = generationRecipe(full);
     setPrompt(recipe.prompt);
     setReferences(recipe.urls.slice(0, MAX_REFERENCES).map((url) => ({ url, label: "" })));
     if (recipe.aspect) setAspectRatio(recipe.aspect);
-    const plan = readShotPlan(generation.inputPayload);
+    const plan = readShotPlan(full.inputPayload ?? null);
     setShotPlan(plan);
     setDirectionExpanded(!(plan.length > 0 || recipe.prompt.length > 1200));
     setLightboxId(null);
@@ -1015,7 +1093,17 @@ export default function GenerationStudio() {
       if (entry.status === "failed" && previous && previous !== "failed") latest = entry;
     }
     if (!latest) return;
-    setRecentFailure({ id: latest.id, error: latest.error ?? null });
+    const failedId = latest.id;
+    // List rows carry no error_log (P13) — pull the reason via `detail` once.
+    if (latest.error) {
+      setRecentFailure({ id: failedId, error: latest.error });
+    } else {
+      void callStudio({ action: "detail", generationId: failedId })
+        .then((data) =>
+          setRecentFailure({ id: failedId, error: (data?.generation?.error as string) ?? null }),
+        )
+        .catch(() => setRecentFailure({ id: failedId, error: null }));
+    }
     toast.error("Generation failed", {
       description: "See “Technical details” above the gallery for the provider reason.",
     });
@@ -2132,7 +2220,7 @@ export default function GenerationStudio() {
                     <div className="mt-auto space-y-2 border-t border-white/10 pt-4">
                       <Button
                         variant="outline"
-                        onClick={() => recreate(lightbox)}
+                        onClick={() => void recreate(lightbox)}
                         className="w-full border-white/15 bg-white/[0.04]"
                       >
                         <RefreshCw size={15} className="mr-2" /> Recreate
