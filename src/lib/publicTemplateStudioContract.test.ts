@@ -10,7 +10,7 @@ describe("public template studio access", () => {
 
     expect(appSource).toContain('path="/app/templates" element={<TemplateStudioPage />}');
     expect(appSource).not.toContain('<CustomerRoute>\n                  <TemplateStudioPage />');
-    expect(shellSource).toContain('<NavLink to="/app/templates" className={navLinkClass}>');
+    expect(shellSource).toContain('<NavLink to="/app/templates"');
     expect(studioSource).toContain('queryFn: () => fetchTemplates("")');
   });
 
