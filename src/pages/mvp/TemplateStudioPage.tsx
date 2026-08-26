@@ -452,6 +452,7 @@ export default function TemplateStudioPage() {
   const [recentRefreshCooldown, setRecentRefreshCooldown] = useState(0);
   const [detailTemplateId, setDetailTemplateId] = useState<string | null>(null);
   const runnerSectionRef = useRef<HTMLElement | null>(null);
+  const workspaceSectionRef = useRef<HTMLElement | null>(null);
   /** Auto-advance: the next unfilled slot gets a subtle highlight + scroll focus. */
   const [focusedInputKey, setFocusedInputKey] = useState<string | null>(null);
   const slotRefs = useRef<Record<string, HTMLDivElement | null>>({});
