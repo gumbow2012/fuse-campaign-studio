@@ -399,6 +399,7 @@ async function applyCreditPackTopup(args: {
   billingMode: StripeBillingMode;
   pack: CreditPackDefinition;
   profile: { user_id: string; email: string };
+  ledgerDescription?: string;
 }) {
   const { admin, pack } = args;
 
