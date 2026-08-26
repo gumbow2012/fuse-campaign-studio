@@ -3215,9 +3215,13 @@ const TemplateCanvas = () => {
                   nodes={detail.nodes.map((node) => ({ id: node.id, name: node.name, nodeType: node.nodeType }))}
                   castConfig={parseCastConfig(detail.castConfig)}
                   saving={mutating === "save-cast-config"}
-                  disabled={!!mutating && mutating !== "save-cast-config"}
+                  cloning={mutating === "clone-version-for-cast"}
+                  isActiveVersion={detail.isActive}
+                  disabled={!!mutating && mutating !== "save-cast-config" && mutating !== "clone-version-for-cast"}
                   onSave={saveCastConfig}
+                  onCloneForCast={cloneVersionForCast}
                 />
+
               </div>
             ) : null}
             <div className="mt-4 grid gap-4 xl:grid-cols-12">
