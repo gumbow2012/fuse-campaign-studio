@@ -1542,7 +1542,9 @@ export default function TemplateStudioPage() {
             <section className="rounded-[2rem] border border-white/10 bg-slate-950/75 p-6 shadow-[0_24px_80px_rgba(0,0,0,0.35)] backdrop-blur-xl">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
-                  <p className="text-[11px] uppercase tracking-[0.24em] text-muted-foreground">Result</p>
+                  <p className="text-[11px] uppercase tracking-[0.24em] text-muted-foreground">
+                    Result{selectedTemplate ? ` · ${selectedTemplate.name}` : ""}
+                  </p>
                   <p className="mt-2 text-sm text-slate-300">
                     Current run {jobId ? <span className="font-mono text-slate-100">{jobId}</span> : "has not started yet"}.
                   </p>
