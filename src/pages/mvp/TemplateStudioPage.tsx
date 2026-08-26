@@ -19,7 +19,8 @@ import {
   
 } from "lucide-react";
 import SiteShell from "@/components/mvp/SiteShell";
-import RunFeedbackCard from "@/components/mvp/RunFeedbackCard";
+import RunFeedbackInline from "@/components/mvp/RunFeedbackInline";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import CreditPackDialog from "@/components/mvp/CreditPackDialog";
 import TemplateDetailDialog, { readTemplateAspectRatio } from "@/components/mvp/TemplateDetailDialog";
 import TemplateInputCard from "@/components/templates/TemplateInputCard";
@@ -441,6 +442,8 @@ export default function TemplateStudioPage() {
   const [libraryAssets, setLibraryAssets] = useState<Record<string, { url: string; name?: string | null } | null>>({});
   const [textInputs, setTextInputs] = useState<Record<string, string>>({});
   const [jobId, setJobId] = useState<string | null>(null);
+  const [privateWorkflowDialogOpen, setPrivateWorkflowDialogOpen] = useState(false);
+  const [workflowUpgradeDialogOpen, setWorkflowUpgradeDialogOpen] = useState(false);
   const [result, setResult] = useState<RunnerResult | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [checkingCredits, setCheckingCredits] = useState(false);
@@ -718,15 +721,17 @@ export default function TemplateStudioPage() {
         const status = await fetchJobStatus(jobId);
         if (cancelled) return;
 
-        setResult({
+        // P0: never lose the graph — if a later poll omits publicGraph/statusMessage,
+        // keep the previously fetched snapshot (pinned to the run's template version).
+        setResult((prev) => ({
           status: status.status,
           progress: status.progress ?? 0,
           outputs: Array.isArray(status.outputs) ? status.outputs : [],
           error: status.error ?? undefined,
-          publicGraph: status.publicGraph,
-          statusMessage: status.statusMessage,
+          publicGraph: status.publicGraph ?? prev?.publicGraph,
+          statusMessage: status.statusMessage ?? prev?.statusMessage,
           hasPrivilegedSteps: Array.isArray(status.steps),
-        });
+        }));
 
         if (!ACTIVE_RUN_STATUSES.has(status.status)) {
           void refetchRecentRuns();
