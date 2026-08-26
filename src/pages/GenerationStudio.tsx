@@ -1,4 +1,5 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { readStudioGalleryCache, writeStudioGalleryCache } from "@/lib/studioGalleryCache";
 import {
   ArrowLeft,
   ArrowRight,
