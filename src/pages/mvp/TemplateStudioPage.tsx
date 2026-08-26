@@ -865,6 +865,12 @@ export default function TemplateStudioPage() {
   const castConfig = selectedTemplate?.castConfig ?? null;
   const castEnabled = castConfig?.supported === true;
   const castRequired = castEnabled && castConfig?.required === true;
+  /** First face-style image input hosts the cast picker (presentation only). */
+  const castSlotFieldKey =
+    inputFields.find(
+      (field) => field.type === "image" && resolveInputRole(field.label, field.requirement?.assetType) === "face",
+    )?.key ?? null;
+
   const builderSteps = buildCampaignSteps({
     hasRequirements: inputFields.length > 0,
     assetsReady: requiredInputsAreReady,
