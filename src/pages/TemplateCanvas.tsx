@@ -11,6 +11,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { uploadRunInputFile } from "@/services/runInputUpload";
+import { listFuseAvatars, listMyAvatars, type AvatarProfile } from "@/services/avatarProfiles";
 import {
   MAX_TEMPLATE_BRANCHES,
   MAX_TEMPLATE_INPUTS,
