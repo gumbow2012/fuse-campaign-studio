@@ -905,6 +905,41 @@ export default function GenerationStudio() {
         .on(
           "postgres_changes",
           {
+            event: "INSERT",
+            schema: "public",
+            table: "studio_generations",
+            filter: `user_id=eq.${userId}`,
+          },
+          (payload) => {
+            const row = payload.new as Record<string, unknown> | null;
+            if (!row?.id) return;
+            const rowId = String(row.id);
+            // Skip rows the optimistic submit already placed in state.
+            setGenerations((prev) => {
+              if (prev.some((entry) => entry.id === rowId)) return prev;
+              const inserted: Generation = {
+                id: rowId,
+                status: (row.status as Generation["status"]) ?? "queued",
+                outputUrl: (row.output_url as string | null) ?? null,
+                outputType: (row.output_type as string | null) ?? null,
+                providerModel: (row.provider_model as string | null) ?? null,
+                estimatedCredits: (row.estimated_credits as number | null) ?? null,
+                estimatedCostUsd: (row.estimated_cost_usd as number | null) ?? null,
+                favorited: typeof row.favorited === "boolean" ? row.favorited : false,
+                createdAt: (row.created_at as string | null) ?? null,
+                completedAt: (row.completed_at as string | null) ?? null,
+                promptPreview:
+                  typeof row.prompt === "string"
+                    ? row.prompt.slice(0, 160)
+                    : null,
+              } as Generation;
+              return [inserted, ...prev];
+            });
+          },
+        )
+        .on(
+          "postgres_changes",
+          {
             event: "UPDATE",
             schema: "public",
             table: "studio_generations",
