@@ -1281,12 +1281,12 @@ export default function TemplateStudioPage() {
                   {inputFields.length ? (
                     <div>
                       <div className="flex flex-wrap items-center justify-between gap-3">
-                        <p className="text-[12px] font-semibold uppercase tracking-[0.22em] text-white">
+                        <p className="font-display text-[12px] font-semibold uppercase tracking-[0.22em] text-white">
                           Add your campaign assets
                         </p>
                         <p
                           className={cn(
-                            "text-[11px] font-semibold uppercase tracking-[0.2em]",
+                            "font-display text-[11px] font-semibold uppercase tracking-[0.2em]",
                             requiredInputsAreReady ? "text-emerald-200" : "text-cyan-100",
                           )}
                         >
@@ -1403,7 +1403,7 @@ export default function TemplateStudioPage() {
                       <div className="min-w-0">
                         <p
                           className={cn(
-                            "text-[11px] font-semibold uppercase tracking-[0.2em]",
+                            "font-display text-[11px] font-semibold uppercase tracking-[0.2em]",
                             requiredInputsAreReady ? "text-emerald-200" : "text-slate-400",
                           )}
                         >
