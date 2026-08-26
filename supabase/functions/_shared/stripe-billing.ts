@@ -721,23 +721,42 @@ export function createCreditCheckoutHandler(mode: StripeBillingMode) {
         allow_promotion_codes: true,
         line_items: [{
           quantity: 1,
-          price_data: {
-            currency: pack.currency,
-            unit_amount: pack.amountCents,
-            product_data: {
-              name: `${pack.name} Credit Pack`,
-              description: `${pack.credits} Fuse credits`,
+          price_data: purchaseType
+            ? {
+              currency: pack.currency,
+              unit_amount: pack.amountCents,
+              product_data: {
+                name: pack.name,
+                description: "One-time FUSE credit top-up",
+              },
+            }
+            : {
+              currency: pack.currency,
+              unit_amount: pack.amountCents,
+              product_data: {
+                name: `${pack.name} Credit Pack`,
+                description: `${pack.credits} Fuse credits`,
+              },
             },
-          },
         }],
-        metadata: {
-          checkout_type: "credit_pack",
-          user_id: user.id,
-          pack_key: pack.key,
-          credits: String(pack.credits),
-          amount_cents: String(pack.amountCents),
-          billing_mode: mode,
-        },
+        metadata: purchaseType
+          ? {
+            checkout_type: "credit_topup",
+            user_id: user.id,
+            credits: String(pack.credits),
+            amount_cents: String(pack.amountCents),
+            pricing_version: pricingVersion,
+            purchase_type: purchaseType,
+            billing_mode: mode,
+          }
+          : {
+            checkout_type: "credit_pack",
+            user_id: user.id,
+            pack_key: pack.key,
+            credits: String(pack.credits),
+            amount_cents: String(pack.amountCents),
+            billing_mode: mode,
+          },
         payment_intent_data: {
           metadata: {
             checkout_type: "credit_pack",
