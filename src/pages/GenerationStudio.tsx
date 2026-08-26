@@ -956,6 +956,40 @@ export default function GenerationStudio() {
    * gallery state (the lightbox still fetches them via action:"detail").
    */
   const { user } = useAuth();
+
+  /**
+   * GS-PERF8: stale-while-revalidate first-page cache.
+   * Hydrate once from the cache (render stale rows instantly), then
+   * loadQueue's background refresh merges fresh page-1 rows in place.
+   */
+  const hydratedCacheRef = useRef(false);
+  useEffect(() => {
+    const userId = user?.id;
+    if (!userId || hydratedCacheRef.current) return;
+    hydratedCacheRef.current = true;
+    const cached = readStudioGalleryCache<Generation>(userId);
+    if (!cached || !cached.rows.length) return;
+    setGenerations((prev) => (prev.length ? prev : cached.rows));
+    if (!pagedRef.current) {
+      nextCursorRef.current = (cached.cursor as ListCursor | null) ?? null;
+      setHasMore(Boolean(cached.cursor));
+    }
+  }, [user?.id]);
+
+  /**
+   * GS-PERF8: keep the cache fresh — the list is newest-first after the
+   * GS-PERF2 in-place merge, so the first PAGE_SIZE rows ARE page 1.
+   * Realtime/reconcile mutations flow through generations, so the cache
+   * never goes stale-wrong. Only page 1 is cached (uses page1CursorRef,
+   * never the deeper pagination cursor).
+   */
+  useEffect(() => {
+    const userId = user?.id;
+    if (!userId || !generations.length) return;
+    writeStudioGalleryCache(userId, generations.slice(0, PAGE_SIZE), page1CursorRef.current);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [generations, user?.id]);
+
   useEffect(() => {
     const userId = user?.id;
     if (!userId) return;
