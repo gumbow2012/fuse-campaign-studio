@@ -4,6 +4,7 @@ import {
   buildBasedOnLabel,
   buildPersonalGraph,
   defaultForkName,
+  mergeForkEdits,
   resolveCustomizability,
   resolveForkEntitlement,
   sanitizePersonalGraphForClient,
@@ -115,5 +116,67 @@ describe("TR8 fork ownership + labels", () => {
   it("builds labels", () => {
     expect(defaultForkName("Ice 2.0")).toBe("Ice 2.0 (yours)");
     expect(buildBasedOnLabel("Ice 2.0", 3)).toBe("Based on Ice 2.0 v3");
+  });
+});
+
+describe("TR9 update_fork merge whitelist", () => {
+  const hidden = buildPersonalGraph({ nodes, edges, promptVisibility: false });
+  const visible = buildPersonalGraph({ nodes, edges, promptVisibility: true });
+
+  it("ignores an injected prompt on a prompt-hidden fork but saves direction + whitelisted settings", () => {
+    const merged = mergeForkEdits({
+      stored: hidden,
+      promptVisibility: false,
+      incoming: {
+        nodes: [
+          {
+            id: "img",
+            prompt: "INJECTED PROMPT",
+            directionOverride: "colder lighting",
+            settings: { model: "nano-banana", secret_flag: true, provider: "evil" },
+          },
+        ],
+      },
+    });
+    const img = merged.nodes.find((n) => n.id === "img")!;
+    expect(img.prompt).toBeUndefined();
+    expect(JSON.stringify(merged)).not.toContain("INJECTED PROMPT");
+    expect(img.directionOverride).toBe("colder lighting");
+    expect(img.settings.model).toBe("nano-banana");
+    expect(img.settings.secret_flag).toBeUndefined();
+    expect(img.settings.provider).toBeUndefined();
+  });
+
+  it("saves prompt edits on a prompt-visible fork", () => {
+    const merged = mergeForkEdits({
+      stored: visible,
+      promptVisibility: true,
+      incoming: { nodes: [{ id: "img", prompt: "MY PROMPT", settings: { aspect_ratio: "16:9" } }] },
+    });
+    const img = merged.nodes.find((n) => n.id === "img")!;
+    expect(img.prompt).toBe("MY PROMPT");
+    expect(img.settings.aspect_ratio).toBe("16:9");
+  });
+
+  it("keeps topology read-only", () => {
+    const merged = mergeForkEdits({
+      stored: hidden,
+      promptVisibility: false,
+      incoming: {
+        nodes: [{ id: "brand-new", node_type: "image_gen", directionOverride: "x" }],
+        edges: [],
+      },
+    });
+    expect(merged.nodes.map((n) => n.id)).toEqual(["input", "img", "vid"]);
+    expect(merged.edges).toHaveLength(2);
+  });
+
+  it("ignores prompt edits on non-promptable nodes", () => {
+    const merged = mergeForkEdits({
+      stored: visible,
+      promptVisibility: true,
+      incoming: { nodes: [{ id: "input", prompt: "nope" }] },
+    });
+    expect(merged.nodes.find((n) => n.id === "input")?.prompt).toBeUndefined();
   });
 });
