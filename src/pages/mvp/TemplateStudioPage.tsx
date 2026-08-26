@@ -8,7 +8,7 @@ import {
   Film,
   GitBranch,
   Loader2,
-  Lock,
+  
   Network,
   RefreshCw,
   Sparkles,
