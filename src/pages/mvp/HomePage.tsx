@@ -352,28 +352,43 @@ export default function HomePage() {
             </p>
           </div>
 
-          {/* Interactive hero preview — real templates, curated existing media */}
+          {/* Hero story — ORIGINAL template → your brand input → your version */}
           <div className="relative">
-            {hero ? (
+            {original ? (
               <div>
-                <div className="mx-auto w-full max-w-[330px] overflow-hidden rounded-[1.5rem] border border-cyan-200/25 bg-black">
-                  <div className="aspect-[9/16]">
-                    <AutoMedia
-                      media={hero.media}
-                      eager
-                      className="h-full w-full object-cover"
-                    />
+                <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3">
+                  <HeroTile label="Original template" media={original.media} eager />
+                  <div className="space-y-2">
+                    <div className="grid grid-cols-2 gap-1.5">
+                      {BRAND_INPUT_ASSETS.map((src) => (
+                        <img
+                          key={src}
+                          src={src}
+                          alt=""
+                          loading="lazy"
+                          className="aspect-square w-10 rounded-md border border-white/10 object-cover sm:w-12"
+                        />
+                      ))}
+                    </div>
+                    <p className="text-center text-[9px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+                      Your brand
+                    </p>
                   </div>
+                  <HeroTile
+                    label="Your version"
+                    highlight
+                    media={yourVersion?.media ?? original.media}
+                  />
                 </div>
 
-                <div className="mx-auto mt-3 max-w-[420px] space-y-2 text-center">
+                <div className="mx-auto mt-4 max-w-[420px] space-y-2 text-center">
                   <div className="flex flex-wrap items-center justify-center gap-2">
                     <p className="font-display text-sm font-semibold uppercase tracking-[0.1em] text-white">
-                      {hero.template.name}
+                      {original.template.name}
                     </p>
-                    {outputLabel(hero.template) && (
+                    {outputLabel(original.template) && (
                       <span className="text-[11px] uppercase tracking-[0.18em] text-slate-400">
-                        · {outputLabel(hero.template)}
+                        · {outputLabel(original.template)}
                       </span>
                     )}
                   </div>
@@ -400,32 +415,6 @@ export default function HomePage() {
                     <Link to="/app/templates">Use this template</Link>
                   </Button>
                 </div>
-
-                {heroPicks.length > 1 && (
-                  <div className="mt-4 flex justify-center gap-2">
-                    {heroPicks.map((entry, index) => (
-                      <button
-                        key={entry.template.id}
-                        type="button"
-                        onClick={() => setHeroIndex(index)}
-                        aria-label={entry.template.name}
-                        className={cn(
-                          "h-20 w-14 overflow-hidden rounded-lg border bg-black transition-colors",
-                          index === heroIndex
-                            ? "border-cyan-200"
-                            : "border-white/10 hover:border-white/30",
-                        )}
-                      >
-                        <img
-                          src={entry.media.type === "image" ? entry.media.url : entry.media.url}
-                          alt=""
-                          loading="lazy"
-                          className="h-full w-full object-cover"
-                        />
-                      </button>
-                    ))}
-                  </div>
-                )}
               </div>
             ) : (
               <div className="overflow-hidden rounded-[1.5rem] border border-white/10 bg-black">
@@ -433,6 +422,7 @@ export default function HomePage() {
               </div>
             )}
           </div>
+
         </div>
       </section>
 
