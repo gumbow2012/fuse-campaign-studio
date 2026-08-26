@@ -277,7 +277,63 @@ export default function HomePage() {
 
   const original = heroPair[0] ?? null;
   const yourVersion = heroPair[1] ?? null;
-  const heroRequirements = original ? requirementChips(original.template) : [];
+
+  /** Every entry already claimed by the allocator — perf shelves reuse these only. */
+  const allocatedEntries = useMemo(
+    () => [
+      ...heroPair,
+      ...trending,
+      ...newToday,
+      ...creatorDrops,
+      ...categories.flatMap((shelf) => shelf.entries),
+    ],
+    [heroPair, trending, newToday, creatorDrops, categories],
+  );
+
+  const performanceIds = useMemo(
+    () => allocatedEntries.map((entry) => String(entry.template.id ?? "")).filter(Boolean),
+    [allocatedEntries],
+  );
+
+  const { data: perfMap = {} as TemplatePerformanceMap } = useQuery({
+    queryKey: ["home-template-performance", performanceIds.slice().sort().join(",")],
+    queryFn: () => loadTemplatePerformance(performanceIds),
+    enabled: performanceIds.length > 0,
+    staleTime: 5 * 60 * 1000,
+    retry: false,
+  });
+
+  const perfFor = (entry: Entry): TemplatePerformanceRow | undefined =>
+    perfMap[String(entry.template.id ?? "")];
+
+  const heroPerf = original ? perfFor(original) : undefined;
+
+  const topRoas = useMemo(
+    () =>
+      allocatedEntries
+        .filter((entry) => (perfMap[String(entry.template.id ?? "")]?.roas ?? null) !== null)
+        .sort(
+          (a, b) =>
+            (perfMap[String(b.template.id ?? "")]?.roas ?? 0) -
+            (perfMap[String(a.template.id ?? "")]?.roas ?? 0),
+        )
+        .slice(0, 8),
+    [allocatedEntries, perfMap],
+  );
+
+  const mostTested = useMemo(
+    () =>
+      allocatedEntries
+        .filter((entry) => (perfMap[String(entry.template.id ?? "")]?.spend ?? null) !== null)
+        .sort(
+          (a, b) =>
+            (perfMap[String(b.template.id ?? "")]?.spend ?? 0) -
+            (perfMap[String(a.template.id ?? "")]?.spend ?? 0),
+        )
+        .slice(0, 8),
+    [allocatedEntries, perfMap],
+  );
+
 
   useEffect(() => {
     if (!import.meta.env.DEV) return;
