@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowLeft,
   ArrowRight,
@@ -610,6 +610,12 @@ function GenerationCard({
 }
 
 /**
+ * GS-PERF4: memoized so a realtime/reconcile update to one generation only
+ * re-renders its own card — unchanged rows keep the same object reference.
+ */
+const MemoizedGenerationCard = memo(GenerationCard);
+
+/**
  * One creative reference card in the stack. Drag handle uses dnd-kit; the arrow
  * buttons remain as the keyboard/accessibility fallback.
  */
@@ -1100,6 +1106,17 @@ export default function GenerationStudio() {
       toast.error(error instanceof Error ? error.message : "Could not update the favorite");
     }
   }, []);
+
+  /**
+   * GS-PERF4: stable card handlers — identities never change across renders,
+   * so MemoizedGenerationCard's shallow prop comparison holds.
+   */
+  const handleCardExpand = useCallback((entry: Generation) => setLightboxId(entry.id), []);
+  const handleCardDelete = useCallback((entry: Generation) => setConfirmSingle(entry), []);
+  const handleCardToggleFavorite = useCallback(
+    (entry: Generation) => void toggleFavorite(entry),
+    [toggleFavorite],
+  );
 
   /** Animate: add the image as a reference and switch the composer to Kling 3.0. */
   const animateImage = useCallback(
@@ -2069,13 +2086,13 @@ export default function GenerationStudio() {
                   <>
                     <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-4">
                       {visibleGenerations.map((generation) => (
-                        <GenerationCard
+                        <MemoizedGenerationCard
                           key={generation.id}
                           generation={generation}
                           onUseAsReference={useAsReference}
-                          onExpand={(entry) => setLightboxId(entry.id)}
-                          onDelete={(entry) => setConfirmSingle(entry)}
-                          onToggleFavorite={(entry) => void toggleFavorite(entry)}
+                          onExpand={handleCardExpand}
+                          onDelete={handleCardDelete}
+                          onToggleFavorite={handleCardToggleFavorite}
                         />
                       ))}
                     </div>
