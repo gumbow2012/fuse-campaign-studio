@@ -85,7 +85,13 @@ export default function TemplateInputCard({
   castPanel,
 }: TemplateInputCardProps) {
   const inputRef = useRef<HTMLInputElement>(null);
-  const [state, setState] = useState<UploadCheckState | "idle">("idle");
+  /*
+   * Local validation state machine: idle → validating → checking → ready|warning|error.
+   * "validating" is the silent phase (no overlay); the "checking" overlay only
+   * appears if validation lasts longer than ~180ms. Every selection must reach
+   * a terminal state — no path may leave the card stuck in checking.
+   */
+  const [state, setState] = useState<UploadCheckState | "idle" | "validating">("idle");
   const [checks, setChecks] = useState<UploadCheckResult | null>(null);
   const [warningDismissed, setWarningDismissed] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
@@ -93,6 +99,8 @@ export default function TemplateInputCard({
   const [profileOpen, setProfileOpen] = useState(false);
   const [castOpen, setCastOpen] = useState(false);
 
+  /* One stable preview URL per selected file — revoked only when the file is
+     replaced/removed or the card unmounts, so the preview never flickers. */
   const previewUrl = useMemo(() => (file ? URL.createObjectURL(file) : null), [file]);
   useEffect(() => {
     return () => {
@@ -111,18 +119,35 @@ export default function TemplateInputCard({
 
     setWarningDismissed(false);
     setChecks(null);
-    setState("uploading");
+    setState("validating");
     const toChecking = window.setTimeout(() => {
       if (!cancelled) setState("checking");
     }, 180);
 
-    void runUploadChecks(file, { transparencyRecommended: requirement?.transparencyRecommended }).then(
-      (result) => {
-        if (cancelled) return;
-        setChecks(result);
-        setState(result.state);
-      },
-    );
+    /*
+     * Terminal-state applier. The 180ms timer is cleared BEFORE the terminal
+     * state is applied, in BOTH resolve and reject paths — a fast check can
+     * never go ready and then be stomped back to "checking" by a late timer.
+     * The cancelled flag guarantees a stale file's completion never updates
+     * the card after a newer file was selected.
+     */
+    const finish = (result: UploadCheckResult) => {
+      if (cancelled) return;
+      window.clearTimeout(toChecking);
+      setChecks(result);
+      setState(result.state);
+    };
+
+    runUploadChecks(file, { transparencyRecommended: requirement?.transparencyRecommended })
+      .then(finish)
+      .catch(() =>
+        finish({
+          state: "error",
+          warnings: [],
+          error: "We couldn't check this image. Try uploading it again.",
+          notChecked: [],
+        }),
+      );
 
     return () => {
       cancelled = true;
