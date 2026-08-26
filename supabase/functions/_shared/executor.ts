@@ -1225,6 +1225,7 @@ export async function runGraphJob(admin: AdminClient, jobId: string) {
               output_payload: {
                 requestId,
                 status: "queued",
+                ...castAudit,
                 telemetry: {
                   estimatedCostUsd: costEstimate?.estimatedCostUsd ?? null,
                   billingUnit: costEstimate?.unit ?? null,
@@ -1370,6 +1371,7 @@ export async function runGraphJob(admin: AdminClient, jobId: string) {
               output_payload: {
                 requestId,
                 status: "queued",
+                ...castAudit,
                 telemetry: {
                   estimatedCostUsd: costEstimate?.estimatedCostUsd ?? null,
                   billingUnit: costEstimate?.unit ?? null,
