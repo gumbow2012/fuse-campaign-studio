@@ -23,6 +23,7 @@ import {
 import { uploadTemplateCoverAsset, uploadTemplateReferenceAsset } from "../_shared/template-assets.ts";
 import { nextEdgeOrder, sortEdgesByExecutionOrder } from "../_shared/edge-order.ts";
 import { normalizeCastConfig } from "../_shared/cast-config.ts";
+import { assertVersionActivatable } from "../_shared/fork-run.ts";
 
 
 type Action =
@@ -295,6 +296,15 @@ async function setActiveVersion(
   templateId: string,
   versionId: string,
 ) {
+  // TR10 ISOLATION: a personal fork version can never become marketplace-active.
+  const { data: guardRow, error: guardError } = await admin
+    .from("template_versions")
+    .select("id, review_status, fork_id")
+    .eq("id", versionId)
+    .maybeSingle();
+  if (guardError) throw new Error(guardError.message);
+  assertVersionActivatable(guardRow as never);
+
   const gate = await getVersionPublishGate(admin, versionId);
   if (!gate.publishable) {
     throw new Error(`Publish blocked: ${gate.reasons.join(" ")}`);
