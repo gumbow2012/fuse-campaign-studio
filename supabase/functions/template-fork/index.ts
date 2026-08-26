@@ -188,7 +188,56 @@ Deno.serve(async (req) => {
       });
     }
 
+    if (action === "update_fork" || action === "reset_fork") {
+      const forkId = String((body as Record<string, unknown>).forkId ?? "").trim();
+      if (!forkId) throw new Error("forkId is required");
+
+      const { data: fork, error: forkError } = await admin
+        .from("template_user_forks")
+        .select("id, user_id, source_version_id, personal_graph, prompt_visibility")
+        .eq("id", forkId)
+        .maybeSingle();
+      if (forkError) throw new Error(forkError.message);
+      if (!fork) throw new Error("Fork not found");
+
+      assertForkOwnership({ forkUserId: fork.user_id as string, userId: user.id, roles });
+      const promptVisibility = fork.prompt_visibility === true;
+
+      let nextGraph;
+      if (action === "update_fork") {
+        nextGraph = mergeForkEdits({
+          stored: fork.personal_graph,
+          incoming: (body as Record<string, unknown>).personalGraph,
+          promptVisibility,
+        });
+      } else {
+        // reset_fork — re-snapshot the PINNED source version graph.
+        const [nodesResult, edgesResult] = await Promise.all([
+          admin.from("nodes").select("id, name, node_type, prompt_config, default_asset_id")
+            .eq("version_id", fork.source_version_id),
+          admin.from("edges").select("source_node_id, target_node_id, mapping_logic")
+            .eq("version_id", fork.source_version_id),
+        ]);
+        if (nodesResult.error) throw new Error(nodesResult.error.message);
+        if (edgesResult.error) throw new Error(edgesResult.error.message);
+        nextGraph = buildPersonalGraph({
+          nodes: (nodesResult.data ?? []) as never,
+          edges: (edgesResult.data ?? []) as never,
+          promptVisibility,
+        });
+      }
+
+      const { error: updateError } = await admin
+        .from("template_user_forks")
+        .update({ personal_graph: nextGraph, updated_at: new Date().toISOString() })
+        .eq("id", forkId);
+      if (updateError) throw new Error(updateError.message);
+
+      return json({ ok: true, personalGraph: sanitizePersonalGraphForClient(nextGraph, promptVisibility) });
+    }
+
     throw new Error("Unsupported action");
+
   } catch (error) {
     const message = errorMessage(error);
     if (message === "Forbidden") return json({ error: "Forbidden", code: "FORBIDDEN" }, 403);
