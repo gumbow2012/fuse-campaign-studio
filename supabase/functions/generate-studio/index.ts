@@ -113,7 +113,10 @@ function serializeGeneration(row: any) {
     kind: row.kind ?? null,
     prompt: row.prompt ?? null,
     outputUrl: row.output_url ?? null,
+    previewUrl: row.preview_url ?? null,
+    posterUrl: row.poster_url ?? null,
     outputType: row.output_type ?? null,
+
     error: row.error_log ?? null,
     estimatedCredits: row.estimated_credits ?? null,
     estimatedCostUsd: row.estimated_cost_usd ? Number(row.estimated_cost_usd) : null,
