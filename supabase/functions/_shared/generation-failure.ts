@@ -221,7 +221,9 @@ export function classifyProviderFailure(
   // 500 (or any other bare status) is ambiguous → PROVIDER_FAILED.
   if (status === 503 || matchesAny(text, NETWORK_SIGNALS)) return "PROVIDER_UNAVAILABLE";
 
-  if (raw) return "PROVIDER_FAILED";
+  // Any remaining evidence — raw text or a bare ambiguous status (400/422/500)
+  // — is a provider failure. UNKNOWN is reserved for total absence of evidence.
+  if (raw || status != null) return "PROVIDER_FAILED";
   return "UNKNOWN";
 }
 
