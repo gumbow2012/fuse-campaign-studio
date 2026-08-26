@@ -5,7 +5,7 @@
  */
 
 import { useEffect, useState } from "react";
-import { Loader2, Save, Users } from "lucide-react";
+import { Copy, Loader2, Save, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import {
@@ -26,14 +26,22 @@ export default function CastConfigPanel({
   castConfig,
   saving,
   disabled,
+  isActiveVersion,
+  cloning,
   onSave,
+  onCloneForCast,
 }: {
   nodes: Array<{ id: string; name: string; nodeType: string }>;
   castConfig: CastConfig | null;
   saving?: boolean;
   disabled?: boolean;
+  /** FT9 — live versions are protected: configure cast on a clone instead. */
+  isActiveVersion?: boolean;
+  cloning?: boolean;
   onSave: (next: CastConfig | null) => void | Promise<void>;
+  onCloneForCast?: (next: CastConfig) => void | Promise<void>;
 }) {
+
   const slot = castConfig?.slots?.[0] ?? null;
   const [mode, setMode] = useState<CastMode>("NO_CASTING");
   const [nodeId, setNodeId] = useState("");
@@ -60,28 +68,33 @@ export default function CastConfigPanel({
   ]);
 
   const castEnabled = mode !== "NO_CASTING";
-  const canSave = !disabled && !saving && (!castEnabled || !!nodeId);
+  const locked = isActiveVersion === true;
+  const busy = !!saving || !!cloning;
+  const canSave = !locked && !disabled && !busy && (!castEnabled || !!nodeId);
+  const canClone = locked && !disabled && !busy && castEnabled && !!nodeId && !!onCloneForCast;
+
+  const buildConfig = (): CastConfig => ({
+    supported: true,
+    required: mode === "REQUIRED",
+    slots: [
+      {
+        id: PRIMARY_CAST_SLOT_ID,
+        label: "Cast A",
+        nodeId,
+        preservePose,
+        preserveComposition,
+        preserveEnvironment,
+        identityStrength,
+      },
+    ],
+  });
 
   const submit = () => {
     if (!castEnabled) {
       void onSave(null);
       return;
     }
-    void onSave({
-      supported: true,
-      required: mode === "REQUIRED",
-      slots: [
-        {
-          id: PRIMARY_CAST_SLOT_ID,
-          label: "Cast A",
-          nodeId,
-          preservePose,
-          preserveComposition,
-          preserveEnvironment,
-          identityStrength,
-        },
-      ],
-    });
+    void onSave(buildConfig());
   };
 
   return (
@@ -89,10 +102,22 @@ export default function CastConfigPanel({
       <div className="flex items-center gap-2">
         <Users className="h-4 w-4 text-cyan-200" />
         <p className="text-xs font-semibold uppercase tracking-[0.15em] text-foreground/80">Cast</p>
+        <span
+          className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] ${
+            locked
+              ? "bg-amber-300/10 text-amber-100"
+              : "bg-cyan-300/10 text-cyan-100"
+          }`}
+        >
+          {locked ? "Live version — protected" : "Draft test version"}
+        </span>
       </div>
       <p className="mt-1 text-xs text-muted-foreground">
-        Casting metadata only — the runner is unchanged. No casting keeps this version exactly as today.
+        {locked
+          ? "This version is live. Pick the cast settings below and clone it into a draft test version — the live graph is never touched."
+          : "Casting metadata only — the runner is unchanged. No casting keeps this version exactly as today."}
       </p>
+
 
       <div className="mt-3 grid gap-3 md:grid-cols-2">
         <div className="space-y-2">
@@ -173,10 +198,25 @@ export default function CastConfigPanel({
         </div>
       ) : null}
 
-      <Button type="button" className="mt-4" onClick={submit} disabled={!canSave}>
-        {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
-        Save Cast
-      </Button>
+      <div className="mt-4 flex flex-wrap gap-2">
+        {locked ? (
+          <Button type="button" onClick={() => void onCloneForCast?.(buildConfig())} disabled={!canClone}>
+            {cloning ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Copy className="mr-2 h-4 w-4" />}
+            Clone version for Cast
+          </Button>
+        ) : (
+          <Button type="button" onClick={submit} disabled={!canSave}>
+            {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+            Save Cast
+          </Button>
+        )}
+      </div>
+      {locked ? (
+        <p className="mt-2 text-[11px] text-muted-foreground">
+          The clone starts as an unreviewed draft. Activation stays a separate manual step after testing.
+        </p>
+      ) : null}
+
     </div>
   );
 }

@@ -585,11 +585,14 @@ async function cloneVersion(args: {
     versionId,
     versionNumber,
     templateId: targetTemplateId,
+    /** FT9 — source node id -> cloned node id, so draft-only metadata can be remapped. */
+    nodeIdMap: Object.fromEntries(idMap.entries()) as Record<string, string>,
     counts: {
       nodes: nodeRows.length,
       edges: edgeRows.length,
     },
   };
+
 }
 
 async function starterNodes(args: {
@@ -998,16 +1001,44 @@ Deno.serve(async (req) => {
         makeActive,
       });
 
+      // FT9 — optionally seed cast metadata on the fresh DRAFT only.
+      let draftCastConfig: unknown = null;
+      if (body.castConfig) {
+        const raw = body.castConfig as Record<string, unknown>;
+        const rawSlots = Array.isArray(raw.slots) ? raw.slots : [];
+        const remapped = {
+          ...raw,
+          slots: rawSlots.map((slot: any) => {
+            const sourceNodeId = typeof slot?.nodeId === "string" ? slot.nodeId : "";
+            return { ...slot, nodeId: result.nodeIdMap[sourceNodeId] ?? sourceNodeId };
+          }),
+        };
+        const allowedNodeIds = new Set(Object.values(result.nodeIdMap));
+        draftCastConfig = normalizeCastConfig(remapped, allowedNodeIds);
+        const { error: draftCastError } = await admin
+          .from("template_versions")
+          .update({ cast_config: draftCastConfig })
+          .eq("id", result.versionId)
+          .eq("is_active", false);
+        if (draftCastError) throw new Error(draftCastError.message);
+      }
+
       await logAuditEvent({
         eventType: "template_version_cloned",
         message: `Admin cloned template version ${sourceVersionId}`,
         source: "admin-template-workbench",
         templateId: result.templateId,
         versionId: result.versionId,
-        metadata: { adminUserId: user.id, sourceVersionId, counts: result.counts },
+        metadata: {
+          adminUserId: user.id,
+          sourceVersionId,
+          counts: result.counts,
+          castSeeded: !!draftCastConfig,
+        },
       }, admin);
 
-      return json(result);
+      return json({ ...result, castConfig: draftCastConfig });
+
     }
 
     if (action === "activate_version") {
@@ -1098,6 +1129,19 @@ Deno.serve(async (req) => {
       if (!versionId) throw new Error("versionId is required");
       await assertVersionAccess(admin, access, versionId);
 
+      // FT9 — never mutate a live version; clone it into a draft first.
+      const { data: castVersionRow, error: castVersionError } = await admin
+        .from("template_versions")
+        .select("id, is_active")
+        .eq("id", versionId)
+        .single();
+      if (castVersionError || !castVersionRow) {
+        throw new Error(castVersionError?.message ?? "Template version not found");
+      }
+      if ((castVersionRow as any).is_active === true) {
+        throw new Error("Active versions are protected. Clone this version into a draft to configure cast.");
+      }
+
       const { data: versionNodes, error: versionNodesError } = await admin
         .from("nodes")
         .select("id")
@@ -1110,8 +1154,10 @@ Deno.serve(async (req) => {
       const { error: castError } = await admin
         .from("template_versions")
         .update({ cast_config: castConfig })
-        .eq("id", versionId);
+        .eq("id", versionId)
+        .eq("is_active", false);
       if (castError) throw new Error(castError.message);
+
 
       await logAuditEvent({
         eventType: "template_cast_config_updated",
