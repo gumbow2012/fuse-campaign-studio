@@ -35,6 +35,7 @@ import {
   compileForkEdges,
   compileForkNodes,
   findForkRunJob,
+  forkInputsFromSourceJob,
   FORK_RUN_MARKER_KEY,
   ForkRunError,
   PERSONAL_FORK_REVIEW_STATUS,
@@ -274,7 +275,7 @@ async function handleRunFork(
 
   const { data: fork, error: forkError } = await admin
     .from("template_user_forks")
-    .select("id, user_id, name, source_template_id, source_version_id, personal_graph, prompt_visibility")
+    .select("id, user_id, name, source_template_id, source_version_id, personal_graph, prompt_visibility, source_job_id")
     .eq("id", forkId)
     .maybeSingle();
   if (forkError) throw new Error(forkError.message);
