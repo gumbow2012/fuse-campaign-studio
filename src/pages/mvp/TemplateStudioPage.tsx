@@ -431,6 +431,8 @@ export default function TemplateStudioPage() {
   const [result, setResult] = useState<RunnerResult | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [checkingCredits, setCheckingCredits] = useState(false);
+  const [runPhase, setRunPhase] = useState<"idle" | "uploading" | "preparing">("idle");
+
   const [adminVisualSpent, setAdminVisualSpent] = useState(() => getAdminVisualCreditsSpent());
   const [expandedRuns, setExpandedRuns] = useState<Record<string, boolean>>({});
   const [feedbackOverrides, setFeedbackOverrides] = useState<Record<string, RunFeedbackRecord | null>>({});
@@ -903,29 +905,43 @@ export default function TemplateStudioPage() {
       }
 
       setCheckingCredits(false);
+      setRunPhase("uploading");
 
-      const uploadedImageInputs = Object.fromEntries(
-        await Promise.all(
-          inputFields
-            .filter((field) => field.type === "image" && (files[field.key] || libraryAssets[field.key]?.url))
-            .map(async (field) => {
-              const file = files[field.key];
-              if (!file) {
-                // FT4: reuse an asset already stored in the user's library.
-                return [field.key, libraryAssets[field.key]!.url];
-              }
-              const url = await uploadRunInputFile(file);
-              // FT4: best-effort save so this asset is reusable later.
-              void saveLibraryAsset({
-                kind: libraryKindForAssetType(field.requirement?.assetType),
-                url,
-                name: file.name,
-                metadata: { source: "template_input", input_key: field.key },
-              });
-              return [field.key, url];
-            }),
-        ),
-      );
+      let uploadedImageInputs: Record<string, string>;
+      try {
+        uploadedImageInputs = Object.fromEntries(
+          await Promise.all(
+            inputFields
+              .filter((field) => field.type === "image" && (files[field.key] || libraryAssets[field.key]?.url))
+              .map(async (field) => {
+                const file = files[field.key];
+                if (!file) {
+                  // FT4: reuse an asset already stored in the user's library.
+                  return [field.key, libraryAssets[field.key]!.url];
+                }
+                const url = await uploadRunInputFile(file);
+                // FT4: best-effort save so this asset is reusable later.
+                void saveLibraryAsset({
+                  kind: libraryKindForAssetType(field.requirement?.assetType),
+                  url,
+                  name: file.name,
+                  metadata: { source: "template_input", input_key: field.key },
+                });
+                return [field.key, url];
+              }),
+          ),
+        );
+      } catch (uploadError) {
+        // Never start a paid run when an asset failed to upload.
+        throw new Error(
+          uploadError instanceof Error
+            ? `Asset upload failed — no credits were used. ${uploadError.message}`
+            : "Asset upload failed — no credits were used.",
+        );
+      }
+
+      setRunPhase("preparing");
+
 
       const inputs = Object.fromEntries(
         inputFields
@@ -967,8 +983,10 @@ export default function TemplateStudioPage() {
       });
     } finally {
       setCheckingCredits(false);
+      setRunPhase("idle");
       setSubmitting(false);
     }
+
   };
 
   const isRunning = result?.status === "queued" || result?.status === "running" || result?.status === "video_pending";
@@ -1418,13 +1436,18 @@ export default function TemplateStudioPage() {
                       >
                         {checkingCredits
                           ? "Checking credits..."
-                          : submitting || isRunning
-                            ? "Generating..."
-                            : !user
-                              ? "Sign in to generate"
-                              : isPrivilegedUser
-                                ? "Generate campaign"
-                                : `Generate campaign · ${creditsRequired} cr`}
+                          : runPhase === "uploading"
+                            ? "Uploading assets..."
+                            : runPhase === "preparing"
+                              ? "Preparing campaign..."
+                              : submitting || isRunning
+                                ? "Generating..."
+                                : !user
+                                  ? "Sign in to generate"
+                                  : isPrivilegedUser
+                                    ? "Generate campaign"
+                                    : `Generate campaign · ${creditsRequired} cr`}
+
                       </Button>
                     </div>
 
