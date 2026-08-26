@@ -17,6 +17,12 @@ import PageMeta from "@/components/mvp/PageMeta";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
 import { accentStyle, resolveAccent } from "@/lib/creatorAccents";
+import { CreatorPerformanceProof } from "@/components/CreatorPerformance";
+import {
+  EMPTY_CREATOR_PERFORMANCE,
+  loadPublicCreatorPerformance,
+  type CreatorPerformanceAggregate,
+} from "@/services/creatorPerformance";
 import {
   countCreatorTemplatesByHandle,
   getCreatorProfileByHandle,
@@ -40,6 +46,9 @@ export default function CreatorProfile() {
   const { user } = useAuth();
   const [profile, setProfile] = useState<CreatorProfileRow | null>(null);
   const [templateCount, setTemplateCount] = useState<number | null>(null);
+  const [performance, setPerformance] = useState<CreatorPerformanceAggregate>(
+    EMPTY_CREATOR_PERFORMANCE,
+  );
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -47,6 +56,7 @@ export default function CreatorProfile() {
     let cancelled = false;
     setLoading(true);
     setError(null);
+    setPerformance(EMPTY_CREATOR_PERFORMANCE);
     getCreatorProfileByHandle(handle)
       .then(async (row) => {
         if (cancelled) return;
@@ -54,6 +64,8 @@ export default function CreatorProfile() {
         if (row) {
           const count = await countCreatorTemplatesByHandle(row.handle);
           if (!cancelled) setTemplateCount(count);
+          const aggregate = await loadPublicCreatorPerformance({ handle: row.handle });
+          if (!cancelled) setPerformance(aggregate);
         }
       })
       .catch((err) => {
@@ -242,6 +254,10 @@ export default function CreatorProfile() {
                 </div>
               ) : null}
             </div>
+
+            <CreatorPerformanceProof aggregate={performance} />
+
+
 
             {profile.description ? (
               <section className="space-y-3">

@@ -28,6 +28,12 @@ import { useAuth } from "@/contexts/AuthContext";
 import { cn } from "@/lib/utils";
 import { getCreatorLevel } from "@/lib/creatorLevels";
 import { getOwnCreatorProfile, type CreatorProfile } from "@/services/creatorProfile";
+import { CreatorPerformancePanel } from "@/components/CreatorPerformance";
+import {
+  EMPTY_CREATOR_PERFORMANCE,
+  loadCreatorPerformance,
+  type CreatorPerformanceAggregate,
+} from "@/services/creatorPerformance";
 import {
   loadCreatorAnalytics,
   loadCreatorChallenges,
@@ -151,6 +157,9 @@ export default function CreatorDashboard() {
   const [analytics, setAnalytics] = useState<CreatorAnalytics | null>(null);
   const [analyticsLoading, setAnalyticsLoading] = useState(false);
   const [analyticsError, setAnalyticsError] = useState<string | null>(null);
+  const [performance, setPerformance] = useState<CreatorPerformanceAggregate>(
+    EMPTY_CREATOR_PERFORMANCE,
+  );
   const [challenges, setChallenges] = useState<CreatorChallenge[] | null>(null);
   const [challengesLoading, setChallengesLoading] = useState(false);
   const [challengesError, setChallengesError] = useState<string | null>(null);
@@ -165,15 +174,18 @@ export default function CreatorDashboard() {
   const loadAnalytics = useCallback(async () => {
     setAnalyticsLoading(true);
     setAnalyticsError(null);
+    const uses: Record<string, number> = {};
     try {
-      setAnalytics(await loadCreatorAnalytics());
+      const result = await loadCreatorAnalytics();
+      setAnalytics(result);
+      for (const row of result.perTemplate) uses[row.template_id] = row.runs;
     } catch (error) {
       setAnalytics(null);
       setAnalyticsError(error instanceof Error ? error.message : "Unknown error");
-    } finally {
-      setAnalyticsLoading(false);
     }
-  }, []);
+    setPerformance(await loadCreatorPerformance(user?.id ?? "", uses));
+    setAnalyticsLoading(false);
+  }, [user?.id]);
 
   const loadChallenges = useCallback(async () => {
     setChallengesLoading(true);
@@ -541,6 +553,8 @@ export default function CreatorDashboard() {
                     </div>
                   </div>
                 )}
+
+                <CreatorPerformancePanel aggregate={performance} className="mt-8" />
               </div>
             ) : null}
 
