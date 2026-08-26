@@ -84,6 +84,11 @@ interface RunnerResult {
   progress: number;
   outputs: RunnerOutput[];
   error?: string;
+  /** TR3: customer-safe live execution graph (no prompts/provider internals). */
+  publicGraph?: PublicGraph;
+  statusMessage?: string;
+  /** Privileged callers only — present when the payload includes raw steps. */
+  hasPrivilegedSteps?: boolean;
 }
 
 interface RecentRun {
