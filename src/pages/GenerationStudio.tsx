@@ -485,14 +485,18 @@ function GenerationCard({
   const isImage = generation.outputType !== "video";
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const done = generation.status === "complete" && !!generation.outputUrl;
+  /* GS-PERF6: tiles load the small stored preview when it exists; the master
+     output_url stays the source for lightbox/download/reference/animate. */
+  const tileSrc = generation.previewUrl ?? generation.outputUrl;
 
   /* GS-PERF5: media only mounts/downloads once the tile nears the viewport. */
   const { ref: mediaHostRef, near } = useNearViewport<HTMLDivElement>(priority, "500px");
   const [loaded, setLoaded] = useState(false);
   useEffect(() => {
     setLoaded(false);
-  }, [generation.outputUrl]);
+  }, [tileSrc]);
   const showSkeleton = done && (isImage ? !loaded : !near);
+
 
   return (
     <article className="group overflow-hidden rounded-2xl border border-white/10 bg-white/[0.03] backdrop-blur-xl transition-colors hover:border-cyan-200/30">
