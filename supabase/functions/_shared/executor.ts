@@ -18,6 +18,13 @@ import {
 } from "./fal.ts";
 import { sortEdgesByExecutionOrder, targetParamOrder } from "./edge-order.ts";
 import { isPromptNode, resolveNodePrompt } from "./prompt-nodes.ts";
+import {
+  CAST_RUNTIME_KEY,
+  castAuditMetadata,
+  parseCastRuntime,
+  resolveTemplateCast,
+  type CastRuntime,
+} from "./cast.ts";
 
 /* ============ Seedance multi-reference (additive, isolated) ============ */
 
@@ -1005,6 +1012,23 @@ export async function runGraphJob(admin: AdminClient, jobId: string) {
   const resolved = new Map<string, ResolvedOutput>();
   const jobInputs = (job.input_payload ?? {}) as Record<string, string>;
 
+  /**
+   * FT10 — cast is OFF unless the run persisted a cast runtime. Legacy jobs skip
+   * this entirely (no extra query, no behavior change).
+   */
+  const castRuntime: CastRuntime | null = parseCastRuntime((job.input_payload as any)?.[CAST_RUNTIME_KEY]);
+  let castConfigValue: unknown = null;
+  if (castRuntime) {
+    const { data: castVersion, error: castVersionError } = await admin
+      .from("template_versions")
+      .select("cast_config")
+      .eq("id", job.version_id)
+      .single();
+    if (castVersionError) throw new Error(castVersionError.message);
+    castConfigValue = (castVersion as any)?.cast_config ?? null;
+  }
+
+
   for (const node of nodes as NodeRow[]) {
     if (node.node_type !== "user_input") continue;
     const editorMode = typeof node.prompt_config?.editor_mode === "string"
@@ -1092,7 +1116,7 @@ export async function runGraphJob(admin: AdminClient, jobId: string) {
       const incoming = sortEdgesByExecutionOrder(incomingByTarget.get(step.node_id) ?? []);
 
       const params = new Map<string, ResolvedOutput>();
-      const orderedParamEntries: Array<[string, ResolvedOutput]> = [];
+      let orderedParamEntries: Array<[string, ResolvedOutput]> = [];
       for (const edge of incoming) {
         const param = edge.mapping_logic?.target_param ?? "image";
         const value = resolved.get(edge.source_node_id);
@@ -1101,6 +1125,21 @@ export async function runGraphJob(admin: AdminClient, jobId: string) {
           orderedParamEntries.push([param, value]);
         }
       }
+
+      // FT10 — SINGLE cast integration point. Identity no-op without cast runtime.
+      // MODE A adds 0 provider calls and 0 credits: it only swaps one existing
+      // reference-conditioning input on the admin-designated target node.
+      const castResult = resolveTemplateCast<ResolvedOutput>({
+        nodeId: node.id,
+        inputs: orderedParamEntries,
+        castConfigValue,
+        runtime: castRuntime,
+        makeValue: (url, previous) => ({ ...previous, assetId: undefined, url }),
+      });
+      orderedParamEntries = castResult.inputs;
+      for (const [key, value] of orderedParamEntries) params.set(key, value);
+      const castAudit = castAuditMetadata(castResult.applied);
+
 
       const startedAt = step.status === "running" ? step.started_at : new Date().toISOString();
 
@@ -1186,6 +1225,7 @@ export async function runGraphJob(admin: AdminClient, jobId: string) {
               output_payload: {
                 requestId,
                 status: "queued",
+                ...castAudit,
                 telemetry: {
                   estimatedCostUsd: costEstimate?.estimatedCostUsd ?? null,
                   billingUnit: costEstimate?.unit ?? null,
@@ -1331,6 +1371,7 @@ export async function runGraphJob(admin: AdminClient, jobId: string) {
               output_payload: {
                 requestId,
                 status: "queued",
+                ...castAudit,
                 telemetry: {
                   estimatedCostUsd: costEstimate?.estimatedCostUsd ?? null,
                   billingUnit: costEstimate?.unit ?? null,

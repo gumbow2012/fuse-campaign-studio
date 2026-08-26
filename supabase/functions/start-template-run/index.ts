@@ -13,6 +13,13 @@ import {
 } from "../_shared/supabase-admin.ts";
 import { PAPARAZZI_VERSION_ID, refundJobCreditsIfNeeded, runGraphJob } from "../_shared/executor.ts";
 import { buildTemplateInputPlan } from "../_shared/template-inputs.ts";
+import {
+  avatarIdentityImage,
+  CAST_RUNTIME_KEY,
+  CastConfigurationError,
+  validateCastSelection,
+  type CastRuntime,
+} from "../_shared/cast.ts";
 import { countTemplateDeliverables, getTemplateCreditCost } from "../_shared/template-pricing.ts";
 
 declare const EdgeRuntime: {
@@ -24,6 +31,8 @@ type StartTemplateRunBody = {
   versionId?: string;
   inputs?: Record<string, string>;
   inputFiles?: Record<string, { dataUrl: string; filename?: string }>;
+  /** FT10 — optional cast selection, e.g. { cast_a: avatarId }. */
+  cast?: Record<string, string>;
 };
 
 type VersionNode = {
@@ -172,7 +181,7 @@ Deno.serve(async (req) => {
 
     const { data: version, error: versionError } = await admin
       .from("template_versions")
-      .select("id, template_id, fuse_templates!inner(name)")
+      .select("id, template_id, cast_config, fuse_templates!inner(name)")
       .eq("id", versionId)
       .single();
     if (versionError || !version) throw new Error(versionError?.message ?? "Version not found");
@@ -203,6 +212,29 @@ Deno.serve(async (req) => {
       node.node_type !== "user_input" && node.node_type !== "prompt" && targetNodeIds.has(node.id)
     );
     const deliverableCounts = countTemplateDeliverables(executionNodes);
+
+    // FT10 — validate cast BEFORE any credit charge. No cast selection => legacy path.
+    const castSelection = body.cast ?? null;
+    const selectedAvatarIds = [
+      ...new Set(Object.values(castSelection ?? {}).map((value) => String(value ?? "").trim()).filter(Boolean)),
+    ];
+    const avatarImages: Record<string, string | null> = {};
+    if (selectedAvatarIds.length) {
+      const { data: avatarRows, error: avatarError } = await admin
+        .from("avatar_profiles")
+        .select("id, thumbnail_url, reference_assets")
+        .in("id", selectedAvatarIds);
+      if (avatarError) throw new Error(avatarError.message);
+      for (const row of avatarRows ?? []) {
+        avatarImages[String((row as any).id)] = avatarIdentityImage(row);
+      }
+    }
+    const castRuntime: CastRuntime | null = validateCastSelection({
+      castConfigValue: (version as any).cast_config ?? null,
+      selection: castSelection,
+      avatarImages,
+      versionNodeIds: new Set(allVersionNodes.map((node) => node.id)),
+    });
 
     const userRoles = user ? await getUserRoles(user.id, admin) : [];
     const bypassCredits = runnerAccess || userRoles.some((role) => role === "admin" || role === "dev");
@@ -253,7 +285,9 @@ Deno.serve(async (req) => {
     const { error: inputUpdateError } = await admin
       .from("execution_jobs")
       .update({
-        input_payload: finalInputs,
+        // MODE A carries the cast runtime alongside inputs; 0 extra provider calls,
+        // 0 extra credits, run-cost calculation unchanged.
+        input_payload: castRuntime ? { ...finalInputs, [CAST_RUNTIME_KEY]: castRuntime } : finalInputs,
       })
       .eq("id", job.id);
     if (inputUpdateError) throw new Error(inputUpdateError.message);
@@ -330,6 +364,10 @@ Deno.serve(async (req) => {
 
     return json({ jobId: job.id, status: "queued" }, 202);
   } catch (error) {
+    if (error instanceof CastConfigurationError) {
+      // Fail closed before any provider submission or credit charge.
+      return json({ error: error.code, detail: error.message }, 400);
+    }
     const message = errorMessage(error);
 
     if (chargedCredits > 0 && jobId) {
