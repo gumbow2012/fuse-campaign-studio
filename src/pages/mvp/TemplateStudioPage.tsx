@@ -1828,6 +1828,41 @@ export default function TemplateStudioPage() {
           if (detailTemplate) handleTemplateSelect(detailTemplate.id);
         }}
       />
+
+      {/* P0: Pro entry point — placeholder until the private-fork editor lands.
+          Replacing this body with real navigation is a one-line swap in handleCustomizeWorkflow. */}
+      <Dialog open={privateWorkflowDialogOpen} onOpenChange={setPrivateWorkflowDialogOpen}>
+        <DialogContent className="border-white/10 bg-[#0c101c] text-slate-100 sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="font-display tracking-[0.12em]">Your private workflow</DialogTitle>
+            <DialogDescription className="text-sm text-slate-400">
+              Workflow customization is being set up for your account. Your private version will let
+              you adjust this campaign's workflow without ever affecting the original template.
+            </DialogDescription>
+          </DialogHeader>
+        </DialogContent>
+      </Dialog>
+
+      {/* P0: locked upsell for Starter / Plus / Free — the graph itself is never hidden. */}
+      <Dialog open={workflowUpgradeDialogOpen} onOpenChange={setWorkflowUpgradeDialogOpen}>
+        <DialogContent className="border-white/10 bg-[#0c101c] text-slate-100 sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="font-display tracking-[0.12em]">MAKE THIS WORKFLOW YOURS</DialogTitle>
+            <DialogDescription className="text-sm text-slate-400">
+              Pro members can create a private version of this campaign and customize its workflow.
+              Your changes never affect the original template.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="mt-2 flex justify-end">
+            <Link
+              to="/pricing"
+              className="inline-flex items-center gap-2 rounded-full bg-cyan-200/90 px-4 py-2 text-xs font-semibold tracking-[0.12em] text-[#062a33] transition-opacity hover:opacity-90"
+            >
+              Upgrade to Pro
+            </Link>
+          </div>
+        </DialogContent>
+      </Dialog>
     </SiteShell>
 
   );
