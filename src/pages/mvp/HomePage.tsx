@@ -372,8 +372,9 @@ export default function HomePage() {
             </div>
 
             <p className="mt-6 text-[11px] font-semibold uppercase tracking-[0.24em] text-slate-400">
-              No prompts · No creative calls · New templates constantly
+              No prompts · New templates daily · Performance tracked
             </p>
+
           </div>
 
           {/* Hero transformation — TEMPLATE → your brand → YOUR CAMPAIGN */}
