@@ -984,6 +984,41 @@ const TemplateCanvas = () => {
     return [...slots.values()];
   }, [detail]);
 
+  useEffect(() => {
+    const castConfig = parseCastConfig(detail?.castConfig);
+    if (!castConfig || !user) {
+      setCastAvatars([]);
+      setSelectedCastAvatarId(null);
+      setCastLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setCastLoading(true);
+    Promise.all([listFuseAvatars(), listMyAvatars(user.id)])
+      .then(([fuse, mine]) => {
+        if (cancelled) return;
+        const seen = new Set<string>();
+        const next: AvatarProfile[] = [];
+        for (const avatar of [...mine, ...fuse]) {
+          if (!seen.has(avatar.id)) {
+            seen.add(avatar.id);
+            next.push(avatar);
+          }
+        }
+        setCastAvatars(next);
+        setSelectedCastAvatarId(null);
+      })
+      .catch(() => {
+        if (!cancelled) setCastAvatars([]);
+      })
+      .finally(() => {
+        if (!cancelled) setCastLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [detail?.castConfig, user]);
+
   const selectedNode = useMemo(
     () => detail?.nodes.find((node) => node.id === selectedNodeId) ?? detail?.nodes[0] ?? null,
     [detail?.nodes, selectedNodeId],
