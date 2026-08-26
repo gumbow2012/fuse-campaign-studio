@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowLeft,
   ArrowRight,
@@ -608,6 +608,12 @@ function GenerationCard({
   );
 
 }
+
+/**
+ * GS-PERF4: memoized so a realtime/reconcile update to one generation only
+ * re-renders its own card — unchanged rows keep the same object reference.
+ */
+const MemoizedGenerationCard = memo(GenerationCard);
 
 /**
  * One creative reference card in the stack. Drag handle uses dnd-kit; the arrow
