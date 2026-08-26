@@ -462,12 +462,15 @@ function GenerationCard({
   onExpand,
   onDelete,
   onToggleFavorite,
+  priority = false,
 }: {
   generation: Generation;
   onUseAsReference: (url: string) => void;
   onExpand: (generation: Generation) => void;
   onDelete: (generation: Generation) => void;
   onToggleFavorite: (generation: Generation) => void;
+  /** GS-PERF5: first-screen tiles load eagerly at high priority. */
+  priority?: boolean;
 }) {
   const inFlight = generation.status === "queued" || generation.status === "running";
   const [progress, setProgress] = useState(generation.status === "running" ? 25 : 8);
@@ -482,11 +485,25 @@ function GenerationCard({
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const done = generation.status === "complete" && !!generation.outputUrl;
 
+  /* GS-PERF5: media only mounts/downloads once the tile nears the viewport. */
+  const { ref: mediaHostRef, near } = useNearViewport<HTMLDivElement>(priority, "500px");
+  const [loaded, setLoaded] = useState(false);
+  useEffect(() => {
+    setLoaded(false);
+  }, [generation.outputUrl]);
+  const showSkeleton = done && !loaded;
+
   return (
     <article className="group overflow-hidden rounded-2xl border border-white/10 bg-white/[0.03] backdrop-blur-xl transition-colors hover:border-cyan-200/30">
-      <div className="relative flex aspect-[3/4] items-center justify-center bg-black/50">
+      <div
+        ref={mediaHostRef}
+        className="relative flex aspect-[3/4] items-center justify-center bg-black/50"
+      >
         {done ? (
           <>
+            {showSkeleton ? (
+              <div className="pointer-events-none absolute inset-0 fuse-skeleton" aria-hidden="true" />
+            ) : null}
             <button
               type="button"
               onClick={() => onExpand(generation)}
@@ -494,19 +511,31 @@ function GenerationCard({
               className="block h-full w-full"
             >
               {isImage ? (
-                <img
-                  src={generation.outputUrl as string}
-                  alt={generation.prompt ?? generation.promptPreview ?? "Generated result"}
-                  className="h-full w-full object-cover"
-                />
+                near ? (
+                  <img
+                    src={generation.outputUrl as string}
+                    alt={generation.prompt ?? generation.promptPreview ?? "Generated result"}
+                    loading={priority ? "eager" : "lazy"}
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                    {...({ fetchpriority: priority ? "high" : "low" } as any)}
+                    decoding="async"
+                    onLoad={() => setLoaded(true)}
+                    onError={() => setLoaded(true)}
+                    className={cn(
+                      "h-full w-full object-cover transition-opacity duration-150",
+                      loaded ? "opacity-100" : "opacity-0",
+                    )}
+                  />
+                ) : null
               ) : (
                 <video
                   ref={videoRef}
-                  src={generation.outputUrl as string}
+                  src={near ? (generation.outputUrl as string) : undefined}
                   muted
                   loop
                   playsInline
                   preload="none"
+                  onLoadedData={() => setLoaded(true)}
                   onMouseEnter={() => {
                     void videoRef.current?.play()?.catch(() => {});
                   }}
@@ -516,10 +545,14 @@ function GenerationCard({
                     el.pause();
                     el.currentTime = 0;
                   }}
-                  className="h-full w-full bg-black/60 object-cover"
+                  className={cn(
+                    "h-full w-full bg-black/60 object-cover transition-opacity duration-150",
+                    loaded ? "opacity-100" : "opacity-0",
+                  )}
                 />
               )}
             </button>
+
             <div className="pointer-events-none absolute inset-x-0 top-0 flex justify-end gap-1.5 p-2 opacity-0 transition-opacity group-hover:pointer-events-auto group-hover:opacity-100 focus-within:pointer-events-auto focus-within:opacity-100">
               {isImage ? (
                 <button
