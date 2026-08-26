@@ -163,6 +163,18 @@ export default function SiteShell({ children }: { children: ReactNode }) {
 
           {/* ── Mobile / tablet cluster: credits + account + menu ── */}
           <div className="flex shrink-0 items-center gap-1.5 lg:hidden">
+            {/* Tablet: key sections inline, everything else in the More menu */}
+            <nav className="hidden items-center gap-1.5 md:flex" aria-label="Primary">
+              <NavLink to="/app/templates" className={textNavLinkClass}>
+                Explore
+              </NavLink>
+              <NavLink to="/creators" className={textNavLinkClass}>
+                Creators
+              </NavLink>
+              <NavLink to="/pricing" className={textNavLinkClass}>
+                Pricing
+              </NavLink>
+            </nav>
             {user && !isAdmin ? (
               <span className="inline-flex min-h-11 items-center rounded-full border border-white/10 bg-white/5 px-3 text-[11px] font-semibold text-cyan-200">
                 <span className="sr-only">Credit balance: </span>
