@@ -89,6 +89,17 @@ export async function runUploadChecks(
     };
   }
 
+  // Real transport limit (direct-to-storage upload, no base64 inflation).
+  if (file.size > MAX_IMAGE_BYTES) {
+    return {
+      state: "error",
+      warnings: [],
+      error: "This image is larger than 12 MB — please use a smaller file.",
+      notChecked,
+    };
+  }
+
+
   const decoded = await decodeImage(file);
   if (decoded.kind === "timeout") {
     return {
