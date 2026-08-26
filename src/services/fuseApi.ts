@@ -599,14 +599,16 @@ export interface AdminAuditJobDetail {
       expected: string;
       nodeIds: string[];
     }>;
-    hiddenRefs: Array<{
+    /** Privileged callers only (admin/dev/runner). */
+    hiddenRefs?: Array<{
       nodeId: string;
       name: string;
       mode: string | null;
       assetUrl: string | null;
     }>;
   };
-  inputPayload: Record<string, string>;
+  /** Privileged callers only (admin/dev/runner). */
+  inputPayload?: Record<string, string>;
   userInputs: Array<{
     id: string;
     name: string;
@@ -628,7 +630,22 @@ export interface AdminAuditJobDetail {
     estimatedCostUsd: number | null;
     executionTimeMs: number | null;
   }>;
-  steps: Array<{
+  /** TR2: customer-safe execution graph — no prompts, mapping or provider data. */
+  publicGraph?: {
+    nodes: Array<{
+      id: string;
+      type: "INPUT" | "PREPARE" | "IMAGE" | "VIDEO" | "OUTPUT" | "PROCESS";
+      label: string;
+      stage: number;
+      deps: string[];
+      status: "waiting" | "active" | "complete" | "failed";
+      outputNumber: number | null;
+    }>;
+    links: Array<{ source: string; target: string }>;
+  };
+  statusMessage?: string;
+  /** Privileged callers only (admin/dev/runner). */
+  steps?: Array<{
     id: string;
     nodeId: string;
     label: string;
