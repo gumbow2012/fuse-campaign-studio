@@ -239,18 +239,25 @@ const RESOLUTION_MULTIPLIER: Record<string, number> = {
   "4K": 3.5,
 };
 
+/**
+ * GS-PERF1: gallery rows come from the lightweight list action — heavy fields
+ * (prompt, inputPayload, error) are only present after a `detail` fetch or a
+ * reconcile merge, so they stay optional here.
+ */
 type Generation = {
   id: string;
   status: "queued" | "running" | "complete" | "failed";
   kind: string | null;
-  prompt: string | null;
+  prompt?: string | null;
+  promptPreview?: string | null;
   outputUrl: string | null;
+  previewUrl?: string | null;
   outputType: string | null;
-  error: string | null;
+  error?: string | null;
   estimatedCredits: number | null;
   estimatedCostUsd: number | null;
   providerModel: string | null;
-  inputPayload: Record<string, unknown> | null;
+  inputPayload?: Record<string, unknown> | null;
   favorited?: boolean;
   createdAt: string | null;
   completedAt: string | null;
@@ -488,7 +495,7 @@ function GenerationCard({
               {isImage ? (
                 <img
                   src={generation.outputUrl as string}
-                  alt={generation.prompt ?? "Generated result"}
+                  alt={generation.prompt ?? generation.promptPreview ?? "Generated result"}
                   className="h-full w-full object-cover"
                 />
               ) : (
