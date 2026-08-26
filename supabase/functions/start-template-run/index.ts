@@ -238,13 +238,29 @@ Deno.serve(async (req) => {
   let jobId: string | null = null;
   let chargedCredits = 0;
 
+  let rawBody: Record<string, unknown> = {};
+  try {
+    rawBody = (await req.json()) as Record<string, unknown>;
+  } catch {
+    rawBody = {};
+  }
+
+  if (String(rawBody.action ?? "") === "regenerate_output") {
+    try {
+      return await handleRegenerateOutput(req, admin, rawBody);
+    } catch (error) {
+      return json({ error: errorMessage(error) }, 400);
+    }
+  }
+
   try {
     const runnerAccess = hasValidRunnerCode(req);
     const user = runnerAccess ? await getOptionalUser(req, admin) : await requireUser(req, admin);
     if (!user && !runnerAccess) throw new Error("Authentication required");
     userId = user?.id ?? null;
 
-    const body = await req.json() as StartTemplateRunBody;
+    const body = rawBody as StartTemplateRunBody;
+
 
     versionId = body.versionId ?? PAPARAZZI_VERSION_ID;
     const inputs = { ...(body.inputs ?? {}) };
