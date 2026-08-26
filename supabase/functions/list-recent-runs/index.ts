@@ -125,7 +125,7 @@ Deno.serve(async (req) => {
         // P0 failure taxonomy: raw provider/moderation strings are assembled
         // ONLY for privileged (admin/dev) callers. Customers get polished copy.
         const rawError = extractProviderDetail(job.result_payload?.rawPayload?.detail) ?? job.error_log ?? null;
-        const publicFailure = job.status === "failed" && rawError
+        const publicFailure = job.status === "failed"
           ? toPublicGenerationFailure({ rawError })
           : null;
         return {
