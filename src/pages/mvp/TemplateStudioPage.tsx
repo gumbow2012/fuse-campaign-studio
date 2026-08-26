@@ -745,15 +745,6 @@ export default function TemplateStudioPage() {
   };
 
 
-  useEffect(() => {
-    if (recentRefreshCooldown <= 0) return;
-
-    const timer = window.setTimeout(() => {
-      setRecentRefreshCooldown((current) => Math.max(current - 1, 0));
-    }, 1000);
-
-    return () => window.clearTimeout(timer);
-  }, [recentRefreshCooldown]);
 
   useEffect(() => {
     if (!activeRunId) return;
