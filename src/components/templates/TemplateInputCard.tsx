@@ -54,7 +54,7 @@ export default function TemplateInputCard({
   label,
   file,
   requirement,
-  fallbackPlaceholderSrc,
+  fallbackPlaceholderSrc: _fallbackPlaceholderSrc,
   onFileChange,
   libraryAsset,
   onLibrarySelect,
