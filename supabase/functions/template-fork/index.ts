@@ -13,10 +13,12 @@ import {
   buildBasedOnLabel,
   buildPersonalGraph,
   defaultForkName,
+  mergeForkEdits,
   resolveCustomizability,
   resolveForkEntitlement,
   sanitizePersonalGraphForClient,
 } from "../_shared/template-fork.ts";
+
 
 /**
  * TR8 — Pro private template forks (create + read).
