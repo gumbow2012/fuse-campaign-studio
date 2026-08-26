@@ -26,6 +26,7 @@ import CampaignResults from "@/components/templates/CampaignResults";
 import RegenerateOutputDialog from "@/components/templates/RegenerateOutputDialog";
 import { useOutputRegeneration } from "@/hooks/useOutputRegeneration";
 
+import { evaluateAndAnnounce } from "@/services/achievements";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 
@@ -654,6 +655,15 @@ export default function TemplateStudioPage() {
         ? "failed"
         : "running";
   const workspaceTemplateName = openedHistoricalRun?.templateName ?? selectedTemplate?.name ?? null;
+
+  // Achievements: a completed campaign is a real signal — evaluate once per run.
+  const achievementRunRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (studioMode !== "complete" || !activeRunId) return;
+    if (achievementRunRef.current === activeRunId) return;
+    achievementRunRef.current = activeRunId;
+    void evaluateAndAnnounce();
+  }, [studioMode, activeRunId]);
 
   // ---- TR7: per-output regeneration (server-priced, confirm-gated) ----
   const [pollNonce, setPollNonce] = useState(0);

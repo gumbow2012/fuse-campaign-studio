@@ -4,6 +4,7 @@ import SiteShell from "@/components/mvp/SiteShell";
 import AccountHeader from "@/components/mvp/AccountHeader";
 import CreditsOverviewCard from "@/components/mvp/membership/CreditsOverviewCard";
 import CreditUsageHistory from "@/components/mvp/membership/CreditUsageHistory";
+import AchievementsSection from "@/components/mvp/AchievementsSection";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -105,6 +106,8 @@ export default function AccountPage() {
             <CreditsOverviewCard buyCreditsHref="/membership?tab=credits" />
 
             <CreditUsageHistory />
+
+            <AchievementsSection />
 
 
             <section className="rounded-[2rem] border border-white/10 bg-slate-950/75 p-6 shadow-[0_24px_80px_rgba(0,0,0,0.35)] backdrop-blur-xl">
