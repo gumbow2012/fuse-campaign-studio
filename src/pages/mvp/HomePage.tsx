@@ -53,11 +53,14 @@ function AutoMedia({
   className,
   eager,
   active = true,
+  staggerIndex = 0,
 }: {
   media: TemplateMedia;
   className?: string;
   eager?: boolean;
   active?: boolean;
+  /** Deterministic playback offset so cards aren't mechanically synchronized. */
+  staggerIndex?: number;
 }) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const [visible, setVisible] = useState(false);
@@ -93,6 +96,17 @@ function AutoMedia({
         loop
         playsInline
         preload="metadata"
+        onLoadedMetadata={(event) => {
+          const node = event.currentTarget;
+          const offset = (staggerIndex % 5) * 0.6;
+          if (Number.isFinite(node.duration) && node.duration > offset + 0.2) {
+            try {
+              node.currentTime = offset;
+            } catch {
+              /* seeking not supported yet — ignore */
+            }
+          }
+        }}
         onMouseEnter={() => void videoRef.current?.play().catch(() => undefined)}
         onClick={() => {
           const node = videoRef.current;
@@ -135,11 +149,13 @@ function TemplateCard({
   badge,
   creator,
   eager,
+  index = 0,
 }: {
   entry: Entry;
   badge?: { tone: "new" | "trending" | "creator"; label: string };
   creator?: string | null;
   eager?: boolean;
+  index?: number;
 }) {
   const outputs = outputLabel(entry.template);
   const vibe = entry.template.category ?? entry.template.tags?.[0] ?? null;
@@ -150,6 +166,7 @@ function TemplateCard({
         <AutoMedia
           media={entry.media}
           eager={eager}
+          staggerIndex={index}
           className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.04]"
         />
         <div className="pointer-events-none absolute inset-x-0 bottom-0 h-1/2 bg-gradient-to-t from-black via-black/60 to-transparent" />
@@ -221,6 +238,7 @@ function Shelf({
             key={`${label}-${entry.template.id}-${index}`}
             entry={entry}
             badge={badge}
+            index={index}
             eager={index < 2}
           />
         ))}
@@ -466,7 +484,14 @@ export default function HomePage() {
         entries={newToday}
         badge={{ tone: "new", label: "New" }}
       />
-      {categoryShelves.map((shelf) => (
+      {creators.length > 0 && (
+        <Shelf
+          label="Creator drops"
+          heading="Built by FUSE creators"
+          entries={creatorDrops}
+        />
+      )}
+      {categories.map((shelf) => (
         <Shelf
           key={shelf.title}
           label={shelf.title}
@@ -661,5 +686,35 @@ export default function HomePage() {
         </div>
       </section>
     </SiteShell>
+  );
+}
+
+function HeroTile({
+  label,
+  media,
+  highlight,
+  eager,
+}: {
+  label: string;
+  media: TemplateMedia;
+  highlight?: boolean;
+  eager?: boolean;
+}) {
+  return (
+    <div>
+      <div
+        className={cn(
+          "overflow-hidden rounded-[1.25rem] border bg-black",
+          highlight ? "border-cyan-200/40" : "border-white/10",
+        )}
+      >
+        <div className="aspect-[9/16]">
+          <AutoMedia media={media} eager={eager} className="h-full w-full object-cover" />
+        </div>
+      </div>
+      <p className="mt-2 text-center text-[9px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+        {label}
+      </p>
+    </div>
   );
 }
