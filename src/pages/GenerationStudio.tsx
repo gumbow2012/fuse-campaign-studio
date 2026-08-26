@@ -1082,7 +1082,17 @@ export default function GenerationStudio() {
       if (entry.status === "failed" && previous && previous !== "failed") latest = entry;
     }
     if (!latest) return;
-    setRecentFailure({ id: latest.id, error: latest.error ?? null });
+    const failedId = latest.id;
+    // List rows carry no error_log (P13) — pull the reason via `detail` once.
+    if (latest.error) {
+      setRecentFailure({ id: failedId, error: latest.error });
+    } else {
+      void callStudio({ action: "detail", generationId: failedId })
+        .then((data) =>
+          setRecentFailure({ id: failedId, error: (data?.generation?.error as string) ?? null }),
+        )
+        .catch(() => setRecentFailure({ id: failedId, error: null }));
+    }
     toast.error("Generation failed", {
       description: "See “Technical details” above the gallery for the provider reason.",
     });
