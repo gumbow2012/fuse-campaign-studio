@@ -198,10 +198,25 @@ export default function CastConfigPanel({
         </div>
       ) : null}
 
-      <Button type="button" className="mt-4" onClick={submit} disabled={!canSave}>
-        {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
-        Save Cast
-      </Button>
+      <div className="mt-4 flex flex-wrap gap-2">
+        {locked ? (
+          <Button type="button" onClick={() => void onCloneForCast?.(buildConfig())} disabled={!canClone}>
+            {cloning ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Copy className="mr-2 h-4 w-4" />}
+            Clone version for Cast
+          </Button>
+        ) : (
+          <Button type="button" onClick={submit} disabled={!canSave}>
+            {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+            Save Cast
+          </Button>
+        )}
+      </div>
+      {locked ? (
+        <p className="mt-2 text-[11px] text-muted-foreground">
+          The clone starts as an unreviewed draft. Activation stays a separate manual step after testing.
+        </p>
+      ) : null}
+
     </div>
   );
 }
