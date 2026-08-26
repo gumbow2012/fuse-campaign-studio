@@ -223,3 +223,35 @@ export function findForkRunJob(
   }
   return null;
 }
+
+/**
+ * TR10b — pick the connected execution nodes of a compiled fork graph.
+ * Same rule the runner uses for cost: no user_input / prompt nodes, must be a
+ * target of at least one edge.
+ */
+export function selectForkExecutionNodes(
+  nodes: CompiledForkNode[],
+  edges: Array<{ target_node_id: string }>,
+) {
+  const targetNodeIds = new Set(edges.map((edge) => edge.target_node_id));
+  return nodes.filter((node) =>
+    node.node_type !== "user_input" && node.node_type !== "prompt" && targetNodeIds.has(node.id)
+  );
+}
+
+/**
+ * TR10b — default a fork run's inputs from the ORIGINATING run's payload.
+ *
+ * Only string values survive, and the internal fork-run marker (plus any other
+ * private `__`-prefixed bookkeeping keys) is stripped. The caller MUST have
+ * loaded the source job scoped to the fork owner's user_id.
+ */
+export function forkInputsFromSourceJob(payload: unknown): Record<string, string> {
+  if (!payload || typeof payload !== "object") return {};
+  const inputs: Record<string, string> = {};
+  for (const [key, value] of Object.entries(payload as Record<string, unknown>)) {
+    if (key.startsWith("__")) continue;
+    if (typeof value === "string" && value.length) inputs[key] = value;
+  }
+  return inputs;
+}
