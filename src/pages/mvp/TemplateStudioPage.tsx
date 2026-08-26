@@ -1,16 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import {
   ArrowLeft,
   ArrowRight,
-  ChevronRight,
   Film,
   GitBranch,
   Loader2,
   
   Network,
-  RefreshCw,
   Sparkles,
 } from "lucide-react";
 import SiteShell from "@/components/mvp/SiteShell";
@@ -59,6 +57,9 @@ import { type TemplateAssetRequirement } from "@/lib/templateAssetRequirements";
 import { resolveInputRole } from "@/lib/templateInputSources";
 import { readPublicFailure, type PublicGenerationFailure } from "@/lib/generationFailure";
 import { createFork } from "@/services/templateForks";
+import CampaignHistoryLauncher from "@/components/campaigns/CampaignHistoryLauncher";
+import CampaignHistoryDrawer from "@/components/campaigns/CampaignHistoryDrawer";
+import { useCampaignHistory } from "@/hooks/useCampaignHistory";
 
 type RunnerStatus = "queued" | "running" | "video_pending" | "complete" | "failed";
 
@@ -115,14 +116,7 @@ interface RecentRun {
   feedback: RunFeedbackRecord | null;
 }
 
-type RecentRunsPage = {
-  jobs: RecentRun[];
-  hasMore: boolean;
-  nextOffset: number | null;
-};
-
 const EMPTY_TEMPLATES: ApiTemplate[] = [];
-const EMPTY_RECENT_RUNS: RecentRun[] = [];
 
 const TEMPLATE_CACHE_KEY = "fuse.templateStudio.templates.v4";
 const TEMPLATE_DETAIL_CACHE_KEY = "fuse.templateStudio.templateDetails.v4";
@@ -130,8 +124,6 @@ const TEMPLATE_SELECTION_KEY = "fuse.templateStudio.selectedTemplateId";
 const ACTIVE_RUN_STATUSES = new Set<RunnerStatus>(["queued", "running", "video_pending"]);
 /** Authoritative layout mode for the studio: compact browse/setup vs expanded campaign workspace. */
 type CampaignStudioMode = "browse" | "setup" | "running" | "complete" | "failed";
-const RUN_CATALOG_PAGE_SIZE = 8;
-const RECENT_RUNS_REFRESH_COOLDOWN_SECONDS = 10;
 
 
 function getOutputDownloadName(templateName: string, index: number, output: RunnerOutput) {
@@ -212,30 +204,6 @@ async function fetchJobStatus(jobId: string) {
     publicGraph?: PublicGraph;
     statusMessage?: string;
     steps?: unknown[];
-  };
-}
-
-async function fetchRecentRuns(limit: number, offset: number): Promise<RecentRunsPage> {
-  const token = await getAccessToken();
-  const response = await fetch(
-    `${SUPABASE_URL}/functions/v1/list-recent-runs?limit=${limit}&offset=${offset}`,
-    {
-      headers: {
-        Authorization: `Bearer ${token}`,
-        apikey: SUPABASE_PUBLISHABLE_KEY,
-      },
-    },
-  );
-
-  const data = await response.json().catch(() => null);
-  if (!response.ok) {
-    throw new Error(data?.error ?? "Could not load recent runs.");
-  }
-
-  return {
-    jobs: Array.isArray(data?.jobs) ? (data.jobs as RecentRun[]) : [],
-    hasMore: Boolean(data?.hasMore),
-    nextOffset: typeof data?.nextOffset === "number" ? data.nextOffset : null,
   };
 }
 
