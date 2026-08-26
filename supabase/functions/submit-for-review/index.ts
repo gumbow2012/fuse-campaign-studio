@@ -8,6 +8,7 @@ import {
   requireBuilderUser,
 } from "../_shared/supabase-admin.ts";
 import { assertVersionAccess, FORBIDDEN_TEMPLATE_MESSAGE } from "../_shared/template-scope.ts";
+import { assertVersionActivatable } from "../_shared/fork-run.ts";
 
 type Body = { versionId?: string };
 
@@ -33,6 +34,8 @@ Deno.serve(async (req) => {
       .maybeSingle();
     if (versionError) throw new Error(versionError.message);
     if (!version) throw new Error("Template version not found");
+    // TR10 ISOLATION: personal fork versions can never enter review/publish.
+    assertVersionActivatable(version as never);
 
     const { error: updateError } = await admin
       .from("template_versions")
