@@ -54,24 +54,12 @@ import {
   matchesSpendFilter,
 } from "@/services/templatePerformance";
 
-import {
-  formatAssetTypeLabel,
-  type TemplateAssetRequirement,
-} from "@/lib/templateAssetRequirements";
+import { type TemplateAssetRequirement } from "@/lib/templateAssetRequirements";
+import { resolveInputRole } from "@/lib/templateInputSources";
 
 type RunnerStatus = "queued" | "running" | "video_pending" | "complete" | "failed";
 
-/** FT2: short hint line assembled from optional requirement metadata. */
-function describeRequirement(requirement: TemplateAssetRequirement) {
-  const notes: string[] = [];
-  if (requirement.maxFiles > 1) {
-    notes.push(`${requirement.minFiles}-${requirement.maxFiles} files`);
-  }
-  if (requirement.recommendedAspect) notes.push(requirement.recommendedAspect);
-  if (requirement.recommendedResolution) notes.push(requirement.recommendedResolution);
-  if (requirement.transparencyRecommended) notes.push("transparent PNG preferred");
-  return notes;
-}
+
 
 
 interface InputField {
