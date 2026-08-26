@@ -90,7 +90,15 @@ export async function runUploadChecks(
   }
 
   const decoded = await decodeImage(file);
-  if (!decoded) {
+  if (decoded.kind === "timeout") {
+    return {
+      state: "error",
+      warnings: [],
+      error: DECODE_TIMEOUT_MESSAGE,
+      notChecked,
+    };
+  }
+  if (decoded.kind === "error") {
     return {
       state: "error",
       warnings: [],
