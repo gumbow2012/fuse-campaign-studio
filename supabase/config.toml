@@ -160,3 +160,6 @@ verify_jwt = true
 
 [functions.creator-analytics]
 verify_jwt = true
+
+[functions.provision-live-billing]
+verify_jwt = true

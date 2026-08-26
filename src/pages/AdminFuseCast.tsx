@@ -19,6 +19,7 @@ import {
   isCanonicalReady,
 } from "@/lib/canonicalPortrait";
 import { listFuseAvatars, updateAvatar, type AvatarProfile } from "@/services/avatarProfiles";
+import LiveBillingProvisionCard from "@/components/admin/LiveBillingProvisionCard";
 
 type Draft = {
   generationId: string | null;
@@ -180,6 +181,10 @@ export default function AdminFuseCast() {
           Portraits are identity references only — never campaign art.
         </p>
       </header>
+
+      <div className="mb-8">
+        <LiveBillingProvisionCard />
+      </div>
 
       {loading ? (
         <p className="flex items-center gap-2 text-sm text-muted-foreground">
