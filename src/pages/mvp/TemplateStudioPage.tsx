@@ -26,6 +26,7 @@ import TemplateInputCard from "@/components/templates/TemplateInputCard";
 import CastSelector, { PRIMARY_CAST_SLOT, type CastSelection } from "@/components/templates/CastSelector";
 import { CampaignBuildGraph, type PublicGraph } from "@/components/templates/CampaignBuildGraph";
 import CampaignOutputsPanel from "@/components/templates/CampaignOutputsPanel";
+import CampaignResults from "@/components/templates/CampaignResults";
 
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
@@ -641,6 +642,17 @@ export default function TemplateStudioPage() {
 
   const handleLoadMoreRuns = () => {
     void recentRunsQuery.fetchNextPage();
+  };
+
+  const handleDownloadSingleOutput = (output: RunnerOutput, index: number) => {
+    const link = document.createElement("a");
+    link.href = output.url;
+    link.download = getOutputDownloadName(selectedTemplate?.name ?? "fuse-run", index, output);
+    link.target = "_blank";
+    link.rel = "noreferrer";
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
   };
 
   const handleDownloadRunOutputs = (run: RecentRun) => {
@@ -1584,32 +1596,11 @@ export default function TemplateStudioPage() {
                     />
                   ) : null}
 
-                  <div className="grid gap-4 md:grid-cols-2">
-                    {result.outputs.map((output, index) => (
-                      <article key={`${output.url}-${index}`} className="overflow-hidden rounded-[1.5rem] border border-white/8 bg-black/20">
-                        {output.type === "video" ? (
-                          <video src={output.url} controls className="aspect-[9/16] w-full bg-black object-cover" />
-                        ) : (
-                          <img src={output.url} alt={formatPublicOutputLabel(index)} className="aspect-[9/16] w-full object-cover" />
-                        )}
-                        <div className="flex items-center justify-between gap-3 p-4">
-                          <div className="flex items-center gap-2 text-sm text-slate-300">
-                            {output.type === "video" ? <Film className="h-4 w-4" /> : <ImageIcon className="h-4 w-4" />}
-                            <span>{formatPublicOutputLabel(index)}</span>
-                          </div>
-                          <a
-                            href={output.url}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="inline-flex items-center gap-2 rounded-full border border-white/10 px-3 py-1.5 text-xs uppercase tracking-[0.2em] text-slate-300 hover:bg-white/[0.06]"
-                          >
-                            <Download className="h-3.5 w-3.5" />
-                            Open
-                          </a>
-                        </div>
-                      </article>
-                    ))}
-                  </div>
+                  <CampaignResults
+                    outputs={result.outputs}
+                    onDownload={handleDownloadSingleOutput}
+                  />
+
                 </div>
               ) : null}
 
