@@ -1714,7 +1714,7 @@ export default function TemplateStudioPage() {
                                 ? "text-emerald-200"
                                 : "text-cyan-100"
                           }`}>
-                            {run.status.replace("_", " ")}
+                            {run.status === "failed" ? "Needs attention" : run.status.replace("_", " ")}
                           </p>
                           <p className="mt-1 text-xs text-slate-400">{run.progress}%</p>
                         </div>
@@ -1807,7 +1807,12 @@ export default function TemplateStudioPage() {
 
               {result?.status === "failed" && !result.publicGraph?.nodes.length ? (
                 <div className="mt-6 rounded-[1.5rem] border border-rose-400/20 bg-rose-400/10 p-5">
-                  <p className="text-sm text-rose-50">Generation interrupted — try again.</p>
+                  <p className="text-sm font-semibold text-rose-100">
+                    {readPublicFailure(result.publicFailure).title}
+                  </p>
+                  <p className="mt-1 text-sm text-rose-50/90">
+                    {readPublicFailure(result.publicFailure).message}
+                  </p>
                 </div>
               ) : null}
 
