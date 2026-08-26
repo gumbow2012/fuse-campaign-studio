@@ -175,14 +175,18 @@ export default function CreatorDashboard() {
     setAnalyticsLoading(true);
     setAnalyticsError(null);
     try {
-      setAnalytics(await loadCreatorAnalytics());
+      const result = await loadCreatorAnalytics();
+      setAnalytics(result);
+      const uses: Record<string, number> = {};
+      for (const row of result.perTemplate) uses[row.template_id] = row.runs;
+      setPerformance(await loadCreatorPerformance(user?.id ?? "", uses));
     } catch (error) {
       setAnalytics(null);
       setAnalyticsError(error instanceof Error ? error.message : "Unknown error");
     } finally {
       setAnalyticsLoading(false);
     }
-  }, []);
+  }, [user?.id]);
 
   const loadChallenges = useCallback(async () => {
     setChallengesLoading(true);
