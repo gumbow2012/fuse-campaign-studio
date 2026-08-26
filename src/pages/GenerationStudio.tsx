@@ -497,7 +497,9 @@ function GenerationCard({
   useEffect(() => {
     setLoaded(false);
   }, [tileSrc]);
-  const showSkeleton = done && (isImage ? !loaded : !near);
+  /* GS-PERF7: shimmer skeleton stays until the media's first frame is ready
+     (image onLoad / video onLoadedData) so video tiles never show a black box. */
+  const showSkeleton = done && !loaded;
 
 
   return (
