@@ -254,6 +254,8 @@ type Generation = {
   promptPreview?: string | null;
   outputUrl: string | null;
   previewUrl?: string | null;
+  posterUrl?: string | null;
+
   outputType: string | null;
   error?: string | null;
   estimatedCredits: number | null;
