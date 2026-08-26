@@ -66,7 +66,7 @@ export function AccountMenuContent({ onNavigate }: { onNavigate?: () => void }) 
     "flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-foreground/80 hover:bg-white/5 hover:text-foreground transition-colors";
 
   return (
-    <div className="w-[264px]">
+    <div className="w-[264px] max-w-full">
       {/* Header */}
       <div className={cn("flex items-center gap-3", panelClass)}>
         <Avatar className="h-10 w-10 rounded-full border border-white/10">
@@ -200,8 +200,9 @@ export function AccountPopover() {
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <button
-          className="group flex items-center justify-center rounded-full border border-white/10 bg-white/[0.03] p-1.5 backdrop-blur-sm transition-colors hover:bg-white/[0.07]"
+          className="group flex min-h-11 min-w-11 items-center justify-center rounded-full border border-white/10 bg-white/[0.03] p-1.5 backdrop-blur-sm transition-colors hover:bg-white/[0.07] motion-reduce:transition-none sm:min-h-0 sm:min-w-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/80 focus-visible:ring-offset-2 focus-visible:ring-offset-background"
           aria-label="Open account menu"
+          aria-haspopup="dialog"
           aria-expanded={open}
         >
           <FuseCore size={28} active={open} />

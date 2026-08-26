@@ -43,13 +43,17 @@ const DESTINATIONS: NavDestination[] = [
   },
 ];
 
+/* Consistent brand focus ring for all nav controls */
+const FOCUS_RING =
+  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/80 focus-visible:ring-offset-2 focus-visible:ring-offset-background";
+
 const NavItem = ({ item, active }: { item: NavDestination; active: boolean }) => {
   const Icon = item.icon;
   return (
     <Link
       to={item.to}
       aria-current={active ? "page" : undefined}
-      className={`group relative flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm transition-colors duration-200 ${
+      className={`group relative flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm transition-colors duration-200 motion-reduce:transition-none ${FOCUS_RING} ${
         active
           ? "bg-primary/10 font-semibold text-foreground"
           : "text-muted-foreground hover:bg-white/5 hover:text-foreground"
@@ -90,14 +94,17 @@ const AdminMenu = () => {
       <PopoverTrigger asChild>
         <button
           className={cn(
-            "hidden lg:inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors",
+            "hidden lg:inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors motion-reduce:transition-none",
+            FOCUS_RING,
             isActive
               ? "border-white/15 bg-white/[0.08] text-foreground"
               : "border-white/10 bg-white/[0.03] text-muted-foreground hover:border-white/15 hover:bg-white/[0.06] hover:text-foreground"
           )}
           aria-label="Admin menu"
+          aria-haspopup="menu"
           aria-expanded={open}
         >
+
           <Shield size={14} />
           Admin
           <ChevronDown
@@ -120,8 +127,10 @@ const AdminMenu = () => {
                 key={link.to}
                 to={link.to}
                 onClick={() => setOpen(false)}
+                aria-current={active ? "page" : undefined}
                 className={cn(
-                  "flex items-center justify-between rounded-lg px-3 py-2 text-sm transition-colors",
+                  "flex items-center justify-between rounded-lg px-3 py-2 text-sm transition-colors motion-reduce:transition-none",
+                  FOCUS_RING,
                   active
                     ? "bg-white/[0.08] text-foreground"
                     : "text-muted-foreground hover:bg-white/5 hover:text-foreground"
@@ -130,6 +139,7 @@ const AdminMenu = () => {
                 {link.label}
                 {active && <span className="h-1.5 w-1.5 rounded-full bg-primary" />}
               </Link>
+
             );
           })}
         </div>
@@ -141,10 +151,27 @@ const AdminMenu = () => {
 /* ─── Mobile menu content ─── */
 const MobileMenu = ({ onClose }: { onClose: () => void }) => {
   const { user, isCreator, roles } = useAuth();
+  const { pathname } = useLocation();
   const isAdminOrDev = roles.includes("admin") || roles.includes("dev");
 
-  const linkClass =
-    "block rounded-lg px-3 py-2 text-sm text-foreground/80 hover:bg-white/5 hover:text-foreground transition-colors";
+  const linkClass = cn(
+    "flex min-h-11 items-center rounded-lg px-3 py-2.5 text-sm text-foreground/80 hover:bg-white/5 hover:text-foreground transition-colors motion-reduce:transition-none",
+    FOCUS_RING
+  );
+
+  const DrawerLink = ({ to, children }: { to: string; children: React.ReactNode }) => {
+    const active = to === "/" ? pathname === "/" : pathname === to || pathname.startsWith(`${to}/`);
+    return (
+      <Link
+        to={to}
+        onClick={onClose}
+        aria-current={active ? "page" : undefined}
+        className={cn(linkClass, active && "bg-white/[0.08] font-semibold text-foreground")}
+      >
+        {children}
+      </Link>
+    );
+  };
 
   return (
     <div className="flex h-full flex-col">
@@ -152,43 +179,41 @@ const MobileMenu = ({ onClose }: { onClose: () => void }) => {
         <span className="font-display text-sm font-black uppercase tracking-wider text-foreground">Menu</span>
       </div>
 
-      <div className="flex-1 overflow-auto px-4 py-4 space-y-6">
+      <div className="flex-1 overflow-y-auto overflow-x-hidden px-4 py-4 space-y-6">
         {/* Main nav */}
-        <div className="space-y-1">
+        <nav aria-label="Primary" className="space-y-1">
           <p className="px-3 text-[10px] font-bold uppercase tracking-[0.15em] text-muted-foreground">Browse</p>
-          <Link to="/" onClick={onClose} className={linkClass}>Home</Link>
+          <DrawerLink to="/">Home</DrawerLink>
           {DESTINATIONS.map((d) => (
-            <Link key={d.label} to={d.to} onClick={onClose} className={linkClass}>{d.label}</Link>
+            <DrawerLink key={d.label} to={d.to}>{d.label}</DrawerLink>
           ))}
-          <Link to="/pricing" onClick={onClose} className={linkClass}>Pricing</Link>
-
-        </div>
+          <DrawerLink to="/pricing">Pricing</DrawerLink>
+        </nav>
 
         {user ? (
           <>
             <div className="space-y-1">
               <p className="px-3 text-[10px] font-bold uppercase tracking-[0.15em] text-muted-foreground">Account</p>
-              <Link to="/dashboard" onClick={onClose} className={linkClass}>Dashboard</Link>
-              <Link to="/account" onClick={onClose} className={linkClass}>Account</Link>
-              <Link to="/pricing" onClick={onClose} className={linkClass}>Plans & Billing</Link>
-              {isCreator && <Link to="/app/creator" onClick={onClose} className={linkClass}>Creator Studio</Link>}
+              <DrawerLink to="/dashboard">Dashboard</DrawerLink>
+              <DrawerLink to="/account">Account</DrawerLink>
+              <DrawerLink to="/pricing">Plans &amp; Billing</DrawerLink>
+              {isCreator && <DrawerLink to="/app/creator">Creator Studio</DrawerLink>}
               {isAdminOrDev && (
                 <div className="space-y-1">
                   <p className="px-3 text-[10px] font-bold uppercase tracking-[0.15em] text-muted-foreground">Admin</p>
                   {ADMIN_LINKS.map((link) => (
-                    <Link key={link.to} to={link.to} onClick={onClose} className={linkClass}>
-                      {link.label}
-                    </Link>
+                    <DrawerLink key={link.to} to={link.to}>{link.label}</DrawerLink>
                   ))}
                 </div>
               )}
             </div>
 
-            <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 backdrop-blur-sm">
+            <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-3 backdrop-blur-sm">
               <AccountMenuContent onNavigate={onClose} />
             </div>
           </>
         ) : (
+
           <div className="space-y-2 pt-4">
             <Link to="/auth" onClick={onClose}>
               <Button variant="outline" className="w-full rounded-full border-white/15 bg-white/5 text-foreground hover:bg-white/10">
@@ -233,46 +258,60 @@ const Navbar = () => {
       }`}
       style={!scrolled ? { borderBottom: '1px solid rgba(255,255,255,0.04)' } : undefined}
     >
-      <div className="container mx-auto flex items-center justify-between h-16 px-6">
+      <div className="container mx-auto flex items-center justify-between h-16 gap-2 px-4 sm:px-6">
         {/* Logo */}
-        <Link to="/" className="flex items-center gap-3">
-          <img src={FUSE_ICON_SRC} alt="" className="h-9 w-9 rounded-xl object-contain" />
-          <img src={FUSE_WORDMARK_SRC} alt="FUSE" className="h-6 w-auto object-contain" />
+        <Link
+          to="/"
+          aria-label="FUSE home"
+          className={cn("flex shrink-0 items-center gap-2 rounded-lg sm:gap-3", FOCUS_RING)}
+        >
+          <img src={FUSE_ICON_SRC} alt="" className="h-8 w-8 rounded-xl object-contain sm:h-9 sm:w-9" />
+          <img src={FUSE_WORDMARK_SRC} alt="FUSE" className="h-5 w-auto object-contain sm:h-6" />
         </Link>
 
-        {/* Center nav — real product destinations */}
-        <div className="hidden lg:flex items-center gap-1">
+        {/* Center nav — real product destinations (tablet and up) */}
+        <div className="hidden md:flex min-w-0 items-center gap-1">
           {DESTINATIONS.map((item) => (
             <NavItem key={item.label} item={item} active={item.match(pathname)} />
           ))}
           <Link
             to="/pricing"
             aria-current={pathname === "/pricing" ? "page" : undefined}
-            className={`ml-2 rounded-lg px-3 py-1.5 text-sm transition-colors duration-200 ${
+            className={cn(
+              "ml-2 hidden lg:inline-flex rounded-lg px-3 py-1.5 text-sm transition-colors duration-200 motion-reduce:transition-none",
+              FOCUS_RING,
               pathname === "/pricing"
                 ? "bg-primary/10 font-semibold text-foreground"
                 : "text-muted-foreground hover:text-foreground"
-            }`}
+            )}
           >
             Pricing
           </Link>
         </div>
 
         {/* Right side */}
-        <div className="flex items-center gap-2">
+        <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
           {user && isAdminOrDev && <AdminMenu />}
 
-          {/* Mobile menu */}
+          {/* Mobile / tablet overflow menu */}
           <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
             <SheetTrigger asChild>
               <button
-                className="lg:hidden p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-secondary/40 transition-colors"
-                aria-label="Open menu"
+                className={cn(
+                  "lg:hidden inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg text-muted-foreground hover:text-foreground hover:bg-secondary/40 transition-colors motion-reduce:transition-none",
+                  FOCUS_RING
+                )}
+                aria-label={mobileOpen ? "Close navigation menu" : "Open navigation menu"}
+                aria-expanded={mobileOpen}
               >
-                <Menu size={20} />
+                <Menu size={20} aria-hidden="true" />
               </button>
             </SheetTrigger>
-            <SheetContent side="right" className="w-[300px] border-white/10 bg-[#0B1120]/95 p-0">
+            <SheetContent
+              side="right"
+              className="w-[min(340px,90vw)] border-white/10 bg-[#0B1120]/95 p-0 motion-reduce:transition-none motion-reduce:animate-none motion-reduce:duration-0"
+            >
+
               <SheetTitle className="sr-only">Navigation menu</SheetTitle>
               <MobileMenu onClose={() => setMobileOpen(false)} />
             </SheetContent>
