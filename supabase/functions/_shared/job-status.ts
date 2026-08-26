@@ -366,35 +366,37 @@ export async function buildJobStatusResponse(
     executionTimeMs: numberedOutputs.reduce((sum: number, output: any) => sum + Number(output.executionTimeMs ?? 0), 0),
   };
 
-  return {
-    jobId: job.id,
-    startedAt: job.started_at ?? null,
-    completedAt: job.completed_at ?? null,
-    status: job.status,
-    progress: job.progress ?? 0,
-    error: resolvedJobError,
-    telemetry: job.result_payload?.telemetry ?? {},
-    user: {
-      id: job.user_id ?? null,
-      name: profile.data?.name ?? null,
-      email: profile.data?.email ?? null,
-      plan: profile.data?.plan ?? null,
-      subscriptionStatus: profile.data?.subscription_status ?? null,
-    },
-    template: {
-      templateId: job.template_id,
-      templateName: job.fuse_templates?.name ?? "Template",
-      versionId: job.version_id,
-      versionNumber: job.template_versions?.version_number ?? null,
-      reviewStatus: job.template_versions?.review_status ?? "Unreviewed",
-      inputs: templateInputs,
-      hiddenRefs: templateRefs,
-    },
-    inputPayload: jobInputs,
-    userInputs,
-    outputTotals: totals,
-    outputs: numberedOutputs,
-    steps: (steps ?? []).map((step: any) => {
+  const outputNumberByNodeId = Object.fromEntries(
+    numberedOutputs.map((output: any) => [String(output.nodeId), output.outputNumber]),
+  ) as Record<string, number>;
+
+  const inputLabelByNodeId = Object.fromEntries(
+    inputPlan.slots.flatMap((slot) => slot.nodeIds.map((nodeId) => [nodeId, slot.name])),
+  ) as Record<string, string>;
+
+  const publicGraph = buildPublicExecutionGraph(
+    nodes ?? [],
+    edges ?? [],
+    steps ?? [],
+    outputExposureByNodeId,
+    { inputLabelByNodeId, outputNumberByNodeId },
+  );
+  const statusMessage = publicStageMessage(publicGraph, String(job.status), !!resolvedJobError);
+
+  // Public outputs carry only their number/type/url — never the gen node's name.
+  const publicOutputs = numberedOutputs.map((output: any) => ({
+    outputNumber: output.outputNumber,
+    stepId: output.stepId,
+    nodeId: output.nodeId,
+    label: `Output ${output.outputNumber}`,
+    type: output.type,
+    url: output.url,
+    estimatedCostUsd: output.estimatedCostUsd ?? null,
+    executionTimeMs: output.executionTimeMs ?? null,
+  }));
+
+  const sensitiveSteps = () =>
+    (steps ?? []).map((step: any) => {
       const node = step.nodes ?? {};
       const incoming = sortEdgesByExecutionOrder(incomingByTarget.get(step.node_id) ?? []).map((edge: any) => {
         const source = nodeMap.get(edge.source_node_id);
@@ -436,6 +438,48 @@ export async function buildJobStatusResponse(
         executionTimeMs: step.execution_time_ms ?? step.output_payload?.telemetry?.executionTimeMs ?? null,
         telemetry: step.output_payload?.telemetry ?? null,
       };
-    }),
+    });
+
+  const base = {
+    jobId: job.id,
+    startedAt: job.started_at ?? null,
+    completedAt: job.completed_at ?? null,
+    status: job.status,
+    statusMessage,
+    progress: job.progress ?? 0,
+    error: resolvedJobError,
+    telemetry: job.result_payload?.telemetry ?? {},
+    user: {
+      id: job.user_id ?? null,
+      name: profile.data?.name ?? null,
+      email: profile.data?.email ?? null,
+      plan: profile.data?.plan ?? null,
+      subscriptionStatus: profile.data?.subscription_status ?? null,
+    },
+    template: {
+      templateId: job.template_id,
+      templateName: job.fuse_templates?.name ?? "Template",
+      versionId: job.version_id,
+      versionNumber: job.template_versions?.version_number ?? null,
+      reviewStatus: job.template_versions?.review_status ?? "Unreviewed",
+      inputs: templateInputs,
+    },
+    userInputs,
+    outputTotals: totals,
+    publicGraph,
+  };
+
+  // Sensitive fields are never assembled into the non-privileged payload.
+  if (!includeSensitive) {
+    return { ...base, outputs: publicOutputs };
+  }
+
+  return {
+    ...base,
+    template: { ...base.template, hiddenRefs: templateRefs },
+    inputPayload: jobInputs,
+    outputs: numberedOutputs,
+    steps: sensitiveSteps(),
   };
 }
+
