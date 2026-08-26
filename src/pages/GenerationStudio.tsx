@@ -823,36 +823,65 @@ export default function GenerationStudio() {
     });
   }, []);
 
-  const [galleryLimit, setGalleryLimit] = useState(24);
+  /**
+   * GS-PERF2: keyset cursor pagination. Page 1 (no cursor) MERGES into the
+   * loaded list in place — the 5s poll refreshes statuses without collapsing
+   * loaded pages. Load More appends the next page strictly after nextCursor.
+   */
+  const PAGE_SIZE = 24;
+  type ListCursor = { createdAt: string; id: string };
+  const nextCursorRef = useRef<ListCursor | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(false);
 
-  const loadQueue = useCallback(async (silent = true, limitOverride?: number) => {
-    const limit = limitOverride ?? galleryLimit;
+  const loadQueue = useCallback(async (silent = true) => {
     try {
-      const data = await callStudio({ action: "queue", limit });
+      const data = await callStudio({ action: "queue", limit: PAGE_SIZE });
       const rows = (data?.generations ?? []) as Generation[];
-      setGenerations(rows);
-      setHasMore(rows.length >= limit);
+      const cursor = (data?.nextCursor as ListCursor | null) ?? null;
+      setGenerations((prev) => {
+        if (!prev.length) return rows;
+        // In-place refresh: page-1 rows update by id and lead the list
+        // (newest first); already-paged older rows keep their positions.
+        const fresh = new Set(rows.map((row) => row.id));
+        return [...rows, ...prev.filter((entry) => !fresh.has(entry.id))];
+      });
+      // Only adopt page 1's cursor before the user has paged deeper —
+      // afterwards the cursor belongs to the oldest loaded row and stays valid.
+      setHasMore((alreadyPaged) => {
+        if (!alreadyPaged || !nextCursorRef.current) nextCursorRef.current = cursor;
+        return Boolean(nextCursorRef.current);
+      });
     } catch (error) {
       if (!silent) toast.error(error instanceof Error ? error.message : "Could not load generations");
     }
-  }, [galleryLimit]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     void loadQueue(false);
   }, [loadQueue]);
 
   const loadMore = useCallback(async () => {
-    const next = galleryLimit + 24;
+    const cursor = nextCursorRef.current;
+    if (!cursor) return;
     setLoadingMore(true);
-    setGalleryLimit(next);
     try {
-      await loadQueue(false, next);
+      const data = await callStudio({ action: "queue", limit: PAGE_SIZE, cursor });
+      const rows = (data?.generations ?? []) as Generation[];
+      setGenerations((prev) => {
+        const seen = new Set(prev.map((entry) => entry.id));
+        return [...prev, ...rows.filter((row) => !seen.has(row.id))];
+      });
+      nextCursorRef.current = (data?.nextCursor as ListCursor | null) ?? null;
+      setHasMore(Boolean(nextCursorRef.current));
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not load more");
     } finally {
       setLoadingMore(false);
     }
-  }, [galleryLimit, loadQueue]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const hasInFlight = generations.some((entry) => entry.status === "queued" || entry.status === "running");
   useEffect(() => {
