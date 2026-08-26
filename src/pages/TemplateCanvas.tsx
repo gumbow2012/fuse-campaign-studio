@@ -540,6 +540,9 @@ const TemplateCanvas = () => {
   const [error, setError] = useState<string | null>(null);
   const [loadingLatestOutputs, setLoadingLatestOutputs] = useState(false);
   const [startingRun, setStartingRun] = useState(false);
+  const [castAvatars, setCastAvatars] = useState<AvatarProfile[]>([]);
+  const [castLoading, setCastLoading] = useState(false);
+  const [selectedCastAvatarId, setSelectedCastAvatarId] = useState<string | null>(null);
   const [mutating, setMutating] = useState<string | null>(null);
   const [newTemplateName, setNewTemplateName] = useState("");
   const [newTemplateDescription, setNewTemplateDescription] = useState("");
