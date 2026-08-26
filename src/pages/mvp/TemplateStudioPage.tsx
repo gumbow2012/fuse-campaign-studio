@@ -1109,7 +1109,7 @@ export default function TemplateStudioPage() {
         <div
           data-studio-mode={studioMode}
           className={cn(
-            "mt-8 grid gap-6 transition-[grid-template-columns] duration-300",
+            "mt-8 grid gap-6 motion-safe:transition-[grid-template-columns] motion-safe:duration-300",
             hasActiveCampaignWorkspace
               ? "xl:grid-cols-[minmax(280px,380px)_minmax(0,1fr)]"
               : "xl:grid-cols-[minmax(0,1fr)_440px] 2xl:grid-cols-[minmax(0,1fr)_480px]",
