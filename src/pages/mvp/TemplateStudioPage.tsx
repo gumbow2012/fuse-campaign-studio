@@ -2,9 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import {
-  AlertTriangle,
   ArrowRight,
-  CheckCircle2,
   ChevronDown,
   ChevronRight,
   Download,
@@ -19,7 +17,8 @@ import {
   
 } from "lucide-react";
 import SiteShell from "@/components/mvp/SiteShell";
-import RunFeedbackCard from "@/components/mvp/RunFeedbackCard";
+import RunFeedbackInline from "@/components/mvp/RunFeedbackInline";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import CreditPackDialog from "@/components/mvp/CreditPackDialog";
 import TemplateDetailDialog, { readTemplateAspectRatio } from "@/components/mvp/TemplateDetailDialog";
 import TemplateInputCard from "@/components/templates/TemplateInputCard";
@@ -441,6 +440,8 @@ export default function TemplateStudioPage() {
   const [libraryAssets, setLibraryAssets] = useState<Record<string, { url: string; name?: string | null } | null>>({});
   const [textInputs, setTextInputs] = useState<Record<string, string>>({});
   const [jobId, setJobId] = useState<string | null>(null);
+  const [privateWorkflowDialogOpen, setPrivateWorkflowDialogOpen] = useState(false);
+  const [workflowUpgradeDialogOpen, setWorkflowUpgradeDialogOpen] = useState(false);
   const [result, setResult] = useState<RunnerResult | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [checkingCredits, setCheckingCredits] = useState(false);
@@ -718,15 +719,17 @@ export default function TemplateStudioPage() {
         const status = await fetchJobStatus(jobId);
         if (cancelled) return;
 
-        setResult({
+        // P0: never lose the graph — if a later poll omits publicGraph/statusMessage,
+        // keep the previously fetched snapshot (pinned to the run's template version).
+        setResult((prev) => ({
           status: status.status,
           progress: status.progress ?? 0,
           outputs: Array.isArray(status.outputs) ? status.outputs : [],
           error: status.error ?? undefined,
-          publicGraph: status.publicGraph,
-          statusMessage: status.statusMessage,
+          publicGraph: status.publicGraph ?? prev?.publicGraph,
+          statusMessage: status.statusMessage ?? prev?.statusMessage,
           hasPrivilegedSteps: Array.isArray(status.steps),
-        });
+        }));
 
         if (!ACTIVE_RUN_STATUSES.has(status.status)) {
           void refetchRecentRuns();
@@ -859,6 +862,18 @@ export default function TemplateStudioPage() {
     inputFields.find(
       (field) => field.type === "image" && resolveInputRole(field.label, field.requirement?.assetType) === "face",
     )?.key ?? null;
+
+  // P0 — plan tier gate for the "Customize workflow" entry point.
+  // Tier comes from profile.plan (billing-owned), matching the plan ladder keys
+  // (free / starter / plus / pro / studio / team); admin/dev always qualify.
+  const planKey = (profile?.plan ?? "free").toLowerCase();
+  const canCustomizeWorkflow =
+    isPrivilegedUser || planKey === "pro" || planKey === "studio" || planKey === "team";
+
+  /** P0: Pro entry point — the private-fork editor navigation lands here next phase. */
+  const handleCustomizeWorkflow = () => {
+    setPrivateWorkflowDialogOpen(true);
+  };
 
 
   const handleTemplateSelect = (templateId: string) => {
@@ -1527,7 +1542,9 @@ export default function TemplateStudioPage() {
             <section className="rounded-[2rem] border border-white/10 bg-slate-950/75 p-6 shadow-[0_24px_80px_rgba(0,0,0,0.35)] backdrop-blur-xl">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
-                  <p className="text-[11px] uppercase tracking-[0.24em] text-muted-foreground">Result</p>
+                  <p className="text-[11px] uppercase tracking-[0.24em] text-muted-foreground">
+                    Result{selectedTemplate ? ` · ${selectedTemplate.name}` : ""}
+                  </p>
                   <p className="mt-2 text-sm text-slate-300">
                     Current run {jobId ? <span className="font-mono text-slate-100">{jobId}</span> : "has not started yet"}.
                   </p>
@@ -1557,50 +1574,52 @@ export default function TemplateStudioPage() {
                 </div>
               ) : null}
 
-              {result && ACTIVE_RUN_STATUSES.has(result.status) ? (
+              {/* P0: the workflow graph stays attached for the ENTIRE run lifecycle —
+                  queued → running → video_pending → complete / failed. */}
+              {result && result.publicGraph && result.publicGraph.nodes.length > 0 ? (
                 <div className="mt-6 space-y-4">
-                  {result.publicGraph && result.publicGraph.nodes.length > 0 ? (
-                    <CampaignBuildGraph
-                      graph={result.publicGraph}
-                      statusMessage={result.statusMessage}
-                      progress={result.progress}
-                    />
-                  ) : (
-                    <RunProgressBeacon progress={result.progress} status={result.status} />
-                  )}
+                  <CampaignBuildGraph
+                    graph={result.publicGraph}
+                    runStatus={result.status}
+                    statusMessage={result.statusMessage}
+                    progress={result.progress}
+                    canCustomizeWorkflow={canCustomizeWorkflow}
+                    onCustomizeWorkflow={handleCustomizeWorkflow}
+                    onLockedCustomize={() => setWorkflowUpgradeDialogOpen(true)}
+                  />
+                  {ACTIVE_RUN_STATUSES.has(result.status) ? (
+                    <CampaignOutputsPanel graph={result.publicGraph} outputs={result.outputs} />
+                  ) : null}
+                </div>
+              ) : null}
+
+              {result && !result.publicGraph?.nodes.length && ACTIVE_RUN_STATUSES.has(result.status) ? (
+                <div className="mt-6 space-y-4">
+                  <RunProgressBeacon progress={result.progress} status={result.status} />
                   <CampaignOutputsPanel graph={result.publicGraph} outputs={result.outputs} />
                 </div>
               ) : null}
 
-              {result?.status === "failed" ? (
+              {result?.status === "failed" && !result.publicGraph?.nodes.length ? (
                 <div className="mt-6 rounded-[1.5rem] border border-rose-400/20 bg-rose-400/10 p-5">
-                  <div className="flex items-center gap-3">
-                    <AlertTriangle className="h-5 w-5 text-rose-100" />
-                    <p className="text-sm text-rose-50">{result.error || "The run failed."}</p>
-                  </div>
+                  <p className="text-sm text-rose-50">Generation interrupted — try again.</p>
                 </div>
               ) : null}
 
               {result?.status === "complete" ? (
                 <div className="mt-6 space-y-5">
-                  <div className="flex items-center gap-3 rounded-[1.5rem] border border-emerald-400/20 bg-emerald-400/10 p-4">
-                    <CheckCircle2 className="h-5 w-5 text-emerald-100" />
-                    <p className="text-sm text-emerald-50">The template completed successfully.</p>
-                  </div>
-
-                  {jobId ? (
-                    <RunFeedbackCard
-                      jobId={jobId}
-                      initialFeedback={currentResultFeedback}
-                      onSaved={(feedback) => handleFeedbackSaved(jobId, feedback)}
-                    />
-                  ) : null}
-
                   <CampaignResults
                     outputs={result.outputs}
                     onDownload={handleDownloadSingleOutput}
                   />
 
+                  {jobId ? (
+                    <RunFeedbackInline
+                      jobId={jobId}
+                      initialFeedback={currentResultFeedback}
+                      onSaved={(feedback) => handleFeedbackSaved(jobId, feedback)}
+                    />
+                  ) : null}
                 </div>
               ) : null}
 
@@ -1756,9 +1775,8 @@ export default function TemplateStudioPage() {
                           </div>
 
                           {!ACTIVE_RUN_STATUSES.has(run.status) ? (
-                            <RunFeedbackCard
+                            <RunFeedbackInline
                               jobId={run.id}
-                              compact
                               initialFeedback={resolveFeedback(run.id, run.feedback)}
                               onSaved={(feedback) => handleFeedbackSaved(run.id, feedback)}
                               className="mt-4"
@@ -1812,6 +1830,41 @@ export default function TemplateStudioPage() {
           if (detailTemplate) handleTemplateSelect(detailTemplate.id);
         }}
       />
+
+      {/* P0: Pro entry point — placeholder until the private-fork editor lands.
+          Replacing this body with real navigation is a one-line swap in handleCustomizeWorkflow. */}
+      <Dialog open={privateWorkflowDialogOpen} onOpenChange={setPrivateWorkflowDialogOpen}>
+        <DialogContent className="border-white/10 bg-[#0c101c] text-slate-100 sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="font-display tracking-[0.12em]">Your private workflow</DialogTitle>
+            <DialogDescription className="text-sm text-slate-400">
+              Workflow customization is being set up for your account. Your private version will let
+              you adjust this campaign's workflow without ever affecting the original template.
+            </DialogDescription>
+          </DialogHeader>
+        </DialogContent>
+      </Dialog>
+
+      {/* P0: locked upsell for Starter / Plus / Free — the graph itself is never hidden. */}
+      <Dialog open={workflowUpgradeDialogOpen} onOpenChange={setWorkflowUpgradeDialogOpen}>
+        <DialogContent className="border-white/10 bg-[#0c101c] text-slate-100 sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="font-display tracking-[0.12em]">MAKE THIS WORKFLOW YOURS</DialogTitle>
+            <DialogDescription className="text-sm text-slate-400">
+              Pro members can create a private version of this campaign and customize its workflow.
+              Your changes never affect the original template.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="mt-2 flex justify-end">
+            <Link
+              to="/pricing"
+              className="inline-flex items-center gap-2 rounded-full bg-cyan-200/90 px-4 py-2 text-xs font-semibold tracking-[0.12em] text-[#062a33] transition-opacity hover:opacity-90"
+            >
+              Upgrade to Pro
+            </Link>
+          </div>
+        </DialogContent>
+      </Dialog>
     </SiteShell>
 
   );

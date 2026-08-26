@@ -314,18 +314,41 @@ function StageList({
   );
 }
 
+export type PublicGraphRunStatus = "queued" | "running" | "video_pending" | "complete" | "failed";
+
+export interface CampaignBuildGraphProps {
+  graph: PublicGraph;
+  /** Friendly stage copy from get-job-status; shown while the run is active. */
+  statusMessage?: string;
+  progress?: number;
+  /** Real run status — the graph stays mounted for the entire lifecycle (P0). */
+  runStatus?: PublicGraphRunStatus;
+  /** Pro / Studio / Team (or admin/dev): the completed graph becomes an entry point. */
+  canCustomizeWorkflow?: boolean;
+  /** P0: clearly-named handler — swapping in the private-fork editor is a one-line change. */
+  onCustomizeWorkflow?: () => void;
+  /** Starter / Plus / Free: locked affordance opens the upgrade modal. */
+  onLockedCustomize?: () => void;
+  className?: string;
+}
+
 export function CampaignBuildGraph({
   graph,
   statusMessage,
   progress,
-}: {
-  graph: PublicGraph;
-  statusMessage?: string;
-  progress?: number;
-}) {
+  runStatus = "running",
+  canCustomizeWorkflow = false,
+  onCustomizeWorkflow,
+  onLockedCustomize,
+  className,
+}: CampaignBuildGraphProps) {
   const reducedMotion = useReducedMotion();
   const [mobileExpanded, setMobileExpanded] = useState(false);
   const columns = useMemo(() => buildStageColumns(graph.nodes), [graph.nodes]);
+  const isComplete = runStatus === "complete";
+  const isFailed = runStatus === "failed";
+  const isActive = !isComplete && !isFailed;
+  const interactive = isComplete && canCustomizeWorkflow && !!onCustomizeWorkflow;
 
   const summary = useMemo(
     () => columns.map((column) => `${column.name} ${STATUS_WORD[column.status]}`).join(", "),
@@ -341,14 +364,48 @@ export function CampaignBuildGraph({
 
   return (
     <section
-      className="rounded-[1.5rem] border border-white/8 bg-black/25 p-5"
+      className={`rounded-[1.5rem] border bg-black/25 p-5 transition-colors ${
+        interactive
+          ? "cursor-pointer border-white/8 hover:border-cyan-200/40 hover:shadow-[0_0_0_1px_rgba(165,243,252,0.18)]"
+          : "border-white/8"
+      } ${className ?? ""}`}
       aria-label="Campaign build progress"
+      onClick={interactive ? onCustomizeWorkflow : undefined}
     >
-      <div className="flex items-center justify-between gap-3">
-        <p className="text-[10px] uppercase tracking-[0.24em] text-muted-foreground">Build</p>
-        {safeProgress !== null ? (
-          <p className="text-[11px] text-slate-400">{safeProgress}%</p>
-        ) : null}
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="font-display text-sm font-semibold tracking-[0.18em] text-slate-100">
+            {isActive ? "BUILDING YOUR CAMPAIGN" : "CAMPAIGN WORKFLOW"}
+          </p>
+          {isComplete ? (
+            canCustomizeWorkflow ? (
+              <button
+                type="button"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onCustomizeWorkflow?.();
+                }}
+                className="mt-1.5 inline-flex items-center gap-1 text-[11px] tracking-[0.14em] text-cyan-200/90 transition-colors hover:text-cyan-100"
+              >
+                Customize workflow <span aria-hidden="true">→</span>
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onLockedCustomize?.();
+                }}
+                className="mt-1.5 inline-flex items-center gap-1.5 text-[11px] tracking-[0.14em] text-slate-400 transition-colors hover:text-slate-200"
+              >
+                <span aria-hidden="true">🔒</span> Customize workflow · PRO
+              </button>
+            )
+          ) : null}
+        </div>
+        <p className={`shrink-0 text-[11px] tabular-nums ${isFailed ? "text-rose-200/90" : "text-cyan-100/90"}`}>
+          {isComplete ? "✓ COMPLETE" : isFailed ? "✕ INTERRUPTED" : safeProgress !== null ? `${safeProgress}%` : ""}
+        </p>
       </div>
 
       {/* Desktop / tablet: condensed left-to-right node diagram. */}
@@ -361,7 +418,10 @@ export function CampaignBuildGraph({
         <StageList columns={columns} reducedMotion={reducedMotion} />
         <button
           type="button"
-          onClick={() => setMobileExpanded((value) => !value)}
+          onClick={(event) => {
+            event.stopPropagation();
+            setMobileExpanded((value) => !value);
+          }}
           aria-expanded={mobileExpanded}
           className="mt-3 inline-flex items-center gap-1 text-[11px] uppercase tracking-[0.18em] text-cyan-200/80"
         >
@@ -379,9 +439,16 @@ export function CampaignBuildGraph({
         ) : null}
       </div>
 
-      <p className="mt-4 text-sm text-slate-200" aria-live="polite">
-        {statusMessage || "Working on your campaign"}
-      </p>
+      {isActive ? (
+        <p className="mt-4 text-sm text-slate-200" aria-live="polite">
+          {statusMessage || "Working on your campaign"}
+        </p>
+      ) : null}
+      {isFailed ? (
+        <p className="mt-4 text-sm text-rose-100/80" aria-live="polite">
+          Generation interrupted — try again.
+        </p>
+      ) : null}
       <p className="sr-only">{summary}</p>
     </section>
   );
