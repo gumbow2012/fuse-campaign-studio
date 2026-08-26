@@ -254,6 +254,8 @@ type Generation = {
   promptPreview?: string | null;
   outputUrl: string | null;
   previewUrl?: string | null;
+  posterUrl?: string | null;
+
   outputType: string | null;
   error?: string | null;
   estimatedCredits: number | null;
@@ -485,14 +487,18 @@ function GenerationCard({
   const isImage = generation.outputType !== "video";
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const done = generation.status === "complete" && !!generation.outputUrl;
+  /* GS-PERF6: tiles load the small stored preview when it exists; the master
+     output_url stays the source for lightbox/download/reference/animate. */
+  const tileSrc = generation.previewUrl ?? generation.outputUrl;
 
   /* GS-PERF5: media only mounts/downloads once the tile nears the viewport. */
   const { ref: mediaHostRef, near } = useNearViewport<HTMLDivElement>(priority, "500px");
   const [loaded, setLoaded] = useState(false);
   useEffect(() => {
     setLoaded(false);
-  }, [generation.outputUrl]);
+  }, [tileSrc]);
   const showSkeleton = done && (isImage ? !loaded : !near);
+
 
   return (
     <article className="group overflow-hidden rounded-2xl border border-white/10 bg-white/[0.03] backdrop-blur-xl transition-colors hover:border-cyan-200/30">
@@ -514,7 +520,9 @@ function GenerationCard({
               {isImage ? (
                 near ? (
                   <img
-                    src={generation.outputUrl as string}
+                    src={tileSrc as string}
+
+
                     alt={generation.prompt ?? generation.promptPreview ?? "Generated result"}
                     loading={priority ? "eager" : "lazy"}
                     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -961,6 +969,9 @@ export default function GenerationStudio() {
                 id: rowId,
                 status: (row.status as Generation["status"]) ?? "queued",
                 outputUrl: (row.output_url as string | null) ?? null,
+                previewUrl: (row.preview_url as string | null) ?? null,
+                posterUrl: (row.poster_url as string | null) ?? null,
+
                 outputType: (row.output_type as string | null) ?? null,
                 providerModel: (row.provider_model as string | null) ?? null,
                 estimatedCredits: (row.estimated_credits as number | null) ?? null,
@@ -997,6 +1008,9 @@ export default function GenerationStudio() {
                       ...entry,
                       status: (row.status as Generation["status"]) ?? entry.status,
                       outputUrl: (row.output_url as string | null) ?? entry.outputUrl,
+                      previewUrl: (row.preview_url as string | null) ?? entry.previewUrl ?? null,
+                      posterUrl: (row.poster_url as string | null) ?? entry.posterUrl ?? null,
+
                       outputType: (row.output_type as string | null) ?? entry.outputType,
                       providerModel: (row.provider_model as string | null) ?? entry.providerModel,
                       estimatedCredits:

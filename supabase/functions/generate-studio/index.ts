@@ -113,7 +113,10 @@ function serializeGeneration(row: any) {
     kind: row.kind ?? null,
     prompt: row.prompt ?? null,
     outputUrl: row.output_url ?? null,
+    previewUrl: row.preview_url ?? null,
+    posterUrl: row.poster_url ?? null,
     outputType: row.output_type ?? null,
+
     error: row.error_log ?? null,
     estimatedCredits: row.estimated_credits ?? null,
     estimatedCostUsd: row.estimated_cost_usd ? Number(row.estimated_cost_usd) : null,
@@ -131,7 +134,8 @@ function serializeGeneration(row: any) {
  * never error_log, never full prompt bodies or reference arrays.
  */
 const LIST_SELECT =
-  "id, status, kind, prompt, output_url, output_type, estimated_credits, estimated_cost_usd, provider_model, favorited, created_at, completed_at";
+  "id, status, kind, prompt, output_url, output_type, preview_url, poster_url, estimated_credits, estimated_cost_usd, provider_model, favorited, created_at, completed_at";
+
 
 function truncatePrompt(prompt: unknown, max = 160): string | null {
   const text = String(prompt ?? "").trim();
@@ -147,7 +151,8 @@ function serializeGenerationListItem(row: any) {
     kind: row.kind ?? null,
     promptPreview: truncatePrompt(row.prompt),
     outputUrl: row.output_url ?? null,
-    previewUrl: null as string | null,
+    previewUrl: (row.preview_url ?? null) as string | null,
+    posterUrl: (row.poster_url ?? null) as string | null,
     outputType: row.output_type ?? null,
     estimatedCredits: row.estimated_credits ?? null,
     estimatedCostUsd: row.estimated_cost_usd ? Number(row.estimated_cost_usd) : null,
@@ -157,6 +162,66 @@ function serializeGenerationListItem(row: any) {
     completedAt: row.completed_at ?? null,
   };
 }
+
+/**
+ * GS-PERF6: small gallery preview for completed IMAGE generations.
+ * The master `output_url` is never touched or re-encoded — this only writes a
+ * separate 480px JPEG into fuse-assets and fills `preview_url`.
+ * Fully best-effort: it must never throw, never block, never affect credits.
+ */
+const PREVIEW_BUCKET = "fuse-assets";
+const PREVIEW_MAX_EDGE = 480;
+
+async function generatePreviewThumbnail(admin: AdminClient, row: any): Promise<boolean> {
+  try {
+    if (!row?.id) return false;
+    if (row.status !== "complete") return false;
+    if ((row.output_type ?? "image") !== "image") return false;
+    const source = String(row.output_url ?? "").trim();
+    if (!source) return false;
+    if (row.preview_url) return false;
+
+    const { default: Image } = await import(
+      "https://deno.land/x/imagescript@1.2.17/mod.ts"
+    );
+
+    const res = await fetch(source);
+    if (!res.ok) return false;
+    const bytes = new Uint8Array(await res.arrayBuffer());
+
+    const decoded = await Image.decode(bytes);
+    const scale = Math.min(1, PREVIEW_MAX_EDGE / Math.max(decoded.width, decoded.height));
+    const width = Math.max(1, Math.round(decoded.width * scale));
+    const height = Math.max(1, Math.round(decoded.height * scale));
+    const resized = scale < 1 ? decoded.resize(width, height) : decoded;
+    const jpeg = await resized.encodeJPEG(80);
+
+    const path = `studio/previews/${row.id}.jpg`;
+    const { error: uploadError } = await admin.storage
+      .from(PREVIEW_BUCKET)
+      .upload(path, jpeg, { contentType: "image/jpeg", upsert: true });
+    if (uploadError) {
+      console.error("preview upload failed:", uploadError.message);
+      return false;
+    }
+
+    const { data: pub } = admin.storage.from(PREVIEW_BUCKET).getPublicUrl(path);
+    const previewUrl = pub?.publicUrl;
+    if (!previewUrl) return false;
+
+    await admin
+      .from("studio_generations")
+      .update({ preview_url: previewUrl })
+      .eq("id", row.id)
+      .is("preview_url", null);
+
+    return true;
+  } catch (error) {
+    console.error("generatePreviewThumbnail failed:", errorMessage(error));
+    return false;
+  }
+}
+
 
 type StartInput = {
   kind?: string;
@@ -496,7 +561,14 @@ async function syncGeneration(admin: AdminClient, row: any) {
       .select("*")
       .single();
 
+    // GS-PERF6: best-effort gallery thumbnail (never blocks or fails the row).
+    const completed = updated ?? { ...row, status: "complete", output_url: output.url, output_type: output.type };
+    if (!completed.preview_url) {
+      await generatePreviewThumbnail(admin, completed);
+    }
+
     return serializeGeneration(updated ?? row);
+
   } catch (error) {
     // A hung/rate-limited provider call must never fail the row or the invocation.
     if (error instanceof ProviderTimeout) return serializeGeneration(row);
@@ -584,7 +656,19 @@ Deno.serve(async (req) => {
         })
         .eq("id", row.id);
 
+      // GS-PERF6: best-effort gallery thumbnail; failures are swallowed.
+      if (!row.preview_url) {
+        await generatePreviewThumbnail(admin, {
+          ...row,
+          status: "complete",
+          output_url: output.url,
+          output_type: output.type,
+          preview_url: null,
+        });
+      }
+
       return json({ ok: true });
+
     } catch (error) {
       console.error("generate-studio callback failed:", errorMessage(error));
       return json({ error: errorMessage(error) }, 500);
@@ -714,6 +798,45 @@ Deno.serve(async (req) => {
       );
       return json({ generations });
     }
+
+    if (action === "backfill_previews") {
+      /** GS-PERF6: admin/dev-only, idempotent thumbnail backfill. */
+      if (!access.isAdmin && !access.isDev) throw new Error("Admin access required");
+
+      const { data: rows, error } = await admin
+        .from("studio_generations")
+        .select("id, status, output_url, output_type, preview_url")
+        .eq("status", "complete")
+        .eq("output_type", "image")
+        .is("preview_url", null)
+        .not("output_url", "is", null)
+        .order("created_at", { ascending: false })
+        .limit(25);
+      if (error) throw new Error(error.message);
+
+      const targets = rows ?? [];
+      let processed = 0;
+      const CONCURRENCY = 3;
+      for (let i = 0; i < targets.length; i += CONCURRENCY) {
+        const chunk = targets.slice(i, i + CONCURRENCY);
+        const results = await Promise.all(
+          chunk.map((row) => generatePreviewThumbnail(admin, row)),
+        );
+        processed += results.filter(Boolean).length;
+      }
+
+      const { count } = await admin
+        .from("studio_generations")
+        .select("id", { count: "exact", head: true })
+        .eq("status", "complete")
+        .eq("output_type", "image")
+        .is("preview_url", null)
+        .not("output_url", "is", null);
+
+      return json({ processed, remaining: count ?? 0 });
+    }
+
+
 
     if (action === "set_favorite") {
       const generationId = String(body.generationId ?? "").trim();
