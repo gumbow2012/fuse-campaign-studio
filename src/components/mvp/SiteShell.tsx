@@ -117,18 +117,28 @@ export default function SiteShell({ children }: { children: ReactNode }) {
                 <NavLink to="/" className={iconNavLinkClass} end aria-label="Home" title="Home">
                   <Home className="h-4 w-4" />
                 </NavLink>
+                <NavLink to="/app/templates" className={textNavLinkClass}>
+                  Explore
+                </NavLink>
+                <a
+                  href="/#new-today"
+                  className="inline-flex items-center rounded-full border border-white/10 bg-white/[0.03] px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground transition-colors hover:border-white/20 hover:text-foreground sm:text-xs"
+                >
+                  New Drops
+                </a>
+                <NavLink to="/creators" className={textNavLinkClass}>
+                  Creators
+                </NavLink>
+                <NavLink to="/pricing" className={textNavLinkClass}>
+                  Pricing
+                </NavLink>
                 <NavLink to="/about" className={iconNavLinkClass} aria-label="About" title="About">
                   <Info className="h-4 w-4" />
-                </NavLink>
-                <NavLink to="/pricing" className={iconNavLinkClass} aria-label="Membership" title="Membership">
-                  <Star className="h-4 w-4" />
                 </NavLink>
                 <NavLink to="/contact" className={iconNavLinkClass} aria-label="Contact" title="Contact">
                   <Mail className="h-4 w-4" />
                 </NavLink>
-                <NavLink to="/app/templates" className={iconNavLinkClass} aria-label="Templates" title="Templates">
-                  <Layers3 className="h-4 w-4" />
-                </NavLink>
+
 
                 <div className="flex items-center gap-1.5">
                   {user ? (
