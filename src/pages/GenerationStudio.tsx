@@ -826,6 +826,7 @@ function ReferenceCard({
 }
 
 export default function GenerationStudio() {
+  galleryPerfRender(); // GS-PERF9 dev-only render counter
 
   const [modelKey, setModelKey] = useState<StudioModelKey>("nano-banana-pro");
   const [modelOpen, setModelOpen] = useState(false);
@@ -908,13 +909,20 @@ export default function GenerationStudio() {
   const nextCursorRef = useRef<ListCursor | null>(null);
   /** GS-PERF8: page-1 cursor, kept current by every loadQueue — used for the SWR cache. */
   const page1CursorRef = useRef<ListCursor | null>(null);
+  /** GS-PERF9 dev-only: only the first page-1 fetch gets timed. */
+  const initialApiTimedRef = useRef(false);
   const pagedRef = useRef(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(false);
 
   const loadQueue = useCallback(async (silent = true) => {
+    // GS-PERF9 dev-only: time the FIRST page-1 fetch + payload size.
+    const timeInitial = !initialApiTimedRef.current;
+    if (timeInitial) initialApiTimedRef.current = true;
+    const t0 = timeInitial ? performance.now() : 0;
     try {
       const data = await callStudio({ action: "queue", limit: PAGE_SIZE });
+      if (timeInitial) galleryPerfInitialApi(performance.now() - t0, data);
       const rows = (data?.generations ?? []) as Generation[];
       const cursor = (data?.nextCursor as ListCursor | null) ?? null;
       page1CursorRef.current = cursor;
@@ -938,6 +946,7 @@ export default function GenerationStudio() {
   }, []);
 
   useEffect(() => {
+    galleryPerfMount(); // GS-PERF9 dev-only: reset session + start resource observer
     void loadQueue(false);
   }, [loadQueue]);
 
@@ -947,7 +956,9 @@ export default function GenerationStudio() {
     pagedRef.current = true;
     setLoadingMore(true);
     try {
+      const t0 = performance.now(); // GS-PERF9 dev-only
       const data = await callStudio({ action: "queue", limit: PAGE_SIZE, cursor });
+      galleryPerfLoadMore(performance.now() - t0);
       const rows = (data?.generations ?? []) as Generation[];
       setGenerations((prev) => {
         const seen = new Set(prev.map((entry) => entry.id));
