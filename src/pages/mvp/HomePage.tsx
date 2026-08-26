@@ -561,14 +561,6 @@ export default function HomePage() {
         entries={newToday}
         badge={{ tone: "new", label: "New" }}
       />
-      {creators.length > 0 && trending.length > 0 && (
-        <Shelf
-          label="Creator drops"
-          heading="Built by FUSE creators"
-          entries={trending.slice(0, 8)}
-          badge={{ tone: "creator", label: "Creator drop" }}
-        />
-      )}
       {categoryShelves.map((shelf) => (
         <Shelf
           key={shelf.title}
