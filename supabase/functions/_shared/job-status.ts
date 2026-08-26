@@ -7,6 +7,7 @@ import {
 import { sortEdgesByExecutionOrder } from "./edge-order.ts";
 import { buildTemplateInputPlan } from "./template-inputs.ts";
 import { getNodeEditorConfig } from "./template-editor.ts";
+import { toPublicGenerationFailure } from "./generation-failure.ts";
 
 type AdminClient = ReturnType<typeof createAdminClient>;
 
@@ -291,6 +292,28 @@ export async function buildJobStatusResponse(
   const failedStep = (steps ?? []).find((step: any) => step.status === "failed");
   const resolvedJobError = resolveStepError(failedStep) ?? job.error_log ?? null;
 
+  /**
+   * P0 failure taxonomy: customers get classified, polished copy only —
+   * never the raw provider/moderation string. Raw detail is assembled
+   * exclusively into the privileged (admin/dev/runner) branch below.
+   */
+  const jobFailed = job.status === "failed" || !!failedStep;
+  const publicFailure = jobFailed
+    ? toPublicGenerationFailure({
+        rawError: resolvedJobError,
+        provider: failedStep?.provider ?? failedStep?.provider_model ?? null,
+      })
+    : null;
+  const providerFailure = jobFailed
+    ? {
+        rawError: resolvedJobError,
+        provider: failedStep?.provider ?? null,
+        providerModel: failedStep?.provider_model ?? null,
+        requestId: failedStep?.provider_request_id ?? null,
+        stepId: failedStep?.id ?? null,
+      }
+    : null;
+
   const templateInputs = inputPlan.slots.map((slot) => ({
     id: slot.id,
     name: slot.name,
@@ -447,7 +470,8 @@ export async function buildJobStatusResponse(
     status: job.status,
     statusMessage,
     progress: job.progress ?? 0,
-    error: resolvedJobError,
+    // Customer-facing failure contract — never raw provider text.
+    publicFailure,
     telemetry: job.result_payload?.telemetry ?? {},
     user: {
       id: job.user_id ?? null,
@@ -476,6 +500,10 @@ export async function buildJobStatusResponse(
 
   return {
     ...base,
+    // Raw provider diagnostics — admin/dev/runner only, kept separate from
+    // the customer-facing publicFailure contract.
+    error: resolvedJobError,
+    providerFailure,
     template: { ...base.template, hiddenRefs: templateRefs },
     inputPayload: jobInputs,
     outputs: numberedOutputs,

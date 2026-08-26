@@ -1,6 +1,11 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { readStudioGalleryCache, writeStudioGalleryCache } from "@/lib/studioGalleryCache";
 import {
+  readPublicFailure,
+  type ProviderFailureDetail,
+  type PublicGenerationFailure,
+} from "@/lib/generationFailure";
+import {
   galleryPerfMount,
   galleryPerfInitialApi,
   galleryPerfLoadMore,
@@ -266,7 +271,10 @@ type Generation = {
   posterUrl?: string | null;
 
   outputType: string | null;
-  error?: string | null;
+  /** Customer-safe failure contract — raw provider text is never sent. */
+  publicFailure?: PublicGenerationFailure | null;
+  /** Privileged (admin/dev) diagnostics only — absent for customers. */
+  providerFailure?: ProviderFailureDetail | null;
   estimatedCredits: number | null;
   estimatedCostUsd: number | null;
   providerModel: string | null;
@@ -342,7 +350,8 @@ function readShotPlan(payload: Record<string, unknown> | null | undefined): Shot
 /** Branded, human status wording for in-flight and finished work. */
 function statusLabel(status: Generation["status"], progress: number) {
   if (status === "complete") return "READY";
-  if (status === "failed") return "FAILED";
+  // Customer-facing wording — never an internal "FAILED" state.
+  if (status === "failed") return "NEEDS ATTENTION";
   if (status === "queued") return "ANALYZING REFERENCES";
   if (progress < 35) return "BUILDING SHOT PLAN";
   if (progress < 85) return "GENERATING";
@@ -638,9 +647,17 @@ function GenerationCard({
           </>
         ) : generation.status === "failed" ? (
           <>
-            <p className="max-h-full overflow-y-auto px-5 py-4 text-center text-xs text-red-300">
-              {generation.error ?? "Generation failed"}
-            </p>
+            <div className="flex max-h-full flex-col items-center justify-center gap-2 px-6 py-4 text-center">
+              <span className="flex h-7 w-7 items-center justify-center rounded-full border border-rose-300/30 bg-rose-400/10 text-[13px] font-semibold text-rose-200">
+                !
+              </span>
+              <p className="text-xs font-medium text-rose-100/90">
+                {readPublicFailure(generation.publicFailure).title}
+              </p>
+              <p className="text-[11px] leading-relaxed text-rose-100/60">
+                {readPublicFailure(generation.publicFailure).message}
+              </p>
+            </div>
             <button
               type="button"
               aria-label="Delete"
@@ -981,7 +998,9 @@ export default function GenerationStudio() {
    * one card. Replaces the old 5s full-gallery poll. Heavy fields stay out of
    * gallery state (the lightbox still fetches them via action:"detail").
    */
-  const { user } = useAuth();
+  const { user, hasAppAccess } = useAuth();
+  /** Admin/dev — the only viewers of raw provider diagnostics. */
+  const isPrivilegedUser = hasAppAccess;
 
   /**
    * GS-PERF8: stale-while-revalidate first-page cache.
@@ -1355,11 +1374,13 @@ export default function GenerationStudio() {
 
   /**
    * Failed tiles are hidden from the gallery, so surface the reason once —
-   * compact headline, provider detail tucked behind an expander.
+   * polished customer copy only; raw provider detail is privileged-only.
    */
-  const [recentFailure, setRecentFailure] = useState<{ id: string; error: string | null } | null>(
-    null,
-  );
+  const [recentFailure, setRecentFailure] = useState<{
+    id: string;
+    failure: PublicGenerationFailure;
+    providerDetail: string | null;
+  } | null>(null);
   const seenStatusRef = useRef<Map<string, string>>(new Map());
 
   useEffect(() => {
@@ -1372,19 +1393,23 @@ export default function GenerationStudio() {
     }
     if (!latest) return;
     const failedId = latest.id;
-    // List rows carry no error_log (P13) — pull the reason via `detail` once.
-    if (latest.error) {
-      setRecentFailure({ id: failedId, error: latest.error });
+    const applyFailure = (generation: Generation | null | undefined) => {
+      setRecentFailure({
+        id: failedId,
+        failure: readPublicFailure(generation?.publicFailure),
+        providerDetail: generation?.providerFailure?.rawError ?? null,
+      });
+    };
+    // List rows carry no failure payload (P13) — pull it via `detail` once.
+    if (latest.publicFailure) {
+      applyFailure(latest);
     } else {
       void callStudio({ action: "detail", generationId: failedId })
-        .then((data) =>
-          setRecentFailure({ id: failedId, error: (data?.generation?.error as string) ?? null }),
-        )
-        .catch(() => setRecentFailure({ id: failedId, error: null }));
+        .then((data) => applyFailure(data?.generation as Generation | undefined))
+        .catch(() => applyFailure(null));
     }
-    toast.error("Generation failed", {
-      description: "See “Technical details” above the gallery for the provider reason.",
-    });
+    const failureCopy = readPublicFailure(latest.publicFailure);
+    toast.error(failureCopy.title, { description: failureCopy.message });
   }, [generations]);
 
   useEffect(() => {
@@ -2181,24 +2206,36 @@ export default function GenerationStudio() {
 
               <TabsContent value="gallery" className="mt-4">
                 {recentFailure ? (
-                  <div className="mb-4 rounded-xl border border-red-400/30 bg-red-500/10 px-4 py-3">
+                  <div className="mb-4 rounded-xl border border-rose-300/25 bg-rose-400/[0.07] px-4 py-3">
                     <div className="flex items-center justify-between gap-3">
-                      <p className="text-xs font-medium text-red-200">Generation failed</p>
+                      <div className="flex items-center gap-2.5">
+                        <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-rose-300/30 bg-rose-400/10 text-[11px] font-semibold text-rose-200">
+                          !
+                        </span>
+                        <div>
+                          <p className="text-xs font-medium text-rose-100/90">
+                            {recentFailure.failure.title}
+                          </p>
+                          <p className="mt-0.5 text-[11px] text-rose-100/60">
+                            {recentFailure.failure.message}
+                          </p>
+                        </div>
+                      </div>
                       <button
                         type="button"
                         onClick={() => setRecentFailure(null)}
-                        className="text-[11px] text-red-200/70 hover:text-red-100"
+                        className="shrink-0 text-[11px] text-rose-100/60 hover:text-rose-50"
                       >
                         Dismiss
                       </button>
                     </div>
-                    {recentFailure.error ? (
+                    {isPrivilegedUser && recentFailure.providerDetail ? (
                       <details className="mt-2">
-                        <summary className="cursor-pointer text-[11px] text-red-200/70 hover:text-red-100">
-                          Technical details
+                        <summary className="cursor-pointer text-[11px] text-rose-100/60 hover:text-rose-50">
+                          View provider error (admin)
                         </summary>
-                        <pre className="mt-2 max-h-40 overflow-auto whitespace-pre-wrap break-words rounded-lg bg-black/40 p-3 text-[10px] leading-relaxed text-red-100/80">
-                          {recentFailure.error}
+                        <pre className="mt-2 max-h-40 overflow-auto whitespace-pre-wrap break-words rounded-lg bg-black/40 p-3 text-[10px] leading-relaxed text-rose-100/80">
+                          {recentFailure.providerDetail}
                         </pre>
                       </details>
                     ) : null}
