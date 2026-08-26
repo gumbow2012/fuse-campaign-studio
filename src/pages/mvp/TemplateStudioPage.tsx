@@ -1064,7 +1064,9 @@ export default function TemplateStudioPage() {
 
 
                     <div className="space-y-3 p-4">
+                      {performance ? <PerformanceBlock row={performance} /> : null}
                       <div className="flex items-start justify-between gap-3">
+
                         <div className="min-w-0">
                           <p className="truncate text-base font-semibold text-white">{template.name}</p>
                           <p className="mt-1 text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
