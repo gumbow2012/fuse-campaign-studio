@@ -6,30 +6,23 @@ import { Button } from "@/components/ui/button";
 import SiteShell from "@/components/mvp/SiteShell";
 import PageMeta from "@/components/mvp/PageMeta";
 import { useAuth } from "@/contexts/AuthContext";
-import { fetchTemplates, type ApiTemplate } from "@/services/fuseApi";
+import { fetchTemplates } from "@/services/fuseApi";
 import { listPublicCreatorProfiles, type CreatorProfile } from "@/services/creatorProfile";
 import { cn } from "@/lib/utils";
 import {
   allocateHomeMedia,
-  BRAND_INPUT_ASSETS,
   FALLBACK_GIFS,
   outputLabel,
   type Entry,
   type TemplateMedia,
 } from "@/lib/homeMediaAllocator";
+import {
+  loadTemplatePerformance,
+  type TemplatePerformanceMap,
+  type TemplatePerformanceRow,
+} from "@/services/templatePerformance";
+import { PerformanceBlock, PerformanceDisclaimer } from "@/components/TemplatePerformance";
 
-/** Requirement chips derived from the template's real input schema. */
-function requirementChips(template: ApiTemplate) {
-  const chips: string[] = [];
-  for (const input of template.input_schema ?? []) {
-    const label = (input.label || input.key || "").trim();
-    if (!label) continue;
-    if (chips.length >= 3) break;
-    chips.push(input.required ? label : `${label} (optional)`);
-  }
-  if (template.castConfig?.supported) chips.push("Cast (optional)");
-  return chips;
-}
 
 /* --------------------------------- pieces --------------------------------- */
 
@@ -150,12 +143,14 @@ function TemplateCard({
   creator,
   eager,
   index = 0,
+  performance,
 }: {
   entry: Entry;
   badge?: { tone: "new" | "trending" | "creator"; label: string };
   creator?: string | null;
   eager?: boolean;
   index?: number;
+  performance?: TemplatePerformanceRow;
 }) {
   const outputs = outputLabel(entry.template);
   const vibe = entry.template.category ?? entry.template.tags?.[0] ?? null;
@@ -169,7 +164,7 @@ function TemplateCard({
           staggerIndex={index}
           className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.04]"
         />
-        <div className="pointer-events-none absolute inset-x-0 bottom-0 h-1/2 bg-gradient-to-t from-black via-black/60 to-transparent" />
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 h-2/3 bg-gradient-to-t from-black via-black/70 to-transparent" />
         {badge && (
           <div className="absolute left-3 top-3">
             <Badge tone={badge.tone}>{badge.label}</Badge>
@@ -177,13 +172,14 @@ function TemplateCard({
         )}
       </div>
       <div className="absolute inset-x-0 bottom-0 p-4">
+        {performance && <PerformanceBlock row={performance} compact className="mb-3" />}
         <p className="font-display text-sm font-semibold uppercase tracking-[0.08em] text-white">
           {entry.template.name}
         </p>
-        <p className="mt-1 text-[11px] uppercase tracking-[0.16em] text-slate-300">
+        <p className="mt-1 text-[10px] uppercase tracking-[0.16em] text-slate-400">
           {[vibe, outputs].filter(Boolean).join(" · ")}
         </p>
-        {creator && <p className="mt-1 text-[11px] text-slate-400">by {creator}</p>}
+        {creator && <p className="mt-1 text-[10px] text-slate-400">by {creator}</p>}
         <Button
           asChild
           size="sm"
@@ -195,6 +191,7 @@ function TemplateCard({
     </article>
   );
 }
+
 
 function MediaShelf({ children }: { children: React.ReactNode }) {
   return (
@@ -210,12 +207,16 @@ function Shelf({
   entries,
   badge,
   id,
+  perfMap,
+  showDisclaimer,
 }: {
   label: string;
   heading: string;
   entries: Entry[];
   badge?: { tone: "new" | "trending" | "creator"; label: string };
   id?: string;
+  perfMap?: TemplatePerformanceMap;
+  showDisclaimer?: boolean;
 }) {
   if (!entries.length) return null;
   return (
@@ -240,12 +241,15 @@ function Shelf({
             badge={badge}
             index={index}
             eager={index < 2}
+            performance={perfMap?.[String(entry.template.id ?? "")]}
           />
         ))}
       </MediaShelf>
+      {showDisclaimer && <PerformanceDisclaimer className="mt-4" />}
     </section>
   );
 }
+
 
 /* ---------------------------------- page ---------------------------------- */
 
@@ -271,7 +275,63 @@ export default function HomePage() {
 
   const original = heroPair[0] ?? null;
   const yourVersion = heroPair[1] ?? null;
-  const heroRequirements = original ? requirementChips(original.template) : [];
+
+  /** Every entry already claimed by the allocator — perf shelves reuse these only. */
+  const allocatedEntries = useMemo(
+    () => [
+      ...heroPair,
+      ...trending,
+      ...newToday,
+      ...creatorDrops,
+      ...categories.flatMap((shelf) => shelf.entries),
+    ],
+    [heroPair, trending, newToday, creatorDrops, categories],
+  );
+
+  const performanceIds = useMemo(
+    () => allocatedEntries.map((entry) => String(entry.template.id ?? "")).filter(Boolean),
+    [allocatedEntries],
+  );
+
+  const { data: perfMap = {} as TemplatePerformanceMap } = useQuery({
+    queryKey: ["home-template-performance", performanceIds.slice().sort().join(",")],
+    queryFn: () => loadTemplatePerformance(performanceIds),
+    enabled: performanceIds.length > 0,
+    staleTime: 5 * 60 * 1000,
+    retry: false,
+  });
+
+  const perfFor = (entry: Entry): TemplatePerformanceRow | undefined =>
+    perfMap[String(entry.template.id ?? "")];
+
+  const heroPerf = original ? perfFor(original) : undefined;
+
+  const topRoas = useMemo(
+    () =>
+      allocatedEntries
+        .filter((entry) => (perfMap[String(entry.template.id ?? "")]?.roas ?? null) !== null)
+        .sort(
+          (a, b) =>
+            (perfMap[String(b.template.id ?? "")]?.roas ?? 0) -
+            (perfMap[String(a.template.id ?? "")]?.roas ?? 0),
+        )
+        .slice(0, 8),
+    [allocatedEntries, perfMap],
+  );
+
+  const mostTested = useMemo(
+    () =>
+      allocatedEntries
+        .filter((entry) => (perfMap[String(entry.template.id ?? "")]?.spend ?? null) !== null)
+        .sort(
+          (a, b) =>
+            (perfMap[String(b.template.id ?? "")]?.spend ?? 0) -
+            (perfMap[String(a.template.id ?? "")]?.spend ?? 0),
+        )
+        .slice(0, 8),
+    [allocatedEntries, perfMap],
+  );
+
 
   useEffect(() => {
     if (!import.meta.env.DEV) return;
@@ -366,34 +426,42 @@ export default function HomePage() {
             </div>
 
             <p className="mt-6 text-[11px] font-semibold uppercase tracking-[0.24em] text-slate-400">
-              No prompts · No creative calls · New templates constantly
+              No prompts · New templates daily · Performance tracked
             </p>
+
           </div>
 
-          {/* Hero story — ORIGINAL template → your brand input → your version */}
+          {/* Hero transformation — TEMPLATE → your brand → YOUR CAMPAIGN */}
           <div className="relative">
             {original ? (
               <div>
                 <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3">
-                  <HeroTile label="Original template" media={original.media} eager />
-                  <div className="space-y-2">
-                    <div className="grid grid-cols-2 gap-1.5">
-                      {BRAND_INPUT_ASSETS.map((src) => (
-                        <img
-                          key={src}
-                          src={src}
-                          alt=""
-                          loading="lazy"
-                          className="aspect-square w-10 rounded-md border border-white/10 object-cover sm:w-12"
-                        />
-                      ))}
+                  <HeroTile label="Template" media={original.media} eager />
+                  <div className="w-[92px] sm:w-[104px]">
+                    <div
+                      className="relative overflow-hidden rounded-xl border border-cyan-300/25 bg-slate-950/80 px-3 py-4 text-center"
+                      style={{
+                        backgroundImage:
+                          "linear-gradient(rgba(148,163,184,0.10) 1px, transparent 1px), linear-gradient(90deg, rgba(148,163,184,0.10) 1px, transparent 1px)",
+                        backgroundSize: "14px 14px",
+                      }}
+                    >
+                      <p className="font-display text-[11px] font-semibold uppercase tracking-[0.2em] text-white">
+                        Your brand
+                      </p>
+                      <p className="mt-1 text-[8px] uppercase tracking-[0.16em] text-slate-400">
+                        garment + logo + cast
+                      </p>
+                      <p className="mt-3 text-[9px] font-semibold uppercase tracking-[0.2em] text-cyan-200">
+                        + Product
+                      </p>
                     </div>
-                    <p className="text-center text-[9px] font-semibold uppercase tracking-[0.18em] text-slate-500">
-                      Your brand
+                    <p className="mt-2 text-center text-[9px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+                      →
                     </p>
                   </div>
                   <HeroTile
-                    label="Your version"
+                    label="Your campaign"
                     highlight
                     media={yourVersion?.media ?? original.media}
                   />
@@ -410,20 +478,8 @@ export default function HomePage() {
                       </span>
                     )}
                   </div>
-                  {heroRequirements.length > 0 && (
-                    <div className="flex flex-wrap items-center justify-center gap-1.5">
-                      <span className="text-[10px] uppercase tracking-[0.2em] text-slate-500">
-                        Requires
-                      </span>
-                      {heroRequirements.map((chip) => (
-                        <span
-                          key={chip}
-                          className="rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-[10px] uppercase tracking-[0.12em] text-slate-300"
-                        >
-                          {chip}
-                        </span>
-                      ))}
-                    </div>
+                  {heroPerf && (
+                    <PerformanceBlock row={heroPerf} compact className="text-left" />
                   )}
                   <Button
                     asChild
@@ -432,6 +488,7 @@ export default function HomePage() {
                   >
                     <Link to="/app/templates">Use this template</Link>
                   </Button>
+                  {heroPerf && <PerformanceDisclaimer />}
                 </div>
               </div>
             ) : (
@@ -440,6 +497,7 @@ export default function HomePage() {
               </div>
             )}
           </div>
+
 
         </div>
       </section>
@@ -472,9 +530,24 @@ export default function HomePage() {
 
       {/* 3 · SHELVES */}
       <Shelf
+        label="Top ROAS"
+        heading="Highest returning campaigns"
+        entries={topRoas}
+        perfMap={perfMap}
+        showDisclaimer
+      />
+      <Shelf
+        label="Most tested"
+        heading="Proven on the most ad spend"
+        entries={mostTested}
+        perfMap={perfMap}
+        showDisclaimer
+      />
+      <Shelf
         label="Trending now"
         heading="What brands are using right now"
         entries={trending}
+        perfMap={perfMap}
         badge={{ tone: "trending", label: "Trending" }}
       />
       <Shelf
@@ -482,8 +555,10 @@ export default function HomePage() {
         label="New today"
         heading="Just added to the marketplace"
         entries={newToday}
+        perfMap={perfMap}
         badge={{ tone: "new", label: "New" }}
       />
+
       {creators.length > 0 && (
         <Shelf
           label="Creator drops"

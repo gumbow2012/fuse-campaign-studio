@@ -42,6 +42,9 @@ import { uploadRunInputFile } from "@/services/runInputUpload";
 import { libraryKindForAssetType, saveLibraryAsset } from "@/services/libraryAssets";
 import { getStaticInputs } from "@/services/templateInputMap";
 import { trackEvent } from "@/lib/metaPixel";
+import { loadTemplatePerformance, type TemplatePerformanceMap } from "@/services/templatePerformance";
+import { PerformanceBlock, PerformanceDisclaimer } from "@/components/TemplatePerformance";
+
 import {
   formatAssetTypeLabel,
   type TemplateAssetRequirement,
@@ -478,6 +481,22 @@ export default function TemplateStudioPage() {
     () => sortTemplatesForStudio((templatesQuery.data ?? EMPTY_TEMPLATES).filter((template) => template.is_active)),
     [templatesQuery.data],
   );
+
+  const performanceIds = useMemo(
+    () => templates.map((template) => String(template.id ?? "")).filter(Boolean),
+    [templates],
+  );
+
+  const { data: performanceMap = {} as TemplatePerformanceMap } = useQuery({
+    queryKey: ["studio-template-performance", performanceIds.slice().sort().join(",")],
+    queryFn: () => loadTemplatePerformance(performanceIds),
+    enabled: performanceIds.length > 0,
+    staleTime: 5 * 60 * 1000,
+    retry: false,
+  });
+
+  const hasAnyPerformance = Object.keys(performanceMap).length > 0;
+
 
   useEffect(() => {
     const requestedTemplate = searchParams.get("template");
@@ -1000,6 +1019,9 @@ export default function TemplateStudioPage() {
                 const credits = template.estimated_credits_per_run || 0;
                 const inputCount = getTemplateInputCount(template);
                 const outputCount = getTemplateOutputCount(template);
+                const performance = performanceMap[String(template.id ?? "")];
+
+
 
                 return (
                   <div
@@ -1042,7 +1064,9 @@ export default function TemplateStudioPage() {
 
 
                     <div className="space-y-3 p-4">
+                      {performance ? <PerformanceBlock row={performance} /> : null}
                       <div className="flex items-start justify-between gap-3">
+
                         <div className="min-w-0">
                           <p className="truncate text-base font-semibold text-white">{template.name}</p>
                           <p className="mt-1 text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
@@ -1082,7 +1106,9 @@ export default function TemplateStudioPage() {
                 );
               })}
             </div>
+            {hasAnyPerformance ? <PerformanceDisclaimer className="mt-4" /> : null}
           </section>
+
 
           <aside className="space-y-6 xl:sticky xl:top-24 xl:self-start">
             <section
