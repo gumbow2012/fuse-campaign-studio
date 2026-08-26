@@ -3463,6 +3463,64 @@ const TemplateCanvas = () => {
                     This version has no user upload nodes.
                   </div>
                 ) : null}
+                {parseCastConfig(detail.castConfig) ? (
+                  <div className="rounded-xl border border-cyan-300/20 bg-cyan-300/[0.05] p-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="text-xs font-semibold uppercase tracking-[0.15em] text-cyan-100">Cast (test)</p>
+                      {selectedCastAvatarId ? (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 px-2 text-[11px] text-foreground/70 hover:text-foreground"
+                          onClick={() => setSelectedCastAvatarId(null)}
+                        >
+                          Clear
+                        </Button>
+                      ) : null}
+                    </div>
+                    {castLoading ? (
+                      <p className="mt-2 flex items-center gap-2 text-xs text-foreground/70">
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading avatars…
+                      </p>
+                    ) : castAvatars.length === 0 ? (
+                      <p className="mt-2 text-xs text-foreground/70">
+                        No avatars yet — create one in My Avatars first.
+                      </p>
+                    ) : (
+                      <div className="mt-2 grid grid-cols-4 gap-2">
+                        {castAvatars.map((avatar) => (
+                          <button
+                            key={avatar.id}
+                            type="button"
+                            onClick={() => setSelectedCastAvatarId(avatar.id)}
+                            className={cn(
+                              "group relative overflow-hidden rounded-xl border bg-background text-left transition-colors",
+                              selectedCastAvatarId === avatar.id
+                                ? "border-cyan-300/70"
+                                : "border-border/50 hover:border-white/25",
+                            )}
+                          >
+                            <div className="relative aspect-square bg-black/40">
+                              {avatar.thumbnail_url ? (
+                                <img
+                                  src={avatar.thumbnail_url}
+                                  alt={avatar.name}
+                                  className="h-full w-full object-cover"
+                                />
+                              ) : (
+                                <div className="flex h-full items-center justify-center text-[10px] uppercase tracking-[0.12em] text-foreground/50">
+                                  No image
+                                </div>
+                              )}
+                            </div>
+                            <p className="truncate p-1.5 text-[10px] font-medium text-foreground">{avatar.name}</p>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ) : null}
                 <Button type="button" className="w-full" onClick={() => void handleRun()} disabled={startingRun}>
                   {startingRun ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Film className="mr-2 h-4 w-4" />}
                   Run From Canvas
