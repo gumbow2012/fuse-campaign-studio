@@ -148,7 +148,9 @@ function serializeGenerationListItem(row: any) {
     kind: row.kind ?? null,
     promptPreview: truncatePrompt(row.prompt),
     outputUrl: row.output_url ?? null,
-    previewUrl: null as string | null,
+    previewUrl: (row.preview_url ?? null) as string | null,
+    posterUrl: (row.poster_url ?? null) as string | null,
+
     outputType: row.output_type ?? null,
     estimatedCredits: row.estimated_credits ?? null,
     estimatedCostUsd: row.estimated_cost_usd ? Number(row.estimated_cost_usd) : null,
