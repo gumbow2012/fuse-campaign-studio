@@ -86,10 +86,14 @@ export default function CampaignResults({
   onFavorite,
   isFavorite,
   onRegenerate,
+  revisionsByOutput,
 }: CampaignResultsProps) {
   const reducedMotion = useReducedMotion();
   const [lightbox, setLightbox] = useState<{ output: CampaignResultOutput; index: number } | null>(null);
   const groups = useMemo(() => groupCampaignOutputs(outputs), [outputs]);
+  /** Selected version index per output number; defaults to the latest. */
+  const [versionIndex, setVersionIndex] = useState<Record<number, number>>({});
+
 
   if (!outputs.length) return null;
 
