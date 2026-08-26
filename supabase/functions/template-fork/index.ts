@@ -8,6 +8,12 @@ import {
   json,
   requireUser,
 } from "../_shared/supabase-admin.ts";
+import { countTemplateDeliverables, getTemplateCreditCost } from "../_shared/template-pricing.ts";
+import {
+  compileForkEdges,
+  compileForkNodes,
+  selectForkExecutionNodes,
+} from "../_shared/fork-run.ts";
 import {
   assertForkOwnership,
   buildBasedOnLabel,
@@ -37,6 +43,7 @@ Deno.serve(async (req) => {
       action?: string;
       templateId?: string;
       forkId?: string;
+      sourceJobId?: string;
     };
     const action = String(body.action ?? "");
 
@@ -107,10 +114,25 @@ Deno.serve(async (req) => {
         promptVisibility,
       });
 
+      // TR10b — remember the run this fork came from (owner-scoped) so a fork
+      // run can reuse the originating uploaded assets.
+      const requestedSourceJobId = String(body.sourceJobId ?? "").trim();
+      let sourceJobId: string | null = null;
+      if (requestedSourceJobId) {
+        const { data: sourceJob } = await admin
+          .from("execution_jobs")
+          .select("id")
+          .eq("id", requestedSourceJobId)
+          .eq("user_id", user.id)
+          .maybeSingle();
+        sourceJobId = sourceJob?.id ? String(sourceJob.id) : null;
+      }
+
       const { data: fork, error: insertError } = await admin
         .from("template_user_forks")
         .insert({
           user_id: user.id,
+          source_job_id: sourceJobId,
           source_template_id: templateId,
           source_version_id: version.id,
           name: defaultForkName((template as Record<string, unknown>).name as string),
@@ -188,6 +210,65 @@ Deno.serve(async (req) => {
           updatedAt: f.updated_at,
         })),
       });
+    }
+
+    if (action === "estimate_fork_run") {
+      // TR10b — DRY RUN. Read-only: no version materialization, no job, no charge.
+      const forkId = String(body.forkId ?? "").trim();
+      if (!forkId) throw new Error("forkId is required");
+
+      const { data: fork, error: forkError } = await admin
+        .from("template_user_forks")
+        .select("id, user_id, source_template_id, source_version_id, personal_graph, prompt_visibility")
+        .eq("id", forkId)
+        .maybeSingle();
+      if (forkError) throw new Error(forkError.message);
+      if (!fork) throw new Error("Fork not found");
+
+      assertForkOwnership({ forkUserId: fork.user_id as string, userId: user.id, roles });
+
+      const { data: profile, error: profileError } = await admin
+        .from("profiles")
+        .select("plan")
+        .eq("user_id", user.id)
+        .maybeSingle();
+      if (profileError) throw new Error(profileError.message);
+
+      const entitlement = resolveForkEntitlement({ plan: profile?.plan ?? null, roles });
+      if (!entitlement.allowed) {
+        return json(
+          { error: "Pro membership required to run personal workflows", code: entitlement.code },
+          403,
+        );
+      }
+
+      const promptVisibility = fork.prompt_visibility === true;
+      const [nodesResult, edgesResult, templateResult] = await Promise.all([
+        admin.from("nodes").select("id, name, node_type, prompt_config, default_asset_id, model_id")
+          .eq("version_id", fork.source_version_id),
+        admin.from("edges").select("source_node_id, target_node_id, mapping_logic")
+          .eq("version_id", fork.source_version_id),
+        admin.from("fuse_templates").select("id, name").eq("id", fork.source_template_id).maybeSingle(),
+      ]);
+      if (nodesResult.error) throw new Error(nodesResult.error.message);
+      if (edgesResult.error) throw new Error(edgesResult.error.message);
+
+      const compiledNodes = await compileForkNodes({
+        forkId,
+        sourceNodes: (nodesResult.data ?? []) as never,
+        personalGraph: fork.personal_graph,
+        promptVisibility,
+      });
+      const compiledEdges = compileForkEdges((edgesResult.data ?? []) as never, compiledNodes);
+      const executionNodes = selectForkExecutionNodes(compiledNodes, compiledEdges);
+
+      const privileged = isPrivilegedRole(roles);
+      const templateName = String((templateResult.data as Record<string, unknown> | null)?.name ?? "");
+      const estimatedCredits = privileged || !executionNodes.length
+        ? 0
+        : getTemplateCreditCost(templateName, countTemplateDeliverables(executionNodes));
+
+      return json({ estimatedCredits, deliverables: executionNodes.length });
     }
 
     if (action === "update_fork" || action === "reset_fork") {
