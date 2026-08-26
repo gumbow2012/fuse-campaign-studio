@@ -831,6 +831,7 @@ export default function GenerationStudio() {
   const PAGE_SIZE = 24;
   type ListCursor = { createdAt: string; id: string };
   const nextCursorRef = useRef<ListCursor | null>(null);
+  const pagedRef = useRef(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(false);
 
@@ -848,10 +849,10 @@ export default function GenerationStudio() {
       });
       // Only adopt page 1's cursor before the user has paged deeper —
       // afterwards the cursor belongs to the oldest loaded row and stays valid.
-      setHasMore((alreadyPaged) => {
-        if (!alreadyPaged || !nextCursorRef.current) nextCursorRef.current = cursor;
-        return Boolean(nextCursorRef.current);
-      });
+      if (!pagedRef.current) {
+        nextCursorRef.current = cursor;
+        setHasMore(Boolean(cursor));
+      }
     } catch (error) {
       if (!silent) toast.error(error instanceof Error ? error.message : "Could not load generations");
     }
@@ -865,6 +866,7 @@ export default function GenerationStudio() {
   const loadMore = useCallback(async () => {
     const cursor = nextCursorRef.current;
     if (!cursor) return;
+    pagedRef.current = true;
     setLoadingMore(true);
     try {
       const data = await callStudio({ action: "queue", limit: PAGE_SIZE, cursor });
