@@ -57,6 +57,7 @@ import {
 import { type TemplateAssetRequirement } from "@/lib/templateAssetRequirements";
 import { resolveInputRole } from "@/lib/templateInputSources";
 import { readPublicFailure, type PublicGenerationFailure } from "@/lib/generationFailure";
+import { createFork } from "@/services/templateForks";
 
 type RunnerStatus = "queued" | "running" | "video_pending" | "complete" | "failed";
 
@@ -446,7 +447,7 @@ export default function TemplateStudioPage() {
   const [libraryAssets, setLibraryAssets] = useState<Record<string, { url: string; name?: string | null } | null>>({});
   const [textInputs, setTextInputs] = useState<Record<string, string>>({});
   const [jobId, setJobId] = useState<string | null>(null);
-  const [privateWorkflowDialogOpen, setPrivateWorkflowDialogOpen] = useState(false);
+  const [creatingFork, setCreatingFork] = useState(false);
   const [workflowUpgradeDialogOpen, setWorkflowUpgradeDialogOpen] = useState(false);
   const [result, setResult] = useState<RunnerResult | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -908,10 +909,35 @@ export default function TemplateStudioPage() {
   const canCustomizeWorkflow =
     isPrivilegedUser || planKey === "pro" || planKey === "studio" || planKey === "team";
 
-  /** P0: Pro entry point — the private-fork editor navigation lands here next phase. */
-  const handleCustomizeWorkflow = () => {
-    setPrivateWorkflowDialogOpen(true);
+  /** TR9: Pro entry point — creates a private fork and opens the personal editor. */
+  const handleCustomizeWorkflow = async () => {
+    const sourceTemplateId = selectedTemplate?.templateId ?? null;
+    if (!sourceTemplateId) {
+      toast({ title: "This template can't be customized yet", variant: "destructive" });
+      return;
+    }
+    if (creatingFork) return;
+    setCreatingFork(true);
+    try {
+      const { forkId } = await createFork(sourceTemplateId);
+      navigate(`/app/templates/customize/${forkId}`);
+    } catch (error) {
+      const code = (error as { code?: string })?.code ?? "";
+      if (code === "PRO_REQUIRED") {
+        setWorkflowUpgradeDialogOpen(true);
+      } else if (code === "CUSTOMIZATION_NOT_ALLOWED") {
+        toast({
+          title: "This template can't be customized",
+          description: "The creator has kept this workflow locked.",
+        });
+      } else {
+        toast({ title: "Couldn't create your private version", variant: "destructive" });
+      }
+    } finally {
+      setCreatingFork(false);
+    }
   };
+
 
 
   const handleTemplateSelect = (templateId: string) => {
@@ -1815,7 +1841,7 @@ export default function TemplateStudioPage() {
                     statusMessage={result.statusMessage}
                     progress={result.progress}
                     canCustomizeWorkflow={canCustomizeWorkflow}
-                    onCustomizeWorkflow={handleCustomizeWorkflow}
+                    onCustomizeWorkflow={() => void handleCustomizeWorkflow()}
                     onLockedCustomize={() => setWorkflowUpgradeDialogOpen(true)}
                   />
                   {ACTIVE_RUN_STATUSES.has(result.status) ? (
@@ -1901,19 +1927,8 @@ export default function TemplateStudioPage() {
 
 
 
-      {/* P0: Pro entry point — placeholder until the private-fork editor lands.
-          Replacing this body with real navigation is a one-line swap in handleCustomizeWorkflow. */}
-      <Dialog open={privateWorkflowDialogOpen} onOpenChange={setPrivateWorkflowDialogOpen}>
-        <DialogContent className="border-white/10 bg-[#0c101c] text-slate-100 sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle className="font-display tracking-[0.12em]">Your private workflow</DialogTitle>
-            <DialogDescription className="text-sm text-slate-400">
-              Workflow customization is being set up for your account. Your private version will let
-              you adjust this campaign's workflow without ever affecting the original template.
-            </DialogDescription>
-          </DialogHeader>
-        </DialogContent>
-      </Dialog>
+
+
 
       {/* P0: locked upsell for Starter / Plus / Free — the graph itself is never hidden. */}
       <Dialog open={workflowUpgradeDialogOpen} onOpenChange={setWorkflowUpgradeDialogOpen}>

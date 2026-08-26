@@ -48,6 +48,8 @@ import HomePage from "@/pages/mvp/HomePage";
 import NotFoundPage from "@/pages/mvp/NotFoundPage";
 import ResetPasswordPage from "@/pages/mvp/ResetPasswordPage";
 import TemplateStudioPage from "@/pages/mvp/TemplateStudioPage";
+import CustomizeWorkflowPage from "@/pages/mvp/CustomizeWorkflowPage";
+
 import CreatorOnboarding from "@/pages/app/creator/CreatorOnboarding";
 
 const queryClient = new QueryClient();
@@ -107,6 +109,15 @@ const App = () => (
 
             <Route path="/billing" element={<Navigate to="/pricing" replace />} />
             <Route path="/app/templates" element={<TemplateStudioPage />} />
+            <Route
+              path="/app/templates/customize/:forkId"
+              element={
+                <CustomerRoute>
+                  <CustomizeWorkflowPage />
+                </CustomerRoute>
+              }
+            />
+
 
             <Route path="/dashboard" element={<Navigate to="/app/templates" replace />} />
             <Route path="/templates" element={<Navigate to="/app/templates" replace />} />

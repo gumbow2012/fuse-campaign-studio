@@ -189,7 +189,79 @@ export function sanitizePersonalGraphForClient(
   };
 }
 
+/**
+ * TR9 — merge ONLY allowed client edits into the stored personal graph.
+ *
+ * Whitelist enforced here:
+ *  - node.prompt            → only when promptVisibility === true, only on promptable nodes
+ *  - node.directionOverride → only when promptVisibility === false, only on promptable nodes
+ *  - node.settings[k]       → only for k in EDITABLE_SETTING_KEYS
+ * Everything else (topology, node ids/types/names, edges, default assets,
+ * unknown settings) is ignored — the stored graph is authoritative.
+ */
+export function mergeForkEdits(args: {
+  stored: unknown;
+  incoming: unknown;
+  promptVisibility: boolean;
+}): PersonalGraph {
+  const base = sanitizePersonalGraphForClient(args.stored, args.promptVisibility) ?? {
+    version: 1,
+    promptVisibility: args.promptVisibility,
+    nodes: [],
+    edges: [],
+  };
+
+  const incomingNodes = new Map<string, any>();
+  const rawNodes = (args.incoming as any)?.nodes;
+  if (Array.isArray(rawNodes)) {
+    for (const node of rawNodes) {
+      const id = String((node as any)?.id ?? "");
+      if (id) incomingNodes.set(id, node);
+    }
+  }
+
+  return {
+    version: 1,
+    promptVisibility: args.promptVisibility,
+    // Topology is read-only: iterate the STORED nodes only.
+    nodes: base.nodes.map((node) => {
+      const edit = incomingNodes.get(node.id);
+      if (!edit) return node;
+
+      const next: PersonalGraphNode = { ...node, settings: { ...node.settings } };
+
+      if (isPromptableNode(node.node_type)) {
+        if (args.promptVisibility) {
+          if (typeof edit.prompt === "string") next.prompt = edit.prompt;
+        } else if (typeof edit.directionOverride === "string") {
+          next.directionOverride = edit.directionOverride;
+        }
+      }
+
+      const incomingSettings = edit.settings;
+      if (incomingSettings && typeof incomingSettings === "object") {
+        for (const key of EDITABLE_SETTING_KEYS) {
+          const value = (incomingSettings as Record<string, unknown>)[key];
+          if (value === undefined) continue;
+          if (
+            typeof value === "string" ||
+            typeof value === "number" ||
+            typeof value === "boolean" ||
+            value === null
+          ) {
+            next.settings[key] = value;
+          }
+        }
+      }
+
+      return next;
+    }),
+    edges: base.edges,
+  };
+}
+
 export function buildBasedOnLabel(templateName: string | null | undefined, versionNumber: unknown) {
+
   const name = String(templateName ?? "Template").trim() || "Template";
   const version = Number(versionNumber);
   return Number.isFinite(version) ? `Based on ${name} v${version}` : `Based on ${name}`;
