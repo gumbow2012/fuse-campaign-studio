@@ -13,7 +13,9 @@ import {
 type UploadRunInputBody = {
   dataUrl?: string;
   filename?: string;
+  action?: string;
 };
+
 
 const MAX_UPLOAD_BYTES = 12 * 1024 * 1024;
 /** Source videos (Outfit Swap) are allowed a larger budget than reference images. */
