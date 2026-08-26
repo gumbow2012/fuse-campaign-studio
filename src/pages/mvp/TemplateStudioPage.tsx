@@ -479,6 +479,22 @@ export default function TemplateStudioPage() {
     [templatesQuery.data],
   );
 
+  const performanceIds = useMemo(
+    () => templates.map((template) => String(template.id ?? "")).filter(Boolean),
+    [templates],
+  );
+
+  const { data: performanceMap = {} as TemplatePerformanceMap } = useQuery({
+    queryKey: ["studio-template-performance", performanceIds.slice().sort().join(",")],
+    queryFn: () => loadTemplatePerformance(performanceIds),
+    enabled: performanceIds.length > 0,
+    staleTime: 5 * 60 * 1000,
+    retry: false,
+  });
+
+  const hasAnyPerformance = Object.keys(performanceMap).length > 0;
+
+
   useEffect(() => {
     const requestedTemplate = searchParams.get("template");
     if (!requestedTemplate || !templates.length) return;
