@@ -18,6 +18,13 @@ import {
 } from "./fal.ts";
 import { sortEdgesByExecutionOrder, targetParamOrder } from "./edge-order.ts";
 import { isPromptNode, resolveNodePrompt } from "./prompt-nodes.ts";
+import {
+  CAST_RUNTIME_KEY,
+  castAuditMetadata,
+  parseCastRuntime,
+  resolveTemplateCast,
+  type CastRuntime,
+} from "./cast.ts";
 
 /* ============ Seedance multi-reference (additive, isolated) ============ */
 
