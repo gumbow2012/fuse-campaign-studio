@@ -621,25 +621,15 @@ export default function TemplateStudioPage() {
     },
   });
 
-  const recentRunsQuery = useInfiniteQuery<RecentRunsPage>({
-    queryKey: ["mvp-run-catalog"],
-    queryFn: ({ pageParam }) => fetchRecentRuns(RUN_CATALOG_PAGE_SIZE, Number(pageParam ?? 0)),
-    initialPageParam: 0,
-    getNextPageParam: (lastPage) => lastPage.nextOffset ?? undefined,
-    enabled: !!user,
-    staleTime: 5_000,
-    refetchInterval: (query) => {
-      const runs = query.state.data?.pages.flatMap((page) => page.jobs) ?? [];
-      return jobId || openedHistoricalRun || runs.some((run) => ACTIVE_RUN_STATUSES.has(run.status)) ? 5_000 : false;
-    },
+  /**
+   * Campaign history now lives in dedicated components (launcher + drawer +
+   * /app/campaigns) and shares one paginated query via useCampaignHistory.
+   */
+  const { query: recentRunsQuery, campaigns: recentRuns } = useCampaignHistory({
+    hasOpenWorkspace: Boolean(jobId) || Boolean(openedHistoricalRun),
   });
-
-  const recentRuns = useMemo(
-    () => recentRunsQuery.data?.pages.flatMap((page) => page.jobs) ?? EMPTY_RECENT_RUNS,
-    [recentRunsQuery.data],
-  );
   const refetchRecentRuns = recentRunsQuery.refetch;
-  const canLoadMoreRuns = !!recentRunsQuery.hasNextPage;
+
 
   // ---- Campaign studio layout state machine (single authoritative condition) ----
   const openedHistoricalRunId = openedHistoricalRun?.id ?? null;
