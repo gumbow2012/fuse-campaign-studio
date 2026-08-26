@@ -25,6 +25,7 @@ import TemplateDetailDialog, { readTemplateAspectRatio } from "@/components/mvp/
 import TemplateInputCard from "@/components/templates/TemplateInputCard";
 import CastSelector, { PRIMARY_CAST_SLOT, type CastSelection } from "@/components/templates/CastSelector";
 import { CampaignBuildGraph, type PublicGraph } from "@/components/templates/CampaignBuildGraph";
+import CampaignOutputsPanel from "@/components/templates/CampaignOutputsPanel";
 
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
@@ -78,6 +79,8 @@ interface RunnerOutput {
   url: string;
   label?: string;
   key?: string;
+  /** TR4: numbered deliverable slot from the job-status payload. */
+  outputNumber?: number;
 }
 
 interface RunnerResult {
