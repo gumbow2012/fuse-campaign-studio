@@ -24,6 +24,7 @@ import CreditPackDialog from "@/components/mvp/CreditPackDialog";
 import TemplateDetailDialog, { readTemplateAspectRatio } from "@/components/mvp/TemplateDetailDialog";
 import CampaignBuilderSteps, { buildCampaignSteps } from "@/components/mvp/CampaignBuilderSteps";
 import TemplateInputCard from "@/components/templates/TemplateInputCard";
+import CastSelector, { PRIMARY_CAST_SLOT, type CastSelection } from "@/components/templates/CastSelector";
 
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
@@ -743,10 +744,13 @@ export default function TemplateStudioPage() {
   const detailTemplate = templates.find((template) => template.id === detailTemplateId) ?? null;
   const creditShortfall = Math.max(0, creditsRequired - displayedCreditBalance);
   const blockedByCredits = !!user && !isPrivilegedUser && !!profile && creditShortfall > 0;
+  const castEnabled = selectedTemplate?.castConfig?.supported === true;
   const builderSteps = buildCampaignSteps({
     hasRequirements: inputFields.length > 0,
     assetsReady: requiredInputsAreReady,
     canGenerate: requiredInputsAreReady && (isPrivilegedUser || !blockedByCredits),
+    castEnabled,
+    castComplete: Boolean(castSelection[PRIMARY_CAST_SLOT]),
   });
 
   const handleTemplateSelect = (templateId: string) => {
@@ -756,6 +760,7 @@ export default function TemplateStudioPage() {
     setTextInputs({});
     setJobId(null);
     setResult(null);
+    setCastSelection({});
     if (window.matchMedia("(max-width: 1279px)").matches) {
       window.requestAnimationFrame(() => {
         runnerSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -1204,6 +1209,14 @@ export default function TemplateStudioPage() {
                       </ul>
 
                     </div>
+                  ) : null}
+
+                  {castEnabled ? (
+                    <CastSelector
+                      userId={user?.id ?? null}
+                      selection={castSelection}
+                      onSelectionChange={setCastSelection}
+                    />
                   ) : null}
 
                   <div className="grid gap-4 md:grid-cols-2">
