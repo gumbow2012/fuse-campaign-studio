@@ -28,6 +28,12 @@ import { useAuth } from "@/contexts/AuthContext";
 import { cn } from "@/lib/utils";
 import { getCreatorLevel } from "@/lib/creatorLevels";
 import { getOwnCreatorProfile, type CreatorProfile } from "@/services/creatorProfile";
+import { CreatorPerformancePanel } from "@/components/CreatorPerformance";
+import {
+  EMPTY_CREATOR_PERFORMANCE,
+  loadCreatorPerformance,
+  type CreatorPerformanceAggregate,
+} from "@/services/creatorPerformance";
 import {
   loadCreatorAnalytics,
   loadCreatorChallenges,
