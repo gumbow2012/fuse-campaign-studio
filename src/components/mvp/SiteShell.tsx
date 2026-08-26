@@ -1,12 +1,11 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { Link, NavLink, useNavigate } from "react-router-dom";
-import { Clapperboard, ClipboardCheck, Gem, Home, Info, Layers3, Mail, Menu, RefreshCw, Shirt, Sparkles, Star, UserRound, UsersRound } from "lucide-react";
+import { Clapperboard, ClipboardCheck, Gem, Home, Info, Layers3, Mail, Menu, Shirt, Sparkles, Star, UsersRound } from "lucide-react";
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
-import CreditPackDialog from "./CreditPackDialog";
 import { CreditChip } from "@/components/CreditChip";
 import NotificationCenter from "@/components/NotificationCenter";
 import { AccountPopover } from "@/components/AccountMenu";
@@ -74,8 +73,7 @@ type BillingCorrectionNotice = {
 
 export default function SiteShell({ children }: { children: ReactNode }) {
   const navigate = useNavigate();
-  const { user, profile, isAdmin, isCreator, hasAppAccess, signOut, refreshProfile } = useAuth();
-  const [refreshingCredits, setRefreshingCredits] = useState(false);
+  const { user, profile, isAdmin, isCreator, hasAppAccess, signOut } = useAuth();
   const [menuOpen, setMenuOpen] = useState(false);
   const closeMenu = () => setMenuOpen(false);
   const toolLinks: Array<{ to: string; label: string; icon: typeof Layers3; featureKey?: FeatureKey }> = [
@@ -90,11 +88,6 @@ export default function SiteShell({ children }: { children: ReactNode }) {
   const [billingCorrectionNotice, setBillingCorrectionNotice] = useState<BillingCorrectionNotice | null>(null);
   const accountLabel = isAdmin ? "Admin account" : "Account";
   const creditDisplay = profile ? `${profile.credits_balance.toLocaleString()} credits` : "Checking credits";
-  const hasActivePaidMembership =
-    !!profile &&
-    profile.plan !== "free" &&
-    (profile.subscription_status === "active" || profile.subscription_status === "trialing");
-  const shouldShowCreditTopUp = !!user && !!profile && !isAdmin && hasActivePaidMembership && profile.credits_balance <= 0;
 
   useEffect(() => {
     if (!user || isAdmin) {
@@ -139,15 +132,6 @@ export default function SiteShell({ children }: { children: ReactNode }) {
     navigate("/", { replace: true });
   };
 
-  const handleRefreshCredits = async () => {
-    if (!user || isAdmin || refreshingCredits) return;
-    setRefreshingCredits(true);
-    try {
-      await refreshProfile();
-    } finally {
-      setRefreshingCredits(false);
-    }
-  };
 
   return (
     <div className="min-h-screen text-foreground">
