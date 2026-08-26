@@ -48,6 +48,8 @@ import HomePage from "@/pages/mvp/HomePage";
 import NotFoundPage from "@/pages/mvp/NotFoundPage";
 import ResetPasswordPage from "@/pages/mvp/ResetPasswordPage";
 import TemplateStudioPage from "@/pages/mvp/TemplateStudioPage";
+import CustomizeWorkflowPage from "@/pages/mvp/CustomizeWorkflowPage";
+
 import CreatorOnboarding from "@/pages/app/creator/CreatorOnboarding";
 
 const queryClient = new QueryClient();
