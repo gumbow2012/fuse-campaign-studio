@@ -585,11 +585,14 @@ async function cloneVersion(args: {
     versionId,
     versionNumber,
     templateId: targetTemplateId,
+    /** FT9 — source node id -> cloned node id, so draft-only metadata can be remapped. */
+    nodeIdMap: Object.fromEntries(idMap.entries()) as Record<string, string>,
     counts: {
       nodes: nodeRows.length,
       edges: edgeRows.length,
     },
   };
+
 }
 
 async function starterNodes(args: {
