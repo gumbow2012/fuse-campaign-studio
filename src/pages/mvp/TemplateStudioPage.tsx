@@ -1019,6 +1019,9 @@ export default function TemplateStudioPage() {
                 const credits = template.estimated_credits_per_run || 0;
                 const inputCount = getTemplateInputCount(template);
                 const outputCount = getTemplateOutputCount(template);
+                const performance = performanceMap[String(template.id ?? "")];
+
+
 
                 return (
                   <div
