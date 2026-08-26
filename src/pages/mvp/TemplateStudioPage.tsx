@@ -1543,7 +1543,7 @@ export default function TemplateStudioPage() {
               ) : null}
 
               {result && ACTIVE_RUN_STATUSES.has(result.status) ? (
-                <div className="mt-6">
+                <div className="mt-6 space-y-4">
                   {result.publicGraph && result.publicGraph.nodes.length > 0 ? (
                     <CampaignBuildGraph
                       graph={result.publicGraph}
@@ -1553,6 +1553,7 @@ export default function TemplateStudioPage() {
                   ) : (
                     <RunProgressBeacon progress={result.progress} status={result.status} />
                   )}
+                  <CampaignOutputsPanel graph={result.publicGraph} outputs={result.outputs} />
                 </div>
               ) : null}
 
