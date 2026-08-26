@@ -1,5 +1,5 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
-import Stripe from "npm:stripe";
+import Stripe from "https://esm.sh/stripe@18.5.0";
 import {
   corsHeaders,
   createAdminClient,
@@ -75,16 +75,37 @@ serve(async (req) => {
     const prices: Record<string, string> = {};
     const rows: Record<string, unknown>[] = [];
 
-    // Load existing catalog once (bounded).
+    // Load existing catalog once (bounded). Explicit paging — the auto-pagination
+    // async iterator is not Deno-compatible in this runtime.
     const allProducts: Stripe.Product[] = [];
-    for await (const product of stripe.products.list({ limit: 100, active: true })) {
-      allProducts.push(product);
-      if (allProducts.length >= 300) break;
+    {
+      let startingAfter: string | undefined;
+      for (;;) {
+        const page = await stripe.products.list({
+          limit: 100,
+          active: true,
+          ...(startingAfter ? { starting_after: startingAfter } : {}),
+        });
+        allProducts.push(...page.data);
+        if (!page.has_more || allProducts.length >= 300) break;
+        startingAfter = page.data[page.data.length - 1]?.id;
+        if (!startingAfter) break;
+      }
     }
     const allPrices: Stripe.Price[] = [];
-    for await (const price of stripe.prices.list({ limit: 100, active: true })) {
-      allPrices.push(price);
-      if (allPrices.length >= 500) break;
+    {
+      let startingAfter: string | undefined;
+      for (;;) {
+        const page = await stripe.prices.list({
+          limit: 100,
+          active: true,
+          ...(startingAfter ? { starting_after: startingAfter } : {}),
+        });
+        allPrices.push(...page.data);
+        if (!page.has_more || allPrices.length >= 500) break;
+        startingAfter = page.data[page.data.length - 1]?.id;
+        if (!startingAfter) break;
+      }
     }
 
     const findProduct = (matchKey: string, metaField: string, name: string) =>
