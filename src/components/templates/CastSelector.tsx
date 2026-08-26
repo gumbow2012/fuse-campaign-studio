@@ -11,10 +11,10 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { listFuseAvatars, listMyAvatars, type AvatarProfile } from "@/services/avatarProfiles";
 
-/** Structured for CAST A/B/C later; a single slot for now. */
+/** Structured for cast_a / cast_b / cast_c later; a single slot for now. */
 export type CastSelection = Record<string, string | null>;
 
-export const PRIMARY_CAST_SLOT = "castA";
+export const PRIMARY_CAST_SLOT = "cast_a";
 
 const LABEL = "text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400";
 
