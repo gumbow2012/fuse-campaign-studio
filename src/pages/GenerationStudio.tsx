@@ -517,8 +517,8 @@ function GenerationCard({
             >
               {isImage ? (
                 near ? (
-                  <img
-                    src={generation.outputUrl as string}
+                    src={tileSrc as string}
+
                     alt={generation.prompt ?? generation.promptPreview ?? "Generated result"}
                     loading={priority ? "eager" : "lazy"}
                     // eslint-disable-next-line @typescript-eslint/no-explicit-any
