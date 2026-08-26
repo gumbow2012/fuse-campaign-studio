@@ -2,19 +2,16 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import {
+  ArrowLeft,
   ArrowRight,
-  ChevronDown,
   ChevronRight,
-  Download,
-  Eye,
   Film,
   GitBranch,
-  Image as ImageIcon,
   Loader2,
+  
   Network,
   RefreshCw,
   Sparkles,
-  
 } from "lucide-react";
 import SiteShell from "@/components/mvp/SiteShell";
 import RunFeedbackInline from "@/components/mvp/RunFeedbackInline";
@@ -29,7 +26,7 @@ import CampaignResults from "@/components/templates/CampaignResults";
 
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+
 import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
 import { Textarea } from "@/components/ui/textarea";
@@ -120,12 +117,11 @@ const TEMPLATE_CACHE_KEY = "fuse.templateStudio.templates.v4";
 const TEMPLATE_DETAIL_CACHE_KEY = "fuse.templateStudio.templateDetails.v4";
 const TEMPLATE_SELECTION_KEY = "fuse.templateStudio.selectedTemplateId";
 const ACTIVE_RUN_STATUSES = new Set<RunnerStatus>(["queued", "running", "video_pending"]);
+/** Authoritative layout mode for the studio: compact browse/setup vs expanded campaign workspace. */
+type CampaignStudioMode = "browse" | "setup" | "running" | "complete" | "failed";
 const RUN_CATALOG_PAGE_SIZE = 8;
 const RECENT_RUNS_REFRESH_COOLDOWN_SECONDS = 10;
 
-function formatPublicOutputLabel(index: number) {
-  return `Output ${index + 1}`;
-}
 
 function getOutputDownloadName(templateName: string, index: number, output: RunnerOutput) {
   const safeTemplateName = templateName.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "") || "fuse-run";
@@ -448,11 +444,15 @@ export default function TemplateStudioPage() {
   const [runPhase, setRunPhase] = useState<"idle" | "uploading" | "preparing">("idle");
 
   const [adminVisualSpent, setAdminVisualSpent] = useState(() => getAdminVisualCreditsSpent());
-  const [expandedRuns, setExpandedRuns] = useState<Record<string, boolean>>({});
+  /** A previously completed/failed run reopened into the workspace. */
+  const [openedHistoricalRun, setOpenedHistoricalRun] = useState<RecentRun | null>(null);
+  /** Post-run: whether the full asset-input controls are re-expanded (Edit Inputs). */
+  const [inputsExpanded, setInputsExpanded] = useState(false);
   const [feedbackOverrides, setFeedbackOverrides] = useState<Record<string, RunFeedbackRecord | null>>({});
   const [recentRefreshCooldown, setRecentRefreshCooldown] = useState(0);
   const [detailTemplateId, setDetailTemplateId] = useState<string | null>(null);
   const runnerSectionRef = useRef<HTMLElement | null>(null);
+  const workspaceSectionRef = useRef<HTMLElement | null>(null);
   /** Auto-advance: the next unfilled slot gets a subtle highlight + scroll focus. */
   const [focusedInputKey, setFocusedInputKey] = useState<string | null>(null);
   const slotRefs = useRef<Record<string, HTMLDivElement | null>>({});
@@ -608,7 +608,7 @@ export default function TemplateStudioPage() {
     staleTime: 5_000,
     refetchInterval: (query) => {
       const runs = query.state.data?.pages.flatMap((page) => page.jobs) ?? [];
-      return jobId || runs.some((run) => ACTIVE_RUN_STATUSES.has(run.status)) ? 5_000 : false;
+      return jobId || openedHistoricalRun || runs.some((run) => ACTIVE_RUN_STATUSES.has(run.status)) ? 5_000 : false;
     },
   });
 
@@ -617,11 +617,26 @@ export default function TemplateStudioPage() {
     [recentRunsQuery.data],
   );
   const refetchRecentRuns = recentRunsQuery.refetch;
-  const hasExpandedRecentRun = recentRuns.some((run) => expandedRuns[run.id]);
   const canLoadMoreRuns = !!recentRunsQuery.hasNextPage;
-  const currentResultFeedback = jobId
-    ? feedbackOverrides[jobId]
-      ?? recentRuns.find((run) => run.id === jobId)?.feedback
+
+  // ---- Campaign studio layout state machine (single authoritative condition) ----
+  const openedHistoricalRunId = openedHistoricalRun?.id ?? null;
+  const activeRunId = jobId ?? openedHistoricalRunId;
+  const hasActiveCampaignWorkspace = Boolean(jobId) || Boolean(openedHistoricalRunId);
+  const studioMode: CampaignStudioMode = !hasActiveCampaignWorkspace
+    ? selectedTemplateId
+      ? "setup"
+      : "browse"
+    : result?.status === "complete"
+      ? "complete"
+      : result?.status === "failed"
+        ? "failed"
+        : "running";
+  const workspaceTemplateName = openedHistoricalRun?.templateName ?? selectedTemplate?.name ?? null;
+
+  const currentResultFeedback = activeRunId
+    ? feedbackOverrides[activeRunId]
+      ?? recentRuns.find((run) => run.id === activeRunId)?.feedback
       ?? null
     : null;
 
@@ -656,20 +671,33 @@ export default function TemplateStudioPage() {
     link.remove();
   };
 
-  const handleDownloadRunOutputs = (run: RecentRun) => {
-    if (!run.outputs.length) return;
-
-    run.outputs.forEach((output, index) => {
-      const link = document.createElement("a");
-      link.href = output.url;
-      link.download = getOutputDownloadName(run.templateName, index, output);
-      link.target = "_blank";
-      link.rel = "noreferrer";
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
+  /** Open a previous run directly into the expanded campaign workspace. */
+  const handleOpenHistoricalRun = (run: RecentRun) => {
+    setJobId(null);
+    setInputsExpanded(false);
+    setOpenedHistoricalRun(run);
+    setResult({
+      status: run.status,
+      progress: run.progress ?? 0,
+      outputs: Array.isArray(run.outputs) ? run.outputs : [],
+      error: run.error ?? undefined,
+    });
+    window.requestAnimationFrame(() => {
+      workspaceSectionRef.current?.scrollIntoView({
+        behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth",
+        block: "start",
+      });
     });
   };
+
+  /** Return from workspace mode to the compact browse/setup layout. */
+  const handleBackToTemplates = () => {
+    setJobId(null);
+    setOpenedHistoricalRun(null);
+    setInputsExpanded(false);
+    setResult(null);
+  };
+
 
   useEffect(() => {
     if (recentRefreshCooldown <= 0) return;
@@ -682,41 +710,14 @@ export default function TemplateStudioPage() {
   }, [recentRefreshCooldown]);
 
   useEffect(() => {
-    if (!recentRuns.length) {
-      setExpandedRuns((current) => (Object.keys(current).length ? {} : current));
-      return;
-    }
-
-    setExpandedRuns((current) => {
-      const next: Record<string, boolean> = {};
-      for (const run of recentRuns) {
-        if (run.id in current) {
-          next[run.id] = current[run.id];
-          continue;
-        }
-        next[run.id] = !isPrivilegedUser && recentRuns[0]?.id === run.id;
-      }
-      const currentKeys = Object.keys(current);
-      const nextKeys = Object.keys(next);
-      if (
-        currentKeys.length === nextKeys.length &&
-        nextKeys.every((key) => current[key] === next[key])
-      ) {
-        return current;
-      }
-      return next;
-    });
-  }, [isPrivilegedUser, recentRuns]);
-
-  useEffect(() => {
-    if (!jobId) return;
+    if (!activeRunId) return;
 
     let cancelled = false;
     let timeoutId: number | undefined;
 
     const poll = async () => {
       try {
-        const status = await fetchJobStatus(jobId);
+        const status = await fetchJobStatus(activeRunId);
         if (cancelled) return;
 
         // P0: never lose the graph — if a later poll omits publicGraph/statusMessage,
@@ -752,7 +753,7 @@ export default function TemplateStudioPage() {
       cancelled = true;
       if (timeoutId) window.clearTimeout(timeoutId);
     };
-  }, [jobId, refetchRecentRuns]);
+  }, [activeRunId, refetchRecentRuns]);
 
   const inputFields: InputField[] = (() => {
     if (templateDetailQuery.data?.user_inputs?.length) {
@@ -882,6 +883,8 @@ export default function TemplateStudioPage() {
     setLibraryAssets({});
     setTextInputs({});
     setJobId(null);
+    setOpenedHistoricalRun(null);
+    setInputsExpanded(false);
     setResult(null);
     setCastSelection({});
     if (window.matchMedia("(max-width: 1279px)").matches) {
@@ -917,6 +920,8 @@ export default function TemplateStudioPage() {
     setSubmitting(true);
     setCheckingCredits(true);
     setJobId(null);
+    setOpenedHistoricalRun(null);
+    setInputsExpanded(false);
     setResult(null);
 
     try {
@@ -1102,13 +1107,15 @@ export default function TemplateStudioPage() {
         ) : null}
 
         <div
+          data-studio-mode={studioMode}
           className={cn(
             "mt-8 grid gap-6 transition-[grid-template-columns] duration-300",
-            hasExpandedRecentRun
-              ? "xl:grid-cols-[minmax(260px,0.58fr)_minmax(0,1.42fr)] 2xl:grid-cols-[minmax(300px,0.56fr)_minmax(0,1.44fr)]"
+            hasActiveCampaignWorkspace
+              ? "xl:grid-cols-[minmax(280px,380px)_minmax(0,1fr)]"
               : "xl:grid-cols-[minmax(0,1fr)_440px] 2xl:grid-cols-[minmax(0,1fr)_480px]",
           )}
         >
+          {!hasActiveCampaignWorkspace ? (
           <section className="rounded-[2rem] border border-white/10 bg-white/[0.03] p-5">
             <div className="flex items-center justify-between gap-3">
               <p className="text-[11px] uppercase tracking-[0.24em] text-muted-foreground">Templates</p>
@@ -1149,7 +1156,7 @@ export default function TemplateStudioPage() {
               </div>
             ) : null}
 
-            <div className={cn("mt-5 grid gap-4 sm:grid-cols-2", hasExpandedRecentRun ? "2xl:grid-cols-2" : "lg:grid-cols-3")}>
+            <div className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {visibleTemplates.map((template) => {
                 const selected = template.id === selectedTemplateId;
                 const credits = template.estimated_credits_per_run || 0;
@@ -1250,9 +1257,71 @@ export default function TemplateStudioPage() {
             ) : null}
             {hasAnyPerformance ? <PerformanceDisclaimer className="mt-4" /> : null}
           </section>
+          ) : null}
 
 
-          <aside className="space-y-6 xl:sticky xl:top-24 xl:self-start">
+          <aside
+            className={cn(
+              "space-y-6",
+              hasActiveCampaignWorkspace ? "order-2 xl:order-1" : "xl:sticky xl:top-24 xl:self-start",
+            )}
+          >
+            {/* Post-run: the setup panel collapses into a compact summary. */}
+            {hasActiveCampaignWorkspace && !inputsExpanded ? (
+              <section className="rounded-[2rem] border border-white/10 bg-slate-950/75 p-5 shadow-[0_24px_80px_rgba(0,0,0,0.35)] backdrop-blur-xl">
+                {jobId ? (
+                  <>
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="font-display text-[12px] font-semibold uppercase tracking-[0.22em] text-white">Campaign inputs</p>
+                      <button
+                        type="button"
+                        onClick={() => setInputsExpanded(true)}
+                        className="rounded-full border border-white/15 bg-white/5 px-3 py-1.5 text-[11px] font-medium text-slate-200 transition-colors hover:bg-white/10"
+                      >
+                        Edit Inputs
+                      </button>
+                    </div>
+                    <div className="mt-3 flex flex-wrap gap-1.5">
+                      {inputFields.map((field) => {
+                        const filled = field.type === "text"
+                          ? Boolean(textInputs[field.key]?.trim())
+                          : Boolean(files[field.key] || libraryAssets[field.key]);
+                        return (
+                          <span
+                            key={field.key}
+                            className={cn(
+                              "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] tracking-wide",
+                              filled
+                                ? "border-emerald-300/25 bg-emerald-300/10 text-emerald-100"
+                                : "border-white/10 bg-black/20 text-slate-500",
+                            )}
+                          >
+                            {filled ? "✓" : "○"} {field.label}
+                          </span>
+                        );
+                      })}
+                      {Object.values(castSelection).some(Boolean) ? (
+                        <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-300/25 bg-emerald-300/10 px-2.5 py-1 text-[10px] tracking-wide text-emerald-100">
+                          ✓ Cast
+                        </span>
+                      ) : null}
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <p className="font-display text-[12px] font-semibold uppercase tracking-[0.22em] text-white">Viewing past run</p>
+                    <p className="mt-2 truncate text-sm font-semibold text-slate-100">{openedHistoricalRun?.templateName}</p>
+                    <p className="mt-1 text-xs text-slate-500">
+                      {formatRunTimestamp(openedHistoricalRun?.startedAt)} · {openedHistoricalRun?.outputs.length ?? 0} deliverable(s)
+                    </p>
+                  </>
+                )}
+              </section>
+            ) : null}
+
+            {/* Full builder: always pre-run; post-run only while Edit Inputs is active. */}
+            {(!hasActiveCampaignWorkspace || inputsExpanded) ? (
+            <>
             <section
               ref={runnerSectionRef}
               className="scroll-mt-24 rounded-[2rem] border border-white/10 bg-slate-950/75 p-6 shadow-[0_24px_80px_rgba(0,0,0,0.35)] backdrop-blur-xl"
@@ -1539,40 +1608,165 @@ export default function TemplateStudioPage() {
               )}
             </section>
 
+            {submitting && !hasActiveCampaignWorkspace ? (
+              <div className="rounded-[2rem] border border-white/10 bg-slate-950/75 p-6 shadow-[0_24px_80px_rgba(0,0,0,0.35)] backdrop-blur-xl">
+                <RunProgressBeacon progress={3} status="queued" />
+              </div>
+            ) : null}
+            </>
+            ) : null}
+
+            {hasActiveCampaignWorkspace && inputsExpanded ? (
+              <div className="flex justify-end">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setInputsExpanded(false)}
+                  className="rounded-full border-white/15 bg-white/5 text-slate-200 hover:bg-white/10"
+                >
+                  Done editing inputs
+                </Button>
+              </div>
+            ) : null}
+
             <section className="rounded-[2rem] border border-white/10 bg-slate-950/75 p-6 shadow-[0_24px_80px_rgba(0,0,0,0.35)] backdrop-blur-xl">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div>
-                  <p className="text-[11px] uppercase tracking-[0.24em] text-muted-foreground">
-                    Result{selectedTemplate ? ` · ${selectedTemplate.name}` : ""}
-                  </p>
+              <div>
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <p className="text-[11px] uppercase tracking-[0.24em] text-muted-foreground">Recent runs</p>
                   <p className="mt-2 text-sm text-slate-300">
-                    Current run {jobId ? <span className="font-mono text-slate-100">{jobId}</span> : "has not started yet"}.
+                    {isPrivilegedUser
+                      ? "Run memory bank for this account. Select a run to open it in the workspace."
+                      : user
+                        ? "Run memory bank for this account. Load more to reach older generations."
+                        : "Sign in to save and review your completed runs."}
                   </p>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={handleRefreshRecentRuns}
+                    disabled={!user || recentRunsQuery.isFetching || recentRefreshCooldown > 0}
+                    className="rounded-full border-white/10 bg-white/[0.03] text-slate-200 hover:bg-white/[0.08]"
+                  >
+                    {recentRunsQuery.isFetching ? (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    ) : (
+                      <RefreshCw className="mr-2 h-4 w-4" />
+                    )}
+                    {recentRefreshCooldown > 0 ? `Refresh in ${recentRefreshCooldown}s` : "Refresh"}
+                  </Button>
                 </div>
-                {result?.status ? (
-                  <div className={`rounded-full px-3 py-1 text-[10px] uppercase tracking-[0.2em] ${
-                    result.status === "failed"
-                      ? "bg-rose-400/10 text-rose-100"
-                      : result.status === "complete"
-                        ? "bg-emerald-400/10 text-emerald-100"
-                        : "bg-cyan-300/10 text-cyan-100"
-                  }`}>
-                    {result.status.replace("_", " ")}
+
+                {recentRunsQuery.isError ? (
+                  <div className="mt-4 rounded-[1.5rem] border border-rose-400/20 bg-rose-400/10 p-4 text-sm text-rose-100">
+                    Could not load recent runs.
+                  </div>
+                ) : null}
+
+                {!recentRunsQuery.isError && !recentRuns.length ? (
+                  <div className="mt-4 rounded-[1.5rem] border border-dashed border-white/10 bg-black/20 p-4 text-sm text-slate-400">
+                    No saved runs yet for this account.
+                  </div>
+                ) : null}
+
+                <div className="mt-4 space-y-3">
+                  {recentRuns.map((run) => (
+                    <button
+                      key={run.id}
+                      type="button"
+                      onClick={() => handleOpenHistoricalRun(run)}
+                      className={cn(
+                        "flex w-full items-start justify-between gap-3 rounded-[1.25rem] border p-4 text-left transition-colors",
+                        activeRunId === run.id
+                          ? "border-cyan-300/40 bg-cyan-300/[0.06]"
+                          : "border-white/8 bg-black/20 hover:border-white/20 hover:bg-white/[0.05]",
+                      )}
+                    >
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-semibold text-white">{run.templateName}</p>
+                        <p className="mt-1 text-xs text-slate-400">
+                          {formatRunTimestamp(run.startedAt)} · {formatRunDuration(run.startedAt, run.completedAt)}
+                        </p>
+                        <p className="mt-1 text-[10px] uppercase tracking-[0.2em] text-slate-500">
+                          {run.outputs.length} deliverable{run.outputs.length === 1 ? "" : "s"}
+                        </p>
+                      </div>
+                      <div className="flex shrink-0 items-center gap-3">
+                        <div className="text-right">
+                          <p className={`text-[10px] uppercase tracking-[0.2em] ${
+                            run.status === "failed"
+                              ? "text-rose-200"
+                              : run.status === "complete"
+                                ? "text-emerald-200"
+                                : "text-cyan-100"
+                          }`}>
+                            {run.status.replace("_", " ")}
+                          </p>
+                          <p className="mt-1 text-xs text-slate-400">{run.progress}%</p>
+                        </div>
+                        <ChevronRight className="mt-0.5 h-4 w-4 text-slate-400" />
+                      </div>
+                    </button>
+                  ))}
+                </div>
+
+                {canLoadMoreRuns ? (
+                  <div className="mt-4 flex justify-center">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={handleLoadMoreRuns}
+                      disabled={recentRunsQuery.isFetchingNextPage}
+                      className="rounded-full border-white/10 bg-white/[0.03] text-slate-200 hover:bg-white/[0.08]"
+                    >
+                      {recentRunsQuery.isFetchingNextPage ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                      Load more runs
+                    </Button>
                   </div>
                 ) : null}
               </div>
+            </section>
+          </aside>
 
-              {!result && !submitting ? (
-                <div className="mt-6 flex min-h-[220px] items-center justify-center rounded-[1.5rem] border border-dashed border-white/10 bg-black/20 text-slate-400">
-                  Output will appear here after you run a template.
+          {/* Campaign workspace — rendered for the entire lifecycle once a real run exists. */}
+          {hasActiveCampaignWorkspace ? (
+          <section
+            ref={workspaceSectionRef}
+            className="order-1 scroll-mt-24 rounded-[2rem] border border-white/10 bg-slate-950/75 p-6 shadow-[0_24px_80px_rgba(0,0,0,0.35)] backdrop-blur-xl xl:order-2"
+          >
+            <button
+              type="button"
+              onClick={handleBackToTemplates}
+              className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.03] px-3 py-1.5 text-[11px] font-medium text-slate-300 transition-colors hover:bg-white/[0.08] hover:text-white"
+            >
+              <ArrowLeft className="h-3.5 w-3.5" />
+              Back to templates
+            </button>
+
+            <div className="mt-5 flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <p className="text-[11px] uppercase tracking-[0.24em] text-muted-foreground">
+                  Result{workspaceTemplateName ? ` · ${workspaceTemplateName}` : ""}
+                </p>
+                <p className="mt-2 text-sm text-slate-300">
+                  Current run {activeRunId ? <span className="font-mono text-slate-100">{activeRunId}</span> : "has not started yet"}.
+                </p>
+              </div>
+              {result?.status ? (
+                <div className={`rounded-full px-3 py-1 text-[10px] uppercase tracking-[0.2em] ${
+                  result.status === "failed"
+                    ? "bg-rose-400/10 text-rose-100"
+                    : result.status === "complete"
+                      ? "bg-emerald-400/10 text-emerald-100"
+                      : "bg-cyan-300/10 text-cyan-100"
+                }`}>
+                  {result.status.replace("_", " ")}
                 </div>
               ) : null}
-
-              {submitting && !result ? (
-                <div className="mt-6">
-                  <RunProgressBeacon progress={3} status="queued" />
-                </div>
-              ) : null}
+            </div>
 
               {/* P0: the workflow graph stays attached for the ENTIRE run lifecycle —
                   queued → running → video_pending → complete / failed. */}
@@ -1613,201 +1807,18 @@ export default function TemplateStudioPage() {
                     onDownload={handleDownloadSingleOutput}
                   />
 
-                  {jobId ? (
+                  {activeRunId ? (
                     <RunFeedbackInline
-                      jobId={jobId}
+                      jobId={activeRunId}
                       initialFeedback={currentResultFeedback}
-                      onSaved={(feedback) => handleFeedbackSaved(jobId, feedback)}
+                      onSaved={(feedback) => handleFeedbackSaved(activeRunId, feedback)}
                     />
                   ) : null}
                 </div>
               ) : null}
 
-              <div className="mt-8 border-t border-white/8 pt-6">
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div>
-                    <p className="text-[11px] uppercase tracking-[0.24em] text-muted-foreground">Recent runs</p>
-                  <p className="mt-2 text-sm text-slate-300">
-                    {isPrivilegedUser
-                      ? "Run memory bank for this account. Expand a run to inspect every deliverable."
-                      : user
-                        ? "Run memory bank for this account. Load more to reach older generations."
-                        : "Sign in to save and review your completed runs."}
-                  </p>
-                  </div>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={handleRefreshRecentRuns}
-                    disabled={!user || recentRunsQuery.isFetching || recentRefreshCooldown > 0}
-                    className="rounded-full border-white/10 bg-white/[0.03] text-slate-200 hover:bg-white/[0.08]"
-                  >
-                    {recentRunsQuery.isFetching ? (
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    ) : (
-                      <RefreshCw className="mr-2 h-4 w-4" />
-                    )}
-                    {recentRefreshCooldown > 0 ? `Refresh in ${recentRefreshCooldown}s` : "Refresh"}
-                  </Button>
-                </div>
-
-                {recentRunsQuery.isError ? (
-                  <div className="mt-4 rounded-[1.5rem] border border-rose-400/20 bg-rose-400/10 p-4 text-sm text-rose-100">
-                    Could not load recent runs.
-                  </div>
-                ) : null}
-
-                {!recentRunsQuery.isError && !recentRuns.length ? (
-                  <div className="mt-4 rounded-[1.5rem] border border-dashed border-white/10 bg-black/20 p-4 text-sm text-slate-400">
-                    No saved runs yet for this account.
-                  </div>
-                ) : null}
-
-                <div className="mt-4 space-y-4">
-                  {recentRuns.map((run) => {
-                    const isExpanded = !!expandedRuns[run.id];
-
-                    return (
-                    <Collapsible
-                        key={run.id}
-                        open={isExpanded}
-                        onOpenChange={(open) =>
-                          setExpandedRuns((current) => ({
-                            ...current,
-                            [run.id]: open,
-                          }))
-                        }
-                      >
-                        <div
-                          className={cn(
-                            "overflow-hidden rounded-[1.5rem] border bg-black/20 transition-colors",
-                            isExpanded ? "border-cyan-300/35 bg-cyan-300/[0.04]" : "border-white/8",
-                          )}
-                        >
-                        <CollapsibleTrigger asChild>
-                          <button type="button" className="flex w-full items-start justify-between gap-3 p-4 text-left">
-                            <div className="min-w-0">
-                              <p className={cn("truncate font-semibold text-white", isExpanded ? "text-base" : "text-sm")}>{run.templateName}</p>
-                              <p className="mt-1 text-xs text-slate-400">
-                                {formatRunTimestamp(run.startedAt)} · {formatRunDuration(run.startedAt, run.completedAt)}
-                              </p>
-                              <p className="mt-1 text-[10px] uppercase tracking-[0.2em] text-slate-500">
-                                {run.outputs.length} deliverable{run.outputs.length === 1 ? "" : "s"}
-                              </p>
-                            </div>
-
-                            <div className="flex items-center gap-3">
-                              <div className="text-right">
-                                <p className={`text-[10px] uppercase tracking-[0.2em] ${
-                                  run.status === "failed"
-                                    ? "text-rose-200"
-                                    : run.status === "complete"
-                                      ? "text-emerald-200"
-                                      : "text-cyan-100"
-                                }`}>
-                                  {run.status.replace("_", " ")}
-                                </p>
-                                <p className="mt-1 text-xs text-slate-400">{run.progress}%</p>
-                              </div>
-                              {expandedRuns[run.id] ? (
-                                <ChevronDown className="mt-0.5 h-4 w-4 text-slate-400" />
-                              ) : (
-                                <ChevronRight className="mt-0.5 h-4 w-4 text-slate-400" />
-                              )}
-                            </div>
-                          </button>
-                        </CollapsibleTrigger>
-
-                        <CollapsibleContent className="border-t border-white/8 px-4 pb-5 pt-4">
-                          {run.outputs.length ? (
-                            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 2xl:grid-cols-4">
-                              {run.outputs.map((output, index) => (
-                                <a
-                                  key={`${run.id}-${output.url}-${index}`}
-                                  href={output.url}
-                                  target="_blank"
-                                  rel="noreferrer"
-                                  className="group overflow-hidden rounded-[1.25rem] border border-white/8 bg-black/30 transition-colors hover:border-cyan-200/35"
-                                >
-                                  <div className="relative aspect-[9/16] overflow-hidden">
-                                    {output.type === "video" ? (
-                                      <video src={output.url} className="h-full w-full bg-black object-cover transition-transform duration-500 group-hover:scale-[1.03]" muted playsInline />
-                                    ) : (
-                                      <img src={output.url} alt={formatPublicOutputLabel(index)} className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.03]" />
-                                    )}
-                                    <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/85 via-black/40 to-transparent p-3 pt-10">
-                                      <div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-white">
-                                        {output.type === "video" ? <Film className="h-3.5 w-3.5" /> : <ImageIcon className="h-3.5 w-3.5" />}
-                                        {formatPublicOutputLabel(index)}
-                                      </div>
-                                    </div>
-                                  </div>
-                                </a>
-                              ))}
-                            </div>
-                          ) : (
-                            <p className="text-sm text-slate-400">No deliverables attached yet.</p>
-                          )}
-
-                          <div className="mt-4 flex flex-wrap gap-2">
-                            {run.outputs[0] ? (
-                              <a
-                                href={run.outputs[0].url}
-                                target="_blank"
-                                rel="noreferrer"
-                                className="inline-flex items-center gap-2 rounded-full border border-white/10 px-3 py-1.5 text-xs uppercase tracking-[0.2em] text-slate-300 hover:bg-white/[0.06]"
-                              >
-                                <Eye className="h-3.5 w-3.5" />
-                                View first
-                              </a>
-                            ) : null}
-                            {run.outputs.length ? (
-                              <button
-                                type="button"
-                                onClick={() => handleDownloadRunOutputs(run)}
-                                className="inline-flex items-center gap-2 rounded-full border border-cyan-200/20 bg-cyan-300/10 px-3 py-1.5 text-xs uppercase tracking-[0.2em] text-cyan-100 hover:bg-cyan-300/15"
-                              >
-                                <Download className="h-3.5 w-3.5" />
-                                Download all
-                              </button>
-                            ) : null}
-                          </div>
-
-                          {!ACTIVE_RUN_STATUSES.has(run.status) ? (
-                            <RunFeedbackInline
-                              jobId={run.id}
-                              initialFeedback={resolveFeedback(run.id, run.feedback)}
-                              onSaved={(feedback) => handleFeedbackSaved(run.id, feedback)}
-                              className="mt-4"
-                            />
-                          ) : null}
-
-                          {run.error ? <p className="mt-3 text-sm text-rose-200">{run.error}</p> : null}
-                        </CollapsibleContent>
-                        </div>
-                      </Collapsible>
-                    );
-                  })}
-                </div>
-
-                {canLoadMoreRuns ? (
-                  <div className="mt-4 flex justify-center">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={handleLoadMoreRuns}
-                      disabled={recentRunsQuery.isFetchingNextPage}
-                      className="rounded-full border-white/10 bg-white/[0.03] text-slate-200 hover:bg-white/[0.08]"
-                    >
-                      {recentRunsQuery.isFetchingNextPage ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                      Load more runs
-                    </Button>
-                  </div>
-                ) : null}
-              </div>
-            </section>
-          </aside>
+          </section>
+          ) : null}
         </div>
       </section>
 
