@@ -29,6 +29,20 @@ import {
   performOutputRegeneration,
   RegenerationError,
 } from "../_shared/regeneration-run.ts";
+import { assertForkOwnership, resolveForkEntitlement } from "../_shared/template-fork.ts";
+import {
+  buildForkRunMarker,
+  compileForkEdges,
+  compileForkNodes,
+  findForkRunJob,
+  FORK_RUN_MARKER_KEY,
+  ForkRunError,
+  PERSONAL_FORK_REVIEW_STATUS,
+} from "../_shared/fork-run.ts";
+
+/** Private fork versions live in a high, non-colliding version_number band. */
+const FORK_VERSION_NUMBER_BASE = 1_000_000;
+
 
 
 declare const EdgeRuntime: {
