@@ -26,14 +26,22 @@ export default function CastConfigPanel({
   castConfig,
   saving,
   disabled,
+  isActiveVersion,
+  cloning,
   onSave,
+  onCloneForCast,
 }: {
   nodes: Array<{ id: string; name: string; nodeType: string }>;
   castConfig: CastConfig | null;
   saving?: boolean;
   disabled?: boolean;
+  /** FT9 — live versions are protected: configure cast on a clone instead. */
+  isActiveVersion?: boolean;
+  cloning?: boolean;
   onSave: (next: CastConfig | null) => void | Promise<void>;
+  onCloneForCast?: (next: CastConfig) => void | Promise<void>;
 }) {
+
   const slot = castConfig?.slots?.[0] ?? null;
   const [mode, setMode] = useState<CastMode>("NO_CASTING");
   const [nodeId, setNodeId] = useState("");
