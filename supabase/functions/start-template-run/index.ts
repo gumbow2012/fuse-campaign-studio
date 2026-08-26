@@ -21,6 +21,15 @@ import {
   type CastRuntime,
 } from "../_shared/cast.ts";
 import { countTemplateDeliverables, getTemplateCreditCost } from "../_shared/template-pricing.ts";
+import {
+  assertRegenerationAccess,
+  resolveRegenerationSubgraph,
+} from "../_shared/regeneration.ts";
+import {
+  performOutputRegeneration,
+  RegenerationError,
+} from "../_shared/regeneration-run.ts";
+
 
 declare const EdgeRuntime: {
   waitUntil(promise: Promise<unknown>): void;
