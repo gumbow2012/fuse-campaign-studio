@@ -255,6 +255,10 @@ export default function CreatorProfile() {
               ) : null}
             </div>
 
+            <CreatorPerformanceProof aggregate={performance} />
+
+
+
             {profile.description ? (
               <section className="space-y-3">
                 <div
