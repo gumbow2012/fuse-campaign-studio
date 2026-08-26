@@ -28,12 +28,27 @@ interface LibraryPickerDialogProps {
   /** Compatible kinds for this input; empty means show everything. */
   kinds?: LibraryAssetKind[];
   onSelect: (asset: LibraryAsset) => void;
-  trigger?: ReactNode;
+  /** Pass `null` to render no trigger (controlled usage). */
+  trigger?: ReactNode | null;
+  /** Optional controlled open state — used by the compact "Add asset" dialog. */
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }
 
-export default function LibraryPickerDialog({ kinds = [], onSelect, trigger }: LibraryPickerDialogProps) {
+export default function LibraryPickerDialog({
+  kinds = [],
+  onSelect,
+  trigger,
+  open: openProp,
+  onOpenChange,
+}: LibraryPickerDialogProps) {
   const { user } = useAuth();
-  const [open, setOpen] = useState(false);
+  const [internalOpen, setInternalOpen] = useState(false);
+  const open = openProp ?? internalOpen;
+  const setOpen = (next: boolean) => {
+    setInternalOpen(next);
+    onOpenChange?.(next);
+  };
   const [activeKind, setActiveKind] = useState<LibraryAssetKind | "all">(kinds[0] ?? "all");
 
   const assetsQuery = useQuery({
@@ -42,6 +57,7 @@ export default function LibraryPickerDialog({ kinds = [], onSelect, trigger }: L
     enabled: !!user?.id && open,
     staleTime: 30_000,
   });
+
 
   const compatible = useMemo(
     () => {
