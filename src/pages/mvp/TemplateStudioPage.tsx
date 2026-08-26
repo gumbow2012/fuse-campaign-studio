@@ -23,6 +23,8 @@ import CastSelector, { PRIMARY_CAST_SLOT, type CastSelection } from "@/component
 import { CampaignBuildGraph, type PublicGraph } from "@/components/templates/CampaignBuildGraph";
 import CampaignOutputsPanel from "@/components/templates/CampaignOutputsPanel";
 import CampaignResults from "@/components/templates/CampaignResults";
+import RegenerateOutputDialog from "@/components/templates/RegenerateOutputDialog";
+import { useOutputRegeneration } from "@/hooks/useOutputRegeneration";
 
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
@@ -788,7 +790,7 @@ export default function TemplateStudioPage() {
       cancelled = true;
       if (timeoutId) window.clearTimeout(timeoutId);
     };
-  }, [activeRunId, refetchRecentRuns]);
+  }, [activeRunId, refetchRecentRuns, pollNonce]);
 
   const inputFields: InputField[] = (() => {
     if (templateDetailQuery.data?.user_inputs?.length) {
@@ -1845,6 +1847,8 @@ export default function TemplateStudioPage() {
                   <CampaignResults
                     outputs={result.outputs}
                     onDownload={handleDownloadSingleOutput}
+                    onRegenerate={(outputNumber) => void regeneration.requestRegenerate(outputNumber)}
+                    revisionsByOutput={regeneration.revisionsByOutput}
                   />
 
                   {activeRunId ? (
