@@ -64,10 +64,10 @@ export default function CampaignHistoryCard({
         </div>
 
         <div className="min-w-0 flex-1">
-          <p className="truncate font-body text-sm font-semibold text-white">{run.templateName}</p>
+          <p className="truncate font-sans text-sm font-semibold text-white">{run.templateName}</p>
           <p
             className={cn(
-              "mt-1 font-body text-[10px] font-semibold uppercase tracking-[0.16em]",
+              "mt-1 font-sans text-[10px] font-semibold uppercase tracking-[0.16em]",
               CAMPAIGN_STATUS_TONE_CLASS[status.tone],
             )}
           >
@@ -75,7 +75,7 @@ export default function CampaignHistoryCard({
             {status.detail ? <span className="ml-1.5 text-slate-400">· {status.detail}</span> : null}
           </p>
           {/* Reserved slot: brand chip + creator attribution land here later. */}
-          <p className="mt-1 truncate font-body text-[11px] text-slate-500">
+          <p className="mt-1 truncate font-sans text-[11px] text-slate-500">
             {formatCampaignOutputCount(run)} · {formatRelativeCampaignTime(run)}
           </p>
         </div>
