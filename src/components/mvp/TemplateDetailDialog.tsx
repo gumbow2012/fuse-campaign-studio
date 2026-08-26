@@ -2,8 +2,14 @@ import { useRef } from "react";
 import { ArrowRight, Film, Image as ImageIcon, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
+import { useQuery } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
 import type { ApiTemplate } from "@/services/fuseApi";
+import { PerformanceDetailSection } from "@/components/TemplatePerformance";
+import {
+  loadTemplatePerformanceRows,
+  type TemplatePerformanceRow,
+} from "@/services/templatePerformance";
 
 export type TemplateQuickFacts = {
   inputCount: number;
@@ -69,13 +75,24 @@ export default function TemplateDetailDialog({
   open,
   onOpenChange,
   onUseTemplate,
+  performance,
 }: {
   template: ApiTemplate | null;
   facts: TemplateQuickFacts;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onUseTemplate: () => void;
+  performance?: TemplatePerformanceRow | null;
 }) {
+  const templateId = template?.id ? String(template.id) : "";
+  const { data: performanceRows = [] } = useQuery<TemplatePerformanceRow[]>({
+    queryKey: ["template-performance-rows", templateId],
+    queryFn: () => loadTemplatePerformanceRows(templateId),
+    enabled: open && !!templateId && !!performance,
+    staleTime: 5 * 60 * 1000,
+    retry: false,
+  });
+
   if (!template) return null;
 
   const quickFacts = [
@@ -118,6 +135,8 @@ export default function TemplateDetailDialog({
                 </div>
               ))}
             </div>
+
+            <PerformanceDetailSection row={performance} rows={performanceRows} />
 
             {template.preview_url ? (
               <div className="rounded-2xl border border-white/10 bg-black/25 p-4">
