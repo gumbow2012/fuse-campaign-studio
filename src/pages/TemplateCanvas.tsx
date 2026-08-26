@@ -19,6 +19,8 @@ import {
   clampTemplateInputCount,
   resolveTemplateBranchInputIndex,
 } from "@/lib/templateBuilder";
+import CastConfigPanel from "@/components/lab/CastConfigPanel";
+import { parseCastConfig, type CastConfig } from "@/lib/castConfig";
 
 type TemplateInput = {
   id: string;
@@ -151,6 +153,8 @@ type TemplateDetail = {
   versionNumber: number;
   reviewStatus: string;
   isActive: boolean;
+  /** FT8 — additive cast metadata; null/absent = no casting (legacy). */
+  castConfig?: CastConfig | null;
   nodes: TemplateDetailNode[];
   edges: Array<{
     id?: string;
@@ -1773,6 +1777,30 @@ const TemplateCanvas = () => {
     templateMetaPreviewAssetType,
     templateMetaPreviewUrl,
   ]);
+
+  const saveCastConfig = useCallback(async (nextCastConfig: CastConfig | null) => {
+    if (!detail?.versionId) return;
+    setMutating("save-cast-config");
+    try {
+      await invokeWorkbench({
+        action: "update_cast_config",
+        versionId: detail.versionId,
+        castConfig: nextCastConfig,
+      });
+      await refreshAfterMutation(detail.versionId);
+      toast({
+        title: nextCastConfig ? "Cast configuration saved" : "Casting disabled",
+        description: nextCastConfig
+          ? "Cast metadata is stored on this version. Generation is unchanged."
+          : "This version behaves exactly as before.",
+      });
+    } catch (castError) {
+      const message = castError instanceof Error ? castError.message : "Could not save cast configuration";
+      toast({ title: "Cast save failed", description: message, variant: "destructive" });
+    } finally {
+      setMutating(null);
+    }
+  }, [detail?.versionId, invokeWorkbench, refreshAfterMutation]);
 
   const clearTemplateCover = useCallback(async () => {
     if (!selectedTemplate) return;
