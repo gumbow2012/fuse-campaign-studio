@@ -758,13 +758,22 @@ export function createCreditCheckoutHandler(mode: StripeBillingMode) {
             billing_mode: mode,
           },
         payment_intent_data: {
-          metadata: {
-            checkout_type: "credit_pack",
-            user_id: user.id,
-            pack_key: pack.key,
-            credits: String(pack.credits),
-            billing_mode: mode,
-          },
+          metadata: purchaseType
+            ? {
+              checkout_type: "credit_topup",
+              user_id: user.id,
+              credits: String(pack.credits),
+              pricing_version: pricingVersion,
+              purchase_type: purchaseType,
+              billing_mode: mode,
+            }
+            : {
+              checkout_type: "credit_pack",
+              user_id: user.id,
+              pack_key: pack.key,
+              credits: String(pack.credits),
+              billing_mode: mode,
+            },
         },
         success_url: billingReturnUrl(origin, mode, "success"),
         cancel_url: billingReturnUrl(origin, mode, "canceled"),
