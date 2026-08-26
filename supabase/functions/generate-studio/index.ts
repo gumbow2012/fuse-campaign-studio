@@ -647,8 +647,7 @@ Deno.serve(async (req) => {
 
       if (cursorCreatedAt && cursorId) {
         query = query.or(
-          `created_at.lt.${encodeURIComponent(cursorCreatedAt)},` +
-            `and(created_at.eq.${encodeURIComponent(cursorCreatedAt)},id.lt.${encodeURIComponent(cursorId)})`,
+          `created_at.lt.${cursorCreatedAt},and(created_at.eq.${cursorCreatedAt},id.lt.${cursorId})`,
         );
       }
 
