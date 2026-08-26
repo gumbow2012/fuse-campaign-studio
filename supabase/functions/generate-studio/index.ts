@@ -126,6 +126,38 @@ function serializeGeneration(row: any) {
   };
 }
 
+/**
+ * GS-PERF1: gallery list reads select ONLY these columns — never input_payload,
+ * never error_log, never full prompt bodies or reference arrays.
+ */
+const LIST_SELECT =
+  "id, status, kind, prompt, output_url, output_type, estimated_credits, estimated_cost_usd, provider_model, favorited, created_at, completed_at";
+
+function truncatePrompt(prompt: unknown, max = 160): string | null {
+  const text = String(prompt ?? "").trim();
+  if (!text) return null;
+  return text.length > max ? `${text.slice(0, max).trimEnd()}…` : text;
+}
+
+/** Lightweight per-row shape for the gallery list. Heavy fields stay in `detail`. */
+function serializeGenerationListItem(row: any) {
+  return {
+    id: row.id,
+    status: row.status as "queued" | "running" | "complete" | "failed",
+    kind: row.kind ?? null,
+    promptPreview: truncatePrompt(row.prompt),
+    outputUrl: row.output_url ?? null,
+    previewUrl: null as string | null,
+    outputType: row.output_type ?? null,
+    estimatedCredits: row.estimated_credits ?? null,
+    estimatedCostUsd: row.estimated_cost_usd ? Number(row.estimated_cost_usd) : null,
+    providerModel: row.provider_model ?? null,
+    favorited: row.favorited === true,
+    createdAt: row.created_at ?? null,
+    completedAt: row.completed_at ?? null,
+  };
+}
+
 type StartInput = {
   kind?: string;
   model?: string;
