@@ -120,6 +120,8 @@ const TEMPLATE_CACHE_KEY = "fuse.templateStudio.templates.v4";
 const TEMPLATE_DETAIL_CACHE_KEY = "fuse.templateStudio.templateDetails.v4";
 const TEMPLATE_SELECTION_KEY = "fuse.templateStudio.selectedTemplateId";
 const ACTIVE_RUN_STATUSES = new Set<RunnerStatus>(["queued", "running", "video_pending"]);
+/** Authoritative layout mode for the studio: compact browse/setup vs expanded campaign workspace. */
+type CampaignStudioMode = "browse" | "setup" | "running" | "complete" | "failed";
 const RUN_CATALOG_PAGE_SIZE = 8;
 const RECENT_RUNS_REFRESH_COOLDOWN_SECONDS = 10;
 
@@ -448,7 +450,10 @@ export default function TemplateStudioPage() {
   const [runPhase, setRunPhase] = useState<"idle" | "uploading" | "preparing">("idle");
 
   const [adminVisualSpent, setAdminVisualSpent] = useState(() => getAdminVisualCreditsSpent());
-  const [expandedRuns, setExpandedRuns] = useState<Record<string, boolean>>({});
+  /** A previously completed/failed run reopened into the workspace. */
+  const [openedHistoricalRun, setOpenedHistoricalRun] = useState<RecentRun | null>(null);
+  /** Post-run: whether the full asset-input controls are re-expanded (Edit Inputs). */
+  const [inputsExpanded, setInputsExpanded] = useState(false);
   const [feedbackOverrides, setFeedbackOverrides] = useState<Record<string, RunFeedbackRecord | null>>({});
   const [recentRefreshCooldown, setRecentRefreshCooldown] = useState(0);
   const [detailTemplateId, setDetailTemplateId] = useState<string | null>(null);
