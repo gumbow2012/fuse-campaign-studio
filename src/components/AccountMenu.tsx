@@ -34,6 +34,7 @@ export function AccountMenuContent({ onNavigate }: { onNavigate?: () => void }) 
   const { profile, signOut, isCreator, roles } = useAuth();
   const { email, displayName, avatarUrl, initials } = useAccountIdentity();
   const [mounted, setMounted] = useState(false);
+  const [topUpOpen, setTopUpOpen] = useState(false);
 
   useEffect(() => {
     const id = requestAnimationFrame(() => setMounted(true));
@@ -113,16 +114,14 @@ export function AccountMenuContent({ onNavigate }: { onNavigate?: () => void }) 
             style={{ width: mounted ? `${ratio * 100}%` : "0%" }}
           />
         </div>
-        <CreditPackDialog
-          trigger={
-            <Button
-              size="sm"
-              className="mt-3 w-full rounded-full bg-cyan-300 font-sans text-xs font-bold uppercase tracking-[0.1em] text-slate-950 hover:bg-cyan-200"
-            >
-              Top up credits
-            </Button>
-          }
-        />
+        <CreditPackDialog open={topUpOpen} onOpenChange={setTopUpOpen} />
+        <Button
+          size="sm"
+          onClick={() => setTopUpOpen(true)}
+          className="mt-3 w-full rounded-full bg-cyan-300 font-sans text-xs font-bold uppercase tracking-[0.1em] text-slate-950 hover:bg-cyan-200"
+        >
+          Top up credits
+        </Button>
       </div>
 
       <div className="my-3 h-px bg-white/10" />

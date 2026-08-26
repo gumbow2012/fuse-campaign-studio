@@ -50,6 +50,7 @@ function useApproxCampaignRuns(balance: number, enabled: boolean) {
 export function CreditChip() {
   const { profile } = useAuth();
   const [open, setOpen] = useState(false);
+  const [topUpOpen, setTopUpOpen] = useState(false);
   const location = useLocation();
   const balance = Number(profile?.credits_balance ?? 0);
   const approxRuns = useApproxCampaignRuns(balance, open);
@@ -80,6 +81,9 @@ export function CreditChip() {
       : null;
 
   return (
+    <>
+      {/* Rendered outside the popover so closing the popover cannot unmount it. */}
+      <CreditPackDialog open={topUpOpen} onOpenChange={setTopUpOpen} />
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <button
@@ -138,16 +142,16 @@ export function CreditChip() {
             </p>
           ) : null}
 
-          <CreditPackDialog
-            trigger={
-              <Button
-                size="sm"
-                className="w-full rounded-full bg-cyan-300 font-sans text-xs font-bold uppercase tracking-[0.1em] text-slate-950 hover:bg-cyan-200"
-              >
-                Top up credits
-              </Button>
-            }
-          />
+          <Button
+            size="sm"
+            onClick={() => {
+              setOpen(false);
+              setTopUpOpen(true);
+            }}
+            className="w-full rounded-full bg-cyan-300 font-sans text-xs font-bold uppercase tracking-[0.1em] text-slate-950 hover:bg-cyan-200"
+          >
+            Top up credits
+          </Button>
 
           <Link
             to="/membership?tab=usage"
@@ -159,5 +163,6 @@ export function CreditChip() {
         </div>
       </PopoverContent>
     </Popover>
+    </>
   );
 }
