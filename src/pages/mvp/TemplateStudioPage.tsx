@@ -908,10 +908,35 @@ export default function TemplateStudioPage() {
   const canCustomizeWorkflow =
     isPrivilegedUser || planKey === "pro" || planKey === "studio" || planKey === "team";
 
-  /** P0: Pro entry point — the private-fork editor navigation lands here next phase. */
-  const handleCustomizeWorkflow = () => {
-    setPrivateWorkflowDialogOpen(true);
+  /** TR9: Pro entry point — creates a private fork and opens the personal editor. */
+  const handleCustomizeWorkflow = async () => {
+    const sourceTemplateId = selectedTemplate?.templateId ?? null;
+    if (!sourceTemplateId) {
+      toast({ title: "This template can't be customized yet", variant: "destructive" });
+      return;
+    }
+    if (creatingFork) return;
+    setCreatingFork(true);
+    try {
+      const { forkId } = await createFork(sourceTemplateId);
+      navigate(`/app/templates/customize/${forkId}`);
+    } catch (error) {
+      const code = (error as { code?: string })?.code ?? "";
+      if (code === "PRO_REQUIRED") {
+        setWorkflowUpgradeDialogOpen(true);
+      } else if (code === "CUSTOMIZATION_NOT_ALLOWED") {
+        toast({
+          title: "This template can't be customized",
+          description: "The creator has kept this workflow locked.",
+        });
+      } else {
+        toast({ title: "Couldn't create your private version", variant: "destructive" });
+      }
+    } finally {
+      setCreatingFork(false);
+    }
   };
+
 
 
   const handleTemplateSelect = (templateId: string) => {
