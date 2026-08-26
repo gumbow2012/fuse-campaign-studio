@@ -1106,7 +1106,9 @@ export default function TemplateStudioPage() {
                 );
               })}
             </div>
+            {hasAnyPerformance ? <PerformanceDisclaimer className="mt-4" /> : null}
           </section>
+
 
           <aside className="space-y-6 xl:sticky xl:top-24 xl:self-start">
             <section
