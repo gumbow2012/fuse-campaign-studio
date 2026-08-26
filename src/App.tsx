@@ -22,7 +22,7 @@ import AdminFuseCast from "@/pages/AdminFuseCast";
 import AdminTemplateImport from "@/pages/AdminTemplateImport";
 import AdminTemplates from "@/pages/AdminTemplates";
 import FlowEmbed from "@/pages/FlowEmbed";
-import FlowTest from "@/pages/FlowTest";
+
 import GenerationStudio from "@/pages/GenerationStudio";
 import CinemaStudio from "@/pages/app/cinema/CinemaStudio";
 import CinemaControlLab from "@/pages/app/cinema/CinemaControlLab";
@@ -155,9 +155,9 @@ const App = () => (
                 </CustomerRoute>
               }
             />
-            <Route path="/app/flow-test" element={<FlowTest />} />
             <Route
               path="/app/lab/templates"
+
               element={
                 <BuilderRoute>
                   <TemplateLab />
