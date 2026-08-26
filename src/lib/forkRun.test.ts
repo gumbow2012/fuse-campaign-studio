@@ -8,7 +8,12 @@ import {
   isPersonalForkVersion,
   PERSONAL_FORK_REVIEW_STATUS,
 } from "../../supabase/functions/_shared/fork-run";
-import { buildPersonalGraph, mergeForkEdits } from "../../supabase/functions/_shared/template-fork";
+import {
+  assertForkOwnership,
+  buildPersonalGraph,
+  mergeForkEdits,
+  resolveForkEntitlement,
+} from "../../supabase/functions/_shared/template-fork";
 import {
   countTemplateDeliverables,
   getTemplateCreditCost,
@@ -210,5 +215,18 @@ describe("TR10 fork run idempotency marker", () => {
   it("labels the job as a fork run", () => {
     expect(marker.is_fork_run).toBe(true);
     expect(marker.fork_id).toBe("fork-1");
+  });
+});
+
+describe("TR10 run_fork access gates", () => {
+  it("rejects a non-owner", () => {
+    expect(() => assertForkOwnership({ forkUserId: "u1", userId: "u2", roles: [] })).toThrow("Forbidden");
+    expect(() => assertForkOwnership({ forkUserId: "u1", userId: "u1", roles: [] })).not.toThrow();
+  });
+
+  it("rejects a non-Pro plan with PRO_REQUIRED", () => {
+    expect(resolveForkEntitlement({ plan: "free", roles: [] })).toEqual({ allowed: false, code: "PRO_REQUIRED" });
+    expect(resolveForkEntitlement({ plan: "pro", roles: [] }).allowed).toBe(true);
+    expect(resolveForkEntitlement({ plan: "free", roles: ["admin"] }).allowed).toBe(true);
   });
 });
