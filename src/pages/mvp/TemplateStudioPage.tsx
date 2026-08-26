@@ -24,6 +24,7 @@ import CreditPackDialog from "@/components/mvp/CreditPackDialog";
 import TemplateDetailDialog, { readTemplateAspectRatio } from "@/components/mvp/TemplateDetailDialog";
 import TemplateInputCard from "@/components/templates/TemplateInputCard";
 import CastSelector, { PRIMARY_CAST_SLOT, type CastSelection } from "@/components/templates/CastSelector";
+import { CampaignBuildGraph, type PublicGraph } from "@/components/templates/CampaignBuildGraph";
 
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
@@ -84,6 +85,11 @@ interface RunnerResult {
   progress: number;
   outputs: RunnerOutput[];
   error?: string;
+  /** TR3: customer-safe live execution graph (no prompts/provider internals). */
+  publicGraph?: PublicGraph;
+  statusMessage?: string;
+  /** Privileged callers only — present when the payload includes raw steps. */
+  hasPrivilegedSteps?: boolean;
 }
 
 interface RecentRun {
@@ -192,6 +198,9 @@ async function fetchJobStatus(jobId: string) {
     progress?: number;
     outputs?: RunnerOutput[];
     error?: string | null;
+    publicGraph?: PublicGraph;
+    statusMessage?: string;
+    steps?: unknown[];
   };
 }
 
@@ -699,6 +708,9 @@ export default function TemplateStudioPage() {
           progress: status.progress ?? 0,
           outputs: Array.isArray(status.outputs) ? status.outputs : [],
           error: status.error ?? undefined,
+          publicGraph: status.publicGraph,
+          statusMessage: status.statusMessage,
+          hasPrivilegedSteps: Array.isArray(status.steps),
         });
 
         if (!ACTIVE_RUN_STATUSES.has(status.status)) {
@@ -1532,7 +1544,15 @@ export default function TemplateStudioPage() {
 
               {result && ACTIVE_RUN_STATUSES.has(result.status) ? (
                 <div className="mt-6">
-                  <RunProgressBeacon progress={result.progress} status={result.status} />
+                  {result.publicGraph && result.publicGraph.nodes.length > 0 ? (
+                    <CampaignBuildGraph
+                      graph={result.publicGraph}
+                      statusMessage={result.statusMessage}
+                      progress={result.progress}
+                    />
+                  ) : (
+                    <RunProgressBeacon progress={result.progress} status={result.status} />
+                  )}
                 </div>
               ) : null}
 
