@@ -17,6 +17,12 @@ import PageMeta from "@/components/mvp/PageMeta";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
 import { accentStyle, resolveAccent } from "@/lib/creatorAccents";
+import { CreatorPerformanceProof } from "@/components/CreatorPerformance";
+import {
+  EMPTY_CREATOR_PERFORMANCE,
+  loadPublicCreatorPerformance,
+  type CreatorPerformanceAggregate,
+} from "@/services/creatorPerformance";
 import {
   countCreatorTemplatesByHandle,
   getCreatorProfileByHandle,
