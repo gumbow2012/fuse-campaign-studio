@@ -1116,7 +1116,7 @@ export async function runGraphJob(admin: AdminClient, jobId: string) {
       const incoming = sortEdgesByExecutionOrder(incomingByTarget.get(step.node_id) ?? []);
 
       const params = new Map<string, ResolvedOutput>();
-      const orderedParamEntries: Array<[string, ResolvedOutput]> = [];
+      let orderedParamEntries: Array<[string, ResolvedOutput]> = [];
       for (const edge of incoming) {
         const param = edge.mapping_logic?.target_param ?? "image";
         const value = resolved.get(edge.source_node_id);
@@ -1125,6 +1125,21 @@ export async function runGraphJob(admin: AdminClient, jobId: string) {
           orderedParamEntries.push([param, value]);
         }
       }
+
+      // FT10 — SINGLE cast integration point. Identity no-op without cast runtime.
+      // MODE A adds 0 provider calls and 0 credits: it only swaps one existing
+      // reference-conditioning input on the admin-designated target node.
+      const castResult = resolveTemplateCast<ResolvedOutput>({
+        nodeId: node.id,
+        inputs: orderedParamEntries,
+        castConfigValue,
+        runtime: castRuntime,
+        makeValue: (url, previous) => ({ ...previous, assetId: undefined, url }),
+      });
+      orderedParamEntries = castResult.inputs;
+      for (const [key, value] of orderedParamEntries) params.set(key, value);
+      const castAudit = castAuditMetadata(castResult.applied);
+
 
       const startedAt = step.status === "running" ? step.started_at : new Date().toISOString();
 
