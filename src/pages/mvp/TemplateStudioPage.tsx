@@ -122,9 +122,6 @@ type CampaignStudioMode = "browse" | "setup" | "running" | "complete" | "failed"
 const RUN_CATALOG_PAGE_SIZE = 8;
 const RECENT_RUNS_REFRESH_COOLDOWN_SECONDS = 10;
 
-function formatPublicOutputLabel(index: number) {
-  return `Output ${index + 1}`;
-}
 
 function getOutputDownloadName(templateName: string, index: number, output: RunnerOutput) {
   const safeTemplateName = templateName.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "") || "fuse-run";
@@ -610,7 +607,7 @@ export default function TemplateStudioPage() {
     staleTime: 5_000,
     refetchInterval: (query) => {
       const runs = query.state.data?.pages.flatMap((page) => page.jobs) ?? [];
-      return jobId || runs.some((run) => ACTIVE_RUN_STATUSES.has(run.status)) ? 5_000 : false;
+      return jobId || openedHistoricalRun || runs.some((run) => ACTIVE_RUN_STATUSES.has(run.status)) ? 5_000 : false;
     },
   });
 
@@ -619,11 +616,26 @@ export default function TemplateStudioPage() {
     [recentRunsQuery.data],
   );
   const refetchRecentRuns = recentRunsQuery.refetch;
-  const hasExpandedRecentRun = recentRuns.some((run) => expandedRuns[run.id]);
   const canLoadMoreRuns = !!recentRunsQuery.hasNextPage;
-  const currentResultFeedback = jobId
-    ? feedbackOverrides[jobId]
-      ?? recentRuns.find((run) => run.id === jobId)?.feedback
+
+  // ---- Campaign studio layout state machine (single authoritative condition) ----
+  const openedHistoricalRunId = openedHistoricalRun?.id ?? null;
+  const activeRunId = jobId ?? openedHistoricalRunId;
+  const hasActiveCampaignWorkspace = Boolean(jobId) || Boolean(openedHistoricalRunId);
+  const studioMode: CampaignStudioMode = !hasActiveCampaignWorkspace
+    ? selectedTemplateId
+      ? "setup"
+      : "browse"
+    : result?.status === "complete"
+      ? "complete"
+      : result?.status === "failed"
+        ? "failed"
+        : "running";
+  const workspaceTemplateName = openedHistoricalRun?.templateName ?? selectedTemplate?.name ?? null;
+
+  const currentResultFeedback = activeRunId
+    ? feedbackOverrides[activeRunId]
+      ?? recentRuns.find((run) => run.id === activeRunId)?.feedback
       ?? null
     : null;
 
@@ -684,34 +696,7 @@ export default function TemplateStudioPage() {
   }, [recentRefreshCooldown]);
 
   useEffect(() => {
-    if (!recentRuns.length) {
-      setExpandedRuns((current) => (Object.keys(current).length ? {} : current));
-      return;
-    }
-
-    setExpandedRuns((current) => {
-      const next: Record<string, boolean> = {};
-      for (const run of recentRuns) {
-        if (run.id in current) {
-          next[run.id] = current[run.id];
-          continue;
-        }
-        next[run.id] = !isPrivilegedUser && recentRuns[0]?.id === run.id;
-      }
-      const currentKeys = Object.keys(current);
-      const nextKeys = Object.keys(next);
-      if (
-        currentKeys.length === nextKeys.length &&
-        nextKeys.every((key) => current[key] === next[key])
-      ) {
-        return current;
-      }
-      return next;
-    });
-  }, [isPrivilegedUser, recentRuns]);
-
-  useEffect(() => {
-    if (!jobId) return;
+    if (!activeRunId) return;
 
     let cancelled = false;
     let timeoutId: number | undefined;
