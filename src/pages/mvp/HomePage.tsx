@@ -216,12 +216,16 @@ function Shelf({
   entries,
   badge,
   id,
+  perfMap,
+  showDisclaimer,
 }: {
   label: string;
   heading: string;
   entries: Entry[];
   badge?: { tone: "new" | "trending" | "creator"; label: string };
   id?: string;
+  perfMap?: TemplatePerformanceMap;
+  showDisclaimer?: boolean;
 }) {
   if (!entries.length) return null;
   return (
@@ -246,12 +250,15 @@ function Shelf({
             badge={badge}
             index={index}
             eager={index < 2}
+            performance={perfMap?.[String(entry.template.id ?? "")]}
           />
         ))}
       </MediaShelf>
+      {showDisclaimer && <PerformanceDisclaimer className="mt-4" />}
     </section>
   );
 }
+
 
 /* ---------------------------------- page ---------------------------------- */
 
