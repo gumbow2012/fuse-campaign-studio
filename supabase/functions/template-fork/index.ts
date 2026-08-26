@@ -19,6 +19,7 @@ import {
   buildBasedOnLabel,
   buildPersonalGraph,
   defaultForkName,
+  isPrivilegedRole,
   mergeForkEdits,
   resolveCustomizability,
   resolveForkEntitlement,
