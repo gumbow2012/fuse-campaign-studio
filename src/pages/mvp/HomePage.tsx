@@ -247,55 +247,24 @@ export default function HomePage() {
     retry: false,
   });
 
-  const withMedia = useMemo<Entry[]>(() => {
-    const seen = new Set<string>();
-    return sortTemplatesForStudio(templates)
-      .map((template) => ({ template, media: resolveMedia(template) }))
-      .filter((entry): entry is Entry => !!entry.media)
-      .filter((entry) => {
-        const key = entry.template.name.trim().toLowerCase();
-        if (seen.has(key)) return false;
-        seen.add(key);
-        return true;
-      });
-  }, [templates]);
+  // Single dedup allocator — every section draws from here.
+  const allocation = useMemo(() => allocateHomeMedia(templates), [templates]);
+  const { hero: heroPair, trending, newToday, creatorDrops, categories, mediaWall } = allocation;
 
-  const heroPicks = useMemo(() => withMedia.slice(0, 4), [withMedia]);
-  const [heroIndex, setHeroIndex] = useState(0);
-  const hero = heroPicks[Math.min(heroIndex, Math.max(heroPicks.length - 1, 0))] ?? null;
+  const original = heroPair[0] ?? null;
+  const yourVersion = heroPair[1] ?? null;
+  const heroRequirements = original ? requirementChips(original.template) : [];
 
-  const trending = useMemo(() => withMedia.slice(0, 12), [withMedia]);
+  useEffect(() => {
+    if (!import.meta.env.DEV) return;
+    // eslint-disable-next-line no-console
+    console.info("[FUSE home media manifest]", {
+      ...allocation.manifest.sections,
+      duplicates: allocation.manifest.duplicates,
+      uniqueTemplates: allocation.manifest.totalUnique,
+    });
+  }, [allocation]);
 
-  const newToday = useMemo(
-    () =>
-      withMedia
-        .filter((entry) => isRecent(entry.template))
-        .sort(
-          (a, b) =>
-            new Date(b.template.created_at ?? 0).getTime() -
-            new Date(a.template.created_at ?? 0).getTime(),
-        )
-        .slice(0, 10),
-    [withMedia],
-  );
-
-  const categoryShelves = useMemo(
-    () =>
-      CATEGORY_SHELVES.map((shelf) => ({
-        ...shelf,
-        entries: withMedia.filter((entry) => matchesCategory(entry.template, shelf.match)).slice(0, 10),
-      })).filter((shelf) => shelf.entries.length >= 2),
-    [withMedia],
-  );
-
-  const mediaWall = useMemo(() => {
-    const urls = withMedia
-      .filter((entry) => entry.media.type === "image")
-      .map((entry) => entry.media.url);
-    return Array.from(new Set([...urls, ...FALLBACK_GIFS])).slice(0, 12);
-  }, [withMedia]);
-
-  const heroRequirements = hero ? requirementChips(hero.template) : [];
 
   return (
     <SiteShell>
