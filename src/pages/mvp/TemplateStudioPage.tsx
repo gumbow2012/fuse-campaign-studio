@@ -1886,6 +1886,21 @@ export default function TemplateStudioPage() {
         }}
       />
 
+      {/* TR7: explicit confirm before any regeneration spend. */}
+      <RegenerateOutputDialog
+        open={regeneration.dialogOpen}
+        onOpenChange={regeneration.setDialogOpen}
+        outputNumber={regeneration.outputNumber}
+        estimate={regeneration.estimate}
+        loadingEstimate={regeneration.loadingEstimate}
+        errorMessage={regeneration.errorMessage}
+        insufficientCredits={regeneration.insufficientCredits}
+        submitting={regeneration.submitting}
+        onConfirm={() => void regeneration.confirmRegenerate()}
+      />
+
+
+
       {/* P0: Pro entry point — placeholder until the private-fork editor lands.
           Replacing this body with real navigation is a one-line swap in handleCustomizeWorkflow. */}
       <Dialog open={privateWorkflowDialogOpen} onOpenChange={setPrivateWorkflowDialogOpen}>
