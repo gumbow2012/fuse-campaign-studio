@@ -670,20 +670,33 @@ export default function TemplateStudioPage() {
     link.remove();
   };
 
-  const handleDownloadRunOutputs = (run: RecentRun) => {
-    if (!run.outputs.length) return;
-
-    run.outputs.forEach((output, index) => {
-      const link = document.createElement("a");
-      link.href = output.url;
-      link.download = getOutputDownloadName(run.templateName, index, output);
-      link.target = "_blank";
-      link.rel = "noreferrer";
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
+  /** Open a previous run directly into the expanded campaign workspace. */
+  const handleOpenHistoricalRun = (run: RecentRun) => {
+    setJobId(null);
+    setInputsExpanded(false);
+    setOpenedHistoricalRun(run);
+    setResult({
+      status: run.status,
+      progress: run.progress ?? 0,
+      outputs: Array.isArray(run.outputs) ? run.outputs : [],
+      error: run.error ?? undefined,
+    });
+    window.requestAnimationFrame(() => {
+      workspaceSectionRef.current?.scrollIntoView({
+        behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth",
+        block: "start",
+      });
     });
   };
+
+  /** Return from workspace mode to the compact browse/setup layout. */
+  const handleBackToTemplates = () => {
+    setJobId(null);
+    setOpenedHistoricalRun(null);
+    setInputsExpanded(false);
+    setResult(null);
+  };
+
 
   useEffect(() => {
     if (recentRefreshCooldown <= 0) return;
@@ -906,6 +919,8 @@ export default function TemplateStudioPage() {
     setSubmitting(true);
     setCheckingCredits(true);
     setJobId(null);
+    setOpenedHistoricalRun(null);
+    setInputsExpanded(false);
     setResult(null);
 
     try {
