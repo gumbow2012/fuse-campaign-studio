@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import SiteShell from "@/components/mvp/SiteShell";
 import PageMeta from "@/components/mvp/PageMeta";
 import { useAuth } from "@/contexts/AuthContext";
-import { fetchTemplates, type ApiTemplate } from "@/services/fuseApi";
+import { fetchTemplates } from "@/services/fuseApi";
 import { listPublicCreatorProfiles, type CreatorProfile } from "@/services/creatorProfile";
 import { cn } from "@/lib/utils";
 import {
@@ -23,19 +23,6 @@ import {
 } from "@/services/templatePerformance";
 import { PerformanceBlock, PerformanceDisclaimer } from "@/components/TemplatePerformance";
 
-
-/** Requirement chips derived from the template's real input schema. */
-function requirementChips(template: ApiTemplate) {
-  const chips: string[] = [];
-  for (const input of template.input_schema ?? []) {
-    const label = (input.label || input.key || "").trim();
-    if (!label) continue;
-    if (chips.length >= 3) break;
-    chips.push(input.required ? label : `${label} (optional)`);
-  }
-  if (template.castConfig?.supported) chips.push("Cast (optional)");
-  return chips;
-}
 
 /* --------------------------------- pieces --------------------------------- */
 
