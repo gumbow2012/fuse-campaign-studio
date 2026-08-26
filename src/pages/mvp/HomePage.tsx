@@ -376,30 +376,37 @@ export default function HomePage() {
             </p>
           </div>
 
-          {/* Hero story — ORIGINAL template → your brand input → your version */}
+          {/* Hero transformation — TEMPLATE → your brand → YOUR CAMPAIGN */}
           <div className="relative">
             {original ? (
               <div>
                 <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3">
-                  <HeroTile label="Original template" media={original.media} eager />
-                  <div className="space-y-2">
-                    <div className="grid grid-cols-2 gap-1.5">
-                      {BRAND_INPUT_ASSETS.map((src) => (
-                        <img
-                          key={src}
-                          src={src}
-                          alt=""
-                          loading="lazy"
-                          className="aspect-square w-10 rounded-md border border-white/10 object-cover sm:w-12"
-                        />
-                      ))}
+                  <HeroTile label="Template" media={original.media} eager />
+                  <div className="w-[92px] sm:w-[104px]">
+                    <div
+                      className="relative overflow-hidden rounded-xl border border-cyan-300/25 bg-slate-950/80 px-3 py-4 text-center"
+                      style={{
+                        backgroundImage:
+                          "linear-gradient(rgba(148,163,184,0.10) 1px, transparent 1px), linear-gradient(90deg, rgba(148,163,184,0.10) 1px, transparent 1px)",
+                        backgroundSize: "14px 14px",
+                      }}
+                    >
+                      <p className="font-display text-[11px] font-semibold uppercase tracking-[0.2em] text-white">
+                        Your brand
+                      </p>
+                      <p className="mt-1 text-[8px] uppercase tracking-[0.16em] text-slate-400">
+                        garment + logo + cast
+                      </p>
+                      <p className="mt-3 text-[9px] font-semibold uppercase tracking-[0.2em] text-cyan-200">
+                        + Product
+                      </p>
                     </div>
-                    <p className="text-center text-[9px] font-semibold uppercase tracking-[0.18em] text-slate-500">
-                      Your brand
+                    <p className="mt-2 text-center text-[9px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+                      →
                     </p>
                   </div>
                   <HeroTile
-                    label="Your version"
+                    label="Your campaign"
                     highlight
                     media={yourVersion?.media ?? original.media}
                   />
@@ -416,20 +423,8 @@ export default function HomePage() {
                       </span>
                     )}
                   </div>
-                  {heroRequirements.length > 0 && (
-                    <div className="flex flex-wrap items-center justify-center gap-1.5">
-                      <span className="text-[10px] uppercase tracking-[0.2em] text-slate-500">
-                        Requires
-                      </span>
-                      {heroRequirements.map((chip) => (
-                        <span
-                          key={chip}
-                          className="rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-[10px] uppercase tracking-[0.12em] text-slate-300"
-                        >
-                          {chip}
-                        </span>
-                      ))}
-                    </div>
+                  {heroPerf && (
+                    <PerformanceBlock row={heroPerf} compact className="text-left" />
                   )}
                   <Button
                     asChild
@@ -438,6 +433,7 @@ export default function HomePage() {
                   >
                     <Link to="/app/templates">Use this template</Link>
                   </Button>
+                  {heroPerf && <PerformanceDisclaimer />}
                 </div>
               </div>
             ) : (
@@ -446,6 +442,7 @@ export default function HomePage() {
               </div>
             )}
           </div>
+
 
         </div>
       </section>
