@@ -42,6 +42,9 @@ import { uploadRunInputFile } from "@/services/runInputUpload";
 import { libraryKindForAssetType, saveLibraryAsset } from "@/services/libraryAssets";
 import { getStaticInputs } from "@/services/templateInputMap";
 import { trackEvent } from "@/lib/metaPixel";
+import { loadTemplatePerformance, type TemplatePerformanceMap } from "@/services/templatePerformance";
+import { PerformanceBlock, PerformanceDisclaimer } from "@/components/TemplatePerformance";
+
 import {
   formatAssetTypeLabel,
   type TemplateAssetRequirement,
