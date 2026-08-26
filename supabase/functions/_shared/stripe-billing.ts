@@ -20,6 +20,11 @@ import {
   type CreditPackDefinition,
 } from "./stripe-credit-packs.ts";
 import {
+  creditTopUpPurchaseType,
+  quoteCreditTopUp,
+  resolveCreditTopUpPurchase,
+} from "./credit-pricing.ts";
+import {
   type StripeBillingMode,
   createStripeClient,
   findStripeCustomerId,
@@ -394,6 +399,7 @@ async function applyCreditPackTopup(args: {
   billingMode: StripeBillingMode;
   pack: CreditPackDefinition;
   profile: { user_id: string; email: string };
+  ledgerDescription?: string;
 }) {
   const { admin, pack } = args;
 
@@ -447,7 +453,7 @@ async function applyCreditPackTopup(args: {
     p_user_id: args.profile.user_id,
     p_amount: pack.credits,
     p_type: "topup",
-    p_description: `Stripe credit pack: ${pack.name}`,
+    p_description: args.ledgerDescription ?? `Stripe credit pack: ${pack.name}`,
     p_template_id: null,
     p_project_id: null,
     p_step_id: null,
@@ -656,9 +662,31 @@ export function createCreditCheckoutHandler(mode: StripeBillingMode) {
       userEmail = user.email ?? null;
       if (!user.email) throw new Error("User not authenticated");
 
-      const body = await req.json().catch(() => ({})) as { packKey?: string };
-      const pack = creditPackFromKey(typeof body.packKey === "string" ? body.packKey : null);
-      if (!pack) throw new Error("Unsupported credit pack");
+      const body = await req.json().catch(() => ({})) as { packKey?: string; credits?: number | string };
+
+      // New flow: the client submits ONLY a credits integer; the server is the
+      // sole price authority via quoteCreditTopUp. Legacy { packKey } flow is
+      // preserved unchanged for older clients.
+      const hasCredits = body.credits !== undefined && body.credits !== null && body.credits !== "";
+      let pack: CreditPackDefinition;
+      let purchaseType: "preset" | "custom" | null = null;
+      let pricingVersion: string | null = null;
+      if (hasCredits) {
+        const quote = quoteCreditTopUp(body.credits);
+        purchaseType = creditTopUpPurchaseType(quote.credits);
+        pricingVersion = quote.pricingVersion;
+        pack = {
+          key: purchaseType === "preset" ? `preset_${quote.credits}` : "custom",
+          name: `${quote.credits.toLocaleString("en-US")} FUSE Credits`,
+          credits: quote.credits,
+          amountCents: quote.amountCents,
+          currency: "usd",
+        } as CreditPackDefinition;
+      } else {
+        const legacyPack = creditPackFromKey(typeof body.packKey === "string" ? body.packKey : null);
+        if (!legacyPack) throw new Error("Unsupported credit pack");
+        pack = legacyPack;
+      }
 
       const stripe = createStripeClient(getStripeSecretKey(mode));
       const { data: profile } = await admin
@@ -693,31 +721,59 @@ export function createCreditCheckoutHandler(mode: StripeBillingMode) {
         allow_promotion_codes: true,
         line_items: [{
           quantity: 1,
-          price_data: {
-            currency: pack.currency,
-            unit_amount: pack.amountCents,
-            product_data: {
-              name: `${pack.name} Credit Pack`,
-              description: `${pack.credits} Fuse credits`,
+          price_data: purchaseType
+            ? {
+              currency: pack.currency,
+              unit_amount: pack.amountCents,
+              product_data: {
+                name: pack.name,
+                description: "One-time FUSE credit top-up",
+              },
+            }
+            : {
+              currency: pack.currency,
+              unit_amount: pack.amountCents,
+              product_data: {
+                name: `${pack.name} Credit Pack`,
+                description: `${pack.credits} Fuse credits`,
+              },
             },
-          },
         }],
-        metadata: {
-          checkout_type: "credit_pack",
-          user_id: user.id,
-          pack_key: pack.key,
-          credits: String(pack.credits),
-          amount_cents: String(pack.amountCents),
-          billing_mode: mode,
-        },
-        payment_intent_data: {
-          metadata: {
+        metadata: purchaseType
+          ? {
+            checkout_type: "credit_topup",
+            user_id: user.id,
+            credits: String(pack.credits),
+            amount_cents: String(pack.amountCents),
+            pricing_version: pricingVersion,
+            purchase_type: purchaseType,
+            billing_mode: mode,
+          }
+          : {
             checkout_type: "credit_pack",
             user_id: user.id,
             pack_key: pack.key,
             credits: String(pack.credits),
+            amount_cents: String(pack.amountCents),
             billing_mode: mode,
           },
+        payment_intent_data: {
+          metadata: purchaseType
+            ? {
+              checkout_type: "credit_topup",
+              user_id: user.id,
+              credits: String(pack.credits),
+              pricing_version: pricingVersion,
+              purchase_type: purchaseType,
+              billing_mode: mode,
+            }
+            : {
+              checkout_type: "credit_pack",
+              user_id: user.id,
+              pack_key: pack.key,
+              credits: String(pack.credits),
+              billing_mode: mode,
+            },
         },
         success_url: billingReturnUrl(origin, mode, "success"),
         cancel_url: billingReturnUrl(origin, mode, "canceled"),
@@ -958,6 +1014,81 @@ export function createStripeWebhookHandler(mode: StripeBillingMode) {
 
       if (event.type === "checkout.session.completed") {
         const session = object;
+        if (session.metadata?.checkout_type === "credit_topup") {
+          // Server-side re-verification: NEVER trust client-supplied price.
+          const resolved = resolveCreditTopUpPurchase(session);
+          if (!resolved.ok) {
+            await logAuditEvent({
+              eventType: "stripe.credit_topup.verification_failed",
+              message: `Credit top-up refused: ${resolved.reason}`,
+              severity: "error",
+              source: stripeSource("stripe-webhook", mode),
+              requestId,
+              errorCode: "credit_topup_verification_failed",
+              metadata: {
+                billing_mode: mode,
+                stripe_event_id: event.id,
+                stripe_checkout_session_id: session.id,
+                amount_total: session.amount_total ?? null,
+                currency: session.currency ?? null,
+                metadata_credits: session.metadata?.credits ?? null,
+              },
+            }, admin);
+            return json({ received: true, granted: false }, 200);
+          }
+
+          const customerId = typeof session.customer === "string" ? session.customer : null;
+          const profile = await resolveProfileForBillingEvent({
+            admin,
+            stripe,
+            eventType: event.type,
+            object: session,
+            stripeCustomerId: customerId,
+            customerEmail,
+          });
+          if (!profile) throw new Error("Profile not found for credit top-up purchase");
+
+          await upsertBillingState(admin, profile, {
+            stripe_customer_id: customerId ?? profile.stripe_customer_id,
+          });
+
+          const purchasePack: CreditPackDefinition = {
+            key: resolved.purchase.key,
+            name: "Credit Top-Up",
+            credits: resolved.purchase.credits,
+            amountCents: resolved.purchase.amountCents,
+            currency: "usd",
+          };
+
+          const grantResult = await applyCreditPackTopup({
+            admin,
+            stripeEventId: event.id,
+            stripeCustomerId: customerId,
+            stripeCheckoutSessionId: session.id,
+            stripePaymentIntentId: typeof session.payment_intent === "string" ? session.payment_intent : null,
+            billingMode: mode,
+            pack: purchasePack,
+            profile,
+            ledgerDescription: "Stripe credit top-up",
+          });
+
+          try {
+            if (mode === "live") {
+              await sendMetaCapiPurchase({
+                email: customerEmail,
+                value: resolved.purchase.amountCents / 100,
+                currency: "USD",
+                eventId: metaCheckoutEventId("Purchase", String(session.id)),
+                eventSourceUrl: "https://fuse-us.com",
+              });
+            }
+          } catch (_capiError) {
+            // analytics must never affect billing
+          }
+
+          return json({ received: true, granted: grantResult.granted }, 200);
+        }
+
         if (session.metadata?.checkout_type === "credit_pack") {
           const pack = creditPackFromKey(
             typeof session.metadata?.pack_key === "string" ? session.metadata.pack_key : null,
