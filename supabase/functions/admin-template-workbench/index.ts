@@ -22,6 +22,7 @@ import {
 
 import { uploadTemplateCoverAsset, uploadTemplateReferenceAsset } from "../_shared/template-assets.ts";
 import { nextEdgeOrder, sortEdgesByExecutionOrder } from "../_shared/edge-order.ts";
+import { normalizeCastConfig, readCastConfig } from "../_shared/cast-config.ts";
 
 
 type Action =
@@ -32,6 +33,7 @@ type Action =
   | "publish_gate"
   | "unpublish_template"
   | "update_template"
+  | "update_cast_config"
   | "add_node"
   | "delete_node"
   | "add_edge"
@@ -805,7 +807,7 @@ Deno.serve(async (req) => {
       const { data: versions, error: versionError } = templateIds.length
         ? await admin
             .from("template_versions")
-            .select("id, template_id, version_number, is_active, review_status, reviewed_at, created_at")
+            .select("id, template_id, version_number, is_active, review_status, reviewed_at, created_at, cast_config")
             .in("template_id", templateIds)
             .order("version_number", { ascending: false })
         : { data: [], error: null };
