@@ -520,7 +520,7 @@ function defaultPosition(laneIndex: number, nodeIndex: number): Point {
 }
 
 const TemplateCanvas = () => {
-  const { session, hasAppAccess } = useAuth();
+  const { session, hasAppAccess, user } = useAuth();
   const canPublishTemplates = hasAppAccess;
   const [searchParams, setSearchParams] = useSearchParams();
   const [templates, setTemplates] = useState<TemplateOption[]>([]);
