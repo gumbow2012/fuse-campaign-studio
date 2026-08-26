@@ -703,7 +703,7 @@ export default function TemplateStudioPage() {
 
     const poll = async () => {
       try {
-        const status = await fetchJobStatus(jobId);
+        const status = await fetchJobStatus(activeRunId);
         if (cancelled) return;
 
         // P0: never lose the graph — if a later poll omits publicGraph/statusMessage,
@@ -739,7 +739,7 @@ export default function TemplateStudioPage() {
       cancelled = true;
       if (timeoutId) window.clearTimeout(timeoutId);
     };
-  }, [jobId, refetchRecentRuns]);
+  }, [activeRunId, refetchRecentRuns]);
 
   const inputFields: InputField[] = (() => {
     if (templateDetailQuery.data?.user_inputs?.length) {
@@ -869,6 +869,8 @@ export default function TemplateStudioPage() {
     setLibraryAssets({});
     setTextInputs({});
     setJobId(null);
+    setOpenedHistoricalRun(null);
+    setInputsExpanded(false);
     setResult(null);
     setCastSelection({});
     if (window.matchMedia("(max-width: 1279px)").matches) {
