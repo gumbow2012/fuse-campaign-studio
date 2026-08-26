@@ -1,6 +1,14 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { readStudioGalleryCache, writeStudioGalleryCache } from "@/lib/studioGalleryCache";
 import {
+  galleryPerfMount,
+  galleryPerfInitialApi,
+  galleryPerfLoadMore,
+  galleryPerfMediaLoaded,
+  galleryPerfRender,
+  galleryPerfCardRender,
+} from "@/lib/galleryPerf";
+import {
   ArrowLeft,
   ArrowRight,
   CheckSquare,
@@ -476,6 +484,7 @@ function GenerationCard({
   /** GS-PERF5: first-screen tiles load eagerly at high priority. */
   priority?: boolean;
 }) {
+  galleryPerfCardRender(); // GS-PERF9 dev-only render counter
   const inFlight = generation.status === "queued" || generation.status === "running";
   const [progress, setProgress] = useState(generation.status === "running" ? 25 : 8);
 
@@ -495,6 +504,11 @@ function GenerationCard({
   /* GS-PERF5: media only mounts/downloads once the tile nears the viewport. */
   const { ref: mediaHostRef, near } = useNearViewport<HTMLDivElement>(priority, "500px");
   const [loaded, setLoaded] = useState(false);
+  /* GS-PERF9 dev-only: report successful media decode for first-paint metrics. */
+  const handleMediaLoaded = useCallback(() => {
+    setLoaded(true);
+    galleryPerfMediaLoaded();
+  }, []);
   useEffect(() => {
     setLoaded(false);
   }, [tileSrc]);
@@ -531,7 +545,7 @@ function GenerationCard({
                     // eslint-disable-next-line @typescript-eslint/no-explicit-any
                     {...({ fetchpriority: priority ? "high" : "low" } as any)}
                     decoding="async"
-                    onLoad={() => setLoaded(true)}
+                    onLoad={handleMediaLoaded}
                     onError={() => setLoaded(true)}
                     className={cn(
                       "h-full w-full object-cover transition-opacity duration-150",
@@ -554,7 +568,7 @@ function GenerationCard({
                   loop
                   playsInline
                   preload={near ? "metadata" : "none"}
-                  onLoadedData={() => setLoaded(true)}
+                  onLoadedData={handleMediaLoaded}
                   onLoadedMetadata={() => setLoaded(true)}
                   onError={() => setLoaded(true)}
                   onMouseEnter={() => {
