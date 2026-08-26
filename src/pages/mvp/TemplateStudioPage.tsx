@@ -642,6 +642,30 @@ export default function TemplateStudioPage() {
         : "running";
   const workspaceTemplateName = openedHistoricalRun?.templateName ?? selectedTemplate?.name ?? null;
 
+  // ---- TR7: per-output regeneration (server-priced, confirm-gated) ----
+  const [pollNonce, setPollNonce] = useState(0);
+  const regeneration = useOutputRegeneration({
+    jobId: activeRunId,
+    enabled: result?.status === "complete",
+    onCharged: () => {
+      void refreshProfile();
+    },
+    onStarted: (outputNumber) => {
+      // Re-enter the running workspace; polling picks up the new running status.
+      setResult((prev) =>
+        prev ? { ...prev, status: "running", outputs: prev.outputs, progress: prev.progress } : prev,
+      );
+      setPollNonce((current) => current + 1);
+      void refetchRecentRuns();
+      toast({
+        title: `Regenerating output ${outputNumber}`,
+        description: "Only this deliverable is being rebuilt — the rest is reused.",
+      });
+    },
+  });
+
+
+
   const currentResultFeedback = activeRunId
     ? feedbackOverrides[activeRunId]
       ?? recentRuns.find((run) => run.id === activeRunId)?.feedback
