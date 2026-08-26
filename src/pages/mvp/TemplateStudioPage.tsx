@@ -54,6 +54,7 @@ import {
 
 import { type TemplateAssetRequirement } from "@/lib/templateAssetRequirements";
 import { resolveInputRole } from "@/lib/templateInputSources";
+import { readPublicFailure, type PublicGenerationFailure } from "@/lib/generationFailure";
 
 type RunnerStatus = "queued" | "running" | "video_pending" | "complete" | "failed";
 
@@ -84,7 +85,10 @@ interface RunnerResult {
   status: RunnerStatus;
   progress: number;
   outputs: RunnerOutput[];
+  /** Privileged callers only — raw provider diagnostics. */
   error?: string;
+  /** P0: polished, customer-safe failure (never raw provider text). */
+  publicFailure?: PublicGenerationFailure | null;
   /** TR3: customer-safe live execution graph (no prompts/provider internals). */
   publicGraph?: PublicGraph;
   statusMessage?: string;
@@ -98,7 +102,10 @@ interface RecentRun {
   startedAt: string | null;
   completedAt: string | null;
   progress: number;
-  error: string | null;
+  /** Privileged callers only (admin/dev) — raw provider diagnostics. */
+  error?: string | null;
+  /** P0: polished, customer-safe failure copy. */
+  publicFailure?: PublicGenerationFailure | null;
   templateName: string;
   outputs: RunnerOutput[];
   feedback: RunFeedbackRecord | null;
@@ -197,6 +204,7 @@ async function fetchJobStatus(jobId: string) {
     progress?: number;
     outputs?: RunnerOutput[];
     error?: string | null;
+    publicFailure?: PublicGenerationFailure | null;
     publicGraph?: PublicGraph;
     statusMessage?: string;
     steps?: unknown[];
@@ -681,6 +689,7 @@ export default function TemplateStudioPage() {
       progress: run.progress ?? 0,
       outputs: Array.isArray(run.outputs) ? run.outputs : [],
       error: run.error ?? undefined,
+      publicFailure: run.publicFailure ?? null,
     });
     window.requestAnimationFrame(() => {
       workspaceSectionRef.current?.scrollIntoView({
@@ -727,6 +736,8 @@ export default function TemplateStudioPage() {
           progress: status.progress ?? 0,
           outputs: Array.isArray(status.outputs) ? status.outputs : [],
           error: status.error ?? undefined,
+          // Keep the classified failure if a later poll omits it.
+          publicFailure: status.publicFailure ?? prev?.publicFailure ?? null,
           publicGraph: status.publicGraph ?? prev?.publicGraph,
           statusMessage: status.statusMessage ?? prev?.statusMessage,
           hasPrivilegedSteps: Array.isArray(status.steps),
@@ -1703,7 +1714,7 @@ export default function TemplateStudioPage() {
                                 ? "text-emerald-200"
                                 : "text-cyan-100"
                           }`}>
-                            {run.status.replace("_", " ")}
+                            {run.status === "failed" ? "Needs attention" : run.status.replace("_", " ")}
                           </p>
                           <p className="mt-1 text-xs text-slate-400">{run.progress}%</p>
                         </div>
@@ -1796,7 +1807,12 @@ export default function TemplateStudioPage() {
 
               {result?.status === "failed" && !result.publicGraph?.nodes.length ? (
                 <div className="mt-6 rounded-[1.5rem] border border-rose-400/20 bg-rose-400/10 p-5">
-                  <p className="text-sm text-rose-50">Generation interrupted — try again.</p>
+                  <p className="text-sm font-semibold text-rose-100">
+                    {readPublicFailure(result.publicFailure).title}
+                  </p>
+                  <p className="mt-1 text-sm text-rose-50/90">
+                    {readPublicFailure(result.publicFailure).message}
+                  </p>
                 </div>
               ) : null}
 

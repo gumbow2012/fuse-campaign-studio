@@ -5,8 +5,10 @@ import {
   createAdminClient,
   errorMessage,
   getOptionalUser,
+  getUserRoles,
   json,
 } from "../_shared/supabase-admin.ts";
+import { toPublicGenerationFailure } from "../_shared/generation-failure.ts";
 import {
   collectDeliverableOutputs,
   loadOutputExposureByNodeId,
@@ -46,6 +48,8 @@ Deno.serve(async (req) => {
     if (!user) {
       return json({ jobs: [] });
     }
+    const roles = await getUserRoles(user.id, admin);
+    const isPrivileged = roles.includes("admin") || roles.includes("dev");
     const url = new URL(req.url);
     const limit = Math.min(Math.max(Number(url.searchParams.get("limit") ?? 8), 1), 20);
 
@@ -117,13 +121,21 @@ Deno.serve(async (req) => {
     }
 
     return json({
-      jobs: (jobs ?? []).map((job: any) => ({
+      jobs: (jobs ?? []).map((job: any) => {
+        // P0 failure taxonomy: raw provider/moderation strings are assembled
+        // ONLY for privileged (admin/dev) callers. Customers get polished copy.
+        const rawError = extractProviderDetail(job.result_payload?.rawPayload?.detail) ?? job.error_log ?? null;
+        const publicFailure = job.status === "failed"
+          ? toPublicGenerationFailure({ rawError })
+          : null;
+        return {
         id: job.id,
         status: job.status,
         startedAt: job.started_at,
         completedAt: job.completed_at,
         progress: job.progress ?? 0,
-        error: extractProviderDetail(job.result_payload?.rawPayload?.detail) ?? job.error_log ?? null,
+        publicFailure,
+        ...(isPrivileged ? { error: rawError } : {}),
         templateName: job.fuse_templates?.name ?? "Template",
         templateId: job.template_versions?.id ?? null,
         versionNumber: job.template_versions?.version_number ?? null,
@@ -131,7 +143,8 @@ Deno.serve(async (req) => {
         telemetry: job.result_payload?.telemetry ?? {},
         outputs: collectDeliverableOutputs(outputsByJobId.get(job.id) ?? [], outputExposureByNodeId),
         feedback: feedbackByJobId.get(job.id) ?? null,
-      })),
+        };
+      }),
     });
   } catch (error) {
     return json({ error: errorMessage(error) }, 400);

@@ -578,7 +578,11 @@ export interface AdminAuditJobDetail {
   completedAt: string | null;
   status: string;
   progress: number;
-  error: string | null;
+  /** Customer-facing polished failure (never raw provider text). */
+  publicFailure?: import("@/lib/generationFailure").PublicGenerationFailure | null;
+  /** Privileged callers only (admin/dev/runner) — raw provider diagnostics. */
+  error?: string | null;
+  providerFailure?: import("@/lib/generationFailure").ProviderFailureDetail | null;
   telemetry: Record<string, unknown>;
   user: {
     id: string | null;

@@ -23,6 +23,9 @@ import {
   VERTICAL_VIDEO_ASPECT_RATIO,
   videoFallbackUsdPerSecond,
 } from "../_shared/fal.ts";
+import {
+  toPublicGenerationFailure,
+} from "../_shared/generation-failure.ts";
 
 /**
  * Generation Studio: standalone prompt-to-image / prompt-to-video generations.
@@ -106,7 +109,19 @@ function combineFailureMessage(base: string, detail: string | null) {
   return `${base}\n\nProvider detail: ${trimmed}`.slice(0, 10000);
 }
 
-function serializeGeneration(row: any) {
+/**
+ * P0 failure taxonomy: customers NEVER receive raw provider/moderation text.
+ * Failed rows expose `publicFailure` (classified, polished copy) to everyone;
+ * the raw provider detail travels separately as `providerFailure` and is only
+ * assembled for privileged (admin/dev) callers.
+ */
+function serializeGeneration(row: any, privileged = false) {
+  const failed = row.status === "failed";
+  const rawError = failed ? (row.error_log ?? null) : null;
+  const publicFailure = failed
+    ? toPublicGenerationFailure({ rawError, provider: row.provider_model ?? null })
+    : null;
+
   return {
     id: row.id,
     status: row.status as "queued" | "running" | "complete" | "failed",
@@ -117,7 +132,7 @@ function serializeGeneration(row: any) {
     posterUrl: row.poster_url ?? null,
     outputType: row.output_type ?? null,
 
-    error: row.error_log ?? null,
+    publicFailure,
     estimatedCredits: row.estimated_credits ?? null,
     estimatedCostUsd: row.estimated_cost_usd ? Number(row.estimated_cost_usd) : null,
     providerModel: row.provider_model ?? null,
@@ -126,6 +141,18 @@ function serializeGeneration(row: any) {
     favorited: row.favorited === true,
     createdAt: row.created_at ?? null,
     completedAt: row.completed_at ?? null,
+    ...(privileged
+      ? {
+          providerFailure: failed
+            ? {
+                rawError,
+                provider: row.provider_model ?? null,
+                requestId: row.provider_request_id ?? null,
+                endpoint: row.provider_model ?? null,
+              }
+            : null,
+        }
+      : {}),
   };
 }
 
@@ -266,7 +293,10 @@ function requestedAspect(value: unknown) {
   return raw && raw.toLowerCase() !== "auto" ? raw : null;
 }
 
-async function startGeneration(admin: AdminClient, args: { input: StartInput; userId: string }) {
+async function startGeneration(
+  admin: AdminClient,
+  args: { input: StartInput; userId: string; privileged?: boolean },
+) {
   const input = args.input;
   const kind = input.kind === "video" ? "video" : "image";
   const prompt = String(input.prompt ?? "").trim();
@@ -339,7 +369,7 @@ async function startGeneration(admin: AdminClient, args: { input: StartInput; us
         .select("*")
         .single();
 
-      return serializeGeneration(updated ?? inserted);
+      return serializeGeneration(updated ?? inserted, args.privileged === true);
     }
 
 
@@ -460,7 +490,7 @@ async function startGeneration(admin: AdminClient, args: { input: StartInput; us
       .select("*")
       .single();
 
-    return serializeGeneration(updated ?? inserted);
+    return serializeGeneration(updated ?? inserted, args.privileged === true);
   } catch (error) {
     const message = errorMessage(error);
     await admin
@@ -512,7 +542,7 @@ function isStuck(row: any) {
 }
 
 /** Terminal-fail an in-flight row that never produced a provider result. */
-async function expireGeneration(admin: AdminClient, row: any) {
+async function expireGeneration(admin: AdminClient, row: any, privileged = false) {
   const { data: updated } = await admin
     .from("studio_generations")
     .update({
@@ -523,15 +553,15 @@ async function expireGeneration(admin: AdminClient, row: any) {
     .eq("id", row.id)
     .select("*")
     .maybeSingle();
-  return serializeGeneration(updated ?? { ...row, status: "failed" });
+  return serializeGeneration(updated ?? { ...row, status: "failed" }, privileged);
 }
 
 /** Poll fal for a generation still in flight and persist any terminal result. */
-async function syncGeneration(admin: AdminClient, row: any) {
-  if (!isInFlight(row)) return serializeGeneration(row);
-  if (isStuck(row)) return await expireGeneration(admin, row);
+async function syncGeneration(admin: AdminClient, row: any, privileged = false) {
+  if (!isInFlight(row)) return serializeGeneration(row, privileged);
+  if (isStuck(row)) return await expireGeneration(admin, row, privileged);
   if (!row.provider_request_id || !row.provider_model) {
-    return serializeGeneration(row);
+    return serializeGeneration(row, privileged);
   }
 
   try {
@@ -540,7 +570,7 @@ async function syncGeneration(admin: AdminClient, row: any) {
       "queue status lookup",
     );
     const normalized = String(status ?? "").toUpperCase();
-    if (normalized !== "COMPLETED" && normalized !== "OK") return serializeGeneration(row);
+    if (normalized !== "COMPLETED" && normalized !== "OK") return serializeGeneration(row, privileged);
 
     const result = await withTimeout(
       getFalQueueResult(row.provider_model, row.provider_request_id),
@@ -567,15 +597,15 @@ async function syncGeneration(admin: AdminClient, row: any) {
       await generatePreviewThumbnail(admin, completed);
     }
 
-    return serializeGeneration(updated ?? row);
+    return serializeGeneration(updated ?? row, privileged);
 
   } catch (error) {
     // A hung/rate-limited provider call must never fail the row or the invocation.
-    if (error instanceof ProviderTimeout) return serializeGeneration(row);
+    if (error instanceof ProviderTimeout) return serializeGeneration(row, privileged);
 
     const message = errorMessage(error);
     const isTransient = /queue status lookup failed|fetch|network|timed out/i.test(message);
-    if (isTransient) return serializeGeneration(row);
+    if (isTransient) return serializeGeneration(row, privileged);
 
     const detail = await providerFailureDetail(row).catch(() => null);
 
@@ -590,7 +620,7 @@ async function syncGeneration(admin: AdminClient, row: any) {
       .select("*")
       .single();
 
-    return serializeGeneration(updated ?? row);
+    return serializeGeneration(updated ?? row, privileged);
   }
 }
 
@@ -678,6 +708,8 @@ Deno.serve(async (req) => {
   try {
     const access = await requireBuilderUser(req, admin);
     const user = access.user;
+    // Raw provider failure detail is assembled ONLY for admin/dev callers.
+    const privileged = access.isAdmin === true || access.isDev === true;
     const body = await req.json().catch(() => ({})) as StartInput & {
       action?: string;
       generationId?: string;
@@ -697,7 +729,7 @@ Deno.serve(async (req) => {
         .maybeSingle();
       if (error) throw new Error(error.message);
       if (!row) return json({ error: "Generation not found" }, 404);
-      return json({ generation: await syncGeneration(admin, row) });
+      return json({ generation: await syncGeneration(admin, row, privileged) });
     }
 
     if (action === "list" || action === "queue") {
@@ -762,7 +794,7 @@ Deno.serve(async (req) => {
         .maybeSingle();
       if (error) throw new Error(error.message);
       if (!row) return json({ error: "Generation not found" }, 404);
-      return json({ generation: serializeGeneration(row) });
+      return json({ generation: serializeGeneration(row, privileged) });
     }
 
     if (action === "reconcile") {
@@ -789,12 +821,12 @@ Deno.serve(async (req) => {
       const CONCURRENCY = 3;
       for (let i = 0; i < inFlightRows.length; i += CONCURRENCY) {
         const chunk = inFlightRows.slice(i, i + CONCURRENCY);
-        const settled = await Promise.all(chunk.map((row) => syncGeneration(admin, row)));
+        const settled = await Promise.all(chunk.map((row) => syncGeneration(admin, row, privileged)));
         for (const entry of settled) reconciled.set(String(entry.id), entry);
       }
 
       const generations = (rows ?? []).map(
-        (row) => reconciled.get(row.id) ?? serializeGeneration(row),
+        (row) => reconciled.get(row.id) ?? serializeGeneration(row, privileged),
       );
       return json({ generations });
     }
@@ -852,7 +884,7 @@ Deno.serve(async (req) => {
         .maybeSingle();
       if (error) throw new Error(error.message);
       if (!row) return json({ error: "Generation not found" }, 404);
-      return json({ generation: serializeGeneration(row) });
+      return json({ generation: serializeGeneration(row, privileged) });
     }
 
     if (action === "delete") {
@@ -890,7 +922,7 @@ Deno.serve(async (req) => {
 
     if (action !== "start") throw new Error(`Unsupported action: ${action}`);
 
-    const generation = await startGeneration(admin, { input: body, userId: user.id });
+    const generation = await startGeneration(admin, { input: body, userId: user.id, privileged });
     return json({ generation });
   } catch (error) {
     const message = errorMessage(error);
