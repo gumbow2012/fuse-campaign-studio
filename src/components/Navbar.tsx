@@ -72,6 +72,7 @@ const ADMIN_LINKS = [
   { label: "Template Import", to: "/admin/templates/import" },
   { label: "Creators", to: "/admin/creators" },
   { label: "Creator Program", to: "/admin/creator-program" },
+  { label: "FUSE Cast", to: "/admin/fuse-cast" },
   { label: "Output Audit", to: "/admin/audits" },
 ];
 

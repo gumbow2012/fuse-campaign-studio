@@ -10,6 +10,7 @@ import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { listFuseAvatars, listMyAvatars, type AvatarProfile } from "@/services/avatarProfiles";
+import { isCanonicalReady } from "@/lib/canonicalPortrait";
 
 /** Structured for cast_a / cast_b / cast_c later; a single slot for now. */
 export type CastSelection = Record<string, string | null>;
@@ -85,7 +86,8 @@ export default function CastSelector({
     enabled: Boolean(userId),
   });
 
-  const fuse = fuseAvatars.data ?? [];
+  // FT14b — customers never see a FUSE character without an approved master portrait.
+  const fuse = (fuseAvatars.data ?? []).filter(isCanonicalReady);
   const mine = myAvatars.data ?? [];
   const selectedId = selection[slot] ?? null;
 

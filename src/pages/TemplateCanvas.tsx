@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
+import { CANONICAL_REQUIRED_LABEL, isCanonicalReady } from "@/lib/canonicalPortrait";
 import { useAuth } from "@/contexts/AuthContext";
 import { uploadRunInputFile } from "@/services/runInputUpload";
 import { listFuseAvatars, listMyAvatars, type AvatarProfile } from "@/services/avatarProfiles";
@@ -3490,14 +3491,23 @@ const TemplateCanvas = () => {
                       </p>
                     ) : (
                       <div className="mt-2 grid grid-cols-4 gap-2">
-                        {castAvatars.map((avatar) => (
+                        {castAvatars.map((avatar) => {
+                          // FT14b — a FUSE avatar without an approved master portrait
+                          // stays visible to admins but is not selectable to run.
+                          const needsCanonical =
+                            avatar.source_type === "FUSE" && !isCanonicalReady(avatar);
+                          return (
                           <button
                             key={avatar.id}
                             type="button"
+                            disabled={needsCanonical}
+                            title={needsCanonical ? CANONICAL_REQUIRED_LABEL : avatar.name}
                             onClick={() => setSelectedCastAvatarId(avatar.id)}
                             className={cn(
                               "group relative overflow-hidden rounded-xl border bg-background text-left transition-colors",
-                              selectedCastAvatarId === avatar.id
+                              needsCanonical
+                                ? "cursor-not-allowed border-amber-300/40 opacity-60"
+                                : selectedCastAvatarId === avatar.id
                                 ? "border-cyan-300/70"
                                 : "border-border/50 hover:border-white/25",
                             )}
@@ -3516,8 +3526,14 @@ const TemplateCanvas = () => {
                               )}
                             </div>
                             <p className="truncate p-1.5 text-[10px] font-medium text-foreground">{avatar.name}</p>
+                            {needsCanonical ? (
+                              <p className="px-1.5 pb-1.5 text-[8px] font-semibold uppercase tracking-[0.1em] text-amber-200">
+                                {CANONICAL_REQUIRED_LABEL}
+                              </p>
+                            ) : null}
                           </button>
-                        ))}
+                          );
+                        })}
                       </div>
                     )}
                   </div>
