@@ -799,6 +799,45 @@ Deno.serve(async (req) => {
       return json({ generations });
     }
 
+    if (action === "backfill_previews") {
+      /** GS-PERF6: admin/dev-only, idempotent thumbnail backfill. */
+      if (!access.isAdmin && !access.isDev) throw new Error("Admin access required");
+
+      const { data: rows, error } = await admin
+        .from("studio_generations")
+        .select("id, status, output_url, output_type, preview_url")
+        .eq("status", "complete")
+        .eq("output_type", "image")
+        .is("preview_url", null)
+        .not("output_url", "is", null)
+        .order("created_at", { ascending: false })
+        .limit(25);
+      if (error) throw new Error(error.message);
+
+      const targets = rows ?? [];
+      let processed = 0;
+      const CONCURRENCY = 3;
+      for (let i = 0; i < targets.length; i += CONCURRENCY) {
+        const chunk = targets.slice(i, i + CONCURRENCY);
+        const results = await Promise.all(
+          chunk.map((row) => generatePreviewThumbnail(admin, row)),
+        );
+        processed += results.filter(Boolean).length;
+      }
+
+      const { count } = await admin
+        .from("studio_generations")
+        .select("id", { count: "exact", head: true })
+        .eq("status", "complete")
+        .eq("output_type", "image")
+        .is("preview_url", null)
+        .not("output_url", "is", null);
+
+      return json({ processed, remaining: count ?? 0 });
+    }
+
+
+
     if (action === "set_favorite") {
       const generationId = String(body.generationId ?? "").trim();
       if (!generationId) throw new Error("generationId is required");
