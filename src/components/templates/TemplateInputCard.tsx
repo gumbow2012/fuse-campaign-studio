@@ -1,70 +1,97 @@
 /**
- * FT3 — Empty input card treatment + lightweight upload checks.
+ * Customer Campaign Builder — compact asset slot.
  *
- * Additive UI only: reuses FT2 requirement metadata when present and falls
- * back to the legacy label-derived placeholder when it isn't.
+ * One slot = one action. The empty state is a small card with the input label,
+ * a required/optional tag and a single "+ Add {ROLE}" button. Every asset source
+ * (upload / library / brand-product profiles / FUSE Cast) lives behind that one
+ * button and still calls the exact same handlers as before — ingestion, payload
+ * shape and validation are untouched.
  */
 
-import { useEffect, useMemo, useRef, useState } from "react";
-import { AlertTriangle, CheckCircle2, Images, Loader2, Plus, Upload, XCircle } from "lucide-react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import {
+  AlertTriangle,
+  Boxes,
+  HelpCircle,
+  Images,
+  Loader2,
+  Plus,
+  Upload,
+  Users,
+  XCircle,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import UploadGuide from "@/components/templates/UploadGuide";
 import LibraryPickerDialog from "@/components/templates/LibraryPickerDialog";
 import ProfileAssetPicker from "@/components/templates/ProfileAssetPicker";
 import { libraryKindForAssetType } from "@/services/libraryAssets";
-import { getUploadGuide } from "@/lib/uploadGuides";
 import { runUploadChecks, type UploadCheckResult, type UploadCheckState } from "@/lib/uploadChecks";
 import {
-  formatAssetTypeLabel,
-  type TemplateAssetRequirement,
-  type TemplateAssetType,
-} from "@/lib/templateAssetRequirements";
+  inputRoleWord,
+  resolveInputRole,
+  resolveInputSources,
+  type AssetSourceKind,
+} from "@/lib/templateInputSources";
+import type { TemplateAssetRequirement } from "@/lib/templateAssetRequirements";
 import { cn } from "@/lib/utils";
-
-/** Short role word used in the "+ ADD {ROLE}" empty state. */
-const ROLE_WORDS: Partial<Record<TemplateAssetType, string>> = {
-  "garment-front": "GARMENT",
-  "garment-back": "GARMENT",
-  logo: "LOGO",
-  product: "PRODUCT",
-  jewelry: "JEWELRY",
-  packaging: "PACKAGING",
-  avatar: "CAST",
-  reference: "REFERENCE",
-  image: "IMAGE",
-  video: "VIDEO",
-};
-
 
 interface TemplateInputCardProps {
   label: string;
   file: File | null;
   requirement?: TemplateAssetRequirement;
-  /** Legacy label-derived placeholder — last-resort fallback only. */
-  fallbackPlaceholderSrc: string;
+  /** Legacy prop kept for call-site compatibility — never rendered. */
+  fallbackPlaceholderSrc?: string;
   onFileChange: (file: File | null) => void;
-  /** FT4: asset picked from the reusable library (already stored, has a URL). */
+  /** Asset picked from the reusable library / a profile (already has a URL). */
   libraryAsset?: { url: string; name?: string | null } | null;
   onLibrarySelect?: (asset: { url: string; name?: string | null }) => void;
   /** Clears both a picked file and a library selection. */
   onClear?: () => void;
+  /** Whether this input is required (drives the tag only). */
+  required?: boolean;
+  /** Auto-advance highlight for the next unfilled slot. */
+  highlighted?: boolean;
+  /** Overrides the visible slot heading (e.g. "Who's in the campaign?"). */
+  displayLabel?: string;
+  /** Cast-supported templates: the existing cast selector, shown inside the Add dialog. */
+  castPanel?: ReactNode;
 }
+
+const SOURCE_ICONS: Record<AssetSourceKind, typeof Upload> = {
+  upload: Upload,
+  library: Images,
+  profile: Boxes,
+  cast: Users,
+};
 
 export default function TemplateInputCard({
   label,
   file,
   requirement,
-  fallbackPlaceholderSrc: _fallbackPlaceholderSrc,
   onFileChange,
   libraryAsset,
   onLibrarySelect,
   onClear,
+  required = true,
+  highlighted = false,
+  displayLabel,
+  castPanel,
 }: TemplateInputCardProps) {
-
   const inputRef = useRef<HTMLInputElement>(null);
   const [state, setState] = useState<UploadCheckState | "idle">("idle");
   const [checks, setChecks] = useState<UploadCheckResult | null>(null);
   const [warningDismissed, setWarningDismissed] = useState(false);
+  const [addOpen, setAddOpen] = useState(false);
+  const [libraryOpen, setLibraryOpen] = useState(false);
+  const [profileOpen, setProfileOpen] = useState(false);
+  const [castOpen, setCastOpen] = useState(false);
 
   const previewUrl = useMemo(() => (file ? URL.createObjectURL(file) : null), [file]);
   useEffect(() => {
@@ -103,238 +130,234 @@ export default function TemplateInputCard({
     };
   }, [file, requirement?.transparencyRecommended]);
 
-  const guide = getUploadGuide(requirement?.assetType);
-  const bestResults = requirement?.shortInstruction ?? guide.bestResults;
-  /** Only a real representative example is shown — never illustration clip-art. */
-  const exampleSrc = requirement?.guidePreview ?? requirement?.goodExamples?.[0];
-  const roleWord =
-    (requirement?.assetType ? ROLE_WORDS[requirement.assetType] : undefined) ?? label.toUpperCase();
-
-  const notes: string[] = [];
-  if (requirement && requirement.maxFiles > 1) notes.push(`${requirement.minFiles}-${requirement.maxFiles} files`);
-  if (requirement?.recommendedAspect) notes.push(requirement.recommendedAspect);
-  if (requirement?.recommendedResolution) notes.push(requirement.recommendedResolution);
-  if (requirement?.transparencyRecommended) notes.push("transparent PNG preferred");
+  const role = resolveInputRole(label, requirement?.assetType);
+  const roleWord = inputRoleWord(label, role);
+  const heading = displayLabel ?? label;
+  const sources = resolveInputSources(label, role, Boolean(castPanel));
+  const availableSources = sources.filter((source) =>
+    source.kind === "upload"
+      ? requirement?.allowUpload !== false
+      : source.kind === "cast"
+        ? Boolean(castPanel)
+        : Boolean(onLibrarySelect),
+  );
 
   const showWarning = state === "warning" && !warningDismissed;
-  const isReady = !!(file ? state === "ready" : libraryAsset);
+  const filledUrl = previewUrl ?? libraryAsset?.url ?? null;
+  const assetName = file?.name ?? libraryAsset?.name ?? null;
+  const busy = state === "uploading" || state === "checking";
+  const isFilled = Boolean(filledUrl);
+
+  const handleSource = (kind: AssetSourceKind) => {
+    setAddOpen(false);
+    if (kind === "upload") {
+      window.setTimeout(() => inputRef.current?.click(), 60);
+      return;
+    }
+    window.setTimeout(() => {
+      if (kind === "library") setLibraryOpen(true);
+      if (kind === "profile") setProfileOpen(true);
+      if (kind === "cast") setCastOpen(true);
+    }, 60);
+  };
 
   return (
-    <div className="rounded-[1.5rem] border border-white/8 bg-black/20 p-4">
-      <div
-        className={cn(
-          "group/upload flex aspect-[9/16] flex-col overflow-hidden rounded-[1.25rem] border border-dashed bg-white/[0.03] transition",
-          state === "error"
-            ? "border-rose-300/45"
-            : showWarning
-              ? "border-amber-300/45"
-              : "border-cyan-200/20 hover:border-cyan-200/45",
-        )}
-      >
-        <div className="relative min-h-0 flex-1 overflow-hidden">
-          {previewUrl || libraryAsset?.url ? (
-            <img
-              src={previewUrl ?? libraryAsset?.url ?? ""}
-              alt={`${label} preview`}
-              className="h-full w-full object-cover"
-            />
-          ) : (
+    <div
+      className={cn(
+        "rounded-[1.25rem] border bg-black/25 p-3 transition-colors motion-safe:transition-all",
+        state === "error"
+          ? "border-rose-300/40"
+          : showWarning
+            ? "border-amber-300/40"
+            : highlighted
+              ? "border-cyan-300/60 shadow-[0_0_0_3px_rgba(34,211,238,0.12)]"
+              : "border-white/10",
+      )}
+    >
+      <div className="flex items-start gap-2">
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-200">
+            {heading}
+          </p>
+          <span
+            className={cn(
+              "mt-1 inline-block rounded-full border px-2 py-0.5 text-[9px] uppercase tracking-[0.18em]",
+              isFilled
+                ? "border-emerald-300/30 bg-emerald-300/10 text-emerald-200"
+                : required
+                  ? "border-cyan-300/30 bg-cyan-300/[0.07] text-cyan-100"
+                  : "border-white/10 text-slate-400",
+            )}
+          >
+            {isFilled ? "✓ Ready" : required ? "Required" : "Optional"}
+          </span>
+        </div>
+        <UploadGuide
+          slotLabel={heading}
+          requirement={requirement}
+          trigger={
             <button
               type="button"
-              onClick={() => inputRef.current?.click()}
-              onDragOver={(event) => event.preventDefault()}
-              onDrop={(event) => {
-                event.preventDefault();
-                const dropped = event.dataTransfer?.files?.[0];
-                if (dropped) onFileChange(dropped);
-              }}
-              className="relative flex h-full w-full flex-col items-center justify-center gap-3 bg-[linear-gradient(180deg,rgba(15,23,42,0.72),rgba(2,6,23,0.94))] text-center"
+              aria-label={`Upload guidance for ${heading}`}
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-white/10 text-slate-400 transition hover:border-cyan-200/40 hover:text-cyan-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300/60"
             >
-              <span
-                aria-hidden="true"
-                className="pointer-events-none absolute inset-0 opacity-[0.14] [background-image:linear-gradient(rgba(148,163,184,0.35)_1px,transparent_1px),linear-gradient(90deg,rgba(148,163,184,0.35)_1px,transparent_1px)] [background-size:28px_28px]"
-              />
-              {exampleSrc ? (
-                <img
-                  src={exampleSrc}
-                  alt=""
-                  aria-hidden="true"
-                  loading="lazy"
-                  className="pointer-events-none absolute inset-0 h-full w-full object-cover opacity-20"
-                />
-              ) : null}
-              <span className="relative flex h-10 w-10 items-center justify-center rounded-full border border-cyan-200/30 bg-black/40 text-cyan-100">
-                <Plus className="h-4 w-4" />
-              </span>
-              <span className="relative text-[11px] font-semibold uppercase tracking-[0.28em] text-slate-300">
-                + Add {roleWord}
-              </span>
-              <span className="relative text-[10px] uppercase tracking-[0.18em] text-slate-500">
-                Drag &amp; drop or click
-              </span>
+              <HelpCircle className="h-4 w-4" />
             </button>
-          )}
-
-          {(state === "uploading" || state === "checking") && previewUrl ? (
-            <div className="absolute inset-0 flex items-center justify-center gap-2 bg-slate-950/70 text-xs uppercase tracking-[0.2em] text-cyan-100">
-              <Loader2 className="h-4 w-4 animate-spin" />
-              {state === "uploading" ? "Uploading" : "Checking"}
-            </div>
-          ) : null}
-        </div>
-
-        <div className="border-t border-white/10 bg-black/30 p-3">
-          <div className="flex items-center gap-2">
-            <span className="block min-w-0 flex-1 truncate text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-300">
-              {requirement?.assetType ? formatAssetTypeLabel(requirement.assetType) : label}
-            </span>
-            {isReady ? (
-              <span className="shrink-0 rounded-full border border-emerald-300/25 bg-emerald-300/10 px-2 py-0.5 text-[9px] uppercase tracking-[0.18em] text-emerald-200">
-                ✓ Ready
-              </span>
-            ) : (
-              <span className="shrink-0 rounded-full border border-white/10 px-2 py-0.5 text-[9px] uppercase tracking-[0.18em] text-slate-400">
-                {label}
-              </span>
-            )}
-          </div>
-
-          {file ? (
-            <p className="mt-2 flex min-w-0 items-center gap-2 text-sm font-medium text-white">
-              {state === "ready" ? (
-                <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-300" />
-              ) : state === "error" ? (
-                <XCircle className="h-4 w-4 shrink-0 text-rose-300" />
-              ) : showWarning ? (
-                <AlertTriangle className="h-4 w-4 shrink-0 text-amber-300" />
-              ) : (
-                <Upload className="h-4 w-4 shrink-0 text-cyan-100" />
-              )}
-              <span className="truncate">{file.name}</span>
-            </p>
-          ) : libraryAsset ? (
-            <p className="mt-2 flex min-w-0 items-center gap-2 text-sm font-medium text-white">
-              <Images className="h-4 w-4 shrink-0 text-cyan-100" />
-              <span className="truncate">{libraryAsset.name ?? "From library"}</span>
-            </p>
-          ) : (
-            <p className="mt-2 text-[11px] leading-relaxed text-slate-400">
-              <span className="text-slate-300">Best results:</span> {bestResults}
-            </p>
-          )}
-
-
-
-          {notes.length ? (
-            <p className="mt-1 text-[10px] uppercase tracking-[0.14em] text-slate-500">{notes.join(" · ")}</p>
-          ) : null}
-
-          <div className="mt-3 flex flex-wrap items-center gap-2">
-            <Button
-              type="button"
-              size="sm"
-              onClick={() => inputRef.current?.click()}
-              className="h-8 rounded-full bg-cyan-300 px-3 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-950 hover:bg-cyan-200"
-            >
-              <Upload className="h-3.5 w-3.5" />
-              {file || libraryAsset ? "Replace" : "Upload New"}
-            </Button>
-            {onLibrarySelect ? (
-              <LibraryPickerDialog
-                kinds={[libraryKindForAssetType(requirement?.assetType)]}
-                onSelect={(asset) => onLibrarySelect({ url: asset.url, name: asset.name })}
-                trigger={
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    className="h-8 rounded-full border-white/12 bg-white/[0.03] px-3 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-200 hover:text-white"
-                  >
-                    <Images className="h-3.5 w-3.5" />
-                    Choose From Library
-                  </Button>
-                }
-              />
-            ) : (
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                disabled
-                title="Coming soon"
-                className="h-8 rounded-full border-white/12 bg-white/[0.03] px-3 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400"
-              >
-                <Images className="h-3.5 w-3.5" />
-                Library · Soon
-              </Button>
-            )}
-
-            {onLibrarySelect ? (
-              <ProfileAssetPicker assetType={requirement?.assetType} onSelect={onLibrarySelect} />
-            ) : null}
-
-            <UploadGuide slotLabel={label} requirement={requirement} />
-          </div>
-
-          <input
-            ref={inputRef}
-            type="file"
-            accept="image/*"
-            className="hidden"
-            onChange={(event) => onFileChange(event.target.files?.[0] ?? null)}
-          />
-        </div>
+          }
+        />
       </div>
 
+      {isFilled ? (
+        <div className="mt-3">
+          <div className="relative h-[104px] overflow-hidden rounded-[0.9rem] border border-white/10 bg-slate-900">
+            <img src={filledUrl ?? ""} alt={`${heading} asset`} className="h-full w-full object-cover" />
+            {busy ? (
+              <div className="absolute inset-0 flex items-center justify-center gap-2 bg-slate-950/70 text-[10px] uppercase tracking-[0.2em] text-cyan-100">
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                {state === "uploading" ? "Uploading" : "Checking"}
+              </div>
+            ) : null}
+          </div>
+          <p className="mt-2 truncate text-xs text-slate-300">{assetName ?? "Selected asset"}</p>
+          <div className="mt-2 flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => setAddOpen(true)}
+              className="text-[10px] uppercase tracking-[0.18em] text-cyan-200 transition hover:text-cyan-100"
+            >
+              Change
+            </button>
+            <button
+              type="button"
+              onClick={() => (onClear ? onClear() : onFileChange(null))}
+              className="text-[10px] uppercase tracking-[0.18em] text-slate-500 transition hover:text-white"
+            >
+              Remove
+            </button>
+          </div>
+        </div>
+      ) : (
+        <button
+          type="button"
+          onClick={() => setAddOpen(true)}
+          onDragOver={(event) => event.preventDefault()}
+          onDrop={(event) => {
+            event.preventDefault();
+            const dropped = event.dataTransfer?.files?.[0];
+            if (dropped) onFileChange(dropped);
+          }}
+          className="mt-3 flex h-[76px] w-full items-center justify-center gap-3 rounded-[0.9rem] border border-dashed border-cyan-200/25 bg-white/[0.02] text-center transition hover:border-cyan-200/60 hover:bg-cyan-300/[0.04] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300/60"
+        >
+          <span className="flex h-7 w-7 items-center justify-center rounded-full border border-cyan-200/35 text-cyan-100">
+            <Plus className="h-3.5 w-3.5" />
+          </span>
+          <span className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-200">
+            Add {roleWord}
+          </span>
+        </button>
+      )}
+
       {state === "error" && checks?.error ? (
-        <div className="mt-3 rounded-2xl border border-rose-300/25 bg-rose-300/[0.07] p-3 text-xs text-rose-100">
-          <p>{checks.error}</p>
+        <p className="mt-2 text-[11px] leading-relaxed text-rose-200">
+          <XCircle className="mr-1 inline h-3.5 w-3.5" />
+          {checks.error}
+        </p>
+      ) : null}
+
+      {showWarning && checks?.warnings.length ? (
+        <div className="mt-2 text-[11px] leading-relaxed text-amber-200">
+          {checks.warnings.map((warning) => (
+            <p key={warning}>
+              <AlertTriangle className="mr-1 inline h-3.5 w-3.5" />
+              {warning}
+            </p>
+          ))}
           <button
             type="button"
-            onClick={() => onFileChange(null)}
-            className="mt-2 text-[11px] uppercase tracking-[0.16em] text-rose-200 hover:text-white"
+            onClick={() => setWarningDismissed(true)}
+            className="mt-1 text-[10px] uppercase tracking-[0.16em] text-slate-400 hover:text-white"
           >
-            Remove file
+            Use anyway
           </button>
         </div>
       ) : null}
 
-      {showWarning && checks?.warnings.length ? (
-        <div className="mt-3 rounded-2xl border border-amber-300/25 bg-amber-300/[0.07] p-3 text-xs text-amber-100">
-          {checks.warnings.map((warning) => (
-            <p key={warning} className="flex gap-2">
-              <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-              <span>{warning}</span>
-            </p>
-          ))}
-          <div className="mt-2 flex gap-3">
-            <button
-              type="button"
-              onClick={() => inputRef.current?.click()}
-              className="text-[11px] uppercase tracking-[0.16em] text-amber-200 hover:text-white"
-            >
-              Replace
-            </button>
-            <button
-              type="button"
-              onClick={() => setWarningDismissed(true)}
-              className="text-[11px] uppercase tracking-[0.16em] text-slate-400 hover:text-white"
-            >
-              Use Anyway
-            </button>
+      {/* ONE action → compact source menu. Sources are never permanently rendered. */}
+      <Dialog open={addOpen} onOpenChange={setAddOpen}>
+        <DialogContent className="max-w-sm border-white/10 bg-slate-950/95 text-white">
+          <DialogHeader>
+            <DialogTitle className="font-display text-xl tracking-[-0.02em]">{heading}</DialogTitle>
+            <DialogDescription className="text-slate-400">
+              Choose where this asset comes from.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2">
+            {availableSources.map((source) => {
+              const Icon = SOURCE_ICONS[source.kind];
+              return (
+                <button
+                  key={`${source.kind}-${source.label}`}
+                  type="button"
+                  onClick={() => handleSource(source.kind)}
+                  className="flex w-full items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3 text-left transition hover:border-cyan-200/45 hover:bg-cyan-300/[0.05] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300/60"
+                >
+                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-white/10 text-cyan-100">
+                    <Icon className="h-4 w-4" />
+                  </span>
+                  <span className="min-w-0">
+                    <span className="block truncate text-sm font-semibold text-white">{source.label}</span>
+                    {source.hint ? (
+                      <span className="block truncate text-[11px] text-slate-400">{source.hint}</span>
+                    ) : null}
+                  </span>
+                </button>
+              );
+            })}
           </div>
-        </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Existing pickers, opened on demand — same handlers as before. */}
+      {onLibrarySelect ? (
+        <>
+          <LibraryPickerDialog
+            trigger={null}
+            open={libraryOpen}
+            onOpenChange={setLibraryOpen}
+            kinds={requirement?.assetType ? [libraryKindForAssetType(requirement.assetType)] : []}
+            onSelect={(asset) => onLibrarySelect({ url: asset.url, name: asset.name })}
+          />
+          <ProfileAssetPicker
+            trigger={null}
+            open={profileOpen}
+            onOpenChange={setProfileOpen}
+            assetType={requirement?.assetType}
+            onSelect={onLibrarySelect}
+          />
+        </>
       ) : null}
 
-      {file || libraryAsset ? (
-        <button
-          type="button"
-          onClick={() => (onClear ? onClear() : onFileChange(null))}
-          className="mt-3 text-xs uppercase tracking-[0.18em] text-slate-500 hover:text-white"
-        >
-          Clear
-        </button>
+      {castPanel ? (
+        <Dialog open={castOpen} onOpenChange={setCastOpen}>
+          <DialogContent className="max-w-2xl border-white/10 bg-slate-950/95 text-white">
+            <DialogHeader>
+              <DialogTitle className="font-display text-xl tracking-[-0.02em]">FUSE Cast</DialogTitle>
+              <DialogDescription className="text-slate-400">
+                Pick who appears in this campaign.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="max-h-[60vh] overflow-y-auto pr-1">{castPanel}</div>
+          </DialogContent>
+        </Dialog>
       ) : null}
+
+      <input
+        ref={inputRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={(event) => onFileChange(event.target.files?.[0] ?? null)}
+      />
     </div>
   );
 }
