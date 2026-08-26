@@ -131,7 +131,8 @@ function serializeGeneration(row: any) {
  * never error_log, never full prompt bodies or reference arrays.
  */
 const LIST_SELECT =
-  "id, status, kind, prompt, output_url, output_type, estimated_credits, estimated_cost_usd, provider_model, favorited, created_at, completed_at";
+  "id, status, kind, prompt, output_url, output_type, preview_url, poster_url, estimated_credits, estimated_cost_usd, provider_model, favorited, created_at, completed_at";
+
 
 function truncatePrompt(prompt: unknown, max = 160): string | null {
   const text = String(prompt ?? "").trim();
