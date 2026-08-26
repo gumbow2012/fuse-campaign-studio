@@ -1414,7 +1414,7 @@ export default function TemplateStudioPage() {
                       <Button
                         onClick={() => void handleRun()}
                         disabled={submitting || isRunning || (!!user && (!requiredInputsAreReady || blockedByCredits))}
-                        className="min-w-[200px] rounded-full bg-cyan-300 text-[12px] font-semibold uppercase tracking-[0.14em] text-slate-950 hover:bg-cyan-200"
+                        className="min-w-[200px] rounded-full bg-cyan-300 font-display text-[12px] font-semibold uppercase tracking-[0.14em] text-slate-950 hover:bg-cyan-200"
                       >
                         {checkingCredits
                           ? "Checking credits..."
