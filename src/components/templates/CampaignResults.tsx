@@ -1,8 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { CheckCircle2, Download, Expand, Film, Heart, Image as ImageIcon, RefreshCw, X } from "lucide-react";
+import OutputRevisionNav from "@/components/templates/OutputRevisionNav";
+import type { OutputRevisionRow } from "@/services/regenerateOutput";
 
 /**
  * TR5 — organized campaign results (COMPLETED state).
+ * TR7 — per-output Regenerate action + revision navigation.
  *
  * Presentation only. Reads nothing but the customer outputs array (plus any
  * category/group metadata the payload already carries) — no template internals.
@@ -24,8 +27,12 @@ export interface CampaignResultsProps {
   onDownload?: (output: CampaignResultOutput, index: number) => void;
   onFavorite?: (output: CampaignResultOutput, index: number) => void;
   isFavorite?: (output: CampaignResultOutput, index: number) => boolean;
-  onRegenerate?: (output: CampaignResultOutput, index: number) => void;
+  /** TR7: receives the output NUMBER; server prices and charges the regen. */
+  onRegenerate?: (outputNumber: number) => void;
+  /** TR7: prior versions per output number (oldest first). */
+  revisionsByOutput?: Map<number, OutputRevisionRow[]>;
 }
+
 
 function useReducedMotion() {
   const [reduced, setReduced] = useState(false);
