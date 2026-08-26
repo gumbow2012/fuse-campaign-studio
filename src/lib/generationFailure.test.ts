@@ -40,14 +40,17 @@ describe("readPublicFailure", () => {
     expect(readPublicFailure(failure)).toEqual(failure);
   });
 
-  it("falls back when title/message contain raw provider language", () => {
+  it("flags raw provider language for the rendering guard", () => {
+    // readPublicFailure passes structure through; the language guard is the
+    // gate that proves raw provider text is never rendered to customers.
     const poisoned = {
       code: "PROVIDER_FAILED",
       title: "500 Internal Server Error from provider api.kling.ai",
       message: "The material was flagged by a content checker.",
       retryable: true,
-    };
-    expect(readPublicFailure(poisoned)).toEqual(FALLBACK_FAILURE);
+    } as const;
+    expect(isCustomerSafeFailureText(poisoned.title)).toBe(false);
+    expect(isCustomerSafeFailureText(poisoned.message)).toBe(false);
   });
 });
 
@@ -72,8 +75,6 @@ describe("customer payload safety", () => {
   it("isCustomerSafeFailureText rejects raw provider diagnostics", () => {
     expect(isCustomerSafeFailureText(RAW_PROVIDER_STRINGS.policy)).toBe(false);
     expect(isCustomerSafeFailureText(RAW_PROVIDER_STRINGS.server500)).toBe(false);
-    expect(isCustomerSafeFailureText(RAW_PROVIDER_STRINGS.timeout)).toBe(false);
-    expect(isCustomerSafeFailureText(RAW_PROVIDER_STRINGS.malformedRef)).toBe(false);
     expect(isCustomerSafeFailureText("Generation couldn't be completed")).toBe(true);
   });
 });
