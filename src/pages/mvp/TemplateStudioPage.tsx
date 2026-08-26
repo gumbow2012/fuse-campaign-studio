@@ -689,6 +689,7 @@ export default function TemplateStudioPage() {
       progress: run.progress ?? 0,
       outputs: Array.isArray(run.outputs) ? run.outputs : [],
       error: run.error ?? undefined,
+      publicFailure: run.publicFailure ?? null,
     });
     window.requestAnimationFrame(() => {
       workspaceSectionRef.current?.scrollIntoView({
@@ -735,6 +736,8 @@ export default function TemplateStudioPage() {
           progress: status.progress ?? 0,
           outputs: Array.isArray(status.outputs) ? status.outputs : [],
           error: status.error ?? undefined,
+          // Keep the classified failure if a later poll omits it.
+          publicFailure: status.publicFailure ?? prev?.publicFailure ?? null,
           publicGraph: status.publicGraph ?? prev?.publicGraph,
           statusMessage: status.statusMessage ?? prev?.statusMessage,
           hasPrivilegedSteps: Array.isArray(status.steps),
