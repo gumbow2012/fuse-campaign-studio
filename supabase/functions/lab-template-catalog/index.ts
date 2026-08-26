@@ -2,6 +2,7 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 
 import { corsHeaders, createAdminClient, errorMessage, json } from "../_shared/supabase-admin.ts";
 import { buildTemplateInputPlan } from "../_shared/template-inputs.ts";
+import { readCastConfig } from "../_shared/cast-config.ts";
 import { getTemplateCreditCost } from "../_shared/template-pricing.ts";
 
 function parseOutputExposed(value: unknown) {
@@ -66,7 +67,7 @@ Deno.serve(async (req) => {
 
     const { data: versions, error: versionError } = await admin
       .from("template_versions")
-      .select("id, template_id, version_number, review_status")
+      .select("id, template_id, version_number, review_status, cast_config")
       .eq("is_active", true);
     if (versionError) throw new Error(versionError.message);
 
@@ -228,6 +229,7 @@ Deno.serve(async (req) => {
           versionId: version.id,
           versionNumber: version.version_number,
           reviewStatus: version.review_status ?? "Unreviewed",
+          castConfig: readCastConfig(version.cast_config),
           createdAt: template?.created_at ?? null,
           previewUrl: cover.url,
           previewAssetType: cover.type,

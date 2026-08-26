@@ -67,8 +67,11 @@ export default function CastSelector({
   selection,
   onSelectionChange,
   slot = PRIMARY_CAST_SLOT,
+  required = false,
 }: {
   userId?: string | null;
+  /** FT8 — mirrors cast_config.required; affects copy only (generation untouched). */
+  required?: boolean;
   selection: CastSelection;
   onSelectionChange: (next: CastSelection) => void;
   slot?: string;
@@ -141,7 +144,12 @@ export default function CastSelector({
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <p className={LABEL}>Cast your campaign</p>
-          <p className="mt-1 text-sm text-slate-400">Pick who appears in this drop.</p>
+          <p className="mt-1 text-sm text-slate-400">
+            Pick who appears in this drop.{" "}
+            <span className="text-[11px] uppercase tracking-[0.16em] text-slate-500">
+              {required ? "Required" : "Optional"}
+            </span>
+          </p>
         </div>
         <Button
           asChild

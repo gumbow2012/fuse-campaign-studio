@@ -22,6 +22,7 @@ import {
 
 import { uploadTemplateCoverAsset, uploadTemplateReferenceAsset } from "../_shared/template-assets.ts";
 import { nextEdgeOrder, sortEdgesByExecutionOrder } from "../_shared/edge-order.ts";
+import { normalizeCastConfig } from "../_shared/cast-config.ts";
 
 
 type Action =
@@ -32,6 +33,7 @@ type Action =
   | "publish_gate"
   | "unpublish_template"
   | "update_template"
+  | "update_cast_config"
   | "add_node"
   | "delete_node"
   | "add_edge"
@@ -1090,6 +1092,38 @@ Deno.serve(async (req) => {
       if (error || !data) throw new Error(error?.message ?? "Template update failed");
       return json({ template: data });
     }
+
+    if (action === "update_cast_config") {
+      const versionId = cleanText(body.versionId);
+      if (!versionId) throw new Error("versionId is required");
+      await assertVersionAccess(admin, access, versionId);
+
+      const { data: versionNodes, error: versionNodesError } = await admin
+        .from("nodes")
+        .select("id")
+        .eq("version_id", versionId);
+      if (versionNodesError) throw new Error(versionNodesError.message);
+      const allowedNodeIds = new Set((versionNodes ?? []).map((node: any) => node.id as string));
+
+      const castConfig = normalizeCastConfig(body.castConfig, allowedNodeIds);
+
+      const { error: castError } = await admin
+        .from("template_versions")
+        .update({ cast_config: castConfig })
+        .eq("id", versionId);
+      if (castError) throw new Error(castError.message);
+
+      await logAuditEvent({
+        eventType: "template_cast_config_updated",
+        message: castConfig ? "Admin updated template cast configuration" : "Admin cleared template cast configuration",
+        source: "admin-template-workbench",
+        versionId,
+        metadata: { adminUserId: user.id, supported: !!castConfig, required: castConfig?.required ?? false },
+      }, admin);
+
+      return json({ castConfig });
+    }
+
 
     if (action === "add_node") {
       const versionId = cleanText(body.versionId);

@@ -746,13 +746,17 @@ export default function TemplateStudioPage() {
   const detailTemplate = templates.find((template) => template.id === detailTemplateId) ?? null;
   const creditShortfall = Math.max(0, creditsRequired - displayedCreditBalance);
   const blockedByCredits = !!user && !isPrivilegedUser && !!profile && creditShortfall > 0;
-  const castEnabled = selectedTemplate?.castConfig?.supported === true;
+  // FT8 — cast metadata comes from the template version's cast_config.
+  // Absent config (every legacy template) keeps the Cast step hidden.
+  const castConfig = selectedTemplate?.castConfig ?? null;
+  const castEnabled = castConfig?.supported === true;
+  const castRequired = castEnabled && castConfig?.required === true;
   const builderSteps = buildCampaignSteps({
     hasRequirements: inputFields.length > 0,
     assetsReady: requiredInputsAreReady,
     canGenerate: requiredInputsAreReady && (isPrivilegedUser || !blockedByCredits),
     castEnabled,
-    castComplete: Boolean(castSelection[PRIMARY_CAST_SLOT]),
+    castComplete: Boolean(castSelection[PRIMARY_CAST_SLOT]) || !castRequired,
   });
 
   const handleTemplateSelect = (templateId: string) => {
@@ -1215,6 +1219,7 @@ export default function TemplateStudioPage() {
 
                   {castEnabled ? (
                     <CastSelector
+                      required={castRequired}
                       userId={user?.id ?? null}
                       selection={castSelection}
                       onSelectionChange={setCastSelection}

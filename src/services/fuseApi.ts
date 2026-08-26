@@ -5,6 +5,7 @@
  * legacy worker only when older internal screens still need it.
  */
 import { supabase } from "@/integrations/supabase/client";
+import { parseCastConfig, type CastConfig } from "@/lib/castConfig";
 import {
   readTemplateAssetRequirement,
   type TemplateAssetRequirement,
@@ -123,6 +124,7 @@ type CatalogTemplate = {
   previewAssetType?: "image" | "video" | null;
   reviewStatus?: string | null;
   createdAt?: string | null;
+  castConfig?: unknown;
 };
 
 type CatalogTemplateInput = {
@@ -173,9 +175,10 @@ export interface ApiTemplate {
   created_at?: string | null;
   /**
    * FT7 — optional cast support flag. Undefined for every template today, so
-   * the Cast step stays skipped. Populated by a later phase (FT8).
+   * the Cast step stays skipped. FT8 populates it from
+   * `template_versions.cast_config` (null/absent = legacy behavior).
    */
-  castConfig?: { supported?: boolean; slots?: number } | null;
+  castConfig?: CastConfig | null;
 }
 
 
@@ -195,6 +198,7 @@ export async function fetchTemplates(token: string): Promise<ApiTemplate[]> {
       : [];
     if (templates.length) {
       return templates.map((template) => ({
+        castConfig: parseCastConfig(template.castConfig),
         counts: {
           inputs: Number(template?.counts?.inputs ?? 0),
           imageOutputs: Number(template?.counts?.imageOutputs ?? 0),
