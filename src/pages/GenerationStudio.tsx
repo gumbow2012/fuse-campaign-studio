@@ -969,6 +969,9 @@ export default function GenerationStudio() {
                 id: rowId,
                 status: (row.status as Generation["status"]) ?? "queued",
                 outputUrl: (row.output_url as string | null) ?? null,
+                previewUrl: (row.preview_url as string | null) ?? null,
+                posterUrl: (row.poster_url as string | null) ?? null,
+
                 outputType: (row.output_type as string | null) ?? null,
                 providerModel: (row.provider_model as string | null) ?? null,
                 estimatedCredits: (row.estimated_credits as number | null) ?? null,
