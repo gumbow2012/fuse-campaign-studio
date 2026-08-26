@@ -615,6 +615,15 @@ async function failJob(
     jobId,
     reason: errorMessage,
   });
+
+  // TR7 — a failed regeneration must not keep the user's credits. Scoped to
+  // regen debits only (type rerun_step + regen marker), never the run debit.
+  try {
+    await refundRegenCreditsIfNeeded(admin, { jobId, reason: errorMessage });
+  } catch (error) {
+    console.error("regen refund failed:", error instanceof Error ? error.message : String(error));
+  }
+
 }
 
 async function completeBlankPromptStep(
