@@ -1,8 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { CheckCircle2, Download, Expand, Film, Heart, Image as ImageIcon, RefreshCw, X } from "lucide-react";
+import OutputRevisionNav from "@/components/templates/OutputRevisionNav";
+import type { OutputRevisionRow } from "@/services/regenerateOutput";
 
 /**
  * TR5 — organized campaign results (COMPLETED state).
+ * TR7 — per-output Regenerate action + revision navigation.
  *
  * Presentation only. Reads nothing but the customer outputs array (plus any
  * category/group metadata the payload already carries) — no template internals.
@@ -24,8 +27,12 @@ export interface CampaignResultsProps {
   onDownload?: (output: CampaignResultOutput, index: number) => void;
   onFavorite?: (output: CampaignResultOutput, index: number) => void;
   isFavorite?: (output: CampaignResultOutput, index: number) => boolean;
-  onRegenerate?: (output: CampaignResultOutput, index: number) => void;
+  /** TR7: receives the output NUMBER; server prices and charges the regen. */
+  onRegenerate?: (outputNumber: number) => void;
+  /** TR7: prior versions per output number (oldest first). */
+  revisionsByOutput?: Map<number, OutputRevisionRow[]>;
 }
+
 
 function useReducedMotion() {
   const [reduced, setReduced] = useState(false);
@@ -79,10 +86,14 @@ export default function CampaignResults({
   onFavorite,
   isFavorite,
   onRegenerate,
+  revisionsByOutput,
 }: CampaignResultsProps) {
   const reducedMotion = useReducedMotion();
   const [lightbox, setLightbox] = useState<{ output: CampaignResultOutput; index: number } | null>(null);
   const groups = useMemo(() => groupCampaignOutputs(outputs), [outputs]);
+  /** Selected version index per output number; defaults to the latest. */
+  const [versionIndex, setVersionIndex] = useState<Record<number, number>>({});
+
 
   if (!outputs.length) return null;
 
@@ -112,6 +123,16 @@ export default function CampaignResults({
                 const label = output.label || `Output ${number}`;
                 const favorite = isFavorite?.(output, index) ?? false;
 
+                // TR7: revisions (oldest first) + the current output as the latest version.
+                const revisions = revisionsByOutput?.get(number) ?? [];
+                const versionCount = revisions.length + 1;
+                const selected = Math.min(versionIndex[number] ?? versionCount - 1, versionCount - 1);
+                const isLatest = selected === versionCount - 1;
+                const revision = isLatest ? null : revisions[selected] ?? null;
+                const shown: CampaignResultOutput = revision?.output_url
+                  ? { ...output, url: revision.output_url, type: revision.output_type || output.type }
+                  : output;
+
                 return (
                   <article
                     key={`${output.url}-${index}`}
@@ -119,13 +140,13 @@ export default function CampaignResults({
                   >
                     <button
                       type="button"
-                      onClick={() => setLightbox({ output, index })}
+                      onClick={() => setLightbox({ output: shown, index })}
                       aria-label={`Expand ${label}`}
                       className="relative block aspect-[9/16] w-full overflow-hidden bg-black"
                     >
-                      {output.type === "video" ? (
+                      {shown.type === "video" ? (
                         <video
-                          src={videoPosterSrc(output.url)}
+                          src={videoPosterSrc(shown.url)}
                           muted
                           playsInline
                           preload="metadata"
@@ -133,7 +154,7 @@ export default function CampaignResults({
                         />
                       ) : (
                         <img
-                          src={output.url}
+                          src={shown.url}
                           alt={label}
                           loading="lazy"
                           decoding="async"
@@ -143,7 +164,7 @@ export default function CampaignResults({
                         />
                       )}
                       <span className="absolute left-2 top-2 rounded-full bg-emerald-400/15 px-2 py-0.5 text-[9px] uppercase tracking-[0.16em] text-emerald-100">
-                        ✓ Ready
+                        {isLatest ? "✓ Ready" : `Version ${selected + 1}`}
                       </span>
                     </button>
 
@@ -153,12 +174,19 @@ export default function CampaignResults({
                         {pad(number)} · {label}
                       </span>
                       <div className="flex items-center gap-1">
+                        <OutputRevisionNav
+                          index={selected}
+                          total={versionCount}
+                          label={label}
+                          onChange={(next) => setVersionIndex((prev) => ({ ...prev, [number]: next }))}
+                        />
                         <button
                           type="button"
-                          onClick={() => setLightbox({ output, index })}
+                          onClick={() => setLightbox({ output: shown, index })}
                           aria-label={`Expand ${label}`}
                           className="rounded-full p-1.5 text-slate-300 hover:bg-white/[0.08]"
                         >
+
                           <Expand className="h-3.5 w-3.5" />
                         </button>
                         {onDownload ? (
@@ -195,13 +223,15 @@ export default function CampaignResults({
                         {onRegenerate ? (
                           <button
                             type="button"
-                            onClick={() => onRegenerate(output, index)}
+                            onClick={() => onRegenerate(number)}
                             aria-label={`Regenerate ${label}`}
+                            title="Regenerate this output"
                             className="rounded-full p-1.5 text-slate-300 hover:bg-white/[0.08]"
                           >
                             <RefreshCw className="h-3.5 w-3.5" />
                           </button>
                         ) : null}
+
                       </div>
                     </div>
                   </article>
