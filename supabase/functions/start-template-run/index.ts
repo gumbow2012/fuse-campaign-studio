@@ -433,12 +433,50 @@ async function handleRunFork(
 
   // 4) CHARGE + RUN — same charge/job/run path as a normal run.
   const inputNodes = compiledNodes.filter((node) => node.node_type === "user_input");
-  const remappedInputs: Record<string, string> = { ...suppliedInputs };
+
+  // TR10b — when the client sends no inputs, reuse the assets from the run this
+  // fork was created from. OWNER-SCOPED: the source job is only read when it
+  // belongs to the authenticated fork owner (.eq("user_id", user.id)).
+  let effectiveInputs = suppliedInputs;
+  if (!Object.keys(effectiveInputs).length) {
+    const sourceJobId = (fork as any).source_job_id
+      ? String((fork as any).source_job_id)
+      : "";
+    if (!sourceJobId) {
+      throw new ForkRunError(
+        "INPUTS_REQUIRED",
+        "Add your assets before running this workflow — there's no earlier run to reuse.",
+      );
+    }
+    const { data: sourceJob, error: sourceJobError } = await admin
+      .from("execution_jobs")
+      .select("id, input_payload")
+      .eq("id", sourceJobId)
+      .eq("user_id", user.id)
+      .maybeSingle();
+    if (sourceJobError) throw new Error(sourceJobError.message);
+    if (!sourceJob) {
+      throw new ForkRunError(
+        "INPUTS_REQUIRED",
+        "Add your assets before running this workflow — the original run is no longer available.",
+      );
+    }
+    effectiveInputs = forkInputsFromSourceJob((sourceJob as any).input_payload);
+    if (!Object.keys(effectiveInputs).length) {
+      throw new ForkRunError(
+        "INPUTS_REQUIRED",
+        "Add your assets before running this workflow.",
+      );
+    }
+  }
+
+  const remappedInputs: Record<string, string> = { ...effectiveInputs };
   for (const node of inputNodes) {
-    const value = suppliedInputs[node.source_node_id] ?? suppliedInputs[node.id] ??
-      suppliedInputs[node.name];
+    const value = effectiveInputs[node.source_node_id] ?? effectiveInputs[node.id] ??
+      effectiveInputs[node.name];
     if (value) remappedInputs[node.id] = value;
   }
+
   const finalInputs = expandInputsForTemplate({
     templateName,
     inputNodes,
