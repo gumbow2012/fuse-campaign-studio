@@ -3183,7 +3183,19 @@ const TemplateCanvas = () => {
                 ) : null}
               </div>
             </div>
+            {canPublishTemplates && detail ? (
+              <div className="mt-4">
+                <CastConfigPanel
+                  nodes={detail.nodes.map((node) => ({ id: node.id, name: node.name, nodeType: node.nodeType }))}
+                  castConfig={parseCastConfig(detail.castConfig)}
+                  saving={mutating === "save-cast-config"}
+                  disabled={!!mutating && mutating !== "save-cast-config"}
+                  onSave={saveCastConfig}
+                />
+              </div>
+            ) : null}
             <div className="mt-4 grid gap-4 xl:grid-cols-12">
+
             <div className="rounded-2xl border border-primary/25 bg-primary/[0.05] p-4 shadow-sm xl:col-span-6">
               <p className="text-xs font-semibold uppercase tracking-[0.15em] text-foreground/80">Manage Existing Template</p>
               <div className="mt-3 space-y-3">
