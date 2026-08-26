@@ -24,6 +24,7 @@ import CreditPackDialog from "@/components/mvp/CreditPackDialog";
 import TemplateDetailDialog, { readTemplateAspectRatio } from "@/components/mvp/TemplateDetailDialog";
 import TemplateInputCard from "@/components/templates/TemplateInputCard";
 import CastSelector, { PRIMARY_CAST_SLOT, type CastSelection } from "@/components/templates/CastSelector";
+import { CampaignBuildGraph, type PublicGraph } from "@/components/templates/CampaignBuildGraph";
 
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
@@ -197,6 +198,9 @@ async function fetchJobStatus(jobId: string) {
     progress?: number;
     outputs?: RunnerOutput[];
     error?: string | null;
+    publicGraph?: PublicGraph;
+    statusMessage?: string;
+    steps?: unknown[];
   };
 }
 
@@ -704,6 +708,9 @@ export default function TemplateStudioPage() {
           progress: status.progress ?? 0,
           outputs: Array.isArray(status.outputs) ? status.outputs : [],
           error: status.error ?? undefined,
+          publicGraph: status.publicGraph,
+          statusMessage: status.statusMessage,
+          hasPrivilegedSteps: Array.isArray(status.steps),
         });
 
         if (!ACTIVE_RUN_STATUSES.has(status.status)) {
