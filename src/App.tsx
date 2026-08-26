@@ -231,6 +231,15 @@ const App = () => (
               }
             />
             <Route
+              path="/admin/fuse-cast"
+              element={
+                <AdminRoute>
+                  <AdminFuseCast />
+                </AdminRoute>
+              }
+            />
+
+            <Route
               path="/admin/audits"
               element={
                 <AdminRoute>
