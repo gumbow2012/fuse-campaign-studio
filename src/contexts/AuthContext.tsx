@@ -7,6 +7,7 @@ interface Profile {
   user_id: string;
   email: string;
   name: string | null;
+  avatar_url: string | null;
   plan: string | null;
   subscription_status: string | null;
   credits_balance: number;
