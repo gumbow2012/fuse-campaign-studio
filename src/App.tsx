@@ -7,6 +7,7 @@ import { AuthProvider } from "@/contexts/AuthContext";
 import { PageTracking } from "@/hooks/usePageTracking";
 import CustomerRoute from "@/components/CustomerRoute";
 import BrandProfilesPage from "@/pages/BrandProfilesPage";
+import AvatarProfilesPage from "@/pages/AvatarProfilesPage";
 import AdminRoute from "@/components/AdminRoute";
 import BuilderRoute from "@/components/BuilderRoute";
 import CreatorRoute from "@/components/CreatorRoute";
@@ -81,6 +82,14 @@ const App = () => (
               element={
                 <CustomerRoute>
                   <BrandProfilesPage />
+                </CustomerRoute>
+              }
+            />
+            <Route
+              path="/app/avatars"
+              element={
+                <CustomerRoute>
+                  <AvatarProfilesPage />
                 </CustomerRoute>
               }
             />
