@@ -108,6 +108,38 @@ export async function deleteBrandProfile(id: string): Promise<void> {
   if (error) throw error;
 }
 
+/** Active brand pointer lives on the caller's own profiles row. */
+export async function getActiveBrandId(): Promise<string | null> {
+  try {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) return null;
+    const { data, error } = await looseTable("profiles")
+      .select("active_brand_id")
+      .eq("user_id", user.id)
+      .maybeSingle();
+    if (error) throw error;
+    const value = data?.active_brand_id;
+    return typeof value === "string" && value ? value : null;
+  } catch (error) {
+    console.warn("active_brand_id unavailable:", error);
+    return null;
+  }
+}
+
+export async function setActiveBrand(brandId: string): Promise<void> {
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) throw new Error("Sign in to switch brands.");
+  const { error } = await looseTable("profiles")
+    .update({ active_brand_id: brandId })
+    .eq("user_id", user.id);
+  if (error) throw error;
+}
+
+
 /** Brand images usable as template inputs (logos, tagged by role). */
 export function brandProfileAssets(brand: BrandProfile): { role: string; url: string }[] {
   const assets: { role: string; url: string }[] = [];
