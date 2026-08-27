@@ -421,6 +421,10 @@ export default function TemplateStudioPage() {
   /** FT4: assets picked from the reusable library (already stored URLs). */
   const [libraryAssets, setLibraryAssets] = useState<Record<string, { url: string; name?: string | null } | null>>({});
   const [textInputs, setTextInputs] = useState<Record<string, string>>({});
+  /** Phase 10: keys filled by brand autofill → the brand they came from. */
+  const [autofilledKeys, setAutofilledKeys] = useState<Record<string, string>>({});
+  const autofillAppliedRef = useRef<string>("");
+
   const [jobId, setJobId] = useState<string | null>(null);
   const [creatingFork, setCreatingFork] = useState(false);
   const [workflowUpgradeDialogOpen, setWorkflowUpgradeDialogOpen] = useState(false);
