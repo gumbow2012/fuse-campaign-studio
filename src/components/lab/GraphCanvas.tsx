@@ -48,7 +48,20 @@ export type GraphCanvasNodeData = {
   deliverable: boolean | null;
   promptValue?: string;
   portIds: string[];
+  /** Presentation-only persisted artifacts (private fork editor). */
+  media?: {
+    output: { url: string; type: "image" | "video" } | null;
+    references: Array<{
+      url: string;
+      type: "image" | "video";
+      role?: "start" | "end";
+      label?: string;
+    }>;
+    unavailable?: boolean;
+  } | null;
+  onOpenMedia?: (url: string, type: "image" | "video") => void;
   isReference?: boolean;
+
   uploadingReference?: boolean;
   onAddPort?: (nodeId: string, type: PortType) => void;
   onPromptCommit?: (nodeId: string, prompt: string) => void;
