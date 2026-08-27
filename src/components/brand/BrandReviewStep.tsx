@@ -5,7 +5,7 @@
  * No readiness rules, billing or generation logic live here.
  */
 
-import { Globe, Loader2, Sparkles } from "lucide-react";
+import { Check, Globe, Loader2, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { CARD, LABEL } from "@/components/brand/BrandEditors";
 import { CastPortrait } from "@/components/cast/CastLibrary";
