@@ -1075,6 +1075,9 @@ export default function TemplateStudioPage() {
     setInputsExpanded(false);
     setResult(null);
     setCastSelection({});
+    setAutofilledKeys({});
+    autofillAppliedRef.current = "";
+
     if (window.matchMedia("(max-width: 1279px)").matches) {
       window.requestAnimationFrame(() => {
         runnerSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
