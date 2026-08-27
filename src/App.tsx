@@ -79,6 +79,7 @@ const App = () => (
         <Sonner />
         <BrowserRouter>
           <PageTracking />
+          <PageViewTracker />
           <CreditTopUpSuccessWatcher />
           <Routes>
             <Route path="/" element={<HomePage />} />
