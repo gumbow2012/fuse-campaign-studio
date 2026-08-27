@@ -86,7 +86,9 @@ export default function TemplateInputCard({
   highlighted = false,
   displayLabel,
   castPanel,
+  sourceNote,
 }: TemplateInputCardProps) {
+
   const inputRef = useRef<HTMLInputElement>(null);
   /*
    * Local validation state machine: idle → validating → checking → ready|warning|error.
