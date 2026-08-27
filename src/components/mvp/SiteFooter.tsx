@@ -43,7 +43,7 @@ const COLUMNS: Array<{ title: string; links: Array<{ label: string; to: string }
 export default function SiteFooter() {
   return (
     <footer className="relative border-t border-white/10 bg-background/40 py-10">
-      <div className="container grid gap-8 md:grid-cols-[1.4fr_repeat(3,1fr)]">
+      <div className="container grid gap-8 md:grid-cols-[1.4fr_repeat(4,1fr)]">
         <div className="space-y-3">
           <Link to="/" className={cn("inline-flex items-center gap-2.5 rounded-xl", focusRing)} aria-label="FUSE home">
             <img src={FUSE_ICON_SRC} alt="" className="h-8 w-8 rounded-xl object-contain" />

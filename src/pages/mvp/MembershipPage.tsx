@@ -11,6 +11,7 @@ import CreditTopUpModule from "@/components/mvp/membership/CreditTopUpModule";
 import CreditMixCalculator from "@/components/mvp/membership/CreditMixCalculator";
 import PlanComparisonMatrix from "@/components/mvp/membership/PlanComparisonMatrix";
 import CreditsOverviewCard from "@/components/mvp/membership/CreditsOverviewCard";
+import EarnCreditsCard from "@/components/mvp/membership/EarnCreditsCard";
 import CreditUsageHistory from "@/components/mvp/membership/CreditUsageHistory";
 import UsageProjectionPanel from "@/components/mvp/membership/UsageProjectionPanel";
 import PromoCodeEntry from "@/components/mvp/membership/PromoCodeEntry";
@@ -155,7 +156,7 @@ export default function MembershipPage() {
         ) : null}
 
         {activeTab === "credits" ? (
-          <div className="mt-6">
+          <div className="mt-6 space-y-6">
             {hasActivePaidMembership || isAdmin ? (
               <section className="rounded-[2rem] border border-white/10 bg-white/[0.03] p-6 md:p-8">
                 <p className="text-[11px] uppercase tracking-[0.24em] text-muted-foreground">Top up credits</p>
@@ -211,6 +212,7 @@ export default function MembershipPage() {
         {activeTab === "usage" ? (
           <div className="mt-6 space-y-6">
             <CreditsOverviewCard buyCreditsHref="/membership?tab=credits" />
+            <EarnCreditsCard />
             <UsageProjectionPanel onNavigateTab={selectTab} />
             <CreditUsageHistory />
 
