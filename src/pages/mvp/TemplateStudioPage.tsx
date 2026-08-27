@@ -2133,7 +2133,11 @@ export default function TemplateStudioPage() {
                               // asset survives an OAuth redirect. No generation starts.
                               if (!user) {
                                 if (!nextFile) {
-                                  setAnonUploads((current) => ({ ...current, [field.key]: undefined as never }));
+                                  setAnonUploads((current) => {
+                                    const next = { ...current };
+                                    delete next[field.key];
+                                    return next;
+                                  });
                                   return;
                                 }
                                 setAnonUploads((current) => ({
@@ -2174,7 +2178,11 @@ export default function TemplateStudioPage() {
                             onClear={() => {
                               setFiles((current) => ({ ...current, [field.key]: null }));
                               setLibraryAssets((current) => ({ ...current, [field.key]: null }));
-                              setAnonUploads((current) => ({ ...current, [field.key]: undefined as never }));
+                              setAnonUploads((current) => {
+                                    const next = { ...current };
+                                    delete next[field.key];
+                                    return next;
+                                  });
                               releaseAutofill(field.key);
                             }}
                           />
