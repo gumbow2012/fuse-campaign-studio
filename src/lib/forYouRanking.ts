@@ -2,7 +2,7 @@
  * RETENTION P3 — deterministic "For you" ordering.
  *
  * No ML, no fabricated affinity. Every point comes from a real signal:
- *   A  brand compatibility (existing TemplateFit resolver)   ready +6, nearly +3
+ *   A  brand compatibility (existing TemplateFit resolver)   ready +6, one gap left +3
  *   B  favorite affinity (shared category / tags)            category +4, per tag +2 (max +4)
  *   C  popularity (public_template_popularity RPC runs)      +0..3, log-scaled
  *   D  recency (created_at)                                  <=14d +2, <=45d +1
@@ -78,7 +78,8 @@ export function rankForYou(inputs: ForYouInputs): { mode: ForYouMode; entries: F
     if (fit?.status === "ready") {
       score += 6;
       personalized = true;
-    } else if (fit?.status === "nearly") {
+    } else if (fit?.status === "missing" && (fit.gaps?.length ?? 0) === 1) {
+      /* nearly-runnable: exactly one real missing requirement. */
       score += 3;
       personalized = true;
     }
