@@ -29,6 +29,7 @@ import {
   writePlanChoice,
 } from "@/lib/onboardingPlanOffer";
 import { track } from "@/lib/analytics/track";
+import { setPlanOfferActive } from "@/lib/planOfferVisibility";
 
 const WELCOME_CREDITS = 100;
 /** A "genuinely new" account — the offer is an onboarding step, not a nag. */
@@ -115,6 +116,12 @@ export default function PlanOfferModal() {
       cancelled = true;
     };
   }, [isNewAccount, profile, user?.id]);
+
+  // P6b — while this offer is on screen the builder must not auto-run.
+  useEffect(() => {
+    setPlanOfferActive(open);
+    return () => setPlanOfferActive(false);
+  }, [open]);
 
   const close = () => {
     setOpen(false);

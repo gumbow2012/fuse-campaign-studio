@@ -52,7 +52,16 @@ import CreditConfirmModal from "@/components/CreditConfirmModal";
 import { trackEvent } from "@/lib/metaPixel";
 import { track } from "@/lib/analytics/track";
 import GenerateAuthGateModal from "@/components/auth/GenerateAuthGateModal";
-import { setPendingGenerationIntent } from "@/lib/pendingGenerationIntent";
+import {
+  clearPendingGenerationIntent,
+  getPendingGenerationIntent,
+  intentSignature,
+  markPendingGenerationConsumed,
+  pendingGenerationConsumed,
+  setPendingGenerationIntent,
+  type PendingGenerationIntent,
+} from "@/lib/pendingGenerationIntent";
+import { isPlanOfferActive, subscribePlanOffer } from "@/lib/planOfferVisibility";
 import { loadTemplatePerformance, type TemplatePerformanceMap } from "@/services/templatePerformance";
 import { PerformanceBlock, PerformanceBadges, PerformanceDisclaimer } from "@/components/TemplatePerformance";
 import FilterDropdown, { type FilterOption } from "@/components/templates/FilterDropdown";
@@ -1269,19 +1278,19 @@ export default function TemplateStudioPage() {
       setPendingGenerationIntent({
         templateId: String(selectedTemplate.id),
         versionId: selectedTemplate.versionId ?? null,
-        textInputs: { ...textInputs },
+        // P6a temp public URLs — the uploads survive the OAuth round-trip.
+        inputs: Object.entries(anonUploads)
+          .filter(([, entry]) => entry.status === "ready" && entry.url)
+          .map(([slotKey, entry]) => ({ slotKey, tempUrl: String(entry.url) })),
+        textOverrides: { ...textInputs },
         selectedOptions: {},
-        cast: Object.fromEntries(
+        selectedCast: Object.fromEntries(
           Object.entries(castSelection).filter(([, value]) => Boolean(value)),
         ) as Record<string, string>,
-        pendingFileKeys: Object.entries(files)
-          .filter(([, file]) => Boolean(file))
-          .map(([key]) => key),
         returnTo: gateReturnTo,
         creditCost: isPrivilegedUser ? 0 : creditsRequired,
-        capturedAt: Date.now(),
-
       });
+
     }
     track("generate_auth_gate_shown", {
       templateId: selectedTemplate ? String(selectedTemplate.id) : null,
@@ -1530,6 +1539,119 @@ export default function TemplateStudioPage() {
 
   };
 
+  /* ------------------------------------------------------------------
+   * P6b — post-auth restoration + auto-run.
+   * The intent captured at gate-open is rehydrated into the builder, then the
+   * run starts through the normal authenticated path (once, if affordable).
+   * ------------------------------------------------------------------ */
+  const restoredIntentRef = useRef<string | null>(null);
+  const [autoRunIntent, setAutoRunIntent] = useState<PendingGenerationIntent | null>(null);
+  const [restoreAfford, setRestoreAfford] = useState<{ required: number; available: number } | null>(null);
+  const [planOfferOpen, setPlanOfferOpen] = useState(() => isPlanOfferActive());
+
+  useEffect(() => {
+    const unsubscribe = subscribePlanOffer(setPlanOfferOpen);
+    return () => {
+      unsubscribe();
+    };
+  }, []);
+
+
+  useEffect(() => {
+    if (!user || !templates.length) return;
+    const intent = getPendingGenerationIntent();
+    if (!intent) return;
+    const signature = intentSignature(intent);
+    if (restoredIntentRef.current === signature) return;
+    if (pendingGenerationConsumed(intent)) {
+      restoredIntentRef.current = signature;
+      return;
+    }
+    const match = templates.find(
+      (template) => template.id.toLowerCase() === intent.templateId.toLowerCase(),
+    );
+    if (!match) return;
+
+    restoredIntentRef.current = signature;
+    setSelectedTemplateId(match.id);
+    if (Object.keys(intent.textOverrides).length) {
+      setTextInputs((current) => ({ ...current, ...intent.textOverrides }));
+    }
+    if (Object.keys(intent.selectedOptions).length) {
+      setTextInputs((current) => ({ ...current, ...intent.selectedOptions }));
+    }
+    if (Object.keys(intent.selectedCast).length) {
+      setCastSelection((current) => ({ ...current, ...intent.selectedCast }) as CastSelection);
+    }
+    if (intent.inputs.length) {
+      // The anon-temp assets are public URLs the authenticated run can read —
+      // they slot in exactly like a saved library asset (no re-upload needed).
+      setLibraryAssets((current) => {
+        const next = { ...current };
+        for (const input of intent.inputs) next[input.slotKey] = { url: input.tempUrl, name: "Saved upload" };
+        return next;
+      });
+      setFiles({});
+      setAnonUploads({});
+    }
+    track("pending_generation_restored", {
+      template_id: match.id,
+      assets: intent.inputs.length,
+    });
+    setAutoRunIntent(intent);
+  }, [templates, user]);
+
+  useEffect(() => {
+    if (!autoRunIntent || !user) return;
+    // Sequence: auth → (plan offer) → restore + auto-run.
+    if (planOfferOpen) return;
+    if (!selectedTemplate || selectedTemplate.id.toLowerCase() !== autoRunIntent.templateId.toLowerCase()) return;
+    if (!isPrivilegedUser && !profile) return;
+    if (submitting || jobId) return;
+
+    const consume = () => {
+      markPendingGenerationConsumed(autoRunIntent);
+      setAutoRunIntent(null);
+    };
+
+    if (!selectedTemplate.versionId || !requiredInputsAreReady) {
+      // Restored, but not runnable without more input — never auto-run blind.
+      consume();
+      return;
+    }
+
+    const required = isPrivilegedUser ? 0 : creditsRequired;
+    const available = isPrivilegedUser ? required : displayedCreditBalance;
+    if (required > available) {
+      consume();
+      setRestoreAfford({ required, available });
+      return;
+    }
+
+    consume();
+    clearPendingGenerationIntent();
+    toast({
+      title: "✓ Account ready — Generating your campaign…",
+      description: `${selectedTemplate.name} is starting now.`,
+    });
+    track("first_generation_started", { template_id: selectedTemplate.id, credits: required });
+    void handleRun();
+  }, [
+    autoRunIntent,
+    creditsRequired,
+    displayedCreditBalance,
+    isPrivilegedUser,
+    jobId,
+    planOfferOpen,
+    profile,
+    requiredInputsAreReady,
+    selectedTemplate,
+    submitting,
+    user,
+  ]);
+
+
+
   const isRunning = result?.status === "queued" || result?.status === "running" || result?.status === "video_pending";
 
   return (
@@ -1587,6 +1709,31 @@ export default function TemplateStudioPage() {
         ) : null}
 
 
+
+        {/* P6b — truthful affordability state after a restored pending run. */}
+        {restoreAfford ? (
+          <div className="mt-6 rounded-[1.5rem] border border-amber-300/25 bg-amber-300/[0.07] p-5">
+            <p className="font-display text-sm font-bold uppercase tracking-[0.18em] text-amber-100">
+              Your account is ready
+            </p>
+            <p className="mt-2 text-sm leading-6 text-amber-50/90">
+              {restoreAfford.available.toLocaleString()} credits available. This campaign requires{" "}
+              {restoreAfford.required.toLocaleString()} credits. Your uploads and setup are saved.
+            </p>
+            <div className="mt-4 flex flex-wrap gap-2">
+              <Button asChild className="rounded-full bg-cyan-300 px-5 font-semibold text-slate-950 hover:bg-cyan-200">
+                <Link to="/app/membership">View Starter</Link>
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => setRestoreAfford(null)}
+                className="rounded-full border-white/15 bg-white/5 text-foreground hover:bg-white/10"
+              >
+                Explore free templates
+              </Button>
+            </div>
+          </div>
+        ) : null}
 
         {!hasActiveCampaignWorkspace ? (
           <BrandActivationBanner surface="marketplace" className="mt-6" />
