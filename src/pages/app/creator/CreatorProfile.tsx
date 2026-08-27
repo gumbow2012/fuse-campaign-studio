@@ -15,6 +15,7 @@ import { ExternalLink, Instagram, MapPin, Music2, Pencil } from "lucide-react";
 import SiteShell from "@/components/mvp/SiteShell";
 import PageMeta from "@/components/mvp/PageMeta";
 import { Button } from "@/components/ui/button";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAuth } from "@/contexts/AuthContext";
 import { accentStyle, resolveAccent } from "@/lib/creatorAccents";
 import { CreatorPerformanceProof } from "@/components/CreatorPerformance";
@@ -293,93 +294,136 @@ export default function CreatorProfile() {
               </div>
             </header>
 
-            {profile.bio ? <p className="max-w-2xl text-sm text-foreground/90">{profile.bio}</p> : null}
+            <Tabs defaultValue="templates" className="pt-2">
+              <TabsList className="w-full justify-start gap-1 rounded-full border border-white/10 bg-white/[0.03] p-1 sm:w-auto">
+                <TabsTrigger
+                  value="templates"
+                  className="rounded-full px-4 text-[10px] uppercase tracking-[0.16em]"
+                >
+                  Templates
+                </TabsTrigger>
+                <TabsTrigger
+                  value="about"
+                  className="rounded-full px-4 text-[10px] uppercase tracking-[0.16em]"
+                >
+                  About
+                </TabsTrigger>
+              </TabsList>
 
-            {profile.specialties.length ? (
-              <div className="flex flex-wrap gap-2">
-                {profile.specialties.map((specialty) => (
-                  <span
-                    key={specialty}
-                    className="rounded-full border px-3 py-1 text-xs"
-                    style={{
-                      borderColor: `rgba(var(--creator-accent-rgb), 0.45)`,
-                      backgroundColor: `rgba(var(--creator-accent-rgb), 0.1)`,
-                      color: "var(--creator-accent)",
-                    }}
-                  >
-                    {specialty}
-                  </span>
-                ))}
-              </div>
-            ) : null}
-
-            {/* REAL metrics only */}
-            <div className="flex flex-wrap gap-6 rounded-xl border border-white/10 bg-white/[0.02] p-4 text-sm">
-              <div>
-                <p className="text-lg font-semibold">{templateCount ?? "—"}</p>
-                <p className="text-xs text-muted-foreground">Templates published</p>
-              </div>
-              <div>
-                <p className="text-lg font-semibold">{social ? followerCount.toLocaleString() : "—"}</p>
-                <p className="text-xs text-muted-foreground">
-                  {followerCount === 1 ? "Follower" : "Followers"}
-                </p>
-              </div>
-              {joined ? (
-                <div>
-                  <p className="text-lg font-semibold">{joined}</p>
-                  <p className="text-xs text-muted-foreground">On FUSE since</p>
+              <TabsContent value="templates" className="mt-6 space-y-6">
+                {/* REAL metrics only */}
+                <div className="flex flex-wrap gap-6 rounded-xl border border-white/10 bg-white/[0.02] p-4 text-sm">
+                  <div>
+                    <p className="text-lg font-semibold">{templateCount ?? "—"}</p>
+                    <p className="text-xs text-muted-foreground">Templates published</p>
+                  </div>
+                  <div>
+                    <p className="text-lg font-semibold">
+                      {social ? followerCount.toLocaleString() : "—"}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {followerCount === 1 ? "Follower" : "Followers"}
+                    </p>
+                  </div>
+                  {joined ? (
+                    <div>
+                      <p className="text-lg font-semibold">{joined}</p>
+                      <p className="text-xs text-muted-foreground">On FUSE since</p>
+                    </div>
+                  ) : null}
                 </div>
-              ) : null}
-            </div>
 
-            <CreatorPerformanceProof aggregate={performance} />
+                <CreatorPerformanceProof aggregate={performance} />
 
+                <Button asChild variant="outline" className="rounded-full border-white/15 bg-white/5">
+                  <Link to={`/app/templates?creator=${profile.handle}`}>
+                    Browse published templates
+                  </Link>
+                </Button>
+              </TabsContent>
 
+              <TabsContent value="about" className="mt-6 space-y-6">
+                {profile.bio ? (
+                  <p className="max-w-2xl text-sm text-foreground/90">{profile.bio}</p>
+                ) : null}
 
-            {profile.description ? (
-              <section className="space-y-3">
-                <div
-                  className="h-px w-full"
-                  style={{
-                    background: `linear-gradient(90deg, rgba(var(--creator-accent-rgb),0.7), transparent)`,
-                  }}
-                />
-                <h2 className="text-xs uppercase tracking-[0.2em] text-muted-foreground">About</h2>
-                <p className="max-w-2xl whitespace-pre-wrap text-sm text-foreground/85">
-                  {profile.description}
-                </p>
-              </section>
-            ) : null}
+                {profile.location ? (
+                  <p className="flex items-center gap-1 text-xs text-muted-foreground">
+                    <MapPin className="h-3.5 w-3.5" /> {profile.location}
+                  </p>
+                ) : null}
 
-            {socials.length ? (
-              <section className="space-y-3">
-                <div
-                  className="h-px w-full"
-                  style={{
-                    background: `linear-gradient(90deg, rgba(var(--creator-accent-rgb),0.7), transparent)`,
-                  }}
-                />
-                <h2 className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Links</h2>
-                <div className="flex flex-wrap gap-2">
-                  {(socials as Array<{ key: string; label: string; href: string; icon: typeof Instagram }>).map(
-                    (social) => (
-                      <a
-                        key={social.key}
-                        href={social.href}
-                        target="_blank"
-                        rel="noreferrer noopener"
-                        className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.03] px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:text-foreground"
-                        style={{ borderColor: `rgba(var(--creator-accent-rgb), 0.28)` }}
+                {profile.specialties.length ? (
+                  <div className="flex flex-wrap gap-2">
+                    {profile.specialties.map((specialty) => (
+                      <span
+                        key={specialty}
+                        className="rounded-full border px-3 py-1 text-xs"
+                        style={{
+                          borderColor: `rgba(var(--creator-accent-rgb), 0.45)`,
+                          backgroundColor: `rgba(var(--creator-accent-rgb), 0.1)`,
+                          color: "var(--creator-accent)",
+                        }}
                       >
-                        <social.icon className="h-3.5 w-3.5" style={{ color: "var(--creator-accent)" }} />
-                        {social.label}
-                      </a>
-                    ),
-                  )}
-                </div>
-              </section>
-            ) : null}
+                        {specialty}
+                      </span>
+                    ))}
+                  </div>
+                ) : null}
+
+                {profile.description ? (
+                  <section className="space-y-3">
+                    <div
+                      className="h-px w-full"
+                      style={{
+                        background: `linear-gradient(90deg, rgba(var(--creator-accent-rgb),0.7), transparent)`,
+                      }}
+                    />
+                    <h2 className="text-xs uppercase tracking-[0.2em] text-muted-foreground">About</h2>
+                    <p className="max-w-2xl whitespace-pre-wrap text-sm text-foreground/85">
+                      {profile.description}
+                    </p>
+                  </section>
+                ) : null}
+
+                {socials.length ? (
+                  <section className="space-y-3">
+                    <div
+                      className="h-px w-full"
+                      style={{
+                        background: `linear-gradient(90deg, rgba(var(--creator-accent-rgb),0.7), transparent)`,
+                      }}
+                    />
+                    <h2 className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Links</h2>
+                    <div className="flex flex-wrap gap-2">
+                      {(
+                        socials as Array<{
+                          key: string;
+                          label: string;
+                          href: string;
+                          icon: typeof Instagram;
+                        }>
+                      ).map((social) => (
+                        <a
+                          key={social.key}
+                          href={social.href}
+                          target="_blank"
+                          rel="noreferrer noopener"
+                          className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.03] px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:text-foreground"
+                          style={{ borderColor: `rgba(var(--creator-accent-rgb), 0.28)` }}
+                        >
+                          <social.icon
+                            className="h-3.5 w-3.5"
+                            style={{ color: "var(--creator-accent)" }}
+                          />
+                          {social.label}
+                        </a>
+                      ))}
+                    </div>
+                  </section>
+                ) : null}
+              </TabsContent>
+            </Tabs>
           </>
         )}
       </div>
