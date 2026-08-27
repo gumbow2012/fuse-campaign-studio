@@ -558,6 +558,18 @@ export default function BrandProfilesPage() {
               <p className="text-sm text-slate-500">Nothing here yet — add a garment or product to reuse it later.</p>
             )}
           </TabsContent>
+
+          <TabsContent value="models" className="mt-6">
+            <BrandModelsPanel
+              avatars={avatars}
+              loading={avatarsQuery.isLoading}
+              activeBrand={activeBrand}
+            />
+          </TabsContent>
+
+          <TabsContent value="library" className="mt-6">
+            <BrandLibraryPanel assets={libraryAssets} loading={libraryQuery.isLoading} />
+          </TabsContent>
         </Tabs>
       </main>
     </div>
