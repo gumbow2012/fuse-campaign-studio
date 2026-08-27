@@ -1768,6 +1768,22 @@ export default function TemplateStudioPage() {
           </div>
         ) : null}
 
+        {/* RETENTION P2 — continue creating (real runs only; hidden when none). */}
+        {user && !hasActiveCampaignWorkspace ? (
+          <ContinueCreatingStrip
+            className="mt-6"
+            campaigns={recentRuns}
+            previewUrlForTemplate={previewUrlForTemplate}
+            templateIdForRun={(run) =>
+              templates.find(
+                (template) => template.name.toLowerCase() === (run.templateName ?? "").toLowerCase(),
+              )?.id ?? null
+            }
+            onOpenRun={handleOpenHistoricalRun}
+            onRunAgain={handleRemixCampaign}
+          />
+        ) : null}
+
 
 
         {/* P6b — truthful affordability state after a restored pending run. */}
