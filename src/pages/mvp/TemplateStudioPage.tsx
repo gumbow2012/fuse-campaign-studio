@@ -77,6 +77,13 @@ import CampaignHistoryLauncher from "@/components/campaigns/CampaignHistoryLaunc
 import CampaignHistoryDrawer from "@/components/campaigns/CampaignHistoryDrawer";
 import { useCampaignHistory } from "@/hooks/useCampaignHistory";
 
+/**
+ * Temporary marketplace simplification: hides the output-type tabs, performance
+ * filter chips and category dropdown from the customer UI. All filtering logic,
+ * metadata and performance data stay intact — flip to `true` to reintroduce.
+ */
+const SHOW_MARKETPLACE_FILTERS = false;
+
 type RunnerStatus = "queued" | "running" | "video_pending" | "complete" | "failed";
 
 
