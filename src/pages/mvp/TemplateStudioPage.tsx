@@ -615,9 +615,17 @@ export default function TemplateStudioPage() {
     return { all: templates.length, image, video };
   }, [templates]);
 
+  /** RETENTION P1 — favorites (separate from the hidden filter block). */
+  const { canFavorite, isFavorite, toggleFavorite, favoriteCount } = useTemplateFavorites();
+  const [favoritesOnly, setFavoritesOnly] = useState(false);
+  useEffect(() => {
+    if (!canFavorite && favoritesOnly) setFavoritesOnly(false);
+  }, [canFavorite, favoritesOnly]);
+
   const visibleTemplates = useMemo(() => {
-    if (!activeFilterCount && outputTypeFilter === "all") return templates;
-    return templates.filter((template) => {
+    const base = favoritesOnly ? templates.filter((template) => isFavorite(String(template.id))) : templates;
+    if (!activeFilterCount && outputTypeFilter === "all") return base;
+    return base.filter((template) => {
       if (outputTypeFilter !== "all") {
         const isVideo = (template.output_type ?? "").toLowerCase() === "video";
         if (outputTypeFilter === "video" ? !isVideo : isVideo) return false;
@@ -634,7 +642,8 @@ export default function TemplateStudioPage() {
       }
       return true;
     });
-  }, [activeFilterCount, outputTypeFilter, perfFilters, performanceMap, templates]);
+  }, [activeFilterCount, favoritesOnly, isFavorite, outputTypeFilter, perfFilters, performanceMap, templates]);
+
 
 
   // TR10b — deep-link straight into the running workspace for a specific run
