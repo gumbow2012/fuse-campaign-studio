@@ -207,10 +207,10 @@ export default function BrandProfilesPage() {
   );
 
   // Every card below is derived from real rows only — nothing is assumed.
-  const completion = useMemo(() => {
-    const metadata = (activeBrand?.metadata ?? null) as Record<string, unknown> | null;
-    const visualStyle = metadata?.visualStyle;
-    return {
+  const onboarding = useMemo(() => readOnboarding(activeBrand), [activeBrand]);
+  const visualStyle = useMemo(() => readVisualStyle(activeBrand), [activeBrand]);
+  const completion = useMemo(
+    () => ({
       identity: Boolean(
         activeBrand?.name &&
           (activeBrand.primary_logo_url || activeBrand.secondary_logo_url) &&
@@ -218,10 +218,12 @@ export default function BrandProfilesPage() {
       ),
       products: brandProducts.length > 0,
       models: avatars.length > 0,
-      visualStyle: Boolean(visualStyle && (typeof visualStyle !== "object" || Object.keys(visualStyle as object).length)),
+      visualStyle: Boolean(visualStyle && (visualStyle.tags.length > 0 || visualStyle.tone.trim().length > 0)),
       assets: libraryAssets.length > 0,
-    };
-  }, [activeBrand, brandProducts.length, avatars.length, libraryAssets.length]);
+    }),
+    [activeBrand, brandProducts.length, avatars.length, libraryAssets.length, visualStyle],
+  );
+
 
   const doneCount = Object.values(completion).filter(Boolean).length;
 
