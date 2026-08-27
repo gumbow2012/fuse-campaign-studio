@@ -8,6 +8,7 @@ import {
   Network,
   ArrowDownWideNarrow,
   ChevronDown,
+  Check,
   Gauge,
   Pencil,
   Plus,
@@ -35,6 +36,7 @@ import {
   VIRAL_SCORE_DISCLAIMER,
   type ViralFactor,
 } from "@/lib/templateFactory/viralScore";
+import QuickPublishButton from "@/components/lab/QuickPublishButton";
 import { supabase } from "@/integrations/supabase/client";
 import {
   analyzeStreetwearReference,
@@ -194,6 +196,101 @@ function BlueprintPanel({
           </span>
         ) : null}
       </div>
+    </div>
+  );
+}
+
+/** TF4 — reference pipeline stages, derived only from real data. */
+const REFERENCE_STAGES = [
+  { key: "reference", label: "Reference" },
+  { key: "analyzed", label: "Analyzed" },
+  { key: "scored", label: "Scored" },
+  { key: "compiled", label: "Compiled" },
+  { key: "published", label: "Live" },
+] as const;
+
+type ReferenceStageKey = (typeof REFERENCE_STAGES)[number]["key"];
+
+type ReferencePipeline = {
+  analyzed: boolean;
+  scored: boolean;
+  compiled: boolean;
+  published: boolean;
+  template: WorkbenchTemplate | null;
+  activeVersion: WorkbenchVersion | null;
+  draftVersion: WorkbenchVersion | null;
+  done: Record<ReferenceStageKey, boolean>;
+};
+
+function referencePipeline(
+  reference: StreetwearReference,
+  template: WorkbenchTemplate | null,
+): ReferencePipeline {
+  const analyzed = !!reference.blueprint;
+  const scored = typeof reference.viral_score === "number";
+  const compiled = !!reference.compiled_template_id;
+  const activeVersion = template?.versions.find((version) => version.is_active) ?? null;
+  const draftVersion = activeVersion ?? template?.versions[0] ?? null;
+  // Published is truthful: the compiled template must actually have an active version.
+  const published = compiled && !!activeVersion;
+  return {
+    analyzed,
+    scored,
+    compiled,
+    published,
+    template,
+    activeVersion,
+    draftVersion,
+    done: { reference: true, analyzed, scored, compiled, published },
+  };
+}
+
+type StageFilter = "all" | "needs_analysis" | "ready_to_compile" | "compiled" | "live";
+
+const STAGE_FILTERS: Array<{ key: StageFilter; label: string }> = [
+  { key: "all", label: "All" },
+  { key: "needs_analysis", label: "Needs analysis" },
+  { key: "ready_to_compile", label: "Ready to compile" },
+  { key: "compiled", label: "Compiled / unpublished" },
+  { key: "live", label: "Live" },
+];
+
+function matchesStageFilter(pipeline: ReferencePipeline, filter: StageFilter): boolean {
+  switch (filter) {
+    case "needs_analysis":
+      return !pipeline.analyzed;
+    case "ready_to_compile":
+      return pipeline.analyzed && !pipeline.compiled;
+    case "compiled":
+      return pipeline.compiled && !pipeline.published;
+    case "live":
+      return pipeline.published;
+    default:
+      return true;
+  }
+}
+
+function PipelineTrack({ done }: { done: Record<ReferenceStageKey, boolean> }) {
+  return (
+    <div className="mt-4 flex flex-wrap items-center gap-1.5">
+      {REFERENCE_STAGES.map((stage, index) => {
+        const complete = done[stage.key];
+        return (
+          <div key={stage.key} className="flex items-center gap-1.5">
+            {index > 0 ? <span className="h-px w-3 bg-white/15" aria-hidden /> : null}
+            <span
+              className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] ${
+                complete
+                  ? "border-cyan-300/35 bg-cyan-300/10 text-cyan-100"
+                  : "border-white/10 bg-white/[0.03] text-muted-foreground"
+              }`}
+            >
+              {complete ? <Check className="h-3 w-3" /> : null}
+              {stage.label}
+            </span>
+          </div>
+        );
+      })}
     </div>
   );
 }
