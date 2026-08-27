@@ -261,6 +261,29 @@ export default function AdminTemplateFactory() {
     },
   });
 
+  const [analyzingId, setAnalyzingId] = useState<string | null>(null);
+
+  const analyzeMutation = useMutation({
+    mutationFn: async (referenceId: string) => {
+      setAnalyzingId(referenceId);
+      return analyzeStreetwearReference(referenceId);
+    },
+    onSuccess: () => {
+      invalidateReferences();
+      toast({ title: "Blueprint ready" });
+    },
+    onError: (error: unknown) => {
+      toast({
+        title: "Could not analyze reference",
+        description: error instanceof Error ? error.message : "Unknown error",
+        variant: "destructive",
+      });
+    },
+    onSettled: () => setAnalyzingId(null),
+  });
+
+
+
   const openEdit = (reference: StreetwearReference) => {
     setForm({
       id: reference.id,
