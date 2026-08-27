@@ -1640,8 +1640,25 @@ export default function TemplateStudioPage() {
                           style={{ width: `${readinessPercent}%` }}
                         />
                       </div>
+                      {Object.keys(autofilledKeys).length ? (
+                        <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+                          <p className="text-[11px] text-slate-400">
+                            Pre-filled from{" "}
+                            <span className="text-slate-200">{activeBrand?.name}</span> — change or
+                            remove any slot as usual.
+                          </p>
+                          <button
+                            type="button"
+                            onClick={clearAutofilled}
+                            className="font-display text-[10px] uppercase tracking-[0.18em] text-slate-400 transition hover:text-white"
+                          >
+                            Clear autofilled
+                          </button>
+                        </div>
+                      ) : null}
                     </div>
                   ) : null}
+
 
                   {/* Cast lives inside the face slot when a face slot exists. */}
                   {castEnabled && !castSlotFieldKey ? (
