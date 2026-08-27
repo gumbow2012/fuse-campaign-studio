@@ -1,7 +1,16 @@
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ExternalLink, ImageOff, Loader2, Network, Pencil, Plus, Trash2 } from "lucide-react";
+import {
+  ExternalLink,
+  ImageOff,
+  Loader2,
+  Network,
+  Pencil,
+  Plus,
+  Sparkles,
+  Trash2,
+} from "lucide-react";
 import SiteShell from "@/components/mvp/SiteShell";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -19,13 +28,16 @@ import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import {
+  analyzeStreetwearReference,
   createStreetwearReference,
   deleteStreetwearReference,
   listStreetwearReferences,
   parseTags,
   updateStreetwearReference,
+  type ReferenceBlueprint,
   type StreetwearReference,
 } from "@/services/streetwearReferences";
+
 
 type WorkbenchVersion = {
   id: string;
