@@ -69,6 +69,8 @@ export default function QuickPublishButton({
   const [gate, setGate] = useState<QuickPublishGate | null>(null);
   const [gateError, setGateError] = useState<string | null>(null);
   const [published, setPublished] = useState<{ name: string; version: number } | null>(null);
+  const [confirmUntested, setConfirmUntested] = useState(false);
+
 
   const loadGate = useCallback(async () => {
     if (!versionId) return;
