@@ -51,6 +51,8 @@ import { getStaticInputs } from "@/services/templateInputMap";
 import CreditConfirmModal from "@/components/CreditConfirmModal";
 import { trackEvent } from "@/lib/metaPixel";
 import { track } from "@/lib/analytics/track";
+import GenerateAuthGateModal from "@/components/auth/GenerateAuthGateModal";
+import { setPendingGenerationIntent } from "@/lib/pendingGenerationIntent";
 import { loadTemplatePerformance, type TemplatePerformanceMap } from "@/services/templatePerformance";
 import { PerformanceBlock, PerformanceBadges, PerformanceDisclaimer } from "@/components/TemplatePerformance";
 import FilterDropdown, { type FilterOption } from "@/components/templates/FilterDropdown";
@@ -449,6 +451,8 @@ export default function TemplateStudioPage() {
   const [jobId, setJobId] = useState<string | null>(null);
   const [creatingFork, setCreatingFork] = useState(false);
   const [workflowUpgradeDialogOpen, setWorkflowUpgradeDialogOpen] = useState(false);
+  /** P2 — generate auth gate for logged-out visitors (never auto-opens). */
+  const [authGateOpen, setAuthGateOpen] = useState(false);
   const [result, setResult] = useState<RunnerResult | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [checkingCredits, setCheckingCredits] = useState(false);
@@ -1237,10 +1241,50 @@ export default function TemplateStudioPage() {
     return { inputs, missing };
   };
 
+  /**
+   * P2 — freeze the builder and gate on auth instead of navigating away.
+   * The configuration is captured in memory so P3/P4 can replay it.
+   */
+  const gateReturnTo = selectedTemplate
+    ? `/app/templates?template=${encodeURIComponent(String(selectedTemplate.id))}`
+    : "/app/templates";
+
+  const gateHasInputs = useMemo(
+    () =>
+      Object.values(files).some(Boolean) ||
+      Object.values(textInputs).some((value) => Boolean(value && value.trim())) ||
+      Object.values(castSelection).some(Boolean),
+    [castSelection, files, textInputs],
+  );
+
+  const openGenerateAuthGate = () => {
+    if (selectedTemplate) {
+      setPendingGenerationIntent({
+        templateId: String(selectedTemplate.id),
+        versionId: selectedTemplate.versionId ?? null,
+        textInputs: { ...textInputs },
+        selectedOptions: {},
+        cast: Object.fromEntries(
+          Object.entries(castSelection).filter(([, value]) => Boolean(value)),
+        ) as Record<string, string>,
+        pendingFileKeys: Object.entries(files)
+          .filter(([, file]) => Boolean(file))
+          .map(([key]) => key),
+        returnTo: gateReturnTo,
+        capturedAt: Date.now(),
+      });
+    }
+    track("generate_auth_gate_shown", {
+      templateId: selectedTemplate ? String(selectedTemplate.id) : null,
+      has_inputs: gateHasInputs,
+    });
+    setAuthGateOpen(true);
+  };
+
   const requestBatchRun = async () => {
     if (!batchTemplates.length) return;
     if (!user) {
-      navigate("/auth?mode=signup", { state: { redirectTo: "/app/templates" } });
+      openGenerateAuthGate();
       return;
     }
     if (!activeBrand) {
@@ -1336,7 +1380,7 @@ export default function TemplateStudioPage() {
   const handleRun = async () => {
     if (!selectedTemplate) return;
     if (!user) {
-      navigate("/auth?mode=signup", { state: { redirectTo: "/app/templates" } });
+      openGenerateAuthGate();
       return;
     }
     if (!selectedTemplate.versionId) {
@@ -1481,6 +1525,13 @@ export default function TemplateStudioPage() {
 
   return (
     <SiteShell>
+      <div
+        className={cn(
+          "transition-[filter,opacity] duration-200",
+          authGateOpen ? "pointer-events-none select-none blur-[2px] opacity-70" : "",
+        )}
+        aria-hidden={authGateOpen}
+      >
       <section className="container py-12 md:py-16">
         <div className="flex flex-wrap items-end justify-between gap-6">
           <div>
@@ -2441,7 +2492,23 @@ export default function TemplateStudioPage() {
         onDownload={handleDownloadCampaign}
         onRemix={handleRemixCampaign}
       />
+      </div>
+
+      {/* P2 — logged-out Generate click: blur the builder, gate on auth. */}
+      <GenerateAuthGateModal
+        open={authGateOpen}
+        templateId={selectedTemplate ? String(selectedTemplate.id) : null}
+        returnTo={gateReturnTo}
+        onClose={() => {
+          setAuthGateOpen(false);
+          track("generate_auth_gate_dismissed", {
+            templateId: selectedTemplate ? String(selectedTemplate.id) : null,
+            has_inputs: gateHasInputs,
+          });
+        }}
+      />
     </SiteShell>
+
 
   );
 }
