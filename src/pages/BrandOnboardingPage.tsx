@@ -29,12 +29,13 @@ import {
 } from "@/services/brandProfiles";
 import { listMyAvatars } from "@/services/avatarProfiles";
 import { listProductProfiles } from "@/services/productProfiles";
-import { deriveBrandReadiness, readBrandFlags, type ReadinessStatus } from "@/lib/brandReadiness";
+import { deriveBrandReadiness, readBrandFlags } from "@/lib/brandReadiness";
 import BrandImportPanel, { type BrandImportConfirmation } from "@/components/brand/BrandImportPanel";
 import BrandIdentityStep, { type ColorRole } from "@/components/brand/BrandIdentityStep";
 import BrandProductsStep from "@/components/brand/BrandProductsStep";
 import BrandCreativeDnaStep, { type CreativeDnaValue } from "@/components/brand/BrandCreativeDnaStep";
 import CastLibrary from "@/components/cast/CastLibrary";
+import BrandReviewStep from "@/components/brand/BrandReviewStep";
 import { takeBrandImport } from "@/services/brandImport";
 
 const STEPS = [
@@ -45,13 +46,6 @@ const STEPS = [
   { id: 5, label: "Creative DNA", optional: true },
   { id: 6, label: "Finish", optional: false },
 ];
-
-const STATUS_MARK: Record<ReadinessStatus, { mark: string; className: string }> = {
-  complete: { mark: "✓ COMPLETE", className: "border-cyan-300/50 bg-cyan-300/10 text-cyan-100" },
-  "recommended-missing": { mark: "⚠ RECOMMENDED", className: "border-amber-300/40 bg-amber-300/10 text-amber-100" },
-  "optional-missing": { mark: "○ OPTIONAL", className: "border-white/10 bg-white/[0.03] text-slate-400" },
-  "required-missing": { mark: "✕ REQUIRED", className: "border-rose-400/40 bg-rose-400/10 text-rose-100" },
-};
 
 function StepRail({
   step,
@@ -486,66 +480,21 @@ export default function BrandOnboardingPage() {
 
 
           {step === 6 ? (
-            <div className={CARD}>
-              <p className={LABEL}>Step 6 — Review</p>
-              <h2 className="mt-2 text-2xl">
-                {brand?.name?.trim() || "Your brand"}
-                {readiness.ready ? " is ready." : " — a few things left."}
-              </h2>
-              <ul className="mt-5 space-y-3 text-sm text-slate-300">
-                {readiness.sections.map((section) => {
-                  const mark = STATUS_MARK[section.status];
-                  const missing = section.items.filter((item) => !item.done);
-                  return (
-                    <li
-                      key={section.key}
-                      className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-white/10 bg-black/20 px-4 py-3"
-                    >
-                      <span className="flex flex-wrap items-center gap-3">
-                        <span
-                          className={`rounded-full border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] ${mark.className}`}
-                        >
-                          {mark.mark}
-                        </span>
-                        <span>
-                          {section.label}
-                          {missing.length ? (
-                            <span className="ml-2 text-xs text-slate-500">
-                              {missing.map((item) => item.label).join(" · ")}
-                            </span>
-                          ) : null}
-                        </span>
-                      </span>
-                      {section.status !== "complete" ? (
-                        <Button
-                          type="button"
-                          variant="outline"
-                          onClick={() => setStep(section.step)}
-                          className="h-8 rounded-full border-white/12 bg-white/[0.03] px-3 text-[10px] uppercase tracking-[0.16em]"
-                        >
-                          Go back &amp; complete
-                        </Button>
-                      ) : null}
-                    </li>
-                  );
-                })}
-              </ul>
-              <Button
-                type="button"
-                onClick={() => finish.mutate()}
-                disabled={finish.isPending || !readiness.ready}
-                className="mt-6 rounded-full bg-cyan-300 px-6 py-5 text-[12px] font-semibold uppercase tracking-[0.16em] text-slate-950 hover:bg-cyan-200"
-              >
-                {finish.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
-                {readiness.ready
-                  ? "Enter Brand Workspace"
-                  : `Complete ${readiness.requiredMissing} required item${readiness.requiredMissing === 1 ? "" : "s"}`}
-              </Button>
-              {readiness.ready && readiness.recommendedMissing > 0 ? (
-                <p className="mt-3 text-xs text-slate-500">You can complete these later.</p>
-              ) : null}
-            </div>
+            <BrandReviewStep
+              brand={brand}
+              products={brandProducts}
+              cast={(avatarsQuery.data ?? []).filter((entry) =>
+                readModelIds(brand).includes(entry.id),
+              )}
+              style={readVisualStyle(brand)}
+              colorRoles={colorRoles}
+              readiness={readiness}
+              onJump={setStep}
+              onSubmit={() => finish.mutate()}
+              submitting={finish.isPending}
+            />
           ) : null}
+
         </div>
 
         <div className="mt-8 flex flex-wrap items-center justify-between gap-3">
