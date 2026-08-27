@@ -134,6 +134,9 @@ export default function BillingPage() {
     }
     if (isAdmin) return;
 
+    track("plan_selected", { plan_key: String(tierKey) });
+    track("checkout_start", { plan_key: String(tierKey), kind: "subscription" });
+
     await startPlanCheckout(tierKey, {
       email: user ? undefined : normalizedEmail,
       brandName: brandName.trim() || undefined,
