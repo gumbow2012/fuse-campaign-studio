@@ -150,6 +150,9 @@ export default function BrandOnboardingPage() {
     setPrimaryLogo(brand.primary_logo_url ?? null);
     setSecondaryLogo(brand.secondary_logo_url ?? null);
     setColors(brand.colors ?? []);
+    const flags = readBrandFlags(brand);
+    setNoLogo(flags.noLogo);
+    setNeutralPalette(flags.neutralPalette);
     setModelIds(readModelIds(brand));
     const style = readVisualStyle(brand);
     setTags(style?.tags ?? []);
