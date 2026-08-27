@@ -47,6 +47,12 @@ import {
   type ProductProfileType,
 } from "@/services/productProfiles";
 import type { BrandImportConfirmation } from "@/components/brand/BrandImportPanel";
+import {
+  classifyProduct,
+  PRODUCT_FILTERS,
+  type ProductFilterId,
+} from "@/lib/productCategories";
+
 
 const LABEL = "text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400";
 const TINY = "font-display text-[10px] uppercase tracking-[0.22em]";
