@@ -35,6 +35,7 @@ import { toast } from "@/hooks/use-toast";
 import { SUPABASE_PUBLISHABLE_KEY, SUPABASE_URL, supabase } from "@/integrations/supabase/client";
 import { ADMIN_VISUAL_BUDGET_TOTAL, getAdminVisualCreditsRemaining, getAdminVisualCreditsSpent, recordAdminVisualCreditUsage } from "@/lib/adminBudget";
 import { cn } from "@/lib/utils";
+import { canInitiateFork, resolveCustomizeState } from "@/lib/customizeGating";
 import { sortTemplatesForStudio } from "@/lib/templateOrdering";
 import { fetchTemplateDetail, fetchTemplates, type ApiTemplate, type RunFeedbackRecord, type TemplateDetail } from "@/services/fuseApi";
 import { uploadRunInputFile } from "@/services/runInputUpload";

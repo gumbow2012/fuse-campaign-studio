@@ -314,6 +314,8 @@ export interface TemplateDetail {
   prompt?: string;
   video_prompt?: string;
   asset_requirements?: string;
+  /** Server-authoritative: may this template be forked/customized? */
+  canCustomize?: boolean;
 }
 
 export async function fetchTemplateDetail(
@@ -336,6 +338,7 @@ export async function fetchTemplateDetail(
         : [];
       if (projectedInputs.length) {
         return {
+          canCustomize: (detailData as any)?.canCustomize === true,
           user_inputs: projectedInputs.map((field) => {
             const requirement = field.requirement
               ? readTemplateAssetRequirement(field.requirement, { required: field.required ?? true })
@@ -361,6 +364,7 @@ export async function fetchTemplateDetail(
       );
 
       return {
+        canCustomize: (detailData as any)?.canCustomize === true,
         user_inputs: uploadNodes.map((node) => ({
           key: String(node.editor?.slotKey || node.id),
           label: String(node.editor?.label || node.name),
@@ -384,6 +388,7 @@ export async function fetchTemplateDetail(
   );
   const t = data.template || data;
   return {
+    canCustomize: false,
     user_inputs: (t.input_manifest || t.user_inputs || []).map((field) => ({
       key: String(field.key),
       label: String(field.label),
