@@ -11,8 +11,43 @@ import { useAuth } from "@/contexts/AuthContext";
 import { getAbsoluteSiteUrl } from "@/lib/site-url";
 import { checkoutEventId, clearPendingCheckout, readPendingCheckout, trackEvent, trackEventOnce } from "@/lib/metaPixel";
 import { track } from "@/lib/analytics/track";
-import { storePendingReferralCode } from "@/lib/pendingReferral";
+import { readPendingReferralCode, storePendingReferralCode } from "@/lib/pendingReferral";
 import { usePendingReferral } from "@/hooks/usePendingReferral";
+import { useQuery } from "@tanstack/react-query";
+import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp";
+import { ArrowRight, Boxes, Check, Gift, Layers, Shirt, Sparkles, Wand2 } from "lucide-react";
+import { FALLBACK_GIFS } from "@/lib/homeMediaAllocator";
+import ExampleOutput from "@/components/ExampleOutput";
+
+const BENEFITS = [
+  { icon: Layers, title: "Campaign Templates", copy: "Pick creative instead of writing prompts." },
+  { icon: Boxes, title: "Brand Workspace", copy: "Save your products, logos and identity once." },
+  { icon: Wand2, title: "Image Templates", copy: "Flat lays, graphics, mockups and more." },
+  { icon: Shirt, title: "Outfit Swap", copy: "Paste a campaign and rebuild it for your brand." },
+];
+
+const LOOP = [
+  { step: "01", label: "Pick a campaign" },
+  { step: "02", label: "Add your brand" },
+  { step: "03", label: "Generate your version" },
+];
+
+const PREVIEW_MEDIA = FALLBACK_GIFS.slice(0, 3);
+
+/** k***@gmail.com — never render the full address back at the user. */
+function maskEmail(value: string) {
+  const [local, domain] = value.split("@");
+  if (!local || !domain) return value;
+  return `${local.slice(0, 1)}***@${domain}`;
+}
+
+const CARD_SHELL =
+  "rounded-[2rem] border border-white/10 bg-slate-950/75 p-6 shadow-[0_24px_80px_rgba(0,0,0,0.45)] backdrop-blur-xl sm:p-8";
+const FIELD =
+  "h-12 rounded-2xl border-white/10 bg-white/[0.04] text-white transition-colors focus-visible:border-cyan-300/60 focus-visible:ring-cyan-300/20";
+const PRIMARY_CTA =
+  "h-13 w-full rounded-full bg-cyan-300 py-6 text-[13px] font-semibold uppercase tracking-[0.14em] text-slate-950 shadow-[0_18px_50px_-18px_rgba(103,232,249,0.7)] transition-transform hover:bg-cyan-200 hover:-translate-y-0.5";
+const LABEL_CLS = "text-[10px] font-semibold uppercase tracking-[0.24em] text-slate-400";
 
 function authErrorDescription(error: unknown, fallback: string) {
   if (!(error instanceof Error)) return fallback;
@@ -44,9 +79,35 @@ export default function AuthPage() {
   const [submitting, setSubmitting] = useState(false);
   const [resendCooldown, setResendCooldown] = useState(0);
   const [autoCodeRequested, setAutoCodeRequested] = useState(false);
+  const [pendingReferral, setPendingReferral] = useState<string | null>(null);
+
+  // Public, non-sensitive program settings — the bonus number is never hardcoded.
+  const { data: referralProgram } = useQuery({
+    queryKey: ["referral-program-config"],
+    enabled: Boolean(pendingReferral),
+    staleTime: 10 * 60_000,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("referral_program_config")
+        .select("enabled, signup_bonus_credits")
+        .limit(1)
+        .maybeSingle();
+      if (error) throw error;
+      return data;
+    },
+  });
+  const referralBonus = Number(referralProgram?.signup_bonus_credits ?? 0);
+  const showReferralClaim = Boolean(pendingReferral) && Boolean(referralProgram?.enabled) && referralBonus > 0;
 
   useEffect(() => {
-    setMode(paidAccess ? "signin" : searchParams.get("mode") === "signup" ? "signup" : "signin");
+    const invited = Boolean(searchParams.get("ref")) || Boolean(readPendingReferralCode());
+    setMode(
+      paidAccess
+        ? "signin"
+        : searchParams.get("mode") === "signup" || (invited && searchParams.get("mode") !== "signin")
+          ? "signup"
+          : "signin",
+    );
     setStep("request");
     setToken("");
     setResendCooldown(0);
@@ -78,6 +139,7 @@ export default function AuthPage() {
   useEffect(() => {
     const stored = storePendingReferralCode(searchParams.get("ref"));
     if (stored) track("referral_landing", { source: "auth_query" });
+    setPendingReferral(stored ?? readPendingReferralCode());
   }, [searchParams]);
 
   usePendingReferral();
