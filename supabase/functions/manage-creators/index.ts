@@ -164,6 +164,52 @@ Deno.serve(async (req) => {
       return json({ ok: true, inviteId, emailSent: false, grantedImmediately: true, userId: targetId });
     }
 
+    if (action === "resend") {
+      // Admin already verified above via requireAdminUser; re-assert intent explicitly.
+      if (!user?.id) throw new Error("Admin access required");
+      const inviteId = typeof body.inviteId === "string" ? body.inviteId.trim() : "";
+      if (!inviteId) throw new Error("inviteId is required");
+
+      const { data: invite, error: loadError } = await admin
+        .from("creator_invites")
+        .select("id, email, sent_count")
+        .eq("id", inviteId)
+        .maybeSingle();
+      if (loadError) throw new Error(loadError.message);
+      if (!invite) throw new Error("Invite not found");
+
+      const email = cleanEmail((invite as any).email);
+      if (!email.includes("@")) throw new Error("This invite has no valid email");
+      const sentCount = Number((invite as any).sent_count ?? 0);
+
+      const { error: sendError } = await admin.auth.admin.inviteUserByEmail(email);
+
+      const patch = sendError
+        ? { email_status: "failed", failure_reason: (sendError.message ?? "Send failed").slice(0, 500) }
+        : {
+            email_status: "provider_accepted",
+            failure_reason: null,
+            last_sent_at: new Date().toISOString(),
+            sent_count: sentCount + 1,
+          };
+
+      const { data: updated, error: updateError } = await admin
+        .from("creator_invites")
+        .update(patch)
+        .eq("id", inviteId)
+        .select(
+          "id, email, status, invited_by, created_at, accepted_at, email_status, provider_message_id, delivered_at, bounced_at, failure_reason, last_sent_at, sent_count",
+        )
+        .single();
+      if (updateError) throw new Error(updateError.message);
+
+      return json({
+        ok: !sendError,
+        reason: sendError ? (sendError.message ?? "Could not send invite email") : null,
+        invite: updated,
+      });
+    }
+
     if (action === "revoke") {
       const userId = typeof body.userId === "string" ? body.userId.trim() : "";
       const inviteId = typeof body.inviteId === "string" ? body.inviteId.trim() : "";
