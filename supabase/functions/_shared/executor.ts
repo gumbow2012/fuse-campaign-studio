@@ -20,6 +20,7 @@ import { refundRegenCreditsIfNeeded } from "./regeneration-run.ts";
 import { sortEdgesByExecutionOrder, targetParamOrder } from "./edge-order.ts";
 
 import { isPromptNode, resolveNodePrompt } from "./prompt-nodes.ts";
+import { buildIdentityLockedPrompt } from "./identity-lock.ts";
 import {
   CAST_RUNTIME_KEY,
   castAuditMetadata,
@@ -1151,6 +1152,18 @@ export async function runGraphJob(admin: AdminClient, jobId: string) {
       for (const [key, value] of orderedParamEntries) params.set(key, value);
       const castAudit = castAuditMetadata(castResult.applied);
 
+      /**
+       * IDENTITY-LOCK — additive prompt strengthening, gated strictly on
+       * (cast active && THIS node is the cast target && this node generates).
+       * castResult.applied is non-null only on the cast target node.
+       */
+      const identityLocked = Boolean(castResult.applied) &&
+        (node.node_type === "image_gen" || node.node_type === "video_gen");
+      const lockPrompt = <T,>(value: T): T =>
+        identityLocked && typeof value === "string" && value.trim()
+          ? (buildIdentityLockedPrompt(value) as unknown as T)
+          : value;
+
 
       const startedAt = step.status === "running" ? step.started_at : new Date().toISOString();
 
@@ -1174,7 +1187,7 @@ export async function runGraphJob(admin: AdminClient, jobId: string) {
 
       if (node.node_type === "image_gen") {
         try {
-          const prompt = resolveNodePrompt(node, promptEdgesByTarget.get(node.id) ?? [], nodeMap);
+          const prompt = lockPrompt(resolveNodePrompt(node, promptEdgesByTarget.get(node.id) ?? [], nodeMap));
           const referenceAsset = getNodeReferenceAsset(node, assetMap);
           const orderedInputs = orderedParamEntries
             .map(([, value]) => value.url)
@@ -1271,7 +1284,7 @@ export async function runGraphJob(admin: AdminClient, jobId: string) {
         }
       } else if (node.node_type === "video_gen") {
         try {
-          const prompt = resolveNodePrompt(node, promptEdgesByTarget.get(node.id) ?? [], nodeMap);
+          const prompt = lockPrompt(resolveNodePrompt(node, promptEdgesByTarget.get(node.id) ?? [], nodeMap));
           const initImageUrl = params.get("init_image")?.url ??
             params.get("start_frame_image")?.url ??
             [...params.values()][0]?.url;

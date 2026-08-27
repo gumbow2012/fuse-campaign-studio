@@ -14,6 +14,7 @@
  */
 
 import { readCastConfig, type CastConfig, type CastSlotConfig } from "./cast-config.ts";
+import { canonicalMasterUrl } from "./identity-lock.ts";
 
 export const CAST_CONFIGURATION_INVALID = "CAST_CONFIGURATION_INVALID";
 export const CAST_MODE_DIRECT_CONDITIONING = "DIRECT_CONDITIONING";
@@ -66,16 +67,15 @@ export function parseCastRuntime(value: unknown): CastRuntime | null {
   return { slotId, avatarId, avatarImageUrl, mode: CAST_MODE_DIRECT_CONDITIONING };
 }
 
-/** Picks the identity reference image off an avatar_profiles row. Never guesses. */
+/**
+ * Picks the identity reference image off an avatar_profiles row. Never guesses.
+ * PREFERS the canonical identity master, then thumbnail_url, then the first
+ * reference_assets entry (unchanged legacy fallback). Still ONE image.
+ */
 export function avatarIdentityImage(row: unknown): string | null {
-  if (!row || typeof row !== "object") return null;
-  const record = row as Record<string, unknown>;
-  const thumb = typeof record.thumbnail_url === "string" ? record.thumbnail_url.trim() : "";
-  if (thumb) return thumb;
-  const refs = Array.isArray(record.reference_assets) ? record.reference_assets : [];
-  const first = refs.map((entry) => String(entry ?? "").trim()).find(Boolean);
-  return first ?? null;
+  return canonicalMasterUrl(row);
 }
+
 
 /**
  * Pre-flight validation used BEFORE credits are charged.
