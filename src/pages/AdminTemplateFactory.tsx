@@ -108,6 +108,86 @@ const EMPTY_FORM: FormState = {
   notes: "",
 };
 
+const BLUEPRINT_FIELDS: Array<{ key: keyof ReferenceBlueprint; label: string }> = [
+  { key: "subject_treatment", label: "Subject treatment" },
+  { key: "garment_focus", label: "Garment focus" },
+  { key: "composition", label: "Composition" },
+  { key: "camera", label: "Camera" },
+  { key: "lighting", label: "Lighting" },
+  { key: "color_grade", label: "Color grade" },
+  { key: "mood", label: "Mood" },
+  { key: "setting", label: "Setting" },
+  { key: "motion", label: "Motion" },
+];
+
+function BlueprintPanel({
+  blueprint,
+  generatedAt,
+}: {
+  blueprint: ReferenceBlueprint;
+  generatedAt: string | null;
+}) {
+  return (
+    <div className="mt-4 rounded-lg border border-cyan-300/20 bg-cyan-300/[0.04] p-3">
+      <div className="flex items-center justify-between gap-2">
+        <span className={TINY_LABEL}>Creative blueprint</span>
+        {generatedAt ? (
+          <span className="text-[11px] text-muted-foreground">
+            {new Date(generatedAt).toLocaleString()}
+          </span>
+        ) : null}
+      </div>
+
+      {blueprint.shot_list?.length ? (
+        <div className="mt-3 space-y-2">
+          {blueprint.shot_list.map((shot, index) => (
+            <div
+              key={`${shot.name ?? "shot"}-${index}`}
+              className="rounded-md border border-white/10 bg-background/50 px-2.5 py-2"
+            >
+              <div className="text-xs font-semibold">
+                {index + 1}. {shot.name ?? "Shot"}
+              </div>
+              <dl className="mt-1 space-y-0.5 text-[11px] leading-4 text-muted-foreground">
+                {shot.framing ? <div>Framing — {shot.framing}</div> : null}
+                {shot.subject ? <div>Subject — {shot.subject}</div> : null}
+                {shot.action ? <div>Action — {shot.action}</div> : null}
+              </dl>
+            </div>
+          ))}
+        </div>
+      ) : null}
+
+      <dl className="mt-3 space-y-1.5">
+        {BLUEPRINT_FIELDS.map(({ key, label }) => {
+          const value = blueprint[key];
+          if (typeof value !== "string" || !value.trim()) return null;
+          return (
+            <div key={key} className="text-[11px] leading-4">
+              <dt className="inline font-semibold text-foreground/80">{label}: </dt>
+              <dd className="inline text-muted-foreground">{value}</dd>
+            </div>
+          );
+        })}
+      </dl>
+
+      <div className="mt-3 flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
+        {typeof blueprint.suggested_output_count === "number" ? (
+          <span className="rounded-full border border-white/10 bg-white/5 px-2 py-0.5">
+            {blueprint.suggested_output_count} suggested outputs
+          </span>
+        ) : null}
+        {blueprint.uncertain?.length ? (
+          <span className="rounded-full border border-amber-300/25 bg-amber-400/10 px-2 py-0.5 text-amber-100">
+            Uncertain: {blueprint.uncertain.join(", ")}
+          </span>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+
 export default function AdminTemplateFactory() {
   const queryClient = useQueryClient();
   const [form, setForm] = useState<FormState | null>(null);
