@@ -330,16 +330,20 @@ export default function UniversalAuthPanel({
           {submitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
           {submitLabel} <ArrowRight className="ml-2 h-4 w-4" />
         </Button>
+
+        <p className="flex items-center justify-center gap-1.5 pt-0.5 text-[11px] text-slate-500">
+          <ShieldCheck className="h-3.5 w-3.5 text-cyan-300/70" /> Secure sign-in
+        </p>
       </form>
 
-      <div className="mt-4 flex flex-wrap items-center justify-between gap-3 text-xs">
+      <div className="mt-3 flex flex-wrap items-center justify-between gap-3 text-xs">
         {mode === "signup" ? (
           <button type="button" onClick={() => switchMode("signin")} className="text-slate-400 hover:text-white">
             Already have an account? <span className="font-semibold text-cyan-200">Sign in</span>
           </button>
         ) : (
           <button type="button" onClick={() => switchMode("signup")} className="text-slate-400 hover:text-white">
-            New here? <span className="font-semibold text-cyan-200">Create account</span>
+            New to FUSE? <span className="font-semibold text-cyan-200">Create account</span>
           </button>
         )}
         <button
@@ -353,18 +357,19 @@ export default function UniversalAuthPanel({
       </div>
 
       {showTerms ? (
-        <p className="mt-8 text-center text-[11px] leading-5 text-slate-500">
+        <p className="mt-5 text-center text-[11px] leading-5 text-slate-400">
           By continuing, you agree to the{" "}
-          <Link to="/terms" className="text-slate-300 underline decoration-white/20 hover:text-white">
+          <Link to="/terms" className="text-slate-200 underline decoration-white/30 hover:text-white">
             Terms
           </Link>{" "}
           and{" "}
-          <Link to="/privacy" className="text-slate-300 underline decoration-white/20 hover:text-white">
+          <Link to="/privacy" className="text-slate-200 underline decoration-white/30 hover:text-white">
             Privacy Policy
           </Link>
           .
         </p>
       ) : null}
+
     </div>
   );
 }
