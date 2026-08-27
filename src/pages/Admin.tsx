@@ -11,6 +11,7 @@ import { Plus, Trash2, BarChart3, Eye, Copy, Loader2, Download, Upload, Check, X
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Link } from "react-router-dom";
 import AdminCreditControl from "@/components/admin/AdminCreditControl";
+import AdminOverviewStrip from "@/components/admin/AdminOverviewStrip";
 
 const EXAMPLE_INPUT_SCHEMA = JSON.stringify(
   [
