@@ -94,6 +94,7 @@ export default function TemplateDetailDialog({
   performance?: TemplatePerformanceRow | null;
 }) {
   const templateId = template?.id ? String(template.id) : "";
+  const { canFavorite, isFavorite, toggleFavorite } = useTemplateFavorites();
   const { activeBrand } = useBrand();
   const { assets: brandFitAssets } = useBrandFitAssets();
   const { data: performanceRows = [] } = useQuery<TemplatePerformanceRow[]>({
