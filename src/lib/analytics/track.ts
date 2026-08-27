@@ -98,7 +98,6 @@ async function send(eventName: string, props: Record<string, unknown>) {
 
   await supabase.from("analytics_events").insert({
     event_name: eventName,
-    event_type: eventName,
     user_id: userId,
     session_id: getSessionId(),
     path,
