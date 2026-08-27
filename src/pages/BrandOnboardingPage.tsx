@@ -375,10 +375,29 @@ export default function BrandOnboardingPage() {
                 <ImageSlot label="Primary logo" url={primaryLogo} onChange={setPrimaryLogo} />
                 <ImageSlot label="Secondary logo" url={secondaryLogo} onChange={setSecondaryLogo} />
               </div>
+              <label className="mt-3 flex items-center gap-2 text-[11px] uppercase tracking-[0.16em] text-slate-400">
+                <input
+                  type="checkbox"
+                  checked={noLogo}
+                  onChange={(event) => setNoLogo(event.target.checked)}
+                  className="h-3.5 w-3.5 accent-cyan-300"
+                />
+                No logo yet
+              </label>
               <div className="mt-6">
                 <p className={LABEL}>Brand colors</p>
                 <ColorPalette colors={colors} onChange={setColors} />
+                <label className="mt-3 flex items-center gap-2 text-[11px] uppercase tracking-[0.16em] text-slate-400">
+                  <input
+                    type="checkbox"
+                    checked={neutralPalette}
+                    onChange={(event) => setNeutralPalette(event.target.checked)}
+                    className="h-3.5 w-3.5 accent-cyan-300"
+                  />
+                  Use neutral palette
+                </label>
               </div>
+
             </div>
           ) : null}
 
