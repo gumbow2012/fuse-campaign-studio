@@ -593,9 +593,10 @@ async function getQuickPublishGate(
   const tested = jobsWithOutputs.length > 0;
 
   return {
-    // "not tested" is a soft signal surfaced to the UI, and still blocks publishing here.
-    publishable: reasons.length === 0 && tested,
+    // "tested" is INFORMATIONAL only — deterministic structural checks are the only blockers.
+    publishable: reasons.length === 0,
     tested,
+
     reasons,
     versionId,
     templateId: (version as any).template_id as string,
