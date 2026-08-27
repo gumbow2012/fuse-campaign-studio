@@ -1269,19 +1269,19 @@ export default function TemplateStudioPage() {
       setPendingGenerationIntent({
         templateId: String(selectedTemplate.id),
         versionId: selectedTemplate.versionId ?? null,
-        textInputs: { ...textInputs },
+        // P6a temp public URLs — the uploads survive the OAuth round-trip.
+        inputs: Object.entries(anonUploads)
+          .filter(([, entry]) => entry.status === "ready" && entry.url)
+          .map(([slotKey, entry]) => ({ slotKey, tempUrl: String(entry.url) })),
+        textOverrides: { ...textInputs },
         selectedOptions: {},
-        cast: Object.fromEntries(
+        selectedCast: Object.fromEntries(
           Object.entries(castSelection).filter(([, value]) => Boolean(value)),
         ) as Record<string, string>,
-        pendingFileKeys: Object.entries(files)
-          .filter(([, file]) => Boolean(file))
-          .map(([key]) => key),
         returnTo: gateReturnTo,
         creditCost: isPrivilegedUser ? 0 : creditsRequired,
-        capturedAt: Date.now(),
-
       });
+
     }
     track("generate_auth_gate_shown", {
       templateId: selectedTemplate ? String(selectedTemplate.id) : null,
