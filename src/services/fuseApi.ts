@@ -314,6 +314,8 @@ export interface TemplateDetail {
   prompt?: string;
   video_prompt?: string;
   asset_requirements?: string;
+  /** Server-authoritative: may this template be forked/customized? */
+  canCustomize?: boolean;
 }
 
 export async function fetchTemplateDetail(
