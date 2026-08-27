@@ -32,7 +32,6 @@ const ROWS: Row[] = [
   { label: "Saved brand assets", value: from("starter") },
   { label: "FUSE Cast + My Avatars", value: from("plus") },
   { label: "Higher concurrency", value: from("plus") },
-  { label: "Priority generation", value: from("pro") },
   { label: "Creator Program eligible", value: from("pro") },
   { label: "Full advanced toolset", value: from("studio") },
   { label: "Team workspace + seats", value: (e) => (e.key === "team" ? "3 seats" : NO) },
@@ -65,7 +64,7 @@ export default function PlanComparisonMatrix({ plan, subscriptionStatus }: Props
                   {entry.name}
                   {isCurrent ? <span className="block text-[9px] tracking-[0.1em] text-cyan-300/80">Your plan</span> : null}
                   {!isCurrent && entry.recommended ? (
-                    <span className="block text-[9px] tracking-[0.1em] text-lime-300/80">Most popular</span>
+                    <span className="block text-[9px] tracking-[0.1em] text-lime-300/80">Best value</span>
                   ) : null}
                 </th>
               );
