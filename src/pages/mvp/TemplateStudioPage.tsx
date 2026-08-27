@@ -451,6 +451,38 @@ export default function TemplateStudioPage() {
 
   const isPrivilegedUser = hasAppAccess;
 
+  /* Phase 10 — the remembered brand + its saved assets (read-only sources). */
+  const { activeBrand, activeBrandId } = useBrand();
+  const brandProductsQuery = useQuery({
+    queryKey: ["product-profiles", user?.id ?? "anon"],
+    queryFn: () => listProductProfiles(user?.id ?? ""),
+    enabled: !!user?.id && !!activeBrandId,
+    staleTime: 30_000,
+  });
+  const brandModelIds = useMemo(() => readModelIds(activeBrand), [activeBrand]);
+  const brandModelsQuery = useQuery({
+    queryKey: ["autofill-avatars", user?.id ?? "anon"],
+    queryFn: async () => {
+      const [mine, fuse] = await Promise.all([listMyAvatars(user?.id ?? ""), listFuseAvatars()]);
+      return [...mine, ...fuse];
+    },
+    enabled: !!user?.id && !!activeBrandId && brandModelIds.length > 0,
+    staleTime: 30_000,
+  });
+
+  const brandProducts = useMemo(
+    () => (brandProductsQuery.data ?? []).filter((profile) => profile.brand_id === activeBrandId),
+    [brandProductsQuery.data, activeBrandId],
+  );
+  /** Associated models, kept in metadata.modelIds order. */
+  const brandModels = useMemo(() => {
+    const pool = brandModelsQuery.data ?? [];
+    return brandModelIds
+      .map((id) => pool.find((avatar) => avatar.id === id))
+      .filter((avatar): avatar is NonNullable<typeof avatar> => !!avatar);
+  }, [brandModelsQuery.data, brandModelIds]);
+
+
   const templatesQuery = useQuery<ApiTemplate[]>({
     queryKey: ["mvp-templates"],
     queryFn: () => fetchTemplates(""),
