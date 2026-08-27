@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp";
 import { toast } from "@/hooks/use-toast";
+import { track } from "@/lib/analytics/track";
 import { supabase } from "@/integrations/supabase/client";
 import { ArrowLeft, ArrowRight, Loader2 } from "lucide-react";
 
@@ -91,6 +92,8 @@ export type UniversalAuthPanelProps = {
   onStepChange?: (step: "email" | "code") => void;
   showTerms?: boolean;
   className?: string;
+  /** Non-PII label for analytics (e.g. "generate_gate", "auth_page"). */
+  authSurface?: string;
 };
 
 export default function UniversalAuthPanel({
@@ -103,6 +106,7 @@ export default function UniversalAuthPanel({
   onStepChange,
   showTerms = true,
   className,
+  authSurface,
 }: UniversalAuthPanelProps) {
   const [email, setEmail] = useState("");
   const [token, setToken] = useState("");
@@ -160,6 +164,7 @@ export default function UniversalAuthPanel({
     setSubmitting(true);
     try {
       if (step === "email") {
+        track("auth_provider_selected", { provider: "email", surface: authSurface ?? null });
         await requestCode(email);
         setStep("code");
         setResendCooldown(60);
@@ -203,6 +208,7 @@ export default function UniversalAuthPanel({
 
   const handleOAuth = async (provider: "google" | "apple" | "azure", label: string) => {
     setOauthPending(provider);
+    track("auth_provider_selected", { provider, surface: authSurface ?? null });
     onBeforeRedirect?.();
     try {
       const { error } = await supabase.auth.signInWithOAuth({

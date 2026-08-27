@@ -186,7 +186,17 @@ export default function LiveAnalytics() {
     const generate = num(healthRow?.runs) ?? eventCount(rangeList, "generate");
     const complete = num(healthRow?.success) ?? eventCount(rangeList, "campaign_complete");
     const paid = eventCount(rangeList, "paid");
-    return { visitors, signups, brand, views, generate, complete, paid };
+    // P7 generate-first funnel (tracked from deployment forward only).
+    const anonView = eventCount(rangeList, "anonymous_template_view");
+    const anonBuild = eventCount(rangeList, "anonymous_builder_started");
+    const anonGenerate = eventCount(rangeList, "anonymous_generate_clicked");
+    const gateAuth = eventCount(rangeList, "generate_auth_completed");
+    const offerShown = eventCount(rangeList, "onboarding_offer_shown");
+    const firstComplete = eventCount(rangeList, "first_generation_completed");
+    return {
+      visitors, signups, brand, views, generate, complete, paid,
+      anonView, anonBuild, anonGenerate, gateAuth, offerShown, firstComplete,
+    };
   }, [rangeList, healthRow]);
 
   const successRate =
@@ -326,6 +336,19 @@ export default function LiveAnalytics() {
           <FunnelRow step="Generate" value={funnel.generate} previous={funnel.views} note="no source" />
           <FunnelRow step="Complete" value={funnel.complete} previous={funnel.generate} note="no source" />
           <FunnelRow step="Paid" value={funnel.paid} previous={funnel.signups} />
+        </div>
+
+        {/* GENERATE-FIRST FUNNEL (tracked from deployment forward) */}
+        <div className="rounded-xl border border-border/40 bg-card p-6">
+          <h3 className="mb-4 font-display text-sm font-bold uppercase tracking-[0.15em] text-foreground">
+            Generate-first funnel · {range.label}
+          </h3>
+          <FunnelRow step="Visitor template view" value={funnel.anonView} previous={null} />
+          <FunnelRow step="Visitor started building" value={funnel.anonBuild} previous={funnel.anonView} />
+          <FunnelRow step="Visitor clicked Generate" value={funnel.anonGenerate} previous={funnel.anonBuild} />
+          <FunnelRow step="Auth completed at gate" value={funnel.gateAuth} previous={funnel.anonGenerate} />
+          <FunnelRow step="Plan offer shown" value={funnel.offerShown} previous={funnel.gateAuth} />
+          <FunnelRow step="First campaign complete" value={funnel.firstComplete} previous={funnel.gateAuth} />
         </div>
       </div>
 

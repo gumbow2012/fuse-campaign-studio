@@ -141,6 +141,7 @@ export default function AuthPage() {
               ) : null}
 
               <UniversalAuthPanel
+                authSurface="auth_page"
                 className="mt-7"
                 oauthRedirectTo={getAbsoluteSiteUrl("/auth")}
                 emailRedirectTo={authRedirect}

@@ -5,6 +5,7 @@ import { CREDIT_PACKS, STRIPE_TIERS } from "@/lib/stripe-config";
 import { quoteCreditTopUp } from "@/lib/creditPricing";
 import { rememberPendingCheckout, trackEvent } from "@/lib/metaPixel";
 import { rememberPendingCreditTopUp } from "@/components/mvp/CreditTopUpSuccessWatcher";
+import { track } from "@/lib/analytics/track";
 
 type PlanCheckoutOptions = {
   email?: string;
@@ -31,6 +32,7 @@ export function useMembershipCheckout() {
     // Stripe Checkout is hosted off-domain, so this is the closest observable proxy.
     trackEvent("AddPaymentInfo", { value: tierForPixel.price, currency: "USD", content_name: tierForPixel.name });
     rememberPendingCheckout({ mode: "subscription", value: tierForPixel.price, contentName: tierForPixel.name });
+    track("checkout_started", { plan_key: String(tierKey), kind: "subscription" });
 
     setLoading(tierKey);
     try {
@@ -64,6 +66,7 @@ export function useMembershipCheckout() {
     trackEvent("InitiateCheckout", { value: packForPixel.price, currency: "USD", content_name: `${packForPixel.name} credit pack` });
     trackEvent("AddPaymentInfo", { value: packForPixel.price, currency: "USD", content_name: `${packForPixel.name} credit pack` });
     rememberPendingCheckout({ mode: "credits", value: packForPixel.price, contentName: `${packForPixel.name} credit pack` });
+    track("checkout_started", { kind: "credits", pack_key: String(packKey) });
 
     setLoading(packKey);
     try {
@@ -97,6 +100,7 @@ export function useMembershipCheckout() {
     trackEvent("AddPaymentInfo", params);
     rememberPendingCheckout({ mode: "credits", value: quote.dollars, contentName });
     rememberPendingCreditTopUp(credits, options.balanceBefore ?? 0);
+    track("checkout_started", { kind: "credits", credits });
 
     setLoading(String(credits));
     try {
