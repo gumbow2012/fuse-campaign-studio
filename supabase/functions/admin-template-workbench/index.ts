@@ -1191,6 +1191,89 @@ Deno.serve(async (req) => {
       return json({ versionId, activationGate: await getVersionPublishGate(admin, versionId) });
     }
 
+    if (action === "quick_publish_gate") {
+      assertCanPublish(access);
+      const versionId = cleanText(body.versionId);
+      if (!versionId) throw new Error("versionId is required");
+      return json({ versionId, quickGate: await getQuickPublishGate(admin, versionId) });
+    }
+
+    if (action === "quick_publish_version") {
+      // Admin/dev only fast path — creators are rejected by assertCanPublish.
+      assertCanPublish(access);
+      const versionId = cleanText(body.versionId);
+      if (!versionId) throw new Error("versionId is required");
+
+      const quickGate = await getQuickPublishGate(admin, versionId);
+      if (!quickGate.tested) {
+        throw new Error("This version has not completed a test run yet.");
+      }
+      if (!quickGate.publishable) {
+        throw new Error(`Quick publish blocked: ${quickGate.reasons.join(" ")}`);
+      }
+
+      // TR10 ISOLATION: personal fork versions can never become marketplace-active.
+      const { data: guardRow, error: guardError } = await admin
+        .from("template_versions")
+        .select("id, review_status, fork_id")
+        .eq("id", versionId)
+        .maybeSingle();
+      if (guardError) throw new Error(guardError.message);
+      assertVersionActivatable(guardRow as never);
+
+      const { error: deactivateError } = await admin
+        .from("template_versions")
+        .update({ is_active: false })
+        .eq("template_id", quickGate.templateId);
+      if (deactivateError) throw new Error(deactivateError.message);
+
+      const { error: activateError } = await admin
+        .from("template_versions")
+        .update({
+          is_active: true,
+          review_status: "Approved",
+          reviewed_at: new Date().toISOString(),
+          reviewed_by: user.id,
+        })
+        .eq("id", versionId);
+      if (activateError) throw new Error(activateError.message);
+
+      const { data: templateRow } = await admin
+        .from("fuse_templates")
+        .select("id, name")
+        .eq("id", quickGate.templateId)
+        .maybeSingle();
+
+      await logAuditEvent({
+        eventType: "template_quick_published",
+        message: `Admin quick-published template version ${versionId} (full audit skipped)`,
+        severity: "warn",
+        source: "admin-template-workbench",
+        templateId: quickGate.templateId,
+        versionId,
+        metadata: {
+          admin_user_id: user.id,
+          template_id: quickGate.templateId,
+          version_id: versionId,
+          latest_test_job_id: quickGate.latestTestJobId,
+          skipped_full_audit: true,
+          timestamp: new Date().toISOString(),
+        },
+      }, admin);
+
+      return json({
+        versionId,
+        templateId: quickGate.templateId,
+        templateName: (templateRow as any)?.name ?? null,
+        versionNumber: quickGate.versionNumber,
+        isActive: true,
+        reviewStatus: "Approved",
+        quickGate: { ...quickGate, isActive: true },
+      });
+    }
+
+
+
     if (action === "unpublish_template") {
       assertCanPublish(access);
       const templateId = cleanText(body.templateId);
