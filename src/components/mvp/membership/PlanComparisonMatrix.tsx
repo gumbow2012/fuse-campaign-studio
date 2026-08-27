@@ -31,7 +31,7 @@ const ROWS: Row[] = [
   { label: "Full template library", value: from("starter") },
   { label: "Saved brand assets", value: from("starter") },
   { label: "FUSE Cast + My Avatars", value: from("plus") },
-  { label: "Higher concurrency", value: from("plus") },
+  { label: "Workflow customization", value: from("pro") },
   { label: "Creator Program eligible", value: from("pro") },
   { label: "Full advanced toolset", value: from("studio") },
   { label: "Team workspace + seats", value: (e) => (e.key === "team" ? "3 seats" : NO) },
