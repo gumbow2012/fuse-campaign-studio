@@ -24,6 +24,7 @@ import AdminCreators from "@/pages/AdminCreators";
 import AdminCreatorProgram from "@/pages/AdminCreatorProgram";
 import AdminFuseCast from "@/pages/AdminFuseCast";
 import AdminTemplateImport from "@/pages/AdminTemplateImport";
+import AdminTemplateFactory from "@/pages/AdminTemplateFactory";
 import AdminTemplates from "@/pages/AdminTemplates";
 import FlowEmbed from "@/pages/FlowEmbed";
 
