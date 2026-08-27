@@ -593,9 +593,10 @@ async function getQuickPublishGate(
   const tested = jobsWithOutputs.length > 0;
 
   return {
-    // "not tested" is a soft signal surfaced to the UI, and still blocks publishing here.
-    publishable: reasons.length === 0 && tested,
+    // "tested" is INFORMATIONAL only — deterministic structural checks are the only blockers.
+    publishable: reasons.length === 0,
     tested,
+
     reasons,
     versionId,
     templateId: (version as any).template_id as string,
@@ -1205,12 +1206,10 @@ Deno.serve(async (req) => {
       if (!versionId) throw new Error("versionId is required");
 
       const quickGate = await getQuickPublishGate(admin, versionId);
-      if (!quickGate.tested) {
-        throw new Error("This version has not completed a test run yet.");
-      }
       if (!quickGate.publishable) {
         throw new Error(`Quick publish blocked: ${quickGate.reasons.join(" ")}`);
       }
+
 
       // TR10 ISOLATION: personal fork versions can never become marketplace-active.
       const { data: guardRow, error: guardError } = await admin
@@ -1255,8 +1254,10 @@ Deno.serve(async (req) => {
           admin_user_id: user.id,
           template_id: quickGate.templateId,
           version_id: versionId,
-          latest_test_job_id: quickGate.latestTestJobId,
+          latest_test_job_id: quickGate.tested ? quickGate.latestTestJobId : null,
+          skipped_test: !quickGate.tested,
           skipped_full_audit: true,
+
           timestamp: new Date().toISOString(),
         },
       }, admin);
