@@ -149,6 +149,7 @@ export default function BrandOnboardingPage() {
   const hydratedFor = useMemo(() => brand?.id ?? null, [brand?.id]);
   useEffect(() => {
     if (!brand) return;
+    setShowImporter(false);
     setName(brand.name ?? "");
     setWebsite(brand.website ?? "");
     setDescription(brand.description ?? "");
