@@ -236,3 +236,23 @@ export function resolveBrandActivationNudge(input: {
       : `${ONBOARDING_ROUTE}?step=1`,
   };
 }
+
+/**
+ * Truthful "FUSE now knows your …" list for the completion celebration.
+ * Only includes what actually exists on the brand.
+ */
+export function describeBrandKnowledge(input: {
+  brand: BrandProfile | null;
+  productCount: number;
+  castCount: number;
+  dnaPresent: boolean;
+}): string[] {
+  const known: string[] = [];
+  const flags = (input.brand?.metadata ?? {}) as Record<string, unknown>;
+  if (input.brand?.name?.trim()) known.push("Identity");
+  if (input.productCount > 0) known.push("Products");
+  if ((input.brand?.colors?.length ?? 0) > 0 || flags.neutralPalette === true) known.push("Brand colors");
+  if (input.castCount > 0) known.push("Cast");
+  if (input.dnaPresent) known.push("Creative direction");
+  return known;
+}
