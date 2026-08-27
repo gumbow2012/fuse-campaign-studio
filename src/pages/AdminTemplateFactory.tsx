@@ -292,7 +292,7 @@ export default function AdminTemplateFactory() {
     },
     onSuccess: (result) => {
       invalidateReferences();
-      queryClient.invalidateQueries({ queryKey: ["admin-template-workbench"] });
+      void queryClient.invalidateQueries({ queryKey: ["admin-template-workbench"] });
       toast({
         title: "Draft template created",
         description: `${result.templateName} · ${result.shotCount} shot${result.shotCount === 1 ? "" : "s"} — open the Node Workbench to review, then ⚡ Quick Publish.`,
