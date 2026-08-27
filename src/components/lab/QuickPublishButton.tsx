@@ -248,7 +248,31 @@ export default function QuickPublishButton({
           )}
         </DialogContent>
       </Dialog>
+
+      <Dialog open={confirmUntested} onOpenChange={setConfirmUntested}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-amber-200" />
+              Publish untested template?
+            </DialogTitle>
+            <DialogDescription>
+              {templateName ?? "This template"}
+              {versionNumber ? ` v${versionNumber}` : gate?.versionNumber ? ` v${gate.versionNumber}` : ""} has not been
+              test-generated. The workflow is structurally valid, but output quality has not been verified.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" size="sm" onClick={() => setConfirmUntested(false)}>Cancel</Button>
+            <Button size="sm" disabled={publishing} onClick={() => void publishNow()}>
+              {publishing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Zap className="mr-2 h-4 w-4" />}
+              Yes, publish live
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
+
   );
 }
 
