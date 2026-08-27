@@ -1530,6 +1530,113 @@ export default function TemplateStudioPage() {
 
   };
 
+  /* ------------------------------------------------------------------
+   * P6b — post-auth restoration + auto-run.
+   * The intent captured at gate-open is rehydrated into the builder, then the
+   * run starts through the normal authenticated path (once, if affordable).
+   * ------------------------------------------------------------------ */
+  const restoredIntentRef = useRef<string | null>(null);
+  const [autoRunIntent, setAutoRunIntent] = useState<PendingGenerationIntent | null>(null);
+  const [restoreAfford, setRestoreAfford] = useState<{ required: number; available: number } | null>(null);
+  const [planOfferOpen, setPlanOfferOpen] = useState(() => isPlanOfferActive());
+
+  useEffect(() => subscribePlanOffer(setPlanOfferOpen), []);
+
+  useEffect(() => {
+    if (!user || !templates.length) return;
+    const intent = getPendingGenerationIntent();
+    if (!intent) return;
+    const signature = intentSignature(intent);
+    if (restoredIntentRef.current === signature) return;
+    if (pendingGenerationConsumed(intent)) {
+      restoredIntentRef.current = signature;
+      return;
+    }
+    const match = templates.find(
+      (template) => template.id.toLowerCase() === intent.templateId.toLowerCase(),
+    );
+    if (!match) return;
+
+    restoredIntentRef.current = signature;
+    setSelectedTemplateId(match.id);
+    if (Object.keys(intent.textOverrides).length) {
+      setTextInputs((current) => ({ ...current, ...intent.textOverrides }));
+    }
+    if (Object.keys(intent.selectedOptions).length) {
+      setTextInputs((current) => ({ ...current, ...intent.selectedOptions }));
+    }
+    if (Object.keys(intent.selectedCast).length) {
+      setCastSelection((current) => ({ ...current, ...intent.selectedCast }) as CastSelection);
+    }
+    if (intent.inputs.length) {
+      // The anon-temp assets are public URLs the authenticated run can read —
+      // they slot in exactly like a saved library asset (no re-upload needed).
+      setLibraryAssets((current) => {
+        const next = { ...current };
+        for (const input of intent.inputs) next[input.slotKey] = { url: input.tempUrl, name: "Saved upload" };
+        return next;
+      });
+      setFiles({});
+      setAnonUploads({});
+    }
+    track("pending_generation_restored", {
+      template_id: match.id,
+      assets: intent.inputs.length,
+    });
+    setAutoRunIntent(intent);
+  }, [templates, user]);
+
+  useEffect(() => {
+    if (!autoRunIntent || !user) return;
+    // Sequence: auth → (plan offer) → restore + auto-run.
+    if (planOfferOpen) return;
+    if (!selectedTemplate || selectedTemplate.id.toLowerCase() !== autoRunIntent.templateId.toLowerCase()) return;
+    if (!isPrivilegedUser && !profile) return;
+    if (submitting || jobId) return;
+
+    const consume = () => {
+      markPendingGenerationConsumed(autoRunIntent);
+      setAutoRunIntent(null);
+    };
+
+    if (!selectedTemplate.versionId || !requiredInputsAreReady) {
+      // Restored, but not runnable without more input — never auto-run blind.
+      consume();
+      return;
+    }
+
+    const required = isPrivilegedUser ? 0 : creditsRequired;
+    const available = isPrivilegedUser ? required : displayedCreditBalance;
+    if (required > available) {
+      consume();
+      setRestoreAfford({ required, available });
+      return;
+    }
+
+    consume();
+    clearPendingGenerationIntent();
+    toast({
+      title: "✓ Account ready — Generating your campaign…",
+      description: `${selectedTemplate.name} is starting now.`,
+    });
+    track("first_generation_started", { template_id: selectedTemplate.id, credits: required });
+    void handleRun();
+  }, [
+    autoRunIntent,
+    creditsRequired,
+    displayedCreditBalance,
+    isPrivilegedUser,
+    jobId,
+    planOfferOpen,
+    profile,
+    requiredInputsAreReady,
+    selectedTemplate,
+    submitting,
+    user,
+  ]);
+
+
+
   const isRunning = result?.status === "queued" || result?.status === "running" || result?.status === "video_pending";
 
   return (
