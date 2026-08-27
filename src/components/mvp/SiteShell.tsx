@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { Link, NavLink, useNavigate } from "react-router-dom";
-import { Clapperboard, ClipboardCheck, Gem, Home, Layers3, Mail, Menu, Shirt, Sparkles, Star, UsersRound } from "lucide-react";
+import { Clapperboard, ClipboardCheck, Film, Gem, Home, Layers3, Mail, Menu, Shirt, Sparkles, Star, UsersRound } from "lucide-react";
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -82,6 +82,7 @@ export default function SiteShell({ children }: { children: ReactNode }) {
     { to: "/admin/templates", label: "Admin Templates", icon: Layers3 },
     { to: "/app/lab/studio", label: "Image Studio", icon: Sparkles },
     { to: "/app/lab/cinema", label: "Cinema Studio", icon: Clapperboard, featureKey: "cinema_studio" },
+    { to: "/app/lab/madden-media", label: "Madden Media Studio", icon: Film },
     { to: "/app/lab/outfit-swap", label: "Outfit Swap", icon: Shirt },
     { to: "/app/lab/jewelry-swap", label: "Jewelry Swap", icon: Gem },
     { to: "/admin/audits", label: "Output Audit", icon: ClipboardCheck },

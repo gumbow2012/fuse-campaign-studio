@@ -36,6 +36,7 @@ import FlowEmbed from "@/pages/FlowEmbed";
 import GenerationStudio from "@/pages/GenerationStudio";
 import CinemaStudio from "@/pages/app/cinema/CinemaStudio";
 import CinemaControlLab from "@/pages/app/cinema/CinemaControlLab";
+import MaddenMediaStudio from "@/pages/app/madden-media/MaddenMediaStudio";
 import CreatorProfile from "@/pages/app/creator/CreatorProfile";
 import CreatorDashboard from "@/pages/app/creator/CreatorDashboard";
 import EditCreatorProfile from "@/pages/app/creator/EditCreatorProfile";
@@ -258,6 +259,14 @@ const App = () => (
               element={
                 <BuilderRoute>
                   <CinemaControlLab />
+                </BuilderRoute>
+              }
+            />
+            <Route
+              path="/app/lab/madden-media"
+              element={
+                <BuilderRoute>
+                  <MaddenMediaStudio />
                 </BuilderRoute>
               }
             />
