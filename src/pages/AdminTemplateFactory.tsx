@@ -384,6 +384,28 @@ export default function AdminTemplateFactory() {
     onSettled: () => setAnalyzingId(null),
   });
 
+  const scoreMutation = useMutation({
+    mutationFn: async (reference: StreetwearReference) => {
+      setScoringId(reference.id);
+      if (!reference.blueprint) throw new Error("Analyze this reference first.");
+      return scoreAndPersist(reference, reference.blueprint);
+    },
+    onSuccess: (result) => {
+      invalidateReferences();
+      toast({ title: `Heuristic score ${result.score}/100` });
+    },
+    onError: (error: unknown) => {
+      toast({
+        title: "Could not score reference",
+        description: error instanceof Error ? error.message : "Unknown error",
+        variant: "destructive",
+      });
+    },
+    onSettled: () => setScoringId(null),
+  });
+
+
+
   const [compilingId, setCompilingId] = useState<string | null>(null);
 
   const compileMutation = useMutation({
