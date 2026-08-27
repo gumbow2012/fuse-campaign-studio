@@ -14,7 +14,18 @@ type UploadRunInputBody = {
   dataUrl?: string;
   filename?: string;
   action?: string;
+  anonSessionId?: string;
+  contentType?: string;
+  size?: number;
 };
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const ANON_ALLOWED_TYPES: Record<string, string> = {
+  "image/jpeg": "jpg",
+  "image/png": "png",
+  "image/webp": "webp",
+};
+
 
 
 const MAX_UPLOAD_BYTES = 12 * 1024 * 1024;
