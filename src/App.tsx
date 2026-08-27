@@ -325,6 +325,16 @@ const App = () => (
             />
 
             <Route
+              path="/admin/templates/factory"
+              element={
+                <AdminRoute>
+                  <AdminTemplateFactory />
+                </AdminRoute>
+              }
+            />
+
+
+            <Route
               path="/app/creator"
               element={
                 <CreatorRoute>

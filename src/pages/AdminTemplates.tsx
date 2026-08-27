@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
-import { GitBranch, Loader2, Network, TestTube2 } from "lucide-react";
+import { Factory, GitBranch, Loader2, Network, TestTube2 } from "lucide-react";
 import SiteShell from "@/components/mvp/SiteShell";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -95,6 +95,12 @@ export default function AdminTemplates() {
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
+            <Button asChild size="sm" variant="outline" className="rounded-full border-white/15 bg-white/5">
+              <Link to="/admin/templates/factory">
+                <Factory className="mr-2 h-4 w-4" />
+                Template Factory
+              </Link>
+            </Button>
             <Button asChild size="sm" className="rounded-full bg-cyan-300 text-slate-950 hover:bg-cyan-200">
               <Link to="/app/lab/canvas">
                 <Network className="mr-2 h-4 w-4" />
@@ -102,6 +108,7 @@ export default function AdminTemplates() {
               </Link>
             </Button>
           </div>
+
         </div>
 
         <Card className="border-white/10 bg-white/[0.03]">
