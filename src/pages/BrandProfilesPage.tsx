@@ -46,8 +46,13 @@ import {
 } from "@/services/productProfiles";
 
 
-function CompletionRing({ done, total }: { done: number; total: number }) {
-  const pct = total ? Math.round((done / total) * 100) : 0;
+/**
+ * Single truth: onboarding is either done (no REQUIRED items missing) or not.
+ * The percent shown is enrichment depth from RECOMMENDED items only — it is
+ * never presented as required onboarding progress.
+ */
+function BrandStatusRing({ ready, depthPct }: { ready: boolean; depthPct: number }) {
+  const pct = ready ? depthPct : 0;
   return (
     <div className="flex items-center gap-3">
       <div
@@ -56,16 +61,18 @@ function CompletionRing({ done, total }: { done: number; total: number }) {
           background: `conic-gradient(#22d3ee ${pct * 3.6}deg, rgba(255,255,255,0.08) ${pct * 3.6}deg)`,
         }}
         role="img"
-        aria-label={`Brand ${done} of ${total} complete`}
+        aria-label={ready ? `Brand set up. Profile depth ${depthPct} percent` : "Brand identity not set up yet"}
       >
         <div className="absolute inset-[6px] flex items-center justify-center rounded-full bg-slate-950 text-sm font-semibold text-white">
-          {done}/{total}
+          {ready ? <Check className="h-5 w-5 text-cyan-200" /> : <span className="text-[11px]">SET UP</span>}
         </div>
       </div>
       <div>
-        <p className={LABEL}>Brand setup</p>
+        <p className={LABEL}>{ready ? "Brand set up ✓" : "Brand setup"}</p>
         <p className="mt-1 text-sm text-slate-300">
-          {done === total ? "Your brand is fully set up." : `${total - done} step${total - done === 1 ? "" : "s"} left.`}
+          {ready
+            ? `Identity ready · Profile depth ${depthPct}% (optional enrichment)`
+            : "Add your brand name, logo and colors to finish setup."}
         </p>
       </div>
     </div>
@@ -222,28 +229,32 @@ export default function BrandProfilesPage() {
     () => avatars.filter((avatar) => brandModelIds.includes(avatar.id)).length,
     [avatars, brandModelIds],
   );
-  const completion = useMemo(
+  // ONE readiness truth for setup state (required vs enrichment).
+  const readiness = useMemo(
+    () => deriveBrandReadiness(activeBrand, products, brandModelIds, visualStyle),
+    [activeBrand, products, brandModelIds, visualStyle],
+  );
+
+  // "Profile depth" = recommended items satisfied. Purely enrichment.
+  const depthPct = useMemo(() => {
+    const recommended = readiness.sections
+      .flatMap((section) => section.items)
+      .filter((item) => item.level === "recommended");
+    if (recommended.length === 0) return 100;
+    const done = recommended.filter((item) => item.done).length;
+    return Math.round((done / recommended.length) * 100);
+  }, [readiness]);
+
+  // Non-blocking enhancement state — labeled optional everywhere in the UI.
+  const identityReady = readiness.ready;
+  const enhancements = useMemo(
     () => ({
-      identity: Boolean(
-        activeBrand?.name &&
-          (activeBrand.primary_logo_url || activeBrand.secondary_logo_url) &&
-          activeBrand.colors.length > 0,
-      ),
       products: brandProducts.length > 0,
       models: avatars.length > 0,
       visualStyle: Boolean(visualStyle && (visualStyle.tags.length > 0 || visualStyle.tone.trim().length > 0)),
       assets: libraryAssets.length > 0,
     }),
-    [activeBrand, brandProducts.length, avatars.length, libraryAssets.length, visualStyle],
-  );
-
-
-  const doneCount = Object.values(completion).filter(Boolean).length;
-
-  // Incomplete brands keep the workspace and get the shared readiness checklist.
-  const readiness = useMemo(
-    () => deriveBrandReadiness(activeBrand, products, brandModelIds, visualStyle),
-    [activeBrand, products, brandModelIds, visualStyle],
+    [brandProducts.length, avatars.length, libraryAssets.length, visualStyle],
   );
 
 
@@ -369,7 +380,7 @@ export default function BrandProfilesPage() {
               setEditingBrand(null);
             }}
           />
-          <CompletionRing done={doneCount} total={5} />
+          <BrandStatusRing ready={identityReady} depthPct={depthPct} />
         </div>
 
         <Tabs value={tab} onValueChange={setTab} className="mt-8">
@@ -385,18 +396,17 @@ export default function BrandProfilesPage() {
             {!readiness.ready ? (
               <div className={`${CARD} mb-4`}>
                 <div className="flex flex-wrap items-center justify-between gap-3">
-                  <p className={LABEL}>Brand readiness</p>
+                  <p className={LABEL}>Finish brand setup</p>
                   <span className="text-[11px] uppercase tracking-[0.16em] text-amber-200">
                     {readiness.requiredMissing} required left
                   </span>
                 </div>
                 <ul className="mt-4 grid gap-2 sm:grid-cols-2">
-                  {readiness.sections.map((section) => (
-                    <li key={section.key} className="flex items-center justify-between gap-3 text-sm">
-                      <span className="text-slate-300">{section.label}</span>
-                      {section.status === "complete" ? (
-                        <Check className="h-4 w-4 shrink-0 text-cyan-200" />
-                      ) : (
+                  {readiness.sections
+                    .filter((section) => section.status === "required-missing")
+                    .map((section) => (
+                      <li key={section.key} className="flex items-center justify-between gap-3 text-sm">
+                        <span className="text-slate-300">{section.label}</span>
                         <button
                           type="button"
                           onClick={() =>
@@ -408,26 +418,38 @@ export default function BrandProfilesPage() {
                           }
                           className="shrink-0 text-[11px] uppercase tracking-[0.16em] text-cyan-200 hover:text-cyan-100"
                         >
-                          {section.status === "required-missing" ? "Complete" : "Improve"}
+                          Complete
                         </button>
-                      )}
-                    </li>
-                  ))}
+                      </li>
+                    ))}
                 </ul>
               </div>
-            ) : null}
+            ) : (
+              <div className={`${CARD} mb-4`}>
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <p className={LABEL}>Brand set up ✓</p>
+                  <span className="inline-flex items-center gap-1.5 text-[11px] uppercase tracking-[0.16em] text-cyan-200">
+                    <Check className="h-3.5 w-3.5" /> Identity ready
+                  </span>
+                </div>
+                <p className="mt-3 text-sm text-slate-400">
+                  Everything below is optional — add it whenever you want sharper results. Profile depth {depthPct}%.
+                </p>
+              </div>
+            )}
 
+            <p className={`${LABEL} mb-3`}>Optional enhancements</p>
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               <DashboardCard
                 icon={<Palette className="h-5 w-5" />}
                 title="Identity"
-                done={completion.identity}
+                done={identityReady}
                 detail={
-                  completion.identity
-                    ? `${activeBrand?.name} — logo and ${activeBrand?.colors.length} color${activeBrand?.colors.length === 1 ? "" : "s"} saved.`
-                    : "Name, a logo and at least one brand color."
+                  identityReady
+                    ? `${activeBrand?.name} — identity and ${activeBrand?.colors.length} color${activeBrand?.colors.length === 1 ? "" : "s"} saved.`
+                    : "Name, a logo (or “no logo”) and at least one color."
                 }
-                cta={completion.identity ? "Edit identity" : "Add your logo & colors"}
+                cta={identityReady ? "Edit identity" : "Finish identity"}
                 onClick={() => {
                   setTab("brands");
                   setEditingBrand(activeBrand ?? null);
@@ -435,10 +457,10 @@ export default function BrandProfilesPage() {
               />
               <DashboardCard
                 icon={<Shirt className="h-5 w-5" />}
-                title="Products & garments"
-                done={completion.products}
+                title="Products & garments (optional)"
+                done={enhancements.products}
                 detail={`${brandProducts.length} saved for this brand.`}
-                cta={completion.products ? "Manage products" : "Add products"}
+                cta={enhancements.products ? "Manage products" : "Add products"}
                 onClick={() => {
                   setTab("products");
                   setEditingProduct(brandProducts.length ? undefined : null);
@@ -446,26 +468,26 @@ export default function BrandProfilesPage() {
               />
               <DashboardCard
                 icon={<Users className="h-5 w-5" />}
-                title="Models / FUSE Cast"
-                done={completion.models}
+                title="Models / FUSE Cast (optional)"
+                done={enhancements.models}
                 detail={
                   brandModelCount
                     ? `${brandModelCount} model${brandModelCount === 1 ? "" : "s"} linked to this brand.`
                     : `${avatars.length} model${avatars.length === 1 ? "" : "s"} saved — none linked to this brand yet.`
                 }
-                cta={completion.models ? "Manage models" : "Add models"}
+                cta={enhancements.models ? "Manage models" : "Add models"}
                 onClick={() => setTab("models")}
               />
               <DashboardCard
                 icon={<Wand2 className="h-5 w-5" />}
-                title="Visual style"
-                done={completion.visualStyle}
+                title="Creative DNA (optional)"
+                done={enhancements.visualStyle}
                 detail={
-                  completion.visualStyle
+                  enhancements.visualStyle
                     ? [visualStyle?.tags.slice(0, 3).join(", "), visualStyle?.tone].filter(Boolean).join(" · ")
                     : "Tags, tone and references FUSE should always respect."
                 }
-                cta={completion.visualStyle ? "Edit your style" : "Set your style"}
+                cta={enhancements.visualStyle ? "Edit your style" : "Set your style"}
                 onClick={() =>
                   activeBrand
                     ? navigate(`/app/brand/onboarding?brand=${activeBrand.id}&step=5`)
@@ -475,8 +497,8 @@ export default function BrandProfilesPage() {
 
               <DashboardCard
                 icon={<Images className="h-5 w-5" />}
-                title="Saved assets"
-                done={completion.assets}
+                title="Saved assets (optional)"
+                done={enhancements.assets}
                 detail={`${libraryAssets.length} asset${libraryAssets.length === 1 ? "" : "s"} in your library.`}
                 cta="Open library"
                 onClick={() => setTab("library")}
