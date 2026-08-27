@@ -6,7 +6,22 @@
 
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Loader2, Plus, Trash2, Upload, X } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import {
+  ArrowRight,
+  Check,
+  Images,
+  Loader2,
+  Palette,
+  Plus,
+  Shirt,
+  Sparkles,
+  Trash2,
+  Upload,
+  Users,
+  Wand2,
+  X,
+} from "lucide-react";
 import Navbar from "@/components/Navbar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,6 +29,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
+import { useBrand } from "@/contexts/BrandContext";
+import { listMyAvatars } from "@/services/avatarProfiles";
+import { listLibraryAssets } from "@/services/libraryAssets";
 import { uploadRunInputFile } from "@/services/runInputUpload";
 import {
   createBrandProfile,
@@ -106,9 +124,11 @@ function ImageSlot({
 function BrandEditor({
   brand,
   onDone,
+  onCreated,
 }: {
   brand: BrandProfile | null;
   onDone: () => void;
+  onCreated?: (created: BrandProfile) => void;
 }) {
   const queryClient = useQueryClient();
   const [name, setName] = useState(brand?.name ?? "");
@@ -130,12 +150,16 @@ function BrandEditor({
         colors,
       };
       if (!payload.name) throw new Error("Brand name is required.");
-      if (brand) await updateBrandProfile(brand.id, payload);
-      else await createBrandProfile(payload);
+      if (brand) {
+        await updateBrandProfile(brand.id, payload);
+        return null;
+      }
+      return await createBrandProfile(payload);
     },
-    onSuccess: () => {
+    onSuccess: (created) => {
       toast.success(brand ? "Brand updated" : "Brand saved");
       queryClient.invalidateQueries({ queryKey: ["brand-profiles"] });
+      if (created) onCreated?.(created);
       onDone();
     },
     onError: (error) => toast.error(error instanceof Error ? error.message : "Could not save brand"),
@@ -565,6 +589,7 @@ function BrandSwitcher({
 export default function BrandProfilesPage() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const { brands, activeBrand, setActiveBrand, loading: brandLoading } = useBrand();
   const [tab, setTab] = useState("dashboard");
   const [editingBrand, setEditingBrand] = useState<BrandProfile | null | undefined>(undefined);
@@ -648,7 +673,11 @@ export default function BrandProfilesPage() {
           {hero}
           {editingBrand !== undefined ? (
             <div className="mt-8">
-              <BrandEditor brand={editingBrand} onDone={() => setEditingBrand(undefined)} />
+              <BrandEditor
+                brand={editingBrand}
+                onDone={() => setEditingBrand(undefined)}
+                onCreated={(created) => setActiveBrand(created.id)}
+              />
             </div>
           ) : (
             <Button
@@ -727,7 +756,7 @@ export default function BrandProfilesPage() {
                 done={completion.models}
                 detail={`${avatars.length} model${avatars.length === 1 ? "" : "s"} in your cast.`}
                 cta={completion.models ? "Manage models" : "Add models"}
-                onClick={() => navigateTo("/app/avatars")}
+                onClick={() => navigate("/app/avatars")}
               />
               <DashboardCard
                 icon={<Wand2 className="h-5 w-5" />}
@@ -743,14 +772,18 @@ export default function BrandProfilesPage() {
                 done={completion.assets}
                 detail={`${libraryAssets.length} asset${libraryAssets.length === 1 ? "" : "s"} in your library.`}
                 cta="Open library"
-                onClick={() => navigateTo("/app/templates")}
+                onClick={() => navigate("/app/templates")}
               />
             </div>
           </TabsContent>
 
           <TabsContent value="brands" className="mt-6 space-y-5">
             {editingBrand !== undefined ? (
-              <BrandEditor brand={editingBrand} onDone={() => setEditingBrand(undefined)} />
+              <BrandEditor
+                brand={editingBrand}
+                onDone={() => setEditingBrand(undefined)}
+                onCreated={(created) => setActiveBrand(created.id)}
+              />
             ) : (
               <Button
                 type="button"
