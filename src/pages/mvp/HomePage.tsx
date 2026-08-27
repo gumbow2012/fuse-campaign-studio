@@ -497,6 +497,14 @@ export default function HomePage() {
                 variant="outline"
                 className="rounded-full border-white/15 bg-white/5 px-7 text-foreground hover:bg-white/10"
               >
+                <Link to="/creators/browse">Browse Creators</Link>
+              </Button>
+              <Button
+                asChild
+                size="lg"
+                variant="ghost"
+                className="rounded-full px-5 text-slate-300 hover:text-white"
+              >
                 <Link to="/creators">Become a Creator</Link>
               </Button>
               {isCreator && (
