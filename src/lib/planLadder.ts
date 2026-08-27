@@ -24,6 +24,12 @@ import { STRIPE_TIERS, type StripeTierKey } from "@/lib/stripe-config";
 
 export type PlanCheckoutMode = "live" | "gated" | "none";
 
+/** One controlled accent per plan — dark FUSE system, not a rainbow page. */
+export type PlanAccentKey = "graphite" | "cyan" | "sky" | "violet" | "lime" | "magenta" | "royal";
+
+/** Intentional, non-duplicated recommendation badges. */
+export type PlanRecommendation = "MOST POPULAR" | "BEST VALUE" | "FOR TEAMS";
+
 export type PlanLadderEntry = {
   key: string;
   name: string;
@@ -31,6 +37,10 @@ export type PlanLadderEntry = {
   tagline: string;
   badge: string;
   icon: LucideIcon;
+  /** Controlled accent used for glow / badge / CTA / border / key metric. */
+  accent: PlanAccentKey;
+  /** Only Capsule / Pro / Team carry one. */
+  recommendation?: PlanRecommendation;
   description: string;
   /** Monthly USD price (designed). */
   price: number;
@@ -60,20 +70,21 @@ export const PLAN_LADDER: PlanLadderEntry[] = [
     tagline: "Explore FUSE",
     badge: "Free",
     icon: Sparkles,
+    accent: "graphite",
     description: "Browse the marketplace, preview campaigns and follow the creators behind them.",
     price: 0,
     annualPrice: 0,
     monthlyCredits: 0,
-    creditsLabel: "Browsing only",
-    goodFor: "Discovering what FUSE can make",
+    creditsLabel: "100 welcome credits",
+    goodFor: "Trying FUSE on free-eligible templates",
     benefits: [
-      "Browse the full template marketplace",
-      "Preview every campaign before you commit",
-      "Discover creators and their drops",
-      "Save favourites to your account",
+      "Explore FUSE",
+      "Free-eligible templates",
+      "Brand Workspace",
+      "100 welcome credits",
     ],
     checkout: "none",
-    ctaLabel: "Explore FUSE",
+    ctaLabel: "Start free",
     isFreeState: true,
   },
   {
@@ -82,6 +93,7 @@ export const PLAN_LADDER: PlanLadderEntry[] = [
     tagline: "For first drops",
     badge: "Entry",
     icon: Zap,
+    accent: "cyan",
     description: "Run real campaigns from the marketplace and launch your first drops.",
     price: STRIPE_TIERS.starter.price,
     annualPrice: 20,
@@ -89,11 +101,12 @@ export const PLAN_LADDER: PlanLadderEntry[] = [
     creditsLabel: `${STRIPE_TIERS.starter.monthlyCredits.toLocaleString()} credits/mo`,
     goodFor: "Your first campaigns",
     benefits: [
-      "Run any template in the marketplace",
-      "New campaigns added daily",
-      "Saved brand assets",
-      "Product + garment profiles",
+      "Full campaign templates",
+      "Image Templates",
+      "Brand Workspace",
+      "Saved products + assets",
       "Campaign history",
+      "Credit top-ups",
     ],
     checkout: "live",
     stripeTierKey: "starter",
@@ -106,6 +119,7 @@ export const PLAN_LADDER: PlanLadderEntry[] = [
     tagline: "For weekly content",
     badge: "Growing",
     icon: Layers,
+    accent: "sky",
     description: "For brands posting every week, with FUSE Cast and your own avatars.",
     price: 59,
     annualPrice: 47,
@@ -114,10 +128,9 @@ export const PLAN_LADDER: PlanLadderEntry[] = [
     goodFor: "Weekly campaign content",
     benefits: [
       "Everything in Starter",
+      "More monthly credits",
       "FUSE Cast",
-      "My Avatars",
-      "Higher concurrency",
-      "Larger saved-asset library",
+      "Higher campaign capacity",
     ],
     checkout: "gated",
     ctaLabel: "Choose Plus",
@@ -130,6 +143,8 @@ export const PLAN_LADDER: PlanLadderEntry[] = [
     tagline: "For a full capsule drop",
     badge: "Coming soon",
     icon: Package,
+    accent: "violet",
+    recommendation: "MOST POPULAR",
     description: "Enough campaign volume to shoot an entire capsule collection in one month.",
     price: 75,
     annualPrice: 60,
@@ -137,14 +152,14 @@ export const PLAN_LADDER: PlanLadderEntry[] = [
     creditsLabel: "10,000 credits/mo",
     goodFor: "One full capsule drop a month",
     benefits: [
-      "Everything in Plus",
-      "Volume for a complete capsule drop",
-      "FUSE Cast + My Avatars",
-      "Higher concurrency",
-      "Campaign history + versions",
+      "Everything in Starter",
+      "More monthly credits",
+      "FUSE Cast",
+      "Higher campaign capacity",
     ],
     checkout: "gated",
     ctaLabel: "Join the Capsule waitlist",
+    featured: true,
   },
   {
     key: "pro",
@@ -152,6 +167,8 @@ export const PLAN_LADDER: PlanLadderEntry[] = [
     tagline: "For active brands",
     badge: "Most popular",
     icon: Rocket,
+    accent: "lime",
+    recommendation: "BEST VALUE",
     description: "For brands running a real drop calendar with priority turnaround.",
     price: STRIPE_TIERS.pro.price,
     annualPrice: 119,
@@ -159,11 +176,10 @@ export const PLAN_LADDER: PlanLadderEntry[] = [
     creditsLabel: `${STRIPE_TIERS.pro.monthlyCredits.toLocaleString()} credits/mo`,
     goodFor: "A campaign every week, all month",
     benefits: [
-      "Everything in Plus",
-      "Priority generation",
-      "Trending + early-access campaigns",
-      "Campaign versions and revisions",
-      "Creator Program eligible",
+      "Everything in Capsule",
+      "Workflow customization",
+      "Advanced generation controls",
+      "Campaign versions + revisions",
     ],
     checkout: "live",
     stripeTierKey: "pro",
@@ -177,6 +193,7 @@ export const PLAN_LADDER: PlanLadderEntry[] = [
     tagline: "High volume",
     badge: "Volume",
     icon: Crown,
+    accent: "magenta",
     description: "For multi-line brands and studios shipping campaigns constantly.",
     price: STRIPE_TIERS.studio.price,
     annualPrice: 319,
@@ -185,10 +202,9 @@ export const PLAN_LADDER: PlanLadderEntry[] = [
     goodFor: "Multiple campaigns every week",
     benefits: [
       "Everything in Pro",
-      "Highest monthly campaign volume",
+      "Very high monthly campaign capacity",
       "Full advanced toolset",
       "Largest saved-asset library",
-      "Priority generation",
     ],
     checkout: "live",
     stripeTierKey: "studio",
@@ -201,6 +217,8 @@ export const PLAN_LADDER: PlanLadderEntry[] = [
     tagline: "For agencies + teams",
     badge: "Teams",
     icon: Building2,
+    accent: "royal",
+    recommendation: "FOR TEAMS",
     description: "A shared workspace for agencies running campaigns for several brands.",
     price: 699,
     annualPrice: 559,
@@ -208,12 +226,10 @@ export const PLAN_LADDER: PlanLadderEntry[] = [
     creditsLabel: "Shared team pool",
     goodFor: "Client campaigns, all month",
     benefits: [
-      "Everything in Studio",
+      "Shared team workspace",
       "Shared team credit pool",
       "3 seats included",
-      "Shared brand assets + templates",
       "Roles and permissions",
-      "Team analytics",
     ],
     checkout: "gated",
     ctaLabel: "Go Team",
@@ -222,7 +238,8 @@ export const PLAN_LADDER: PlanLadderEntry[] = [
 
 export const FEATURED_PLANS = PLAN_LADDER.filter((entry) => entry.featured);
 
-export const ANNUAL_SAVINGS_LABEL = "SAVE 20%";
+/** Selector label — the exact percent lives on each card (it can vary by plan). */
+export const ANNUAL_SAVINGS_LABEL = "Best savings";
 
 /** Annual checkout is gated for every plan until annual Stripe prices exist. */
 export function isCheckoutLive(entry: PlanLadderEntry, cycle: "monthly" | "annual") {
