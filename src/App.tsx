@@ -62,6 +62,8 @@ import CollectionsPage from "@/pages/mvp/CollectionsPage";
 import PublicCollectionPage from "@/pages/mvp/PublicCollectionPage";
 import NotificationsPage from "@/pages/mvp/NotificationsPage";
 import CustomizeWorkflowPage from "@/pages/mvp/CustomizeWorkflowPage";
+import ContestsPage from "@/pages/mvp/ContestsPage";
+import Referrals from "@/pages/Referrals";
 
 import CreatorOnboarding from "@/pages/app/creator/CreatorOnboarding";
 
@@ -84,6 +86,15 @@ const App = () => (
             <Route path="/pricing" element={<BillingPage />} />
             <Route path="/contact" element={<ContactPage />} />
             <Route path="/faq" element={<FaqPage />} />
+            <Route path="/contests" element={<ContestsPage />} />
+            <Route
+              path="/referrals"
+              element={
+                <CustomerRoute>
+                  <Referrals />
+                </CustomerRoute>
+              }
+            />
             <Route path="/terms" element={<TermsPage />} />
             <Route path="/privacy" element={<PrivacyPage />} />
             <Route path="/creators" element={<CreatorProgramPage />} />

@@ -320,6 +320,51 @@ export type Database = {
         }
         Relationships: []
       }
+      contests: {
+        Row: {
+          cover_url: string | null
+          created_at: string
+          description: string | null
+          ends_at: string | null
+          id: string
+          prize: string | null
+          sort_order: number
+          starts_at: string | null
+          status: string
+          subtitle: string | null
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          cover_url?: string | null
+          created_at?: string
+          description?: string | null
+          ends_at?: string | null
+          id?: string
+          prize?: string | null
+          sort_order?: number
+          starts_at?: string | null
+          status?: string
+          subtitle?: string | null
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          cover_url?: string | null
+          created_at?: string
+          description?: string | null
+          ends_at?: string | null
+          id?: string
+          prize?: string | null
+          sort_order?: number
+          starts_at?: string | null
+          status?: string
+          subtitle?: string | null
+          title?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       creator_profiles: {
         Row: {
           accent: string
