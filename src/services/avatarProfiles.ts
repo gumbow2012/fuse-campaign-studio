@@ -118,6 +118,12 @@ export async function createUserAvatar(input: AvatarProfileInput): Promise<Avata
     .select("*")
     .maybeSingle();
   if (error) throw error;
+  // Phase 7 activation analytics — fire-and-forget, safe props only.
+  try {
+    track(ACTIVATION_EVENTS.castAdded, { source: "user_avatar_created" });
+  } catch {
+    /* analytics must never break a save */
+  }
   return data ? normalize(data) : null;
 }
 
