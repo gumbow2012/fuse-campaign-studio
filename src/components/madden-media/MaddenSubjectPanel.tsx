@@ -114,10 +114,11 @@ export default function MaddenSubjectPanel({ slot, onBind }: Props) {
     setAnalyzing(true);
     try {
       const result = await analyzeSubject(data.referenceUrls);
-      if (!result.ok) {
-        toast.error(result.reason);
+      if (result.ok !== true) {
+        toast.error(result.reason ?? "Subject analysis failed");
         return;
       }
+
       // Analysis fills the fields; the artist's edits and locks always win after.
       commit(
         {
