@@ -36,6 +36,7 @@ import { listProductProfiles } from "@/services/productProfiles";
 import { deriveBrandReadiness, readBrandFlags, type ReadinessStatus } from "@/lib/brandReadiness";
 import BrandImportPanel, { type BrandImportConfirmation } from "@/components/brand/BrandImportPanel";
 import BrandIdentityStep, { type ColorRole } from "@/components/brand/BrandIdentityStep";
+import BrandProductsStep from "@/components/brand/BrandProductsStep";
 import { takeBrandImport } from "@/services/brandImport";
 
 const STEPS = [
