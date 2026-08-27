@@ -9,6 +9,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useBrand } from "@/contexts/BrandContext";
 import { fetchTemplates, type ApiTemplate } from "@/services/fuseApi";
 import CreatorVerificationBadge from "@/components/CreatorVerificationBadge";
+import AddToCollectionButton from "@/components/collections/AddToCollectionButton";
 import { listFollowedCreatorIds } from "@/services/creatorFollows";
 import { listPublicCreatorProfiles, type CreatorProfile } from "@/services/creatorProfile";
 import { listProductProfiles, type ProductProfileType } from "@/services/productProfiles";
