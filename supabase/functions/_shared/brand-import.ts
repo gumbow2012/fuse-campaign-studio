@@ -71,7 +71,10 @@ function absolutize(value: string | null | undefined, base: URL): string | null 
   const raw = (value ?? "").trim();
   if (!raw || raw.startsWith("data:") || raw.startsWith("javascript:")) return null;
   try {
-    return new URL(raw, base).toString();
+    const resolved = new URL(raw, base);
+    // Keep candidates https so they render inside the app without mixed content.
+    if (resolved.protocol === "http:") resolved.protocol = "https:";
+    return resolved.toString();
   } catch {
     return null;
   }
