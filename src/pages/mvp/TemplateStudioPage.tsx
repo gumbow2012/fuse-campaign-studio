@@ -1640,7 +1640,7 @@ export default function TemplateStudioPage() {
 
 
                     <div className="space-y-3 p-4">
-                      {performance ? <PerformanceBlock row={performance} /> : null}
+                      {performance ? <PerformanceBlock row={performance} compact /> : null}
                       {performance ? <PerformanceBadges row={performance} limit={3} /> : null}
                       <div className="flex items-start justify-between gap-3">
 
