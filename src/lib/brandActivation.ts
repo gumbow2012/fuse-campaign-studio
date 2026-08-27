@@ -31,7 +31,12 @@ export interface BrandActivationState {
   shownAt?: string;
   lastReminderType?: string;
   lastReminderAt?: string;
+  /** Phase 3 banner: when it was dismissed and for WHICH activation state. */
+  bannerDismissedAt?: string;
+  /** Signature of the readiness state at dismissal — advancing it re-shows the banner. */
+  bannerDismissedSignature?: string;
 }
+
 
 export interface BrandCompletion {
   /** Satisfied / (required + recommended) items, rounded. Optional excluded. */
