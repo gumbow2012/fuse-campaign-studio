@@ -2129,6 +2129,34 @@ export default function TemplateStudioPage() {
                               setLibraryAssets((current) => ({ ...current, [field.key]: null }));
                               releaseAutofill(field.key);
                               if (nextFile) advanceFromInput(field.key);
+                              // P6a: logged-out uploads go to temporary storage so the
+                              // asset survives an OAuth redirect. No generation starts.
+                              if (!user) {
+                                if (!nextFile) {
+                                  setAnonUploads((current) => ({ ...current, [field.key]: undefined as never }));
+                                  return;
+                                }
+                                setAnonUploads((current) => ({
+                                  ...current,
+                                  [field.key]: { status: "uploading" },
+                                }));
+                                void uploadAnonymousRunInput(nextFile)
+                                  .then((url) =>
+                                    setAnonUploads((current) => ({
+                                      ...current,
+                                      [field.key]: { status: "ready", url },
+                                    })),
+                                  )
+                                  .catch((error) => {
+                                    const message =
+                                      error instanceof Error ? error.message : "Upload failed.";
+                                    setAnonUploads((current) => ({
+                                      ...current,
+                                      [field.key]: { status: "error", error: message },
+                                    }));
+                                    toast.error(message);
+                                  });
+                              }
                             }}
                             libraryAsset={libraryAssets[field.key] ?? null}
                             // P1: saved-library / brand pickers are account features.
@@ -2146,9 +2174,29 @@ export default function TemplateStudioPage() {
                             onClear={() => {
                               setFiles((current) => ({ ...current, [field.key]: null }));
                               setLibraryAssets((current) => ({ ...current, [field.key]: null }));
+                              setAnonUploads((current) => ({ ...current, [field.key]: undefined as never }));
                               releaseAutofill(field.key);
                             }}
                           />
+                          {!user && anonUploads[field.key] ? (
+                            <p
+                              className={cn(
+                                "mt-2 text-[11px] leading-relaxed",
+                                anonUploads[field.key]?.status === "error"
+                                  ? "text-rose-200"
+                                  : anonUploads[field.key]?.status === "ready"
+                                    ? "text-emerald-200"
+                                    : "text-cyan-100",
+                              )}
+                            >
+                              {anonUploads[field.key]?.status === "uploading"
+                                ? "Saving upload for this session..."
+                                : anonUploads[field.key]?.status === "ready"
+                                  ? "Upload saved — it will still be here after you sign in."
+                                  : anonUploads[field.key]?.error}
+                            </p>
+                          ) : null}
+
                         </div>
                       ) : (
                         <div key={field.key} className="rounded-[1.25rem] border border-white/10 bg-black/25 p-3">
