@@ -27,6 +27,8 @@ import { useBrand } from "@/contexts/BrandContext";
 import { listMyAvatars } from "@/services/avatarProfiles";
 import { listLibraryAssets } from "@/services/libraryAssets";
 import { BrandEditor, CARD, LABEL, ProductEditor } from "@/components/brand/BrandEditors";
+import BrandImportPanel from "@/components/brand/BrandImportPanel";
+import { stashBrandImport } from "@/services/brandImport";
 import BrandModelsPanel from "@/components/brand/BrandModelsPanel";
 import BrandLibraryPanel from "@/components/brand/BrandLibraryPanel";
 import {
