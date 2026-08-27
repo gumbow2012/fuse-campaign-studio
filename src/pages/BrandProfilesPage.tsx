@@ -27,8 +27,11 @@ import { useBrand } from "@/contexts/BrandContext";
 import { listMyAvatars } from "@/services/avatarProfiles";
 import { listLibraryAssets } from "@/services/libraryAssets";
 import { BrandEditor, CARD, LABEL, ProductEditor } from "@/components/brand/BrandEditors";
+import BrandModelsPanel from "@/components/brand/BrandModelsPanel";
+import BrandLibraryPanel from "@/components/brand/BrandLibraryPanel";
 import {
   deleteBrandProfile,
+  readModelIds,
   readOnboarding,
   readVisualStyle,
   type BrandProfile,
