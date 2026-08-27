@@ -26,6 +26,8 @@ import {
   handlePreviewGenerate,
   handlePreviewInventory,
 } from "./previews.ts";
+import { handleBatchRun } from "./batch.ts";
+
 
 
 const GEMINI_ANALYSIS_MODEL = Deno.env.get("GEMINI_ANALYSIS_MODEL")?.trim() || "gemini-3.6-flash";
