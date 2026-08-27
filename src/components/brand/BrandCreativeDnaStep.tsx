@@ -183,10 +183,11 @@ function LinkField({
 
   const save = () => {
     const result = validateSocialLink(draft, kind);
-    if (!result.ok) {
+    if (result.ok === false) {
       setError(result.message);
       return;
     }
+
     setError(null);
     setDraft("");
     onChange(result.url);
