@@ -31,7 +31,9 @@ import {
 import UploadGuide from "@/components/templates/UploadGuide";
 import LibraryPickerDialog from "@/components/templates/LibraryPickerDialog";
 import ProfileAssetPicker from "@/components/templates/ProfileAssetPicker";
+import SaveAssetToBrandPrompt from "@/components/brand/SaveAssetToBrandPrompt";
 import { libraryKindForAssetType } from "@/services/libraryAssets";
+
 import { runUploadChecks, type UploadCheckResult, type UploadCheckState } from "@/lib/uploadChecks";
 import {
   inputRoleWord,
@@ -273,7 +275,12 @@ export default function TemplateInputCard({
               Remove
             </button>
           </div>
+          {/* Phase 5 — one-click "remember this asset" after a manual upload. */}
+          {file && state !== "error" ? (
+            <SaveAssetToBrandPrompt file={file} assetType={requirement?.assetType ?? null} role={role} />
+          ) : null}
         </div>
+
       ) : (
         <button
           type="button"

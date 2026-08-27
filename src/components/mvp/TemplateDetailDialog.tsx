@@ -5,6 +5,11 @@ import { Link } from "react-router-dom";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import CreatorVerificationBadge from "@/components/CreatorVerificationBadge";
 import { useQuery } from "@tanstack/react-query";
+import { useBrand } from "@/contexts/BrandContext";
+import { useBrandFitAssets } from "@/hooks/useBrandFitAssets";
+import { deriveTemplateFit } from "@/lib/brandTemplateFit";
+import TemplateFitBadge from "@/components/brand/TemplateFitBadge";
+import TemplateRequirementNudge from "@/components/brand/TemplateRequirementNudge";
 import { cn } from "@/lib/utils";
 import type { ApiTemplate } from "@/services/fuseApi";
 import { PerformanceDetailSection } from "@/components/TemplatePerformance";
@@ -27,7 +32,12 @@ function isVideoAsset(template: Pick<ApiTemplate, "preview_url" | "preview_asset
 
 /** Reads an aspect ratio only if the template already declares one — never guessed. */
 export function readTemplateAspectRatio(template: ApiTemplate | null | undefined) {
+  const { activeBrand } = useBrand();
+  const { assets: brandFitAssets } = useBrandFitAssets();
+
   if (!template) return null;
+
+  const brandFit = brandFitAssets ? deriveTemplateFit(template, brandFitAssets) : null;
   const candidates = [...(template.tags ?? []), template.output_type ?? ""];
   for (const candidate of candidates) {
     const match = /(\d{1,2}\s*:\s*\d{1,2})/.exec(String(candidate));
@@ -149,6 +159,15 @@ export default function TemplateDetailDialog({
                 </div>
               ))}
             </div>
+
+            {/* Phase 5 — truthful brand compatibility for this template. */}
+            {brandFit && activeBrand ? (
+              brandFit.status === "ready" ? (
+                <TemplateFitBadge fit={brandFit} brandName={activeBrand.name} />
+              ) : (
+                <TemplateRequirementNudge fit={brandFit} />
+              )
+            ) : null}
 
             <PerformanceDetailSection row={performance} rows={performanceRows} />
 
