@@ -33,6 +33,7 @@ import {
 } from "@/services/brandProfiles";
 import { listMyAvatars } from "@/services/avatarProfiles";
 import { listProductProfiles } from "@/services/productProfiles";
+import { deriveBrandReadiness, readBrandFlags, type ReadinessStatus } from "@/lib/brandReadiness";
 
 const STEPS = [
   { id: 1, label: "Brand basics", optional: false },
