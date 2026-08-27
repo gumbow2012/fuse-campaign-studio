@@ -17,6 +17,7 @@ import { usePendingReferral } from "@/hooks/usePendingReferral";
 import { getAbsoluteSiteUrl } from "@/lib/site-url";
 import { writePendingAuthIntent } from "@/lib/pendingAuthIntent";
 import { getPendingGenerationIntent } from "@/lib/pendingGenerationIntent";
+import { track } from "@/lib/analytics/track";
 
 type Props = {
   open: boolean;
@@ -177,8 +178,10 @@ export default function GenerateAuthGateModal({ open, onClose, templateId, retur
             oauthRedirectTo={redirectTo}
             emailRedirectTo={redirectTo}
             emailCtaLabel={"Create account & generate"}
+            authSurface="generate_gate"
             onBeforeRedirect={() => writePendingAuthIntent({ returnTo, templateId: templateId ?? undefined })}
             onAuthenticated={() => {
+              track("generate_auth_completed", { template_id: templateId ?? null });
               // The next phase owns the auto-run; here we just leave the
               // captured intent in place and continue on this route.
               void getPendingGenerationIntent();
