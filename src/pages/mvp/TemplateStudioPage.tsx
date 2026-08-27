@@ -7,6 +7,7 @@ import {
   Check,
   Film,
   GitBranch,
+  Heart,
   Loader2,
   
   Network,
@@ -39,6 +40,8 @@ import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/hooks/use-toast";
+import { useTemplateFavorites } from "@/hooks/useTemplateFavorites";
+import FavoriteTemplateButton from "@/components/templates/FavoriteTemplateButton";
 import { SUPABASE_PUBLISHABLE_KEY, SUPABASE_URL, supabase } from "@/integrations/supabase/client";
 import { ADMIN_VISUAL_BUDGET_TOTAL, getAdminVisualCreditsRemaining, getAdminVisualCreditsSpent, recordAdminVisualCreditUsage } from "@/lib/adminBudget";
 import { cn } from "@/lib/utils";
@@ -615,9 +618,17 @@ export default function TemplateStudioPage() {
     return { all: templates.length, image, video };
   }, [templates]);
 
+  /** RETENTION P1 — favorites (separate from the hidden filter block). */
+  const { canFavorite, isFavorite, toggleFavorite, favoriteCount } = useTemplateFavorites();
+  const [favoritesOnly, setFavoritesOnly] = useState(false);
+  useEffect(() => {
+    if (!canFavorite && favoritesOnly) setFavoritesOnly(false);
+  }, [canFavorite, favoritesOnly]);
+
   const visibleTemplates = useMemo(() => {
-    if (!activeFilterCount && outputTypeFilter === "all") return templates;
-    return templates.filter((template) => {
+    const base = favoritesOnly ? templates.filter((template) => isFavorite(String(template.id))) : templates;
+    if (!activeFilterCount && outputTypeFilter === "all") return base;
+    return base.filter((template) => {
       if (outputTypeFilter !== "all") {
         const isVideo = (template.output_type ?? "").toLowerCase() === "video";
         if (outputTypeFilter === "video" ? !isVideo : isVideo) return false;
@@ -634,7 +645,8 @@ export default function TemplateStudioPage() {
       }
       return true;
     });
-  }, [activeFilterCount, outputTypeFilter, perfFilters, performanceMap, templates]);
+  }, [activeFilterCount, favoritesOnly, isFavorite, outputTypeFilter, perfFilters, performanceMap, templates]);
+
 
 
   // TR10b — deep-link straight into the running workspace for a specific run
@@ -1935,7 +1947,25 @@ export default function TemplateStudioPage() {
             ) : null}
 
             <div className="mt-4 flex flex-wrap items-center gap-2">
+              {canFavorite ? (
+                <button
+                  type="button"
+                  onClick={() => setFavoritesOnly((previous) => !previous)}
+                  aria-pressed={favoritesOnly}
+                  className={cn(
+                    "inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] transition-colors",
+                    favoritesOnly
+                      ? "border-rose-300/50 bg-rose-400/15 text-rose-100"
+                      : "border-white/10 bg-white/[0.04] text-slate-300 hover:text-white",
+                  )}
+                >
+                  <Heart className={cn("h-3.5 w-3.5", favoritesOnly && "fill-current")} />
+                  Favorites
+                  <span className="opacity-60">{favoriteCount}</span>
+                </button>
+              ) : null}
               <button
+
                 type="button"
                 onClick={() => (selectMode ? exitSelectMode() : setSelectMode(true))}
                 aria-pressed={selectMode}
@@ -2001,6 +2031,14 @@ export default function TemplateStudioPage() {
                       <div className="absolute bottom-3 left-3 rounded-full border border-white/15 bg-black/45 px-2.5 py-1 text-[9px] uppercase tracking-[0.18em] text-white/80 backdrop-blur">
                         Vibe
                       </div>
+                      {canFavorite && !selectMode ? (
+                        <FavoriteTemplateButton
+                          favorite={isFavorite(String(template.id))}
+                          onToggle={() => toggleFavorite(String(template.id))}
+                          className="absolute bottom-3 right-3"
+                        />
+                      ) : null}
+
                       {selectMode ? (
                         <span
                           aria-hidden="true"
@@ -2086,6 +2124,12 @@ export default function TemplateStudioPage() {
                 );
               })}
             </div>
+            {favoritesOnly && !visibleTemplates.length ? (
+              <div className="mt-5 rounded-[1.5rem] border border-white/8 bg-black/20 p-4 text-sm text-slate-300">
+                No favorites yet — tap the heart on any template to save it here.
+              </div>
+            ) : null}
+
             {activeFilterCount && templates.length && !visibleTemplates.length ? (
               <div className="mt-5 rounded-[1.5rem] border border-white/8 bg-black/20 p-4 text-sm text-slate-300">
                 No templates match these performance filters yet.
