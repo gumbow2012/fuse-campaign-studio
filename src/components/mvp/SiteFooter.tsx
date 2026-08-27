@@ -13,6 +13,14 @@ const COLUMNS: Array<{ title: string; links: Array<{ label: string; to: string }
       { label: "Templates", to: "/app/templates" },
       { label: "Pricing", to: "/pricing" },
       { label: "Creators", to: "/creators" },
+      { label: "Refer & earn", to: "/referrals" },
+    ],
+  },
+  {
+    title: "Community",
+    links: [
+      { label: "Contests", to: "/contests" },
+      { label: "Creator program", to: "/creators" },
     ],
   },
   {
