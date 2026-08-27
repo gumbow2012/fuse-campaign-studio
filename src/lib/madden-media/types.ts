@@ -137,7 +137,10 @@ export function normalizeProjectState(raw: unknown): MaddenProjectState {
         description: typeof s.description === "string" ? s.description : "",
         references: Array.isArray(s.references) ? (s.references as MaddenReference[]) : [],
         locked: s.locked !== false,
+        profileId: typeof s.profileId === "string" ? s.profileId : null,
+        profileData: s.profileData ?? undefined,
       };
+
     }
   }
 
