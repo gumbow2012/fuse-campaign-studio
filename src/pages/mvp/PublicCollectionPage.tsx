@@ -49,7 +49,7 @@ function ShareCard({
         </div>
         <div className="min-w-0 space-y-2">
           <p className="font-display text-[10px] uppercase tracking-[0.28em] text-cyan-100">
-            FUSE Collection
+            FUSE Drop
           </p>
           <p className="font-display text-2xl font-semibold uppercase tracking-[-0.01em] text-white sm:text-3xl">
             {collection.title}
@@ -152,24 +152,24 @@ export default function PublicCollectionPage() {
   return (
     <SiteShell>
       <PageMeta
-        title={collection ? `${collection.title} · FUSE Collection` : "FUSE Collection"}
+        title={collection ? `${collection.title} · FUSE Drop` : "FUSE Drop"}
         description={
           collection?.description?.slice(0, 155) ??
-          "A curated FUSE collection of AI campaign templates."
+          "A curated FUSE drop of AI campaign templates."
         }
         path={`/c/${slug}`}
       />
 
       <div className="container space-y-8 py-10">
         {collectionQuery.isLoading ? (
-          <p className="text-sm text-slate-400">Loading collection…</p>
+          <p className="text-sm text-slate-400">Loading drop…</p>
         ) : !collection ? (
           <div className="mx-auto max-w-lg space-y-3 rounded-2xl border border-white/10 bg-white/[0.02] p-10 text-center">
             <p className="font-display text-[10px] uppercase tracking-[0.24em] text-cyan-100">
-              Collection
+              Drop
             </p>
             <h1 className="font-display text-2xl font-semibold uppercase text-white">
-              This collection isn’t available
+              This drop isn’t available
             </h1>
             <p className="text-sm text-slate-400">
               It may be private or the link may have changed.
@@ -188,7 +188,7 @@ export default function PublicCollectionPage() {
                 onClick={() => void share()}
                 className="rounded-full bg-cyan-300 text-slate-950 hover:bg-cyan-200"
               >
-                <Share2 className="mr-1.5 h-4 w-4" /> Share collection
+                <Share2 className="mr-1.5 h-4 w-4" /> Share drop
               </Button>
               {shareOpen ? (
                 <span className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.03] px-3 py-1.5 text-xs text-slate-300">
@@ -205,7 +205,7 @@ export default function PublicCollectionPage() {
 
             {ordered.length === 0 ? (
               <p className="text-sm text-slate-400">
-                This collection has no templates yet.
+                This drop has no templates yet.
               </p>
             ) : (
               <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">

@@ -71,11 +71,11 @@ export default function AddToCollectionButton({
     },
     onSuccess: (added) => {
       invalidate();
-      toast({ title: added ? "Added to collection" : "Removed from collection" });
+      toast({ title: added ? "Added to drop" : "Removed from drop" });
     },
     onError: (error) =>
       toast({
-        title: "Could not update collection",
+        title: "Could not update drop",
         description: error instanceof Error ? error.message : "Please try again.",
         variant: "destructive",
       }),
@@ -94,7 +94,7 @@ export default function AddToCollectionButton({
     },
     onError: (error) =>
       toast({
-        title: "Could not create collection",
+        title: "Could not create drop",
         description: error instanceof Error ? error.message : "Please try again.",
         variant: "destructive",
       }),
@@ -105,7 +105,7 @@ export default function AddToCollectionButton({
       <PopoverTrigger asChild>
         <button
           type="button"
-          aria-label="Add to collection"
+          aria-label="Add to drop"
           onClick={(event) => event.stopPropagation()}
           className={cn(
             "inline-flex h-8 w-8 items-center justify-center rounded-full border border-white/15 bg-slate-950/70 text-cyan-100 backdrop-blur transition-colors hover:border-cyan-200/50 hover:text-white",
@@ -121,13 +121,13 @@ export default function AddToCollectionButton({
         onClick={(event) => event.stopPropagation()}
       >
         <p className="font-display text-[10px] uppercase tracking-[0.22em] text-cyan-100">
-          Add to collection
+          Add to drop
         </p>
 
         {!user ? (
           <div className="mt-3 space-y-3">
             <p className="text-xs text-slate-400">
-              Sign in to save templates into shareable collections.
+              Sign in to save templates into shareable drops.
             </p>
             <Button
               asChild
@@ -144,7 +144,7 @@ export default function AddToCollectionButton({
                 <p className="px-1 py-2 text-xs text-slate-400">Loading…</p>
               ) : collections.length === 0 ? (
                 <p className="px-1 py-2 text-xs text-slate-400">
-                  No collections yet — create your first one below.
+                  No drops yet — create your first one below.
                 </p>
               ) : (
                 collections.map((collection) => {
@@ -178,7 +178,7 @@ export default function AddToCollectionButton({
               <Input
                 value={newTitle}
                 onChange={(event) => setNewTitle(event.target.value)}
-                placeholder="New collection"
+                placeholder="New drop"
                 className="h-9 border-white/10 bg-white/5 text-xs"
               />
               <Button
@@ -201,7 +201,7 @@ export default function AddToCollectionButton({
               size="sm"
               className="mt-2 w-full rounded-full text-[11px] uppercase tracking-[0.16em] text-cyan-100"
             >
-              <Link to="/app/collections">Manage collections</Link>
+              <Link to="/app/collections">Manage drops</Link>
             </Button>
           </>
         )}

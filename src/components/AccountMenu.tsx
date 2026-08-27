@@ -140,7 +140,7 @@ export function AccountMenuContent({
         ) : null}
         <MenuLink to="/app/brand" icon={Boxes} label="Brand & Products" />
         <MenuLink to="/app/avatars" icon={Users} label="My Avatars" featureKey="my_avatars" />
-        <MenuLink to="/app/collections" icon={FolderHeart} label="My Collections" />
+        <MenuLink to="/app/collections" icon={FolderHeart} label="My Drops" />
       </div>
 
       <div className="my-2 h-px bg-white/10" />
