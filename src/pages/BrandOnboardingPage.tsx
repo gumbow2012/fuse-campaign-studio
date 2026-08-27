@@ -35,6 +35,7 @@ import { listMyAvatars } from "@/services/avatarProfiles";
 import { listProductProfiles } from "@/services/productProfiles";
 import { deriveBrandReadiness, readBrandFlags, type ReadinessStatus } from "@/lib/brandReadiness";
 import BrandImportPanel, { type BrandImportConfirmation } from "@/components/brand/BrandImportPanel";
+import BrandIdentityStep, { type ColorRole } from "@/components/brand/BrandIdentityStep";
 import { takeBrandImport } from "@/services/brandImport";
 
 const STEPS = [
@@ -134,7 +135,9 @@ export default function BrandOnboardingPage() {
   // Step 2
   const [primaryLogo, setPrimaryLogo] = useState<string | null>(null);
   const [secondaryLogo, setSecondaryLogo] = useState<string | null>(null);
+  const [invertedLogo, setInvertedLogo] = useState<string | null>(null);
   const [colors, setColors] = useState<string[]>([]);
+  const [colorRoles, setColorRoles] = useState<Record<string, ColorRole>>({});
   const [noLogo, setNoLogo] = useState(false);
   const [neutralPalette, setNeutralPalette] = useState(false);
   // Step 4
@@ -158,6 +161,13 @@ export default function BrandOnboardingPage() {
     setPrimaryLogo(brand.primary_logo_url ?? null);
     setSecondaryLogo(brand.secondary_logo_url ?? null);
     setColors(brand.colors ?? []);
+    const meta = (brand.metadata ?? {}) as Record<string, unknown>;
+    setInvertedLogo(typeof meta.invertedLogoUrl === "string" ? meta.invertedLogoUrl : null);
+    setColorRoles(
+      meta.colorRoles && typeof meta.colorRoles === "object"
+        ? (meta.colorRoles as Record<string, ColorRole>)
+        : {},
+    );
     const flags = readBrandFlags(brand);
     setNoLogo(flags.noLogo);
     setNeutralPalette(flags.neutralPalette);
@@ -257,6 +267,11 @@ export default function BrandOnboardingPage() {
       if (step === 2) {
         metaPatch.noLogo = noLogo;
         metaPatch.neutralPalette = neutralPalette;
+        metaPatch.invertedLogoUrl = invertedLogo;
+        // Roles only survive for colors that are still in the palette.
+        metaPatch.colorRoles = Object.fromEntries(
+          Object.entries(colorRoles).filter(([hex]) => colors.includes(hex)),
+        );
       }
       if (step === 4) metaPatch.modelIds = modelIds;
       if (step === 5) {
@@ -405,80 +420,23 @@ export default function BrandOnboardingPage() {
 
 
           {step === 2 ? (
-            <div className={CARD}>
-              <p className={LABEL}>Step 2 — Identity</p>
-              <h2 className="mt-2 text-2xl">Logos and colors.</h2>
-              {imported && (imported.logoCandidates.length || imported.colorCandidates.length) ? (
-                <div className="mt-4 rounded-2xl border border-cyan-300/25 bg-cyan-300/[0.04] p-4">
-                  <p className="text-[11px] uppercase tracking-[0.16em] text-cyan-200/80">{imported.label}</p>
-                  {imported.logoCandidates.length ? (
-                    <div className="mt-3 flex flex-wrap gap-3">
-                      {imported.logoCandidates.map((logo) => (
-                        <button
-                          key={logo}
-                          type="button"
-                          onClick={() => (primaryLogo ? setSecondaryLogo(logo) : setPrimaryLogo(logo))}
-                          className="h-16 w-16 overflow-hidden rounded-xl border border-white/10 bg-black/40"
-                          title="Use this logo"
-                        >
-                          <img src={logo} alt="Imported logo" className="h-full w-full object-contain" />
-                        </button>
-                      ))}
-                    </div>
-                  ) : null}
-                  {imported.colorCandidates.length ? (
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      {imported.colorCandidates.map((color) => (
-                        <button
-                          key={color}
-                          type="button"
-                          onClick={() =>
-                            setColors((current) =>
-                              current.includes(color) ? current : [...current, color],
-                            )
-                          }
-                          className="flex items-center gap-2 rounded-full border border-white/12 px-3 py-1.5 text-[11px] text-slate-200"
-                        >
-                          <span
-                            className="h-4 w-4 rounded-full border border-white/20"
-                            style={{ backgroundColor: color }}
-                          />
-                          {color}
-                        </button>
-                      ))}
-                    </div>
-                  ) : null}
-                </div>
-              ) : null}
-              <div className="mt-5 grid gap-5 md:grid-cols-2">
-                <ImageSlot label="Primary logo" url={primaryLogo} onChange={setPrimaryLogo} />
-                <ImageSlot label="Secondary logo" url={secondaryLogo} onChange={setSecondaryLogo} />
-              </div>
-
-              <label className="mt-3 flex items-center gap-2 text-[11px] uppercase tracking-[0.16em] text-slate-400">
-                <input
-                  type="checkbox"
-                  checked={noLogo}
-                  onChange={(event) => setNoLogo(event.target.checked)}
-                  className="h-3.5 w-3.5 accent-cyan-300"
-                />
-                No logo yet
-              </label>
-              <div className="mt-6">
-                <p className={LABEL}>Brand colors</p>
-                <ColorPalette colors={colors} onChange={setColors} />
-                <label className="mt-3 flex items-center gap-2 text-[11px] uppercase tracking-[0.16em] text-slate-400">
-                  <input
-                    type="checkbox"
-                    checked={neutralPalette}
-                    onChange={(event) => setNeutralPalette(event.target.checked)}
-                    className="h-3.5 w-3.5 accent-cyan-300"
-                  />
-                  Use neutral palette
-                </label>
-              </div>
-
-            </div>
+            <BrandIdentityStep
+              imported={imported}
+              primaryLogo={primaryLogo}
+              secondaryLogo={secondaryLogo}
+              invertedLogo={invertedLogo}
+              colors={colors}
+              colorRoles={colorRoles}
+              noLogo={noLogo}
+              neutralPalette={neutralPalette}
+              setPrimaryLogo={setPrimaryLogo}
+              setSecondaryLogo={setSecondaryLogo}
+              setInvertedLogo={setInvertedLogo}
+              setColors={setColors}
+              setColorRoles={setColorRoles}
+              setNoLogo={setNoLogo}
+              setNeutralPalette={setNeutralPalette}
+            />
           ) : null}
 
           {step === 3 ? (
