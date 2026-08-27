@@ -10,6 +10,8 @@ import { useBrandFitAssets } from "@/hooks/useBrandFitAssets";
 import { deriveTemplateFit } from "@/lib/brandTemplateFit";
 import TemplateFitBadge from "@/components/brand/TemplateFitBadge";
 import TemplateRequirementNudge from "@/components/brand/TemplateRequirementNudge";
+import FavoriteTemplateButton from "@/components/templates/FavoriteTemplateButton";
+import { useTemplateFavorites } from "@/hooks/useTemplateFavorites";
 import { cn } from "@/lib/utils";
 import type { ApiTemplate } from "@/services/fuseApi";
 import { PerformanceDetailSection } from "@/components/TemplatePerformance";
