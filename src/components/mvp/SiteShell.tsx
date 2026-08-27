@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { Link, NavLink, useNavigate } from "react-router-dom";
-import { Clapperboard, ClipboardCheck, Gem, Home, Info, Layers3, Mail, Menu, Shirt, Sparkles, Star, UsersRound } from "lucide-react";
+import { Clapperboard, ClipboardCheck, Gem, Home, Layers3, Mail, Menu, Shirt, Sparkles, Star, UsersRound } from "lucide-react";
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -25,7 +25,6 @@ const PRIMARY_LINKS: PrimaryLink[] = [
   { label: "New Drops", href: "/#new-today" },
   { label: "Creators", to: "/creators" },
   { label: "Pricing", to: "/pricing" },
-  { label: "About", to: "/about" },
   { label: "Contact", to: "/contact" },
 ];
 
@@ -297,9 +296,6 @@ export default function SiteShell({ children }: { children: ReactNode }) {
                 </NavLink>
                 <NavLink to="/pricing" className={textNavLinkClass}>
                   Pricing
-                </NavLink>
-                <NavLink to="/about" className={iconNavLinkClass} aria-label="About" title="About">
-                  <Info className="h-4 w-4" aria-hidden="true" />
                 </NavLink>
                 <NavLink to="/contact" className={iconNavLinkClass} aria-label="Contact" title="Contact">
                   <Mail className="h-4 w-4" aria-hidden="true" />
