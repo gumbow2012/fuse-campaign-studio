@@ -191,7 +191,6 @@ export default function BrandOnboardingPage() {
     enabled: !!user?.id,
   });
   const brandProducts = (productsQuery.data ?? []).filter((entry) => entry.brand_id === brand?.id);
-  const avatars = avatarsQuery.data ?? [];
 
   // Esc leaves the wizard; everything is already saved step by step.
   useEffect(() => {
