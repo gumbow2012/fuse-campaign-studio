@@ -196,6 +196,9 @@ function TemplateCard({
             <Badge tone={badge.tone}>{badge.label}</Badge>
           </div>
         )}
+        <div className="absolute right-3 top-3">
+          <AddToCollectionButton templateId={String(entry.template.id ?? "")} />
+        </div>
       </div>
       <div className="absolute inset-x-0 bottom-0 p-4">
         {performance && <PerformanceBlock row={performance} compact className="mb-3" />}
