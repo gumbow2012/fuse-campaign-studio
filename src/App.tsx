@@ -45,6 +45,7 @@ import TemplateLab from "@/pages/TemplateLab";
 import AboutPage from "@/pages/mvp/AboutPage";
 import AccountPage from "@/pages/mvp/AccountPage";
 import AuthPage from "@/pages/mvp/AuthPage";
+import ReferralCapturePage from "@/pages/mvp/ReferralCapturePage";
 import BillingPage from "@/pages/mvp/BillingPage";
 import MembershipPage from "@/pages/mvp/MembershipPage";
 import ContactPage from "@/pages/mvp/ContactPage";
@@ -105,6 +106,8 @@ const App = () => (
             <Route path="/creators/browse" element={<CreatorsDirectoryPage />} />
             <Route path="/creators/apply" element={<CreatorApplyPage />} />
             <Route path="/auth" element={<AuthPage />} />
+            <Route path="/join/:code" element={<ReferralCapturePage />} />
+            <Route path="/r/:code" element={<ReferralCapturePage />} />
             <Route path="/c/:slug" element={<PublicCollectionPage />} />
             <Route
               path="/app/collections"

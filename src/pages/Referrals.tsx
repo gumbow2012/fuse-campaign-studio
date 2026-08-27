@@ -14,7 +14,7 @@ const Referrals = () => {
   const [applying, setApplying] = useState(false);
   const [copied, setCopied] = useState(false);
 
-  const { data, isLoading, refetch } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ["my-referral"],
     queryFn: async () => {
       const { data, error } = await supabase.functions.invoke("referrals", {
@@ -68,6 +68,20 @@ const Referrals = () => {
         {isLoading ? (
           <div className="flex justify-center py-20">
             <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+          </div>
+        ) : isError ? (
+          <div className="rounded-xl border border-border/40 bg-card p-6">
+            <h2 className="font-display text-sm font-bold text-foreground mb-2 uppercase tracking-wider">
+              Could not load your referral program.
+            </h2>
+            <p className="text-xs text-muted-foreground mb-4">Something went wrong on our side. Try again in a moment.</p>
+            <Button
+              onClick={() => refetch()}
+              variant="outline"
+              className="border-border/50 text-foreground bg-secondary hover:bg-secondary/80"
+            >
+              Try again
+            </Button>
           </div>
         ) : (
           <>
