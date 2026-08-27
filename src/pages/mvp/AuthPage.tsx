@@ -36,6 +36,7 @@ export default function AuthPage() {
 
   const paidAccess = searchParams.get("paid") === "true";
   const [invited, setInvited] = useState(false);
+  const [authStep, setAuthStep] = useState<"email" | "code">("email");
 
   // ---- pending intent: captured on arrival, replayed after auth ----------
   const intent = useMemo(() => {
@@ -131,17 +132,20 @@ export default function AuthPage() {
               </div>
 
               <h1 className="mt-7 font-display text-[2rem] font-bold leading-none tracking-[-0.04em] text-white">
-                ENTER FUSE.
+                {authStep === "code" ? "CHECK YOUR EMAIL." : "ENTER FUSE."}
               </h1>
-              <p className="mt-3 text-sm leading-6 text-slate-400">
-                Create an account or sign in to continue.
-              </p>
+              {authStep === "email" ? (
+                <p className="mt-3 text-sm leading-6 text-slate-400">
+                  Create an account or sign in to continue.
+                </p>
+              ) : null}
 
               <UniversalAuthPanel
                 className="mt-7"
                 oauthRedirectTo={getAbsoluteSiteUrl("/auth")}
                 emailRedirectTo={authRedirect}
                 autoRequestEmail={autoRequestEmail}
+                onStepChange={setAuthStep}
                 onBeforeRedirect={() => writePendingAuthIntent(intent)}
                 onAuthenticated={({ userId, isNewAccount }) => {
                   if (isNewAccount) {

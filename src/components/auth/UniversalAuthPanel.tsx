@@ -87,6 +87,8 @@ export type UniversalAuthPanelProps = {
   onAuthenticated?: (args: { userId?: string; isNewAccount: boolean }) => void;
   /** Optional prefill + auto-send (paid checkout hand-off). */
   autoRequestEmail?: string | null;
+  /** Lets the caller swap its own headline when the code step opens. */
+  onStepChange?: (step: "email" | "code") => void;
   showTerms?: boolean;
   className?: string;
 };
@@ -98,6 +100,7 @@ export default function UniversalAuthPanel({
   onBeforeRedirect,
   onAuthenticated,
   autoRequestEmail,
+  onStepChange,
   showTerms = true,
   className,
 }: UniversalAuthPanelProps) {
@@ -108,6 +111,11 @@ export default function UniversalAuthPanel({
   const [oauthPending, setOauthPending] = useState<string | null>(null);
   const [resendCooldown, setResendCooldown] = useState(0);
   const autoRequested = useRef(false);
+
+  useEffect(() => {
+    onStepChange?.(step);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step]);
 
   useEffect(() => {
     if (resendCooldown <= 0) return;
