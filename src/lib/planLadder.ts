@@ -13,6 +13,7 @@ import { STRIPE_TIERS, type StripeTierKey } from "@/lib/stripe-config";
  *
  * STRIPE OBJECTS STILL TO BE CREATED (none of these exist today):
  *   - PLUS monthly ($59)
+ *   - CAPSULE monthly ($75)
  *   - TEAM monthly ($699)
  *   - ANNUAL prices for EVERY plan: Starter, Plus, Pro, Studio, Team
  *   (FREE needs no Stripe product.)
