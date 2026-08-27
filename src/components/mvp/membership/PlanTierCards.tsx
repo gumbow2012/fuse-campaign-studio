@@ -140,10 +140,8 @@ function PlanCard({
         {!isCurrent && !isAdmin ? <ArrowRight className="h-4 w-4" /> : null}
       </Button>
 
-      <p className="mt-3 text-[11px] text-slate-500">
-        {entry.creditsLabel}
-        {approx ? ` · approx ${approx}` : ""}
-      </p>
+      <p className="mt-3 text-xs font-medium text-slate-300">{entry.creditsLabel}</p>
+      {approx ? <p className="mt-1 text-[10px] text-slate-500">{approx}</p> : null}
     </article>
   );
 }

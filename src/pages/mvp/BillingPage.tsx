@@ -282,23 +282,44 @@ export default function BillingPage() {
           ) : null}
 
           {!user ? (
-            <div className="flex flex-col gap-3 rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3 sm:flex-row sm:items-center sm:gap-x-4">
-              <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-muted-foreground">Get started</span>
-              <div className="flex flex-1 flex-col gap-3 sm:flex-row sm:items-center">
-                <Input
-                  type="email"
-                  value={checkoutEmail}
-                  onChange={(event) => setCheckoutEmail(event.target.value)}
-                  required
-                  placeholder="you@brand.com"
-                  className="h-10 rounded-xl border-white/10 bg-white/[0.03] text-white sm:max-w-xs"
-                />
-                <Input
-                  value={brandName}
-                  onChange={(event) => setBrandName(event.target.value)}
-                  placeholder="Brand name (optional)"
-                  className="h-10 rounded-xl border-white/10 bg-white/[0.03] text-white sm:max-w-xs"
-                />
+            <div className="rounded-2xl border border-white/10 bg-white/[0.03] px-5 py-5 sm:px-6 sm:py-6">
+              <h2 className="font-display text-lg font-bold uppercase tracking-[0.16em] text-white sm:text-xl">
+                Start your membership
+              </h2>
+              <p className="mt-1.5 text-sm text-slate-400">Tell us where to send your FUSE access.</p>
+              <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-end">
+                <div className="flex-[1.6] space-y-2">
+                  <label
+                    htmlFor="checkout-email"
+                    className="block text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400"
+                  >
+                    Email address
+                  </label>
+                  <Input
+                    id="checkout-email"
+                    type="email"
+                    value={checkoutEmail}
+                    onChange={(event) => setCheckoutEmail(event.target.value)}
+                    required
+                    placeholder="you@brand.com"
+                    className="h-[56px] w-full rounded-xl border-white/10 bg-slate-950/60 px-4 text-base text-white placeholder:text-slate-500 focus-visible:border-cyan-300/60 focus-visible:ring-2 focus-visible:ring-cyan-300/40"
+                  />
+                </div>
+                <div className="flex-1 space-y-2">
+                  <label
+                    htmlFor="checkout-brand"
+                    className="block text-[10px] font-bold uppercase tracking-[0.2em] text-slate-500"
+                  >
+                    Brand name — optional
+                  </label>
+                  <Input
+                    id="checkout-brand"
+                    value={brandName}
+                    onChange={(event) => setBrandName(event.target.value)}
+                    placeholder="Brand name"
+                    className="h-[56px] w-full rounded-xl border-white/10 bg-slate-950/60 px-4 text-base text-white placeholder:text-slate-500 focus-visible:border-cyan-300/60 focus-visible:ring-2 focus-visible:ring-cyan-300/40"
+                  />
+                </div>
               </div>
             </div>
           ) : null}
