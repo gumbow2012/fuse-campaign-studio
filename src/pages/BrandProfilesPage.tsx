@@ -212,6 +212,11 @@ export default function BrandProfilesPage() {
   // Every card below is derived from real rows only — nothing is assumed.
   const onboarding = useMemo(() => readOnboarding(activeBrand), [activeBrand]);
   const visualStyle = useMemo(() => readVisualStyle(activeBrand), [activeBrand]);
+  const brandModelIds = useMemo(() => readModelIds(activeBrand), [activeBrand]);
+  const brandModelCount = useMemo(
+    () => avatars.filter((avatar) => brandModelIds.includes(avatar.id)).length,
+    [avatars, brandModelIds],
+  );
   const completion = useMemo(
     () => ({
       identity: Boolean(
