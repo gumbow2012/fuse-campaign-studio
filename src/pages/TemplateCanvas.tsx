@@ -3384,6 +3384,18 @@ const TemplateCanvas = () => {
                   Publish Version Live
                 </Button>
               ) : null}
+              {detail && !detail.isActive ? (
+                <QuickPublishButton
+                  versionId={detail.versionId}
+                  templateName={detail.templateName}
+                  versionNumber={detail.versionNumber}
+                  building={phase === "running"}
+                  variant="outline"
+                  onRunTest={() => setShowRunnerPanel(true)}
+                  onPublished={() => refreshAfterMutation(detail.versionId)}
+                />
+              ) : null}
+
               {!canPublishTemplates && detail ? (
                 detail.reviewStatus === "Submitted" ? (
                   <p className="rounded-xl border border-amber-300/25 bg-amber-300/[0.08] px-3 py-2 text-xs font-medium text-amber-100">
