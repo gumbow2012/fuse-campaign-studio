@@ -45,7 +45,7 @@ import { cn } from "@/lib/utils";
 import { canInitiateFork, resolveCustomizeState } from "@/lib/customizeGating";
 import { sortTemplatesForStudio } from "@/lib/templateOrdering";
 import { fetchTemplateDetail, fetchTemplates, type ApiTemplate, type RunFeedbackRecord, type TemplateDetail } from "@/services/fuseApi";
-import { uploadRunInputFile } from "@/services/runInputUpload";
+import { uploadAnonymousRunInput, uploadRunInputFile } from "@/services/runInputUpload";
 import { libraryKindForAssetType, saveLibraryAsset } from "@/services/libraryAssets";
 import { getStaticInputs } from "@/services/templateInputMap";
 import CreditConfirmModal from "@/components/CreditConfirmModal";
@@ -441,8 +441,13 @@ export default function TemplateStudioPage() {
     return window.localStorage.getItem(TEMPLATE_SELECTION_KEY) ?? "";
   });
   const [files, setFiles] = useState<Record<string, File | null>>({});
+  /** P6a: logged-out temp uploads — local preview + temp URL survive OAuth. */
+  const [anonUploads, setAnonUploads] = useState<
+    Record<string, { status: "uploading" | "ready" | "error"; url?: string; error?: string }>
+  >({});
   /** FT4: assets picked from the reusable library (already stored URLs). */
   const [libraryAssets, setLibraryAssets] = useState<Record<string, { url: string; name?: string | null } | null>>({});
+
   const [textInputs, setTextInputs] = useState<Record<string, string>>({});
   /** Phase 10: keys filled by brand autofill → the brand they came from. */
   const [autofilledKeys, setAutofilledKeys] = useState<Record<string, string>>({});
@@ -1146,7 +1151,9 @@ export default function TemplateStudioPage() {
   const handleTemplateSelect = (templateId: string) => {
     setSelectedTemplateId(templateId);
     setFiles({});
+    setAnonUploads({});
     setLibraryAssets({});
+
     setTextInputs({});
     setJobId(null);
     setOpenedHistoricalRun(null);
@@ -2122,6 +2129,38 @@ export default function TemplateStudioPage() {
                               setLibraryAssets((current) => ({ ...current, [field.key]: null }));
                               releaseAutofill(field.key);
                               if (nextFile) advanceFromInput(field.key);
+                              // P6a: logged-out uploads go to temporary storage so the
+                              // asset survives an OAuth redirect. No generation starts.
+                              if (!user) {
+                                if (!nextFile) {
+                                  setAnonUploads((current) => {
+                                    const next = { ...current };
+                                    delete next[field.key];
+                                    return next;
+                                  });
+                                  return;
+                                }
+                                setAnonUploads((current) => ({
+                                  ...current,
+                                  [field.key]: { status: "uploading" },
+                                }));
+                                void uploadAnonymousRunInput(nextFile)
+                                  .then((url) =>
+                                    setAnonUploads((current) => ({
+                                      ...current,
+                                      [field.key]: { status: "ready", url },
+                                    })),
+                                  )
+                                  .catch((error) => {
+                                    const message =
+                                      error instanceof Error ? error.message : "Upload failed.";
+                                    setAnonUploads((current) => ({
+                                      ...current,
+                                      [field.key]: { status: "error", error: message },
+                                    }));
+                                    toast({ title: "Upload failed", description: message, variant: "destructive" });
+                                  });
+                              }
                             }}
                             libraryAsset={libraryAssets[field.key] ?? null}
                             // P1: saved-library / brand pickers are account features.
@@ -2139,9 +2178,33 @@ export default function TemplateStudioPage() {
                             onClear={() => {
                               setFiles((current) => ({ ...current, [field.key]: null }));
                               setLibraryAssets((current) => ({ ...current, [field.key]: null }));
+                              setAnonUploads((current) => {
+                                    const next = { ...current };
+                                    delete next[field.key];
+                                    return next;
+                                  });
                               releaseAutofill(field.key);
                             }}
                           />
+                          {!user && anonUploads[field.key] ? (
+                            <p
+                              className={cn(
+                                "mt-2 text-[11px] leading-relaxed",
+                                anonUploads[field.key]?.status === "error"
+                                  ? "text-rose-200"
+                                  : anonUploads[field.key]?.status === "ready"
+                                    ? "text-emerald-200"
+                                    : "text-cyan-100",
+                              )}
+                            >
+                              {anonUploads[field.key]?.status === "uploading"
+                                ? "Saving upload for this session..."
+                                : anonUploads[field.key]?.status === "ready"
+                                  ? "Upload saved — it will still be here after you sign in."
+                                  : anonUploads[field.key]?.error}
+                            </p>
+                          ) : null}
+
                         </div>
                       ) : (
                         <div key={field.key} className="rounded-[1.25rem] border border-white/10 bg-black/25 p-3">

@@ -54,6 +54,57 @@ export async function uploadRunInputFile(file: File) {
   return publicUrl(path);
 }
 
+const ANON_SESSION_KEY = "fuse.anonUploadSession";
+const ANON_ALLOWED_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
+
+/** Stable per-browser anon session id — groups a visitor's temp uploads. */
+export function getAnonUploadSessionId() {
+  let id = window.localStorage.getItem(ANON_SESSION_KEY);
+  if (!id || !/^[0-9a-f-]{36}$/i.test(id)) {
+    id = crypto.randomUUID();
+    window.localStorage.setItem(ANON_SESSION_KEY, id);
+  }
+  return id;
+}
+
+/**
+ * P6a — logged-out builder uploads. The edge function signs one randomized
+ * `anon-temp/` path; bytes go straight to Storage via the signed URL so the
+ * temp URL survives an OAuth redirect. No generation is started here.
+ */
+export async function uploadAnonymousRunInput(file: File) {
+  if (!ANON_ALLOWED_TYPES.has(file.type)) {
+    throw new Error("Unsupported file type. Use a JPG, PNG or WebP image.");
+  }
+  if (file.size > MAX_IMAGE_UPLOAD_BYTES) {
+    throw new Error("This image is larger than 12 MB — please use a smaller file.");
+  }
+
+  const response = await fetch(`${SUPABASE_URL}/functions/v1/upload-run-input`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", apikey: SUPABASE_PUBLISHABLE_KEY },
+    body: JSON.stringify({
+      action: "sign-anon",
+      anonSessionId: getAnonUploadSessionId(),
+      filename: file.name,
+      contentType: file.type,
+      size: file.size,
+    }),
+  });
+  const data = await response.json().catch(() => null);
+  if (!response.ok) throw new Error(data?.error ?? "Could not authorize upload.");
+  if (!data?.path || !data?.token) throw new Error("Upload authorization did not return a signed URL.");
+
+  const { error } = await supabase.storage
+    .from(BUCKET)
+    .uploadToSignedUrl(String(data.path), String(data.token), file, {
+      contentType: file.type || undefined,
+    });
+  if (error) throw new Error(error.message);
+
+  return String(data.publicUrl ?? publicUrl(String(data.path)));
+}
+
 /**
  * Non-authenticated harness flow — authorization goes through the edge function
  * (which mints a signed upload URL); file bytes never pass through it.
