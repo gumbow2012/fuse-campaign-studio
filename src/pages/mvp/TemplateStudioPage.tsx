@@ -2031,6 +2031,14 @@ export default function TemplateStudioPage() {
                       <div className="absolute bottom-3 left-3 rounded-full border border-white/15 bg-black/45 px-2.5 py-1 text-[9px] uppercase tracking-[0.18em] text-white/80 backdrop-blur">
                         Vibe
                       </div>
+                      {canFavorite && !selectMode ? (
+                        <FavoriteTemplateButton
+                          favorite={isFavorite(String(template.id))}
+                          onToggle={() => toggleFavorite(String(template.id))}
+                          className="absolute bottom-3 right-3"
+                        />
+                      ) : null}
+
                       {selectMode ? (
                         <span
                           aria-hidden="true"
