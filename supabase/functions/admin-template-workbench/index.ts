@@ -1206,12 +1206,10 @@ Deno.serve(async (req) => {
       if (!versionId) throw new Error("versionId is required");
 
       const quickGate = await getQuickPublishGate(admin, versionId);
-      if (!quickGate.tested) {
-        throw new Error("This version has not completed a test run yet.");
-      }
       if (!quickGate.publishable) {
         throw new Error(`Quick publish blocked: ${quickGate.reasons.join(" ")}`);
       }
+
 
       // TR10 ISOLATION: personal fork versions can never become marketplace-active.
       const { data: guardRow, error: guardError } = await admin
