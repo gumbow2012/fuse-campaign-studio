@@ -486,6 +486,40 @@ export default function AdminTemplateFactory() {
                         <ExternalLink className="h-3 w-3" />
                       </a>
                     ) : null}
+
+                    <div className="mt-4 flex items-center gap-2">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="rounded-full border-cyan-300/30 bg-cyan-300/10 text-cyan-100 hover:bg-cyan-300/20"
+                        disabled={!reference.image_url || analyzingId === reference.id}
+                        onClick={() => analyzeMutation.mutate(reference.id)}
+                      >
+                        {analyzingId === reference.id ? (
+                          <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
+                        ) : (
+                          <Sparkles className="mr-2 h-3.5 w-3.5" />
+                        )}
+                        {analyzingId === reference.id
+                          ? "Analyzing…"
+                          : reference.blueprint
+                            ? "Re-analyze"
+                            : "Analyze"}
+                      </Button>
+                      {!reference.image_url ? (
+                        <span className="text-[11px] text-muted-foreground">
+                          Add an image URL to analyze
+                        </span>
+                      ) : null}
+                    </div>
+
+                    {reference.blueprint ? (
+                      <BlueprintPanel
+                        blueprint={reference.blueprint}
+                        generatedAt={reference.blueprint_generated_at}
+                      />
+                    ) : null}
+
                   </CardContent>
                 </Card>
               ))}
