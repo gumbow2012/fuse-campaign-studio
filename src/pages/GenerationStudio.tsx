@@ -1496,11 +1496,13 @@ export default function GenerationStudio() {
 
 
   const handleGenerate = () => {
-    const text = prompt.trim();
-    if (!text) {
+    const base = prompt.trim();
+    if (!base) {
       toast.error("Describe the scene you imagine first");
       return;
     }
+    // Video only: append the optional camera movement instruction. Nothing else changes.
+    const text = movementFragment ? `${base}\n\n${movementFragment}` : base;
 
     const urls = references.map((entry) => entry.url);
     const payload: Record<string, unknown> = {
@@ -1508,6 +1510,7 @@ export default function GenerationStudio() {
       kind: model.kind,
       model: model.key,
       prompt: text,
+
       // Only send the secondary param the selected model truly accepts.
       ...(model.resolutions.length && quality
         ? { [model.paramField ?? "resolution"]: quality }
