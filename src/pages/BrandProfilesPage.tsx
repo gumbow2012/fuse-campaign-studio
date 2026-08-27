@@ -381,6 +381,41 @@ export default function BrandProfilesPage() {
           </TabsList>
 
           <TabsContent value="dashboard" className="mt-6">
+            {!readiness.ready ? (
+              <div className={`${CARD} mb-4`}>
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <p className={LABEL}>Brand readiness</p>
+                  <span className="text-[11px] uppercase tracking-[0.16em] text-amber-200">
+                    {readiness.requiredMissing} required left
+                  </span>
+                </div>
+                <ul className="mt-4 grid gap-2 sm:grid-cols-2">
+                  {readiness.sections.map((section) => (
+                    <li key={section.key} className="flex items-center justify-between gap-3 text-sm">
+                      <span className="text-slate-300">{section.label}</span>
+                      {section.status === "complete" ? (
+                        <Check className="h-4 w-4 shrink-0 text-cyan-200" />
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            navigate(
+                              activeBrand
+                                ? `/app/brand/onboarding?brand=${activeBrand.id}&step=${section.step}`
+                                : "/app/brand/onboarding",
+                            )
+                          }
+                          className="shrink-0 text-[11px] uppercase tracking-[0.16em] text-cyan-200 hover:text-cyan-100"
+                        >
+                          {section.status === "required-missing" ? "Complete" : "Improve"}
+                        </button>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               <DashboardCard
                 icon={<Palette className="h-5 w-5" />}
