@@ -29,12 +29,13 @@ import {
 } from "@/services/brandProfiles";
 import { listMyAvatars } from "@/services/avatarProfiles";
 import { listProductProfiles } from "@/services/productProfiles";
-import { deriveBrandReadiness, readBrandFlags, type ReadinessStatus } from "@/lib/brandReadiness";
+import { deriveBrandReadiness, readBrandFlags } from "@/lib/brandReadiness";
 import BrandImportPanel, { type BrandImportConfirmation } from "@/components/brand/BrandImportPanel";
 import BrandIdentityStep, { type ColorRole } from "@/components/brand/BrandIdentityStep";
 import BrandProductsStep from "@/components/brand/BrandProductsStep";
 import BrandCreativeDnaStep, { type CreativeDnaValue } from "@/components/brand/BrandCreativeDnaStep";
 import CastLibrary from "@/components/cast/CastLibrary";
+import BrandReviewStep from "@/components/brand/BrandReviewStep";
 import { takeBrandImport } from "@/services/brandImport";
 
 const STEPS = [
@@ -45,13 +46,6 @@ const STEPS = [
   { id: 5, label: "Creative DNA", optional: true },
   { id: 6, label: "Finish", optional: false },
 ];
-
-const STATUS_MARK: Record<ReadinessStatus, { mark: string; className: string }> = {
-  complete: { mark: "✓ COMPLETE", className: "border-cyan-300/50 bg-cyan-300/10 text-cyan-100" },
-  "recommended-missing": { mark: "⚠ RECOMMENDED", className: "border-amber-300/40 bg-amber-300/10 text-amber-100" },
-  "optional-missing": { mark: "○ OPTIONAL", className: "border-white/10 bg-white/[0.03] text-slate-400" },
-  "required-missing": { mark: "✕ REQUIRED", className: "border-rose-400/40 bg-rose-400/10 text-rose-100" },
-};
 
 function StepRail({
   step,
