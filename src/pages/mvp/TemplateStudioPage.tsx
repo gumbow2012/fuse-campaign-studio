@@ -1151,7 +1151,9 @@ export default function TemplateStudioPage() {
   const handleTemplateSelect = (templateId: string) => {
     setSelectedTemplateId(templateId);
     setFiles({});
+    setAnonUploads({});
     setLibraryAssets({});
+
     setTextInputs({});
     setJobId(null);
     setOpenedHistoricalRun(null);
