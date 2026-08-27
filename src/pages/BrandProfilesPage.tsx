@@ -6,7 +6,22 @@
 
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Loader2, Plus, Trash2, Upload, X } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import {
+  ArrowRight,
+  Check,
+  Images,
+  Loader2,
+  Palette,
+  Plus,
+  Shirt,
+  Sparkles,
+  Trash2,
+  Upload,
+  Users,
+  Wand2,
+  X,
+} from "lucide-react";
 import Navbar from "@/components/Navbar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,6 +29,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
+import { useBrand } from "@/contexts/BrandContext";
+import { listMyAvatars } from "@/services/avatarProfiles";
+import { listLibraryAssets } from "@/services/libraryAssets";
 import { uploadRunInputFile } from "@/services/runInputUpload";
 import {
   createBrandProfile,
@@ -106,9 +124,11 @@ function ImageSlot({
 function BrandEditor({
   brand,
   onDone,
+  onCreated,
 }: {
   brand: BrandProfile | null;
   onDone: () => void;
+  onCreated?: (created: BrandProfile) => void;
 }) {
   const queryClient = useQueryClient();
   const [name, setName] = useState(brand?.name ?? "");
@@ -130,12 +150,16 @@ function BrandEditor({
         colors,
       };
       if (!payload.name) throw new Error("Brand name is required.");
-      if (brand) await updateBrandProfile(brand.id, payload);
-      else await createBrandProfile(payload);
+      if (brand) {
+        await updateBrandProfile(brand.id, payload);
+        return null;
+      }
+      return await createBrandProfile(payload);
     },
-    onSuccess: () => {
+    onSuccess: (created) => {
       toast.success(brand ? "Brand updated" : "Brand saved");
       queryClient.invalidateQueries({ queryKey: ["brand-profiles"] });
+      if (created) onCreated?.(created);
       onDone();
     },
     onError: (error) => toast.error(error instanceof Error ? error.message : "Could not save brand"),
@@ -430,31 +454,197 @@ function ProductEditor({
   );
 }
 
+function CompletionRing({ done, total }: { done: number; total: number }) {
+  const pct = total ? Math.round((done / total) * 100) : 0;
+  return (
+    <div className="flex items-center gap-3">
+      <div
+        className="relative h-16 w-16 shrink-0 rounded-full"
+        style={{
+          background: `conic-gradient(#22d3ee ${pct * 3.6}deg, rgba(255,255,255,0.08) ${pct * 3.6}deg)`,
+        }}
+        role="img"
+        aria-label={`Brand ${done} of ${total} complete`}
+      >
+        <div className="absolute inset-[6px] flex items-center justify-center rounded-full bg-slate-950 text-sm font-semibold text-white">
+          {done}/{total}
+        </div>
+      </div>
+      <div>
+        <p className={LABEL}>Brand setup</p>
+        <p className="mt-1 text-sm text-slate-300">
+          {done === total ? "Your brand is fully set up." : `${total - done} step${total - done === 1 ? "" : "s"} left.`}
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function DashboardCard({
+  icon,
+  title,
+  done,
+  detail,
+  cta,
+  onClick,
+}: {
+  icon: React.ReactNode;
+  title: string;
+  done: boolean;
+  detail: string;
+  cta: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`${CARD} group text-left transition hover:border-cyan-300/40 hover:bg-white/[0.05]`}
+    >
+      <div className="flex items-start justify-between gap-3">
+        <span className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-white/10 bg-black/40 text-cyan-200">
+          {icon}
+        </span>
+        {done ? (
+          <span className="inline-flex items-center gap-1 rounded-full border border-cyan-300/40 bg-cyan-300/10 px-2 py-0.5 text-[10px] uppercase tracking-[0.16em] text-cyan-100">
+            <Check className="h-3 w-3" /> Done
+          </span>
+        ) : (
+          <span className="rounded-full border border-white/10 px-2 py-0.5 text-[10px] uppercase tracking-[0.16em] text-slate-400">
+            To do
+          </span>
+        )}
+      </div>
+      <p className="mt-4 font-display text-lg tracking-[-0.01em]">{title}</p>
+      <p className="mt-1 text-sm text-slate-400">{detail}</p>
+      <span className="mt-4 inline-flex items-center gap-1.5 text-[11px] uppercase tracking-[0.16em] text-cyan-200">
+        {cta} <ArrowRight className="h-3.5 w-3.5 transition group-hover:translate-x-0.5" />
+      </span>
+    </button>
+  );
+}
+
+function BrandSwitcher({
+  brands,
+  activeBrand,
+  onSelect,
+  onCreate,
+}: {
+  brands: BrandProfile[];
+  activeBrand: BrandProfile | null;
+  onSelect: (id: string) => void;
+  onCreate: () => void;
+}) {
+  const initials = (activeBrand?.name ?? "?")
+    .split(/\s+/)
+    .map((part) => part[0])
+    .filter(Boolean)
+    .slice(0, 2)
+    .join("")
+    .toUpperCase();
+
+  return (
+    <div className="flex flex-wrap items-center gap-3">
+      <div className="flex items-center gap-3 rounded-full border border-white/10 bg-white/[0.03] py-2 pl-2 pr-4">
+        <span className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-full border border-white/10 bg-black/50 text-xs font-semibold text-cyan-100">
+          {activeBrand?.primary_logo_url ? (
+            <img src={activeBrand.primary_logo_url} alt={activeBrand.name} className="h-full w-full object-contain" />
+          ) : (
+            initials
+          )}
+        </span>
+        <span className="min-w-0">
+          <span className={`${LABEL} block`}>Active brand</span>
+          <span className="block truncate text-sm font-semibold text-white">{activeBrand?.name ?? "None"}</span>
+        </span>
+      </div>
+
+      {brands.length > 1 ? (
+        <select
+          value={activeBrand?.id ?? ""}
+          onChange={(event) => onSelect(event.target.value)}
+          aria-label="Switch active brand"
+          className="h-10 rounded-full border border-white/10 bg-black/30 px-4 text-sm text-white"
+        >
+          {brands.map((brand) => (
+            <option key={brand.id} value={brand.id}>
+              {brand.name}
+            </option>
+          ))}
+        </select>
+      ) : null}
+
+      <Button
+        type="button"
+        variant="outline"
+        onClick={onCreate}
+        className="h-10 rounded-full border-white/12 bg-white/[0.03] px-4 text-[11px] uppercase tracking-[0.16em]"
+      >
+        <Plus className="h-3.5 w-3.5" /> New brand
+      </Button>
+    </div>
+  );
+}
+
 export default function BrandProfilesPage() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
+  const { brands, activeBrand, setActiveBrand, loading: brandLoading } = useBrand();
+  const [tab, setTab] = useState("dashboard");
   const [editingBrand, setEditingBrand] = useState<BrandProfile | null | undefined>(undefined);
   const [editingProduct, setEditingProduct] = useState<ProductProfile | null | undefined>(undefined);
 
-  const brandsQuery = useQuery({
-    queryKey: ["brand-profiles", user?.id ?? "anon"],
-    queryFn: () => listBrandProfiles(user?.id ?? ""),
-    enabled: !!user?.id,
-  });
   const productsQuery = useQuery({
     queryKey: ["product-profiles", user?.id ?? "anon"],
     queryFn: () => listProductProfiles(user?.id ?? ""),
     enabled: !!user?.id,
   });
+  const avatarsQuery = useQuery({
+    queryKey: ["my-avatars", user?.id ?? "anon"],
+    queryFn: () => listMyAvatars(user?.id ?? ""),
+    enabled: !!user?.id,
+  });
+  const libraryQuery = useQuery({
+    queryKey: ["library-assets", user?.id ?? "anon"],
+    queryFn: () => listLibraryAssets(user?.id ?? ""),
+    enabled: !!user?.id,
+  });
 
-  const brands = useMemo(() => brandsQuery.data ?? [], [brandsQuery.data]);
   const products = productsQuery.data ?? [];
+  const avatars = avatarsQuery.data ?? [];
+  const libraryAssets = libraryQuery.data ?? [];
+
+  const brandProducts = useMemo(
+    () => (activeBrand ? products.filter((profile) => profile.brand_id === activeBrand.id) : []),
+    [products, activeBrand],
+  );
+
+  // Every card below is derived from real rows only — nothing is assumed.
+  const completion = useMemo(() => {
+    const metadata = (activeBrand?.metadata ?? null) as Record<string, unknown> | null;
+    const visualStyle = metadata?.visualStyle;
+    return {
+      identity: Boolean(
+        activeBrand?.name &&
+          (activeBrand.primary_logo_url || activeBrand.secondary_logo_url) &&
+          activeBrand.colors.length > 0,
+      ),
+      products: brandProducts.length > 0,
+      models: avatars.length > 0,
+      visualStyle: Boolean(visualStyle && (typeof visualStyle !== "object" || Object.keys(visualStyle as object).length)),
+      assets: libraryAssets.length > 0,
+    };
+  }, [activeBrand, brandProducts.length, avatars.length, libraryAssets.length]);
+
+  const doneCount = Object.values(completion).filter(Boolean).length;
 
   const removeBrand = useMutation({
     mutationFn: (id: string) => deleteBrandProfile(id),
     onSuccess: () => {
       toast.success("Brand deleted");
       queryClient.invalidateQueries({ queryKey: ["brand-profiles"] });
+      queryClient.invalidateQueries({ queryKey: ["active-brand-id"] });
     },
     onError: () => toast.error("Could not delete brand"),
   });
@@ -467,26 +657,133 @@ export default function BrandProfilesPage() {
     onError: () => toast.error("Could not delete profile"),
   });
 
+  const hero = (
+    <>
+      <p className="text-[11px] uppercase tracking-[0.28em] text-cyan-200/80">Brand workspace</p>
+      <h1 className="mt-2 font-display text-4xl tracking-[-0.03em] sm:text-5xl">BUILD YOUR BRAND ONCE.</h1>
+      <p className="mt-3 max-w-2xl text-lg text-slate-400">FUSE remembers the rest.</p>
+    </>
+  );
+
+  if (!brandLoading && brands.length === 0) {
+    return (
+      <div className="min-h-screen bg-slate-950 text-white">
+        <Navbar />
+        <main className="mx-auto w-full max-w-3xl px-5 pb-24 pt-28">
+          {hero}
+          {editingBrand !== undefined ? (
+            <div className="mt-8">
+              <BrandEditor
+                brand={editingBrand}
+                onDone={() => setEditingBrand(undefined)}
+                onCreated={(created) => setActiveBrand(created.id)}
+              />
+            </div>
+          ) : (
+            <Button
+              type="button"
+              onClick={() => setEditingBrand(null)}
+              className="mt-8 rounded-full bg-cyan-300 px-6 py-6 text-[12px] font-semibold uppercase tracking-[0.16em] text-slate-950 hover:bg-cyan-200"
+            >
+              <Sparkles className="h-4 w-4" /> Build your brand
+            </Button>
+          )}
+        </main>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-slate-950 text-white">
       <Navbar />
       <main className="mx-auto w-full max-w-6xl px-5 pb-24 pt-28">
-        <p className="text-[11px] uppercase tracking-[0.28em] text-cyan-200/80">Brand kit</p>
-        <h1 className="mt-2 font-display text-4xl tracking-[-0.03em]">Brand &amp; product profiles</h1>
-        <p className="mt-3 max-w-2xl text-sm text-slate-400">
-          Set up your brand once and your garments and products once. Every campaign template can pull these assets
-          straight into its inputs.
-        </p>
+        {hero}
 
-        <Tabs defaultValue="brands" className="mt-8">
+        <div className="mt-7 flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
+          <BrandSwitcher
+            brands={brands}
+            activeBrand={activeBrand}
+            onSelect={(id) => {
+              setActiveBrand(id);
+              setTab("dashboard");
+            }}
+            onCreate={() => {
+              setTab("brands");
+              setEditingBrand(null);
+            }}
+          />
+          <CompletionRing done={doneCount} total={5} />
+        </div>
+
+        <Tabs value={tab} onValueChange={setTab} className="mt-8">
           <TabsList className="border border-white/10 bg-white/[0.03]">
+            <TabsTrigger value="dashboard">Dashboard</TabsTrigger>
             <TabsTrigger value="brands">Brands</TabsTrigger>
             <TabsTrigger value="products">Products &amp; garments</TabsTrigger>
           </TabsList>
 
+          <TabsContent value="dashboard" className="mt-6">
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              <DashboardCard
+                icon={<Palette className="h-5 w-5" />}
+                title="Identity"
+                done={completion.identity}
+                detail={
+                  completion.identity
+                    ? `${activeBrand?.name} — logo and ${activeBrand?.colors.length} color${activeBrand?.colors.length === 1 ? "" : "s"} saved.`
+                    : "Name, a logo and at least one brand color."
+                }
+                cta={completion.identity ? "Edit identity" : "Add your logo & colors"}
+                onClick={() => {
+                  setTab("brands");
+                  setEditingBrand(activeBrand ?? null);
+                }}
+              />
+              <DashboardCard
+                icon={<Shirt className="h-5 w-5" />}
+                title="Products & garments"
+                done={completion.products}
+                detail={`${brandProducts.length} saved for this brand.`}
+                cta={completion.products ? "Manage products" : "Add products"}
+                onClick={() => {
+                  setTab("products");
+                  setEditingProduct(brandProducts.length ? undefined : null);
+                }}
+              />
+              <DashboardCard
+                icon={<Users className="h-5 w-5" />}
+                title="Models / FUSE Cast"
+                done={completion.models}
+                detail={`${avatars.length} model${avatars.length === 1 ? "" : "s"} in your cast.`}
+                cta={completion.models ? "Manage models" : "Add models"}
+                onClick={() => navigate("/app/avatars")}
+              />
+              <DashboardCard
+                icon={<Wand2 className="h-5 w-5" />}
+                title="Visual style"
+                done={completion.visualStyle}
+                detail="Lighting, mood and finish presets for every campaign."
+                cta="Set your style"
+                onClick={() => toast.info("Visual style presets are coming next.")}
+              />
+              <DashboardCard
+                icon={<Images className="h-5 w-5" />}
+                title="Saved assets"
+                done={completion.assets}
+                detail={`${libraryAssets.length} asset${libraryAssets.length === 1 ? "" : "s"} in your library.`}
+                cta="Open library"
+                onClick={() => navigate("/app/templates")}
+              />
+            </div>
+          </TabsContent>
+
           <TabsContent value="brands" className="mt-6 space-y-5">
             {editingBrand !== undefined ? (
-              <BrandEditor brand={editingBrand} onDone={() => setEditingBrand(undefined)} />
+              <BrandEditor
+                brand={editingBrand}
+                onDone={() => setEditingBrand(undefined)}
+                onCreated={(created) => setActiveBrand(created.id)}
+              />
             ) : (
               <Button
                 type="button"
@@ -497,12 +794,15 @@ export default function BrandProfilesPage() {
               </Button>
             )}
 
-            {brandsQuery.isLoading ? (
+            {brandLoading ? (
               <p className="text-sm text-slate-400">Loading brands…</p>
-            ) : brands.length ? (
+            ) : (
               <div className="grid gap-4 md:grid-cols-2">
                 {brands.map((brand) => (
-                  <div key={brand.id} className={CARD}>
+                  <div
+                    key={brand.id}
+                    className={`${CARD} ${brand.id === activeBrand?.id ? "border-cyan-300/40" : ""}`}
+                  >
                     <div className="flex items-start gap-4">
                       <div className="h-16 w-16 shrink-0 overflow-hidden rounded-xl border border-white/10 bg-black/40">
                         {brand.primary_logo_url ? (
@@ -511,9 +811,7 @@ export default function BrandProfilesPage() {
                       </div>
                       <div className="min-w-0 flex-1">
                         <p className="truncate text-lg font-semibold">{brand.name}</p>
-                        {brand.website ? (
-                          <p className="truncate text-xs text-slate-500">{brand.website}</p>
-                        ) : null}
+                        {brand.website ? <p className="truncate text-xs text-slate-500">{brand.website}</p> : null}
                         <div className="mt-2 flex flex-wrap gap-1.5">
                           {brand.colors.map((color) => (
                             <span
@@ -526,7 +824,22 @@ export default function BrandProfilesPage() {
                         </div>
                       </div>
                     </div>
-                    <div className="mt-4 flex gap-2">
+                    <div className="mt-4 flex flex-wrap gap-2">
+                      {brand.id === activeBrand?.id ? (
+                        <span className="inline-flex h-8 items-center rounded-full border border-cyan-300/40 bg-cyan-300/10 px-3 text-[11px] uppercase tracking-[0.16em] text-cyan-100">
+                          Active
+                        </span>
+                      ) : (
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          onClick={() => setActiveBrand(brand.id)}
+                          className="h-8 rounded-full border-white/12 bg-white/[0.03] px-3 text-[11px] uppercase tracking-[0.16em]"
+                        >
+                          Set active
+                        </Button>
+                      )}
                       <Button
                         type="button"
                         size="sm"
@@ -549,8 +862,6 @@ export default function BrandProfilesPage() {
                   </div>
                 ))}
               </div>
-            ) : (
-              <p className="text-sm text-slate-500">Nothing here yet — create a brand to reuse it later.</p>
             )}
           </TabsContent>
 
@@ -630,3 +941,4 @@ export default function BrandProfilesPage() {
     </div>
   );
 }
+
