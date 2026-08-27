@@ -44,6 +44,7 @@ import { libraryKindForAssetType, saveLibraryAsset } from "@/services/libraryAss
 import { getStaticInputs } from "@/services/templateInputMap";
 import CreditConfirmModal from "@/components/CreditConfirmModal";
 import { trackEvent } from "@/lib/metaPixel";
+import { track } from "@/lib/analytics/track";
 import { loadTemplatePerformance, type TemplatePerformanceMap } from "@/services/templatePerformance";
 import { PerformanceBlock, PerformanceBadges, PerformanceDisclaimer } from "@/components/TemplatePerformance";
 import FilterDropdown, { type FilterOption } from "@/components/templates/FilterDropdown";
@@ -230,10 +231,14 @@ async function startTemplateRun(versionId: string, inputs: Record<string, string
 
   const data = await response.json().catch(() => null);
   if (!response.ok) {
+    track("template_run", { version_id: versionId, ok: false });
     throw new Error(data?.error ?? `Could not start the template run (${response.status}).`);
   }
 
-  return data as { jobId?: string; error?: string };
+  const result = data as { jobId?: string; error?: string };
+  track("template_run", { version_id: versionId, ok: true });
+  if (result.jobId) track("campaign_created", { version_id: versionId });
+  return result;
 }
 
 function formatRunTimestamp(value: string | null | undefined) {

@@ -10,6 +10,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { getAbsoluteSiteUrl } from "@/lib/site-url";
 import { checkoutEventId, clearPendingCheckout, readPendingCheckout, trackEvent, trackEventOnce } from "@/lib/metaPixel";
+import { track } from "@/lib/analytics/track";
 
 function authErrorDescription(error: unknown, fallback: string) {
   if (!(error instanceof Error)) return fallback;
@@ -135,6 +136,7 @@ export default function AuthPage() {
           const isNewAccount = Number.isFinite(createdAt) && Date.now() - createdAt < 5 * 60 * 1000;
           if (isNewAccount) {
             trackEventOnce(`completeRegistration.${verifiedUser.id}`, "CompleteRegistration");
+            track("sign_up", { paid_access: Boolean(paidAccess) });
           }
         }
         toast({

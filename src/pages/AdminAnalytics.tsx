@@ -1,4 +1,5 @@
 import Navbar from "@/components/Navbar";
+import SiteIntelligence from "@/components/admin/SiteIntelligence";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery } from "@tanstack/react-query";
 import { BarChart3, Zap, Users, TrendingUp, AlertTriangle, DollarSign } from "lucide-react";
@@ -89,6 +90,8 @@ const AdminAnalytics = () => {
             </div>
           </>
         )}
+
+        <SiteIntelligence />
       </div>
     </div>
   );

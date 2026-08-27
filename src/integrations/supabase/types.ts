@@ -17,28 +17,43 @@ export type Database = {
       analytics_events: {
         Row: {
           created_at: string
-          event_type: string
+          event_name: string | null
+          event_type: string | null
           id: string
           metadata: Json | null
+          path: string | null
           project_id: string | null
+          props: Json
+          referrer: string | null
+          session_id: string | null
           template_id: string | null
           user_id: string | null
         }
         Insert: {
           created_at?: string
-          event_type: string
+          event_name?: string | null
+          event_type?: string | null
           id?: string
           metadata?: Json | null
+          path?: string | null
           project_id?: string | null
+          props?: Json
+          referrer?: string | null
+          session_id?: string | null
           template_id?: string | null
           user_id?: string | null
         }
         Update: {
           created_at?: string
-          event_type?: string
+          event_name?: string | null
+          event_type?: string | null
           id?: string
           metadata?: Json | null
+          path?: string | null
           project_id?: string | null
+          props?: Json
+          referrer?: string | null
+          session_id?: string | null
           template_id?: string | null
           user_id?: string | null
         }
@@ -1527,6 +1542,32 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      analytics_daily: {
+        Args: { _days?: number }
+        Returns: {
+          day: string
+          events: number
+          sessions: number
+          users: number
+        }[]
+      }
+      analytics_event_counts: {
+        Args: { _days?: number }
+        Returns: {
+          event_name: string
+          events: number
+          sessions: number
+          users: number
+        }[]
+      }
+      analytics_top_paths: {
+        Args: { _days?: number }
+        Returns: {
+          path: string
+          sessions: number
+          views: number
+        }[]
+      }
       get_my_profile: {
         Args: never
         Returns: {

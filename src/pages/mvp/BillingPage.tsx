@@ -13,6 +13,7 @@ import { toast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { useMembershipCheckout } from "@/hooks/useMembershipCheckout";
 import { supabase } from "@/integrations/supabase/client";
+import { track } from "@/lib/analytics/track";
 import { CREDIT_PACKS, STRIPE_TIERS } from "@/lib/stripe-config";
 import {
   checkoutEventId,
@@ -134,6 +135,9 @@ export default function BillingPage() {
     }
     if (isAdmin) return;
 
+    track("plan_selected", { plan_key: String(tierKey) });
+    track("checkout_start", { plan_key: String(tierKey), kind: "subscription" });
+
     await startPlanCheckout(tierKey, {
       email: user ? undefined : normalizedEmail,
       brandName: brandName.trim() || undefined,
@@ -175,6 +179,7 @@ export default function BillingPage() {
     }
     if (isAdmin) return;
 
+    track("checkout_start", { kind: "credits", credits });
     await startCreditTopUp(credits, { balanceBefore: Number(profile?.credits_balance ?? 0) });
   };
 
