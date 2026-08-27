@@ -97,6 +97,15 @@ const App = () => (
               }
             />
             <Route
+              path="/app/brand/onboarding"
+              element={
+                <CustomerRoute>
+                  <BrandOnboardingPage />
+                </CustomerRoute>
+              }
+            />
+
+            <Route
               path="/app/avatars"
               element={
                 <CustomerRoute>
