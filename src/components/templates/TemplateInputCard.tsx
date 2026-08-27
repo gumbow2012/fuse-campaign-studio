@@ -62,7 +62,10 @@ interface TemplateInputCardProps {
   displayLabel?: string;
   /** Cast-supported templates: the existing cast selector, shown inside the Add dialog. */
   castPanel?: ReactNode;
+  /** Phase 10: subtle provenance note when the slot was autofilled ("From ACME"). */
+  sourceNote?: string | null;
 }
+
 
 const SOURCE_ICONS: Record<AssetSourceKind, typeof Upload> = {
   upload: Upload,
