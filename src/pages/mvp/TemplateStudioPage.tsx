@@ -47,6 +47,8 @@ import { ADMIN_VISUAL_BUDGET_TOTAL, getAdminVisualCreditsRemaining, getAdminVisu
 import { cn } from "@/lib/utils";
 import { canInitiateFork, resolveCustomizeState } from "@/lib/customizeGating";
 import { sortTemplatesForStudio } from "@/lib/templateOrdering";
+import { rankForYou } from "@/lib/forYouRanking";
+import ForYouRow from "@/components/templates/ForYouRow";
 import { fetchTemplateDetail, fetchTemplates, type ApiTemplate, type RunFeedbackRecord, type TemplateDetail } from "@/services/fuseApi";
 import { uploadAnonymousRunInput, uploadRunInputFile } from "@/services/runInputUpload";
 import { libraryKindForAssetType, saveLibraryAsset } from "@/services/libraryAssets";
@@ -620,7 +622,7 @@ export default function TemplateStudioPage() {
   }, [templates]);
 
   /** RETENTION P1 — favorites (separate from the hidden filter block). */
-  const { canFavorite, isFavorite, toggleFavorite, favoriteCount } = useTemplateFavorites();
+  const { canFavorite, isFavorite, toggleFavorite, favoriteCount, favoriteIds } = useTemplateFavorites();
   const [favoritesOnly, setFavoritesOnly] = useState(false);
   useEffect(() => {
     if (!canFavorite && favoritesOnly) setFavoritesOnly(false);
@@ -647,6 +649,9 @@ export default function TemplateStudioPage() {
       return true;
     });
   }, [activeFilterCount, favoritesOnly, isFavorite, outputTypeFilter, perfFilters, performanceMap, templates]);
+
+
+
 
 
 
@@ -730,6 +735,46 @@ export default function TemplateStudioPage() {
     hasOpenWorkspace: Boolean(jobId) || Boolean(openedHistoricalRun),
   });
   const refetchRecentRuns = recentRunsQuery.refetch;
+
+  /**
+   * RETENTION P3 — deterministic "For you" row. Popularity is optional: when the
+   * RPC is unavailable the signal is simply absent (never fabricated).
+   */
+  const { data: templatePopularity = {} as Record<string, number> } = useQuery({
+    queryKey: ["public-template-popularity", 90],
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc("public_template_popularity" as never, { days: 90 } as never);
+      if (error) return {} as Record<string, number>;
+      const map: Record<string, number> = {};
+      for (const row of (data ?? []) as { template_id?: string; runs?: number }[]) {
+        if (row?.template_id) map[String(row.template_id)] = Number(row.runs ?? 0);
+      }
+      return map;
+    },
+    enabled: !!user?.id,
+    staleTime: 10 * 60 * 1000,
+    retry: false,
+  });
+
+  const forYou = useMemo(() => {
+    if (!templates.length) return { mode: "popular" as const, entries: [] };
+    const continueNames = new Set(
+      recentRuns.slice(0, 5).map((run) => (run.templateName ?? "").toLowerCase()).filter(Boolean),
+    );
+    const excludeIds = new Set(
+      templates
+        .filter((template) => continueNames.has(template.name.toLowerCase()))
+        .map((template) => String(template.id)),
+    );
+    return rankForYou({
+      templates,
+      fitMap: activeBrand ? templateFitMap : {},
+      favoriteIds,
+      popularity: templatePopularity,
+      excludeIds,
+      limit: 8,
+    });
+  }, [activeBrand, favoriteIds, recentRuns, templateFitMap, templatePopularity, templates]);
 
 
   // ---- Campaign studio layout state machine (single authoritative condition) ----
@@ -1784,6 +1829,30 @@ export default function TemplateStudioPage() {
             onRunAgain={handleRemixCampaign}
           />
         ) : null}
+
+        {/* RETENTION P3 — deterministic personalized (or honestly "popular") row. */}
+        {user && !hasActiveCampaignWorkspace ? (
+          <ForYouRow
+            className="mt-8"
+            mode={forYou.mode}
+            entries={forYou.entries}
+            brandName={forYou.mode === "personalized" ? activeBrand?.name ?? null : null}
+            renderMedia={(template) => (
+              <TemplateVibeMedia template={template} className="aspect-[9/16] w-full object-cover" />
+            )}
+            fitFor={(template) => (activeBrand ? templateFitMap[String(template.id)] ?? null : null)}
+            canFavorite={canFavorite}
+            isFavorite={(id) => isFavorite(id)}
+            onToggleFavorite={(id) => toggleFavorite(id)}
+            onSelect={(template) => {
+              track("for_you_template_clicked", { template_id: template.id });
+              handleTemplateSelect(template.id);
+            }}
+            onShown={(mode, count) => track("for_you_shown", { mode, count })}
+          />
+        ) : null}
+
+
 
 
 
