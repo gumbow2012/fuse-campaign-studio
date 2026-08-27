@@ -239,6 +239,13 @@ export default function BrandProfilesPage() {
 
   const doneCount = Object.values(completion).filter(Boolean).length;
 
+  // Incomplete brands keep the workspace and get the shared readiness checklist.
+  const readiness = useMemo(
+    () => deriveBrandReadiness(activeBrand, products, brandModelIds, visualStyle),
+    [activeBrand, products, brandModelIds, visualStyle],
+  );
+
+
   const removeBrand = useMutation({
     mutationFn: (id: string) => deleteBrandProfile(id),
     onSuccess: () => {
