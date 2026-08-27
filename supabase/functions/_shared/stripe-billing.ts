@@ -1356,7 +1356,16 @@ export function createStripeWebhookHandler(mode: StripeBillingMode) {
           profile,
         });
 
+        // Referral qualification (R3) — best-effort, never breaks billing.
+        await maybeRewardReferrer({
+          admin,
+          userId: profile.user_id,
+          amountPaidCents: integerCents(invoice.amount_paid) ?? 0,
+          stripeEventId: event.id,
+        });
+
         // Additive analytics only — never blocks or fails the webhook.
+
         try {
           if (mode === "live") {
             const amountPaidCents = integerCents(invoice.amount_paid) ?? 0;
