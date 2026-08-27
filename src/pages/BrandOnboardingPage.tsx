@@ -612,55 +612,79 @@ export default function BrandOnboardingPage() {
 
           {step === 6 ? (
             <div className={CARD}>
-              <p className={LABEL}>Step 6 — Finish</p>
-              <h2 className="mt-2 text-2xl">{brand?.name ?? "Your brand"} is ready.</h2>
-              <ul className="mt-5 space-y-2 text-sm text-slate-300">
-                {[
-                  { label: "Brand basics", done: Boolean(brand?.name) },
-                  {
-                    label: "Identity (logo + colors)",
-                    done: Boolean((brand?.primary_logo_url || brand?.secondary_logo_url) && (brand?.colors.length ?? 0) > 0),
-                  },
-                  { label: `Products (${brandProducts.length})`, done: brandProducts.length > 0 },
-                  { label: `Models (${modelIds.length})`, done: modelIds.length > 0 },
-                  { label: "Visual style", done: style.tags.length > 0 || style.tone.trim().length > 0 },
-                ].map((entry) => (
-                  <li key={entry.label} className="flex items-center gap-2">
-                    <span
-                      className={`inline-flex h-5 w-5 items-center justify-center rounded-full border ${
-                        entry.done ? "border-cyan-300/50 bg-cyan-300/10 text-cyan-200" : "border-white/10 text-slate-500"
-                      }`}
+              <p className={LABEL}>Step 6 — Review</p>
+              <h2 className="mt-2 text-2xl">
+                {brand?.name?.trim() || "Your brand"}
+                {readiness.ready ? " is ready." : " — a few things left."}
+              </h2>
+              <ul className="mt-5 space-y-3 text-sm text-slate-300">
+                {readiness.sections.map((section) => {
+                  const mark = STATUS_MARK[section.status];
+                  const missing = section.items.filter((item) => !item.done);
+                  return (
+                    <li
+                      key={section.key}
+                      className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-white/10 bg-black/20 px-4 py-3"
                     >
-                      {entry.done ? <Check className="h-3 w-3" /> : null}
-                    </span>
-                    {entry.label}
-                  </li>
-                ))}
+                      <span className="flex flex-wrap items-center gap-3">
+                        <span
+                          className={`rounded-full border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] ${mark.className}`}
+                        >
+                          {mark.mark}
+                        </span>
+                        <span>
+                          {section.label}
+                          {missing.length ? (
+                            <span className="ml-2 text-xs text-slate-500">
+                              {missing.map((item) => item.label).join(" · ")}
+                            </span>
+                          ) : null}
+                        </span>
+                      </span>
+                      {section.status !== "complete" ? (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={() => setStep(section.step)}
+                          className="h-8 rounded-full border-white/12 bg-white/[0.03] px-3 text-[10px] uppercase tracking-[0.16em]"
+                        >
+                          Go back &amp; complete
+                        </Button>
+                      ) : null}
+                    </li>
+                  );
+                })}
               </ul>
               <Button
                 type="button"
                 onClick={() => finish.mutate()}
-                disabled={finish.isPending}
+                disabled={finish.isPending || !readiness.ready}
                 className="mt-6 rounded-full bg-cyan-300 px-6 py-5 text-[12px] font-semibold uppercase tracking-[0.16em] text-slate-950 hover:bg-cyan-200"
               >
                 {finish.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
-                Enter your Brand Workspace
+                {readiness.ready
+                  ? "Enter Brand Workspace"
+                  : `Complete ${readiness.requiredMissing} required item${readiness.requiredMissing === 1 ? "" : "s"}`}
               </Button>
+              {readiness.ready && readiness.recommendedMissing > 0 ? (
+                <p className="mt-3 text-xs text-slate-500">You can complete these later.</p>
+              ) : null}
             </div>
           ) : null}
         </div>
 
-        {step < 6 ? (
-          <div className="mt-8 flex flex-wrap items-center justify-between gap-3">
-            <Button
-              type="button"
-              variant="ghost"
-              disabled={step === 1}
-              onClick={() => setStep((current) => Math.max(1, current - 1))}
-              className="rounded-full text-[11px] uppercase tracking-[0.16em] text-slate-400"
-            >
-              <ArrowLeft className="h-3.5 w-3.5" /> Back
-            </Button>
+        <div className="mt-8 flex flex-wrap items-center justify-between gap-3">
+          <Button
+            type="button"
+            variant="ghost"
+            disabled={step === 1}
+            onClick={() => setStep((current) => Math.max(1, current - 1))}
+            className="rounded-full text-[11px] uppercase tracking-[0.16em] text-slate-400"
+          >
+            <ArrowLeft className="h-3.5 w-3.5" /> Back
+          </Button>
+          {step < 6 ? (
+
             <div className="flex items-center gap-2">
               {optional ? (
                 <Button
