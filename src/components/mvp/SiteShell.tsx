@@ -275,13 +275,34 @@ export default function SiteShell({ children }: { children: ReactNode }) {
                         </Button>
                       </>
                     ) : (
-                      <Button asChild className={cn("min-h-11 w-full rounded-full bg-cyan-300 text-slate-950 hover:bg-cyan-200", focusRing)}>
-                        <Link to="/app/templates" onClick={closeMenu}>
-                          <Layers3 className="h-4 w-4" aria-hidden="true" />
-                          Try templates
-                        </Link>
-                      </Button>
+                      <>
+                        <Button asChild className={cn("min-h-11 w-full rounded-full bg-cyan-300 text-slate-950 hover:bg-cyan-200", focusRing)}>
+                          <Link to="/auth?mode=signup" onClick={closeMenu}>
+                            Sign up
+                          </Link>
+                        </Button>
+                        <Button
+                          asChild
+                          variant="outline"
+                          className={cn("min-h-11 w-full rounded-full border-white/15 bg-white/5 text-foreground hover:bg-white/10", focusRing)}
+                        >
+                          <Link to="/auth?mode=signin" onClick={closeMenu}>
+                            Sign in
+                          </Link>
+                        </Button>
+                        <Button
+                          asChild
+                          variant="outline"
+                          className={cn("min-h-11 w-full rounded-full border-white/15 bg-white/5 text-foreground hover:bg-white/10", focusRing)}
+                        >
+                          <Link to="/app/templates" onClick={closeMenu}>
+                            <Layers3 className="h-4 w-4" aria-hidden="true" />
+                            Try templates
+                          </Link>
+                        </Button>
+                      </>
                     )}
+
                   </div>
                 </div>
               </SheetContent>
