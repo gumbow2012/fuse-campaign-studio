@@ -303,6 +303,12 @@ export default function CreatorProfile() {
                   Templates
                 </TabsTrigger>
                 <TabsTrigger
+                  value="achievements"
+                  className="rounded-full px-4 text-[10px] uppercase tracking-[0.16em]"
+                >
+                  Achievements
+                </TabsTrigger>
+                <TabsTrigger
                   value="about"
                   className="rounded-full px-4 text-[10px] uppercase tracking-[0.16em]"
                 >
@@ -325,6 +331,14 @@ export default function CreatorProfile() {
                       {followerCount === 1 ? "Follower" : "Followers"}
                     </p>
                   </div>
+                  {typeof performance.totalUses === "number" ? (
+                    <div>
+                      <p className="text-lg font-semibold">
+                        {performance.totalUses.toLocaleString()}
+                      </p>
+                      <p className="text-xs text-muted-foreground">Runs of their templates</p>
+                    </div>
+                  ) : null}
                   {joined ? (
                     <div>
                       <p className="text-lg font-semibold">{joined}</p>
@@ -335,12 +349,13 @@ export default function CreatorProfile() {
 
                 <CreatorPerformanceProof aggregate={performance} />
 
-                <Button asChild variant="outline" className="rounded-full border-white/15 bg-white/5">
-                  <Link to={`/app/templates?creator=${profile.handle}`}>
-                    Browse published templates
-                  </Link>
-                </Button>
+                <CreatorTemplateCatalog creatorUserId={profile.user_id} handle={profile.handle} />
               </TabsContent>
+
+              <TabsContent value="achievements" className="mt-6">
+                <CreatorAchievementsPanel achievements={social?.achievements ?? []} />
+              </TabsContent>
+
 
               <TabsContent value="about" className="mt-6 space-y-6">
                 {profile.bio ? (
