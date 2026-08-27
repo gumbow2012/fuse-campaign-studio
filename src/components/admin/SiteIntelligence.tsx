@@ -45,11 +45,13 @@ export default function SiteIntelligence() {
   const funnel = useQuery({
     queryKey: ["admin-activation-funnel", days],
     queryFn: async () => {
-      const { data, error } = await supabase.rpc("admin_activation_funnel" as never, {
-        days,
-      } as never);
-      if (error) throw error;
-      return normalizeFunnel(data);
+      // Arg name differs across deployments — try `days`, fall back to `_days`.
+      let response = await supabase.rpc("admin_activation_funnel" as never, { days } as never);
+      if (response.error) {
+        response = await supabase.rpc("admin_activation_funnel" as never, { _days: days } as never);
+      }
+      if (response.error) throw response.error;
+      return normalizeFunnel(response.data);
     },
   });
 
