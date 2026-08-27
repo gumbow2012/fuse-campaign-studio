@@ -10,6 +10,47 @@ type PathRow = { path: string; views: number; sessions: number };
 
 const RANGES = [7, 30, 90] as const;
 
+type FunnelStep = { label: string; count: number };
+
+/** Canonical activation funnel order + the keys the RPC may use per step. */
+const FUNNEL_STEPS: { label: string; keys: string[] }[] = [
+  { label: "New accounts", keys: ["new_accounts", "accounts", "signups"] },
+  { label: "Brand started", keys: ["brand_started", "brands_started"] },
+  { label: "Brand set up", keys: ["brand_set_up", "brand_setup", "brands_set_up", "brand_complete"] },
+  { label: "Product added", keys: ["product_added", "products_added"] },
+  { label: "First template run", keys: ["first_template_run", "first_run", "template_run"] },
+];
+
+function toCount(value: unknown): number {
+  const parsed = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+/**
+ * Accepts either a single row of named counts or a row-per-step shape
+ * ({ step, count }) so the funnel renders whichever the RPC returns.
+ */
+function normalizeFunnel(data: unknown): FunnelStep[] {
+  const rows = Array.isArray(data) ? data : data ? [data] : [];
+  if (!rows.length) return [];
+  const flat: Record<string, unknown> = {};
+  for (const row of rows as Record<string, unknown>[]) {
+    if (!row || typeof row !== "object") continue;
+    const stepKey = row.step ?? row.step_key ?? row.stage ?? row.name;
+    const stepCount = row.count ?? row.users ?? row.value ?? row.total;
+    if (typeof stepKey === "string" && stepCount !== undefined) {
+      flat[stepKey.toLowerCase()] = stepCount;
+      continue;
+    }
+    for (const [key, value] of Object.entries(row)) flat[key.toLowerCase()] = value;
+  }
+  const steps = FUNNEL_STEPS.map(({ label, keys }) => {
+    const match = keys.find((key) => flat[key] !== undefined);
+    return { label, count: match ? toCount(flat[match]) : 0 };
+  });
+  return steps.some((step) => step.count > 0) ? steps : [];
+}
+
 /** Admin-only site analytics. The RPCs fail closed for non-admins. */
 export default function SiteIntelligence() {
   const [days, setDays] = useState<number>(30);
