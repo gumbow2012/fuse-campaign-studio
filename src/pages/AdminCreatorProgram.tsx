@@ -28,6 +28,27 @@ function formatDate(value: string | null) {
   return new Date(value).toLocaleString([], { month: "short", day: "numeric", year: "numeric" });
 }
 
+type InviteRow = {
+  id: string;
+  email: string | null;
+  status: string | null;
+  created_at: string | null;
+  accepted_at: string | null;
+  email_status: string | null;
+  delivered_at: string | null;
+  bounced_at: string | null;
+  failure_reason: string | null;
+  last_sent_at: string | null;
+  sent_count: number | null;
+};
+
+function minutesSince(value: string | null) {
+  if (!value) return null;
+  const ms = Date.now() - new Date(value).getTime();
+  if (!Number.isFinite(ms) || ms < 0) return null;
+  return Math.floor(ms / 60000);
+}
+
 const panel = "rounded-3xl border border-white/10 bg-white/[0.04] p-5 shadow-sm backdrop-blur";
 const emptyState =
   "rounded-2xl border border-white/10 bg-background/40 px-4 py-6 text-sm text-muted-foreground";
