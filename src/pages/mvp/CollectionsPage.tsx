@@ -136,14 +136,14 @@ export default function CollectionsPage() {
       setActiveId(collection.id);
       invalidate();
     },
-    onError: fail("Could not create that collection"),
+    onError: fail("Could not create that drop"),
   });
 
   const patch = useMutation({
     mutationFn: ({ id, ...rest }: { id: string; title?: string; description?: string | null; is_public?: boolean }) =>
       updateCollection(id, rest),
     onSuccess: invalidate,
-    onError: fail("Could not save that collection"),
+    onError: fail("Could not save that drop"),
   });
 
   const remove = useMutation({
@@ -152,7 +152,7 @@ export default function CollectionsPage() {
       setActiveId(null);
       invalidate();
     },
-    onError: fail("Could not delete that collection"),
+    onError: fail("Could not delete that drop"),
   });
 
   const addItem = useMutation({
@@ -170,7 +170,7 @@ export default function CollectionsPage() {
   const reorder = useMutation({
     mutationFn: (orderedIds: string[]) => reorderCollectionItems(activeId!, orderedIds),
     onSuccess: invalidate,
-    onError: fail("Could not reorder that collection"),
+    onError: fail("Could not reorder that drop"),
   });
 
   const move = (index: number, direction: -1 | 1) => {
@@ -204,19 +204,19 @@ export default function CollectionsPage() {
   return (
     <SiteShell>
       <PageMeta
-        title="My Collections · FUSE"
-        description="Group FUSE campaign templates into collections and share them with a public link."
+        title="My Drops · FUSE"
+        description="Group FUSE campaign templates into drops and share them with a public link."
         path="/app/collections"
       />
 
       <div className="container space-y-8 py-10">
         <header className="space-y-3">
-          <TinyLabel>Collections</TinyLabel>
+          <TinyLabel>Drops</TinyLabel>
           <h1 className="font-display text-3xl font-semibold uppercase tracking-[-0.02em] text-white sm:text-4xl">
-            My collections
+            My drops
           </h1>
           <p className="max-w-2xl text-sm text-slate-400">
-            Curate template line-ups for a drop, a client or a season. Flip a collection public to
+            Curate template line-ups for a drop, a client or a season. Flip a drop public to
             get a shareable link and share card.
           </p>
         </header>
@@ -231,7 +231,7 @@ export default function CollectionsPage() {
           <Input
             value={newTitle}
             onChange={(event) => setNewTitle(event.target.value)}
-            placeholder="New collection title"
+            placeholder="New drop title"
             className="max-w-sm border-white/10 bg-white/5"
           />
           <Button
@@ -244,7 +244,7 @@ export default function CollectionsPage() {
             ) : (
               <Plus className="mr-1.5 h-4 w-4" />
             )}
-            Create collection
+            Create drop
           </Button>
         </form>
 
@@ -252,10 +252,10 @@ export default function CollectionsPage() {
           {/* list */}
           <div className="space-y-3">
             {collectionsQuery.isLoading ? (
-              <p className="text-sm text-slate-400">Loading collections…</p>
+              <p className="text-sm text-slate-400">Loading drops…</p>
             ) : collections.length === 0 ? (
               <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-6 text-sm text-slate-400">
-                No collections yet. Create one above, then add templates from the marketplace.
+                No drops yet. Create one above, then add templates from the marketplace.
               </div>
             ) : (
               collections.map((collection) => (
@@ -323,7 +323,7 @@ export default function CollectionsPage() {
                 <Textarea
                   defaultValue={active.description ?? ""}
                   key={`desc-${active.id}`}
-                  placeholder="What is this collection for?"
+                  placeholder="What is this drop for?"
                   onBlur={(event) => {
                     const value = event.target.value;
                     if (value !== (active.description ?? "")) {
@@ -381,7 +381,7 @@ export default function CollectionsPage() {
 
               {/* items */}
               <div className="space-y-3">
-                <TinyLabel>Templates in this collection</TinyLabel>
+                <TinyLabel>Templates in this drop</TinyLabel>
                 {items.length === 0 ? (
                   <p className="text-sm text-slate-400">
                     Nothing here yet — add templates from the picker below.
@@ -428,7 +428,7 @@ export default function CollectionsPage() {
                               type="button"
                               variant="ghost"
                               size="icon"
-                              aria-label="Remove from collection"
+                              aria-label="Remove from drop"
                               onClick={() => removeItem.mutate(item.template_id)}
                               className="h-8 w-8 text-rose-300"
                             >
@@ -480,7 +480,7 @@ export default function CollectionsPage() {
             </div>
           ) : (
             <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-8 text-sm text-slate-400">
-              Select a collection to manage it.
+              Select a drop to manage it.
             </div>
           )}
         </div>
