@@ -695,6 +695,27 @@ export default function AdminTemplateFactory() {
                               : "Compile to template"}
                         </Button>
                       ) : null}
+                      {reference.blueprint ? (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="rounded-full border-white/15 bg-white/5"
+                          disabled={scoringId === reference.id}
+                          onClick={() => scoreMutation.mutate(reference)}
+                        >
+                          {scoringId === reference.id ? (
+                            <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
+                          ) : (
+                            <Gauge className="mr-2 h-3.5 w-3.5" />
+                          )}
+                          {scoringId === reference.id
+                            ? "Scoring…"
+                            : reference.viral_score === null
+                              ? "Score"
+                              : "Rescore"}
+                        </Button>
+                      ) : null}
+
                       {!reference.image_url ? (
                         <span className="text-[11px] text-muted-foreground">
                           Add an image URL to analyze
