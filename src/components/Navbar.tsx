@@ -22,6 +22,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { AccountPopover, AccountMenuContent } from "@/components/AccountMenu";
 import { CreditChip } from "@/components/CreditChip";
+import { StreakChip } from "@/components/StreakChip";
 import NotificationCenter from "@/components/NotificationCenter";
 import FeatureNewBadge from "@/components/FeatureNewBadge";
 import type { FeatureKey } from "@/lib/featureRegistry";
@@ -460,6 +461,7 @@ const Navbar = () => {
           {user ? (
             /* ONE cohesive cluster: credits · notifications · account */
             <div className="flex items-center gap-1.5 sm:gap-2">
+              <StreakChip />
               <CreditChip />
               <NotificationCenter />
               <AccountPopover />
