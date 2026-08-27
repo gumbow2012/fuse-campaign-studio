@@ -864,6 +864,88 @@ export default function TemplateStudioPage() {
     });
   };
 
+  /*
+   * Phase 10 — deterministic brand autofill.
+   * Pre-populates ONLY empty slots with assets already saved on the active
+   * brand, writing the exact same `libraryAssets` / `textInputs` state the
+   * customer would produce through the pickers. The submit/charge path,
+   * validation and cost display are untouched.
+   */
+  const autofillSignature = `${selectedTemplateId}|${activeBrandId ?? ""}`;
+  const autofillFieldKeys = inputFields.map((field) => field.key).join(",");
+
+  useEffect(() => {
+    if (!activeBrand || !inputFields.length) return;
+    if (brandProductsQuery.isLoading || brandModelsQuery.isLoading) return;
+    if (autofillAppliedRef.current === autofillSignature) return;
+    autofillAppliedRef.current = autofillSignature;
+
+    const plan = planBrandAutofill(
+      inputFields.map((field) => ({
+        key: field.key,
+        label: field.label,
+        type: field.type,
+        assetType: field.requirement?.assetType ?? null,
+      })),
+      { brand: activeBrand, products: brandProducts, models: brandModels },
+    );
+
+    const applied: string[] = [];
+
+    setLibraryAssets((current) => {
+      const next = { ...current };
+      for (const [key, asset] of Object.entries(plan.images)) {
+        if (files[key] || current[key]?.url) continue;
+        next[key] = asset;
+        applied.push(key);
+      }
+      return next;
+    });
+
+    setTextInputs((current) => {
+      const next = { ...current };
+      for (const [key, value] of Object.entries(plan.texts)) {
+        if (current[key]?.trim()) continue;
+        next[key] = value;
+        applied.push(key);
+      }
+      return next;
+    });
+
+    if (applied.length) {
+      setAutofilledKeys((current) => {
+        const next = { ...current };
+        for (const key of applied) next[key] = activeBrand.name;
+        return next;
+      });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    autofillSignature,
+    autofillFieldKeys,
+    activeBrand,
+    brandProducts,
+    brandModels,
+    brandProductsQuery.isLoading,
+    brandModelsQuery.isLoading,
+  ]);
+
+  /** Clears every slot autofilled from the brand — user values are never touched. */
+  const clearAutofilled = () => {
+    const keys = Object.keys(autofilledKeys);
+    if (!keys.length) return;
+    setLibraryAssets((current) => {
+      const next = { ...current };
+      for (const key of keys) next[key] = null;
+      return next;
+    });
+    setTextInputs((current) => {
+      const next = { ...current };
+      for (const key of keys) next[key] = "";
+      return next;
+    });
+    setAutofilledKeys({});
+  };
 
 
   const creditsRequired = selectedTemplate?.estimated_credits_per_run ?? 0;
