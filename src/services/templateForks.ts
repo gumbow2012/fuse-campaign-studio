@@ -7,6 +7,20 @@
 import { supabase } from "@/integrations/supabase/client";
 import { SUPABASE_PUBLISHABLE_KEY, SUPABASE_URL } from "@/integrations/supabase/client";
 
+export interface ForkNodeMediaItem {
+  url: string;
+  type: "image" | "video";
+  sourceNodeId?: string;
+  role?: "start" | "end";
+  label?: string;
+}
+
+export interface ForkNodeMedia {
+  output: { url: string; type: "image" | "video" } | null;
+  references: ForkNodeMediaItem[];
+  unavailable?: boolean;
+}
+
 export interface PersonalGraphNode {
   id: string;
   name: string;
@@ -15,7 +29,10 @@ export interface PersonalGraphNode {
   settings: Record<string, unknown>;
   prompt?: string;
   directionOverride?: string;
+  /** Presentation-only: persisted artifacts from the source run. */
+  media?: ForkNodeMedia;
 }
+
 
 export interface PersonalGraph {
   version: 1;

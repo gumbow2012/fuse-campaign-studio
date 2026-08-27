@@ -44,6 +44,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { toast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
 import {
   createFork,
   estimateForkRun,
@@ -51,10 +52,12 @@ import {
   resetFork,
   runFork,
   updateFork,
+  type ForkNodeMediaItem,
   type PersonalGraph,
   type PersonalGraphNode,
   type TemplateFork,
 } from "@/services/templateForks";
+
 
 const PROMPTABLE = ["prompt", "image_gen", "video_gen"];
 
@@ -156,6 +159,8 @@ export default function CustomizeWorkflowPage() {
   const [railOpen, setRailOpen] = useState(false);
   const [inspectorOpen, setInspectorOpen] = useState(false);
   const [positions, setPositions] = useState<Record<string, { x: number; y: number }>>({});
+  const [lightbox, setLightbox] = useState<{ url: string; type: "image" | "video" } | null>(null);
+
   const runKeyRef = useRef<string | null>(null);
   const graphRef = useRef<PersonalGraph | null>(null);
   const autosaveTimer = useRef<number | null>(null);
@@ -251,6 +256,38 @@ export default function CustomizeWorkflowPage() {
     return map;
   }, [nodes]);
 
+  /** Human-readable provenance for a reference thumbnail. Media only. */
+  const provenanceLabel = useCallback(
+    (ref: ForkNodeMediaItem) => {
+      if (ref.role) return ref.role === "start" ? "Start" : "End";
+      if (ref.sourceNodeId) {
+        const upstream = nodes.find((node) => node.id === ref.sourceNodeId);
+        const number = numbering.get(ref.sourceNodeId);
+        return `#${number ?? "?"} · ${kindLabel(upstream?.node_type ?? "").toUpperCase()}`;
+      }
+      return "Brand asset";
+    },
+    [nodes, numbering],
+  );
+
+  const decoratedMedia = useCallback(
+    (node: PersonalGraphNode) => {
+      const media = node.media;
+      if (!media) return null;
+      return {
+        output: media.output,
+        unavailable: media.unavailable,
+        references: media.references.map((ref) => ({
+          url: ref.url,
+          type: ref.type,
+          role: ref.role,
+          label: provenanceLabel(ref),
+        })),
+      };
+    },
+    [provenanceLabel],
+  );
+
   const flowNodes = useMemo<GraphCanvasNode[]>(
     () =>
       nodes.map((node) => {
@@ -295,12 +332,15 @@ export default function CustomizeWorkflowPage() {
             expected: null,
             deliverable: node.node_type === "output" ? true : null,
             portIds: [],
+            media: decoratedMedia(node),
+            onOpenMedia: (url: string, type: "image" | "video") => setLightbox({ url, type }),
             // READ-ONLY: no onAddPort / onPromptCommit / onUploadReference / onRunNode.
           },
         };
       }),
-    [nodes, incomingByNode, fork?.promptVisibility, positions, layout, numbering, outputNumbering],
+    [nodes, incomingByNode, fork?.promptVisibility, positions, layout, numbering, outputNumbering, decoratedMedia],
   );
+
 
   const flowEdges = useMemo<Edge[]>(
     () =>
@@ -587,6 +627,87 @@ export default function CustomizeWorkflowPage() {
         </p>
       </div>
 
+      {(() => {
+        const media = selectedNode.media;
+        if (!media) return null;
+        if (media.unavailable && !media.output && !media.references.length) {
+          return (
+            <p className="text-xs text-slate-500">
+              Reference unavailable · #{numbering.get(selectedNode.id) ?? "?"}
+            </p>
+          );
+        }
+        const renderThumb = (
+          url: string,
+          type: "image" | "video",
+          caption: string,
+          key: string,
+        ) => (
+          <button
+            key={key}
+            type="button"
+            className="w-20 text-left"
+            onClick={() => setLightbox({ url, type })}
+          >
+            {type === "video" ? (
+              <video
+                src={url}
+                muted
+                loop
+                playsInline
+                preload="metadata"
+                className="h-20 w-20 rounded-lg border border-white/10 bg-black/40 object-cover"
+                onMouseEnter={(event) => void event.currentTarget.play().catch(() => undefined)}
+                onMouseLeave={(event) => event.currentTarget.pause()}
+              />
+            ) : (
+              <img
+                src={url}
+                alt={caption}
+                loading="lazy"
+                className="h-20 w-20 rounded-lg border border-white/10 bg-black/40 object-cover"
+              />
+            )}
+            <span className="mt-1 block truncate text-[10px] uppercase tracking-[0.12em] text-slate-500">
+              {caption}
+            </span>
+          </button>
+        );
+        return (
+          <div className="space-y-3 rounded-xl border border-white/10 bg-black/20 p-3">
+            {media.references.length ? (
+              <div>
+                <p className="text-[10px] uppercase tracking-[0.16em] text-slate-500">References / inputs</p>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {media.references.map((ref, index) =>
+                    renderThumb(
+                      ref.url,
+                      ref.type,
+                      ref.role ? (ref.role === "start" ? "Start" : "End") : provenanceLabel(ref),
+                      `${ref.url}-${index}`,
+                    ),
+                  )}
+                </div>
+              </div>
+            ) : null}
+            {media.output ? (
+              <div>
+                <p className="text-[10px] uppercase tracking-[0.16em] text-slate-500">Output</p>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {renderThumb(media.output.url, media.output.type, "Result", "output")}
+                </div>
+              </div>
+            ) : (
+              <p className="text-xs text-slate-500">
+                Reference unavailable · #{numbering.get(selectedNode.id) ?? "?"}
+              </p>
+            )}
+          </div>
+        );
+      })()}
+
+
+
       {selectedNode.node_type === "user_input" && (
         <div className="rounded-xl border border-white/10 bg-black/20 p-3 text-xs text-slate-400">
           <p className="text-[10px] uppercase tracking-[0.16em] text-slate-500">Your asset</p>
@@ -805,7 +926,18 @@ export default function CustomizeWorkflowPage() {
         </div>
       </div>
 
+      <Dialog open={!!lightbox} onOpenChange={(open) => !open && setLightbox(null)}>
+        <DialogContent className="max-w-3xl border-white/10 bg-[#0c101c] p-3">
+          {lightbox?.type === "video" ? (
+            <video src={lightbox.url} controls autoPlay muted loop className="max-h-[75vh] w-full rounded-lg" />
+          ) : lightbox ? (
+            <img src={lightbox.url} alt="Workflow media" className="max-h-[75vh] w-full rounded-lg object-contain" />
+          ) : null}
+        </DialogContent>
+      </Dialog>
+
       <AlertDialog open={resetOpen} onOpenChange={setResetOpen}>
+
         <AlertDialogContent className="border-white/10 bg-[#0c101c] text-slate-100">
           <AlertDialogHeader>
             <AlertDialogTitle className="font-display tracking-[0.12em]">RESET TO ORIGINAL?</AlertDialogTitle>
