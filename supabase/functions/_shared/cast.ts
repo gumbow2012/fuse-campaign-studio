@@ -14,6 +14,7 @@
  */
 
 import { readCastConfig, type CastConfig, type CastSlotConfig } from "./cast-config.ts";
+import { canonicalMasterUrl } from "./identity-lock.ts";
 
 export const CAST_CONFIGURATION_INVALID = "CAST_CONFIGURATION_INVALID";
 export const CAST_MODE_DIRECT_CONDITIONING = "DIRECT_CONDITIONING";
