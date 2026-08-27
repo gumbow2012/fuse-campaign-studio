@@ -88,6 +88,7 @@ import { readModelIds } from "@/services/brandProfiles";
 import { readPublicFailure, type PublicGenerationFailure } from "@/lib/generationFailure";
 import { createFork } from "@/services/templateForks";
 import CampaignHistoryLauncher from "@/components/campaigns/CampaignHistoryLauncher";
+import ContinueCreatingStrip from "@/components/campaigns/ContinueCreatingStrip";
 import CampaignHistoryDrawer from "@/components/campaigns/CampaignHistoryDrawer";
 import { useCampaignHistory } from "@/hooks/useCampaignHistory";
 
@@ -1766,6 +1767,22 @@ export default function TemplateStudioPage() {
               previewUrlForTemplate={previewUrlForTemplate}
             />
           </div>
+        ) : null}
+
+        {/* RETENTION P2 — continue creating (real runs only; hidden when none). */}
+        {user && !hasActiveCampaignWorkspace ? (
+          <ContinueCreatingStrip
+            className="mt-6"
+            campaigns={recentRuns}
+            previewUrlForTemplate={previewUrlForTemplate}
+            templateIdForRun={(run) =>
+              templates.find(
+                (template) => template.name.toLowerCase() === (run.templateName ?? "").toLowerCase(),
+              )?.id ?? null
+            }
+            onOpenRun={handleOpenHistoricalRun}
+            onRunAgain={handleRemixCampaign}
+          />
         ) : null}
 
 
