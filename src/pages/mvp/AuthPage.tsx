@@ -1,7 +1,7 @@
 /**
  * AUTH — one universal, instant flow.
  *
- * No mode toggle, no marketing media, no name field. The auth mechanics live in
+ * Email + password (no email verification), plus OAuth. The mechanics live in
  * UniversalAuthPanel (shared with the generate auth gate) — this page only owns
  * intent capture, referral survival and post-auth routing.
  */
@@ -36,7 +36,7 @@ export default function AuthPage() {
 
   const paidAccess = searchParams.get("paid") === "true";
   const [invited, setInvited] = useState(false);
-  const initialMode: AuthMode = searchParams.get("mode") === "signin" ? "signin" : "signup";
+  const initialMode: AuthMode = searchParams.get("mode") === "signup" ? "signup" : "signin";
   const [mode, setMode] = useState<AuthMode>(initialMode);
 
   // ---- pending intent: captured on arrival, replayed after auth ----------
@@ -90,8 +90,6 @@ export default function AuthPage() {
     if (!user || authLoading) return;
     navigate(destination, { replace: true });
   }, [authLoading, destination, navigate, user]);
-
-  const authRedirect = getAbsoluteSiteUrl(`/auth${paidAccess ? "?paid=true" : ""}`);
 
   // Paid checkout hand-off: prefill the email field.
   const autoRequestEmail = useMemo(() => {
