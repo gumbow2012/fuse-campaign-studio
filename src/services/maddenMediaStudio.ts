@@ -14,6 +14,13 @@ import {
   type MaddenProjectState,
   type MaddenProjectSummary,
 } from "@/lib/madden-media/types";
+import {
+  normalizeSubjectAttributes,
+  normalizeSubjectData,
+  type MaddenSubjectAttributes,
+  type MaddenSubjectProfile,
+  type MaddenSubjectProfileData,
+} from "@/lib/madden-media/subject";
 
 const TABLE = "madden_media_projects";
 
@@ -98,6 +105,108 @@ function toProject(row: Record<string, unknown>): MaddenMediaProject {
     name: String(row.name ?? "Untitled project"),
     projectState: normalizeProjectState(row.project_state),
     createdAt: String(row.created_at ?? ""),
+    updatedAt: String(row.updated_at ?? ""),
+  };
+}
+
+/* ------------------------------------------------------------------ *
+ * M2 — reusable profiles (madden_profiles) + subject vision analysis
+ * ------------------------------------------------------------------ *
+ * Own-row CRUD via RLS. The analysis is a Gemini VISION call in the
+ * madden-media-studio edge function — no image/video generation, no credits.
+ */
+
+const PROFILES_TABLE = "madden_profiles";
+
+export async function listSubjectProfiles(): Promise<MaddenSubjectProfile[]> {
+  const { data, error } = await looseTable(PROFILES_TABLE)
+    .select("id, name, data, thumbnail_url, updated_at")
+    .eq("kind", "subject")
+    .order("updated_at", { ascending: false })
+    .limit(100);
+  if (error) fail(error, "Could not load your saved subjects");
+  return ((data as Record<string, unknown>[] | null) ?? []).map(toSubjectProfile);
+}
+
+export async function saveSubjectProfile(input: {
+  id?: string | null;
+  name: string;
+  data: MaddenSubjectProfileData;
+  thumbnailUrl?: string | null;
+}): Promise<MaddenSubjectProfile> {
+  const userId = await requireUserId();
+  const name = input.name.trim() || "Untitled subject";
+  const payload = {
+    name,
+    kind: "subject",
+    data: input.data as unknown as Record<string, unknown>,
+    thumbnail_url: input.thumbnailUrl ?? input.data.referenceUrls[0] ?? null,
+  };
+
+  const query = input.id
+    ? looseTable(PROFILES_TABLE).update(payload).eq("id", input.id)
+    : looseTable(PROFILES_TABLE).insert({ ...payload, user_id: userId });
+
+  const { data, error } = await query
+    .select("id, name, data, thumbnail_url, updated_at")
+    .maybeSingle();
+  if (error) fail(error, "Could not save that subject");
+  if (!data) throw new Error("Could not save that subject");
+  return toSubjectProfile(data);
+}
+
+export async function deleteSubjectProfile(id: string): Promise<void> {
+  const { error } = await looseTable(PROFILES_TABLE).delete().eq("id", id);
+  if (error) fail(error, "Could not delete that subject");
+}
+
+export type AnalyzeSubjectResult =
+  | {
+      ok: true;
+      attributes: MaddenSubjectAttributes;
+      analysis: { version: string; model: string; analyzedAt: string };
+      analyzedUrls: string[];
+    }
+  | { ok: false; reason: string };
+
+/** Structured VISUAL-CONSISTENCY extraction. Never identifies a person. */
+export async function analyzeSubject(referenceUrls: string[]): Promise<AnalyzeSubjectResult> {
+  if (referenceUrls.length === 0) {
+    return { ok: false, reason: "Add at least one reference image first." };
+  }
+  const { data, error } = await supabase.functions.invoke("madden-media-studio", {
+    body: { action: "analyze_subject", referenceUrls },
+  });
+  if (error) {
+    return { ok: false, reason: error.message || "Subject analysis failed." };
+  }
+  const result = data as Record<string, unknown> | null;
+  if (!result || result.ok !== true) {
+    return {
+      ok: false,
+      reason: String(result?.reason ?? "Subject analysis could not read those images."),
+    };
+  }
+  return {
+    ok: true,
+    attributes: normalizeSubjectAttributes(result.attributes),
+    analysis: {
+      version: String(result.version ?? ""),
+      model: String(result.model ?? ""),
+      analyzedAt: new Date().toISOString(),
+    },
+    analyzedUrls: Array.isArray(result.analyzedUrls)
+      ? (result.analyzedUrls as unknown[]).map((url) => String(url))
+      : referenceUrls,
+  };
+}
+
+function toSubjectProfile(row: Record<string, unknown>): MaddenSubjectProfile {
+  return {
+    id: String(row.id),
+    name: String(row.name ?? "Untitled subject"),
+    thumbnailUrl: row.thumbnail_url ? String(row.thumbnail_url) : null,
+    data: normalizeSubjectData(row.data),
     updatedAt: String(row.updated_at ?? ""),
   };
 }

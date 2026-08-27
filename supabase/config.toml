@@ -149,6 +149,9 @@ verify_jwt = false
 [functions.analyze-jewelry-frames]
 verify_jwt = false
 
+[functions.madden-media-studio]
+verify_jwt = false
+
 [functions.cinema-studio]
 verify_jwt = false
 
