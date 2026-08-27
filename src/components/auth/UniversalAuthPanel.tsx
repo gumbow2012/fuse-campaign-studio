@@ -267,11 +267,14 @@ export default function UniversalAuthPanel({
         ) : null}
       </div>
 
-      <div className="my-7 flex items-center gap-4">
+      <div className="my-5 flex items-center gap-4">
         <span className="h-px flex-1 bg-white/10" />
-        <span className="text-[10px] font-semibold uppercase tracking-[0.28em] text-slate-500">or</span>
+        <span className="whitespace-nowrap text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-500">
+          or continue with email
+        </span>
         <span className="h-px flex-1 bg-white/10" />
       </div>
+
 
       <form onSubmit={handleSubmit} className="space-y-3">
         <Input
