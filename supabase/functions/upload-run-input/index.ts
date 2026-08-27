@@ -89,10 +89,47 @@ Deno.serve(async (req) => {
   const admin = createAdminClient();
 
   try {
+    const rawBody = await req.json() as UploadRunInputBody;
+
+    /*
+     * ANONYMOUS TEMP UPLOAD (P6a) — logged-out builder assets.
+     * The service role signs exactly ONE randomized path under `anon-temp/`,
+     * so an anonymous caller can never write anywhere else and no broad
+     * anonymous RLS write policy on fuse-assets is needed.
+     * ponytail: anon-temp/** assets need a periodic cleanup job (TTL, e.g.
+     * delete after 24h unless claimed post-auth). Not built yet.
+     */
+    if (rawBody.action === "sign-anon") {
+      const anonSessionId = String(rawBody.anonSessionId ?? "");
+      if (!UUID_RE.test(anonSessionId)) throw new Error("Invalid session id.");
+
+      const contentType = String(rawBody.contentType ?? "").toLowerCase();
+      const extension = ANON_ALLOWED_TYPES[contentType];
+      if (!extension) throw new Error("Unsupported file type. Use JPG, PNG or WebP.");
+
+      const size = Number(rawBody.size ?? 0);
+      if (!Number.isFinite(size) || size <= 0) throw new Error("Invalid file size.");
+      if (size > MAX_UPLOAD_BYTES) throw new Error("Image is too large. Use a file under 12 MB.");
+
+      const storagePath = `anon-temp/${anonSessionId}/${crypto.randomUUID()}.${extension}`;
+      const { data, error } = await admin.storage
+        .from("fuse-assets")
+        .createSignedUploadUrl(storagePath);
+      if (error || !data) throw new Error(error?.message ?? "Could not authorize upload.");
+
+      return json({
+        path: data.path ?? storagePath,
+        token: data.token,
+        publicUrl:
+          `${Deno.env.get("SUPABASE_URL")}/storage/v1/object/public/fuse-assets/${storagePath}`,
+      });
+    }
+
     const runnerAccess = hasValidRunnerCode(req);
     const user = runnerAccess ? await getOptionalUser(req, admin) : await requireUser(req, admin);
     if (!user && !runnerAccess) throw new Error("Authentication required.");
-    const body = await req.json() as UploadRunInputBody;
+    const body = rawBody;
+
 
     // Direct-to-storage authorization: mint a signed upload URL. Bytes never
     // pass through this function.
