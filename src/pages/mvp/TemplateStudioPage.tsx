@@ -441,8 +441,13 @@ export default function TemplateStudioPage() {
     return window.localStorage.getItem(TEMPLATE_SELECTION_KEY) ?? "";
   });
   const [files, setFiles] = useState<Record<string, File | null>>({});
+  /** P6a: logged-out temp uploads — local preview + temp URL survive OAuth. */
+  const [anonUploads, setAnonUploads] = useState<
+    Record<string, { status: "uploading" | "ready" | "error"; url?: string; error?: string }>
+  >({});
   /** FT4: assets picked from the reusable library (already stored URLs). */
   const [libraryAssets, setLibraryAssets] = useState<Record<string, { url: string; name?: string | null } | null>>({});
+
   const [textInputs, setTextInputs] = useState<Record<string, string>>({});
   /** Phase 10: keys filled by brand autofill → the brand they came from. */
   const [autofilledKeys, setAutofilledKeys] = useState<Record<string, string>>({});
