@@ -93,6 +93,8 @@ export default function BillingPage() {
         );
       }
       track("paid", { mode: pending?.mode ?? "subscription" });
+      // P7 funnel — checkout returned successful (already guarded once per session).
+      track("checkout_completed", { mode: pending?.mode ?? "subscription" });
       clearPendingCheckout();
       setLoading("refresh");
       void refreshSubscription()
