@@ -288,7 +288,7 @@ function Shelf({
 /* ---------------------------------- page ---------------------------------- */
 
 export default function HomePage() {
-  const { user, isAdmin, isCreator } = useAuth();
+  const { user, isCreator } = useAuth();
 
   const { data: templates = [] } = useQuery({
     queryKey: ["mvp-templates"],
@@ -499,53 +499,16 @@ export default function HomePage() {
                 asChild
                 size="lg"
                 variant="outline"
-                className="rounded-full border-white/15 bg-white/5 px-7 text-foreground hover:bg-white/10"
+                className="rounded-full border-white/15 bg-transparent px-7 text-slate-200 hover:bg-white/10"
               >
-                <Link to="/creators/browse">Browse Creators</Link>
+                <Link to="/app/lab/canvas">Create a Template</Link>
               </Button>
-              <Button
-                asChild
-                size="lg"
-                variant="ghost"
-                className="rounded-full px-5 text-slate-300 hover:text-white"
-              >
-                <Link to="/creators">Become a Creator</Link>
-              </Button>
-              {isCreator && (
-                <>
-                  <Button
-                    asChild
-                    size="lg"
-                    variant="ghost"
-                    className="rounded-full px-5 text-slate-300 hover:text-white"
-                  >
-                    <Link to="/app/lab/canvas">Create a Template</Link>
-                  </Button>
-                  <Button
-                    asChild
-                    size="lg"
-                    variant="ghost"
-                    className="rounded-full px-5 text-slate-300 hover:text-white"
-                  >
-                    <Link to="/app/creator">Creator Dashboard</Link>
-                  </Button>
-                </>
-              )}
-              {isAdmin && (
-                <Button
-                  asChild
-                  size="sm"
-                  variant="ghost"
-                  className="rounded-full px-4 text-xs text-slate-400 hover:text-white"
-                >
-                  <Link to="/admin">Admin</Link>
-                </Button>
-              )}
             </div>
 
-            <p className="mt-6 text-[11px] font-semibold uppercase tracking-[0.24em] text-slate-400">
+            <p className="mt-5 text-[11px] font-semibold uppercase tracking-[0.24em] text-slate-400">
               No prompts · New templates daily · Performance tracked
             </p>
+
 
           </div>
 
