@@ -7,7 +7,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, ArrowRight, Check, Loader2, Plus, Sparkles, Upload, X } from "lucide-react";
+import { ArrowLeft, ArrowRight, Check, Loader2, Sparkles, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -16,9 +16,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useBrand } from "@/contexts/BrandContext";
 import {
   CARD,
-  ImageSlot,
   LABEL,
-  ColorPalette,
 } from "@/components/brand/BrandEditors";
 import {
   createBrandProfile,
