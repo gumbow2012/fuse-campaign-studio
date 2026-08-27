@@ -1750,9 +1750,10 @@ export default function TemplateStudioPage() {
                           {field.type === "prompt" ? (
                             <Textarea
                               value={textInputs[field.key] ?? ""}
-                              onChange={(event) =>
-                                setTextInputs((current) => ({ ...current, [field.key]: event.target.value }))
-                              }
+                              onChange={(event) => {
+                                releaseAutofill(field.key);
+                                setTextInputs((current) => ({ ...current, [field.key]: event.target.value }));
+                              }}
                               rows={3}
                               placeholder={field.label}
                               className="min-h-[92px] rounded-[0.9rem] border-white/10 bg-white/[0.03] text-white"
@@ -1760,9 +1761,10 @@ export default function TemplateStudioPage() {
                           ) : (
                             <Input
                               value={textInputs[field.key] ?? ""}
-                              onChange={(event) =>
-                                setTextInputs((current) => ({ ...current, [field.key]: event.target.value }))
-                              }
+                              onChange={(event) => {
+                                releaseAutofill(field.key);
+                                setTextInputs((current) => ({ ...current, [field.key]: event.target.value }));
+                              }}
                               placeholder={field.label}
                               className="h-11 rounded-[0.9rem] border-white/10 bg-white/[0.03] text-white"
                             />
