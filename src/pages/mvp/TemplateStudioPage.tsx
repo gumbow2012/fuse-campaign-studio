@@ -52,7 +52,16 @@ import CreditConfirmModal from "@/components/CreditConfirmModal";
 import { trackEvent } from "@/lib/metaPixel";
 import { track } from "@/lib/analytics/track";
 import GenerateAuthGateModal from "@/components/auth/GenerateAuthGateModal";
-import { setPendingGenerationIntent } from "@/lib/pendingGenerationIntent";
+import {
+  clearPendingGenerationIntent,
+  getPendingGenerationIntent,
+  intentSignature,
+  markPendingGenerationConsumed,
+  pendingGenerationConsumed,
+  setPendingGenerationIntent,
+  type PendingGenerationIntent,
+} from "@/lib/pendingGenerationIntent";
+import { isPlanOfferActive, subscribePlanOffer } from "@/lib/planOfferVisibility";
 import { loadTemplatePerformance, type TemplatePerformanceMap } from "@/services/templatePerformance";
 import { PerformanceBlock, PerformanceBadges, PerformanceDisclaimer } from "@/components/TemplatePerformance";
 import FilterDropdown, { type FilterOption } from "@/components/templates/FilterDropdown";
@@ -1694,6 +1703,31 @@ export default function TemplateStudioPage() {
         ) : null}
 
 
+
+        {/* P6b — truthful affordability state after a restored pending run. */}
+        {restoreAfford ? (
+          <div className="mt-6 rounded-[1.5rem] border border-amber-300/25 bg-amber-300/[0.07] p-5">
+            <p className="font-display text-sm font-bold uppercase tracking-[0.18em] text-amber-100">
+              Your account is ready
+            </p>
+            <p className="mt-2 text-sm leading-6 text-amber-50/90">
+              {restoreAfford.available.toLocaleString()} credits available. This campaign requires{" "}
+              {restoreAfford.required.toLocaleString()} credits. Your uploads and setup are saved.
+            </p>
+            <div className="mt-4 flex flex-wrap gap-2">
+              <Button asChild className="rounded-full bg-cyan-300 px-5 font-semibold text-slate-950 hover:bg-cyan-200">
+                <Link to="/app/membership">View Starter</Link>
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => setRestoreAfford(null)}
+                className="rounded-full border-white/15 bg-white/5 text-foreground hover:bg-white/10"
+              >
+                Explore free templates
+              </Button>
+            </div>
+          </div>
+        ) : null}
 
         {!hasActiveCampaignWorkspace ? (
           <BrandActivationBanner surface="marketplace" className="mt-6" />
