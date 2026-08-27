@@ -120,7 +120,8 @@ export async function saveReferenceViralScore(
 ): Promise<void> {
   const { error } = await supabase
     .from("streetwear_references")
-    .update({ viral_score: score, viral_factors: factors as never })
+    // Cast: viral_score/viral_factors exist in the DB but not yet in generated types.
+    .update({ viral_score: score, viral_factors: factors } as never)
     .eq("id", referenceId);
   if (error) throw error;
 }
