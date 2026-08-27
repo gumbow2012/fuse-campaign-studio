@@ -476,12 +476,12 @@ export default function HomePage() {
           <div>
             <SectionLabel>Campaign template marketplace</SectionLabel>
             <h1 className="mt-4 font-display text-4xl font-bold uppercase leading-[1.03] tracking-[-0.02em] text-white sm:text-6xl">
-              The campaign is
+              Viral campaigns.
               <br />
               <span className="text-cyan-200">already built.</span>
             </h1>
             <p className="mt-5 max-w-xl text-lg leading-8 text-slate-300">
-              Pick creative that&rsquo;s already working. Add your brand. FUSE does the rest.
+              Pick a proven creative. Add your brand. FUSE does the rest.
             </p>
 
             <div className="mt-7 flex flex-wrap items-center gap-3">
