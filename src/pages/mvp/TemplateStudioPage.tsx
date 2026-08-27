@@ -4,6 +4,7 @@ import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import {
   ArrowLeft,
   ArrowRight,
+  Check,
   Film,
   GitBranch,
   Loader2,
@@ -41,6 +42,7 @@ import { fetchTemplateDetail, fetchTemplates, type ApiTemplate, type RunFeedback
 import { uploadRunInputFile } from "@/services/runInputUpload";
 import { libraryKindForAssetType, saveLibraryAsset } from "@/services/libraryAssets";
 import { getStaticInputs } from "@/services/templateInputMap";
+import CreditConfirmModal from "@/components/CreditConfirmModal";
 import { trackEvent } from "@/lib/metaPixel";
 import { loadTemplatePerformance, type TemplatePerformanceMap } from "@/services/templatePerformance";
 import { PerformanceBlock, PerformanceBadges, PerformanceDisclaimer } from "@/components/TemplatePerformance";
@@ -1101,6 +1103,180 @@ export default function TemplateStudioPage() {
     }
   };
 
+  /*
+   * Phase 4 — marketplace multi-select batch run.
+   * Reuses the existing single-run path (startTemplateRun) once per selected
+   * template. No new runner, no new billing: the same credit confirm modal
+   * gates the combined cost before anything is enqueued.
+   */
+  const [selectMode, setSelectMode] = useState(false);
+  const [batchSelection, setBatchSelection] = useState<string[]>([]);
+  const [batchConfirmOpen, setBatchConfirmOpen] = useState(false);
+  const [batchRunning, setBatchRunning] = useState(false);
+
+  const batchTemplates = useMemo(
+    () => batchSelection
+      .map((id) => templates.find((template) => template.id === id))
+      .filter((template): template is ApiTemplate => !!template),
+    [batchSelection, templates],
+  );
+  const batchCredits = batchTemplates.reduce(
+    (total, template) => total + (template.estimated_credits_per_run || 0),
+    0,
+  );
+
+  const exitSelectMode = () => {
+    setSelectMode(false);
+    setBatchSelection([]);
+  };
+
+  const toggleBatchSelection = (templateId: string) =>
+    setBatchSelection((current) =>
+      current.includes(templateId)
+        ? current.filter((id) => id !== templateId)
+        : [...current, templateId],
+    );
+
+  /** Derives a template's inputs the same way the single-run builder does. */
+  const batchInputFieldsFor = (template: ApiTemplate): InputField[] => {
+    if (template.input_schema?.length) {
+      return template.input_schema.map((field) => ({
+        key: field.key,
+        label: field.label,
+        type: field.type || "image",
+        required: field.required ?? true,
+        hint: field.hint,
+      }));
+    }
+    const staticInputs = getStaticInputs(template.name);
+    if (staticInputs?.length) return staticInputs;
+    return [{ key: "product_image", label: "Product image", type: "image", required: true }];
+  };
+
+  /** Fills a template from the active brand; reports anything still missing. */
+  const buildBatchRunInputs = (template: ApiTemplate) => {
+    const fields = batchInputFieldsFor(template);
+    const plan = planBrandAutofill(
+      fields.map((field) => ({
+        key: field.key,
+        label: field.label,
+        type: field.type,
+        assetType: field.requirement?.assetType ?? null,
+      })),
+      { brand: activeBrand!, products: brandProducts, models: brandModels },
+    );
+
+    const inputs: Record<string, string> = {};
+    const missing: string[] = [];
+
+    for (const field of fields) {
+      const value = field.type === "image" ? plan.images[field.key]?.url ?? "" : plan.texts[field.key] ?? "";
+      if (value) {
+        inputs[field.key] = value;
+      } else if (field.required) {
+        missing.push(field.label);
+      }
+    }
+
+    return { inputs, missing };
+  };
+
+  const requestBatchRun = async () => {
+    if (!batchTemplates.length) return;
+    if (!user) {
+      navigate("/auth?mode=signup", { state: { redirectTo: "/app/templates" } });
+      return;
+    }
+    if (!activeBrand) {
+      toast({
+        title: "Choose a brand first",
+        description: "Batch runs use your active brand's saved assets.",
+        variant: "destructive",
+      });
+      return;
+    }
+    if (!isPrivilegedUser) {
+      if (!hasActiveMembership) {
+        toast({
+          title: "Membership required",
+          description: "Your billing state is not active yet.",
+          variant: "destructive",
+        });
+        return;
+      }
+      if (displayedCreditBalance < batchCredits) {
+        toast({
+          title: "Credits not available",
+          description: `These ${batchTemplates.length} runs cost ${batchCredits} credits and your balance is ${displayedCreditBalance}.`,
+          variant: "destructive",
+        });
+        return;
+      }
+    }
+    setBatchConfirmOpen(true);
+  };
+
+  const confirmBatchRun = async () => {
+    setBatchConfirmOpen(false);
+    if (!batchTemplates.length || !activeBrand) return;
+
+    setBatchRunning(true);
+    const skipped: string[] = [];
+    let queued = 0;
+
+    try {
+      for (const template of batchTemplates) {
+        if (!template.versionId) {
+          skipped.push(`${template.name} — no live version`);
+          continue;
+        }
+
+        const { inputs, missing } = buildBatchRunInputs(template);
+        if (missing.length) {
+          skipped.push(`${template.name} — needs ${missing.join(", ")}`);
+          continue;
+        }
+
+        try {
+          const data = await startTemplateRun(template.versionId, inputs);
+          if (data?.error) throw new Error(String(data.error));
+          if (!data?.jobId) throw new Error("no job id returned");
+          queued += 1;
+          if (isPrivilegedUser) {
+            recordAdminVisualCreditUsage(template.estimated_credits_per_run || 0);
+          }
+        } catch (error) {
+          skipped.push(
+            `${template.name} — ${error instanceof Error ? error.message : "could not start"}`,
+          );
+        }
+      }
+
+      if (isPrivilegedUser) setAdminVisualSpent(getAdminVisualCreditsSpent());
+      void refetchRecentRuns();
+      void refreshProfile();
+
+      if (queued) {
+        toast({
+          title: `${queued} ${queued === 1 ? "campaign" : "campaigns"} queued`,
+          description: skipped.length
+            ? `Skipped ${skipped.length}: ${skipped.join(" · ")}`
+            : "Track them in your campaign history.",
+        });
+      } else {
+        toast({
+          title: "Nothing was queued",
+          description: skipped.join(" · ") || "No runnable templates in the selection.",
+          variant: "destructive",
+        });
+      }
+
+      if (queued) exitSelectMode();
+    } finally {
+      setBatchRunning(false);
+    }
+  };
+
   const handleRun = async () => {
     if (!selectedTemplate) return;
     if (!user) {
@@ -1371,6 +1547,19 @@ export default function TemplateStudioPage() {
                   Clear
                 </button>
               ) : null}
+              <button
+                type="button"
+                onClick={() => (selectMode ? exitSelectMode() : setSelectMode(true))}
+                aria-pressed={selectMode}
+                className={cn(
+                  "ml-auto rounded-full border px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] transition-colors",
+                  selectMode
+                    ? "border-cyan-300/50 bg-cyan-300/15 text-cyan-100"
+                    : "border-white/10 bg-white/[0.04] text-slate-300 hover:text-white",
+                )}
+              >
+                {selectMode ? "Done" : "Select"}
+              </button>
             </div>
 
             {!templatesQuery.isFetching && !templates.length ? (
@@ -1382,6 +1571,7 @@ export default function TemplateStudioPage() {
             <div className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {visibleTemplates.map((template) => {
                 const selected = template.id === selectedTemplateId;
+                const batchSelected = batchSelection.includes(template.id);
                 const credits = template.estimated_credits_per_run || 0;
                 const inputCount = getTemplateInputCount(template);
                 const outputCount = getTemplateOutputCount(template);
@@ -1394,17 +1584,23 @@ export default function TemplateStudioPage() {
                     key={template.id}
                     role="button"
                     tabIndex={0}
-                    onClick={() => handleTemplateSelect(template.id)}
+                    aria-pressed={selectMode ? batchSelected : undefined}
+                    onClick={() =>
+                      selectMode ? toggleBatchSelection(template.id) : handleTemplateSelect(template.id)
+                    }
                     onKeyDown={(event) => {
                       if (event.key === "Enter" || event.key === " ") {
                         event.preventDefault();
-                        handleTemplateSelect(template.id);
+                        if (selectMode) toggleBatchSelection(template.id);
+                        else handleTemplateSelect(template.id);
                       }
                     }}
                     className={`group cursor-pointer overflow-hidden rounded-[1.5rem] border text-left transition-colors ${
-                      selected
-                        ? "border-cyan-300/50 bg-cyan-300/10"
-                        : "border-white/8 bg-black/20 hover:border-white/20 hover:bg-white/[0.05]"
+                      selectMode && batchSelected
+                        ? "border-cyan-300 bg-cyan-300/10 ring-2 ring-cyan-300/40"
+                        : selected && !selectMode
+                          ? "border-cyan-300/50 bg-cyan-300/10"
+                          : "border-white/8 bg-black/20 hover:border-white/20 hover:bg-white/[0.05]"
                     }`}
                   >
                     <div className="relative overflow-hidden bg-black/30">
@@ -1416,16 +1612,30 @@ export default function TemplateStudioPage() {
                       <div className="absolute bottom-3 left-3 rounded-full border border-white/15 bg-black/45 px-2.5 py-1 text-[9px] uppercase tracking-[0.18em] text-white/80 backdrop-blur">
                         Vibe
                       </div>
-                      <button
-                        type="button"
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          setDetailTemplateId(template.id);
-                        }}
-                        className="absolute right-3 top-3 rounded-full border border-white/15 bg-black/55 px-3 py-1 text-[9px] font-semibold uppercase tracking-[0.18em] text-white/85 backdrop-blur transition-colors hover:bg-black/80"
-                      >
-                        Details
-                      </button>
+                      {selectMode ? (
+                        <span
+                          aria-hidden="true"
+                          className={cn(
+                            "absolute right-3 top-3 flex h-7 w-7 items-center justify-center rounded-full border backdrop-blur",
+                            batchSelected
+                              ? "border-cyan-300 bg-cyan-300 text-slate-950"
+                              : "border-white/25 bg-black/55 text-transparent",
+                          )}
+                        >
+                          <Check className="h-4 w-4" />
+                        </span>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            setDetailTemplateId(template.id);
+                          }}
+                          className="absolute right-3 top-3 rounded-full border border-white/15 bg-black/55 px-3 py-1 text-[9px] font-semibold uppercase tracking-[0.18em] text-white/85 backdrop-blur transition-colors hover:bg-black/80"
+                        >
+                          Details
+                        </button>
+                      )}
                     </div>
 
 
@@ -1466,7 +1676,13 @@ export default function TemplateStudioPage() {
                           ? "bg-cyan-300 text-slate-950"
                           : "border border-white/10 bg-white/[0.04] text-white group-hover:bg-white/[0.08]",
                       )}>
-                        {selected ? "Selected" : "Use this template"}
+                        {selectMode
+                          ? batchSelected
+                            ? "Selected for batch"
+                            : "Tap to select"
+                          : selected
+                            ? "Selected"
+                            : "Use this template"}
                       </span>
                     </div>
                   </div>
@@ -2046,6 +2262,44 @@ export default function TemplateStudioPage() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {selectMode && batchSelection.length ? (
+        <div className="fixed inset-x-0 bottom-0 z-40 border-t border-white/10 bg-slate-950/95 backdrop-blur-xl">
+          <div className="container flex flex-wrap items-center gap-3 py-4">
+            <p className="text-sm font-semibold text-white">
+              {batchSelection.length} {batchSelection.length === 1 ? "template" : "templates"} selected
+            </p>
+            <p className="text-xs text-slate-400">
+              {isPrivilegedUser ? "Bypassed for team access" : `${formatCredits(batchCredits)} credits total`}
+            </p>
+            <div className="ml-auto flex items-center gap-2">
+              <Button
+                variant="ghost"
+                onClick={() => setBatchSelection([])}
+                className="rounded-full text-slate-300 hover:text-white"
+              >
+                Clear
+              </Button>
+              <Button
+                onClick={() => void requestBatchRun()}
+                disabled={batchRunning}
+                className="rounded-full bg-cyan-300 text-slate-950 hover:bg-cyan-200"
+              >
+                {batchRunning ? "Queueing..." : "Run selected"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      <CreditConfirmModal
+        open={batchConfirmOpen}
+        onOpenChange={setBatchConfirmOpen}
+        creditCost={isPrivilegedUser ? 0 : batchCredits}
+        currentBalance={isPrivilegedUser ? batchCredits : displayedCreditBalance}
+        actionLabel={`Run ${batchTemplates.length} ${batchTemplates.length === 1 ? "campaign" : "campaigns"}`}
+        onConfirm={() => void confirmBatchRun()}
+      />
 
       <CampaignHistoryDrawer
         open={historyOpen}
