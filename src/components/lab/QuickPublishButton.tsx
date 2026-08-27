@@ -110,10 +110,12 @@ export default function QuickPublishButton({
         | { error?: string; templateName?: string | null; versionNumber?: number; templateId?: string }
         | null;
       if (payload?.error) throw new Error(payload.error);
+      setConfirmUntested(false);
       setPublished({
         name: payload?.templateName ?? templateName ?? "Template",
         version: Number(payload?.versionNumber ?? versionNumber ?? gate?.versionNumber ?? 0),
       });
+
       await onPublished?.({ versionId, templateId: payload?.templateId ?? gate?.templateId ?? "" });
     } catch (error) {
       toast({
