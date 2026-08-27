@@ -967,7 +967,17 @@ export default function TemplateStudioPage() {
   ]);
 
   /** Clears every slot autofilled from the brand — user values are never touched. */
+  /** Once the user touches a slot it is theirs — drop the autofill marker. */
+  const releaseAutofill = (key: string) =>
+    setAutofilledKeys((current) => {
+      if (!(key in current)) return current;
+      const next = { ...current };
+      delete next[key];
+      return next;
+    });
+
   const clearAutofilled = () => {
+
     const keys = Object.keys(autofilledKeys);
     if (!keys.length) return;
     setLibraryAssets((current) => {
