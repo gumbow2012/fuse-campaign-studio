@@ -91,11 +91,12 @@ Deno.serve(async (req) => {
 
       const { data: existingInvite } = await admin
         .from("creator_invites")
-        .select("id, status")
+        .select("id, status, sent_count")
         .eq("email", email)
         .maybeSingle();
 
       let inviteId = (existingInvite as any)?.id as string | undefined;
+      let sentCount = Number((existingInvite as any)?.sent_count ?? 0);
       if (inviteId) {
         const { error } = await admin
           .from("creator_invites")
@@ -106,21 +107,38 @@ Deno.serve(async (req) => {
         const { data: inserted, error } = await admin
           .from("creator_invites")
           .insert({ email, invited_by: user.id, status: "pending" })
-          .select("id")
+          .select("id, sent_count")
           .single();
         if (error) throw new Error(error.message);
         inviteId = (inserted as any).id;
+        sentCount = Number((inserted as any)?.sent_count ?? 0);
       }
 
       const { error: inviteError } = await admin.auth.admin.inviteUserByEmail(email);
 
       if (!inviteError) {
-        return json({ ok: true, inviteId, emailSent: true, grantedImmediately: false });
+        // Honest status: the provider accepted the send. Delivery is NOT confirmed here.
+        await admin
+          .from("creator_invites")
+          .update({
+            email_status: "provider_accepted",
+            last_sent_at: new Date().toISOString(),
+            sent_count: sentCount + 1,
+            failure_reason: null,
+          })
+          .eq("id", inviteId!);
+        return json({ ok: true, inviteId, emailSent: true, grantedImmediately: false, emailStatus: "provider_accepted" });
       }
 
       const message = inviteError.message ?? "";
       const alreadyExists = /already|registered|exists/i.test(message);
-      if (!alreadyExists) throw new Error(message || "Could not send invite email");
+      if (!alreadyExists) {
+        await admin
+          .from("creator_invites")
+          .update({ email_status: "failed", failure_reason: message.slice(0, 500) || "Send failed" })
+          .eq("id", inviteId!);
+        return json({ ok: false, inviteId, emailSent: false, emailStatus: "failed", reason: message || "Could not send invite email" });
+      }
 
       // User already exists — grant the creator role right away.
       const { data: profile, error: profileError } = await admin
