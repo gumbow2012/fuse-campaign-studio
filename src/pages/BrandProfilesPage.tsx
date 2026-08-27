@@ -394,7 +394,7 @@ export default function BrandProfilesPage() {
                 done={completion.assets}
                 detail={`${libraryAssets.length} asset${libraryAssets.length === 1 ? "" : "s"} in your library.`}
                 cta="Open library"
-                onClick={() => navigate("/app/templates")}
+                onClick={() => setTab("library")}
               />
             </div>
           </TabsContent>
