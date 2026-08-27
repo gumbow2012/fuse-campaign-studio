@@ -833,13 +833,6 @@ Deno.serve(async (req) => {
     }
   }
 
-  let user: Awaited<ReturnType<typeof requireUser>>;
-  try {
-    user = await requireUser(req);
-  } catch (error) {
-    return json({ error: errorMessage(error) }, 401);
-  }
-
   let body: any = {};
   try {
     body = await req.json();
@@ -848,7 +841,27 @@ Deno.serve(async (req) => {
   }
 
   const action = String(body?.action ?? "");
+
+  // Token-gated batch runner: authenticates with a private config token so a
+  // scheduler (pg_cron) can call it. Deliberately BEFORE the JWT gate.
+  if (action === "batch_run") {
+    try {
+      return await handleBatchRun(body);
+    } catch (error) {
+      console.error("[cinema-studio] batch_run failed", errorMessage(error).slice(0, 800));
+      return json({ error: errorMessage(error) }, 500);
+    }
+  }
+
+  let user: Awaited<ReturnType<typeof requireUser>>;
+  try {
+    user = await requireUser(req);
+  } catch (error) {
+    return json({ error: errorMessage(error) }, 401);
+  }
+
   const apiKey = Deno.env.get("GEMINI_API_KEY")?.trim();
+
 
   try {
     switch (action) {
