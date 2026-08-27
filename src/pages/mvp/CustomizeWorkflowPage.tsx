@@ -627,6 +627,87 @@ export default function CustomizeWorkflowPage() {
         </p>
       </div>
 
+      {(() => {
+        const media = selectedNode.media;
+        if (!media) return null;
+        if (media.unavailable && !media.output && !media.references.length) {
+          return (
+            <p className="text-xs text-slate-500">
+              Reference unavailable · #{numbering.get(selectedNode.id) ?? "?"}
+            </p>
+          );
+        }
+        const renderThumb = (
+          url: string,
+          type: "image" | "video",
+          caption: string,
+          key: string,
+        ) => (
+          <button
+            key={key}
+            type="button"
+            className="w-20 text-left"
+            onClick={() => setLightbox({ url, type })}
+          >
+            {type === "video" ? (
+              <video
+                src={url}
+                muted
+                loop
+                playsInline
+                preload="metadata"
+                className="h-20 w-20 rounded-lg border border-white/10 bg-black/40 object-cover"
+                onMouseEnter={(event) => void event.currentTarget.play().catch(() => undefined)}
+                onMouseLeave={(event) => event.currentTarget.pause()}
+              />
+            ) : (
+              <img
+                src={url}
+                alt={caption}
+                loading="lazy"
+                className="h-20 w-20 rounded-lg border border-white/10 bg-black/40 object-cover"
+              />
+            )}
+            <span className="mt-1 block truncate text-[10px] uppercase tracking-[0.12em] text-slate-500">
+              {caption}
+            </span>
+          </button>
+        );
+        return (
+          <div className="space-y-3 rounded-xl border border-white/10 bg-black/20 p-3">
+            {media.references.length ? (
+              <div>
+                <p className="text-[10px] uppercase tracking-[0.16em] text-slate-500">References / inputs</p>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {media.references.map((ref, index) =>
+                    renderThumb(
+                      ref.url,
+                      ref.type,
+                      ref.role ? (ref.role === "start" ? "Start" : "End") : provenanceLabel(ref),
+                      `${ref.url}-${index}`,
+                    ),
+                  )}
+                </div>
+              </div>
+            ) : null}
+            {media.output ? (
+              <div>
+                <p className="text-[10px] uppercase tracking-[0.16em] text-slate-500">Output</p>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {renderThumb(media.output.url, media.output.type, "Result", "output")}
+                </div>
+              </div>
+            ) : (
+              <p className="text-xs text-slate-500">
+                Reference unavailable · #{numbering.get(selectedNode.id) ?? "?"}
+              </p>
+            )}
+          </div>
+        );
+      })()}
+
+
+
       {selectedNode.node_type === "user_input" && (
         <div className="rounded-xl border border-white/10 bg-black/20 p-3 text-xs text-slate-400">
           <p className="text-[10px] uppercase tracking-[0.16em] text-slate-500">Your asset</p>
