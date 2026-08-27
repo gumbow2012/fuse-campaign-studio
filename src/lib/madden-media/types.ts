@@ -1,0 +1,147 @@
+/**
+ * Madden Media Studio — M1 foundation types.
+ *
+ * Self-contained on purpose: nothing here imports from Cinema, Jewelry,
+ * Generation Studio or Templates. Later phases (M2–M7) fill these slots in;
+ * M1 only establishes the shape and safe defaults.
+ */
+
+export type MaddenSlotKind = "subject" | "outfit" | "jewelry" | "environment";
+
+/** A single uploaded / referenced image attached to a slot. */
+export type MaddenReference = {
+  id: string;
+  url: string;
+  label?: string;
+  /** Free-form notes the artist writes about this reference. */
+  notes?: string;
+};
+
+/** Shared shape for the four consistency slots. */
+export type MaddenSlot = {
+  kind: MaddenSlotKind;
+  /** Short human label, e.g. the artist name or the outfit name. */
+  name: string;
+  /** Description used later for prompt synthesis (M3+). */
+  description: string;
+  references: MaddenReference[];
+  /** When true the slot is treated as locked continuity across all shots. */
+  locked: boolean;
+};
+
+/** A single 9:16 short-form shot in the board. */
+export type MaddenShot = {
+  id: string;
+  title: string;
+  /** Director-facing description of the action / framing. */
+  direction: string;
+  durationSeconds: number;
+  /** Slots this shot inherits. Empty = inherit every locked slot. */
+  inheritSlots: MaddenSlotKind[];
+};
+
+export type MaddenSettings = {
+  /** Fixed to vertical short-form for this workspace. */
+  aspectRatio: "9:16";
+  /** Look/grade label, resolved in a later phase. */
+  lookName: string;
+  /** Notes that apply to the whole project. */
+  globalNotes: string;
+};
+
+export type MaddenProjectState = {
+  /** Schema version so later phases can migrate saved states safely. */
+  version: 1;
+  slots: Record<MaddenSlotKind, MaddenSlot>;
+  shots: MaddenShot[];
+  settings: MaddenSettings;
+};
+
+export type MaddenMediaProject = {
+  id: string;
+  userId: string;
+  name: string;
+  projectState: MaddenProjectState;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type MaddenProjectSummary = {
+  id: string;
+  name: string;
+  updatedAt: string;
+};
+
+export const MADDEN_SLOT_KINDS: MaddenSlotKind[] = [
+  "subject",
+  "outfit",
+  "jewelry",
+  "environment",
+];
+
+export const MADDEN_SLOT_LABELS: Record<MaddenSlotKind, string> = {
+  subject: "Subject",
+  outfit: "Outfit",
+  jewelry: "Jewelry",
+  environment: "Environment",
+};
+
+export const MADDEN_SLOT_HINTS: Record<MaddenSlotKind, string> = {
+  subject: "Artist / celebrity reference identity kept consistent across shots.",
+  outfit: "The exact garment set worn in every shot.",
+  jewelry: "Chains, rings, watches — locked piece-for-piece.",
+  environment: "Location, time of day and lighting continuity.",
+};
+
+export function createSlot(kind: MaddenSlotKind): MaddenSlot {
+  return { kind, name: "", description: "", references: [], locked: true };
+}
+
+export function createEmptyProjectState(): MaddenProjectState {
+  return {
+    version: 1,
+    slots: {
+      subject: createSlot("subject"),
+      outfit: createSlot("outfit"),
+      jewelry: createSlot("jewelry"),
+      environment: createSlot("environment"),
+    },
+    shots: [],
+    settings: { aspectRatio: "9:16", lookName: "", globalNotes: "" },
+  };
+}
+
+/** Defensively normalises anything read out of the jsonb column. */
+export function normalizeProjectState(raw: unknown): MaddenProjectState {
+  const base = createEmptyProjectState();
+  if (!raw || typeof raw !== "object") return base;
+  const value = raw as Partial<MaddenProjectState>;
+
+  const slots = { ...base.slots };
+  for (const kind of MADDEN_SLOT_KINDS) {
+    const saved = (value.slots as Record<string, unknown> | undefined)?.[kind];
+    if (saved && typeof saved === "object") {
+      const s = saved as Partial<MaddenSlot>;
+      slots[kind] = {
+        kind,
+        name: typeof s.name === "string" ? s.name : "",
+        description: typeof s.description === "string" ? s.description : "",
+        references: Array.isArray(s.references) ? (s.references as MaddenReference[]) : [],
+        locked: s.locked !== false,
+      };
+    }
+  }
+
+  return {
+    version: 1,
+    slots,
+    shots: Array.isArray(value.shots) ? (value.shots as MaddenShot[]) : [],
+    settings: {
+      aspectRatio: "9:16",
+      lookName:
+        typeof value.settings?.lookName === "string" ? value.settings.lookName : "",
+      globalNotes:
+        typeof value.settings?.globalNotes === "string" ? value.settings.globalNotes : "",
+    },
+  };
+}
