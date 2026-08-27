@@ -388,13 +388,30 @@ export default function AdminTemplateFactory() {
     return grouped;
   }, [templates]);
 
-  const [sortByScore, setSortByScore] = useState(false);
+  const [sortByScore, setSortByScore] = useState(true);
+  const [stageFilter, setStageFilter] = useState<StageFilter>("all");
 
-  const sortedReferences = useMemo(() => {
-    const list = [...(references ?? [])];
-    if (!sortByScore) return list;
-    return list.sort((a, b) => (b.viral_score ?? -1) - (a.viral_score ?? -1));
-  }, [references, sortByScore]);
+  const templateById = useMemo(() => {
+    const map = new Map<string, WorkbenchTemplate>();
+    for (const template of templates ?? []) map.set(template.id, template);
+    return map;
+  }, [templates]);
+
+  /** Each reference paired with its truthful pipeline state, filtered + sorted. */
+  const pipelineReferences = useMemo(() => {
+    const rows = (references ?? []).map((reference) => ({
+      reference,
+      pipeline: referencePipeline(
+        reference,
+        reference.compiled_template_id ? templateById.get(reference.compiled_template_id) ?? null : null,
+      ),
+    }));
+    const filtered = rows.filter((row) => matchesStageFilter(row.pipeline, stageFilter));
+    if (!sortByScore) return filtered;
+    return filtered.sort(
+      (a, b) => (b.reference.viral_score ?? -1) - (a.reference.viral_score ?? -1),
+    );
+  }, [references, templateById, stageFilter, sortByScore]);
 
   const invalidateReferences = () => {
     void queryClient.invalidateQueries({ queryKey: ["streetwear-references"] });
@@ -560,8 +577,9 @@ export default function AdminTemplateFactory() {
             <p className={TINY_LABEL}>Admin · Supply</p>
             <h1 className="mt-2 text-3xl font-black tracking-tight">Template Factory</h1>
             <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
-              Pipeline overview of every graph template plus the curated streetwear intelligence board
-              that informs what gets built next.
+              The reference board is the primary factory workflow: analyze a reference, score it,
+              compile it into a draft template, then publish. The supply pipeline below tracks every
+              graph template.
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -652,6 +670,20 @@ export default function AdminTemplateFactory() {
               </p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
+              {STAGE_FILTERS.map((filter) => (
+                <button
+                  key={filter.key}
+                  type="button"
+                  onClick={() => setStageFilter(filter.key)}
+                  className={`rounded-full border px-3 py-1 text-[11px] font-semibold transition-colors ${
+                    stageFilter === filter.key
+                      ? "border-cyan-300/40 bg-cyan-300/15 text-cyan-100"
+                      : "border-white/10 bg-white/[0.03] text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  {filter.label}
+                </button>
+              ))}
               <Button
                 size="sm"
                 variant="outline"
@@ -684,7 +716,7 @@ export default function AdminTemplateFactory() {
             </Card>
           ) : (
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {sortedReferences.map((reference) => (
+              {pipelineReferences.map(({ reference, pipeline }) => (
 
                 <Card key={reference.id} className="overflow-hidden border-white/10 bg-white/[0.03]">
                   <div className="aspect-[4/3] w-full bg-black/40">
