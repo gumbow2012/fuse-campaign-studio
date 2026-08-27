@@ -151,9 +151,6 @@ export default function AuthPage() {
         </div>
       </section>
 
-          </div>
-        </div>
-      </section>
     </SiteShell>
   );
 }
