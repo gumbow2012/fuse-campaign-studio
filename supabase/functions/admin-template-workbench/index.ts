@@ -70,6 +70,23 @@ type PublishGateResult = {
   latestApprovedJobId: string | null;
   latestApprovedAt: string | null;
 };
+type QuickPublishGateResult = {
+  publishable: boolean;
+  tested: boolean;
+  reasons: string[];
+  versionId: string;
+  templateId: string;
+  versionNumber: number;
+  isActive: boolean;
+  isFork: boolean;
+  structuralIssueCount: number;
+  executionNodeCount: number;
+  customerInputCount: number;
+  finalOutputCount: number;
+  completedRunCount: number;
+  latestTestJobId: string | null;
+};
+
 type InputSlotDraft = {
   key: string;
   label: string;
