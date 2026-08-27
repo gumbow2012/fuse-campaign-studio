@@ -34,6 +34,8 @@ import {
 import { listMyAvatars } from "@/services/avatarProfiles";
 import { listProductProfiles } from "@/services/productProfiles";
 import { deriveBrandReadiness, readBrandFlags, type ReadinessStatus } from "@/lib/brandReadiness";
+import BrandImportPanel, { type BrandImportConfirmation } from "@/components/brand/BrandImportPanel";
+import { takeBrandImport } from "@/services/brandImport";
 
 const STEPS = [
   { id: 1, label: "Brand basics", optional: false },
@@ -120,10 +122,15 @@ export default function BrandOnboardingPage() {
     [brands, brandId],
   );
 
+  // Website importer (Phase 2) — candidate state only, never auto-persisted.
+  const handoff = useMemo(() => takeBrandImport<BrandImportConfirmation>(), []);
+  const [imported, setImported] = useState<BrandImportConfirmation | null>(handoff);
+  const [showImporter, setShowImporter] = useState(!searchParams.get("brand") && !handoff);
+
   // Step 1
-  const [name, setName] = useState("");
-  const [website, setWebsite] = useState("");
-  const [description, setDescription] = useState("");
+  const [name, setName] = useState(handoff?.name ?? "");
+  const [website, setWebsite] = useState(handoff?.website ?? "");
+  const [description, setDescription] = useState(handoff?.description ?? "");
   // Step 2
   const [primaryLogo, setPrimaryLogo] = useState<string | null>(null);
   const [secondaryLogo, setSecondaryLogo] = useState<string | null>(null);
@@ -144,6 +151,7 @@ export default function BrandOnboardingPage() {
   const hydratedFor = useMemo(() => brand?.id ?? null, [brand?.id]);
   useEffect(() => {
     if (!brand) return;
+    setShowImporter(false);
     setName(brand.name ?? "");
     setWebsite(brand.website ?? "");
     setDescription(brand.description ?? "");
@@ -329,10 +337,28 @@ export default function BrandOnboardingPage() {
         </div>
 
         <div className="mt-8 flex-1">
-          {step === 1 ? (
+          {step === 1 && showImporter ? (
+            <BrandImportPanel
+              onManual={() => setShowImporter(false)}
+              onConfirm={(result) => {
+                // Prefill only — persistence stays in the existing step autosave.
+                setName(result.name);
+                setWebsite(result.website);
+                setDescription(result.description);
+                setImported(result);
+                setShowImporter(false);
+                toast.success(result.label);
+              }}
+            />
+          ) : null}
+
+          {step === 1 && !showImporter ? (
             <div className={CARD}>
               <p className={LABEL}>Step 1 — Brand basics</p>
               <h2 className="mt-2 text-2xl">What are we building?</h2>
+              {imported ? (
+                <p className="mt-2 text-xs uppercase tracking-[0.16em] text-cyan-200/80">{imported.label}</p>
+              ) : null}
               <div className="mt-5 space-y-4">
                 <div>
                   <p className={LABEL}>Brand name *</p>
@@ -363,18 +389,72 @@ export default function BrandOnboardingPage() {
                     className="mt-2 border-white/10 bg-black/30 text-white"
                   />
                 </div>
+                {!imported ? (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    onClick={() => setShowImporter(true)}
+                    className="rounded-full text-[11px] uppercase tracking-[0.16em] text-cyan-200"
+                  >
+                    <Sparkles className="h-3.5 w-3.5" /> Import from my website instead
+                  </Button>
+                ) : null}
               </div>
             </div>
           ) : null}
+
 
           {step === 2 ? (
             <div className={CARD}>
               <p className={LABEL}>Step 2 — Identity</p>
               <h2 className="mt-2 text-2xl">Logos and colors.</h2>
+              {imported && (imported.logoCandidates.length || imported.colorCandidates.length) ? (
+                <div className="mt-4 rounded-2xl border border-cyan-300/25 bg-cyan-300/[0.04] p-4">
+                  <p className="text-[11px] uppercase tracking-[0.16em] text-cyan-200/80">{imported.label}</p>
+                  {imported.logoCandidates.length ? (
+                    <div className="mt-3 flex flex-wrap gap-3">
+                      {imported.logoCandidates.map((logo) => (
+                        <button
+                          key={logo}
+                          type="button"
+                          onClick={() => (primaryLogo ? setSecondaryLogo(logo) : setPrimaryLogo(logo))}
+                          className="h-16 w-16 overflow-hidden rounded-xl border border-white/10 bg-black/40"
+                          title="Use this logo"
+                        >
+                          <img src={logo} alt="Imported logo" className="h-full w-full object-contain" />
+                        </button>
+                      ))}
+                    </div>
+                  ) : null}
+                  {imported.colorCandidates.length ? (
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {imported.colorCandidates.map((color) => (
+                        <button
+                          key={color}
+                          type="button"
+                          onClick={() =>
+                            setColors((current) =>
+                              current.includes(color) ? current : [...current, color],
+                            )
+                          }
+                          className="flex items-center gap-2 rounded-full border border-white/12 px-3 py-1.5 text-[11px] text-slate-200"
+                        >
+                          <span
+                            className="h-4 w-4 rounded-full border border-white/20"
+                            style={{ backgroundColor: color }}
+                          />
+                          {color}
+                        </button>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
               <div className="mt-5 grid gap-5 md:grid-cols-2">
                 <ImageSlot label="Primary logo" url={primaryLogo} onChange={setPrimaryLogo} />
                 <ImageSlot label="Secondary logo" url={secondaryLogo} onChange={setSecondaryLogo} />
               </div>
+
               <label className="mt-3 flex items-center gap-2 text-[11px] uppercase tracking-[0.16em] text-slate-400">
                 <input
                   type="checkbox"
@@ -409,6 +489,39 @@ export default function BrandOnboardingPage() {
                 <p className="mt-2 text-sm text-slate-400">
                   {brandProducts.length} saved for {brand?.name ?? "this brand"}.
                 </p>
+                {imported && imported.products.length ? (
+                  <div className="mt-4 rounded-2xl border border-cyan-300/25 bg-cyan-300/[0.04] p-4">
+                    <p className="text-[11px] uppercase tracking-[0.16em] text-cyan-200/80">
+                      {imported.label} — {imported.products.length} product
+                      {imported.products.length === 1 ? "" : "s"} found
+                    </p>
+                    <div className="mt-3 grid grid-cols-3 gap-3 sm:grid-cols-6">
+                      {imported.products.slice(0, 12).map((product) => (
+                        <div
+                          key={`${product.title}-${product.url ?? ""}`}
+                          className="overflow-hidden rounded-xl border border-white/10 bg-black/30"
+                          title={product.title}
+                        >
+                          <div className="aspect-square overflow-hidden bg-slate-900">
+                            {product.imageUrl ? (
+                              <img
+                                src={product.imageUrl}
+                                alt={product.title}
+                                loading="lazy"
+                                className="h-full w-full object-cover"
+                              />
+                            ) : null}
+                          </div>
+                          <p className="truncate px-2 py-1.5 text-[10px] text-slate-400">{product.title}</p>
+                        </div>
+                      ))}
+                    </div>
+                    <p className="mt-3 text-xs text-slate-500">
+                      Add the ones you want to shoot below — imported items aren't saved until you add them.
+                    </p>
+                  </div>
+                ) : null}
+
                 {brandProducts.length ? (
                   <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
                     {brandProducts.map((entry) => (

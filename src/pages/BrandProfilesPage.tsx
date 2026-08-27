@@ -27,6 +27,8 @@ import { useBrand } from "@/contexts/BrandContext";
 import { listMyAvatars } from "@/services/avatarProfiles";
 import { listLibraryAssets } from "@/services/libraryAssets";
 import { BrandEditor, CARD, LABEL, ProductEditor } from "@/components/brand/BrandEditors";
+import BrandImportPanel from "@/components/brand/BrandImportPanel";
+import { stashBrandImport } from "@/services/brandImport";
 import BrandModelsPanel from "@/components/brand/BrandModelsPanel";
 import BrandLibraryPanel from "@/components/brand/BrandLibraryPanel";
 import {
@@ -286,17 +288,20 @@ export default function BrandProfilesPage() {
         <Navbar />
         <main className="mx-auto w-full max-w-3xl px-5 pb-24 pt-28">
           {hero}
-          <Button
-            type="button"
-            onClick={() => navigate("/app/brand/onboarding")}
-            className="mt-8 rounded-full bg-cyan-300 px-6 py-6 text-[12px] font-semibold uppercase tracking-[0.16em] text-slate-950 hover:bg-cyan-200"
-          >
-            <Sparkles className="h-4 w-4" /> Build your brand
-          </Button>
+          <div className="mt-8">
+            <BrandImportPanel
+              onManual={() => navigate("/app/brand/onboarding")}
+              onConfirm={(result) => {
+                stashBrandImport(result);
+                navigate("/app/brand/onboarding");
+              }}
+            />
+          </div>
         </main>
       </div>
     );
   }
+
 
   return (
     <div className="min-h-screen bg-slate-950 text-white">
