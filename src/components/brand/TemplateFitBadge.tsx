@@ -39,9 +39,10 @@ export default function TemplateFitBadge({
       ) : (
         <>
           <Plus className="h-3 w-3" aria-hidden />
-          {gap.label}
+          Needs: {gap.label.replace(/^add\s+an?\s+/i, "")}
         </>
       )}
     </span>
+
   );
 }
