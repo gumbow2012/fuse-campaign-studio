@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import SiteShell from "@/components/mvp/SiteShell";
 import MaddenProjectSwitcher from "@/components/madden-media/MaddenProjectSwitcher";
 import MaddenSlotCard from "@/components/madden-media/MaddenSlotCard";
+import MaddenSubjectPanel from "@/components/madden-media/MaddenSubjectPanel";
 import MaddenShotBoard from "@/components/madden-media/MaddenShotBoard";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
@@ -221,7 +222,11 @@ export default function MaddenMediaStudio() {
         ) : (
           <div className="space-y-4">
             <div className="grid gap-4 md:grid-cols-2">
-              {MADDEN_SLOT_KINDS.map((kind) => (
+              <MaddenSubjectPanel
+                slot={state.slots.subject}
+                onBind={(patch) => updateSlot("subject", patch as Partial<MaddenSlot>)}
+              />
+              {MADDEN_SLOT_KINDS.filter((kind) => kind !== "subject").map((kind) => (
                 <MaddenSlotCard key={kind} slot={state.slots[kind]} onChange={updateSlot} />
               ))}
             </div>
