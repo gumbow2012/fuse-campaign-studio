@@ -34,6 +34,7 @@ import {
 import { listMyAvatars } from "@/services/avatarProfiles";
 import { listProductProfiles } from "@/services/productProfiles";
 import { deriveBrandReadiness, readBrandFlags, type ReadinessStatus } from "@/lib/brandReadiness";
+import BrandImportPanel, { type BrandImportConfirmation } from "@/components/brand/BrandImportPanel";
 
 const STEPS = [
   { id: 1, label: "Brand basics", optional: false },
