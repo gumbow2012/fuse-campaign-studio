@@ -2158,7 +2158,7 @@ export default function TemplateStudioPage() {
                                       ...current,
                                       [field.key]: { status: "error", error: message },
                                     }));
-                                    toast.error(message);
+                                    toast({ title: "Upload failed", description: message, variant: "destructive" });
                                   });
                               }
                             }}
