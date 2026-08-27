@@ -6,7 +6,7 @@
  * intent capture, referral survival and post-auth routing.
  */
 import { useEffect, useMemo, useState } from "react";
-import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import SiteShell from "@/components/mvp/SiteShell";
 import PageMeta from "@/components/mvp/PageMeta";
 import { useAuth } from "@/contexts/AuthContext";
@@ -23,11 +23,8 @@ import {
   writePendingAuthIntent,
 } from "@/lib/pendingAuthIntent";
 
-const FUSE_ICON_SRC = "/fuse-icon.png?v=20260519";
-const FUSE_WORDMARK_SRC = "/fuse-wordmark.png?v=20260519";
-
 const CARD_SHELL =
-  "rounded-[2rem] border border-white/10 bg-slate-950/75 p-6 shadow-[0_24px_80px_rgba(0,0,0,0.45)] backdrop-blur-xl sm:p-8";
+  "rounded-[1.75rem] border border-white/10 bg-slate-950/75 px-6 py-7 shadow-[0_24px_80px_rgba(0,0,0,0.45)] backdrop-blur-xl sm:px-8 sm:py-8";
 
 export default function AuthPage() {
   const [searchParams] = useSearchParams();
@@ -37,7 +34,7 @@ export default function AuthPage() {
   const paidAccess = searchParams.get("paid") === "true";
   const [invited, setInvited] = useState(false);
   const initialMode: AuthMode = searchParams.get("mode") === "signup" ? "signup" : "signin";
-  const [mode, setMode] = useState<AuthMode>(initialMode);
+
 
   // ---- pending intent: captured on arrival, replayed after auth ----------
   const intent = useMemo(() => {
@@ -109,44 +106,37 @@ export default function AuthPage() {
       <section className="relative overflow-hidden">
         <div
           aria-hidden
-          className="pointer-events-none absolute inset-0 opacity-70"
+          className="pointer-events-none absolute inset-0"
           style={{
             background:
-              "radial-gradient(60% 45% at 20% 5%, rgba(103,232,249,0.10), transparent 70%), radial-gradient(50% 40% at 85% 90%, rgba(56,189,248,0.07), transparent 70%)",
+              "radial-gradient(50% 40% at 50% 32%, rgba(103,232,249,0.10), transparent 72%)",
           }}
         />
 
-        <div className="container relative flex min-h-[calc(100vh-90px)] items-center justify-center py-12">
-          <div className="w-full max-w-[500px]">
+        <div className="container relative flex min-h-[calc(100vh-200px)] items-center justify-center py-8">
+          <div className="w-full max-w-[520px]">
             {invited ? (
-              <p className="mb-4 flex items-center justify-center gap-2 text-[10px] font-semibold uppercase tracking-[0.24em] text-cyan-200">
+              <p className="mb-3 flex items-center justify-center gap-2 text-[10px] font-semibold uppercase tracking-[0.24em] text-cyan-200">
                 <Sparkles className="h-3.5 w-3.5" /> You&apos;ve been invited to FUSE
               </p>
             ) : null}
 
             <div className={CARD_SHELL}>
-              <div className="flex items-center gap-3">
-                <img src={FUSE_ICON_SRC} alt="" className="h-9 w-9 rounded-xl object-contain" />
-                <img src={FUSE_WORDMARK_SRC} alt="FUSE" className="h-4 w-auto object-contain" />
-              </div>
-
-              <h1 className="mt-7 font-display text-[2rem] font-bold leading-none tracking-[-0.04em] text-white">
-                {mode === "signup" ? "CREATE YOUR ACCOUNT." : "ENTER FUSE."}
+              <h1 className="font-display text-[1.75rem] font-bold leading-none tracking-[-0.04em] text-white">
+                ACCESS FUSE
               </h1>
-              <p className="mt-3 text-sm leading-6 text-slate-400">
-                {mode === "signup"
-                  ? "Create your account with an email and password."
-                  : "Sign in with your email and password."}
+              <p className="mt-2 text-sm leading-6 text-slate-400">
+                Sign in or create your account to continue.
               </p>
-
 
               <UniversalAuthPanel
                 authSurface="auth_page"
-                className="mt-7"
+                className="mt-5"
                 oauthRedirectTo={getAbsoluteSiteUrl("/auth")}
                 initialMode={initialMode}
+                emailCtaLabel="Continue"
                 autoRequestEmail={autoRequestEmail}
-                onModeChange={setMode}
+                
                 onBeforeRedirect={() => writePendingAuthIntent(intent)}
                 onAuthenticated={({ userId, isNewAccount }) => {
                   if (isNewAccount) {
@@ -157,17 +147,10 @@ export default function AuthPage() {
                 }}
               />
             </div>
-
-            <p className="mt-6 text-center text-[11px] leading-5 text-slate-500">
-              Need help?{" "}
-              <Link to="/contact" className="text-slate-300 underline decoration-white/20 hover:text-white">
-                Contact us
-              </Link>
-              .
-            </p>
           </div>
         </div>
       </section>
+
     </SiteShell>
   );
 }

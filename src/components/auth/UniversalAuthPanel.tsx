@@ -17,7 +17,7 @@ import { toast } from "@/hooks/use-toast";
 import { track } from "@/lib/analytics/track";
 import { supabase } from "@/integrations/supabase/client";
 import { getAbsoluteSiteUrl } from "@/lib/site-url";
-import { ArrowRight, Eye, EyeOff, Loader2 } from "lucide-react";
+import { ArrowRight, Eye, EyeOff, Loader2, ShieldCheck } from "lucide-react";
 
 export const APPLE_AUTH_ENABLED = import.meta.env.VITE_ENABLE_APPLE_AUTH === "true";
 export const MICROSOFT_AUTH_ENABLED = import.meta.env.VITE_ENABLE_MICROSOFT_AUTH === "true";
@@ -242,7 +242,7 @@ export default function UniversalAuthPanel({
   };
 
   const busy = submitting || resetting || Boolean(oauthPending);
-  const submitLabel = mode === "signup" ? emailCtaLabel : "Sign in";
+  const submitLabel = mode === "signup" ? emailCtaLabel : "Continue";
 
   return (
     <div className={className}>
@@ -267,11 +267,14 @@ export default function UniversalAuthPanel({
         ) : null}
       </div>
 
-      <div className="my-7 flex items-center gap-4">
+      <div className="my-5 flex items-center gap-4">
         <span className="h-px flex-1 bg-white/10" />
-        <span className="text-[10px] font-semibold uppercase tracking-[0.28em] text-slate-500">or</span>
+        <span className="whitespace-nowrap text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-500">
+          or continue with email
+        </span>
         <span className="h-px flex-1 bg-white/10" />
       </div>
+
 
       <form onSubmit={handleSubmit} className="space-y-3">
         <Input
@@ -327,16 +330,20 @@ export default function UniversalAuthPanel({
           {submitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
           {submitLabel} <ArrowRight className="ml-2 h-4 w-4" />
         </Button>
+
+        <p className="flex items-center justify-center gap-1.5 pt-0.5 text-[11px] text-slate-500">
+          <ShieldCheck className="h-3.5 w-3.5 text-cyan-300/70" /> Secure sign-in
+        </p>
       </form>
 
-      <div className="mt-4 flex flex-wrap items-center justify-between gap-3 text-xs">
+      <div className="mt-3 flex flex-wrap items-center justify-between gap-3 text-xs">
         {mode === "signup" ? (
           <button type="button" onClick={() => switchMode("signin")} className="text-slate-400 hover:text-white">
             Already have an account? <span className="font-semibold text-cyan-200">Sign in</span>
           </button>
         ) : (
           <button type="button" onClick={() => switchMode("signup")} className="text-slate-400 hover:text-white">
-            New here? <span className="font-semibold text-cyan-200">Create account</span>
+            New to FUSE? <span className="font-semibold text-cyan-200">Create account</span>
           </button>
         )}
         <button
@@ -350,18 +357,19 @@ export default function UniversalAuthPanel({
       </div>
 
       {showTerms ? (
-        <p className="mt-8 text-center text-[11px] leading-5 text-slate-500">
+        <p className="mt-5 text-center text-[11px] leading-5 text-slate-400">
           By continuing, you agree to the{" "}
-          <Link to="/terms" className="text-slate-300 underline decoration-white/20 hover:text-white">
+          <Link to="/terms" className="text-slate-200 underline decoration-white/30 hover:text-white">
             Terms
           </Link>{" "}
           and{" "}
-          <Link to="/privacy" className="text-slate-300 underline decoration-white/20 hover:text-white">
+          <Link to="/privacy" className="text-slate-200 underline decoration-white/30 hover:text-white">
             Privacy Policy
           </Link>
           .
         </p>
       ) : null}
+
     </div>
   );
 }
