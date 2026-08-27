@@ -43,6 +43,17 @@ export async function fetchNotifications(limit = 30): Promise<UserNotification[]
   return (data ?? []) as unknown as UserNotification[];
 }
 
+/** Exact number of unread notifications for the signed-in user (RLS scoped). */
+export async function countUnreadNotifications(): Promise<number> {
+  const { count, error } = await supabase
+    .from("user_notifications")
+    .select("id", { count: "exact", head: true })
+    .is("read_at", null);
+
+  if (error) throw error;
+  return count ?? 0;
+}
+
 /** Marks every unread notification for the current user as read. */
 export async function markAllNotificationsRead(userId: string) {
   const { error } = await supabase
