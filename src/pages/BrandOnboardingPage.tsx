@@ -163,17 +163,27 @@ export default function BrandOnboardingPage() {
     queryClient.invalidateQueries({ queryKey: ["active-brand-id"] });
   };
 
-  function onboardingPatch(target: BrandProfile | null, nextStep: number, completed: number) {
+  // Readiness is derived from SAVED data only — never from "step visited".
+  const readiness = useMemo(
+    () =>
+      deriveBrandReadiness(
+        brand,
+        productsQuery.data ?? [],
+        readModelIds(brand),
+        readVisualStyle(brand),
+      ),
+    [brand, productsQuery.data],
+  );
+
+  function onboardingPatch(target: BrandProfile | null, nextStep: number) {
     const current = readOnboarding(target);
-    const completedSteps = Array.from(new Set([...(current?.completedSteps ?? []), completed])).sort(
-      (a, b) => a - b,
-    );
+    const completedSteps = Array.from(new Set(readiness.completedSteps)).sort((a, b) => a - b);
     return {
       onboarding: {
         currentStep: nextStep,
         completedSteps,
         startedAt: current?.startedAt || new Date().toISOString(),
-        completedAt: nextStep >= 6 && completed >= 5 ? new Date().toISOString() : (current?.completedAt ?? null),
+        completedAt: current?.completedAt ?? null,
       },
     };
   }
@@ -188,7 +198,7 @@ export default function BrandOnboardingPage() {
           name: trimmed,
           website: website.trim() || null,
           description: description.trim() || null,
-          metadata: onboardingPatch(null, nextStep, 1),
+          metadata: onboardingPatch(null, nextStep),
         });
         if (!created) throw new Error("Could not create the brand.");
         setBrandId(created.id);
@@ -209,7 +219,11 @@ export default function BrandOnboardingPage() {
         patch.secondary_logo_url = secondaryLogo;
         patch.colors = colors;
       }
-      const metaPatch: Record<string, unknown> = { ...onboardingPatch(brand, nextStep, step) };
+      const metaPatch: Record<string, unknown> = { ...onboardingPatch(brand, nextStep) };
+      if (step === 2) {
+        metaPatch.noLogo = noLogo;
+        metaPatch.neutralPalette = neutralPalette;
+      }
       if (step === 4) metaPatch.modelIds = modelIds;
       if (step === 5) {
         metaPatch.visualStyle = {
@@ -232,29 +246,30 @@ export default function BrandOnboardingPage() {
 
   const finish = useMutation({
     mutationFn: async () => {
-      if (brand) {
-        await patchBrandMetadata(brand, {
-          onboarding: {
-            ...(readOnboarding(brand) ?? {
-              currentStep: 6,
-              completedSteps: [1],
-              startedAt: new Date().toISOString(),
-            }),
-            currentStep: 6,
-            completedAt: new Date().toISOString(),
-          },
-        });
-      }
+      if (!brand) return;
+      if (!readiness.ready) throw new Error("Complete the required items first.");
+      const current = readOnboarding(brand);
+      await patchBrandMetadata(brand, {
+        onboarding: {
+          currentStep: 6,
+          completedSteps: readiness.completedSteps,
+          startedAt: current?.startedAt || new Date().toISOString(),
+          // Only stamped when every REQUIRED item is actually satisfied.
+          completedAt: current?.completedAt ?? new Date().toISOString(),
+        },
+      });
     },
     onSuccess: () => {
       refreshBrands();
       navigate("/app/brand");
     },
-    onError: () => navigate("/app/brand"),
+    onError: (error) => toast.error(error instanceof Error ? error.message : "Could not finish"),
   });
 
   const canContinue = step !== 1 || name.trim().length > 0;
   const optional = STEPS.find((entry) => entry.id === step)?.optional ?? false;
+  const maxReachable = Math.max(step, ...readiness.completedSteps, 1);
+
 
   const style = { tags, tone, references, notes };
 
