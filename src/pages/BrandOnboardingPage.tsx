@@ -487,6 +487,39 @@ export default function BrandOnboardingPage() {
                 <p className="mt-2 text-sm text-slate-400">
                   {brandProducts.length} saved for {brand?.name ?? "this brand"}.
                 </p>
+                {imported && imported.products.length ? (
+                  <div className="mt-4 rounded-2xl border border-cyan-300/25 bg-cyan-300/[0.04] p-4">
+                    <p className="text-[11px] uppercase tracking-[0.16em] text-cyan-200/80">
+                      {imported.label} — {imported.products.length} product
+                      {imported.products.length === 1 ? "" : "s"} found
+                    </p>
+                    <div className="mt-3 grid grid-cols-3 gap-3 sm:grid-cols-6">
+                      {imported.products.slice(0, 12).map((product) => (
+                        <div
+                          key={`${product.title}-${product.url ?? ""}`}
+                          className="overflow-hidden rounded-xl border border-white/10 bg-black/30"
+                          title={product.title}
+                        >
+                          <div className="aspect-square overflow-hidden bg-slate-900">
+                            {product.imageUrl ? (
+                              <img
+                                src={product.imageUrl}
+                                alt={product.title}
+                                loading="lazy"
+                                className="h-full w-full object-cover"
+                              />
+                            ) : null}
+                          </div>
+                          <p className="truncate px-2 py-1.5 text-[10px] text-slate-400">{product.title}</p>
+                        </div>
+                      ))}
+                    </div>
+                    <p className="mt-3 text-xs text-slate-500">
+                      Add the ones you want to shoot below — imported items aren't saved until you add them.
+                    </p>
+                  </div>
+                ) : null}
+
                 {brandProducts.length ? (
                   <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
                     {brandProducts.map((entry) => (
