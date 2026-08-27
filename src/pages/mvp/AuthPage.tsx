@@ -15,7 +15,7 @@ import { checkoutEventId, clearPendingCheckout, readPendingCheckout, trackEventO
 import { track } from "@/lib/analytics/track";
 import { readPendingReferralCode, storePendingReferralCode } from "@/lib/pendingReferral";
 import { usePendingReferral } from "@/hooks/usePendingReferral";
-import UniversalAuthPanel from "@/components/auth/UniversalAuthPanel";
+import UniversalAuthPanel, { type AuthMode } from "@/components/auth/UniversalAuthPanel";
 import { Sparkles } from "lucide-react";
 import {
   resolveIntentDestination,
@@ -36,7 +36,8 @@ export default function AuthPage() {
 
   const paidAccess = searchParams.get("paid") === "true";
   const [invited, setInvited] = useState(false);
-  const [authStep, setAuthStep] = useState<"email" | "code">("email");
+  const initialMode: AuthMode = searchParams.get("mode") === "signin" ? "signin" : "signup";
+  const [mode, setMode] = useState<AuthMode>(initialMode);
 
   // ---- pending intent: captured on arrival, replayed after auth ----------
   const intent = useMemo(() => {
@@ -92,7 +93,7 @@ export default function AuthPage() {
 
   const authRedirect = getAbsoluteSiteUrl(`/auth${paidAccess ? "?paid=true" : ""}`);
 
-  // Paid checkout hand-off: prefill and send the code automatically.
+  // Paid checkout hand-off: prefill the email field.
   const autoRequestEmail = useMemo(() => {
     if (!paidAccess || typeof window === "undefined") return null;
     const stored = window.localStorage.getItem("fuse.n");
@@ -103,7 +104,7 @@ export default function AuthPage() {
     <SiteShell>
       <PageMeta
         title="Sign In or Create Your FUSE Account — FUSE"
-        description="Enter FUSE. Continue with Google or your email — no password required."
+        description="Enter FUSE. Continue with Google, or sign in with your email and password."
         path="/auth"
       />
 
@@ -132,31 +133,27 @@ export default function AuthPage() {
               </div>
 
               <h1 className="mt-7 font-display text-[2rem] font-bold leading-none tracking-[-0.04em] text-white">
-                {authStep === "code"
-                  ? "CHECK YOUR EMAIL."
-                  : searchParams.get("mode") === "signup"
-                    ? "CREATE YOUR ACCOUNT."
-                    : "ENTER FUSE."}
+                {mode === "signup" ? "CREATE YOUR ACCOUNT." : "ENTER FUSE."}
               </h1>
-              {authStep === "email" ? (
-                <p className="mt-3 text-sm leading-6 text-slate-400">
-                  Create an account or sign in to continue.
-                </p>
-              ) : null}
+              <p className="mt-3 text-sm leading-6 text-slate-400">
+                {mode === "signup"
+                  ? "Create your account with an email and password."
+                  : "Sign in with your email and password."}
+              </p>
 
 
               <UniversalAuthPanel
                 authSurface="auth_page"
                 className="mt-7"
                 oauthRedirectTo={getAbsoluteSiteUrl("/auth")}
-                emailRedirectTo={authRedirect}
+                initialMode={initialMode}
                 autoRequestEmail={autoRequestEmail}
-                onStepChange={setAuthStep}
+                onModeChange={setMode}
                 onBeforeRedirect={() => writePendingAuthIntent(intent)}
                 onAuthenticated={({ userId, isNewAccount }) => {
                   if (isNewAccount) {
                     trackEventOnce(`completeRegistration.${userId}`, "CompleteRegistration");
-                    track("sign_up", { method: "email_otp", paid_access: Boolean(paidAccess) });
+                    track("sign_up", { method: "email_password", paid_access: Boolean(paidAccess) });
                   }
                   navigate(destination, { replace: true });
                 }}
