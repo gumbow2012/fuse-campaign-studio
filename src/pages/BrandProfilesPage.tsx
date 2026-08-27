@@ -253,29 +253,38 @@ export default function BrandProfilesPage() {
     </>
   );
 
+  const resumeBanner =
+    activeBrand && onboarding && !onboarding.completedAt ? (
+      <div className="mt-7 flex flex-col gap-3 rounded-[1.5rem] border border-cyan-300/30 bg-cyan-300/[0.06] p-5 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <p className={LABEL}>Setup in progress</p>
+          <p className="mt-1 text-sm text-slate-200">
+            {activeBrand.name} — you stopped at step {onboarding.currentStep} of 6.
+          </p>
+        </div>
+        <Button
+          type="button"
+          onClick={() => navigate(`/app/brand/onboarding?brand=${activeBrand.id}&step=${onboarding.currentStep}`)}
+          className="rounded-full bg-cyan-300 px-5 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-950 hover:bg-cyan-200"
+        >
+          Resume brand setup <ArrowRight className="h-3.5 w-3.5" />
+        </Button>
+      </div>
+    ) : null;
+
   if (!brandLoading && brands.length === 0) {
     return (
       <div className="min-h-screen bg-slate-950 text-white">
         <Navbar />
         <main className="mx-auto w-full max-w-3xl px-5 pb-24 pt-28">
           {hero}
-          {editingBrand !== undefined ? (
-            <div className="mt-8">
-              <BrandEditor
-                brand={editingBrand}
-                onDone={() => setEditingBrand(undefined)}
-                onCreated={(created) => setActiveBrand(created.id)}
-              />
-            </div>
-          ) : (
-            <Button
-              type="button"
-              onClick={() => setEditingBrand(null)}
-              className="mt-8 rounded-full bg-cyan-300 px-6 py-6 text-[12px] font-semibold uppercase tracking-[0.16em] text-slate-950 hover:bg-cyan-200"
-            >
-              <Sparkles className="h-4 w-4" /> Build your brand
-            </Button>
-          )}
+          <Button
+            type="button"
+            onClick={() => navigate("/app/brand/onboarding")}
+            className="mt-8 rounded-full bg-cyan-300 px-6 py-6 text-[12px] font-semibold uppercase tracking-[0.16em] text-slate-950 hover:bg-cyan-200"
+          >
+            <Sparkles className="h-4 w-4" /> Build your brand
+          </Button>
         </main>
       </div>
     );
@@ -286,6 +295,8 @@ export default function BrandProfilesPage() {
       <Navbar />
       <main className="mx-auto w-full max-w-6xl px-5 pb-24 pt-28">
         {hero}
+        {resumeBanner}
+
 
         <div className="mt-7 flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
           <BrandSwitcher
