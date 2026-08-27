@@ -5,7 +5,7 @@
  * No readiness rules, billing or generation logic live here.
  */
 
-import { Globe, Loader2, Sparkles } from "lucide-react";
+import { Check, Globe, Loader2, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { CARD, LABEL } from "@/components/brand/BrandEditors";
 import { CastPortrait } from "@/components/cast/CastLibrary";
@@ -286,43 +286,65 @@ export default function BrandReviewStep({
         </div>
       </div>
 
-      {/* Checklist — driven by deriveBrandReadiness */}
+      {/* FINISH — required-only gate, optional enhancements never block */}
       <div className={CARD}>
-        <p className={LABEL}>Completion checklist</p>
-        <ul className="mt-4 space-y-3 text-sm text-slate-300">
-          {readiness.sections.map((section) => {
-            const mark = STATUS_MARK[section.status];
-            const missing = section.items.filter((item) => !item.done);
+        {readiness.ready ? (
+          <>
+            <h3 className="font-display text-2xl tracking-[-0.02em]">{name.toUpperCase()} IS SET UP.</h3>
+            <ul className="mt-4 space-y-2 text-sm text-slate-300">
+              <li className="flex items-center gap-2">
+                <Check className="h-4 w-4 text-cyan-300" /> Brand name
+              </li>
+              <li className="flex items-center gap-2">
+                <Check className="h-4 w-4 text-cyan-300" /> Identity
+              </li>
+            </ul>
+          </>
+        ) : (
+          <>
+            <h3 className="font-display text-2xl tracking-[-0.02em]">ALMOST THERE.</h3>
+            <ul className="mt-4 space-y-2 text-sm text-slate-300">
+              {readiness.sections
+                .flatMap((section) => section.items.map((item) => ({ item, step: section.step })))
+                .filter((entry) => entry.item.level === "required" && !entry.item.done)
+                .map((entry) => (
+                  <li key={entry.item.key} className="flex items-center justify-between gap-3">
+                    <span className="text-slate-400">✕ {entry.item.label}</span>
+                    <button
+                      type="button"
+                      onClick={() => onJump(entry.step)}
+                      className="text-[10px] uppercase tracking-[0.16em] text-cyan-200 hover:text-cyan-100"
+                    >
+                      Complete
+                    </button>
+                  </li>
+                ))}
+            </ul>
+          </>
+        )}
+
+        <p className={`${LABEL} mt-6`}>Optional enhancements</p>
+        <ul className="mt-3 space-y-2 text-sm">
+          {OPTIONAL_ROWS.map((row) => {
+            const done = row.done({ products, cast, signals, tone, referenceBrands });
             return (
               <li
-                key={section.key}
-                className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-white/10 bg-black/20 px-4 py-3"
+                key={row.key}
+                className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-white/10 bg-black/20 px-4 py-3"
               >
-                <span className="flex flex-wrap items-center gap-3">
-                  <span
-                    className={`rounded-full border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] ${mark.className}`}
-                  >
-                    {mark.mark}
+                <span className="min-w-0">
+                  <span className="text-slate-300">
+                    {done ? "✓" : "○"} {row.label}
                   </span>
-                  <span>
-                    {section.label}
-                    {missing.length ? (
-                      <span className="ml-2 text-xs text-slate-500">
-                        {missing.map((item) => item.label).join(" · ")}
-                      </span>
-                    ) : null}
-                  </span>
+                  <span className="ml-2 text-xs text-slate-500">{row.why}</span>
                 </span>
-                {section.status !== "complete" ? (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => onJump(section.step)}
-                    className="h-8 rounded-full border-white/12 bg-white/[0.03] px-3 text-[10px] uppercase tracking-[0.16em]"
-                  >
-                    Go back &amp; complete
-                  </Button>
-                ) : null}
+                <button
+                  type="button"
+                  onClick={() => onJump(row.step)}
+                  className="shrink-0 text-[10px] uppercase tracking-[0.16em] text-cyan-200 hover:text-cyan-100"
+                >
+                  {done ? "Edit" : row.cta}
+                </button>
               </li>
             );
           })}
@@ -336,13 +358,52 @@ export default function BrandReviewStep({
         >
           {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
           {readiness.ready
-            ? "Enter Brand Workspace"
+            ? "Enter FUSE"
             : `Complete ${readiness.requiredMissing} required item${readiness.requiredMissing === 1 ? "" : "s"}`}
         </Button>
-        {readiness.ready && readiness.recommendedMissing > 0 ? (
-          <p className="mt-3 text-xs text-slate-500">You can complete these later.</p>
-        ) : null}
+        <p className="mt-3 text-xs text-slate-500">Optional enhancements can be added any time — they never block you.</p>
       </div>
     </div>
   );
 }
+
+const OPTIONAL_ROWS: {
+  key: string;
+  label: string;
+  why: string;
+  cta: string;
+  step: number;
+  done: (ctx: {
+    products: ProductProfile[];
+    cast: AvatarProfile[];
+    signals: string[];
+    tone: string;
+    referenceBrands: string[];
+  }) => boolean;
+}[] = [
+  {
+    key: "products",
+    label: "Add products",
+    why: "Makes compatible campaigns one-click.",
+    cta: "Add products",
+    step: 3,
+    done: (ctx) => ctx.products.length > 0,
+  },
+  {
+    key: "cast",
+    label: "Choose cast",
+    why: "Lets people-based campaigns preload a model.",
+    cta: "Choose cast",
+    step: 4,
+    done: (ctx) => ctx.cast.length > 0,
+  },
+  {
+    key: "dna",
+    label: "Add Creative DNA",
+    why: "Personalizes recommendations.",
+    cta: "Add references",
+    step: 5,
+    done: (ctx) => ctx.signals.length > 0 || ctx.tone.trim().length > 0 || ctx.referenceBrands.length > 0,
+  },
+];
+
