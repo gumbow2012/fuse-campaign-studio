@@ -363,9 +363,13 @@ export default function BrandProfilesPage() {
                 icon={<Users className="h-5 w-5" />}
                 title="Models / FUSE Cast"
                 done={completion.models}
-                detail={`${avatars.length} model${avatars.length === 1 ? "" : "s"} in your cast.`}
+                detail={
+                  brandModelCount
+                    ? `${brandModelCount} model${brandModelCount === 1 ? "" : "s"} linked to this brand.`
+                    : `${avatars.length} model${avatars.length === 1 ? "" : "s"} saved — none linked to this brand yet.`
+                }
                 cta={completion.models ? "Manage models" : "Add models"}
-                onClick={() => navigate("/app/avatars")}
+                onClick={() => setTab("models")}
               />
               <DashboardCard
                 icon={<Wand2 className="h-5 w-5" />}
