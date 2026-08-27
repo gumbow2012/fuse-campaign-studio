@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { BrandProvider } from "@/contexts/BrandContext";
+import { StreakProvider } from "@/hooks/useStreak";
 import { PageTracking } from "@/hooks/usePageTracking";
 import CreditTopUpSuccessWatcher from "@/components/mvp/CreditTopUpSuccessWatcher";
 import CustomerRoute from "@/components/CustomerRoute";
@@ -66,6 +67,7 @@ const App = () => (
   <QueryClientProvider client={queryClient}>
     <AuthProvider>
       <BrandProvider>
+      <StreakProvider>
       <TooltipProvider>
         <Toaster />
         <Sonner />
@@ -344,6 +346,7 @@ const App = () => (
           </Routes>
         </BrowserRouter>
       </TooltipProvider>
+      </StreakProvider>
       </BrandProvider>
     </AuthProvider>
   </QueryClientProvider>
