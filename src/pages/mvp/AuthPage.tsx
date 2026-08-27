@@ -132,13 +132,18 @@ export default function AuthPage() {
               </div>
 
               <h1 className="mt-7 font-display text-[2rem] font-bold leading-none tracking-[-0.04em] text-white">
-                {authStep === "code" ? "CHECK YOUR EMAIL." : "ENTER FUSE."}
+                {authStep === "code"
+                  ? "CHECK YOUR EMAIL."
+                  : searchParams.get("mode") === "signup"
+                    ? "CREATE YOUR ACCOUNT."
+                    : "ENTER FUSE."}
               </h1>
               {authStep === "email" ? (
                 <p className="mt-3 text-sm leading-6 text-slate-400">
                   Create an account or sign in to continue.
                 </p>
               ) : null}
+
 
               <UniversalAuthPanel
                 authSurface="auth_page"
