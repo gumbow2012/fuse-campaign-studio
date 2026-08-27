@@ -127,9 +127,9 @@ export default function BrandOnboardingPage() {
   const [showImporter, setShowImporter] = useState(!searchParams.get("brand") && !handoff);
 
   // Step 1
-  const [name, setName] = useState("");
-  const [website, setWebsite] = useState("");
-  const [description, setDescription] = useState("");
+  const [name, setName] = useState(handoff?.name ?? "");
+  const [website, setWebsite] = useState(handoff?.website ?? "");
+  const [description, setDescription] = useState(handoff?.description ?? "");
   // Step 2
   const [primaryLogo, setPrimaryLogo] = useState<string | null>(null);
   const [secondaryLogo, setSecondaryLogo] = useState<string | null>(null);
