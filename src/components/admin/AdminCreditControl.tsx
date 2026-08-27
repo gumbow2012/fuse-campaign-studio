@@ -361,7 +361,6 @@ const AdminCreditControl = () => {
               Apply adjustment
             </Button>
           </DialogFooter>
-        </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
