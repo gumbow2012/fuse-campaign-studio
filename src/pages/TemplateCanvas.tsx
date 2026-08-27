@@ -3096,6 +3096,17 @@ const TemplateCanvas = () => {
                       Open Output Audit
                     </Link>
                   </Button>
+                  {detail && !detail.isActive ? (
+                    <QuickPublishButton
+                      versionId={detail.versionId}
+                      templateName={detail.templateName}
+                      versionNumber={detail.versionNumber}
+                      building={phase === "running"}
+                      onRunTest={() => setShowRunnerPanel(true)}
+                      onPublished={() => refreshAfterMutation(detail.versionId)}
+                    />
+                  ) : null}
+
                   {canPublishTemplates && testingGateSatisfied && detail && !detail.isActive ? (
                     <Button type="button" size="sm" onClick={() => void activateCurrentVersion()} disabled={!!mutating}>
                       {mutating === "activate-version" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle2 className="mr-2 h-4 w-4" />}
