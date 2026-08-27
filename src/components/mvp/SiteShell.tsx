@@ -333,15 +333,23 @@ export default function SiteShell({ children }: { children: ReactNode }) {
                         variant="outline"
                         className={cn("h-10 rounded-full border-white/15 bg-white/5 px-4 text-sm text-foreground hover:bg-white/10", focusRing)}
                       >
-                        <Link to="/auth">Sign in</Link>
+                        <Link to="/auth?mode=signin">Sign in</Link>
                       </Button>
-                      <Button asChild className={cn("h-10 rounded-full bg-cyan-300 px-4 text-sm text-slate-950 hover:bg-cyan-200", focusRing)}>
+                      <Button asChild className={cn("h-10 rounded-full bg-cyan-300 px-4 text-sm font-semibold text-slate-950 hover:bg-cyan-200", focusRing)}>
+                        <Link to="/auth?mode=signup">Sign up</Link>
+                      </Button>
+                      <Button
+                        asChild
+                        variant="outline"
+                        className={cn("h-10 rounded-full border-white/15 bg-white/5 px-4 text-sm text-foreground hover:bg-white/10", focusRing)}
+                      >
                         <Link to="/app/templates">
                           <Layers3 className="h-4 w-4" aria-hidden="true" />
                           Try templates
                         </Link>
                       </Button>
                     </>
+
                   )}
                 </div>
               </nav>
