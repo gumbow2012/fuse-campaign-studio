@@ -412,7 +412,9 @@ export default function AvatarProfilesPage() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const createIntent = searchParams.get("create") === "generate" ? "generate" : "upload";
-  const backTo = searchParams.get("from");
+  // Preserve the originating Brand Workspace step (?from=/app/brand/onboarding...).
+  const fromParam = searchParams.get("from");
+  const backTo = fromParam && fromParam.startsWith("/") ? fromParam : null;
 
   useEffect(() => {
     if (searchParams.get("create")) setCreating(true);
@@ -420,7 +422,7 @@ export default function AvatarProfilesPage() {
   }, []);
 
   const goBack = () => {
-    if (backTo) navigate(backTo);
+    if (backTo) navigate(backTo, { replace: true });
     else navigate(-1);
   };
 
