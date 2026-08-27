@@ -383,22 +383,8 @@ export default function SiteShell({ children }: { children: ReactNode }) {
 
       <main className="relative">{children}</main>
 
-      <footer className="relative border-t border-white/10 py-8">
-        <div className="container flex flex-col items-center gap-2 text-center text-xs text-muted-foreground sm:flex-row sm:justify-between sm:text-left">
-          <p>© {new Date().getFullYear()} FUSE</p>
-          <p>
-            Built by{" "}
-            <a
-              href="https://maddenmedia.ai"
-              target="_blank"
-              rel="noreferrer"
-              className="text-foreground underline underline-offset-4 hover:text-cyan-100"
-            >
-              Madden Media
-            </a>
-          </p>
-        </div>
-      </footer>
+      <SiteFooter />
+
     </div>
   );
 }
