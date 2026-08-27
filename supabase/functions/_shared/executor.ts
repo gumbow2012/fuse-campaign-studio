@@ -1159,7 +1159,10 @@ export async function runGraphJob(admin: AdminClient, jobId: string) {
        */
       const identityLocked = Boolean(castResult.applied) &&
         (node.node_type === "image_gen" || node.node_type === "video_gen");
-      const lockPrompt = (value: string) => (identityLocked ? buildIdentityLockedPrompt(value) : value);
+      const lockPrompt = <T,>(value: T): T =>
+        identityLocked && typeof value === "string" && value.trim()
+          ? (buildIdentityLockedPrompt(value) as unknown as T)
+          : value;
 
 
       const startedAt = step.status === "running" ? step.started_at : new Date().toISOString();
