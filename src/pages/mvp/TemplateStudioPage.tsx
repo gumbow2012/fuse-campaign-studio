@@ -673,15 +673,18 @@ export default function TemplateStudioPage() {
     : null;
 
   const templateDetailQuery = useQuery<TemplateDetail | null>({
+    // P1: the detail is public via lab-template-detail, so logged-out visitors
+    // can open and configure the builder. Anonymous visitors need a live
+    // version id (the legacy token path is authenticated-only).
+    enabled: !!selectedTemplate && (!!user || !!selectedTemplate.versionId),
     queryKey: ["mvp-template-detail", selectedTemplateDetailCacheId],
-    enabled: !!selectedTemplate && !!user,
     placeholderData: selectedTemplateDetailCacheId
       ? loadCachedTemplateDetail(selectedTemplateDetailCacheId)
       : null,
     staleTime: 60_000,
     queryFn: async () => {
       if (!selectedTemplate || !selectedTemplateDetailCacheId) return null;
-      const token = await getAccessToken();
+      const token = user ? await getAccessToken() : "";
       const detail = await fetchTemplateDetail(token, selectedTemplate);
       storeCachedTemplateDetail(selectedTemplateDetailCacheId, detail);
       return detail;
@@ -1482,22 +1485,22 @@ export default function TemplateStudioPage() {
         <div className="flex flex-wrap items-end justify-between gap-6">
           <div>
             <p className="text-[11px] font-semibold uppercase tracking-[0.3em] text-cyan-100">
-              {isPublicTemplateBrowser ? "Template Page" : "Post-Purchase Studio"}
+              {isPublicTemplateBrowser ? "Campaign Builder" : "Post-Purchase Studio"}
             </p>
             <h1 className="mt-3 font-display text-2xl font-bold leading-tight text-white sm:text-4xl">
               {isPublicTemplateBrowser
-                ? "Choose a campaign template."
+                ? "Build your campaign. No account needed yet."
                 : "Your template is ready. Upload your assets."}
             </h1>
             <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-300 md:text-base">
               {isPublicTemplateBrowser
-                ? "Each template turns your brand assets into ready-to-use vertical videos. Browse before checkout."
+                ? "Pick a template, add your assets and set up the run — you only sign in when you generate."
                 : "The selected workflow is loaded. Add the required assets, confirm the run cost, and generate campaign videos."}
             </p>
           </div>
           {isPublicTemplateBrowser ? (
             <div className="rounded-[1.5rem] border border-emerald-300/20 bg-emerald-300/[0.08] px-5 py-4 text-sm leading-6 text-emerald-50">
-              Browse first. Unlock only after you choose a template.
+              Set everything up free. Sign in only to generate.
             </div>
           ) : (
             <CreditRemainingMeter
@@ -1928,55 +1931,39 @@ export default function TemplateStudioPage() {
                     </div>
                   </div>
 
+                  {/* P1: logged-out visitors see the same expectation summary,
+                      then the real (local-only) builder below it. */}
                   {isPublicTemplateBrowser ? (
-                    <div className="space-y-5">
-                      <div className="rounded-[1.5rem] border border-emerald-300/20 bg-emerald-300/[0.07] p-5">
-                        <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-emerald-100">
-                          Confirm before checkout
-                        </p>
-                        <div className="mt-4 grid gap-3 text-sm text-slate-200 sm:grid-cols-2">
-                          <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
-                            <p className="text-[10px] uppercase tracking-[0.2em] text-slate-500">Required uploads</p>
-                            <p className="mt-2 text-2xl font-semibold text-white">
-                              {formatCount(inputFields.length, "upload", "uploads")}
-                            </p>
-                          </div>
-                          <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
-                            <p className="text-[10px] uppercase tracking-[0.2em] text-slate-500">Expected output</p>
-                            <p className="mt-2 text-2xl font-semibold text-white">
-                              {formatCount(selectedTemplateOutputCount, "video", "videos")}
-                            </p>
-                          </div>
-                          <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
-                            <p className="text-[10px] uppercase tracking-[0.2em] text-slate-500">Run cost</p>
-                            <p className="mt-2 text-2xl font-semibold text-white">{creditsRequired} credits</p>
-                          </div>
-                          <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
-                            <p className="text-[10px] uppercase tracking-[0.2em] text-slate-500">Use case</p>
-                            <p className="mt-2 text-base font-semibold text-white">Campaign drop template</p>
-                          </div>
+                    <div className="rounded-[1.5rem] border border-emerald-300/20 bg-emerald-300/[0.07] p-5">
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-emerald-100">
+                        What this template makes
+                      </p>
+                      <div className="mt-4 grid gap-3 text-sm text-slate-200 sm:grid-cols-2">
+                        <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
+                          <p className="text-[10px] uppercase tracking-[0.2em] text-slate-500">Your inputs</p>
+                          <p className="mt-2 text-2xl font-semibold text-white">
+                            {formatCount(inputFields.length, "input", "inputs")}
+                          </p>
+                        </div>
+                        <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
+                          <p className="text-[10px] uppercase tracking-[0.2em] text-slate-500">Expected output</p>
+                          <p className="mt-2 text-2xl font-semibold text-white">
+                            {formatCount(selectedTemplateOutputCount, "video", "videos")}
+                          </p>
+                        </div>
+                        <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
+                          <p className="text-[10px] uppercase tracking-[0.2em] text-slate-500">Run cost</p>
+                          <p className="mt-2 text-2xl font-semibold text-white">{creditsRequired} credits</p>
+                        </div>
+                        <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
+                          <p className="text-[10px] uppercase tracking-[0.2em] text-slate-500">Use case</p>
+                          <p className="mt-2 text-base font-semibold text-white">Campaign drop template</p>
                         </div>
                       </div>
-
-                      <div className="rounded-[1.5rem] border border-white/8 bg-black/20 p-5">
-                        <p className="text-[11px] uppercase tracking-[0.24em] text-muted-foreground">Upload slots</p>
-                        <div className="mt-4 flex flex-wrap gap-2">
-                          {inputFields.map((field) => (
-                            <span key={field.key} className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs text-slate-200">
-                              {field.label}
-                            </span>
-                          ))}
-                        </div>
-                      </div>
-
-                      <Button asChild className="w-full rounded-full bg-cyan-300 text-slate-950 hover:bg-cyan-200">
-                        <Link to={selectedTemplateCheckoutPath}>
-                          Use this template
-                          <ArrowRight className="h-4 w-4" />
-                        </Link>
-                      </Button>
                     </div>
-                  ) : (
+                  ) : null}
+
+                  {(
                     <>
                   {/* Compact readiness header — replaces the old requirements panel. */}
                   {inputFields.length ? (
@@ -2078,12 +2065,18 @@ export default function TemplateStudioPage() {
                               if (nextFile) advanceFromInput(field.key);
                             }}
                             libraryAsset={libraryAssets[field.key] ?? null}
-                            onLibrarySelect={(asset) => {
-                              setFiles((current) => ({ ...current, [field.key]: null }));
-                              setLibraryAssets((current) => ({ ...current, [field.key]: asset }));
-                              releaseAutofill(field.key);
-                              advanceFromInput(field.key);
-                            }}
+                            // P1: saved-library / brand pickers are account features.
+                            // Logged-out visitors configure with local files only.
+                            onLibrarySelect={
+                              user
+                                ? (asset) => {
+                                    setFiles((current) => ({ ...current, [field.key]: null }));
+                                    setLibraryAssets((current) => ({ ...current, [field.key]: asset }));
+                                    releaseAutofill(field.key);
+                                    advanceFromInput(field.key);
+                                  }
+                                : undefined
+                            }
                             onClear={() => {
                               setFiles((current) => ({ ...current, [field.key]: null }));
                               setLibraryAssets((current) => ({ ...current, [field.key]: null }));
@@ -2158,7 +2151,7 @@ export default function TemplateStudioPage() {
                               : submitting || isRunning
                                 ? "Generating..."
                                 : !user
-                                  ? "Sign in to generate"
+                                  ? "Generate campaign →"
                                   : isPrivilegedUser
                                     ? "Generate campaign"
                                     : `Generate campaign · ${creditsRequired} cr`}
@@ -2167,12 +2160,8 @@ export default function TemplateStudioPage() {
                     </div>
 
                     {!user ? (
-                      <p className="mt-3 text-sm leading-6 text-cyan-100">
-                        Sign in or create an account before generating campaigns or buying credits.
-                        {" "}
-                        <Link to="/auth?mode=signup" className="underline underline-offset-4">
-                          Create account
-                        </Link>
+                      <p className="mt-3 text-sm leading-6 text-slate-400">
+                        Configure everything here — your files stay on this device until you generate.
                       </p>
                     ) : profileIsResolving ? (
                       <p className="mt-3 text-sm leading-6 text-cyan-100">
