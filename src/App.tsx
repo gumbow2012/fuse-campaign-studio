@@ -53,6 +53,8 @@ import NotFoundPage from "@/pages/mvp/NotFoundPage";
 import ResetPasswordPage from "@/pages/mvp/ResetPasswordPage";
 import TemplateStudioPage from "@/pages/mvp/TemplateStudioPage";
 import CampaignLibraryPage from "@/pages/mvp/CampaignLibraryPage";
+import CollectionsPage from "@/pages/mvp/CollectionsPage";
+import PublicCollectionPage from "@/pages/mvp/PublicCollectionPage";
 import NotificationsPage from "@/pages/mvp/NotificationsPage";
 import CustomizeWorkflowPage from "@/pages/mvp/CustomizeWorkflowPage";
 
