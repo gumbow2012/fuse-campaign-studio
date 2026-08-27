@@ -139,13 +139,23 @@ export async function setActiveBrand(brandId: string): Promise<void> {
   if (error) throw error;
 }
 
-/** Phase 6 — brand aesthetic captured during onboarding. */
+/**
+ * Phase 6 — brand aesthetic captured during onboarding ("Creative DNA").
+ * `tags` / `references` are kept as legacy mirrors of `styleSignals` /
+ * `referenceImages` so older readers keep working.
+ */
 export interface BrandVisualStyle {
   tags: string[];
   tone: string;
   references: string[];
   notes: string;
+  styleSignals: string[];
+  instagram: string | null;
+  pinterest: string | null;
+  referenceBrands: string[];
+  referenceImages: string[];
 }
+
 
 /** Phase 8 — wizard progress so setup can always be resumed. */
 export interface BrandOnboardingState {
@@ -159,13 +169,29 @@ export function readVisualStyle(brand: BrandProfile | null): BrandVisualStyle | 
   const raw = (brand?.metadata ?? {}) as Record<string, unknown>;
   const value = raw.visualStyle as Record<string, unknown> | undefined;
   if (!value || typeof value !== "object") return null;
+  const list = (input: unknown) =>
+    Array.isArray(input) ? input.map(String).filter(Boolean) : [];
+  const text = (input: unknown) => (typeof input === "string" ? input : "");
+  const link = (input: unknown) => (typeof input === "string" && input.trim() ? input : null);
+
+  const tags = list(value.tags);
+  const styleSignals = list(value.styleSignals);
+  const references = list(value.references);
+  const referenceImages = list(value.referenceImages);
+
   return {
-    tags: Array.isArray(value.tags) ? value.tags.map(String).filter(Boolean) : [],
-    tone: typeof value.tone === "string" ? value.tone : "",
-    references: Array.isArray(value.references) ? value.references.map(String).filter(Boolean) : [],
-    notes: typeof value.notes === "string" ? value.notes : "",
+    tags: tags.length ? tags : styleSignals,
+    tone: text(value.tone),
+    references: references.length ? references : referenceImages,
+    notes: text(value.notes),
+    styleSignals: styleSignals.length ? styleSignals : tags,
+    instagram: link(value.instagram),
+    pinterest: link(value.pinterest),
+    referenceBrands: list(value.referenceBrands),
+    referenceImages: referenceImages.length ? referenceImages : references,
   };
 }
+
 
 export function readOnboarding(brand: BrandProfile | null): BrandOnboardingState | null {
   const raw = (brand?.metadata ?? {}) as Record<string, unknown>;

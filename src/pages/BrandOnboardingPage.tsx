@@ -7,7 +7,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, ArrowRight, Check, Loader2, Plus, Sparkles, Upload, X } from "lucide-react";
+import { ArrowLeft, ArrowRight, Check, Loader2, Sparkles, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -16,10 +16,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useBrand } from "@/contexts/BrandContext";
 import {
   CARD,
-  ImageSlot,
   LABEL,
-  ColorPalette,
-  useUploader,
 } from "@/components/brand/BrandEditors";
 import {
   createBrandProfile,
@@ -36,6 +33,7 @@ import { deriveBrandReadiness, readBrandFlags, type ReadinessStatus } from "@/li
 import BrandImportPanel, { type BrandImportConfirmation } from "@/components/brand/BrandImportPanel";
 import BrandIdentityStep, { type ColorRole } from "@/components/brand/BrandIdentityStep";
 import BrandProductsStep from "@/components/brand/BrandProductsStep";
+import BrandCreativeDnaStep, { type CreativeDnaValue } from "@/components/brand/BrandCreativeDnaStep";
 import CastLibrary from "@/components/cast/CastLibrary";
 import { takeBrandImport } from "@/services/brandImport";
 
@@ -44,23 +42,8 @@ const STEPS = [
   { id: 2, label: "Identity", optional: false },
   { id: 3, label: "Products", optional: true },
   { id: 4, label: "Models", optional: true },
-  { id: 5, label: "Visual style", optional: true },
+  { id: 5, label: "Creative DNA", optional: true },
   { id: 6, label: "Finish", optional: false },
-];
-
-const STYLE_TAGS = [
-  "Streetwear",
-  "Editorial",
-  "Luxury",
-  "Minimal",
-  "Grunge",
-  "Y2K",
-  "Neon night",
-  "Studio clean",
-  "Film grain",
-  "High contrast",
-  "Warm daylight",
-  "Cinematic",
 ];
 
 const STATUS_MARK: Record<ReadinessStatus, { mark: string; className: string }> = {
@@ -143,13 +126,19 @@ export default function BrandOnboardingPage() {
   const [neutralPalette, setNeutralPalette] = useState(false);
   // Step 4
   const [modelIds, setModelIds] = useState<string[]>([]);
-  // Step 5
-  const [tags, setTags] = useState<string[]>([]);
-  const [tone, setTone] = useState("");
-  const [references, setReferences] = useState<string[]>([]);
-  const [notes, setNotes] = useState("");
-  const [tagDraft, setTagDraft] = useState("");
-  const { busy: refBusy, upload: uploadRef } = useUploader();
+  // Step 5 — Creative DNA (Phase 6)
+  const [dna, setDna] = useState<CreativeDnaValue>({
+    styleSignals: [],
+    tone: "",
+    instagram: null,
+    pinterest: null,
+    referenceBrands: [],
+    referenceImages: [],
+    notes: "",
+  });
+  const patchDna = (patch: Partial<CreativeDnaValue>) =>
+    setDna((current) => ({ ...current, ...patch }));
+
 
   const hydratedFor = useMemo(() => brand?.id ?? null, [brand?.id]);
   useEffect(() => {
@@ -173,10 +162,16 @@ export default function BrandOnboardingPage() {
     setNeutralPalette(flags.neutralPalette);
     setModelIds(readModelIds(brand));
     const style = readVisualStyle(brand);
-    setTags(style?.tags ?? []);
-    setTone(style?.tone ?? "");
-    setReferences(style?.references ?? []);
-    setNotes(style?.notes ?? "");
+    setDna({
+      styleSignals: style?.styleSignals ?? [],
+      tone: style?.tone ?? "",
+      instagram: style?.instagram ?? null,
+      pinterest: style?.pinterest ?? null,
+      referenceBrands: style?.referenceBrands ?? [],
+      referenceImages: style?.referenceImages ?? [],
+      notes: style?.notes ?? "",
+    });
+
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hydratedFor]);
 
@@ -274,13 +269,23 @@ export default function BrandOnboardingPage() {
       }
       if (step === 4) metaPatch.modelIds = modelIds;
       if (step === 5) {
+        // Creative DNA — extends the existing visualStyle object; tags /
+        // references stay as legacy mirrors for older readers.
+        const existing = readVisualStyle(brand);
         metaPatch.visualStyle = {
-          tags,
-          tone: tone.trim(),
-          references,
-          notes: notes.trim(),
+          ...(existing ?? {}),
+          styleSignals: dna.styleSignals,
+          tags: dna.styleSignals,
+          tone: dna.tone.trim(),
+          instagram: dna.instagram,
+          pinterest: dna.pinterest,
+          referenceBrands: dna.referenceBrands,
+          referenceImages: dna.referenceImages,
+          references: dna.referenceImages,
+          notes: dna.notes.trim(),
         };
       }
+
       const metadata = { ...((brand.metadata ?? {}) as Record<string, unknown>), ...metaPatch };
       await patchBrandProfile(brand.id, { ...patch, metadata } as never);
       return nextStep;
@@ -318,8 +323,6 @@ export default function BrandOnboardingPage() {
   const optional = STEPS.find((entry) => entry.id === step)?.optional ?? false;
   const maxReachable = Math.max(step, ...readiness.completedSteps, 1);
 
-
-  const style = { tags, tone, references, notes };
 
   return (
     <div className="min-h-screen bg-slate-950 text-white">
@@ -479,123 +482,8 @@ export default function BrandOnboardingPage() {
             </div>
           ) : null}
 
-          {step === 5 ? (
-            <div className={CARD}>
-              <p className={LABEL}>Step 5 — Visual style</p>
-              <h2 className="mt-2 text-2xl">How should it look?</h2>
+          {step === 5 ? <BrandCreativeDnaStep value={dna} onChange={patchDna} /> : null}
 
-              <div className="mt-5">
-                <p className={LABEL}>Style tags</p>
-                <div className="mt-2 flex flex-wrap gap-2">
-                  {Array.from(new Set([...STYLE_TAGS, ...tags])).map((tag) => {
-                    const active = tags.includes(tag);
-                    return (
-                      <button
-                        key={tag}
-                        type="button"
-                        aria-pressed={active}
-                        onClick={() =>
-                          setTags((current) =>
-                            current.includes(tag) ? current.filter((entry) => entry !== tag) : [...current, tag],
-                          )
-                        }
-                        className={`rounded-full border px-3 py-1.5 text-[11px] uppercase tracking-[0.16em] transition ${
-                          active
-                            ? "border-cyan-300/50 bg-cyan-300/10 text-cyan-100"
-                            : "border-white/10 bg-white/[0.03] text-slate-400 hover:text-white"
-                        }`}
-                      >
-                        {tag}
-                      </button>
-                    );
-                  })}
-                </div>
-                <div className="mt-3 flex gap-2">
-                  <Input
-                    value={tagDraft}
-                    onChange={(event) => setTagDraft(event.target.value)}
-                    placeholder="Add your own tag"
-                    className="h-9 max-w-xs border-white/10 bg-black/30 text-white"
-                  />
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => {
-                      const value = tagDraft.trim();
-                      if (!value) return;
-                      setTags((current) => (current.includes(value) ? current : [...current, value]));
-                      setTagDraft("");
-                    }}
-                    className="h-9 rounded-full border-white/12 bg-white/[0.03] px-3 text-[11px] uppercase tracking-[0.16em]"
-                  >
-                    <Plus className="h-3.5 w-3.5" /> Add
-                  </Button>
-                </div>
-              </div>
-
-              <div className="mt-5">
-                <p className={LABEL}>Tone / mood</p>
-                <Input
-                  value={tone}
-                  onChange={(event) => setTone(event.target.value)}
-                  placeholder="Cold night streets, hard flash, zero gloss."
-                  className="mt-2 border-white/10 bg-black/30 text-white"
-                />
-              </div>
-
-              <div className="mt-5">
-                <p className={LABEL}>Reference images</p>
-                <div className="mt-2 flex flex-wrap items-center gap-3">
-                  {references.map((url, index) => (
-                    <span key={`${url}-${index}`} className="relative">
-                      <img
-                        src={url}
-                        alt={`Reference ${index + 1}`}
-                        className="h-20 w-20 rounded-xl border border-white/10 object-cover"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setReferences((current) => current.filter((_, i) => i !== index))}
-                        aria-label="Remove reference"
-                        className="absolute -right-2 -top-2 rounded-full border border-white/20 bg-slate-950 p-1"
-                      >
-                        <X className="h-3 w-3 text-slate-300" />
-                      </button>
-                    </span>
-                  ))}
-                  <label className="cursor-pointer">
-                    <input
-                      type="file"
-                      accept="image/*"
-                      className="hidden"
-                      onChange={async (event) => {
-                        const file = event.target.files?.[0];
-                        event.target.value = "";
-                        if (!file) return;
-                        const url = await uploadRef(file);
-                        if (url) setReferences((current) => [...current, url]);
-                      }}
-                    />
-                    <span className="inline-flex items-center gap-2 rounded-full border border-white/12 bg-white/[0.04] px-3 py-1.5 text-[11px] uppercase tracking-[0.16em] text-slate-200">
-                      {refBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
-                      Add reference
-                    </span>
-                  </label>
-                </div>
-              </div>
-
-              <div className="mt-5">
-                <p className={LABEL}>Notes</p>
-                <Textarea
-                  value={notes}
-                  onChange={(event) => setNotes(event.target.value)}
-                  rows={3}
-                  placeholder="Anything FUSE should always respect."
-                  className="mt-2 border-white/10 bg-black/30 text-white"
-                />
-              </div>
-            </div>
-          ) : null}
 
           {step === 6 ? (
             <div className={CARD}>
