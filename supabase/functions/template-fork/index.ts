@@ -153,7 +153,7 @@ Deno.serve(async (req) => {
 
       const { data: fork, error: forkError } = await admin
         .from("template_user_forks")
-        .select("id, user_id, name, source_template_id, source_version_id, personal_graph, prompt_visibility, created_at, updated_at")
+        .select("id, user_id, name, source_job_id, source_template_id, source_version_id, personal_graph, prompt_visibility, created_at, updated_at")
         .eq("id", forkId)
         .maybeSingle();
       if (forkError) throw new Error(forkError.message);
@@ -167,6 +167,56 @@ Deno.serve(async (req) => {
       ]);
 
       const promptVisibility = fork.prompt_visibility === true;
+      const sanitized = sanitizePersonalGraphForClient(fork.personal_graph, promptVisibility);
+
+      // ── MEDIA (presentation only): reuse the source run's persisted artifacts ──
+      let mediaByNode: Record<string, ForkNodeMedia> = {};
+      const sourceJobId = fork.source_job_id ? String(fork.source_job_id) : "";
+      if (sourceJobId && sanitized?.nodes?.length) {
+        // Ownership gate: the source run must belong to the fork owner.
+        const { data: sourceJob } = await admin
+          .from("execution_jobs")
+          .select("id, user_id")
+          .eq("id", sourceJobId)
+          .maybeSingle();
+
+        if (sourceJob && String(sourceJob.user_id ?? "") === String(fork.user_id)) {
+          const { data: steps } = await admin
+            .from("execution_steps")
+            .select("node_id, input_payload, output_payload, output_asset_id")
+            .eq("job_id", sourceJobId);
+
+          const assetIds = [
+            ...new Set((steps ?? []).map((s) => s.output_asset_id).filter(Boolean) as string[]),
+          ];
+          const assetUrlById = new Map<string, string>();
+          if (assetIds.length) {
+            const { data: assetRows } = await admin
+              .from("assets")
+              .select("id, supabase_storage_url")
+              .in("id", assetIds);
+            for (const row of assetRows ?? []) {
+              if (row?.supabase_storage_url) {
+                assetUrlById.set(String(row.id), String(row.supabase_storage_url));
+              }
+            }
+          }
+
+          const built = buildNodeMediaMap({
+            steps: (steps ?? []) as never,
+            assetUrlById,
+            nodeIds: sanitized.nodes.map((node) => node.id),
+          });
+          const signed = await signMediaUrls(admin, collectMapUrls(built));
+          mediaByNode = applySignedUrls(built, signed);
+        }
+      }
+
+      // MEDIA ONLY — attached after sanitization; no prompt text is added here.
+      const nodesWithMedia = (sanitized?.nodes ?? []).map((node) => {
+        const media = mediaByNode[node.id];
+        return media ? { ...node, media } : node;
+      });
 
       return json({
         fork: {
@@ -177,12 +227,13 @@ Deno.serve(async (req) => {
           sourceVersionId: fork.source_version_id,
           promptVisibility,
           basedOn: buildBasedOnLabel(template?.name ?? null, version?.version_number),
-          personalGraph: sanitizePersonalGraphForClient(fork.personal_graph, promptVisibility),
+          personalGraph: sanitized ? { ...sanitized, nodes: nodesWithMedia } : null,
           createdAt: fork.created_at,
           updatedAt: fork.updated_at,
         },
       });
     }
+
 
     if (action === "list_forks") {
       const { data: forks, error: listError } = await admin
