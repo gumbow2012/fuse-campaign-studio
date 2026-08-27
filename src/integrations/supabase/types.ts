@@ -59,6 +59,102 @@ export type Database = {
           },
         ]
       }
+      cinema_batch_config: {
+        Row: {
+          created_at: string
+          enabled: boolean
+          id: string
+          token: string
+          updated_at: string
+          usd_ceiling: number
+        }
+        Insert: {
+          created_at?: string
+          enabled?: boolean
+          id?: string
+          token: string
+          updated_at?: string
+          usd_ceiling?: number
+        }
+        Update: {
+          created_at?: string
+          enabled?: boolean
+          id?: string
+          token?: string
+          updated_at?: string
+          usd_ceiling?: number
+        }
+        Relationships: []
+      }
+      cinema_batch_queue: {
+        Row: {
+          attempts: number
+          category: string
+          created_at: string
+          error: string | null
+          generated_src: string | null
+          id: string
+          kind: string
+          name: string | null
+          preset_id: string
+          scene: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          attempts?: number
+          category: string
+          created_at?: string
+          error?: string | null
+          generated_src?: string | null
+          id?: string
+          kind?: string
+          name?: string | null
+          preset_id: string
+          scene?: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          attempts?: number
+          category?: string
+          created_at?: string
+          error?: string | null
+          generated_src?: string | null
+          id?: string
+          kind?: string
+          name?: string | null
+          preset_id?: string
+          scene?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      cinema_batch_spend: {
+        Row: {
+          created_at: string
+          id: string
+          kind: string
+          preset_id: string
+          usd: number
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          kind?: string
+          preset_id: string
+          usd?: number
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          kind?: string
+          preset_id?: string
+          usd?: number
+        }
+        Relationships: []
+      }
       cinema_control_tests: {
         Row: {
           category: string
