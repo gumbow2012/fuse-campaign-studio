@@ -1719,25 +1719,34 @@ export default function TemplateStudioPage() {
                             onFileChange={(nextFile) => {
                               setFiles((current) => ({ ...current, [field.key]: nextFile }));
                               setLibraryAssets((current) => ({ ...current, [field.key]: null }));
+                              releaseAutofill(field.key);
                               if (nextFile) advanceFromInput(field.key);
                             }}
                             libraryAsset={libraryAssets[field.key] ?? null}
                             onLibrarySelect={(asset) => {
                               setFiles((current) => ({ ...current, [field.key]: null }));
                               setLibraryAssets((current) => ({ ...current, [field.key]: asset }));
+                              releaseAutofill(field.key);
                               advanceFromInput(field.key);
                             }}
                             onClear={() => {
                               setFiles((current) => ({ ...current, [field.key]: null }));
                               setLibraryAssets((current) => ({ ...current, [field.key]: null }));
+                              releaseAutofill(field.key);
                             }}
                           />
                         </div>
                       ) : (
                         <div key={field.key} className="rounded-[1.25rem] border border-white/10 bg-black/25 p-3">
-                          <p className="mb-2 truncate text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-200">
-                            {field.label}
+                          <p className="mb-2 flex items-center gap-2 truncate text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-200">
+                            <span className="truncate">{field.label}</span>
+                            {autofilledKeys[field.key] ? (
+                              <span className="shrink-0 rounded-full border border-white/10 bg-white/[0.04] px-2 py-0.5 font-display text-[9px] tracking-[0.18em] text-slate-400">
+                                From {autofilledKeys[field.key]}
+                              </span>
+                            ) : null}
                           </p>
+
                           {field.type === "prompt" ? (
                             <Textarea
                               value={textInputs[field.key] ?? ""}
