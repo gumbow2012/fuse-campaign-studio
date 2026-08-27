@@ -46,7 +46,7 @@ const CARD_SHELL =
 const FIELD =
   "h-12 rounded-2xl border-white/10 bg-white/[0.04] text-white transition-colors focus-visible:border-cyan-300/60 focus-visible:ring-cyan-300/20";
 const PRIMARY_CTA =
-  "h-13 w-full rounded-full bg-cyan-300 py-6 text-[13px] font-semibold uppercase tracking-[0.14em] text-slate-950 shadow-[0_18px_50px_-18px_rgba(103,232,249,0.7)] transition-transform hover:bg-cyan-200 hover:-translate-y-0.5";
+  "w-full rounded-full bg-cyan-300 py-6 text-[13px] font-semibold uppercase tracking-[0.14em] text-slate-950 shadow-[0_18px_50px_-18px_rgba(103,232,249,0.7)] transition-transform hover:bg-cyan-200 hover:-translate-y-0.5";
 const LABEL_CLS = "text-[10px] font-semibold uppercase tracking-[0.24em] text-slate-400";
 
 function authErrorDescription(error: unknown, fallback: string) {
@@ -518,7 +518,7 @@ export default function AuthPage() {
                           variant="outline"
                           disabled={submitting}
                           onClick={() => void handleGoogleSignIn()}
-                          className="mt-5 h-13 w-full rounded-full border-white/15 bg-white/[0.05] py-6 text-sm font-semibold text-white transition-colors hover:bg-white/10"
+                          className="mt-5 w-full rounded-full border-white/15 bg-white/[0.05] py-6 text-sm font-semibold text-white transition-colors hover:bg-white/10"
                         >
                           Continue with Google
                         </Button>
