@@ -380,7 +380,7 @@ export default function BrandProfilesPage() {
               setEditingBrand(null);
             }}
           />
-          <CompletionRing done={doneCount} total={5} />
+          <BrandStatusRing ready={identityReady} depthPct={depthPct} />
         </div>
 
         <Tabs value={tab} onValueChange={setTab} className="mt-8">
