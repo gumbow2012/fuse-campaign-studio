@@ -1039,11 +1039,16 @@ export default function TemplateStudioPage() {
   // Tier comes from profile.plan (billing-owned), matching the plan ladder keys
   // (free / starter / plus / pro / studio / team); admin/dev always qualify.
   const planKey = (profile?.plan ?? "free").toLowerCase();
-  const canCustomizeWorkflow =
+  const planCanCustomize =
     isPrivilegedUser || planKey === "pro" || planKey === "studio" || planKey === "team";
+  // Server-authoritative template permission (lab-template-detail mirrors template-fork).
+  const templateCanCustomize = (templateDetailQuery.data as any)?.canCustomize === true;
+  const customizeState = resolveCustomizeState({ planCanCustomize, templateCanCustomize });
 
   /** TR9: Pro entry point — creates a private fork and opens the personal editor. */
   const handleCustomizeWorkflow = async () => {
+    // Defense in depth: only the fully-unlocked state may hit the fork endpoint.
+    if (!canInitiateFork(customizeState)) return;
     const sourceTemplateId = selectedTemplate?.templateId ?? null;
     if (!sourceTemplateId) {
       toast({ title: "This template can't be customized yet", variant: "destructive" });
@@ -1930,7 +1935,7 @@ export default function TemplateStudioPage() {
                     runStatus={result.status}
                     statusMessage={result.statusMessage}
                     progress={result.progress}
-                    canCustomizeWorkflow={canCustomizeWorkflow}
+                    customizeState={customizeState}
                     onCustomizeWorkflow={() => void handleCustomizeWorkflow()}
                     onLockedCustomize={() => setWorkflowUpgradeDialogOpen(true)}
                   />

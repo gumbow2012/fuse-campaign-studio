@@ -314,6 +314,8 @@ function StageList({
   );
 }
 
+import { canInitiateFork, isCreatorLockedState, type CustomizeState } from "@/lib/customizeGating";
+
 export type PublicGraphRunStatus = "queued" | "running" | "video_pending" | "complete" | "failed";
 
 export interface CampaignBuildGraphProps {
@@ -323,8 +325,8 @@ export interface CampaignBuildGraphProps {
   progress?: number;
   /** Real run status — the graph stays mounted for the entire lifecycle (P0). */
   runStatus?: PublicGraphRunStatus;
-  /** Pro / Studio / Team (or admin/dev): the completed graph becomes an entry point. */
-  canCustomizeWorkflow?: boolean;
+  /** Server-truthful gating state (plan + template permission) resolved by the page. */
+  customizeState?: CustomizeState;
   /** P0: clearly-named handler — swapping in the private-fork editor is a one-line change. */
   onCustomizeWorkflow?: () => void;
   /** Starter / Plus / Free: locked affordance opens the upgrade modal. */
@@ -337,7 +339,7 @@ export function CampaignBuildGraph({
   statusMessage,
   progress,
   runStatus = "running",
-  canCustomizeWorkflow = false,
+  customizeState = "plan_locked_creator_locked",
   onCustomizeWorkflow,
   onLockedCustomize,
   className,
@@ -348,7 +350,9 @@ export function CampaignBuildGraph({
   const isComplete = runStatus === "complete";
   const isFailed = runStatus === "failed";
   const isActive = !isComplete && !isFailed;
-  const interactive = isComplete && canCustomizeWorkflow && !!onCustomizeWorkflow;
+  const canCustomize = canInitiateFork(customizeState);
+  const creatorLocked = isCreatorLockedState(customizeState);
+  const interactive = isComplete && canCustomize && !!onCustomizeWorkflow;
 
   const summary = useMemo(
     () => columns.map((column) => `${column.name} ${STATUS_WORD[column.status]}`).join(", "),
@@ -378,7 +382,7 @@ export function CampaignBuildGraph({
             {isActive ? "BUILDING YOUR CAMPAIGN" : "CAMPAIGN WORKFLOW"}
           </p>
           {isComplete ? (
-            canCustomizeWorkflow ? (
+            canCustomize ? (
               <button
                 type="button"
                 onClick={(event) => {
@@ -389,6 +393,10 @@ export function CampaignBuildGraph({
               >
                 Customize workflow <span aria-hidden="true">→</span>
               </button>
+            ) : creatorLocked ? (
+              <p className="mt-1.5 inline-flex items-center gap-1.5 text-[11px] tracking-[0.14em] text-slate-500">
+                <span aria-hidden="true">🔒</span> Locked by creator
+              </p>
             ) : (
               <button
                 type="button"
