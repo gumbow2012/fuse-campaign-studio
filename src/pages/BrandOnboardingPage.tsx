@@ -319,7 +319,7 @@ export default function BrandOnboardingPage() {
         </div>
 
         <div className="mt-6">
-          <StepRail step={step} />
+          <StepRail step={step} maxReachable={maxReachable} onJump={setStep} />
           <div className="mt-3 h-1 w-full overflow-hidden rounded-full bg-white/10">
             <div
               className="h-full rounded-full bg-cyan-300 transition-all"
