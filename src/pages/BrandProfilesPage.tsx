@@ -396,18 +396,17 @@ export default function BrandProfilesPage() {
             {!readiness.ready ? (
               <div className={`${CARD} mb-4`}>
                 <div className="flex flex-wrap items-center justify-between gap-3">
-                  <p className={LABEL}>Brand readiness</p>
+                  <p className={LABEL}>Finish brand setup</p>
                   <span className="text-[11px] uppercase tracking-[0.16em] text-amber-200">
                     {readiness.requiredMissing} required left
                   </span>
                 </div>
                 <ul className="mt-4 grid gap-2 sm:grid-cols-2">
-                  {readiness.sections.map((section) => (
-                    <li key={section.key} className="flex items-center justify-between gap-3 text-sm">
-                      <span className="text-slate-300">{section.label}</span>
-                      {section.status === "complete" ? (
-                        <Check className="h-4 w-4 shrink-0 text-cyan-200" />
-                      ) : (
+                  {readiness.sections
+                    .filter((section) => section.status === "required-missing")
+                    .map((section) => (
+                      <li key={section.key} className="flex items-center justify-between gap-3 text-sm">
+                        <span className="text-slate-300">{section.label}</span>
                         <button
                           type="button"
                           onClick={() =>
@@ -419,26 +418,38 @@ export default function BrandProfilesPage() {
                           }
                           className="shrink-0 text-[11px] uppercase tracking-[0.16em] text-cyan-200 hover:text-cyan-100"
                         >
-                          {section.status === "required-missing" ? "Complete" : "Improve"}
+                          Complete
                         </button>
-                      )}
-                    </li>
-                  ))}
+                      </li>
+                    ))}
                 </ul>
               </div>
-            ) : null}
+            ) : (
+              <div className={`${CARD} mb-4`}>
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <p className={LABEL}>Brand set up ✓</p>
+                  <span className="inline-flex items-center gap-1.5 text-[11px] uppercase tracking-[0.16em] text-cyan-200">
+                    <Check className="h-3.5 w-3.5" /> Identity ready
+                  </span>
+                </div>
+                <p className="mt-3 text-sm text-slate-400">
+                  Everything below is optional — add it whenever you want sharper results. Profile depth {depthPct}%.
+                </p>
+              </div>
+            )}
 
+            <p className={`${LABEL} mb-3`}>Optional enhancements</p>
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               <DashboardCard
                 icon={<Palette className="h-5 w-5" />}
                 title="Identity"
-                done={completion.identity}
+                done={identityReady}
                 detail={
-                  completion.identity
-                    ? `${activeBrand?.name} — logo and ${activeBrand?.colors.length} color${activeBrand?.colors.length === 1 ? "" : "s"} saved.`
-                    : "Name, a logo and at least one brand color."
+                  identityReady
+                    ? `${activeBrand?.name} — identity and ${activeBrand?.colors.length} color${activeBrand?.colors.length === 1 ? "" : "s"} saved.`
+                    : "Name, a logo (or “no logo”) and at least one color."
                 }
-                cta={completion.identity ? "Edit identity" : "Add your logo & colors"}
+                cta={identityReady ? "Edit identity" : "Finish identity"}
                 onClick={() => {
                   setTab("brands");
                   setEditingBrand(activeBrand ?? null);
@@ -446,10 +457,10 @@ export default function BrandProfilesPage() {
               />
               <DashboardCard
                 icon={<Shirt className="h-5 w-5" />}
-                title="Products & garments"
-                done={completion.products}
+                title="Products & garments (optional)"
+                done={enhancements.products}
                 detail={`${brandProducts.length} saved for this brand.`}
-                cta={completion.products ? "Manage products" : "Add products"}
+                cta={enhancements.products ? "Manage products" : "Add products"}
                 onClick={() => {
                   setTab("products");
                   setEditingProduct(brandProducts.length ? undefined : null);
@@ -457,26 +468,26 @@ export default function BrandProfilesPage() {
               />
               <DashboardCard
                 icon={<Users className="h-5 w-5" />}
-                title="Models / FUSE Cast"
-                done={completion.models}
+                title="Models / FUSE Cast (optional)"
+                done={enhancements.models}
                 detail={
                   brandModelCount
                     ? `${brandModelCount} model${brandModelCount === 1 ? "" : "s"} linked to this brand.`
                     : `${avatars.length} model${avatars.length === 1 ? "" : "s"} saved — none linked to this brand yet.`
                 }
-                cta={completion.models ? "Manage models" : "Add models"}
+                cta={enhancements.models ? "Manage models" : "Add models"}
                 onClick={() => setTab("models")}
               />
               <DashboardCard
                 icon={<Wand2 className="h-5 w-5" />}
-                title="Visual style"
-                done={completion.visualStyle}
+                title="Creative DNA (optional)"
+                done={enhancements.visualStyle}
                 detail={
-                  completion.visualStyle
+                  enhancements.visualStyle
                     ? [visualStyle?.tags.slice(0, 3).join(", "), visualStyle?.tone].filter(Boolean).join(" · ")
                     : "Tags, tone and references FUSE should always respect."
                 }
-                cta={completion.visualStyle ? "Edit your style" : "Set your style"}
+                cta={enhancements.visualStyle ? "Edit your style" : "Set your style"}
                 onClick={() =>
                   activeBrand
                     ? navigate(`/app/brand/onboarding?brand=${activeBrand.id}&step=5`)
@@ -486,8 +497,8 @@ export default function BrandProfilesPage() {
 
               <DashboardCard
                 icon={<Images className="h-5 w-5" />}
-                title="Saved assets"
-                done={completion.assets}
+                title="Saved assets (optional)"
+                done={enhancements.assets}
                 detail={`${libraryAssets.length} asset${libraryAssets.length === 1 ? "" : "s"} in your library.`}
                 cta="Open library"
                 onClick={() => setTab("library")}
