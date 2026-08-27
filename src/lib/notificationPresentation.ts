@@ -31,6 +31,7 @@ const TYPE_MAP: Record<string, { icon: LucideIcon; tone: string }> = {
   creator_followed: { icon: UserPlus, tone: "text-cyan-300" },
   creator_new_template: { icon: Star, tone: "text-cyan-300" },
   creator_verified: { icon: BadgeCheck, tone: "text-cyan-300" },
+  brand_activation: { icon: Sparkles, tone: "text-cyan-300" },
 };
 
 export function notificationVisual(type: string) {
