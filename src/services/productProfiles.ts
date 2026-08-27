@@ -4,6 +4,8 @@
  */
 import { supabase } from "@/integrations/supabase/client";
 import { looseTable } from "@/services/looseTable";
+import { track } from "@/lib/analytics/track";
+import { ACTIVATION_EVENTS } from "@/lib/brandActivation";
 
 export type ProductProfileType = "product" | "garment";
 
