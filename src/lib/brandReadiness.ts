@@ -123,7 +123,8 @@ export function deriveBrandReadiness(
         {
           key: "product",
           label: "At least one product or garment",
-          level: "required",
+          // Optional enhancement — onboarding never blocks on products.
+          level: "recommended",
           done: brandProducts.length > 0,
         },
         {
