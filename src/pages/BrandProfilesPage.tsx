@@ -323,10 +323,12 @@ export default function BrandProfilesPage() {
         </div>
 
         <Tabs value={tab} onValueChange={setTab} className="mt-8">
-          <TabsList className="border border-white/10 bg-white/[0.03]">
+          <TabsList className="flex h-auto flex-wrap justify-start gap-1 border border-white/10 bg-white/[0.03]">
             <TabsTrigger value="dashboard">Dashboard</TabsTrigger>
             <TabsTrigger value="brands">Brands</TabsTrigger>
             <TabsTrigger value="products">Products &amp; garments</TabsTrigger>
+            <TabsTrigger value="models">Models</TabsTrigger>
+            <TabsTrigger value="library">Library</TabsTrigger>
           </TabsList>
 
           <TabsContent value="dashboard" className="mt-6">
