@@ -183,6 +183,8 @@ export default function BrandProfilesPage() {
   const navigate = useNavigate();
   const { brands, activeBrand, setActiveBrand, loading: brandLoading } = useBrand();
   const [tab, setTab] = useState("dashboard");
+  const [showImporter, setShowImporter] = useState(false);
+
   const [editingBrand, setEditingBrand] = useState<BrandProfile | null | undefined>(undefined);
   const [editingProduct, setEditingProduct] = useState<ProductProfile | null | undefined>(undefined);
 
