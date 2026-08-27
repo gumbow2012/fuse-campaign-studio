@@ -59,31 +59,51 @@ const STYLE_TAGS = [
   "Cinematic",
 ];
 
-function StepRail({ step }: { step: number }) {
+const STATUS_MARK: Record<ReadinessStatus, { mark: string; className: string }> = {
+  complete: { mark: "✓ COMPLETE", className: "border-cyan-300/50 bg-cyan-300/10 text-cyan-100" },
+  "recommended-missing": { mark: "⚠ RECOMMENDED", className: "border-amber-300/40 bg-amber-300/10 text-amber-100" },
+  "optional-missing": { mark: "○ OPTIONAL", className: "border-white/10 bg-white/[0.03] text-slate-400" },
+  "required-missing": { mark: "✕ REQUIRED", className: "border-rose-400/40 bg-rose-400/10 text-rose-100" },
+};
+
+function StepRail({
+  step,
+  maxReachable,
+  onJump,
+}: {
+  step: number;
+  maxReachable: number;
+  onJump: (id: number) => void;
+}) {
   return (
     <div className="flex flex-wrap items-center gap-2">
       {STEPS.map((entry) => {
         const state = entry.id === step ? "current" : entry.id < step ? "done" : "todo";
+        const clickable = entry.id <= Math.max(step, maxReachable);
         return (
-          <span
+          <button
             key={entry.id}
+            type="button"
+            disabled={!clickable}
+            onClick={() => clickable && onJump(entry.id)}
             className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] transition ${
               state === "current"
                 ? "border-cyan-300/60 bg-cyan-300/10 text-cyan-100"
                 : state === "done"
-                  ? "border-white/10 bg-white/[0.04] text-slate-300"
+                  ? "border-white/10 bg-white/[0.04] text-slate-300 hover:text-white"
                   : "border-white/10 text-slate-500"
-            }`}
+            } ${clickable ? "cursor-pointer" : "cursor-default"}`}
             aria-current={state === "current" ? "step" : undefined}
           >
             {state === "done" ? <Check className="h-3 w-3" /> : null}
             {entry.label}
-          </span>
+          </button>
         );
       })}
     </div>
   );
 }
+
 
 export default function BrandOnboardingPage() {
   const navigate = useNavigate();
