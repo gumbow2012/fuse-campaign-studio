@@ -207,6 +207,248 @@ async function analyzeReference(body: Record<string, unknown>, admin: ReturnType
   };
 }
 
+// ---------------------------------------------------------------------------
+// TF2 — compile a stored blueprint into a DRAFT template graph.
+// Reuses the existing data model exactly: fuse_templates + template_versions
+// + nodes + edges. NO provider generation happens here — this only writes rows.
+// ---------------------------------------------------------------------------
+
+const CUSTOMER_INPUTS = [
+  {
+    slotKey: "product_image",
+    label: "Product / garment image",
+    hint: "Upload the flat-lay or on-body shot of the product this campaign sells.",
+  },
+  {
+    slotKey: "brand_logo",
+    label: "Brand logo (optional)",
+    hint: "Transparent PNG preferred. Used for subtle brand placement.",
+  },
+];
+
+function bpText(blueprint: Record<string, unknown>, key: string): string {
+  const value = blueprint[key];
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function buildShotPrompt(
+  blueprint: Record<string, unknown>,
+  shot: Record<string, unknown>,
+  index: number,
+) {
+  const line = (label: string, value: string) => (value ? `${label}: ${value}` : "");
+  const shotText = (key: string) =>
+    typeof shot[key] === "string" ? String(shot[key]).trim() : "";
+
+  return [
+    `SHOT ${index + 1} — ${shotText("name") || `Campaign frame ${index + 1}`}`,
+    "",
+    "Create a premium streetwear campaign image.",
+    line("Framing", shotText("framing")),
+    line("Subject", shotText("subject") || bpText(blueprint, "subject_treatment")),
+    line("Action", shotText("action")),
+    line("Subject treatment", bpText(blueprint, "subject_treatment")),
+    line("Garment focus", bpText(blueprint, "garment_focus")),
+    line("Composition", bpText(blueprint, "composition")),
+    line("Camera", bpText(blueprint, "camera")),
+    line("Lighting", bpText(blueprint, "lighting")),
+    line("Color grade", bpText(blueprint, "color_grade")),
+    line("Mood", bpText(blueprint, "mood")),
+    line("Setting", bpText(blueprint, "setting")),
+    "",
+    "The supplied product image is the strict visual authority for the product: its design,",
+    "graphics, typography, colors, materials, texture and construction must match it exactly.",
+    "Do not redesign the product, invent logos, or add text that is not supplied.",
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+
+async function compileBlueprint(
+  body: Record<string, unknown>,
+  admin: ReturnType<typeof createAdminClient>,
+  userId: string,
+) {
+  const referenceId = String(body.referenceId ?? "").trim();
+  if (!referenceId) return { ok: false as const, reason: "referenceId is required." };
+
+  const { data: reference, error } = await admin
+    .from("streetwear_references")
+    .select("id, title, category, tags, image_url, notes, blueprint, compiled_template_id")
+    .eq("id", referenceId)
+    .maybeSingle();
+  if (error) return { ok: false as const, reason: error.message };
+  if (!reference) return { ok: false as const, reason: "Reference not found." };
+
+  const blueprint = (reference as any).blueprint as Record<string, unknown> | null;
+  if (!blueprint || typeof blueprint !== "object") {
+    return { ok: false as const, reason: "Analyze this reference first." };
+  }
+
+  const rawShots = Array.isArray((blueprint as any).shot_list)
+    ? ((blueprint as any).shot_list as unknown[])
+    : [];
+  const shots = rawShots
+    .filter((shot) => shot && typeof shot === "object")
+    .map((shot) => shot as Record<string, unknown>)
+    .slice(0, 8);
+  if (!shots.length) {
+    return { ok: false as const, reason: "This blueprint has no shot list to compile." };
+  }
+
+  const title = String((reference as any).title ?? "").trim();
+  const name = (title || "Factory Draft").slice(0, 120);
+  const description = [
+    bpText(blueprint, "mood"),
+    bpText(blueprint, "setting"),
+    bpText(blueprint, "garment_focus"),
+  ]
+    .filter(Boolean)
+    .join(" · ")
+    .slice(0, 400) ||
+    "Draft campaign template compiled from a curated streetwear reference.";
+  const previewUrl = String((reference as any).image_url ?? "").trim() || null;
+
+  let templateId: string | null = null;
+  let versionId: string | null = null;
+
+  try {
+    const { data: template, error: templateError } = await admin
+      .from("fuse_templates")
+      .insert({
+        name,
+        description,
+        created_by: userId,
+        preview_url: previewUrl,
+        preview_asset_type: "image",
+      })
+      .select("id")
+      .single();
+    if (templateError || !template) {
+      throw new Error(templateError?.message ?? "Template create failed");
+    }
+    templateId = String((template as any).id);
+
+    versionId = crypto.randomUUID();
+    const { error: versionError } = await admin.from("template_versions").insert({
+      id: versionId,
+      template_id: templateId,
+      version_number: 1,
+      is_active: false,
+      review_status: "Unreviewed",
+    });
+    if (versionError) throw new Error(versionError.message);
+
+    const nodes: Record<string, unknown>[] = [];
+    const edges: Record<string, unknown>[] = [];
+    const positions: Record<string, { x: number; y: number }> = {};
+
+    // --- Customer upload inputs (editor_mode "upload" => real customer inputs) ---
+    const inputNodes = CUSTOMER_INPUTS.map((input, index) => {
+      const id = crypto.randomUUID();
+      nodes.push({
+        id,
+        version_id: versionId,
+        node_type: "user_input",
+        model_id: null,
+        prompt_config: {
+          editor_mode: "upload",
+          editor_slot_key: input.slotKey,
+          editor_label: input.label,
+          editor_expected: "image",
+          editor_hint: input.hint,
+          optional: index > 0,
+          sort_order: index + 1,
+          factory_role: "customer_input",
+        },
+        default_asset_id: null,
+        name: input.label,
+      });
+      positions[id] = { x: 80, y: 80 + index * 240 };
+      return { id, slotKey: input.slotKey };
+    });
+
+    // --- One image_gen node per blueprint shot, all exposed as final outputs ---
+    shots.forEach((shot, index) => {
+      const id = crypto.randomUUID();
+      const shotName = (typeof shot.name === "string" ? shot.name.trim() : "") ||
+        `Shot ${index + 1}`;
+      nodes.push({
+        id,
+        version_id: versionId,
+        node_type: "image_gen",
+        model_id: null,
+        prompt_config: {
+          prompt: buildShotPrompt(blueprint, shot, index),
+          aspect_ratio: "9:16",
+          output_exposed: true,
+          factory_role: "shot",
+          factory_shot_index: index,
+          factory_reference_id: referenceId,
+        },
+        default_asset_id: null,
+        name: `${String(index + 1).padStart(2, "0")} · ${shotName}`.slice(0, 120),
+      });
+      positions[id] = { x: 620, y: 80 + index * 240 };
+
+      inputNodes.forEach((input, inputIndex) => {
+        edges.push({
+          id: crypto.randomUUID(),
+          version_id: versionId,
+          source_node_id: input.id,
+          target_node_id: id,
+          mapping_logic: {
+            target_param: `image_${inputIndex + 1}`,
+            edge_order: inputIndex + 1,
+          },
+          condition_logic: null,
+        });
+      });
+    });
+
+    const { error: nodesError } = await admin.from("nodes").insert(nodes);
+    if (nodesError) throw new Error(nodesError.message);
+    const { error: edgesError } = await admin.from("edges").insert(edges);
+    if (edgesError) throw new Error(edgesError.message);
+
+    const { error: linkError } = await admin
+      .from("streetwear_references")
+      .update({ compiled_template_id: templateId })
+      .eq("id", referenceId);
+    if (linkError) throw new Error(linkError.message);
+
+    return {
+      ok: true as const,
+      referenceId,
+      templateId,
+      versionId,
+      templateName: name,
+      shotCount: shots.length,
+      nodeCount: nodes.length,
+      edgeCount: edges.length,
+      positions,
+    };
+  } catch (err) {
+    // Best-effort cleanup so a partial failure never leaves garbage behind.
+    try {
+      if (versionId) {
+        await admin.from("edges").delete().eq("version_id", versionId);
+        await admin.from("nodes").delete().eq("version_id", versionId);
+        await admin.from("template_versions").delete().eq("id", versionId);
+      }
+      if (templateId) {
+        await admin.from("fuse_templates").delete().eq("id", templateId);
+      }
+    } catch (cleanupError) {
+      console.error("template-factory compile cleanup failed:", errorMessage(cleanupError));
+    }
+    console.error("template-factory compile_blueprint failed:", errorMessage(err));
+    return { ok: false as const, reason: errorMessage(err) };
+  }
+}
+
+
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
