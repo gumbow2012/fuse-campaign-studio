@@ -464,7 +464,7 @@ export default function AvatarProfilesPage() {
           onClick={goBack}
           className="mb-5 inline-flex items-center gap-1.5 rounded-full border border-white/12 bg-white/[0.03] px-3 py-1.5 text-[11px] uppercase tracking-[0.16em] text-slate-300 hover:text-white"
         >
-          <ArrowLeft className="h-3.5 w-3.5" /> Back
+          <ArrowLeft className="h-3.5 w-3.5" /> {backTo?.includes("/app/brand") ? "Back to brand setup" : "Back"}
         </button>
         <h1 className="font-display text-3xl font-semibold tracking-tight">My Avatars</h1>
         <p className="mt-3 max-w-2xl text-sm text-slate-400">
