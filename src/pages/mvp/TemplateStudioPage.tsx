@@ -1549,7 +1549,13 @@ export default function TemplateStudioPage() {
   const [restoreAfford, setRestoreAfford] = useState<{ required: number; available: number } | null>(null);
   const [planOfferOpen, setPlanOfferOpen] = useState(() => isPlanOfferActive());
 
-  useEffect(() => subscribePlanOffer(setPlanOfferOpen), []);
+  useEffect(() => {
+    const unsubscribe = subscribePlanOffer(setPlanOfferOpen);
+    return () => {
+      unsubscribe();
+    };
+  }, []);
+
 
   useEffect(() => {
     if (!user || !templates.length) return;
