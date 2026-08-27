@@ -634,7 +634,71 @@ export default function HomePage() {
         </section>
       )}
 
+      {/* 2.5 · BRAND PERSONALIZATION — additive only, never a filter */}
+      {showBrandNudge && (
+        <section className="container pt-8">
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-cyan-200/20 bg-cyan-300/[0.04] px-5 py-4">
+            <div className="flex items-center gap-3">
+              <Sparkles className="h-4 w-4 shrink-0 text-cyan-200" />
+              <Link
+                to="/app/brand"
+                className="text-sm text-slate-200 transition hover:text-white"
+              >
+                Build your brand to personalize your marketplace
+                <ArrowRight className="ml-2 inline h-3.5 w-3.5 text-cyan-200" />
+              </Link>
+            </div>
+            <button
+              type="button"
+              onClick={dismissBrandNudge}
+              aria-label="Dismiss brand personalization tip"
+              className="rounded-full p-1 text-slate-500 transition hover:text-white"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        </section>
+      )}
+
+      {activeBrand && recommended.length > 0 && (
+        <section className="container border-t border-white/10 py-12">
+          <div className="flex flex-wrap items-end justify-between gap-4">
+            <div>
+              <SectionLabel>For your brand</SectionLabel>
+              <SectionHeading>Recommended for {activeBrand.name}</SectionHeading>
+              <p className="mt-3 max-w-xl text-sm leading-6 text-slate-400">
+                Matched to your saved products and brand style. The full catalog stays below.
+              </p>
+            </div>
+            <Button asChild variant="ghost" className="rounded-full text-cyan-100 hover:text-white">
+              <Link to="/app/brand">
+                Brand workspace
+                <ArrowRight className="h-4 w-4" />
+              </Link>
+            </Button>
+          </div>
+          <MediaShelf>
+            {recommended.map(({ entry, reasons }, index) => (
+              <div key={`recommended-${entry.template.id}-${index}`} className="shrink-0">
+                <TemplateCard
+                  entry={entry}
+                  index={index}
+                  eager={index < 2}
+                  performance={perfMap[String(entry.template.id ?? "")]}
+                />
+                {reasons.length > 0 && (
+                  <p className="mt-2 w-[248px] truncate font-display text-[10px] uppercase tracking-[0.18em] text-cyan-100/80 sm:w-[272px]">
+                    {reasons.join(" · ")}
+                  </p>
+                )}
+              </div>
+            ))}
+          </MediaShelf>
+        </section>
+      )}
+
       {/* 3 · SHELVES */}
+
       <Shelf
         id="from-creators-you-follow"
         label="Your creators"
