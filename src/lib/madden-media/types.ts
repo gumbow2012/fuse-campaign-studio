@@ -27,7 +27,16 @@ export type MaddenSlot = {
   references: MaddenReference[];
   /** When true the slot is treated as locked continuity across all shots. */
   locked: boolean;
+  /** M2+: the reusable madden_profiles row bound into this slot, if any. */
+  profileId?: string | null;
+  /**
+   * M2+: the slot's structured consistency payload as bound into the project.
+   * For the subject slot this is a MaddenSubjectProfileData shape; kept as
+   * unknown here so this module stays free of cross-module imports.
+   */
+  profileData?: unknown;
 };
+
 
 /** A single 9:16 short-form shot in the board. */
 export type MaddenShot = {
