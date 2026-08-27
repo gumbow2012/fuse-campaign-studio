@@ -135,6 +135,7 @@ export default function AuthPage() {
           const isNewAccount = Number.isFinite(createdAt) && Date.now() - createdAt < 5 * 60 * 1000;
           if (isNewAccount) {
             trackEventOnce(`completeRegistration.${verifiedUser.id}`, "CompleteRegistration");
+            track("sign_up", { paid_access: Boolean(paidAccess) });
           }
         }
         toast({
