@@ -337,16 +337,43 @@ export default function AdminTemplateFactory() {
   });
 
   const [analyzingId, setAnalyzingId] = useState<string | null>(null);
+  const [scoringId, setScoringId] = useState<string | null>(null);
+  const [sortByScore, setSortByScore] = useState(false);
+
+  /** TF3 — deterministic heuristic, computed locally then persisted. */
+  const scoreAndPersist = async (reference: StreetwearReference, blueprint: ReferenceBlueprint) => {
+    const result = scoreBlueprint(blueprint as Record<string, unknown>, {
+      title: reference.title,
+      category: reference.category,
+      tags: reference.tags,
+      notes: reference.notes,
+    });
+    await saveReferenceViralScore(reference.id, result.score, {
+      version: result.version,
+      max_score: result.maxScore,
+      factors: result.factors,
+      scored_at: new Date().toISOString(),
+    });
+    return result;
+  };
 
   const analyzeMutation = useMutation({
-    mutationFn: async (referenceId: string) => {
-      setAnalyzingId(referenceId);
-      return analyzeStreetwearReference(referenceId);
+    mutationFn: async (reference: StreetwearReference) => {
+      setAnalyzingId(reference.id);
+      const analysis = await analyzeStreetwearReference(reference.id);
+      // Scoring is a best-effort follow-up: a failed write must not lose the blueprint.
+      try {
+        await scoreAndPersist(reference, analysis.blueprint);
+      } catch (scoreError) {
+        console.warn("Viral score persist failed", scoreError);
+      }
+      return analysis;
     },
     onSuccess: () => {
       invalidateReferences();
       toast({ title: "Blueprint ready" });
     },
+
     onError: (error: unknown) => {
       toast({
         title: "Could not analyze reference",
