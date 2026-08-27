@@ -6,10 +6,14 @@ import { Button } from "@/components/ui/button";
 import SiteShell from "@/components/mvp/SiteShell";
 import PageMeta from "@/components/mvp/PageMeta";
 import { useAuth } from "@/contexts/AuthContext";
+import { useBrand } from "@/contexts/BrandContext";
 import { fetchTemplates, type ApiTemplate } from "@/services/fuseApi";
 import CreatorVerificationBadge from "@/components/CreatorVerificationBadge";
 import { listFollowedCreatorIds } from "@/services/creatorFollows";
 import { listPublicCreatorProfiles, type CreatorProfile } from "@/services/creatorProfile";
+import { listProductProfiles, type ProductProfileType } from "@/services/productProfiles";
+import { readVisualStyle } from "@/services/brandProfiles";
+import { rankTemplatesForBrand } from "@/lib/brandRelevance";
 import { cn } from "@/lib/utils";
 import {
   allocateHomeMedia,
