@@ -1607,54 +1607,63 @@ export default function TemplateStudioPage() {
               </div>
             ) : null}
 
-            <div
-              role="group"
-              aria-label="Filter by output type"
-              className="mt-4 inline-flex rounded-full border border-white/10 bg-white/[0.04] p-1"
-            >
-              {([
-                { key: "all", label: "All" },
-                { key: "image", label: "Image" },
-                { key: "video", label: "Video" },
-              ] as const).map((segment) => (
-                <button
-                  key={segment.key}
-                  type="button"
-                  onClick={() => setOutputTypeFilter(segment.key)}
-                  aria-pressed={outputTypeFilter === segment.key}
-                  className={cn(
-                    "rounded-full px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] transition-colors motion-reduce:transition-none",
-                    outputTypeFilter === segment.key
-                      ? "bg-cyan-300 text-slate-950"
-                      : "text-slate-300 hover:text-white",
-                  )}
+            {/* Temporarily hidden (SHOW_MARKETPLACE_FILTERS): output-type tabs,
+                performance chips and category dropdown. Infra + data kept intact. */}
+            {SHOW_MARKETPLACE_FILTERS ? (
+              <>
+                <div
+                  role="group"
+                  aria-label="Filter by output type"
+                  className="mt-4 inline-flex rounded-full border border-white/10 bg-white/[0.04] p-1"
                 >
-                  {segment.label}
-                  <span className="ml-1 opacity-60">{outputTypeCounts[segment.key]}</span>
-                </button>
-              ))}
-            </div>
+                  {([
+                    { key: "all", label: "All" },
+                    { key: "image", label: "Image" },
+                    { key: "video", label: "Video" },
+                  ] as const).map((segment) => (
+                    <button
+                      key={segment.key}
+                      type="button"
+                      onClick={() => setOutputTypeFilter(segment.key)}
+                      aria-pressed={outputTypeFilter === segment.key}
+                      className={cn(
+                        "rounded-full px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] transition-colors motion-reduce:transition-none",
+                        outputTypeFilter === segment.key
+                          ? "bg-cyan-300 text-slate-950"
+                          : "text-slate-300 hover:text-white",
+                      )}
+                    >
+                      {segment.label}
+                      <span className="ml-1 opacity-60">{outputTypeCounts[segment.key]}</span>
+                    </button>
+                  ))}
+                </div>
+
+                <div className="mt-4 flex flex-wrap items-center gap-2">
+                  {filterDefinitions.map((filter) => (
+                    <FilterDropdown
+                      key={filter.key}
+                      filter={filter}
+                      value={perfFilters[filter.key] ?? null}
+                      onChange={(value) =>
+                        setPerfFilters((previous) => ({ ...previous, [filter.key]: value }))
+                      }
+                    />
+                  ))}
+                  {activeFilterCount ? (
+                    <button
+                      type="button"
+                      onClick={() => setPerfFilters({ roas: null, aov: null, spend: null, category: null })}
+                      className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-400 hover:text-white"
+                    >
+                      Clear
+                    </button>
+                  ) : null}
+                </div>
+              </>
+            ) : null}
 
             <div className="mt-4 flex flex-wrap items-center gap-2">
-              {filterDefinitions.map((filter) => (
-                <FilterDropdown
-                  key={filter.key}
-                  filter={filter}
-                  value={perfFilters[filter.key] ?? null}
-                  onChange={(value) =>
-                    setPerfFilters((previous) => ({ ...previous, [filter.key]: value }))
-                  }
-                />
-              ))}
-              {activeFilterCount ? (
-                <button
-                  type="button"
-                  onClick={() => setPerfFilters({ roas: null, aov: null, spend: null, category: null })}
-                  className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-400 hover:text-white"
-                >
-                  Clear
-                </button>
-              ) : null}
               <button
                 type="button"
                 onClick={() => (selectMode ? exitSelectMode() : setSelectMode(true))}
@@ -1669,6 +1678,7 @@ export default function TemplateStudioPage() {
                 {selectMode ? "Done" : "Select"}
               </button>
             </div>
+
 
             {!templatesQuery.isFetching && !templates.length ? (
               <div className="mt-5 rounded-[1.5rem] border border-white/8 bg-black/20 p-4 text-sm text-slate-300">
