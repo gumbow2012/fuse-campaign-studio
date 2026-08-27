@@ -136,7 +136,7 @@ export default function AuthPage() {
                 initialMode={initialMode}
                 emailCtaLabel="Continue"
                 autoRequestEmail={autoRequestEmail}
-                onModeChange={setMode}
+                
                 onBeforeRedirect={() => writePendingAuthIntent(intent)}
                 onAuthenticated={({ userId, isNewAccount }) => {
                   if (isNewAccount) {
