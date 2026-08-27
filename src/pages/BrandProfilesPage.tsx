@@ -229,28 +229,32 @@ export default function BrandProfilesPage() {
     () => avatars.filter((avatar) => brandModelIds.includes(avatar.id)).length,
     [avatars, brandModelIds],
   );
-  const completion = useMemo(
+  // ONE readiness truth for setup state (required vs enrichment).
+  const readiness = useMemo(
+    () => deriveBrandReadiness(activeBrand, products, brandModelIds, visualStyle),
+    [activeBrand, products, brandModelIds, visualStyle],
+  );
+
+  // "Profile depth" = recommended items satisfied. Purely enrichment.
+  const depthPct = useMemo(() => {
+    const recommended = readiness.sections
+      .flatMap((section) => section.items)
+      .filter((item) => item.level === "recommended");
+    if (recommended.length === 0) return 100;
+    const done = recommended.filter((item) => item.done).length;
+    return Math.round((done / recommended.length) * 100);
+  }, [readiness]);
+
+  // Non-blocking enhancement state — labeled optional everywhere in the UI.
+  const identityReady = readiness.ready;
+  const enhancements = useMemo(
     () => ({
-      identity: Boolean(
-        activeBrand?.name &&
-          (activeBrand.primary_logo_url || activeBrand.secondary_logo_url) &&
-          activeBrand.colors.length > 0,
-      ),
       products: brandProducts.length > 0,
       models: avatars.length > 0,
       visualStyle: Boolean(visualStyle && (visualStyle.tags.length > 0 || visualStyle.tone.trim().length > 0)),
       assets: libraryAssets.length > 0,
     }),
-    [activeBrand, brandProducts.length, avatars.length, libraryAssets.length, visualStyle],
-  );
-
-
-  const doneCount = Object.values(completion).filter(Boolean).length;
-
-  // Incomplete brands keep the workspace and get the shared readiness checklist.
-  const readiness = useMemo(
-    () => deriveBrandReadiness(activeBrand, products, brandModelIds, visualStyle),
-    [activeBrand, products, brandModelIds, visualStyle],
+    [brandProducts.length, avatars.length, libraryAssets.length, visualStyle],
   );
 
 
