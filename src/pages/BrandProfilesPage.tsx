@@ -27,8 +27,11 @@ import { useBrand } from "@/contexts/BrandContext";
 import { listMyAvatars } from "@/services/avatarProfiles";
 import { listLibraryAssets } from "@/services/libraryAssets";
 import { BrandEditor, CARD, LABEL, ProductEditor } from "@/components/brand/BrandEditors";
+import BrandModelsPanel from "@/components/brand/BrandModelsPanel";
+import BrandLibraryPanel from "@/components/brand/BrandLibraryPanel";
 import {
   deleteBrandProfile,
+  readModelIds,
   readOnboarding,
   readVisualStyle,
   type BrandProfile,
@@ -209,6 +212,11 @@ export default function BrandProfilesPage() {
   // Every card below is derived from real rows only — nothing is assumed.
   const onboarding = useMemo(() => readOnboarding(activeBrand), [activeBrand]);
   const visualStyle = useMemo(() => readVisualStyle(activeBrand), [activeBrand]);
+  const brandModelIds = useMemo(() => readModelIds(activeBrand), [activeBrand]);
+  const brandModelCount = useMemo(
+    () => avatars.filter((avatar) => brandModelIds.includes(avatar.id)).length,
+    [avatars, brandModelIds],
+  );
   const completion = useMemo(
     () => ({
       identity: Boolean(
@@ -315,10 +323,12 @@ export default function BrandProfilesPage() {
         </div>
 
         <Tabs value={tab} onValueChange={setTab} className="mt-8">
-          <TabsList className="border border-white/10 bg-white/[0.03]">
+          <TabsList className="flex h-auto flex-wrap justify-start gap-1 border border-white/10 bg-white/[0.03]">
             <TabsTrigger value="dashboard">Dashboard</TabsTrigger>
             <TabsTrigger value="brands">Brands</TabsTrigger>
             <TabsTrigger value="products">Products &amp; garments</TabsTrigger>
+            <TabsTrigger value="models">Models</TabsTrigger>
+            <TabsTrigger value="library">Library</TabsTrigger>
           </TabsList>
 
           <TabsContent value="dashboard" className="mt-6">
@@ -353,9 +363,13 @@ export default function BrandProfilesPage() {
                 icon={<Users className="h-5 w-5" />}
                 title="Models / FUSE Cast"
                 done={completion.models}
-                detail={`${avatars.length} model${avatars.length === 1 ? "" : "s"} in your cast.`}
+                detail={
+                  brandModelCount
+                    ? `${brandModelCount} model${brandModelCount === 1 ? "" : "s"} linked to this brand.`
+                    : `${avatars.length} model${avatars.length === 1 ? "" : "s"} saved — none linked to this brand yet.`
+                }
                 cta={completion.models ? "Manage models" : "Add models"}
-                onClick={() => navigate("/app/avatars")}
+                onClick={() => setTab("models")}
               />
               <DashboardCard
                 icon={<Wand2 className="h-5 w-5" />}
@@ -380,7 +394,7 @@ export default function BrandProfilesPage() {
                 done={completion.assets}
                 detail={`${libraryAssets.length} asset${libraryAssets.length === 1 ? "" : "s"} in your library.`}
                 cta="Open library"
-                onClick={() => navigate("/app/templates")}
+                onClick={() => setTab("library")}
               />
             </div>
           </TabsContent>
@@ -543,6 +557,18 @@ export default function BrandProfilesPage() {
             ) : (
               <p className="text-sm text-slate-500">Nothing here yet — add a garment or product to reuse it later.</p>
             )}
+          </TabsContent>
+
+          <TabsContent value="models" className="mt-6">
+            <BrandModelsPanel
+              avatars={avatars}
+              loading={avatarsQuery.isLoading}
+              activeBrand={activeBrand}
+            />
+          </TabsContent>
+
+          <TabsContent value="library" className="mt-6">
+            <BrandLibraryPanel assets={libraryAssets} loading={libraryQuery.isLoading} />
           </TabsContent>
         </Tabs>
       </main>
