@@ -24,6 +24,7 @@ import { uploadTemplateCoverAsset, uploadTemplateReferenceAsset } from "../_shar
 import { nextEdgeOrder, sortEdgesByExecutionOrder } from "../_shared/edge-order.ts";
 import { normalizeCastConfig } from "../_shared/cast-config.ts";
 import { assertVersionActivatable } from "../_shared/fork-run.ts";
+import { countTemplateDeliverables } from "../_shared/template-pricing.ts";
 
 
 type Action =
@@ -32,6 +33,8 @@ type Action =
   | "clone_version"
   | "activate_version"
   | "publish_gate"
+  | "quick_publish_gate"
+  | "quick_publish_version"
   | "unpublish_template"
   | "update_template"
   | "update_cast_config"
@@ -40,6 +43,7 @@ type Action =
   | "add_edge"
   | "reorder_edge"
   | "delete_edge";
+
 
 type NodeType = "user_input" | "image_gen" | "video_gen" | "prompt";
 type StarterPreset = "campaign" | "reference" | "blank";
@@ -70,6 +74,23 @@ type PublishGateResult = {
   latestApprovedJobId: string | null;
   latestApprovedAt: string | null;
 };
+type QuickPublishGateResult = {
+  publishable: boolean;
+  tested: boolean;
+  reasons: string[];
+  versionId: string;
+  templateId: string;
+  versionNumber: number;
+  isActive: boolean;
+  isFork: boolean;
+  structuralIssueCount: number;
+  executionNodeCount: number;
+  customerInputCount: number;
+  finalOutputCount: number;
+  completedRunCount: number;
+  latestTestJobId: string | null;
+};
+
 type InputSlotDraft = {
   key: string;
   label: string;
@@ -494,6 +515,102 @@ async function getVersionPublishGate(
     latestApprovedAt: selectedApproval?.updated_at ?? null,
   };
 }
+
+/**
+ * ADMIN QUICK PUBLISH — deterministic-only gate. Intentionally does NOT require
+ * the manual output audit, audit score, or output-report ceremony. The formal
+ * creator/QA path stays in getVersionPublishGate (do not merge these).
+ */
+async function getQuickPublishGate(
+  admin: ReturnType<typeof createAdminClient>,
+  versionId: string,
+): Promise<QuickPublishGateResult> {
+  const reasons: string[] = [];
+
+  const { data: version, error: versionError } = await admin
+    .from("template_versions")
+    .select("id, template_id, version_number, is_active, review_status, fork_id")
+    .eq("id", versionId)
+    .maybeSingle();
+  if (versionError) throw new Error(versionError.message);
+  if (!version) throw new Error("Template version not found");
+  if (!(version as any).template_id) throw new Error("Template version has no parent template");
+
+  const isFork = !!(version as any).fork_id;
+  if (isFork) {
+    reasons.push("Personal fork versions can never become the marketplace version.");
+  }
+
+  const structuralIssues = await getVersionStructuralIssues(admin, versionId);
+  if (structuralIssues.length) {
+    const preview = structuralIssues.slice(0, 3).map((issue) => `${issue.name} (${issue.nodeType})`).join(", ");
+    reasons.push(`Fix ${structuralIssues.length} disconnected execution node${structuralIssues.length === 1 ? "" : "s"}: ${preview}.`);
+  }
+
+  const { data: nodes, error: nodesError } = await admin
+    .from("nodes")
+    .select("id, name, node_type, prompt_config, default_asset_id")
+    .eq("version_id", versionId);
+  if (nodesError) throw new Error(nodesError.message);
+  const allNodes = (nodes ?? []) as any[];
+
+  const executionNodeCount = allNodes.filter(
+    (node) => node.node_type === "image_gen" || node.node_type === "video_gen",
+  ).length;
+  if (!executionNodeCount) {
+    reasons.push("This version has no generation steps.");
+  }
+
+  const inputNodes = allNodes.filter((node) => node.node_type === "user_input");
+  const customerInputNodes = inputNodes.filter(
+    (node) => node.prompt_config?.editor_mode !== "reference",
+  );
+  const unresolvedInputs = inputNodes.filter(
+    (node) => node.prompt_config?.editor_mode === "reference" && !node.default_asset_id,
+  );
+  if (!customerInputNodes.length) {
+    reasons.push("Add at least one customer input before publishing.");
+  }
+  if (unresolvedInputs.length) {
+    reasons.push(`${unresolvedInputs.length} locked reference input${unresolvedInputs.length === 1 ? "" : "s"} still missing an asset.`);
+  }
+
+  const deliverables = countTemplateDeliverables(allNodes);
+  const finalOutputCount = deliverables.imageOutputs + deliverables.videoOutputs;
+  if (!finalOutputCount) {
+    reasons.push("Expose at least one final output before publishing.");
+  }
+
+  const { data: completedJobs, error: jobsError } = await admin
+    .from("execution_jobs")
+    .select("id, status, completed_at, result_payload")
+    .eq("version_id", versionId)
+    .eq("status", "complete")
+    .order("completed_at", { ascending: false })
+    .limit(20);
+  if (jobsError) throw new Error(jobsError.message);
+  const jobsWithOutputs = (completedJobs ?? []).filter((job: any) => resultOutputCount(job) > 0);
+  const tested = jobsWithOutputs.length > 0;
+
+  return {
+    // "not tested" is a soft signal surfaced to the UI, and still blocks publishing here.
+    publishable: reasons.length === 0 && tested,
+    tested,
+    reasons,
+    versionId,
+    templateId: (version as any).template_id as string,
+    versionNumber: Number((version as any).version_number ?? 0),
+    isActive: !!(version as any).is_active,
+    isFork,
+    structuralIssueCount: structuralIssues.length,
+    executionNodeCount,
+    customerInputCount: customerInputNodes.length,
+    finalOutputCount,
+    completedRunCount: jobsWithOutputs.length,
+    latestTestJobId: jobsWithOutputs[0]?.id ?? null,
+  };
+}
+
 
 async function markVersionNeedsReview(
   admin: ReturnType<typeof createAdminClient>,
@@ -1073,6 +1190,89 @@ Deno.serve(async (req) => {
       await assertVersionAccess(admin, access, versionId);
       return json({ versionId, activationGate: await getVersionPublishGate(admin, versionId) });
     }
+
+    if (action === "quick_publish_gate") {
+      assertCanPublish(access);
+      const versionId = cleanText(body.versionId);
+      if (!versionId) throw new Error("versionId is required");
+      return json({ versionId, quickGate: await getQuickPublishGate(admin, versionId) });
+    }
+
+    if (action === "quick_publish_version") {
+      // Admin/dev only fast path — creators are rejected by assertCanPublish.
+      assertCanPublish(access);
+      const versionId = cleanText(body.versionId);
+      if (!versionId) throw new Error("versionId is required");
+
+      const quickGate = await getQuickPublishGate(admin, versionId);
+      if (!quickGate.tested) {
+        throw new Error("This version has not completed a test run yet.");
+      }
+      if (!quickGate.publishable) {
+        throw new Error(`Quick publish blocked: ${quickGate.reasons.join(" ")}`);
+      }
+
+      // TR10 ISOLATION: personal fork versions can never become marketplace-active.
+      const { data: guardRow, error: guardError } = await admin
+        .from("template_versions")
+        .select("id, review_status, fork_id")
+        .eq("id", versionId)
+        .maybeSingle();
+      if (guardError) throw new Error(guardError.message);
+      assertVersionActivatable(guardRow as never);
+
+      const { error: deactivateError } = await admin
+        .from("template_versions")
+        .update({ is_active: false })
+        .eq("template_id", quickGate.templateId);
+      if (deactivateError) throw new Error(deactivateError.message);
+
+      const { error: activateError } = await admin
+        .from("template_versions")
+        .update({
+          is_active: true,
+          review_status: "Approved",
+          reviewed_at: new Date().toISOString(),
+          reviewed_by: user.id,
+        })
+        .eq("id", versionId);
+      if (activateError) throw new Error(activateError.message);
+
+      const { data: templateRow } = await admin
+        .from("fuse_templates")
+        .select("id, name")
+        .eq("id", quickGate.templateId)
+        .maybeSingle();
+
+      await logAuditEvent({
+        eventType: "template_quick_published",
+        message: `Admin quick-published template version ${versionId} (full audit skipped)`,
+        severity: "warn",
+        source: "admin-template-workbench",
+        templateId: quickGate.templateId,
+        versionId,
+        metadata: {
+          admin_user_id: user.id,
+          template_id: quickGate.templateId,
+          version_id: versionId,
+          latest_test_job_id: quickGate.latestTestJobId,
+          skipped_full_audit: true,
+          timestamp: new Date().toISOString(),
+        },
+      }, admin);
+
+      return json({
+        versionId,
+        templateId: quickGate.templateId,
+        templateName: (templateRow as any)?.name ?? null,
+        versionNumber: quickGate.versionNumber,
+        isActive: true,
+        reviewStatus: "Approved",
+        quickGate: { ...quickGate, isActive: true },
+      });
+    }
+
+
 
     if (action === "unpublish_template") {
       assertCanPublish(access);

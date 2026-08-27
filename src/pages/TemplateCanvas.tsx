@@ -23,7 +23,9 @@ import {
   resolveTemplateBranchInputIndex,
 } from "@/lib/templateBuilder";
 import CastConfigPanel from "@/components/lab/CastConfigPanel";
+import QuickPublishButton from "@/components/lab/QuickPublishButton";
 import { parseCastConfig, type CastConfig } from "@/lib/castConfig";
+
 
 type TemplateInput = {
   id: string;
@@ -3094,6 +3096,17 @@ const TemplateCanvas = () => {
                       Open Output Audit
                     </Link>
                   </Button>
+                  {detail && !detail.isActive ? (
+                    <QuickPublishButton
+                      versionId={detail.versionId}
+                      templateName={detail.templateName}
+                      versionNumber={detail.versionNumber}
+                      building={phase === "running"}
+                      onRunTest={() => setShowRunnerPanel(true)}
+                      onPublished={() => refreshAfterMutation(detail.versionId)}
+                    />
+                  ) : null}
+
                   {canPublishTemplates && testingGateSatisfied && detail && !detail.isActive ? (
                     <Button type="button" size="sm" onClick={() => void activateCurrentVersion()} disabled={!!mutating}>
                       {mutating === "activate-version" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle2 className="mr-2 h-4 w-4" />}
@@ -3371,6 +3384,18 @@ const TemplateCanvas = () => {
                   Publish Version Live
                 </Button>
               ) : null}
+              {detail && !detail.isActive ? (
+                <QuickPublishButton
+                  versionId={detail.versionId}
+                  templateName={detail.templateName}
+                  versionNumber={detail.versionNumber}
+                  building={phase === "running"}
+                  variant="outline"
+                  onRunTest={() => setShowRunnerPanel(true)}
+                  onPublished={() => refreshAfterMutation(detail.versionId)}
+                />
+              ) : null}
+
               {!canPublishTemplates && detail ? (
                 detail.reviewStatus === "Submitted" ? (
                   <p className="rounded-xl border border-amber-300/25 bg-amber-300/[0.08] px-3 py-2 text-xs font-medium text-amber-100">
