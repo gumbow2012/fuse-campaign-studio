@@ -109,6 +109,24 @@ export async function compileStreetwearReference(referenceId: string): Promise<{
   };
 }
 
+/**
+ * TF3 — persist the deterministic virality heuristic on a reference.
+ * Admin RLS on streetwear_references governs this write.
+ */
+export async function saveReferenceViralScore(
+  referenceId: string,
+  score: number,
+  factors: unknown,
+): Promise<void> {
+  const { error } = await supabase
+    .from("streetwear_references")
+    // Cast: viral_score/viral_factors exist in the DB but not yet in generated types.
+    .update({ viral_score: score, viral_factors: factors } as never)
+    .eq("id", referenceId);
+  if (error) throw error;
+}
+
+
 
 
 export async function listStreetwearReferences(): Promise<StreetwearReference[]> {

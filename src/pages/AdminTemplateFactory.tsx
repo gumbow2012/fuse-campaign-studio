@@ -6,6 +6,9 @@ import {
   ImageOff,
   Loader2,
   Network,
+  ArrowDownWideNarrow,
+  ChevronDown,
+  Gauge,
   Pencil,
   Plus,
   Sparkles,
@@ -26,10 +29,17 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/hooks/use-toast";
+import {
+  scoreBlueprint,
+  viralScoreBand,
+  VIRAL_SCORE_DISCLAIMER,
+  type ViralFactor,
+} from "@/lib/templateFactory/viralScore";
 import { supabase } from "@/integrations/supabase/client";
 import {
   analyzeStreetwearReference,
   compileStreetwearReference,
+  saveReferenceViralScore,
   createStreetwearReference,
   deleteStreetwearReference,
   listStreetwearReferences,
@@ -188,8 +198,74 @@ function BlueprintPanel({
   );
 }
 
+const BAND_TONE: Record<string, string> = {
+  high: "border-emerald-300/30 bg-emerald-300/10 text-emerald-100",
+  solid: "border-cyan-300/30 bg-cyan-300/10 text-cyan-100",
+  thin: "border-white/15 bg-white/5 text-muted-foreground",
+};
+
+function readViralFactors(value: unknown): ViralFactor[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .filter((item): item is Record<string, unknown> => !!item && typeof item === "object")
+    .map((item) => ({
+      key: String(item.key ?? ""),
+      label: String(item.label ?? item.key ?? "Factor"),
+      points: Number(item.points ?? 0) || 0,
+      note: String(item.note ?? ""),
+    }));
+}
+
+function ViralScorePanel({
+  score,
+  factors,
+}: {
+  score: number;
+  factors: ViralFactor[];
+}) {
+  const [open, setOpen] = useState(false);
+  const band = viralScoreBand(score);
+
+  return (
+    <div className="mt-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <Badge className={`rounded-full ${BAND_TONE[band]}`}>
+          Virality heuristic {score}/100
+        </Badge>
+        {factors.length ? (
+          <button
+            type="button"
+            onClick={() => setOpen((prev) => !prev)}
+            className="inline-flex items-center gap-1 text-[11px] text-cyan-200 hover:underline"
+          >
+            {open ? "Hide" : "Why this score"}
+            <ChevronDown className={`h-3 w-3 transition-transform ${open ? "rotate-180" : ""}`} />
+          </button>
+        ) : null}
+      </div>
+      <p className="mt-1 text-[11px] leading-4 text-muted-foreground">
+        {VIRAL_SCORE_DISCLAIMER}
+      </p>
+
+      {open && factors.length ? (
+        <dl className="mt-2 space-y-1 rounded-lg border border-white/10 bg-background/50 p-2.5">
+          {factors.map((factor) => (
+            <div key={factor.key} className="flex items-start justify-between gap-3 text-[11px] leading-4">
+              <div>
+                <dt className="font-semibold text-foreground/85">{factor.label}</dt>
+                {factor.note ? <dd className="text-muted-foreground">{factor.note}</dd> : null}
+              </div>
+              <span className="shrink-0 tabular-nums text-cyan-200">+{factor.points}</span>
+            </div>
+          ))}
+        </dl>
+      ) : null}
+    </div>
+  );
+}
 
 export default function AdminTemplateFactory() {
+
   const queryClient = useQueryClient();
   const [form, setForm] = useState<FormState | null>(null);
 
@@ -214,6 +290,14 @@ export default function AdminTemplateFactory() {
     for (const template of templates ?? []) grouped[resolveStage(template)].push(template);
     return grouped;
   }, [templates]);
+
+  const [sortByScore, setSortByScore] = useState(false);
+
+  const sortedReferences = useMemo(() => {
+    const list = [...(references ?? [])];
+    if (!sortByScore) return list;
+    return list.sort((a, b) => (b.viral_score ?? -1) - (a.viral_score ?? -1));
+  }, [references, sortByScore]);
 
   const invalidateReferences = () => {
     void queryClient.invalidateQueries({ queryKey: ["streetwear-references"] });
@@ -263,16 +347,42 @@ export default function AdminTemplateFactory() {
   });
 
   const [analyzingId, setAnalyzingId] = useState<string | null>(null);
+  const [scoringId, setScoringId] = useState<string | null>(null);
+
+  /** TF3 — deterministic heuristic, computed locally then persisted. */
+  const scoreAndPersist = async (reference: StreetwearReference, blueprint: ReferenceBlueprint) => {
+    const result = scoreBlueprint(blueprint as Record<string, unknown>, {
+      title: reference.title,
+      category: reference.category,
+      tags: reference.tags,
+      notes: reference.notes,
+    });
+    await saveReferenceViralScore(reference.id, result.score, {
+      version: result.version,
+      max_score: result.maxScore,
+      factors: result.factors,
+      scored_at: new Date().toISOString(),
+    });
+    return result;
+  };
 
   const analyzeMutation = useMutation({
-    mutationFn: async (referenceId: string) => {
-      setAnalyzingId(referenceId);
-      return analyzeStreetwearReference(referenceId);
+    mutationFn: async (reference: StreetwearReference) => {
+      setAnalyzingId(reference.id);
+      const analysis = await analyzeStreetwearReference(reference.id);
+      // Scoring is a best-effort follow-up: a failed write must not lose the blueprint.
+      try {
+        await scoreAndPersist(reference, analysis.blueprint);
+      } catch (scoreError) {
+        console.warn("Viral score persist failed", scoreError);
+      }
+      return analysis;
     },
     onSuccess: () => {
       invalidateReferences();
       toast({ title: "Blueprint ready" });
     },
+
     onError: (error: unknown) => {
       toast({
         title: "Could not analyze reference",
@@ -282,6 +392,28 @@ export default function AdminTemplateFactory() {
     },
     onSettled: () => setAnalyzingId(null),
   });
+
+  const scoreMutation = useMutation({
+    mutationFn: async (reference: StreetwearReference) => {
+      setScoringId(reference.id);
+      if (!reference.blueprint) throw new Error("Analyze this reference first.");
+      return scoreAndPersist(reference, reference.blueprint);
+    },
+    onSuccess: (result) => {
+      invalidateReferences();
+      toast({ title: `Heuristic score ${result.score}/100` });
+    },
+    onError: (error: unknown) => {
+      toast({
+        title: "Could not score reference",
+        description: error instanceof Error ? error.message : "Unknown error",
+        variant: "destructive",
+      });
+    },
+    onSettled: () => setScoringId(null),
+  });
+
+
 
   const [compilingId, setCompilingId] = useState<string | null>(null);
 
@@ -422,14 +554,25 @@ export default function AdminTemplateFactory() {
                 Curated trend references that brief new template concepts.
               </p>
             </div>
-            <Button
-              size="sm"
-              className="rounded-full bg-cyan-300 text-slate-950 hover:bg-cyan-200"
-              onClick={() => setForm({ ...EMPTY_FORM })}
-            >
-              <Plus className="mr-2 h-4 w-4" />
-              Add reference
-            </Button>
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                className={`rounded-full border-white/15 ${sortByScore ? "bg-cyan-300/15 text-cyan-100" : "bg-white/5"}`}
+                onClick={() => setSortByScore((prev) => !prev)}
+              >
+                <ArrowDownWideNarrow className="mr-2 h-3.5 w-3.5" />
+                {sortByScore ? "Sorted by heuristic" : "Sort by heuristic"}
+              </Button>
+              <Button
+                size="sm"
+                className="rounded-full bg-cyan-300 text-slate-950 hover:bg-cyan-200"
+                onClick={() => setForm({ ...EMPTY_FORM })}
+              >
+                <Plus className="mr-2 h-4 w-4" />
+                Add reference
+              </Button>
+            </div>
           </div>
 
           {referencesLoading ? (
@@ -444,7 +587,8 @@ export default function AdminTemplateFactory() {
             </Card>
           ) : (
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {references.map((reference) => (
+              {sortedReferences.map((reference) => (
+
                 <Card key={reference.id} className="overflow-hidden border-white/10 bg-white/[0.03]">
                   <div className="aspect-[4/3] w-full bg-black/40">
                     {reference.image_url ? (
@@ -520,7 +664,7 @@ export default function AdminTemplateFactory() {
                         variant="outline"
                         className="rounded-full border-cyan-300/30 bg-cyan-300/10 text-cyan-100 hover:bg-cyan-300/20"
                         disabled={!reference.image_url || analyzingId === reference.id}
-                        onClick={() => analyzeMutation.mutate(reference.id)}
+                        onClick={() => analyzeMutation.mutate(reference)}
                       >
                         {analyzingId === reference.id ? (
                           <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
@@ -553,6 +697,27 @@ export default function AdminTemplateFactory() {
                               : "Compile to template"}
                         </Button>
                       ) : null}
+                      {reference.blueprint ? (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="rounded-full border-white/15 bg-white/5"
+                          disabled={scoringId === reference.id}
+                          onClick={() => scoreMutation.mutate(reference)}
+                        >
+                          {scoringId === reference.id ? (
+                            <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
+                          ) : (
+                            <Gauge className="mr-2 h-3.5 w-3.5" />
+                          )}
+                          {scoringId === reference.id
+                            ? "Scoring…"
+                            : reference.viral_score === null
+                              ? "Score"
+                              : "Rescore"}
+                        </Button>
+                      ) : null}
+
                       {!reference.image_url ? (
                         <span className="text-[11px] text-muted-foreground">
                           Add an image URL to analyze
@@ -578,6 +743,15 @@ export default function AdminTemplateFactory() {
                           <ExternalLink className="h-3 w-3" />
                         </Link>
                       </div>
+                    ) : null}
+
+                    {typeof reference.viral_score === "number" ? (
+                      <ViralScorePanel
+                        score={reference.viral_score}
+                        factors={readViralFactors(
+                          (reference.viral_factors as { factors?: unknown } | null)?.factors,
+                        )}
+                      />
                     ) : null}
 
                     {reference.blueprint ? (
