@@ -866,6 +866,9 @@ export default function GenerationStudio() {
   const [quality, setQuality] = useState("2K");
   const [duration, setDuration] = useState(5);
   const [generateAudio, setGenerateAudio] = useState(true);
+  /** VIDEO only — optional camera movement instruction appended to the prompt. */
+  const [cameraMovementId, setCameraMovementId] = useState<string>(DEFAULT_CAMERA_MOVEMENT_ID);
+
   const [generations, setGenerations] = useState<Generation[]>([]);
   const [library, setLibrary] = useState<string[]>(() => readReferenceLibrary());
   const [selected, setSelected] = useState<string[]>([]);
