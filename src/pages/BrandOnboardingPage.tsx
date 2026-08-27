@@ -37,6 +37,7 @@ import BrandCreativeDnaStep, { type CreativeDnaValue } from "@/components/brand/
 import CastLibrary from "@/components/cast/CastLibrary";
 import BrandReviewStep from "@/components/brand/BrandReviewStep";
 import { takeBrandImport } from "@/services/brandImport";
+import { track } from "@/lib/analytics/track";
 
 const STEPS = [
   { id: 1, label: "Brand basics", optional: false },
@@ -46,6 +47,12 @@ const STEPS = [
   { id: 5, label: "Creative DNA", optional: true },
   { id: 6, label: "Finish", optional: false },
 ];
+
+/** Safe non-PII step descriptor for analytics, e.g. "3_products". */
+function stepKey(id: number): string {
+  const label = STEPS.find((entry) => entry.id === id)?.label ?? "unknown";
+  return `${id}_${label.toLowerCase().replace(/[^a-z0-9]+/g, "_")}`;
+}
 
 function StepRail({
   step,
@@ -190,6 +197,12 @@ export default function BrandOnboardingPage() {
     return () => window.removeEventListener("keydown", onKey);
   }, [navigate]);
 
+  // Funnel: one started event per step the user actually lands on.
+  useEffect(() => {
+    track("brand_step_started", { step: stepKey(step) });
+  }, [step]);
+
+
   const refreshBrands = () => {
     queryClient.invalidateQueries({ queryKey: ["brand-profiles"] });
     queryClient.invalidateQueries({ queryKey: ["active-brand-id"] });
@@ -285,6 +298,7 @@ export default function BrandOnboardingPage() {
       return nextStep;
     },
     onSuccess: (nextStep) => {
+      track("brand_step_completed", { step: stepKey(step) });
       refreshBrands();
       setStep(nextStep);
     },
@@ -307,6 +321,8 @@ export default function BrandOnboardingPage() {
       });
     },
     onSuccess: () => {
+      track("brand_step_completed", { step: stepKey(6) });
+      track("brand_setup_complete");
       refreshBrands();
       navigate("/app/brand");
     },

@@ -689,6 +689,7 @@ export default function TemplateStudioPage() {
     if (studioMode !== "complete" || !activeRunId) return;
     if (achievementRunRef.current === activeRunId) return;
     achievementRunRef.current = activeRunId;
+    track("campaign_complete", { template_id: selectedTemplateId ?? null });
     void evaluateAndAnnounce();
   }, [studioMode, activeRunId]);
 
@@ -1393,6 +1394,8 @@ export default function TemplateStudioPage() {
       }
 
       setRunPhase("preparing");
+      track("inputs_ready", { template_id: selectedTemplate.id });
+      track("generate", { template_id: selectedTemplate.id });
 
 
       const inputs = Object.fromEntries(
@@ -1679,6 +1682,7 @@ export default function TemplateStudioPage() {
                           type="button"
                           onClick={(event) => {
                             event.stopPropagation();
+                            track("template_view", { template_id: template.id });
                             setDetailTemplateId(template.id);
                           }}
                           className="absolute right-3 top-3 rounded-full border border-white/15 bg-black/55 px-3 py-1 text-[9px] font-semibold uppercase tracking-[0.18em] text-white/85 backdrop-blur transition-colors hover:bg-black/80"

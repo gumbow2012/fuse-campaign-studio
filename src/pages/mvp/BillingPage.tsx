@@ -92,6 +92,7 @@ export default function BillingPage() {
           sessionId ? checkoutEventId("Subscribe", sessionId) : undefined,
         );
       }
+      track("paid", { mode: pending?.mode ?? "subscription" });
       clearPendingCheckout();
       setLoading("refresh");
       void refreshSubscription()

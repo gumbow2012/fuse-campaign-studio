@@ -11,6 +11,7 @@ import { Plus, Trash2, BarChart3, Eye, Copy, Loader2, Download, Upload, Check, X
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Link } from "react-router-dom";
 import AdminCreditControl from "@/components/admin/AdminCreditControl";
+import AdminOverviewStrip from "@/components/admin/AdminOverviewStrip";
 
 const EXAMPLE_INPUT_SCHEMA = JSON.stringify(
   [
@@ -388,6 +389,10 @@ const Admin = () => {
       <div className="pt-24 pb-16 container mx-auto px-6">
         <h1 className="font-display text-3xl font-black text-foreground mb-1">Admin</h1>
         <p className="text-muted-foreground text-sm mb-8">Manage templates, credits, and projects.</p>
+
+        <AdminOverviewStrip />
+
+
 
         <Tabs defaultValue="templates">
           <TabsList className="bg-secondary border border-border/40 mb-6">
