@@ -206,6 +206,8 @@ export default function MembershipPage() {
                 </Button>
               </section>
             )}
+
+            <EarnCreditsCard />
           </div>
         ) : null}
 
