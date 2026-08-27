@@ -474,7 +474,13 @@ export default function AvatarProfilesPage() {
 
         <div className="mt-8 space-y-5">
           {creating ? (
-            <AvatarCreator intent={createIntent} onDone={() => setCreating(false)} />
+            <AvatarCreator
+              intent={createIntent}
+              onDone={() => {
+                setCreating(false);
+                if (backTo) goBack();
+              }}
+            />
           ) : (
             <Button
               type="button"
