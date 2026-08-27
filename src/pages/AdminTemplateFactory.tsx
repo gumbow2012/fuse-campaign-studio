@@ -6,6 +6,7 @@ import {
   ImageOff,
   Loader2,
   Network,
+  ChevronDown,
   Pencil,
   Plus,
   Sparkles,
@@ -26,10 +27,17 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/hooks/use-toast";
+import {
+  scoreBlueprint,
+  viralScoreBand,
+  VIRAL_SCORE_DISCLAIMER,
+  type ViralFactor,
+} from "@/lib/templateFactory/viralScore";
 import { supabase } from "@/integrations/supabase/client";
 import {
   analyzeStreetwearReference,
   compileStreetwearReference,
+  saveReferenceViralScore,
   createStreetwearReference,
   deleteStreetwearReference,
   listStreetwearReferences,
