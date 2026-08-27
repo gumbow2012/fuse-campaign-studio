@@ -24,7 +24,7 @@ const CAST = [
   { id: "no", label: "Not right now", plan: null },
 ] as const;
 
-const ORDER = ["free", "starter", "plus", "pro", "studio", "team"];
+const ORDER = ["free", "starter", "plus", "capsule", "pro", "studio", "team"];
 
 export default function FindYourPlan() {
   const [cadence, setCadence] = useState<string | null>(null);

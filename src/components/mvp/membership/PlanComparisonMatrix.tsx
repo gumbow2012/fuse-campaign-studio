@@ -14,7 +14,7 @@ type Props = {
  *
  * Deliberately short: one flat, scannable list of the highest-signal differentiators.
  */
-const ORDER = ["free", "starter", "plus", "pro", "studio", "team"];
+const ORDER = ["free", "starter", "plus", "capsule", "pro", "studio", "team"];
 const rank = (entry: PlanLadderEntry) => ORDER.indexOf(entry.key);
 
 const YES = "Included";
