@@ -890,6 +890,11 @@ export default function GenerationStudio() {
   );
   const isVideo = model.kind === "video";
 
+  /** Selected movement fragment (video only, empty for "None"). */
+  const cameraMovement = isVideo ? getCameraMovementPreset(cameraMovementId) : undefined;
+  const movementFragment = cameraMovement?.promptFragment?.trim() ?? "";
+
+
   /** Live dollar + credit estimate; updates with model, duration and quality. */
   const estimatedCostUsd = useMemo(() => {
     const multiplier = RESOLUTION_MULTIPLIER[quality] ?? 1;
