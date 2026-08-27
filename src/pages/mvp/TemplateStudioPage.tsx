@@ -554,9 +554,26 @@ export default function TemplateStudioPage() {
 
   const activeFilterCount = Object.values(perfFilters).filter(Boolean).length;
 
+  /** Output-type segment — reads the existing template output_type, no new engine. */
+  const [outputTypeFilter, setOutputTypeFilter] = useState<"all" | "image" | "video">("all");
+
+  const outputTypeCounts = useMemo(() => {
+    let image = 0;
+    let video = 0;
+    for (const template of templates) {
+      if ((template.output_type ?? "").toLowerCase() === "video") video += 1;
+      else image += 1;
+    }
+    return { all: templates.length, image, video };
+  }, [templates]);
+
   const visibleTemplates = useMemo(() => {
-    if (!activeFilterCount) return templates;
+    if (!activeFilterCount && outputTypeFilter === "all") return templates;
     return templates.filter((template) => {
+      if (outputTypeFilter !== "all") {
+        const isVideo = (template.output_type ?? "").toLowerCase() === "video";
+        if (outputTypeFilter === "video" ? !isVideo : isVideo) return false;
+      }
       const row = performanceMap[String(template.id ?? "")] ?? null;
       if (perfFilters.roas && !matchesRoasFilter(row, perfFilters.roas)) return false;
       if (perfFilters.aov && !matchesAovFilter(row, perfFilters.aov)) return false;
@@ -569,7 +586,7 @@ export default function TemplateStudioPage() {
       }
       return true;
     });
-  }, [activeFilterCount, perfFilters, performanceMap, templates]);
+  }, [activeFilterCount, outputTypeFilter, perfFilters, performanceMap, templates]);
 
 
   // TR10b — deep-link straight into the running workspace for a specific run
