@@ -506,6 +506,26 @@ export default function AdminTemplateFactory() {
                             ? "Re-analyze"
                             : "Analyze"}
                       </Button>
+                      {reference.blueprint ? (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="rounded-full border-emerald-300/30 bg-emerald-300/10 text-emerald-100 hover:bg-emerald-300/20"
+                          disabled={compilingId === reference.id}
+                          onClick={() => compileMutation.mutate(reference.id)}
+                        >
+                          {compilingId === reference.id ? (
+                            <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
+                          ) : (
+                            <Network className="mr-2 h-3.5 w-3.5" />
+                          )}
+                          {compilingId === reference.id
+                            ? "Compiling…"
+                            : reference.compiled_template_id
+                              ? "Recompile"
+                              : "Compile to template"}
+                        </Button>
+                      ) : null}
                       {!reference.image_url ? (
                         <span className="text-[11px] text-muted-foreground">
                           Add an image URL to analyze
@@ -513,12 +533,33 @@ export default function AdminTemplateFactory() {
                       ) : null}
                     </div>
 
+                    {reference.compiled_template_id ? (
+                      <div className="mt-3 rounded-xl border border-emerald-300/25 bg-emerald-300/5 p-3">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Badge className="rounded-full border-emerald-300/30 bg-emerald-300/10 text-emerald-100">
+                            Compiled ✓
+                          </Badge>
+                          <span className="text-[11px] text-muted-foreground">
+                            Draft template created — review it, then ⚡ Quick Publish.
+                          </span>
+                        </div>
+                        <Link
+                          to={`/admin/templates?template=${reference.compiled_template_id}`}
+                          className="mt-2 inline-flex items-center gap-1 text-xs text-emerald-200 hover:underline"
+                        >
+                          Open Node Workbench
+                          <ExternalLink className="h-3 w-3" />
+                        </Link>
+                      </div>
+                    ) : null}
+
                     {reference.blueprint ? (
                       <BlueprintPanel
                         blueprint={reference.blueprint}
                         generatedAt={reference.blueprint_generated_at}
                       />
                     ) : null}
+
 
                   </CardContent>
                 </Card>
