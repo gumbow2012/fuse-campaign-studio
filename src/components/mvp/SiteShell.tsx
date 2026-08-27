@@ -10,7 +10,9 @@ import { CreditChip } from "@/components/CreditChip";
 import NotificationCenter from "@/components/NotificationCenter";
 import { AccountPopover } from "@/components/AccountMenu";
 import FeatureNewBadge from "@/components/FeatureNewBadge";
+import SiteFooter from "@/components/mvp/SiteFooter";
 import type { FeatureKey } from "@/lib/featureRegistry";
+
 
 const focusRing =
   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/80 focus-visible:ring-offset-2 focus-visible:ring-offset-background";
