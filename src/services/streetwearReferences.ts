@@ -4,6 +4,31 @@
  */
 import { supabase } from "@/integrations/supabase/client";
 
+export type ReferenceBlueprintShot = {
+  name?: string;
+  framing?: string;
+  subject?: string;
+  action?: string;
+};
+
+export type ReferenceBlueprint = {
+  shot_list?: ReferenceBlueprintShot[];
+  subject_treatment?: string;
+  garment_focus?: string;
+  composition?: string;
+  camera?: string;
+  lighting?: string;
+  color_grade?: string;
+  mood?: string;
+  setting?: string;
+  motion?: string;
+  suggested_output_count?: number;
+  uncertain?: string[];
+  version?: string;
+  model?: string;
+  analyzed_image_url?: string;
+};
+
 export type StreetwearReference = {
   id: string;
   title: string;
@@ -15,6 +40,11 @@ export type StreetwearReference = {
   created_by: string | null;
   created_at: string;
   updated_at: string;
+  blueprint: ReferenceBlueprint | null;
+  blueprint_generated_at: string | null;
+  viral_score: number | null;
+  viral_factors: unknown | null;
+  compiled_template_id: string | null;
 };
 
 export type StreetwearReferenceInput = {
@@ -25,6 +55,28 @@ export type StreetwearReferenceInput = {
   source_url?: string | null;
   notes?: string | null;
 };
+
+/** TF1 — Gemini vision analysis of a reference into a reusable creative blueprint. */
+export async function analyzeStreetwearReference(referenceId: string): Promise<{
+  blueprint: ReferenceBlueprint;
+  blueprintGeneratedAt: string | null;
+}> {
+  const { data, error } = await supabase.functions.invoke("template-factory", {
+    body: { action: "analyze_reference", referenceId },
+  });
+  if (error) throw error;
+  const payload = data as
+    | { ok?: boolean; reason?: string; blueprint?: ReferenceBlueprint; blueprintGeneratedAt?: string }
+    | null;
+  if (!payload?.ok || !payload.blueprint) {
+    throw new Error(payload?.reason ?? "Analysis failed");
+  }
+  return {
+    blueprint: payload.blueprint,
+    blueprintGeneratedAt: payload.blueprintGeneratedAt ?? null,
+  };
+}
+
 
 export async function listStreetwearReferences(): Promise<StreetwearReference[]> {
   const { data, error } = await supabase
