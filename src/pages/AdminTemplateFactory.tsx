@@ -188,8 +188,74 @@ function BlueprintPanel({
   );
 }
 
+const BAND_TONE: Record<string, string> = {
+  high: "border-emerald-300/30 bg-emerald-300/10 text-emerald-100",
+  solid: "border-cyan-300/30 bg-cyan-300/10 text-cyan-100",
+  thin: "border-white/15 bg-white/5 text-muted-foreground",
+};
+
+function readViralFactors(value: unknown): ViralFactor[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .filter((item): item is Record<string, unknown> => !!item && typeof item === "object")
+    .map((item) => ({
+      key: String(item.key ?? ""),
+      label: String(item.label ?? item.key ?? "Factor"),
+      points: Number(item.points ?? 0) || 0,
+      note: String(item.note ?? ""),
+    }));
+}
+
+function ViralScorePanel({
+  score,
+  factors,
+}: {
+  score: number;
+  factors: ViralFactor[];
+}) {
+  const [open, setOpen] = useState(false);
+  const band = viralScoreBand(score);
+
+  return (
+    <div className="mt-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <Badge className={`rounded-full ${BAND_TONE[band]}`}>
+          Virality heuristic {score}/100
+        </Badge>
+        {factors.length ? (
+          <button
+            type="button"
+            onClick={() => setOpen((prev) => !prev)}
+            className="inline-flex items-center gap-1 text-[11px] text-cyan-200 hover:underline"
+          >
+            {open ? "Hide" : "Why this score"}
+            <ChevronDown className={`h-3 w-3 transition-transform ${open ? "rotate-180" : ""}`} />
+          </button>
+        ) : null}
+      </div>
+      <p className="mt-1 text-[11px] leading-4 text-muted-foreground">
+        {VIRAL_SCORE_DISCLAIMER}
+      </p>
+
+      {open && factors.length ? (
+        <dl className="mt-2 space-y-1 rounded-lg border border-white/10 bg-background/50 p-2.5">
+          {factors.map((factor) => (
+            <div key={factor.key} className="flex items-start justify-between gap-3 text-[11px] leading-4">
+              <div>
+                <dt className="font-semibold text-foreground/85">{factor.label}</dt>
+                {factor.note ? <dd className="text-muted-foreground">{factor.note}</dd> : null}
+              </div>
+              <span className="shrink-0 tabular-nums text-cyan-200">+{factor.points}</span>
+            </div>
+          ))}
+        </dl>
+      ) : null}
+    </div>
+  );
+}
 
 export default function AdminTemplateFactory() {
+
   const queryClient = useQueryClient();
   const [form, setForm] = useState<FormState | null>(null);
 
