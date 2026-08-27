@@ -14,6 +14,11 @@ import {
 } from "lucide-react";
 import SiteShell from "@/components/mvp/SiteShell";
 import BrandActivationBanner from "@/components/brand/BrandActivationBanner";
+import TemplateFitBadge from "@/components/brand/TemplateFitBadge";
+import BuildBrandAfterRunCard from "@/components/brand/BuildBrandAfterRunCard";
+import { useBrandFitAssets } from "@/hooks/useBrandFitAssets";
+import { deriveTemplateFit, type TemplateFit } from "@/lib/brandTemplateFit";
+import { ONBOARDING_ROUTE } from "@/lib/brandActivation";
 import RunFeedbackInline from "@/components/mvp/RunFeedbackInline";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import CreditPackDialog from "@/components/mvp/CreditPackDialog";
@@ -492,6 +497,9 @@ export default function TemplateStudioPage() {
   }, [brandModelsQuery.data, brandModelIds]);
 
 
+  /* Phase 5 — truthful per-template compatibility for the active brand. */
+  const { assets: brandFitAssets } = useBrandFitAssets();
+
   const templatesQuery = useQuery<ApiTemplate[]>({
     queryKey: ["mvp-templates"],
     queryFn: () => fetchTemplates(""),
@@ -502,6 +510,20 @@ export default function TemplateStudioPage() {
   const templates = useMemo(
     () => sortTemplatesForStudio((templatesQuery.data ?? EMPTY_TEMPLATES).filter((template) => template.is_active)),
     [templatesQuery.data],
+  );
+
+  const templateFitMap = useMemo<Record<string, TemplateFit>>(() => {
+    if (!brandFitAssets) return {};
+    const map: Record<string, TemplateFit> = {};
+    for (const template of templates) {
+      map[String(template.id)] = deriveTemplateFit(template, brandFitAssets);
+    }
+    return map;
+  }, [templates, brandFitAssets]);
+
+  const readyForBrandCount = useMemo(
+    () => Object.values(templateFitMap).filter((fit) => fit.status === "ready").length,
+    [templateFitMap],
   );
 
   const performanceIds = useMemo(
@@ -1551,6 +1573,34 @@ export default function TemplateStudioPage() {
               {templatesQuery.isFetching ? <Loader2 className="h-4 w-4 animate-spin text-cyan-100" /> : null}
             </div>
 
+            {/* Phase 5 — contextual activation moment above the grid. */}
+            {activeBrand ? (
+              <p className="mt-2 font-display text-[11px] font-semibold uppercase tracking-[0.2em] text-cyan-100">
+                For {activeBrand.name}
+                {readyForBrandCount > 0 ? (
+                  <span className="ml-2 text-slate-400">
+                    {readyForBrandCount} ready to run with your saved assets
+                  </span>
+                ) : null}
+              </p>
+            ) : (
+              <div className="mt-3 rounded-[1rem] border border-cyan-200/20 bg-cyan-300/[0.05] px-3.5 py-3">
+                <p className="font-display text-[10px] font-semibold uppercase tracking-[0.18em] text-cyan-100">
+                  See which campaigns are ready for your brand
+                </p>
+                <p className="mt-1 text-[11px] leading-relaxed text-slate-300">
+                  Build your brand once and FUSE can preload compatible inputs.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => navigate(`${ONBOARDING_ROUTE}?step=1`)}
+                  className="mt-2 rounded-full border border-cyan-300/35 bg-cyan-300/10 px-3 py-1 font-display text-[10px] font-semibold uppercase tracking-[0.16em] text-cyan-100 transition hover:bg-cyan-300/20"
+                >
+                  Build brand
+                </button>
+              </div>
+            )}
+
             {templatesQuery.isError ? (
               <div className="mt-5 rounded-[1.5rem] border border-rose-400/20 bg-rose-400/10 p-4 text-sm text-rose-100">
                 Could not load templates.
@@ -1723,6 +1773,13 @@ export default function TemplateStudioPage() {
                           Campaign drop template for ready-to-use vertical videos.
                         </p>
                       )}
+
+                      {activeBrand && templateFitMap[String(template.id)] ? (
+                        <TemplateFitBadge
+                          fit={templateFitMap[String(template.id)]}
+                          brandName={activeBrand.name}
+                        />
+                      ) : null}
 
                       <div className="flex items-center justify-between gap-2 text-[10px] uppercase tracking-[0.18em] text-slate-400">
                         <span>{formatCount(inputCount, "upload", "uploads")}</span>
@@ -2247,6 +2304,8 @@ export default function TemplateStudioPage() {
                     onRegenerate={(outputNumber) => void regeneration.requestRegenerate(outputNumber)}
                     revisionsByOutput={regeneration.revisionsByOutput}
                   />
+
+                  <BuildBrandAfterRunCard runId={activeRunId} />
 
                   {activeRunId ? (
                     <RunFeedbackInline
