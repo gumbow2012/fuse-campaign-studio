@@ -178,6 +178,7 @@ export default function BillingPage() {
     }
     if (isAdmin) return;
 
+    track("checkout_start", { kind: "credits", credits });
     await startCreditTopUp(credits, { balanceBefore: Number(profile?.credits_balance ?? 0) });
   };
 
