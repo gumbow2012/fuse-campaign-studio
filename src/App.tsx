@@ -81,6 +81,15 @@ const App = () => (
             <Route path="/creators/browse" element={<CreatorsDirectoryPage />} />
             <Route path="/creators/apply" element={<CreatorApplyPage />} />
             <Route path="/auth" element={<AuthPage />} />
+            <Route path="/c/:slug" element={<PublicCollectionPage />} />
+            <Route
+              path="/app/collections"
+              element={
+                <CustomerRoute>
+                  <CollectionsPage />
+                </CustomerRoute>
+              }
+            />
             <Route path="/forgot-password" element={<ForgotPasswordPage />} />
             <Route path="/reset-password" element={<ResetPasswordPage />} />
 
