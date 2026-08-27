@@ -21,7 +21,7 @@ export default function TemplatePreviewCarousel() {
     <section className="rounded-[2rem] border border-white/10 bg-white/[0.03] p-5 md:p-7">
       <p className="text-[11px] uppercase tracking-[0.24em] text-muted-foreground">What your membership unlocks</p>
       <h2 className="mt-2 font-display text-2xl font-semibold tracking-[-0.04em] text-white sm:text-3xl">
-        Pick a campaign. Upload your brand. Generate.
+        Pick a campaign. Add your brand. Generate.
       </h2>
 
       <div className="-mx-5 mt-5 overflow-x-auto px-5 pb-2 md:-mx-7 md:px-7">
