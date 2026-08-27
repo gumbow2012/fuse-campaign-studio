@@ -137,6 +137,9 @@ export function readActivationState(brand: BrandProfile | null): BrandActivation
     shownAt: text("shownAt"),
     lastReminderType: text("lastReminderType"),
     lastReminderAt: text("lastReminderAt"),
+    bannerDismissedAt: text("bannerDismissedAt"),
+    bannerDismissedSignature: text("bannerDismissedSignature"),
+
   };
 }
 
