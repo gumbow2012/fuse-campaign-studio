@@ -1865,8 +1865,9 @@ export default function TemplateStudioPage() {
             onToggleFavorite={(id) => toggleFavorite(id)}
             onSelect={(template) => {
               track("for_you_template_clicked", { template_id: template.id });
-              handleTemplateSelect(template.id);
+              handleTemplateSelect(template.id, { alwaysReveal: true });
             }}
+
             onShown={(mode, count) => track("for_you_shown", { mode, count })}
           />
         ) : null}
