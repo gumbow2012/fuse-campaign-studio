@@ -117,6 +117,32 @@ export default function SiteIntelligence() {
             )}
           </div>
 
+          <div>
+            <p className="mb-1 text-[10px] font-bold uppercase tracking-[0.18em] text-muted-foreground">
+              Brand activation funnel
+            </p>
+            <p className="mb-3 text-xs text-muted-foreground">
+              Reflects tracking from deployment forward — earlier activity is not backfilled.
+            </p>
+            {funnel.error ? (
+              <p className="text-sm text-muted-foreground">Activation funnel is unavailable for this account.</p>
+            ) : (funnel.data ?? []).length ? (
+              <Table
+                head={["Step", "Count", "Step conversion"]}
+                rows={(funnel.data ?? []).map((row, index, all) => {
+                  const previous = index > 0 ? all[index - 1].count : null;
+                  const rate =
+                    previous && previous > 0 ? `${Math.round((row.count / previous) * 100)}%` : index === 0 ? "—" : "0%";
+                  return [row.label, row.count.toLocaleString("en-US"), rate];
+                })}
+              />
+            ) : (
+              <p className="text-sm text-muted-foreground">No activation data recorded in this range yet.</p>
+            )}
+          </div>
+
+
+
           <div className="grid gap-6 lg:grid-cols-2">
             <div>
               <p className="mb-3 text-[10px] font-bold uppercase tracking-[0.18em] text-muted-foreground">
