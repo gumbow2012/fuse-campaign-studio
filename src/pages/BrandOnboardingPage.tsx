@@ -329,10 +329,28 @@ export default function BrandOnboardingPage() {
         </div>
 
         <div className="mt-8 flex-1">
-          {step === 1 ? (
+          {step === 1 && showImporter ? (
+            <BrandImportPanel
+              onManual={() => setShowImporter(false)}
+              onConfirm={(result) => {
+                // Prefill only — persistence stays in the existing step autosave.
+                setName(result.name);
+                setWebsite(result.website);
+                setDescription(result.description);
+                setImported(result);
+                setShowImporter(false);
+                toast.success(result.label);
+              }}
+            />
+          ) : null}
+
+          {step === 1 && !showImporter ? (
             <div className={CARD}>
               <p className={LABEL}>Step 1 — Brand basics</p>
               <h2 className="mt-2 text-2xl">What are we building?</h2>
+              {imported ? (
+                <p className="mt-2 text-xs uppercase tracking-[0.16em] text-cyan-200/80">{imported.label}</p>
+              ) : null}
               <div className="mt-5 space-y-4">
                 <div>
                   <p className={LABEL}>Brand name *</p>
@@ -363,9 +381,20 @@ export default function BrandOnboardingPage() {
                     className="mt-2 border-white/10 bg-black/30 text-white"
                   />
                 </div>
+                {!imported ? (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    onClick={() => setShowImporter(true)}
+                    className="rounded-full text-[11px] uppercase tracking-[0.16em] text-cyan-200"
+                  >
+                    <Sparkles className="h-3.5 w-3.5" /> Import from my website instead
+                  </Button>
+                ) : null}
               </div>
             </div>
           ) : null}
+
 
           {step === 2 ? (
             <div className={CARD}>
