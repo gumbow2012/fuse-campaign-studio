@@ -41,6 +41,7 @@ import { fetchTemplateDetail, fetchTemplates, type ApiTemplate, type RunFeedback
 import { uploadRunInputFile } from "@/services/runInputUpload";
 import { libraryKindForAssetType, saveLibraryAsset } from "@/services/libraryAssets";
 import { getStaticInputs } from "@/services/templateInputMap";
+import CreditConfirmModal from "@/components/CreditConfirmModal";
 import { trackEvent } from "@/lib/metaPixel";
 import { loadTemplatePerformance, type TemplatePerformanceMap } from "@/services/templatePerformance";
 import { PerformanceBlock, PerformanceBadges, PerformanceDisclaimer } from "@/components/TemplatePerformance";
@@ -1545,6 +1546,19 @@ export default function TemplateStudioPage() {
                   Clear
                 </button>
               ) : null}
+              <button
+                type="button"
+                onClick={() => (selectMode ? exitSelectMode() : setSelectMode(true))}
+                aria-pressed={selectMode}
+                className={cn(
+                  "ml-auto rounded-full border px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] transition-colors",
+                  selectMode
+                    ? "border-cyan-300/50 bg-cyan-300/15 text-cyan-100"
+                    : "border-white/10 bg-white/[0.04] text-slate-300 hover:text-white",
+                )}
+              >
+                {selectMode ? "Done" : "Select"}
+              </button>
             </div>
 
             {!templatesQuery.isFetching && !templates.length ? (
@@ -1556,6 +1570,7 @@ export default function TemplateStudioPage() {
             <div className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {visibleTemplates.map((template) => {
                 const selected = template.id === selectedTemplateId;
+                const batchSelected = batchSelection.includes(template.id);
                 const credits = template.estimated_credits_per_run || 0;
                 const inputCount = getTemplateInputCount(template);
                 const outputCount = getTemplateOutputCount(template);
@@ -1568,17 +1583,23 @@ export default function TemplateStudioPage() {
                     key={template.id}
                     role="button"
                     tabIndex={0}
-                    onClick={() => handleTemplateSelect(template.id)}
+                    aria-pressed={selectMode ? batchSelected : undefined}
+                    onClick={() =>
+                      selectMode ? toggleBatchSelection(template.id) : handleTemplateSelect(template.id)
+                    }
                     onKeyDown={(event) => {
                       if (event.key === "Enter" || event.key === " ") {
                         event.preventDefault();
-                        handleTemplateSelect(template.id);
+                        if (selectMode) toggleBatchSelection(template.id);
+                        else handleTemplateSelect(template.id);
                       }
                     }}
                     className={`group cursor-pointer overflow-hidden rounded-[1.5rem] border text-left transition-colors ${
-                      selected
-                        ? "border-cyan-300/50 bg-cyan-300/10"
-                        : "border-white/8 bg-black/20 hover:border-white/20 hover:bg-white/[0.05]"
+                      selectMode && batchSelected
+                        ? "border-cyan-300 bg-cyan-300/10 ring-2 ring-cyan-300/40"
+                        : selected && !selectMode
+                          ? "border-cyan-300/50 bg-cyan-300/10"
+                          : "border-white/8 bg-black/20 hover:border-white/20 hover:bg-white/[0.05]"
                     }`}
                   >
                     <div className="relative overflow-hidden bg-black/30">
@@ -1590,16 +1611,30 @@ export default function TemplateStudioPage() {
                       <div className="absolute bottom-3 left-3 rounded-full border border-white/15 bg-black/45 px-2.5 py-1 text-[9px] uppercase tracking-[0.18em] text-white/80 backdrop-blur">
                         Vibe
                       </div>
-                      <button
-                        type="button"
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          setDetailTemplateId(template.id);
-                        }}
-                        className="absolute right-3 top-3 rounded-full border border-white/15 bg-black/55 px-3 py-1 text-[9px] font-semibold uppercase tracking-[0.18em] text-white/85 backdrop-blur transition-colors hover:bg-black/80"
-                      >
-                        Details
-                      </button>
+                      {selectMode ? (
+                        <span
+                          aria-hidden="true"
+                          className={cn(
+                            "absolute right-3 top-3 flex h-7 w-7 items-center justify-center rounded-full border backdrop-blur",
+                            batchSelected
+                              ? "border-cyan-300 bg-cyan-300 text-slate-950"
+                              : "border-white/25 bg-black/55 text-transparent",
+                          )}
+                        >
+                          <Check className="h-4 w-4" />
+                        </span>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            setDetailTemplateId(template.id);
+                          }}
+                          className="absolute right-3 top-3 rounded-full border border-white/15 bg-black/55 px-3 py-1 text-[9px] font-semibold uppercase tracking-[0.18em] text-white/85 backdrop-blur transition-colors hover:bg-black/80"
+                        >
+                          Details
+                        </button>
+                      )}
                     </div>
 
 
@@ -1640,7 +1675,13 @@ export default function TemplateStudioPage() {
                           ? "bg-cyan-300 text-slate-950"
                           : "border border-white/10 bg-white/[0.04] text-white group-hover:bg-white/[0.08]",
                       )}>
-                        {selected ? "Selected" : "Use this template"}
+                        {selectMode
+                          ? batchSelected
+                            ? "Selected for batch"
+                            : "Tap to select"
+                          : selected
+                            ? "Selected"
+                            : "Use this template"}
                       </span>
                     </div>
                   </div>
@@ -2220,6 +2261,44 @@ export default function TemplateStudioPage() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {selectMode && batchSelection.length ? (
+        <div className="fixed inset-x-0 bottom-0 z-40 border-t border-white/10 bg-slate-950/95 backdrop-blur-xl">
+          <div className="container flex flex-wrap items-center gap-3 py-4">
+            <p className="text-sm font-semibold text-white">
+              {batchSelection.length} {batchSelection.length === 1 ? "template" : "templates"} selected
+            </p>
+            <p className="text-xs text-slate-400">
+              {isPrivilegedUser ? "Bypassed for team access" : `${formatCredits(batchCredits)} credits total`}
+            </p>
+            <div className="ml-auto flex items-center gap-2">
+              <Button
+                variant="ghost"
+                onClick={() => setBatchSelection([])}
+                className="rounded-full text-slate-300 hover:text-white"
+              >
+                Clear
+              </Button>
+              <Button
+                onClick={() => void requestBatchRun()}
+                disabled={batchRunning}
+                className="rounded-full bg-cyan-300 text-slate-950 hover:bg-cyan-200"
+              >
+                {batchRunning ? "Queueing..." : "Run selected"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      <CreditConfirmModal
+        open={batchConfirmOpen}
+        onOpenChange={setBatchConfirmOpen}
+        creditCost={isPrivilegedUser ? 0 : batchCredits}
+        currentBalance={isPrivilegedUser ? batchCredits : displayedCreditBalance}
+        actionLabel={`Run ${batchTemplates.length} ${batchTemplates.length === 1 ? "campaign" : "campaigns"}`}
+        onConfirm={() => void confirmBatchRun()}
+      />
 
       <CampaignHistoryDrawer
         open={historyOpen}
