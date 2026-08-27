@@ -6,6 +6,7 @@ import {
   ImageOff,
   Loader2,
   Network,
+  ArrowDownWideNarrow,
   ChevronDown,
   Pencil,
   Plus,
@@ -288,6 +289,12 @@ export default function AdminTemplateFactory() {
     for (const template of templates ?? []) grouped[resolveStage(template)].push(template);
     return grouped;
   }, [templates]);
+
+  const sortedReferences = useMemo(() => {
+    const list = [...(references ?? [])];
+    if (!sortByScore) return list;
+    return list.sort((a, b) => (b.viral_score ?? -1) - (a.viral_score ?? -1));
+  }, [references, sortByScore]);
 
   const invalidateReferences = () => {
     void queryClient.invalidateQueries({ queryKey: ["streetwear-references"] });
@@ -655,7 +662,7 @@ export default function AdminTemplateFactory() {
                         variant="outline"
                         className="rounded-full border-cyan-300/30 bg-cyan-300/10 text-cyan-100 hover:bg-cyan-300/20"
                         disabled={!reference.image_url || analyzingId === reference.id}
-                        onClick={() => analyzeMutation.mutate(reference.id)}
+                        onClick={() => analyzeMutation.mutate(reference)}
                       >
                         {analyzingId === reference.id ? (
                           <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
