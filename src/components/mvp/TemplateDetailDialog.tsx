@@ -195,16 +195,27 @@ export default function TemplateDetailDialog({
               </div>
             ) : null}
 
-            <Button
-              onClick={() => {
-                onUseTemplate();
-                onOpenChange(false);
-              }}
-              className="w-full rounded-full bg-cyan-300 text-[12px] font-semibold uppercase tracking-[0.16em] text-slate-950 hover:bg-cyan-200"
-            >
-              Use this template
-              <ArrowRight className="h-4 w-4" />
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button
+                onClick={() => {
+                  onUseTemplate();
+                  onOpenChange(false);
+                }}
+                className="flex-1 rounded-full bg-cyan-300 text-[12px] font-semibold uppercase tracking-[0.16em] text-slate-950 hover:bg-cyan-200"
+              >
+                Use this template
+                <ArrowRight className="h-4 w-4" />
+              </Button>
+              {canFavorite ? (
+                <FavoriteTemplateButton
+                  favorite={isFavorite(templateId)}
+                  onToggle={() => toggleFavorite(templateId)}
+                  label={isFavorite(templateId) ? "Saved" : "Save"}
+                  className="px-3 py-2"
+                />
+              ) : null}
+            </div>
+
           </div>
         </div>
       </DialogContent>
