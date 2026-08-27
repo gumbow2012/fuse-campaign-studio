@@ -15,6 +15,14 @@ import {
   selectForkExecutionNodes,
 } from "../_shared/fork-run.ts";
 import {
+  applySignedUrls,
+  buildNodeMediaMap,
+  collectMapUrls,
+  signMediaUrls,
+  type ForkNodeMedia,
+} from "../_shared/fork-media.ts";
+
+import {
   assertForkOwnership,
   buildBasedOnLabel,
   buildPersonalGraph,
