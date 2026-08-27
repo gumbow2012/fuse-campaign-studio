@@ -126,7 +126,15 @@ export default function PlanOfferModal() {
     return () => setPlanOfferActive(false);
   }, [open]);
 
+  // P7 — one funnel event per moment; a choice suppresses the "closed" event.
+  const choiceMade = useRef(false);
+  const closeTracked = useRef(false);
+
   const close = () => {
+    if (!choiceMade.current && !closeTracked.current) {
+      closeTracked.current = true;
+      track("onboarding_offer_closed", {});
+    }
     setOpen(false);
     setGranted(false);
     setAfford(null);
@@ -136,12 +144,19 @@ export default function PlanOfferModal() {
     if (!user?.id) return;
     setGranting(true);
     try {
-      const { error } = await supabase.rpc("grant_welcome_credits" as never);
+      const { data, error } = await supabase.rpc("grant_welcome_credits" as never);
       if (error) throw error;
       writePlanChoice(user.id, "free");
+      choiceMade.current = true;
       track("onboarding_plan_choice", { choice: "free" });
+      track("free_selected", {});
+      const grantResult = data as { granted?: boolean } | boolean | null;
+      const wasGranted =
+        grantResult === true || (typeof grantResult === "object" && grantResult?.granted === true);
+      if (wasGranted) track("welcome_credits_granted", { credits: WELCOME_CREDITS });
       const refreshed = await refreshProfile();
       setGranted(true);
+
 
       const intent = getPendingGenerationIntent();
       const required = intent?.creditCost ?? 0;
