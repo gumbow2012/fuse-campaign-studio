@@ -101,25 +101,8 @@ const Admin = () => {
     }
   };
 
-  // Credit Adjustment
-  const [creditUserId, setCreditUserId] = useState("");
-  const [creditAmount, setCreditAmount] = useState("");
-  const [creditDesc, setCreditDesc] = useState("");
+  // Credit adjustments now live in AdminCreditControl (identity search + apply_credit_transaction only).
 
-  const adjustCredits = async () => {
-    try {
-      const { error } = await supabase.functions.invoke("admin-adjust-credits", {
-        body: { userId: creditUserId, amount: parseInt(creditAmount), description: creditDesc },
-      });
-      if (error) throw error;
-      toast({ title: "Credits adjusted" });
-      setCreditUserId("");
-      setCreditAmount("");
-      setCreditDesc("");
-    } catch (err: any) {
-      toast({ title: "Error", description: err.message, variant: "destructive" });
-    }
-  };
 
   // Revenue config
   const { data: platformConfig } = useQuery({
