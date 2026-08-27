@@ -361,10 +361,19 @@ export default function BrandProfilesPage() {
                 icon={<Wand2 className="h-5 w-5" />}
                 title="Visual style"
                 done={completion.visualStyle}
-                detail="Lighting, mood and finish presets for every campaign."
-                cta="Set your style"
-                onClick={() => toast.info("Visual style presets are coming next.")}
+                detail={
+                  completion.visualStyle
+                    ? [visualStyle?.tags.slice(0, 3).join(", "), visualStyle?.tone].filter(Boolean).join(" · ")
+                    : "Tags, tone and references FUSE should always respect."
+                }
+                cta={completion.visualStyle ? "Edit your style" : "Set your style"}
+                onClick={() =>
+                  activeBrand
+                    ? navigate(`/app/brand/onboarding?brand=${activeBrand.id}&step=5`)
+                    : navigate("/app/brand/onboarding")
+                }
               />
+
               <DashboardCard
                 icon={<Images className="h-5 w-5" />}
                 title="Saved assets"
