@@ -10,6 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Plus, Trash2, BarChart3, Eye, Copy, Loader2, Download, Upload, Check, X, Pencil, Save, Play, Search } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Link } from "react-router-dom";
+import AdminCreditControl from "@/components/admin/AdminCreditControl";
 
 const EXAMPLE_INPUT_SCHEMA = JSON.stringify(
   [
@@ -101,25 +102,8 @@ const Admin = () => {
     }
   };
 
-  // Credit Adjustment
-  const [creditUserId, setCreditUserId] = useState("");
-  const [creditAmount, setCreditAmount] = useState("");
-  const [creditDesc, setCreditDesc] = useState("");
+  // Credit adjustments now live in AdminCreditControl (identity search + apply_credit_transaction only).
 
-  const adjustCredits = async () => {
-    try {
-      const { error } = await supabase.functions.invoke("admin-adjust-credits", {
-        body: { userId: creditUserId, amount: parseInt(creditAmount), description: creditDesc },
-      });
-      if (error) throw error;
-      toast({ title: "Credits adjusted" });
-      setCreditUserId("");
-      setCreditAmount("");
-      setCreditDesc("");
-    } catch (err: any) {
-      toast({ title: "Error", description: err.message, variant: "destructive" });
-    }
-  };
 
   // Revenue config
   const { data: platformConfig } = useQuery({
@@ -794,18 +778,9 @@ const Admin = () => {
           </TabsContent>
 
           <TabsContent value="credits">
-            <div className="rounded-xl border border-border/40 bg-card p-5 max-w-md">
-              <h3 className="text-sm font-bold text-foreground mb-4">Adjust User Credits</h3>
-              <div className="space-y-3">
-                <Input placeholder="User ID (UUID)" value={creditUserId} onChange={e => setCreditUserId(e.target.value)} className="bg-secondary border-border text-foreground" />
-                <Input placeholder="Amount (+/-)" type="number" value={creditAmount} onChange={e => setCreditAmount(e.target.value)} className="bg-secondary border-border text-foreground" />
-                <Input placeholder="Reason" value={creditDesc} onChange={e => setCreditDesc(e.target.value)} className="bg-secondary border-border text-foreground" />
-                <Button onClick={adjustCredits} disabled={!creditUserId || !creditAmount} className="gradient-primary text-primary-foreground font-bold border-0">
-                  Adjust Credits
-                </Button>
-              </div>
-            </div>
+            <AdminCreditControl />
           </TabsContent>
+
 
           <TabsContent value="projects">
             {/* Pending projects needing fulfillment */}
