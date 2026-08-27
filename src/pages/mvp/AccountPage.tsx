@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import SiteShell from "@/components/mvp/SiteShell";
 import AccountHeader from "@/components/mvp/AccountHeader";
+import BrandActivationBanner from "@/components/brand/BrandActivationBanner";
 import CreditsOverviewCard from "@/components/mvp/membership/CreditsOverviewCard";
 import CreditUsageHistory from "@/components/mvp/membership/CreditUsageHistory";
 import AchievementsSection from "@/components/mvp/AchievementsSection";
@@ -119,6 +120,8 @@ export default function AccountPage() {
             <Link to="/pricing">Manage membership</Link>
           </Button>
         </div>
+
+        <BrandActivationBanner surface="account" className="mt-8" />
 
         <div className="mt-8">
           <AccountHeader />

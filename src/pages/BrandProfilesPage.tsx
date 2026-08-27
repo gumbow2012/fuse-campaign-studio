@@ -28,6 +28,7 @@ import { listMyAvatars } from "@/services/avatarProfiles";
 import { listLibraryAssets } from "@/services/libraryAssets";
 import { BrandEditor, CARD, LABEL, ProductEditor } from "@/components/brand/BrandEditors";
 import BrandImportPanel from "@/components/brand/BrandImportPanel";
+import BrandActivationBanner from "@/components/brand/BrandActivationBanner";
 import { deriveBrandReadiness } from "@/lib/brandReadiness";
 import { stashBrandImport } from "@/services/brandImport";
 import BrandModelsPanel from "@/components/brand/BrandModelsPanel";
@@ -388,6 +389,7 @@ export default function BrandProfilesPage() {
       <main className="mx-auto w-full max-w-6xl px-5 pb-24 pt-28">
         {hero}
         {resumeBanner}
+        <BrandActivationBanner surface="brand_workspace" className="mt-6" />
 
 
         <div className="mt-7 flex flex-col gap-5 md:flex-row md:items-center md:justify-between">

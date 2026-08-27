@@ -13,6 +13,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import SiteShell from "@/components/mvp/SiteShell";
+import BrandActivationBanner from "@/components/brand/BrandActivationBanner";
 import RunFeedbackInline from "@/components/mvp/RunFeedbackInline";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import CreditPackDialog from "@/components/mvp/CreditPackDialog";
@@ -1494,6 +1495,10 @@ export default function TemplateStudioPage() {
         ) : null}
 
 
+
+        {!hasActiveCampaignWorkspace ? (
+          <BrandActivationBanner surface="marketplace" className="mt-6" />
+        ) : null}
 
         {isPrivilegedUser ? (
           <section className="mt-6 rounded-[1.75rem] border border-cyan-300/20 bg-cyan-300/[0.06] p-4">
