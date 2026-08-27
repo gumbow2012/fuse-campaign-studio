@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { CreditChip } from "@/components/CreditChip";
+import { StreakChip } from "@/components/StreakChip";
 import NotificationCenter from "@/components/NotificationCenter";
 import { AccountPopover } from "@/components/AccountMenu";
 import FeatureNewBadge from "@/components/FeatureNewBadge";
@@ -168,6 +169,7 @@ export default function SiteShell({ children }: { children: ReactNode }) {
             {user ? (
               /* ONE cohesive cluster: credits · notifications · account */
               <div className="flex items-center gap-1.5">
+                <StreakChip />
                 <CreditChip />
                 <NotificationCenter />
                 <AccountPopover />
@@ -305,6 +307,7 @@ export default function SiteShell({ children }: { children: ReactNode }) {
                   {user ? (
                     /* ONE cohesive cluster: credits · notifications · account */
                     <>
+                      <StreakChip />
                       <CreditChip />
                       <NotificationCenter />
                       <AccountPopover />

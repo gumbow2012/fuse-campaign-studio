@@ -1,5 +1,6 @@
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useStreak } from "@/hooks/useStreak";
+import { todayIso } from "@/services/streaks";
 
 /** Compact daily-activity streak indicator for the header cluster. */
 export function StreakChip() {
@@ -9,6 +10,8 @@ export function StreakChip() {
 
   const longest = Number(streak.longest_streak ?? 0);
   const total = Number(streak.total_active_days ?? 0);
+  /* RETENTION P4 — gentle nudge only: not active today AND a real streak to keep. */
+  const needsNudge = current >= 2 && streak.last_active_on !== todayIso();
 
   return (
     <Popover>
@@ -41,6 +44,11 @@ export function StreakChip() {
           <p>Longest streak: {longest.toLocaleString()} days</p>
           <p>Total active days: {total.toLocaleString()}</p>
         </div>
+        {needsNudge ? (
+          <p className="mt-3 rounded-xl border border-amber-300/25 bg-amber-300/[0.07] px-3 py-2 text-[11px] text-amber-100">
+            Keep your streak going — create something today.
+          </p>
+        ) : null}
       </PopoverContent>
     </Popover>
   );
