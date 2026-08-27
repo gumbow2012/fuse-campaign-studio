@@ -37,6 +37,7 @@ import BrandCreativeDnaStep, { type CreativeDnaValue } from "@/components/brand/
 import CastLibrary from "@/components/cast/CastLibrary";
 import BrandReviewStep from "@/components/brand/BrandReviewStep";
 import { takeBrandImport } from "@/services/brandImport";
+import { track } from "@/lib/analytics/track";
 
 const STEPS = [
   { id: 1, label: "Brand basics", optional: false },
