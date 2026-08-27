@@ -10,6 +10,8 @@ import { PageTracking } from "@/hooks/usePageTracking";
 import { PageViewTracker } from "@/lib/analytics/usePageViews";
 import CreditTopUpSuccessWatcher from "@/components/mvp/CreditTopUpSuccessWatcher";
 import WelcomeActivationModal from "@/components/brand/WelcomeActivationModal";
+import PlanOfferModal from "@/components/onboarding/PlanOfferModal";
+
 import { useBrandActivationReminders } from "@/hooks/useBrandActivationReminders";
 import CustomerRoute from "@/components/CustomerRoute";
 import BrandProfilesPage from "@/pages/BrandProfilesPage";
