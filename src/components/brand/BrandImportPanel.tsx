@@ -58,7 +58,7 @@ export default function BrandImportPanel({
     const result = await importBrandFromWebsite(url);
     setBusy(false);
     if (!result.ok) {
-      setFailure(result.reason);
+      setFailure("reason" in result ? result.reason : "We couldn't read this store.");
       return;
     }
     setFound(result);
