@@ -46,8 +46,13 @@ import {
 } from "@/services/productProfiles";
 
 
-function CompletionRing({ done, total }: { done: number; total: number }) {
-  const pct = total ? Math.round((done / total) * 100) : 0;
+/**
+ * Single truth: onboarding is either done (no REQUIRED items missing) or not.
+ * The percent shown is enrichment depth from RECOMMENDED items only — it is
+ * never presented as required onboarding progress.
+ */
+function BrandStatusRing({ ready, depthPct }: { ready: boolean; depthPct: number }) {
+  const pct = ready ? depthPct : 0;
   return (
     <div className="flex items-center gap-3">
       <div
@@ -56,16 +61,18 @@ function CompletionRing({ done, total }: { done: number; total: number }) {
           background: `conic-gradient(#22d3ee ${pct * 3.6}deg, rgba(255,255,255,0.08) ${pct * 3.6}deg)`,
         }}
         role="img"
-        aria-label={`Brand ${done} of ${total} complete`}
+        aria-label={ready ? `Brand set up. Profile depth ${depthPct} percent` : "Brand identity not set up yet"}
       >
         <div className="absolute inset-[6px] flex items-center justify-center rounded-full bg-slate-950 text-sm font-semibold text-white">
-          {done}/{total}
+          {ready ? <Check className="h-5 w-5 text-cyan-200" /> : <span className="text-[11px]">SET UP</span>}
         </div>
       </div>
       <div>
-        <p className={LABEL}>Brand setup</p>
+        <p className={LABEL}>{ready ? "Brand set up ✓" : "Brand setup"}</p>
         <p className="mt-1 text-sm text-slate-300">
-          {done === total ? "Your brand is fully set up." : `${total - done} step${total - done === 1 ? "" : "s"} left.`}
+          {ready
+            ? `Identity ready · Profile depth ${depthPct}% (optional enrichment)`
+            : "Add your brand name, logo and colors to finish setup."}
         </p>
       </div>
     </div>
