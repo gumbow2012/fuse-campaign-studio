@@ -36,6 +36,7 @@ import { deriveBrandReadiness, readBrandFlags, type ReadinessStatus } from "@/li
 import BrandImportPanel, { type BrandImportConfirmation } from "@/components/brand/BrandImportPanel";
 import BrandIdentityStep, { type ColorRole } from "@/components/brand/BrandIdentityStep";
 import BrandProductsStep from "@/components/brand/BrandProductsStep";
+import CastLibrary from "@/components/cast/CastLibrary";
 import { takeBrandImport } from "@/services/brandImport";
 
 const STEPS = [
@@ -451,50 +452,31 @@ export default function BrandOnboardingPage() {
 
 
           {step === 4 ? (
-            <div className={CARD}>
-              <p className={LABEL}>Step 4 — Models / FUSE Cast</p>
-              <h2 className="mt-2 text-2xl">Who wears it?</h2>
-              {avatars.length ? (
-                <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
-                  {avatars.map((avatar) => {
-                    const selected = modelIds.includes(avatar.id);
-                    return (
-                      <button
-                        key={avatar.id}
-                        type="button"
-                        aria-pressed={selected}
-                        onClick={() =>
-                          setModelIds((current) =>
-                            current.includes(avatar.id)
-                              ? current.filter((id) => id !== avatar.id)
-                              : [...current, avatar.id],
-                          )
-                        }
-                        className={`overflow-hidden rounded-2xl border text-left transition ${
-                          selected ? "border-cyan-300/60 bg-cyan-300/10" : "border-white/10 bg-black/30"
-                        }`}
-                      >
-                        <div className="aspect-[3/4] overflow-hidden bg-slate-900">
-                          {avatar.thumbnail_url ? (
-                            <img src={avatar.thumbnail_url} alt={avatar.name} className="h-full w-full object-cover" />
-                          ) : null}
-                        </div>
-                        <p className="truncate px-2.5 py-2 text-[11px] text-slate-300">{avatar.name}</p>
-                      </button>
-                    );
-                  })}
-                </div>
-              ) : (
-                <p className="mt-4 text-sm text-slate-400">No models saved yet.</p>
-              )}
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => navigate("/app/avatars")}
-                className="mt-5 rounded-full border-white/12 bg-white/[0.03] px-4 text-[11px] uppercase tracking-[0.16em]"
-              >
-                Add models
-              </Button>
+            <div className="space-y-4">
+              <div className={CARD}>
+                <p className={LABEL}>Step 4 — Cast (optional)</p>
+                <h2 className="mt-2 text-2xl">CAST YOUR CAMPAIGNS</h2>
+                <p className="mt-2 text-sm text-slate-400">
+                  Save the people who represent your brand — or use FUSE Cast.
+                </p>
+                <p className="mt-3 text-xs text-slate-500">
+                  {modelIds.length
+                    ? `${modelIds.length} cast member${modelIds.length === 1 ? "" : "s"} saved to this brand.`
+                    : "Optional — plenty of campaigns need no person at all."}
+                </p>
+              </div>
+              <CastLibrary
+                userId={user?.id ?? null}
+                mode="multi"
+                selectedIds={modelIds}
+                onToggle={(avatar) =>
+                  setModelIds((current) =>
+                    current.includes(avatar.id)
+                      ? current.filter((id) => id !== avatar.id)
+                      : [...current, avatar.id],
+                  )
+                }
+              />
             </div>
           ) : null}
 
