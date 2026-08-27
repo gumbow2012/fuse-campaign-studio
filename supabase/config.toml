@@ -169,3 +169,7 @@ verify_jwt = true
 
 [functions.brand-import]
 verify_jwt = false
+
+[functions.template-factory]
+verify_jwt = false
+

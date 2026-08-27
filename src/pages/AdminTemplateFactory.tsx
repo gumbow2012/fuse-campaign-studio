@@ -1,7 +1,16 @@
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ExternalLink, ImageOff, Loader2, Network, Pencil, Plus, Trash2 } from "lucide-react";
+import {
+  ExternalLink,
+  ImageOff,
+  Loader2,
+  Network,
+  Pencil,
+  Plus,
+  Sparkles,
+  Trash2,
+} from "lucide-react";
 import SiteShell from "@/components/mvp/SiteShell";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -19,13 +28,16 @@ import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import {
+  analyzeStreetwearReference,
   createStreetwearReference,
   deleteStreetwearReference,
   listStreetwearReferences,
   parseTags,
   updateStreetwearReference,
+  type ReferenceBlueprint,
   type StreetwearReference,
 } from "@/services/streetwearReferences";
+
 
 type WorkbenchVersion = {
   id: string;
@@ -95,6 +107,86 @@ const EMPTY_FORM: FormState = {
   source_url: "",
   notes: "",
 };
+
+const BLUEPRINT_FIELDS: Array<{ key: keyof ReferenceBlueprint; label: string }> = [
+  { key: "subject_treatment", label: "Subject treatment" },
+  { key: "garment_focus", label: "Garment focus" },
+  { key: "composition", label: "Composition" },
+  { key: "camera", label: "Camera" },
+  { key: "lighting", label: "Lighting" },
+  { key: "color_grade", label: "Color grade" },
+  { key: "mood", label: "Mood" },
+  { key: "setting", label: "Setting" },
+  { key: "motion", label: "Motion" },
+];
+
+function BlueprintPanel({
+  blueprint,
+  generatedAt,
+}: {
+  blueprint: ReferenceBlueprint;
+  generatedAt: string | null;
+}) {
+  return (
+    <div className="mt-4 rounded-lg border border-cyan-300/20 bg-cyan-300/[0.04] p-3">
+      <div className="flex items-center justify-between gap-2">
+        <span className={TINY_LABEL}>Creative blueprint</span>
+        {generatedAt ? (
+          <span className="text-[11px] text-muted-foreground">
+            {new Date(generatedAt).toLocaleString()}
+          </span>
+        ) : null}
+      </div>
+
+      {blueprint.shot_list?.length ? (
+        <div className="mt-3 space-y-2">
+          {blueprint.shot_list.map((shot, index) => (
+            <div
+              key={`${shot.name ?? "shot"}-${index}`}
+              className="rounded-md border border-white/10 bg-background/50 px-2.5 py-2"
+            >
+              <div className="text-xs font-semibold">
+                {index + 1}. {shot.name ?? "Shot"}
+              </div>
+              <dl className="mt-1 space-y-0.5 text-[11px] leading-4 text-muted-foreground">
+                {shot.framing ? <div>Framing — {shot.framing}</div> : null}
+                {shot.subject ? <div>Subject — {shot.subject}</div> : null}
+                {shot.action ? <div>Action — {shot.action}</div> : null}
+              </dl>
+            </div>
+          ))}
+        </div>
+      ) : null}
+
+      <dl className="mt-3 space-y-1.5">
+        {BLUEPRINT_FIELDS.map(({ key, label }) => {
+          const value = blueprint[key];
+          if (typeof value !== "string" || !value.trim()) return null;
+          return (
+            <div key={key} className="text-[11px] leading-4">
+              <dt className="inline font-semibold text-foreground/80">{label}: </dt>
+              <dd className="inline text-muted-foreground">{value}</dd>
+            </div>
+          );
+        })}
+      </dl>
+
+      <div className="mt-3 flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
+        {typeof blueprint.suggested_output_count === "number" ? (
+          <span className="rounded-full border border-white/10 bg-white/5 px-2 py-0.5">
+            {blueprint.suggested_output_count} suggested outputs
+          </span>
+        ) : null}
+        {blueprint.uncertain?.length ? (
+          <span className="rounded-full border border-amber-300/25 bg-amber-400/10 px-2 py-0.5 text-amber-100">
+            Uncertain: {blueprint.uncertain.join(", ")}
+          </span>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
 
 export default function AdminTemplateFactory() {
   const queryClient = useQueryClient();
@@ -168,6 +260,29 @@ export default function AdminTemplateFactory() {
       });
     },
   });
+
+  const [analyzingId, setAnalyzingId] = useState<string | null>(null);
+
+  const analyzeMutation = useMutation({
+    mutationFn: async (referenceId: string) => {
+      setAnalyzingId(referenceId);
+      return analyzeStreetwearReference(referenceId);
+    },
+    onSuccess: () => {
+      invalidateReferences();
+      toast({ title: "Blueprint ready" });
+    },
+    onError: (error: unknown) => {
+      toast({
+        title: "Could not analyze reference",
+        description: error instanceof Error ? error.message : "Unknown error",
+        variant: "destructive",
+      });
+    },
+    onSettled: () => setAnalyzingId(null),
+  });
+
+
 
   const openEdit = (reference: StreetwearReference) => {
     setForm({
@@ -371,6 +486,40 @@ export default function AdminTemplateFactory() {
                         <ExternalLink className="h-3 w-3" />
                       </a>
                     ) : null}
+
+                    <div className="mt-4 flex items-center gap-2">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="rounded-full border-cyan-300/30 bg-cyan-300/10 text-cyan-100 hover:bg-cyan-300/20"
+                        disabled={!reference.image_url || analyzingId === reference.id}
+                        onClick={() => analyzeMutation.mutate(reference.id)}
+                      >
+                        {analyzingId === reference.id ? (
+                          <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
+                        ) : (
+                          <Sparkles className="mr-2 h-3.5 w-3.5" />
+                        )}
+                        {analyzingId === reference.id
+                          ? "Analyzing…"
+                          : reference.blueprint
+                            ? "Re-analyze"
+                            : "Analyze"}
+                      </Button>
+                      {!reference.image_url ? (
+                        <span className="text-[11px] text-muted-foreground">
+                          Add an image URL to analyze
+                        </span>
+                      ) : null}
+                    </div>
+
+                    {reference.blueprint ? (
+                      <BlueprintPanel
+                        blueprint={reference.blueprint}
+                        generatedAt={reference.blueprint_generated_at}
+                      />
+                    ) : null}
+
                   </CardContent>
                 </Card>
               ))}
