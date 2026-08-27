@@ -35,6 +35,7 @@ import { listMyAvatars } from "@/services/avatarProfiles";
 import { listProductProfiles } from "@/services/productProfiles";
 import { deriveBrandReadiness, readBrandFlags, type ReadinessStatus } from "@/lib/brandReadiness";
 import BrandImportPanel, { type BrandImportConfirmation } from "@/components/brand/BrandImportPanel";
+import BrandIdentityStep, { type ColorRole } from "@/components/brand/BrandIdentityStep";
 import { takeBrandImport } from "@/services/brandImport";
 
 const STEPS = [
@@ -134,7 +135,9 @@ export default function BrandOnboardingPage() {
   // Step 2
   const [primaryLogo, setPrimaryLogo] = useState<string | null>(null);
   const [secondaryLogo, setSecondaryLogo] = useState<string | null>(null);
+  const [invertedLogo, setInvertedLogo] = useState<string | null>(null);
   const [colors, setColors] = useState<string[]>([]);
+  const [colorRoles, setColorRoles] = useState<Record<string, ColorRole>>({});
   const [noLogo, setNoLogo] = useState(false);
   const [neutralPalette, setNeutralPalette] = useState(false);
   // Step 4
@@ -158,6 +161,13 @@ export default function BrandOnboardingPage() {
     setPrimaryLogo(brand.primary_logo_url ?? null);
     setSecondaryLogo(brand.secondary_logo_url ?? null);
     setColors(brand.colors ?? []);
+    const meta = (brand.metadata ?? {}) as Record<string, unknown>;
+    setInvertedLogo(typeof meta.invertedLogoUrl === "string" ? meta.invertedLogoUrl : null);
+    setColorRoles(
+      meta.colorRoles && typeof meta.colorRoles === "object"
+        ? (meta.colorRoles as Record<string, ColorRole>)
+        : {},
+    );
     const flags = readBrandFlags(brand);
     setNoLogo(flags.noLogo);
     setNeutralPalette(flags.neutralPalette);
@@ -257,6 +267,11 @@ export default function BrandOnboardingPage() {
       if (step === 2) {
         metaPatch.noLogo = noLogo;
         metaPatch.neutralPalette = neutralPalette;
+        metaPatch.invertedLogoUrl = invertedLogo;
+        // Roles only survive for colors that are still in the palette.
+        metaPatch.colorRoles = Object.fromEntries(
+          Object.entries(colorRoles).filter(([hex]) => colors.includes(hex)),
+        );
       }
       if (step === 4) metaPatch.modelIds = modelIds;
       if (step === 5) {
