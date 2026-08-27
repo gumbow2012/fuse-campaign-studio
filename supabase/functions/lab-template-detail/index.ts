@@ -288,6 +288,7 @@ Deno.serve(async (req) => {
       reviewStatus: version.review_status ?? "Unreviewed",
       isActive: version.is_active,
       castConfig: readCastConfig((version as any).cast_config),
+      canCustomize: customizable,
       userInputs,
       nodes: numberedNodes,
       edges: (edges ?? []).map((edge: any) => ({
