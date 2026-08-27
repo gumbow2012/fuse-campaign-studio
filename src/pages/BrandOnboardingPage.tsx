@@ -121,6 +121,10 @@ export default function BrandOnboardingPage() {
     [brands, brandId],
   );
 
+  // Website importer (Phase 2) — candidate state only, never auto-persisted.
+  const [imported, setImported] = useState<BrandImportConfirmation | null>(null);
+  const [showImporter, setShowImporter] = useState(!searchParams.get("brand"));
+
   // Step 1
   const [name, setName] = useState("");
   const [website, setWebsite] = useState("");
