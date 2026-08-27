@@ -8,6 +8,7 @@ import {
   Network,
   ArrowDownWideNarrow,
   ChevronDown,
+  Gauge,
   Pencil,
   Plus,
   Sparkles,
@@ -290,6 +291,8 @@ export default function AdminTemplateFactory() {
     return grouped;
   }, [templates]);
 
+  const [sortByScore, setSortByScore] = useState(false);
+
   const sortedReferences = useMemo(() => {
     const list = [...(references ?? [])];
     if (!sortByScore) return list;
@@ -345,7 +348,6 @@ export default function AdminTemplateFactory() {
 
   const [analyzingId, setAnalyzingId] = useState<string | null>(null);
   const [scoringId, setScoringId] = useState<string | null>(null);
-  const [sortByScore, setSortByScore] = useState(false);
 
   /** TF3 — deterministic heuristic, computed locally then persisted. */
   const scoreAndPersist = async (reference: StreetwearReference, blueprint: ReferenceBlueprint) => {
@@ -741,6 +743,15 @@ export default function AdminTemplateFactory() {
                           <ExternalLink className="h-3 w-3" />
                         </Link>
                       </div>
+                    ) : null}
+
+                    {typeof reference.viral_score === "number" ? (
+                      <ViralScorePanel
+                        score={reference.viral_score}
+                        factors={readViralFactors(
+                          (reference.viral_factors as { factors?: unknown } | null)?.factors,
+                        )}
+                      />
                     ) : null}
 
                     {reference.blueprint ? (
