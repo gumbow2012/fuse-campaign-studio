@@ -316,6 +316,8 @@ Deno.serve(async (req) => {
         buckets: result.buckets,
         reviewStatusTracked: result.reviewStatusTracked,
         ...social,
+        achievements,
+
       });
     }
 
