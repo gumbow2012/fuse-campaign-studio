@@ -312,6 +312,10 @@ const TemplateFlowNode = ({ id, data, selected }: NodeProps<GraphCanvasNode>) =>
         <p className="mt-2 text-[11px] text-muted-foreground">{data.detailLine}</p>
       ) : null}
 
+      {data.media ? <NodeMediaStrip media={data.media} onOpen={data.onOpenMedia} /> : null}
+
+
+
       <div className="mt-3 rounded-xl border border-border/50 bg-background/60 p-2.5">
         <div className="flex items-center justify-between gap-2">
           <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
