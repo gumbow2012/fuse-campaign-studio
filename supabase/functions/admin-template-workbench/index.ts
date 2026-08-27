@@ -1254,8 +1254,10 @@ Deno.serve(async (req) => {
           admin_user_id: user.id,
           template_id: quickGate.templateId,
           version_id: versionId,
-          latest_test_job_id: quickGate.latestTestJobId,
+          latest_test_job_id: quickGate.tested ? quickGate.latestTestJobId : null,
+          skipped_test: !quickGate.tested,
           skipped_full_audit: true,
+
           timestamp: new Date().toISOString(),
         },
       }, admin);
