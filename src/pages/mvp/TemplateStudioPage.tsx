@@ -1680,6 +1680,7 @@ export default function TemplateStudioPage() {
                           type="button"
                           onClick={(event) => {
                             event.stopPropagation();
+                            track("template_view", { template_id: template.id });
                             setDetailTemplateId(template.id);
                           }}
                           className="absolute right-3 top-3 rounded-full border border-white/15 bg-black/55 px-3 py-1 text-[9px] font-semibold uppercase tracking-[0.18em] text-white/85 backdrop-blur transition-colors hover:bg-black/80"
