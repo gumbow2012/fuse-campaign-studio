@@ -7,6 +7,7 @@ import { AuthProvider } from "@/contexts/AuthContext";
 import { BrandProvider } from "@/contexts/BrandContext";
 import { StreakProvider } from "@/hooks/useStreak";
 import { PageTracking } from "@/hooks/usePageTracking";
+import { PageViewTracker } from "@/lib/analytics/usePageViews";
 import CreditTopUpSuccessWatcher from "@/components/mvp/CreditTopUpSuccessWatcher";
 import CustomerRoute from "@/components/CustomerRoute";
 import BrandProfilesPage from "@/pages/BrandProfilesPage";
