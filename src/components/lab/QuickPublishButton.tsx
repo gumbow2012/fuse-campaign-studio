@@ -189,7 +189,7 @@ export default function QuickPublishButton({
                     <GateLine ok={gate.structuralIssueCount === 0 && gate.executionNodeCount > 0} label="Workflow connected" />
                     <GateLine ok={gate.customerInputCount > 0} label={`${gate.customerInputCount} customer input${gate.customerInputCount === 1 ? "" : "s"}`} />
                     <GateLine ok={gate.finalOutputCount > 0} label={`${gate.finalOutputCount} final output${gate.finalOutputCount === 1 ? "" : "s"}`} />
-                    <GateLine ok={gate.tested} label="Latest test completed" />
+                    <GateLine ok={gate.tested} label={gate.tested ? "Tested" : "Not tested"} />
                   </ul>
 
                   {gate.tested ? (
@@ -199,7 +199,7 @@ export default function QuickPublishButton({
                   ) : (
                     <p className="flex items-start gap-2 rounded-xl border border-amber-300/30 bg-amber-300/[0.1] px-3 py-2 text-xs font-semibold text-amber-100">
                       <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-                      NOT TESTED — This version has not completed a test run.
+                      NOT TESTED — output quality has not been verified.
                     </p>
                   )}
 
@@ -217,23 +217,29 @@ export default function QuickPublishButton({
                 <Button variant="outline" size="sm" onClick={() => setOpen(false)}>Cancel</Button>
                 {gate && !gate.tested ? (
                   onRunTest ? (
-                    <Button size="sm" onClick={() => { setOpen(false); onRunTest(); }}>Run test</Button>
+                    <Button variant="outline" size="sm" onClick={() => { setOpen(false); onRunTest(); }}>Run test</Button>
                   ) : (
-                    <Button asChild size="sm">
+                    <Button asChild variant="outline" size="sm">
                       <Link to={`/app/lab/canvas?versionId=${versionId}`}>Run test</Link>
                     </Button>
                   )
-                ) : (
-                  <Button
-                    size="sm"
-                    disabled={!gate?.publishable || publishing || loadingGate}
-                    onClick={() => void publishNow()}
-                  >
-                    {publishing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Zap className="mr-2 h-4 w-4" />}
-                    Publish now
-                  </Button>
-                )}
+                ) : null}
+                <Button
+                  size="sm"
+                  disabled={!gate?.publishable || publishing || loadingGate}
+                  onClick={() => {
+                    if (gate && !gate.tested) {
+                      setConfirmUntested(true);
+                      return;
+                    }
+                    void publishNow();
+                  }}
+                >
+                  {publishing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Zap className="mr-2 h-4 w-4" />}
+                  {gate && !gate.tested ? "Publish anyway" : "Publish now"}
+                </Button>
               </DialogFooter>
+
             </>
           )}
         </DialogContent>
