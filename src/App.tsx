@@ -10,6 +10,7 @@ import { PageTracking } from "@/hooks/usePageTracking";
 import { PageViewTracker } from "@/lib/analytics/usePageViews";
 import CreditTopUpSuccessWatcher from "@/components/mvp/CreditTopUpSuccessWatcher";
 import WelcomeActivationModal from "@/components/brand/WelcomeActivationModal";
+import { useBrandActivationReminders } from "@/hooks/useBrandActivationReminders";
 import CustomerRoute from "@/components/CustomerRoute";
 import BrandProfilesPage from "@/pages/BrandProfilesPage";
 import BrandOnboardingPage from "@/pages/BrandOnboardingPage";
@@ -72,6 +73,12 @@ import CreatorOnboarding from "@/pages/app/creator/CreatorOnboarding";
 
 const queryClient = new QueryClient();
 
+/** Mounted once: creates deduplicated brand activation reminders. */
+function BrandActivationReminders() {
+  useBrandActivationReminders();
+  return null;
+}
+
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <AuthProvider>
@@ -84,6 +91,7 @@ const App = () => (
           <PageTracking />
           <PageViewTracker />
           <CreditTopUpSuccessWatcher />
+          <BrandActivationReminders />
           <WelcomeActivationModal />
           <Routes>
             <Route path="/" element={<HomePage />} />
