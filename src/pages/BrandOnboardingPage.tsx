@@ -298,6 +298,7 @@ export default function BrandOnboardingPage() {
       return nextStep;
     },
     onSuccess: (nextStep) => {
+      track("brand_step_completed", { step: stepKey(step) });
       refreshBrands();
       setStep(nextStep);
     },
