@@ -13,6 +13,7 @@ import { toast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { useMembershipCheckout } from "@/hooks/useMembershipCheckout";
 import { supabase } from "@/integrations/supabase/client";
+import { track } from "@/lib/analytics/track";
 import { CREDIT_PACKS, STRIPE_TIERS } from "@/lib/stripe-config";
 import {
   checkoutEventId,
