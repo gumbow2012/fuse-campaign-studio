@@ -169,8 +169,11 @@ export default function SiteShell({ children }: { children: ReactNode }) {
             </nav>
             {user ? (
               /* ONE cohesive cluster: credits · notifications · account */
-              <div className="flex items-center gap-1.5">
-                <StreakChip />
+              <div className="flex min-w-0 shrink items-center gap-1 sm:gap-1.5">
+                {/* Streak is the first thing to yield on very small screens. */}
+                <div className="hidden sm:flex">
+                  <StreakChip />
+                </div>
                 <CreditChip />
                 <NotificationCenter />
                 <AccountPopover />

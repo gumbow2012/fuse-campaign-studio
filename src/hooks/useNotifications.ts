@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import {
+  countUnreadNotifications,
   fetchNotifications,
   markAllNotificationsRead,
   markNotificationRead,
@@ -29,6 +30,15 @@ export function useNotifications(limit = 30) {
     refetchOnWindowFocus: true,
   });
 
+  /* Exact unread total (not limited to the fetched page) for the bell badge. */
+  const unreadQuery = useQuery({
+    queryKey: [...key, "unread-count"],
+    queryFn: countUnreadNotifications,
+    enabled: Boolean(userId),
+    staleTime: 30_000,
+    refetchOnWindowFocus: true,
+  });
+
   useEffect(() => {
     if (!userId) return;
 
@@ -49,7 +59,8 @@ export function useNotifications(limit = 30) {
   }, [userId, queryClient]);
 
   const notifications = (query.data ?? []) as UserNotification[];
-  const unreadCount = notifications.filter((item) => !item.read_at).length;
+  const pageUnread = notifications.filter((item) => !item.read_at).length;
+  const unreadCount = Math.max(unreadQuery.data ?? 0, pageUnread);
 
   const markAll = useMutation({
     mutationFn: async () => {

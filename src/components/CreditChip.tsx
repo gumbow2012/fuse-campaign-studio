@@ -62,11 +62,10 @@ export function CreditChip() {
   const isLow = balance < LOW_CREDITS;
   const isCritical = balance < CRITICAL_CREDITS;
 
-  const chipTone = isCritical
-    ? "border-red-400/40 bg-red-400/15 text-red-200"
-    : isLow
-      ? "border-amber-400/30 bg-amber-400/10 text-amber-200"
-      : "border-white/10 bg-white/[0.04] text-cyan-200";
+  /* Low balance stays subtle (soft amber), never alarming. */
+  const chipTone = isLow
+    ? "border-amber-300/25 bg-amber-300/[0.07] text-amber-100"
+    : "border-white/10 bg-white/[0.04] text-cyan-200";
 
   const isActivePlan =
     profile?.subscription_status === "active" || profile?.subscription_status === "trialing";
@@ -122,7 +121,7 @@ export function CreditChip() {
             <div
               className={cn(
                 "h-full rounded-full transition-[width] duration-700 ease-out",
-                isCritical ? "bg-red-400" : isLow ? "bg-amber-300" : "bg-gradient-to-r from-electric-blue to-electric-cyan"
+                isLow ? "bg-amber-300/80" : "bg-gradient-to-r from-electric-blue to-electric-cyan"
               )}
               style={{ width: `${ratio * 100}%` }}
             />
@@ -133,6 +132,16 @@ export function CreditChip() {
               <p>Monthly allowance: {cycleCredits.toLocaleString()}</p>
               {resetLabel ? <p>Resets {resetLabel}</p> : null}
             </div>
+          ) : null}
+
+          {isLow ? (
+            <Link
+              to="/membership?tab=upgrade"
+              onClick={() => setOpen(false)}
+              className="block rounded-xl border border-amber-300/25 bg-amber-300/[0.07] px-3 py-2 text-xs text-amber-100 transition-colors hover:bg-amber-300/[0.12]"
+            >
+              {isCritical ? "Running low on credits" : "Credits are getting low"} — see plans
+            </Link>
           ) : null}
 
           {approxRuns !== null && approxRuns > 0 ? (

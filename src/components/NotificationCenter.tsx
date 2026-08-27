@@ -25,8 +25,24 @@ function NotificationRow({
   const unread = !notification.read_at;
 
   return (
-    <li className={cn("rounded-xl px-3 py-2.5 transition-colors", unread ? "bg-white/[0.05]" : "hover:bg-white/[0.03]")}>
-      <div className="flex gap-2.5">
+    <li className={cn("rounded-xl transition-colors", unread ? "bg-white/[0.05]" : "hover:bg-white/[0.03]")}>
+      <div
+        className="flex gap-2.5 px-3 py-2.5"
+        role={unread ? "button" : undefined}
+        tabIndex={unread ? 0 : undefined}
+        aria-label={unread ? `Mark "${notification.title}" as read` : undefined}
+        onClick={unread ? () => onRead(notification.id) : undefined}
+        onKeyDown={
+          unread
+            ? (event) => {
+                if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault();
+                  onRead(notification.id);
+                }
+              }
+            : undefined
+        }
+      >
         <span className="mt-0.5 shrink-0">
           <Icon size={15} className={tone} aria-hidden="true" />
         </span>
@@ -52,7 +68,8 @@ function NotificationRow({
             {notification.action_url && notification.action_label ? (
               <Link
                 to={notification.action_url}
-                onClick={() => {
+                onClick={(event) => {
+                  event.stopPropagation();
                   if (unread) onRead(notification.id);
                   onNavigate();
                 }}
@@ -96,7 +113,7 @@ function NotificationList({ onNavigate }: { onNavigate: () => void }) {
         ) : notifications.length === 0 ? (
           <div className="px-3 py-8 text-center">
             <p className="font-display text-[11px] font-bold uppercase tracking-[0.18em] text-muted-foreground">
-              All quiet
+              You&rsquo;re all caught up.
             </p>
             <p className="mt-1.5 font-sans text-xs text-muted-foreground">
               Campaign updates and drops will show up here.
@@ -157,9 +174,9 @@ export function NotificationCenter() {
       {unreadCount > 0 ? (
         <span
           aria-hidden="true"
-          className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-cyan-300 px-1 font-sans text-[9px] font-bold text-slate-950"
+          className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 max-w-[26px] items-center justify-center rounded-full bg-cyan-300 px-1 font-sans text-[9px] font-bold text-slate-950"
         >
-          {unreadCount > 9 ? "9+" : unreadCount}
+          {unreadCount > 99 ? "99+" : unreadCount}
         </span>
       ) : null}
     </button>
