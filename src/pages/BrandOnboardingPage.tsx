@@ -406,10 +406,53 @@ export default function BrandOnboardingPage() {
             <div className={CARD}>
               <p className={LABEL}>Step 2 — Identity</p>
               <h2 className="mt-2 text-2xl">Logos and colors.</h2>
+              {imported && (imported.logoCandidates.length || imported.colorCandidates.length) ? (
+                <div className="mt-4 rounded-2xl border border-cyan-300/25 bg-cyan-300/[0.04] p-4">
+                  <p className="text-[11px] uppercase tracking-[0.16em] text-cyan-200/80">{imported.label}</p>
+                  {imported.logoCandidates.length ? (
+                    <div className="mt-3 flex flex-wrap gap-3">
+                      {imported.logoCandidates.map((logo) => (
+                        <button
+                          key={logo}
+                          type="button"
+                          onClick={() => (primaryLogo ? setSecondaryLogo(logo) : setPrimaryLogo(logo))}
+                          className="h-16 w-16 overflow-hidden rounded-xl border border-white/10 bg-black/40"
+                          title="Use this logo"
+                        >
+                          <img src={logo} alt="Imported logo" className="h-full w-full object-contain" />
+                        </button>
+                      ))}
+                    </div>
+                  ) : null}
+                  {imported.colorCandidates.length ? (
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {imported.colorCandidates.map((color) => (
+                        <button
+                          key={color}
+                          type="button"
+                          onClick={() =>
+                            setColors((current) =>
+                              current.includes(color) ? current : [...current, color],
+                            )
+                          }
+                          className="flex items-center gap-2 rounded-full border border-white/12 px-3 py-1.5 text-[11px] text-slate-200"
+                        >
+                          <span
+                            className="h-4 w-4 rounded-full border border-white/20"
+                            style={{ backgroundColor: color }}
+                          />
+                          {color}
+                        </button>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
               <div className="mt-5 grid gap-5 md:grid-cols-2">
                 <ImageSlot label="Primary logo" url={primaryLogo} onChange={setPrimaryLogo} />
                 <ImageSlot label="Secondary logo" url={secondaryLogo} onChange={setSecondaryLogo} />
               </div>
+
               <label className="mt-3 flex items-center gap-2 text-[11px] uppercase tracking-[0.16em] text-slate-400">
                 <input
                   type="checkbox"
