@@ -1946,7 +1946,25 @@ export default function TemplateStudioPage() {
             ) : null}
 
             <div className="mt-4 flex flex-wrap items-center gap-2">
+              {canFavorite ? (
+                <button
+                  type="button"
+                  onClick={() => setFavoritesOnly((previous) => !previous)}
+                  aria-pressed={favoritesOnly}
+                  className={cn(
+                    "inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] transition-colors",
+                    favoritesOnly
+                      ? "border-rose-300/50 bg-rose-400/15 text-rose-100"
+                      : "border-white/10 bg-white/[0.04] text-slate-300 hover:text-white",
+                  )}
+                >
+                  <Heart className={cn("h-3.5 w-3.5", favoritesOnly && "fill-current")} />
+                  Favorites
+                  <span className="opacity-60">{favoriteCount}</span>
+                </button>
+              ) : null}
               <button
+
                 type="button"
                 onClick={() => (selectMode ? exitSelectMode() : setSelectMode(true))}
                 aria-pressed={selectMode}
