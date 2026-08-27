@@ -1002,6 +1002,7 @@ export type Database = {
       }
       referral_rewards: {
         Row: {
+          attribution_id: string | null
           created_at: string
           credits_amount: number | null
           id: string
@@ -1009,8 +1010,10 @@ export type Database = {
           referrer_user_id: string
           revenue_allocation_id: string | null
           reward_type: string
+          stripe_event_id: string | null
         }
         Insert: {
+          attribution_id?: string | null
           created_at?: string
           credits_amount?: number | null
           id?: string
@@ -1018,8 +1021,10 @@ export type Database = {
           referrer_user_id: string
           revenue_allocation_id?: string | null
           reward_type: string
+          stripe_event_id?: string | null
         }
         Update: {
+          attribution_id?: string | null
           created_at?: string
           credits_amount?: number | null
           id?: string
@@ -1027,8 +1032,16 @@ export type Database = {
           referrer_user_id?: string
           revenue_allocation_id?: string | null
           reward_type?: string
+          stripe_event_id?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "referral_rewards_attribution_id_fkey"
+            columns: ["attribution_id"]
+            isOneToOne: false
+            referencedRelation: "referral_attributions"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "referral_rewards_revenue_allocation_id_fkey"
             columns: ["revenue_allocation_id"]
