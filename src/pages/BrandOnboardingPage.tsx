@@ -38,6 +38,8 @@ import CastLibrary from "@/components/cast/CastLibrary";
 import BrandReviewStep from "@/components/brand/BrandReviewStep";
 import { takeBrandImport } from "@/services/brandImport";
 import { track } from "@/lib/analytics/track";
+import { describeBrandKnowledge } from "@/lib/brandActivation";
+import BrandReadyCelebration from "@/components/brand/BrandReadyCelebration";
 
 const STEPS = [
   { id: 1, label: "Brand basics", optional: false },
@@ -203,6 +205,8 @@ export default function BrandOnboardingPage() {
   }, [step]);
 
 
+  const [celebrating, setCelebrating] = useState(false);
+
   const refreshBrands = () => {
     queryClient.invalidateQueries({ queryKey: ["brand-profiles"] });
     queryClient.invalidateQueries({ queryKey: ["active-brand-id"] });
@@ -324,7 +328,7 @@ export default function BrandOnboardingPage() {
       track("brand_step_completed", { step: stepKey(6) });
       track("brand_setup_complete");
       refreshBrands();
-      navigate("/app/brand");
+      setCelebrating(true);
     },
     onError: (error) => toast.error(error instanceof Error ? error.message : "Could not finish"),
   });
@@ -510,6 +514,24 @@ export default function BrandOnboardingPage() {
               submitting={finish.isPending}
             />
           ) : null}
+
+          <BrandReadyCelebration
+            open={celebrating}
+            brandId={brand?.id ?? null}
+            brandName={brand?.name ?? ""}
+            knows={describeBrandKnowledge({
+              brand,
+              productCount: brandProducts.length,
+              castCount: readModelIds(brand).length,
+              dnaPresent: Boolean(
+                dna && ((dna.tags?.length ?? 0) > 0 || (dna.tone ?? "").trim().length > 0),
+              ),
+            })}
+            onClose={() => {
+              setCelebrating(false);
+              navigate("/app/brand");
+            }}
+          />
 
         </div>
 
