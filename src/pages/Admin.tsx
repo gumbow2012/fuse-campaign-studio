@@ -389,6 +389,10 @@ const Admin = () => {
         <h1 className="font-display text-3xl font-black text-foreground mb-1">Admin</h1>
         <p className="text-muted-foreground text-sm mb-8">Manage templates, credits, and projects.</p>
 
+        <AdminOverviewStrip />
+
+
+
         <Tabs defaultValue="templates">
           <TabsList className="bg-secondary border border-border/40 mb-6">
             <TabsTrigger value="templates" className="text-xs">Templates</TabsTrigger>
