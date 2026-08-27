@@ -150,7 +150,30 @@ Deno.serve(async (req) => {
     const edges: Record<string, unknown>[] = [];
     const positions: Record<string, { x: number; y: number }> = {};
 
-    // --- Product reference inputs (replaceable examples) ---
+    // --- Persist each product image as a locked template asset ---
+    const { data: productAssets, error: productAssetsError } = await admin
+      .from("assets")
+      .insert(
+        products.map((product, index) => ({
+          supabase_storage_url: product.url,
+          asset_type: "image",
+          metadata: {
+            source: "outfit_swap_product_reference",
+            templateId: template.id,
+            versionId,
+            productIndex: index,
+            productType: product.type ?? "Product",
+          },
+        })),
+      )
+      .select("id");
+    if (productAssetsError) throw new Error(productAssetsError.message);
+    if (!productAssets || productAssets.length !== products.length) {
+      throw new Error("Failed to persist product references");
+    }
+    const productAssetIds = productAssets.map((asset: { id: string }) => String(asset.id));
+
+    // --- Product reference inputs (hidden locked references) ---
     const productNodes = products.map((product, index) => {
       const id = crypto.randomUUID();
       const typeLabel = product.type ?? "Product";
@@ -162,7 +185,8 @@ Deno.serve(async (req) => {
         node_type: "user_input",
         model_id: null,
         prompt_config: {
-          editor_mode: "upload",
+          editor_mode: "reference",
+          locked: true,
           editor_slot_key: slotKey,
           editor_label: label,
           editor_expected: "image",
@@ -172,11 +196,12 @@ Deno.serve(async (req) => {
           outfit_swap_product_type: typeLabel,
           outfit_swap_apply_to: product.person ?? "Main Subject",
         },
-        default_asset_id: null,
+        default_asset_id: productAssetIds[index],
         name: label,
       });
       return { id, index, slotKey };
     });
+
 
     // --- Persist each approved swapped frame as a locked template asset ---
     const { data: frameAssets, error: frameAssetsError } = await admin
