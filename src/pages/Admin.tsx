@@ -10,6 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Plus, Trash2, BarChart3, Eye, Copy, Loader2, Download, Upload, Check, X, Pencil, Save, Play, Search } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Link } from "react-router-dom";
+import AdminCreditControl from "@/components/admin/AdminCreditControl";
 
 const EXAMPLE_INPUT_SCHEMA = JSON.stringify(
   [
