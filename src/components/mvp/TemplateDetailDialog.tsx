@@ -32,13 +32,10 @@ function isVideoAsset(template: Pick<ApiTemplate, "preview_url" | "preview_asset
 
 /** Reads an aspect ratio only if the template already declares one — never guessed. */
 export function readTemplateAspectRatio(template: ApiTemplate | null | undefined) {
-  const { activeBrand } = useBrand();
-  const { assets: brandFitAssets } = useBrandFitAssets();
-
   if (!template) return null;
 
-  const brandFit = brandFitAssets ? deriveTemplateFit(template, brandFitAssets) : null;
   const candidates = [...(template.tags ?? []), template.output_type ?? ""];
+
   for (const candidate of candidates) {
     const match = /(\d{1,2}\s*:\s*\d{1,2})/.exec(String(candidate));
     if (match) return match[1].replace(/\s+/g, "");
