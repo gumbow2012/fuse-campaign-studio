@@ -286,18 +286,53 @@ export default function BrandProfilesPage() {
     return (
       <div className="min-h-screen bg-slate-950 text-white">
         <Navbar />
-        <main className="mx-auto w-full max-w-3xl px-5 pb-24 pt-28">
-          {hero}
-          <div className="mt-8">
-            <BrandImportPanel
-              onManual={() => navigate("/app/brand/onboarding")}
-              onConfirm={(result) => {
-                stashBrandImport(result);
-                navigate("/app/brand/onboarding");
-              }}
-            />
+        <main className="mx-auto flex w-full max-w-2xl flex-col items-center px-5 pb-24 pt-32">
+          <div
+            className={`${CARD} w-full text-center`}
+            style={{
+              background:
+                "radial-gradient(120% 100% at 50% 0%, rgba(34,211,238,0.10) 0%, rgba(255,255,255,0.02) 55%)",
+            }}
+          >
+            <span className="mx-auto inline-flex h-12 w-12 items-center justify-center rounded-2xl border border-cyan-300/30 bg-cyan-300/10 text-cyan-200">
+              <Sparkles className="h-5 w-5" />
+            </span>
+            <p className="mt-6 text-[11px] uppercase tracking-[0.28em] text-cyan-200/80">Brand workspace</p>
+            <h1 className="mt-3 font-display text-3xl tracking-[-0.03em] sm:text-4xl">Set up your brand</h1>
+            <p className="mx-auto mt-3 max-w-md text-sm text-slate-400">
+              Add your brand once — FUSE reuses it across every campaign.
+            </p>
+            <Button
+              type="button"
+              onClick={() => navigate("/app/brand/onboarding")}
+              className="mt-7 h-11 rounded-full bg-cyan-300 px-6 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-950 hover:bg-cyan-200"
+            >
+              Add your brand <ArrowRight className="h-3.5 w-3.5" />
+            </Button>
+            <div className="mt-4">
+              <button
+                type="button"
+                onClick={() => setShowImporter((value) => !value)}
+                className="text-[11px] uppercase tracking-[0.16em] text-slate-400 underline decoration-white/20 underline-offset-4 transition hover:text-cyan-200"
+              >
+                Import from website
+              </button>
+            </div>
           </div>
+
+          {showImporter ? (
+            <div className="mt-6 w-full">
+              <BrandImportPanel
+                onManual={() => navigate("/app/brand/onboarding")}
+                onConfirm={(result) => {
+                  stashBrandImport(result);
+                  navigate("/app/brand/onboarding");
+                }}
+              />
+            </div>
+          ) : null}
         </main>
+
       </div>
     );
   }
