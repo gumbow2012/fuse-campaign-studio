@@ -321,6 +321,8 @@ export default function BrandOnboardingPage() {
       });
     },
     onSuccess: () => {
+      track("brand_step_completed", { step: stepKey(6) });
+      track("brand_setup_complete");
       refreshBrands();
       navigate("/app/brand");
     },
