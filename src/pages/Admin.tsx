@@ -876,32 +876,9 @@ const Admin = () => {
           </TabsContent>
 
           <TabsContent value="referrals">
-            <div className="rounded-xl border border-border/40 bg-card p-5">
-              <h3 className="text-sm font-bold text-foreground mb-4">Referral Program Config</h3>
-              {referralConfig ? (
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                  <div>
-                    <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-muted-foreground mb-1">Status</p>
-                    <p className={`font-display text-lg font-black ${referralConfig.enabled ? "text-green-400" : "text-red-400"}`}>
-                      {referralConfig.enabled ? "Active" : "Disabled"}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-muted-foreground mb-1">Signup Bonus</p>
-                    <p className="font-display text-xl font-black text-foreground">{referralConfig.signup_bonus_credits} credits</p>
-                  </div>
-                  <div>
-                    <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-muted-foreground mb-1">Referrer Bonus</p>
-                    <p className="font-display text-xl font-black text-foreground">{referralConfig.referrer_bonus_credits_on_paid} credits</p>
-                  </div>
-                  <div>
-                    <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-muted-foreground mb-1">Trigger</p>
-                    <p className="text-xs font-bold text-foreground">{referralConfig.paid_trigger}</p>
-                  </div>
-                </div>
-              ) : <p className="text-sm text-muted-foreground">Loading...</p>}
-            </div>
+            <AdminReferrals />
           </TabsContent>
+
         </Tabs>
       </div>
     </div>
