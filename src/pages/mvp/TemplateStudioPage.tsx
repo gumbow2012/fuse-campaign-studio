@@ -1931,55 +1931,39 @@ export default function TemplateStudioPage() {
                     </div>
                   </div>
 
+                  {/* P1: logged-out visitors see the same expectation summary,
+                      then the real (local-only) builder below it. */}
                   {isPublicTemplateBrowser ? (
-                    <div className="space-y-5">
-                      <div className="rounded-[1.5rem] border border-emerald-300/20 bg-emerald-300/[0.07] p-5">
-                        <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-emerald-100">
-                          Confirm before checkout
-                        </p>
-                        <div className="mt-4 grid gap-3 text-sm text-slate-200 sm:grid-cols-2">
-                          <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
-                            <p className="text-[10px] uppercase tracking-[0.2em] text-slate-500">Required uploads</p>
-                            <p className="mt-2 text-2xl font-semibold text-white">
-                              {formatCount(inputFields.length, "upload", "uploads")}
-                            </p>
-                          </div>
-                          <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
-                            <p className="text-[10px] uppercase tracking-[0.2em] text-slate-500">Expected output</p>
-                            <p className="mt-2 text-2xl font-semibold text-white">
-                              {formatCount(selectedTemplateOutputCount, "video", "videos")}
-                            </p>
-                          </div>
-                          <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
-                            <p className="text-[10px] uppercase tracking-[0.2em] text-slate-500">Run cost</p>
-                            <p className="mt-2 text-2xl font-semibold text-white">{creditsRequired} credits</p>
-                          </div>
-                          <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
-                            <p className="text-[10px] uppercase tracking-[0.2em] text-slate-500">Use case</p>
-                            <p className="mt-2 text-base font-semibold text-white">Campaign drop template</p>
-                          </div>
+                    <div className="rounded-[1.5rem] border border-emerald-300/20 bg-emerald-300/[0.07] p-5">
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-emerald-100">
+                        What this template makes
+                      </p>
+                      <div className="mt-4 grid gap-3 text-sm text-slate-200 sm:grid-cols-2">
+                        <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
+                          <p className="text-[10px] uppercase tracking-[0.2em] text-slate-500">Your inputs</p>
+                          <p className="mt-2 text-2xl font-semibold text-white">
+                            {formatCount(inputFields.length, "input", "inputs")}
+                          </p>
+                        </div>
+                        <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
+                          <p className="text-[10px] uppercase tracking-[0.2em] text-slate-500">Expected output</p>
+                          <p className="mt-2 text-2xl font-semibold text-white">
+                            {formatCount(selectedTemplateOutputCount, "video", "videos")}
+                          </p>
+                        </div>
+                        <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
+                          <p className="text-[10px] uppercase tracking-[0.2em] text-slate-500">Run cost</p>
+                          <p className="mt-2 text-2xl font-semibold text-white">{creditsRequired} credits</p>
+                        </div>
+                        <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
+                          <p className="text-[10px] uppercase tracking-[0.2em] text-slate-500">Use case</p>
+                          <p className="mt-2 text-base font-semibold text-white">Campaign drop template</p>
                         </div>
                       </div>
-
-                      <div className="rounded-[1.5rem] border border-white/8 bg-black/20 p-5">
-                        <p className="text-[11px] uppercase tracking-[0.24em] text-muted-foreground">Upload slots</p>
-                        <div className="mt-4 flex flex-wrap gap-2">
-                          {inputFields.map((field) => (
-                            <span key={field.key} className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs text-slate-200">
-                              {field.label}
-                            </span>
-                          ))}
-                        </div>
-                      </div>
-
-                      <Button asChild className="w-full rounded-full bg-cyan-300 text-slate-950 hover:bg-cyan-200">
-                        <Link to={selectedTemplateCheckoutPath}>
-                          Use this template
-                          <ArrowRight className="h-4 w-4" />
-                        </Link>
-                      </Button>
                     </div>
-                  ) : (
+                  ) : null}
+
+                  {(
                     <>
                   {/* Compact readiness header — replaces the old requirements panel. */}
                   {inputFields.length ? (
