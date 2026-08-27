@@ -180,13 +180,17 @@ export default function PlanOfferModal() {
 
   const handleStarter = () => {
     if (user?.id) writePlanChoice(user.id, "starter");
+    choiceMade.current = true;
     track("onboarding_plan_choice", { choice: "starter" });
+    track("starter_selected", { plan_key: "starter" });
     void startPlanCheckout("starter");
   };
 
   const handleCapsule = () => {
     if (user?.id) writePlanChoice(user.id, "capsule");
+    choiceMade.current = true;
     track("onboarding_plan_choice", { choice: "capsule" });
+    track("capsule_selected", { plan_key: "capsule" });
     setGatedOpen(true);
   };
 
