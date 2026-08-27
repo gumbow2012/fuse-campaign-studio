@@ -163,3 +163,6 @@ verify_jwt = true
 
 [functions.provision-live-billing]
 verify_jwt = true
+
+[functions.brand-import]
+verify_jwt = false
