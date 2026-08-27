@@ -338,6 +338,7 @@ export async function fetchTemplateDetail(
         : [];
       if (projectedInputs.length) {
         return {
+          canCustomize: (detailData as any)?.canCustomize === true,
           user_inputs: projectedInputs.map((field) => {
             const requirement = field.requirement
               ? readTemplateAssetRequirement(field.requirement, { required: field.required ?? true })
@@ -363,6 +364,7 @@ export async function fetchTemplateDetail(
       );
 
       return {
+        canCustomize: (detailData as any)?.canCustomize === true,
         user_inputs: uploadNodes.map((node) => ({
           key: String(node.editor?.slotKey || node.id),
           label: String(node.editor?.label || node.name),
