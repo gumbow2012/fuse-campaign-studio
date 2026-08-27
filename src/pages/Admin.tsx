@@ -117,14 +117,6 @@ const Admin = () => {
     },
   });
 
-  const { data: referralConfig } = useQuery({
-    queryKey: ["referral-config"],
-    queryFn: async () => {
-      const { data, error } = await supabase.from("referral_program_config").select("*").limit(1).single();
-      if (error) throw error;
-      return data;
-    },
-  });
 
   // Recent projects
   const { data: recentProjects } = useQuery({
