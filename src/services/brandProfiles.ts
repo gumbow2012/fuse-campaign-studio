@@ -139,13 +139,23 @@ export async function setActiveBrand(brandId: string): Promise<void> {
   if (error) throw error;
 }
 
-/** Phase 6 — brand aesthetic captured during onboarding. */
+/**
+ * Phase 6 — brand aesthetic captured during onboarding ("Creative DNA").
+ * `tags` / `references` are kept as legacy mirrors of `styleSignals` /
+ * `referenceImages` so older readers keep working.
+ */
 export interface BrandVisualStyle {
   tags: string[];
   tone: string;
   references: string[];
   notes: string;
+  styleSignals: string[];
+  instagram: string | null;
+  pinterest: string | null;
+  referenceBrands: string[];
+  referenceImages: string[];
 }
+
 
 /** Phase 8 — wizard progress so setup can always be resumed. */
 export interface BrandOnboardingState {
