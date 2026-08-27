@@ -1,37 +1,47 @@
-import { FormEvent, useEffect, useState } from "react";
+/**
+ * AUTH — one universal, instant flow.
+ *
+ * No mode toggle, no marketing media, no name field. OAuth or a 6-digit email
+ * code. Intended destination + referral code survive the OAuth round-trip via
+ * pendingAuthIntent.
+ */
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import SiteShell from "@/components/mvp/SiteShell";
 import PageMeta from "@/components/mvp/PageMeta";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { getAbsoluteSiteUrl } from "@/lib/site-url";
-import { checkoutEventId, clearPendingCheckout, readPendingCheckout, trackEvent, trackEventOnce } from "@/lib/metaPixel";
+import { checkoutEventId, clearPendingCheckout, readPendingCheckout, trackEventOnce } from "@/lib/metaPixel";
 import { track } from "@/lib/analytics/track";
 import { readPendingReferralCode, storePendingReferralCode } from "@/lib/pendingReferral";
 import { usePendingReferral } from "@/hooks/usePendingReferral";
-import { useQuery } from "@tanstack/react-query";
 import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp";
-import { ArrowRight, Boxes, Check, Gift, Layers, Shirt, Sparkles, Wand2 } from "lucide-react";
-import { FALLBACK_GIFS } from "@/lib/homeMediaAllocator";
+import { ArrowLeft, ArrowRight, Loader2, Sparkles } from "lucide-react";
+import {
+  readPendingAuthIntent,
+  resolveIntentDestination,
+  sanitizeReturnTo,
+  writePendingAuthIntent,
+} from "@/lib/pendingAuthIntent";
 
-const BENEFITS = [
-  { icon: Layers, title: "Campaign Templates", copy: "Pick creative instead of writing prompts." },
-  { icon: Boxes, title: "Brand Workspace", copy: "Save your products, logos and identity once." },
-  { icon: Wand2, title: "Image Templates", copy: "Flat lays, graphics, mockups and more." },
-  { icon: Shirt, title: "Outfit Swap", copy: "Paste a campaign and rebuild it for your brand." },
-];
+const FUSE_ICON_SRC = "/fuse-icon.png?v=20260519";
+const FUSE_WORDMARK_SRC = "/fuse-wordmark.png?v=20260519";
 
-const LOOP = [
-  { step: "01", label: "Pick a campaign" },
-  { step: "02", label: "Add your brand" },
-  { step: "03", label: "Generate your version" },
-];
+const CARD_SHELL =
+  "rounded-[2rem] border border-white/10 bg-slate-950/75 p-6 shadow-[0_24px_80px_rgba(0,0,0,0.45)] backdrop-blur-xl sm:p-8";
+const FIELD =
+  "h-12 rounded-2xl border-white/10 bg-white/[0.04] text-white transition-colors focus-visible:border-cyan-300/60 focus-visible:ring-cyan-300/20";
+const PRIMARY_CTA =
+  "w-full rounded-full bg-cyan-300 py-6 text-[13px] font-semibold uppercase tracking-[0.14em] text-slate-950 shadow-[0_18px_50px_-18px_rgba(103,232,249,0.7)] transition-transform hover:bg-cyan-200 hover:-translate-y-0.5";
+const OAUTH_BTN =
+  "flex h-12 w-full items-center justify-center gap-3 rounded-2xl border border-white/12 bg-white/[0.04] text-sm font-semibold text-white transition-colors hover:border-cyan-300/40 hover:bg-white/[0.08] disabled:opacity-60";
 
-const PREVIEW_MEDIA = FALLBACK_GIFS.slice(0, 3);
+const APPLE_ENABLED = import.meta.env.VITE_ENABLE_APPLE_AUTH === "true";
+const MICROSOFT_ENABLED = import.meta.env.VITE_ENABLE_MICROSOFT_AUTH === "true";
 
 /** k***@gmail.com — never render the full address back at the user. */
 function maskEmail(value: string) {
@@ -40,17 +50,8 @@ function maskEmail(value: string) {
   return `${local.slice(0, 1)}***@${domain}`;
 }
 
-const CARD_SHELL =
-  "rounded-[2rem] border border-white/10 bg-slate-950/75 p-6 shadow-[0_24px_80px_rgba(0,0,0,0.45)] backdrop-blur-xl sm:p-8";
-const FIELD =
-  "h-12 rounded-2xl border-white/10 bg-white/[0.04] text-white transition-colors focus-visible:border-cyan-300/60 focus-visible:ring-cyan-300/20";
-const PRIMARY_CTA =
-  "w-full rounded-full bg-cyan-300 py-6 text-[13px] font-semibold uppercase tracking-[0.14em] text-slate-950 shadow-[0_18px_50px_-18px_rgba(103,232,249,0.7)] transition-transform hover:bg-cyan-200 hover:-translate-y-0.5";
-const LABEL_CLS = "text-[10px] font-semibold uppercase tracking-[0.24em] text-slate-400";
-
 function authErrorDescription(error: unknown, fallback: string) {
   if (!(error instanceof Error)) return fallback;
-
   const message = error.message;
   const normalized = message.toLowerCase();
   if (normalized.includes("security purposes") || normalized.includes("rate limit")) {
@@ -60,58 +61,76 @@ function authErrorDescription(error: unknown, fallback: string) {
   return message;
 }
 
+function GoogleMark() {
+  return (
+    <svg viewBox="0 0 24 24" className="h-4.5 w-4.5" aria-hidden width="18" height="18">
+      <path fill="#4285F4" d="M23.5 12.3c0-.8-.1-1.6-.2-2.3H12v4.5h6.4a5.5 5.5 0 0 1-2.4 3.6v3h3.9c2.3-2.1 3.6-5.2 3.6-8.8Z" />
+      <path fill="#34A853" d="M12 24c3.2 0 5.9-1.1 7.9-2.9l-3.9-3a7.2 7.2 0 0 1-10.7-3.8H1.3v3.1A12 12 0 0 0 12 24Z" />
+      <path fill="#FBBC05" d="M5.3 14.3a7.2 7.2 0 0 1 0-4.6V6.6H1.3a12 12 0 0 0 0 10.8l4-3.1Z" />
+      <path fill="#EA4335" d="M12 4.8c1.8 0 3.4.6 4.6 1.8l3.4-3.4A12 12 0 0 0 1.3 6.6l4 3.1A7.2 7.2 0 0 1 12 4.8Z" />
+    </svg>
+  );
+}
+
+function AppleMark() {
+  return (
+    <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden className="fill-white">
+      <path d="M16.4 12.7c0-2.3 1.9-3.4 2-3.5-1.1-1.6-2.7-1.8-3.3-1.8-1.5-.1-2.8.8-3.5.8-.7 0-1.8-.8-3-.8-1.6 0-3 .9-3.9 2.3-1.7 2.9-.4 7.2 1.2 9.5.8 1.2 1.7 2.4 3 2.4 1.2 0 1.6-.8 3.1-.8 1.4 0 1.8.8 3 .7 1.3 0 2.1-1.2 2.9-2.3.9-1.3 1.3-2.6 1.3-2.7-.1 0-2.8-1.1-2.8-3.8ZM14.3 5.3c.6-.8 1-1.9.9-3-1 0-2.2.7-2.9 1.5-.6.7-1.1 1.8-1 2.9 1.1.1 2.3-.6 3-1.4Z" />
+    </svg>
+  );
+}
+
+function MicrosoftMark() {
+  return (
+    <svg viewBox="0 0 23 23" width="18" height="18" aria-hidden>
+      <path fill="#F25022" d="M1 1h10v10H1z" />
+      <path fill="#7FBA00" d="M12 1h10v10H12z" />
+      <path fill="#00A4EF" d="M1 12h10v10H1z" />
+      <path fill="#FFB900" d="M12 12h10v10H12z" />
+    </svg>
+  );
+}
+
 export default function AuthPage() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-  const { user, loading: authLoading, signOut } = useAuth();
+  const { user, loading: authLoading } = useAuth();
 
   const paidAccess = searchParams.get("paid") === "true";
-  const selectedTemplateParam = searchParams.get("template") || (typeof window !== "undefined" ? window.localStorage.getItem("fuse.checkoutTemplate") : null);
-  const studioPath = selectedTemplateParam
-    ? `/app/templates?template=${encodeURIComponent(selectedTemplateParam)}`
-    : "/app/templates";
-  const [mode, setMode] = useState<"signin" | "signup">(searchParams.get("mode") === "signup" ? "signup" : "signin");
-  const [name, setName] = useState("");
+
   const [email, setEmail] = useState("");
   const [token, setToken] = useState("");
-  const [step, setStep] = useState<"request" | "verify">("request");
+  const [step, setStep] = useState<"email" | "code">("email");
   const [submitting, setSubmitting] = useState(false);
+  const [oauthPending, setOauthPending] = useState<string | null>(null);
   const [resendCooldown, setResendCooldown] = useState(0);
-  const [autoCodeRequested, setAutoCodeRequested] = useState(false);
-  const [pendingReferral, setPendingReferral] = useState<string | null>(null);
+  const [invited, setInvited] = useState(false);
+  const autoRequested = useRef(false);
 
-  // Public, non-sensitive program settings — the bonus number is never hardcoded.
-  const { data: referralProgram } = useQuery({
-    queryKey: ["referral-program-config"],
-    enabled: Boolean(pendingReferral),
-    staleTime: 10 * 60_000,
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("referral_program_config")
-        .select("enabled, signup_bonus_credits")
-        .limit(1)
-        .maybeSingle();
-      if (error) throw error;
-      return data;
-    },
-  });
-  const referralBonus = Number(referralProgram?.signup_bonus_credits ?? 0);
-  const showReferralClaim = Boolean(pendingReferral) && Boolean(referralProgram?.enabled) && referralBonus > 0;
+  // ---- pending intent: captured on arrival, replayed after auth ----------
+  const intent = useMemo(() => {
+    const templateId =
+      searchParams.get("template") ||
+      (typeof window !== "undefined" ? window.localStorage.getItem("fuse.n") : null);
+    const referral = storePendingReferralCode(searchParams.get("ref")) ?? readPendingReferralCode();
+    return writePendingAuthIntent({
+      returnTo: sanitizeReturnTo(searchParams.get("returnTo")),
+      templateId: templateId ?? undefined,
+      referralCode: referral ?? undefined,
+    });
+  }, [searchParams]);
+
+  const destination = resolveIntentDestination(intent);
 
   useEffect(() => {
-    const invited = Boolean(searchParams.get("ref")) || Boolean(readPendingReferralCode());
-    setMode(
-      paidAccess
-        ? "signin"
-        : searchParams.get("mode") === "signup" || (invited && searchParams.get("mode") !== "signin")
-          ? "signup"
-          : "signin",
-    );
-    setStep("request");
-    setToken("");
-    setResendCooldown(0);
-  }, [paidAccess, searchParams]);
+    const referred = Boolean(searchParams.get("ref")) || Boolean(intent.referralCode);
+    setInvited(referred || searchParams.get("invite") === "creator");
+    if (searchParams.get("ref")) track("referral_landing", { source: "auth_query" });
+  }, [intent.referralCode, searchParams]);
 
+  usePendingReferral();
+
+  // Paid checkout return telemetry (unchanged behaviour).
   useEffect(() => {
     if (searchParams.get("success") !== "true" && !paidAccess) return;
     const pending = readPendingCheckout();
@@ -134,87 +153,76 @@ export default function AuthPage() {
     clearPendingCheckout();
   }, [paidAccess, searchParams]);
 
-  // Referral capture: ?ref=CODE must outlive the OTP round-trip / OAuth redirect.
-  useEffect(() => {
-    const stored = storePendingReferralCode(searchParams.get("ref"));
-    if (stored) track("referral_landing", { source: "auth_query" });
-    setPendingReferral(stored ?? readPendingReferralCode());
-  }, [searchParams]);
-
-  usePendingReferral();
-
+  // Already signed in (including an OAuth redirect return) → intended destination.
   useEffect(() => {
     if (!user || authLoading) return;
-    navigate(studioPath, { replace: true });
-  }, [authLoading, navigate, studioPath, user]);
+    navigate(destination, { replace: true });
+  }, [authLoading, destination, navigate, user]);
 
   useEffect(() => {
     if (resendCooldown <= 0) return;
-
-    const timer = window.setTimeout(() => {
-      setResendCooldown((current) => Math.max(current - 1, 0));
-    }, 1000);
-
+    const timer = window.setTimeout(() => setResendCooldown((current) => Math.max(current - 1, 0)), 1000);
     return () => window.clearTimeout(timer);
   }, [resendCooldown]);
 
-  useEffect(() => {
-    if (!paidAccess || autoCodeRequested || step !== "request" || submitting) return;
-    const storedEmail = typeof window !== "undefined" ? window.localStorage.getItem("fuse.checkoutAccessEmail") : null;
-    if (!storedEmail) return;
+  const emailRedirectTo = getAbsoluteSiteUrl(`/auth${paidAccess ? "?paid=true" : ""}`);
 
+  const requestCode = async (target: string) => {
+    const { error } = await supabase.auth.signInWithOtp({
+      email: target,
+      options: {
+        // One code path: existing email signs in, new email creates the account.
+        shouldCreateUser: true,
+        emailRedirectTo,
+      },
+    });
+    if (error) throw error;
+  };
+
+  // Paid checkout hand-off: pre-fill and send the code automatically.
+  useEffect(() => {
+    if (!paidAccess || autoRequested.current || step !== "email") return;
+    const storedEmail = typeof window !== "undefined" ? window.localStorage.getItem("fuse.n") : null;
+    if (!storedEmail || !storedEmail.includes("@")) return;
+    autoRequested.current = true;
     setEmail(storedEmail);
-    setAutoCodeRequested(true);
-    window.setTimeout(() => {
-      const form = document.getElementById("studio-access-form") as HTMLFormElement | null;
-      form?.requestSubmit();
-    }, 50);
-  }, [autoCodeRequested, paidAccess, step, submitting]);
+    setSubmitting(true);
+    void (async () => {
+      try {
+        await requestCode(storedEmail);
+        setStep("code");
+        setResendCooldown(60);
+      } catch {
+        /* let the user submit manually */
+      } finally {
+        setSubmitting(false);
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [paidAccess, step]);
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setSubmitting(true);
 
     try {
-      if (step === "request") {
-        const { error } = await supabase.auth.signInWithOtp({
-          email,
-          options: {
-            // Use one code-based auth path so a fresh email never silently dead-ends.
-            shouldCreateUser: true,
-            data: name ? { full_name: name } : undefined,
-            emailRedirectTo: getAbsoluteSiteUrl(`/auth${paidAccess && selectedTemplateParam ? `?paid=true&template=${encodeURIComponent(selectedTemplateParam)}` : ""}`),
-          },
-        });
-        if (error) throw error;
-        setStep("verify");
-        toast({
-          title: "Code sent",
-          description: `Enter the 6-digit code we sent to ${email}.`,
-        });
+      if (step === "email") {
+        await requestCode(email);
+        setStep("code");
         setResendCooldown(60);
+        toast({ title: "Code sent", description: `Enter the 6-digit code we sent to ${maskEmail(email)}.` });
       } else {
-        const { data: verified, error } = await supabase.auth.verifyOtp({
-          email,
-          token,
-          type: "email",
-        });
+        const { data: verified, error } = await supabase.auth.verifyOtp({ email, token, type: "email" });
         if (error) throw error;
 
         const verifiedUser = verified?.user;
-        if (verifiedUser?.created_at) {
-          const createdAt = new Date(verifiedUser.created_at).getTime();
-          const isNewAccount = Number.isFinite(createdAt) && Date.now() - createdAt < 5 * 60 * 1000;
-          if (isNewAccount) {
-            trackEventOnce(`completeRegistration.${verifiedUser.id}`, "CompleteRegistration");
-            track("sign_up", { paid_access: Boolean(paidAccess) });
-          }
+        const createdAt = verifiedUser?.created_at ? new Date(verifiedUser.created_at).getTime() : NaN;
+        // Genuinely new FUSE account → new-user activation (handled in the app shell).
+        if (Number.isFinite(createdAt) && Date.now() - createdAt < 60_000) {
+          trackEventOnce(`completeRegistration.${verifiedUser?.id}`, "CompleteRegistration");
+          track("sign_up", { method: "email_otp", paid_access: Boolean(paidAccess) });
         }
-        toast({
-          title: "Verified",
-          description: paidAccess ? "Opening your Fuse studio." : "Your access is active.",
-        });
-        navigate(studioPath, { replace: true });
+        navigate(destination, { replace: true });
       }
     } catch (error) {
       toast({
@@ -228,28 +236,16 @@ export default function AuthPage() {
   };
 
   const handleResend = async () => {
-    if (!email) return;
+    if (!email || resendCooldown > 0) return;
     setSubmitting(true);
-
     try {
-      const { error } = await supabase.auth.signInWithOtp({
-        email,
-        options: {
-          shouldCreateUser: true,
-          data: name ? { full_name: name } : undefined,
-          emailRedirectTo: getAbsoluteSiteUrl(`/auth${paidAccess && selectedTemplateParam ? `?paid=true&template=${encodeURIComponent(selectedTemplateParam)}` : ""}`),
-        },
-      });
-      if (error) throw error;
-      toast({
-        title: "Code resent",
-        description: `A new code was sent to ${email}.`,
-      });
+      await requestCode(email);
       setResendCooldown(60);
+      toast({ title: "New code sent", description: `We sent another code to ${maskEmail(email)}.` });
     } catch (error) {
       toast({
-        title: "Could not resend code",
-        description: authErrorDescription(error, "Try again."),
+        title: "Could not resend",
+        description: authErrorDescription(error, "Could not resend the code."),
         variant: "destructive",
       });
     } finally {
@@ -257,380 +253,206 @@ export default function AuthPage() {
     }
   };
 
-  const handleGoogleSignIn = async () => {
-    setSubmitting(true);
-
+  const handleOAuth = async (provider: "google" | "apple" | "azure", label: string) => {
+    setOauthPending(provider);
+    // Intent is already persisted — it survives the provider round-trip.
+    writePendingAuthIntent(intent);
     try {
       const { error } = await supabase.auth.signInWithOAuth({
-        provider: "google",
+        provider,
         options: {
           redirectTo: getAbsoluteSiteUrl("/auth"),
-          queryParams: {
-            prompt: "select_account",
-          },
+          ...(provider === "google" ? { queryParams: { prompt: "select_account" } } : {}),
         },
       });
       if (error) throw error;
     } catch (error) {
       toast({
-        title: "Google sign-in failed",
-        description: error instanceof Error ? error.message : "Could not start Google sign-in.",
+        title: `${label} sign-in failed`,
+        description: error instanceof Error ? error.message : `Could not start ${label} sign-in.`,
         variant: "destructive",
       });
-      setSubmitting(false);
+      setOauthPending(null);
     }
   };
 
-  const signup = mode === "signup";
-  const verifying = step === "verify";
-
-  const heroTitle = paidAccess
-    ? "CHECK YOUR EMAIL TO OPEN YOUR FUSE STUDIO."
-    : showReferralClaim
-      ? "YOU'VE BEEN INVITED TO FUSE."
-      : signup
-        ? "YOUR NEXT CAMPAIGN IS ALREADY BUILT."
-        : "WELCOME BACK.";
-
-  const heroCopy = paidAccess
-    ? "We sent a secure access code to your email. Enter it below to open your selected template."
-    : showReferralClaim
-      ? `Create your account and claim ${referralBonus.toLocaleString()} FUSE credits.`
-      : signup
-        ? "Pick proven creative. Add your brand. FUSE handles the rest."
-        : "Your campaigns, brand and creative workspace are waiting.";
+  const busy = submitting || Boolean(oauthPending);
 
   return (
     <SiteShell>
       <PageMeta
-        title={signup ? "Create Your Free FUSE Account — FUSE" : "Sign In — FUSE"}
-        description={
-          signup
-            ? "Create your free FUSE account. Pick a proven campaign template, add your brand, and generate your version."
-            : "Sign in to FUSE. No password needed — we email you a one-time code."
-        }
+        title="Sign In or Create Your FUSE Account — FUSE"
+        description="Enter FUSE. Continue with Google or your email — no password required."
         path="/auth"
       />
 
       <section className="relative overflow-hidden">
-        {/* Subtle bloom — brand aesthetic, no neon SaaS gradients */}
         <div
           aria-hidden
           className="pointer-events-none absolute inset-0 opacity-70"
           style={{
             background:
-              "radial-gradient(60% 45% at 15% 10%, rgba(103,232,249,0.10), transparent 70%), radial-gradient(50% 40% at 90% 80%, rgba(56,189,248,0.07), transparent 70%)",
+              "radial-gradient(60% 45% at 20% 5%, rgba(103,232,249,0.10), transparent 70%), radial-gradient(50% 40% at 85% 90%, rgba(56,189,248,0.07), transparent 70%)",
           }}
         />
 
-        <div className="container relative flex min-h-[calc(100vh-90px)] items-center py-10 lg:py-14">
-          <div className="mx-auto grid w-full max-w-6xl items-center gap-10 lg:grid-cols-[1fr_minmax(0,460px)] lg:gap-14">
-            {/* ---------------- LEFT: value + visual proof ---------------- */}
-            <div className="order-1">
-              {showReferralClaim ? (
-                <span className="inline-flex items-center gap-2 rounded-full border border-cyan-300/30 bg-cyan-300/10 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.24em] text-cyan-100">
-                  <Gift className="h-3.5 w-3.5" /> Invitation
-                </span>
-              ) : (
-                <span className={LABEL_CLS}>{signup ? "Create account" : "Sign in"}</span>
-              )}
+        <div className="container relative flex min-h-[calc(100vh-90px)] items-center justify-center py-12">
+          <div className="w-full max-w-[500px]">
+            {invited ? (
+              <p className="mb-4 flex items-center justify-center gap-2 text-[10px] font-semibold uppercase tracking-[0.24em] text-cyan-200">
+                <Sparkles className="h-3.5 w-3.5" /> You&apos;ve been invited to FUSE
+              </p>
+            ) : null}
 
-              <h1 className="mt-4 font-display text-[2.35rem] font-bold leading-[1.02] tracking-[-0.045em] text-white sm:text-5xl lg:text-[3.4rem]">
-                {heroTitle}
-              </h1>
-              <p className="mt-4 max-w-lg text-base leading-7 text-slate-300 sm:text-lg">{heroCopy}</p>
-
-              {/* Visual proof — existing curated preview media only */}
-              <div className="mt-8 flex items-end gap-3">
-                {PREVIEW_MEDIA.map((src, index) => (
-                  <div
-                    key={src}
-                    className={`relative overflow-hidden rounded-2xl border border-white/10 bg-white/[0.03] shadow-[0_20px_60px_-30px_rgba(0,0,0,0.9)] transition-transform duration-500 hover:-translate-y-1 ${
-                      index === 1 ? "w-[36%] sm:w-[34%]" : "w-[30%] sm:w-[28%]"
-                    } ${index === 1 ? "-mb-3" : ""}`}
-                  >
-                    <img
-                      src={src}
-                      alt="FUSE campaign template preview"
-                      loading="lazy"
-                      className="aspect-[9/16] h-full w-full object-cover"
-                    />
-                  </div>
-                ))}
+            <div className={CARD_SHELL}>
+              <div className="flex items-center gap-3">
+                <img src={FUSE_ICON_SRC} alt="" className="h-9 w-9 rounded-xl object-contain" />
+                <img src={FUSE_WORDMARK_SRC} alt="FUSE" className="h-4 w-auto object-contain" />
               </div>
 
-              {signup ? (
+              {step === "email" ? (
                 <>
-                  <ul className="mt-9 grid gap-4 sm:grid-cols-2">
-                    {BENEFITS.map((benefit) => (
-                      <li key={benefit.title} className="flex gap-3">
-                        <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-cyan-300/25 bg-cyan-300/10 text-cyan-200">
-                          <benefit.icon className="h-4 w-4" />
-                        </span>
-                        <span className="min-w-0">
-                          <span className="block text-sm font-semibold text-white">{benefit.title}</span>
-                          <span className="block text-sm leading-6 text-slate-400">{benefit.copy}</span>
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
+                  <h1 className="mt-7 font-display text-[2rem] font-bold leading-none tracking-[-0.04em] text-white">
+                    ENTER FUSE.
+                  </h1>
+                  <p className="mt-3 text-sm leading-6 text-slate-400">
+                    Create an account or sign in to continue.
+                  </p>
 
-                  <div className="mt-9 flex flex-wrap items-center gap-x-6 gap-y-3">
-                    {LOOP.map((item) => (
-                      <div key={item.step} className="flex items-center gap-2">
-                        <span className="font-display text-sm font-bold text-cyan-200">{item.step}</span>
-                        <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-300">
-                          {item.label}
-                        </span>
-                      </div>
-                    ))}
+                  <div className="mt-7 space-y-2.5">
+                    <button
+                      type="button"
+                      className={OAUTH_BTN}
+                      disabled={busy}
+                      onClick={() => void handleOAuth("google", "Google")}
+                    >
+                      {oauthPending === "google" ? <Loader2 className="h-4 w-4 animate-spin" /> : <GoogleMark />}
+                      Continue with Google
+                    </button>
+
+                    {APPLE_ENABLED ? (
+                      <button
+                        type="button"
+                        className={OAUTH_BTN}
+                        disabled={busy}
+                        onClick={() => void handleOAuth("apple", "Apple")}
+                      >
+                        {oauthPending === "apple" ? <Loader2 className="h-4 w-4 animate-spin" /> : <AppleMark />}
+                        Continue with Apple
+                      </button>
+                    ) : null}
+
+                    {MICROSOFT_ENABLED ? (
+                      <button
+                        type="button"
+                        className={OAUTH_BTN}
+                        disabled={busy}
+                        onClick={() => void handleOAuth("azure", "Microsoft")}
+                      >
+                        {oauthPending === "azure" ? <Loader2 className="h-4 w-4 animate-spin" /> : <MicrosoftMark />}
+                        Continue with Microsoft
+                      </button>
+                    ) : null}
                   </div>
+
+                  <div className="my-7 flex items-center gap-4">
+                    <span className="h-px flex-1 bg-white/10" />
+                    <span className="text-[10px] font-semibold uppercase tracking-[0.28em] text-slate-500">or</span>
+                    <span className="h-px flex-1 bg-white/10" />
+                  </div>
+
+                  <form onSubmit={handleSubmit} className="space-y-3">
+                    <Input
+                      type="email"
+                      required
+                      autoComplete="email"
+                      inputMode="email"
+                      placeholder="you@brand.com"
+                      value={email}
+                      onChange={(event) => setEmail(event.target.value)}
+                      className={FIELD}
+                      aria-label="Email address"
+                    />
+                    <Button type="submit" disabled={busy || !email} className={PRIMARY_CTA}>
+                      {submitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                      Continue with email <ArrowRight className="ml-2 h-4 w-4" />
+                    </Button>
+                    <p className="text-center text-xs text-slate-500">No password required.</p>
+                  </form>
                 </>
               ) : (
-                <ul className="mt-9 space-y-3">
-                  {["Your saved brand, products and cast", "Every campaign you've generated", "Your credits and plan"].map(
-                    (item) => (
-                      <li key={item} className="flex items-center gap-3 text-sm text-slate-300">
-                        <Check className="h-4 w-4 shrink-0 text-cyan-300" /> {item}
-                      </li>
-                    ),
-                  )}
-                </ul>
-              )}
-            </div>
+                <>
+                  <h1 className="mt-7 font-display text-[2rem] font-bold leading-none tracking-[-0.04em] text-white">
+                    CHECK YOUR EMAIL.
+                  </h1>
+                  <p className="mt-3 text-sm leading-6 text-slate-400">
+                    We sent a six-digit code to <span className="text-slate-200">{maskEmail(email)}</span>
+                  </p>
 
-            {/* ---------------- RIGHT: auth card ---------------- */}
-            <div className="order-2 w-full">
-              <div className={CARD_SHELL}>
-                {/* Top-level modes */}
-                {paidAccess ? (
-                  <span className="inline-flex rounded-full bg-cyan-300 px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-950">
-                    Studio access
-                  </span>
-                ) : (
-                  <div className="grid grid-cols-2 gap-2 rounded-2xl border border-white/10 bg-white/[0.03] p-1.5">
-                    <button
-                      type="button"
-                      onClick={() => setMode("signup")}
-                      className={`rounded-xl px-3 py-3 text-[11px] font-semibold uppercase tracking-[0.16em] transition-colors ${
-                        signup ? "bg-cyan-300 text-slate-950" : "text-slate-300 hover:text-white"
-                      }`}
+                  <form onSubmit={handleSubmit} className="mt-7 space-y-5">
+                    <InputOTP
+                      maxLength={6}
+                      value={token}
+                      autoFocus
+                      onChange={(value) => setToken(value.replace(/\D/g, "").slice(0, 6))}
+                      containerClassName="justify-between gap-2"
                     >
-                      Create account
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setMode("signin")}
-                      className={`rounded-xl px-3 py-3 text-[11px] font-semibold uppercase tracking-[0.16em] transition-colors ${
-                        !signup ? "bg-cyan-300 text-slate-950" : "text-slate-300 hover:text-white"
-                      }`}
-                    >
-                      Sign in
-                    </button>
-                  </div>
-                )}
-
-                {user ? (
-                  <div className="mt-6 rounded-[1.5rem] border border-white/10 bg-white/[0.03] p-5">
-                    <p className="text-sm text-slate-200">You are already signed in.</p>
-                    <div className="mt-4 flex flex-wrap gap-3">
-                      <Button asChild className="rounded-full bg-cyan-300 text-slate-950 hover:bg-cyan-200">
-                        <Link to={studioPath}>Open Studio</Link>
-                      </Button>
-                      <Button
-                        variant="outline"
-                        onClick={() => void signOut()}
-                        className="rounded-full border-white/15 bg-white/5 text-foreground hover:bg-white/10"
-                      >
-                        Sign out
-                      </Button>
-                    </div>
-                  </div>
-                ) : verifying ? (
-                  /* ---------- EMAIL CODE STEP ---------- */
-                  <div className="mt-7">
-                    <h2 className="font-display text-2xl font-bold tracking-[-0.03em] text-white">CHECK YOUR INBOX.</h2>
-                    <p className="mt-2 text-sm leading-6 text-slate-400">
-                      We sent a 6-digit code to <span className="text-slate-200">{maskEmail(email)}</span>
-                    </p>
-
-                    <form id="studio-access-form" onSubmit={handleSubmit} className="mt-6 space-y-6">
-                      <InputOTP
-                        maxLength={6}
-                        value={token}
-                        onChange={(value) => setToken(value.replace(/\D/g, "").slice(0, 6))}
-                        containerClassName="justify-between gap-2"
-                      >
-                        <InputOTPGroup className="flex w-full justify-between gap-2">
-                          {[0, 1, 2, 3, 4, 5].map((index) => (
-                            <InputOTPSlot
-                              key={index}
-                              index={index}
-                              className="h-14 w-full rounded-2xl border border-white/10 bg-white/[0.04] font-display text-xl text-white first:rounded-l-2xl last:rounded-r-2xl"
-                            />
-                          ))}
-                        </InputOTPGroup>
-                      </InputOTP>
-
-                      <Button type="submit" disabled={submitting || token.length < 6} className={PRIMARY_CTA}>
-                        {submitting ? "Verifying…" : "Enter FUSE →"}
-                      </Button>
-
-                      <div className="flex flex-wrap items-center justify-between gap-3 text-sm text-slate-400">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setStep("request");
-                            setToken("");
-                          }}
-                          className="transition-colors hover:text-white"
-                        >
-                          ← Change email
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => void handleResend()}
-                          disabled={submitting || resendCooldown > 0}
-                          className="transition-colors hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
-                        >
-                          {resendCooldown > 0 ? `Resend in ${resendCooldown}s` : "Resend code"}
-                        </button>
-                      </div>
-                    </form>
-                  </div>
-                ) : (
-                  /* ---------- REQUEST STEP ---------- */
-                  <div className="mt-7">
-                    <h2 className="font-display text-xl font-bold uppercase tracking-[-0.01em] text-white">
-                      {paidAccess ? "Studio access" : signup ? "Start creating" : "Sign in"}
-                    </h2>
-
-                    {!paidAccess ? (
-                      <>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          disabled={submitting}
-                          onClick={() => void handleGoogleSignIn()}
-                          className="mt-5 w-full rounded-full border-white/15 bg-white/[0.05] py-6 text-sm font-semibold text-white transition-colors hover:bg-white/10"
-                        >
-                          Continue with Google
-                        </Button>
-
-                        <div className="my-6 flex items-center gap-3 text-[10px] uppercase tracking-[0.24em] text-slate-500">
-                          <span className="h-px flex-1 bg-white/10" />
-                          <span>Or continue with email</span>
-                          <span className="h-px flex-1 bg-white/10" />
-                        </div>
-                      </>
-                    ) : null}
-
-                    <form id="studio-access-form" onSubmit={handleSubmit} className="space-y-5">
-                      {!paidAccess && signup ? (
-                        <div className="space-y-2">
-                          <Label htmlFor="auth-name" className={LABEL_CLS}>
-                            Your name
-                          </Label>
-                          <Input
-                            id="auth-name"
-                            value={name}
-                            onChange={(event) => setName(event.target.value)}
-                            required
-                            className={FIELD}
+                      <InputOTPGroup className="flex w-full justify-between gap-2">
+                        {[0, 1, 2, 3, 4, 5].map((index) => (
+                          <InputOTPSlot
+                            key={index}
+                            index={index}
+                            className="h-14 w-full rounded-2xl border border-white/10 bg-white/[0.04] font-display text-xl text-white first:rounded-l-2xl last:rounded-r-2xl"
                           />
-                        </div>
-                      ) : null}
+                        ))}
+                      </InputOTPGroup>
+                    </InputOTP>
 
-                      <div className="space-y-2">
-                        <Label htmlFor="auth-email" className={LABEL_CLS}>
-                          {paidAccess ? "Checkout email" : "Email"}
-                        </Label>
-                        <Input
-                          id="auth-email"
-                          type="email"
-                          value={email}
-                          onChange={(event) => setEmail(event.target.value)}
-                          required
-                          className={FIELD}
-                        />
-                      </div>
+                    <Button type="submit" disabled={submitting || token.length < 6} className={PRIMARY_CTA}>
+                      {submitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                      Enter FUSE <ArrowRight className="ml-2 h-4 w-4" />
+                    </Button>
+                  </form>
 
-                      <Button type="submit" disabled={submitting} className={PRIMARY_CTA}>
-                        {submitting
-                          ? "Working…"
-                          : paidAccess
-                            ? "Send studio access code"
-                            : signup
-                              ? "Create free account →"
-                              : "Send sign-in code →"}
-                      </Button>
-                    </form>
-
-                    {!paidAccess ? (
-                      <>
-                        {signup ? (
-                          <ul className="mt-6 space-y-2 text-xs text-slate-400">
-                            {["No password required", "No credit card required to create an account", "Start with free Image Templates"].map(
-                              (claim) => (
-                                <li key={claim} className="flex items-center gap-2">
-                                  <Check className="h-3.5 w-3.5 shrink-0 text-cyan-300" /> {claim}
-                                </li>
-                              ),
-                            )}
-                          </ul>
-                        ) : null}
-
-                        <p className="mt-6 text-sm text-slate-400">
-                          {signup ? "Already have an account? " : "New to FUSE? "}
-                          <button
-                            type="button"
-                            onClick={() => setMode(signup ? "signin" : "signup")}
-                            className="font-semibold uppercase tracking-[0.14em] text-cyan-200 transition-colors hover:text-cyan-100"
-                          >
-                            {signup ? "Sign in →" : "Create free account →"}
-                          </button>
-                        </p>
-
-                        {signup ? (
-                          <div className="mt-6 rounded-2xl border border-white/10 bg-white/[0.03] p-4">
-                            <p className={LABEL_CLS}>Next</p>
-                            <p className="mt-2 text-sm leading-6 text-slate-300">
-                              Build your Brand Workspace — save your logo, colors and products once and FUSE preloads
-                              every campaign for you.
-                            </p>
-                            <div className="mt-3 flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500">
-                              <span className="text-cyan-200">Account</span>
-                              <ArrowRight className="h-3 w-3" />
-                              <span>Brand</span>
-                              <ArrowRight className="h-3 w-3" />
-                              <span>Campaigns</span>
-                            </div>
-                          </div>
-                        ) : null}
-
-                        <p className="mt-6 text-xs leading-6 text-slate-500">
-                          By continuing, you agree to the{" "}
-                          <Link to="/terms" className="text-slate-300 underline underline-offset-4 hover:text-white">
-                            Terms
-                          </Link>{" "}
-                          and{" "}
-                          <Link to="/privacy" className="text-slate-300 underline underline-offset-4 hover:text-white">
-                            Privacy Policy
-                          </Link>
-                          .
-                        </p>
-                      </>
-                    ) : null}
+                  <div className="mt-6 flex flex-wrap items-center justify-between gap-3 text-xs">
+                    {resendCooldown > 0 ? (
+                      <span className="text-slate-500">Resend code in {resendCooldown}s</span>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => void handleResend()}
+                        disabled={submitting}
+                        className="font-semibold text-cyan-200 hover:text-cyan-100"
+                      >
+                        Resend code
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setStep("email");
+                        setToken("");
+                        setResendCooldown(0);
+                      }}
+                      className="inline-flex items-center gap-1.5 text-slate-400 hover:text-white"
+                    >
+                      <ArrowLeft className="h-3.5 w-3.5" /> Use a different email
+                    </button>
                   </div>
-                )}
-              </div>
+                </>
+              )}
 
-              {showReferralClaim ? (
-                <p className="mt-4 flex items-center justify-center gap-2 text-xs text-cyan-100/80">
-                  <Sparkles className="h-3.5 w-3.5" /> {referralBonus.toLocaleString()} credits are attached to this
-                  invite — they land as soon as your account is created.
-                </p>
-              ) : null}
+              <p className="mt-8 text-center text-[11px] leading-5 text-slate-500">
+                By continuing, you agree to the{" "}
+                <Link to="/terms" className="text-slate-300 underline decoration-white/20 hover:text-white">
+                  Terms
+                </Link>{" "}
+                and{" "}
+                <Link to="/privacy" className="text-slate-300 underline decoration-white/20 hover:text-white">
+                  Privacy Policy
+                </Link>
+                .
+              </p>
             </div>
           </div>
         </div>
