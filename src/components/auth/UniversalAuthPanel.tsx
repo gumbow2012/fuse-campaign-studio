@@ -3,23 +3,26 @@
  *
  * The single set of auth actions used everywhere (the /auth page and the
  * generate gate modal): OAuth (Google always, Apple / Microsoft behind env
- * flags) + a 6-digit email code. No passwords, no name field.
+ * flags) + email & password. Email confirmation is disabled, so signUp returns
+ * an active session immediately.
  *
  * Callers own the surrounding layout, copy and post-auth routing — this panel
  * only owns the auth mechanics so there is never a second auth flow.
  */
-import { FormEvent, useEffect, useRef, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp";
 import { toast } from "@/hooks/use-toast";
 import { track } from "@/lib/analytics/track";
 import { supabase } from "@/integrations/supabase/client";
-import { ArrowLeft, ArrowRight, Loader2 } from "lucide-react";
+import { getAbsoluteSiteUrl } from "@/lib/site-url";
+import { ArrowRight, Eye, EyeOff, Loader2 } from "lucide-react";
 
 export const APPLE_AUTH_ENABLED = import.meta.env.VITE_ENABLE_APPLE_AUTH === "true";
 export const MICROSOFT_AUTH_ENABLED = import.meta.env.VITE_ENABLE_MICROSOFT_AUTH === "true";
+
+export const MIN_PASSWORD_LENGTH = 8;
 
 const FIELD =
   "h-12 rounded-2xl border-white/10 bg-white/[0.04] text-white transition-colors focus-visible:border-cyan-300/60 focus-visible:ring-cyan-300/20";
@@ -27,6 +30,8 @@ const PRIMARY_CTA =
   "w-full rounded-full bg-cyan-300 py-6 text-[13px] font-semibold uppercase tracking-[0.14em] text-slate-950 shadow-[0_18px_50px_-18px_rgba(103,232,249,0.7)] transition-transform hover:bg-cyan-200 hover:-translate-y-0.5";
 const OAUTH_BTN =
   "flex h-12 w-full items-center justify-center gap-3 rounded-2xl border border-white/12 bg-white/[0.04] text-sm font-semibold text-white transition-colors hover:border-cyan-300/40 hover:bg-white/[0.08] disabled:opacity-60";
+
+export type AuthMode = "signup" | "signin";
 
 /** k***@gmail.com — never render the full address back at the user. */
 export function maskEmail(value: string) {
@@ -39,11 +44,27 @@ export function authErrorDescription(error: unknown, fallback: string) {
   if (!(error instanceof Error)) return fallback;
   const message = error.message;
   const normalized = message.toLowerCase();
-  if (normalized.includes("security purposes") || normalized.includes("rate limit")) {
-    return "Too many code requests. Wait a minute and try again.";
+  if (normalized.includes("rate limit") || normalized.includes("security purposes")) {
+    return "Too many attempts. Wait a minute and try again.";
   }
-  if (message === "Invalid login credentials") return "Invalid email or code.";
+  if (normalized.includes("invalid login credentials")) {
+    return "That email and password don’t match. Try again or reset your password.";
+  }
+  if (normalized.includes("password should be") || normalized.includes("password is too short")) {
+    return `Use at least ${MIN_PASSWORD_LENGTH} characters for your password.`;
+  }
   return message;
+}
+
+/** Supabase reports an existing account in a couple of shapes. */
+function isEmailAlreadyRegistered(error: unknown) {
+  if (!(error instanceof Error)) return false;
+  const normalized = error.message.toLowerCase();
+  return (
+    normalized.includes("already registered") ||
+    normalized.includes("already exists") ||
+    normalized.includes("user already")
+  );
 }
 
 function GoogleMark() {
@@ -77,19 +98,20 @@ function MicrosoftMark() {
 }
 
 export type UniversalAuthPanelProps = {
-  /** Absolute URL the provider / magic link returns to. */
+  /** Absolute URL the provider returns to. */
   oauthRedirectTo: string;
-  emailRedirectTo: string;
-  /** Label for the email submit button on the first step. */
+  /** Which email flow to open with (driven by ?mode / the caller's surface). */
+  initialMode?: AuthMode;
+  /** Label for the email submit button (create-account mode). */
   emailCtaLabel?: string;
   /** Persist the caller's intent right before a provider round-trip. */
   onBeforeRedirect?: () => void;
-  /** Fired after a successful OTP verification. */
+  /** Fired after a successful sign-up / sign-in. */
   onAuthenticated?: (args: { userId?: string; isNewAccount: boolean }) => void;
-  /** Optional prefill + auto-send (paid checkout hand-off). */
+  /** Optional email prefill (paid checkout hand-off). */
   autoRequestEmail?: string | null;
-  /** Lets the caller swap its own headline when the code step opens. */
-  onStepChange?: (step: "email" | "code") => void;
+  /** Lets the caller mirror the current mode in its own headline. */
+  onModeChange?: (mode: AuthMode) => void;
   showTerms?: boolean;
   className?: string;
   /** Non-PII label for analytics (e.g. "generate_gate", "auth_page"). */
@@ -98,111 +120,101 @@ export type UniversalAuthPanelProps = {
 
 export default function UniversalAuthPanel({
   oauthRedirectTo,
-  emailRedirectTo,
-  emailCtaLabel = "Continue with email",
+  initialMode = "signup",
+  emailCtaLabel = "Create account",
   onBeforeRedirect,
   onAuthenticated,
   autoRequestEmail,
-  onStepChange,
+  onModeChange,
   showTerms = true,
   className,
   authSurface,
 }: UniversalAuthPanelProps) {
-  const [email, setEmail] = useState("");
-  const [token, setToken] = useState("");
-  const [step, setStep] = useState<"email" | "code">("email");
+  const [mode, setMode] = useState<AuthMode>(initialMode);
+  const [email, setEmail] = useState(autoRequestEmail ?? "");
+  const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [resetting, setResetting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [existingAccount, setExistingAccount] = useState(false);
   const [oauthPending, setOauthPending] = useState<string | null>(null);
-  const [resendCooldown, setResendCooldown] = useState(0);
-  const autoRequested = useRef(false);
 
   useEffect(() => {
-    onStepChange?.(step);
+    setMode(initialMode);
+  }, [initialMode]);
+
+  useEffect(() => {
+    onModeChange?.(mode);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [step]);
+  }, [mode]);
 
   useEffect(() => {
-    if (resendCooldown <= 0) return;
-    const timer = window.setTimeout(() => setResendCooldown((current) => Math.max(current - 1, 0)), 1000);
-    return () => window.clearTimeout(timer);
-  }, [resendCooldown]);
+    if (autoRequestEmail && autoRequestEmail.includes("@")) setEmail(autoRequestEmail);
+  }, [autoRequestEmail]);
 
-  const requestCode = async (target: string) => {
-    const { error } = await supabase.auth.signInWithOtp({
-      email: target,
-      options: {
-        // One code path: existing email signs in, new email creates the account.
-        shouldCreateUser: true,
-        emailRedirectTo,
-      },
-    });
-    if (error) throw error;
+  const switchMode = (next: AuthMode) => {
+    setMode(next);
+    setError(null);
+    setExistingAccount(false);
   };
-
-  useEffect(() => {
-    if (!autoRequestEmail || autoRequested.current || step !== "email") return;
-    if (!autoRequestEmail.includes("@")) return;
-    autoRequested.current = true;
-    setEmail(autoRequestEmail);
-    setSubmitting(true);
-    void (async () => {
-      try {
-        await requestCode(autoRequestEmail);
-        setStep("code");
-        setResendCooldown(60);
-      } catch {
-        /* let the user submit manually */
-      } finally {
-        setSubmitting(false);
-      }
-    })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [autoRequestEmail, step]);
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    setError(null);
+    setExistingAccount(false);
+
+    if (mode === "signup" && password.length < MIN_PASSWORD_LENGTH) {
+      setError(`Use at least ${MIN_PASSWORD_LENGTH} characters for your password.`);
+      return;
+    }
+
     setSubmitting(true);
     try {
-      if (step === "email") {
-        track("auth_provider_selected", { provider: "email", surface: authSurface ?? null });
-        await requestCode(email);
-        setStep("code");
-        setResendCooldown(60);
-        toast({ title: "Code sent", description: `Enter the 6-digit code we sent to ${maskEmail(email)}.` });
+      track("auth_provider_selected", { provider: "email", surface: authSurface ?? null });
+
+      if (mode === "signup") {
+        const { data, error: signUpError } = await supabase.auth.signUp({ email, password });
+        if (signUpError) throw signUpError;
+        // Email confirmation is off → a session is returned immediately.
+        onAuthenticated?.({ userId: data?.user?.id, isNewAccount: true });
       } else {
-        const { data: verified, error } = await supabase.auth.verifyOtp({ email, token, type: "email" });
-        if (error) throw error;
-        const verifiedUser = verified?.user;
-        const createdAt = verifiedUser?.created_at ? new Date(verifiedUser.created_at).getTime() : NaN;
-        const isNewAccount = Number.isFinite(createdAt) && Date.now() - createdAt < 60_000;
-        onAuthenticated?.({ userId: verifiedUser?.id, isNewAccount });
+        const { data, error: signInError } = await supabase.auth.signInWithPassword({ email, password });
+        if (signInError) throw signInError;
+        onAuthenticated?.({ userId: data?.user?.id, isNewAccount: false });
       }
-    } catch (error) {
-      toast({
-        title: "Authentication failed",
-        description: authErrorDescription(error, "Could not complete authentication."),
-        variant: "destructive",
-      });
+    } catch (caught) {
+      if (mode === "signup" && isEmailAlreadyRegistered(caught)) {
+        setExistingAccount(true);
+        setError("That email already has an account.");
+      } else {
+        setError(authErrorDescription(caught, "Could not complete authentication."));
+      }
     } finally {
       setSubmitting(false);
     }
   };
 
-  const handleResend = async () => {
-    if (resendCooldown > 0 || !email) return;
-    setSubmitting(true);
+  const handleForgotPassword = async () => {
+    if (!email.includes("@")) {
+      setError("Enter your email first, then tap “Forgot password?”.");
+      return;
+    }
+    setResetting(true);
+    setError(null);
     try {
-      await requestCode(email);
-      setResendCooldown(60);
-      toast({ title: "Code resent", description: `A new code is on the way to ${maskEmail(email)}.` });
-    } catch (error) {
-      toast({
-        title: "Could not resend",
-        description: authErrorDescription(error, "Could not resend the code."),
-        variant: "destructive",
+      const { error: resetError } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: getAbsoluteSiteUrl("/reset-password"),
       });
+      if (resetError) throw resetError;
+      toast({
+        title: "Reset link sent",
+        description: `Follow the link we sent to ${maskEmail(email)} to set a new password.`,
+      });
+    } catch (caught) {
+      setError(authErrorDescription(caught, "Could not send the reset link."));
     } finally {
-      setSubmitting(false);
+      setResetting(false);
     }
   };
 
@@ -211,134 +223,131 @@ export default function UniversalAuthPanel({
     track("auth_provider_selected", { provider, surface: authSurface ?? null });
     onBeforeRedirect?.();
     try {
-      const { error } = await supabase.auth.signInWithOAuth({
+      const { error: oauthError } = await supabase.auth.signInWithOAuth({
         provider,
         options: {
           redirectTo: oauthRedirectTo,
           ...(provider === "google" ? { queryParams: { prompt: "select_account" } } : {}),
         },
       });
-      if (error) throw error;
-    } catch (error) {
+      if (oauthError) throw oauthError;
+    } catch (caught) {
       toast({
         title: `${label} sign-in failed`,
-        description: error instanceof Error ? error.message : `Could not start ${label} sign-in.`,
+        description: caught instanceof Error ? caught.message : `Could not start ${label} sign-in.`,
         variant: "destructive",
       });
       setOauthPending(null);
     }
   };
 
-  const busy = submitting || Boolean(oauthPending);
+  const busy = submitting || resetting || Boolean(oauthPending);
+  const submitLabel = mode === "signup" ? emailCtaLabel : "Sign in";
 
   return (
     <div className={className}>
-      {step === "email" ? (
-        <>
-          <div className="space-y-2.5">
-            <button type="button" className={OAUTH_BTN} disabled={busy} onClick={() => void handleOAuth("google", "Google")}>
-              {oauthPending === "google" ? <Loader2 className="h-4 w-4 animate-spin" /> : <GoogleMark />}
-              Continue with Google
-            </button>
+      <div className="space-y-2.5">
+        <button type="button" className={OAUTH_BTN} disabled={busy} onClick={() => void handleOAuth("google", "Google")}>
+          {oauthPending === "google" ? <Loader2 className="h-4 w-4 animate-spin" /> : <GoogleMark />}
+          Continue with Google
+        </button>
 
-            {APPLE_AUTH_ENABLED ? (
-              <button type="button" className={OAUTH_BTN} disabled={busy} onClick={() => void handleOAuth("apple", "Apple")}>
-                {oauthPending === "apple" ? <Loader2 className="h-4 w-4 animate-spin" /> : <AppleMark />}
-                Continue with Apple
-              </button>
-            ) : null}
+        {APPLE_AUTH_ENABLED ? (
+          <button type="button" className={OAUTH_BTN} disabled={busy} onClick={() => void handleOAuth("apple", "Apple")}>
+            {oauthPending === "apple" ? <Loader2 className="h-4 w-4 animate-spin" /> : <AppleMark />}
+            Continue with Apple
+          </button>
+        ) : null}
 
-            {MICROSOFT_AUTH_ENABLED ? (
-              <button type="button" className={OAUTH_BTN} disabled={busy} onClick={() => void handleOAuth("azure", "Microsoft")}>
-                {oauthPending === "azure" ? <Loader2 className="h-4 w-4 animate-spin" /> : <MicrosoftMark />}
-                Continue with Microsoft
-              </button>
-            ) : null}
-          </div>
+        {MICROSOFT_AUTH_ENABLED ? (
+          <button type="button" className={OAUTH_BTN} disabled={busy} onClick={() => void handleOAuth("azure", "Microsoft")}>
+            {oauthPending === "azure" ? <Loader2 className="h-4 w-4 animate-spin" /> : <MicrosoftMark />}
+            Continue with Microsoft
+          </button>
+        ) : null}
+      </div>
 
-          <div className="my-7 flex items-center gap-4">
-            <span className="h-px flex-1 bg-white/10" />
-            <span className="text-[10px] font-semibold uppercase tracking-[0.28em] text-slate-500">or</span>
-            <span className="h-px flex-1 bg-white/10" />
-          </div>
+      <div className="my-7 flex items-center gap-4">
+        <span className="h-px flex-1 bg-white/10" />
+        <span className="text-[10px] font-semibold uppercase tracking-[0.28em] text-slate-500">or</span>
+        <span className="h-px flex-1 bg-white/10" />
+      </div>
 
-          <form onSubmit={handleSubmit} className="space-y-3">
-            <Input
-              type="email"
-              required
-              autoComplete="email"
-              inputMode="email"
-              placeholder="you@brand.com"
-              value={email}
-              onChange={(event) => setEmail(event.target.value)}
-              className={FIELD}
-              aria-label="Email address"
-            />
-            <Button type="submit" disabled={busy || !email} className={PRIMARY_CTA}>
-              {submitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-              {emailCtaLabel} <ArrowRight className="ml-2 h-4 w-4" />
-            </Button>
-            <p className="text-center text-xs text-slate-500">No password required.</p>
-          </form>
-        </>
-      ) : (
-        <>
-          <p className="text-sm leading-6 text-slate-400">
-            We sent a six-digit code to <span className="text-slate-200">{maskEmail(email)}</span>
-          </p>
+      <form onSubmit={handleSubmit} className="space-y-3">
+        <Input
+          type="email"
+          required
+          autoComplete="email"
+          inputMode="email"
+          placeholder="you@brand.com"
+          value={email}
+          onChange={(event) => setEmail(event.target.value)}
+          className={FIELD}
+          aria-label="Email address"
+        />
 
-          <form onSubmit={handleSubmit} className="mt-6 space-y-5">
-            <InputOTP
-              maxLength={6}
-              value={token}
-              autoFocus
-              onChange={(value) => setToken(value.replace(/\D/g, "").slice(0, 6))}
-              containerClassName="justify-between gap-2"
-            >
-              <InputOTPGroup className="flex w-full justify-between gap-2">
-                {[0, 1, 2, 3, 4, 5].map((index) => (
-                  <InputOTPSlot
-                    key={index}
-                    index={index}
-                    className="h-14 w-full rounded-2xl border border-white/10 bg-white/[0.04] font-display text-xl text-white first:rounded-l-2xl last:rounded-r-2xl"
-                  />
-                ))}
-              </InputOTPGroup>
-            </InputOTP>
+        <div className="relative">
+          <Input
+            type={showPassword ? "text" : "password"}
+            required
+            minLength={mode === "signup" ? MIN_PASSWORD_LENGTH : undefined}
+            autoComplete={mode === "signup" ? "new-password" : "current-password"}
+            placeholder={mode === "signup" ? `Password (${MIN_PASSWORD_LENGTH}+ characters)` : "Password"}
+            value={password}
+            onChange={(event) => setPassword(event.target.value)}
+            className={`${FIELD} pr-12`}
+            aria-label="Password"
+          />
+          <button
+            type="button"
+            onClick={() => setShowPassword((current) => !current)}
+            aria-label={showPassword ? "Hide password" : "Show password"}
+            className="absolute right-3 top-1/2 -translate-y-1/2 rounded-full p-1.5 text-slate-400 transition-colors hover:text-white"
+          >
+            {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+          </button>
+        </div>
 
-            <Button type="submit" disabled={submitting || token.length < 6} className={PRIMARY_CTA}>
-              {submitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-              Enter FUSE <ArrowRight className="ml-2 h-4 w-4" />
-            </Button>
-          </form>
-
-          <div className="mt-6 flex flex-wrap items-center justify-between gap-3 text-xs">
-            {resendCooldown > 0 ? (
-              <span className="text-slate-500">Resend code in {resendCooldown}s</span>
-            ) : (
+        {error ? (
+          <p role="alert" className="text-xs leading-5 text-rose-300">
+            {error}{" "}
+            {existingAccount ? (
               <button
                 type="button"
-                onClick={() => void handleResend()}
-                disabled={submitting}
-                className="font-semibold text-cyan-200 hover:text-cyan-100"
+                onClick={() => switchMode("signin")}
+                className="font-semibold text-cyan-200 underline decoration-cyan-300/40 hover:text-cyan-100"
               >
-                Resend code
+                Sign in instead
               </button>
-            )}
-            <button
-              type="button"
-              onClick={() => {
-                setStep("email");
-                setToken("");
-                setResendCooldown(0);
-              }}
-              className="inline-flex items-center gap-1.5 text-slate-400 hover:text-white"
-            >
-              <ArrowLeft className="h-3.5 w-3.5" /> Use a different email
-            </button>
-          </div>
-        </>
-      )}
+            ) : null}
+          </p>
+        ) : null}
+
+        <Button type="submit" disabled={busy || !email || !password} className={PRIMARY_CTA}>
+          {submitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+          {submitLabel} <ArrowRight className="ml-2 h-4 w-4" />
+        </Button>
+      </form>
+
+      <div className="mt-4 flex flex-wrap items-center justify-between gap-3 text-xs">
+        {mode === "signup" ? (
+          <button type="button" onClick={() => switchMode("signin")} className="text-slate-400 hover:text-white">
+            Already have an account? <span className="font-semibold text-cyan-200">Sign in</span>
+          </button>
+        ) : (
+          <button type="button" onClick={() => switchMode("signup")} className="text-slate-400 hover:text-white">
+            New here? <span className="font-semibold text-cyan-200">Create account</span>
+          </button>
+        )}
+        <button
+          type="button"
+          onClick={() => void handleForgotPassword()}
+          disabled={resetting}
+          className="text-slate-400 hover:text-white disabled:opacity-60"
+        >
+          {resetting ? "Sending…" : "Forgot password?"}
+        </button>
+      </div>
 
       {showTerms ? (
         <p className="mt-8 text-center text-[11px] leading-5 text-slate-500">

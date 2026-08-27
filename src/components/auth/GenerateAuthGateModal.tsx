@@ -176,7 +176,7 @@ export default function GenerateAuthGateModal({ open, onClose, templateId, retur
           <UniversalAuthPanel
             className="mt-6"
             oauthRedirectTo={redirectTo}
-            emailRedirectTo={redirectTo}
+            initialMode="signup"
             emailCtaLabel={"Create account & generate"}
             authSurface="generate_gate"
             onBeforeRedirect={() => writePendingAuthIntent({ returnTo, templateId: templateId ?? undefined })}
