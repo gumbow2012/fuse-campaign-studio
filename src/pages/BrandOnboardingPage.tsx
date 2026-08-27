@@ -204,6 +204,25 @@ export default function BrandOnboardingPage() {
     track("brand_step_started", { step: stepKey(step) });
   }, [step]);
 
+  // Phase 7: re-entering an incomplete brand counts as a RESUME (once per brand).
+  const resumeTracked = useRef<string | null>(null);
+  useEffect(() => {
+    if (!brand || resumeTracked.current === brand.id) return;
+    const state = readOnboarding(brand);
+    if (state?.completedAt) return;
+    resumeTracked.current = brand.id;
+    try {
+      track(ACTIVATION_EVENTS.onboardingResumed, {
+        brand_setup_complete: false,
+        step: stepKey(step),
+      });
+    } catch {
+      /* analytics must never break onboarding */
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [brand?.id]);
+
+
 
   const [celebrating, setCelebrating] = useState(false);
 
