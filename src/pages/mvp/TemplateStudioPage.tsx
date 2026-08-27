@@ -1702,6 +1702,10 @@ export default function TemplateStudioPage() {
                             highlighted={focusedInputKey === field.key}
                             file={files[field.key] ?? null}
                             requirement={field.requirement}
+                            sourceNote={
+                              autofilledKeys[field.key] ? `From ${autofilledKeys[field.key]}` : null
+                            }
+
                             castPanel={
                               castEnabled && field.key === castSlotFieldKey ? (
                                 <CastSelector
