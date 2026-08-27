@@ -689,6 +689,7 @@ export default function TemplateStudioPage() {
     if (studioMode !== "complete" || !activeRunId) return;
     if (achievementRunRef.current === activeRunId) return;
     achievementRunRef.current = activeRunId;
+    track("campaign_complete", { template_id: selectedTemplateId ?? null });
     void evaluateAndAnnounce();
   }, [studioMode, activeRunId]);
 
