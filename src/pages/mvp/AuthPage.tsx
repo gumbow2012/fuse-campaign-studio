@@ -11,6 +11,8 @@ import { useAuth } from "@/contexts/AuthContext";
 import { getAbsoluteSiteUrl } from "@/lib/site-url";
 import { checkoutEventId, clearPendingCheckout, readPendingCheckout, trackEvent, trackEventOnce } from "@/lib/metaPixel";
 import { track } from "@/lib/analytics/track";
+import { storePendingReferralCode } from "@/lib/pendingReferral";
+import { usePendingReferral } from "@/hooks/usePendingReferral";
 
 function authErrorDescription(error: unknown, fallback: string) {
   if (!(error instanceof Error)) return fallback;
@@ -71,6 +73,14 @@ export default function AuthPage() {
     }
     clearPendingCheckout();
   }, [paidAccess, searchParams]);
+
+  // Referral capture: ?ref=CODE must outlive the OTP round-trip / OAuth redirect.
+  useEffect(() => {
+    const stored = storePendingReferralCode(searchParams.get("ref"));
+    if (stored) track("referral_landing", { source: "auth_query" });
+  }, [searchParams]);
+
+  usePendingReferral();
 
   useEffect(() => {
     if (!user || authLoading) return;
