@@ -1101,6 +1101,180 @@ export default function TemplateStudioPage() {
     }
   };
 
+  /*
+   * Phase 4 — marketplace multi-select batch run.
+   * Reuses the existing single-run path (startTemplateRun) once per selected
+   * template. No new runner, no new billing: the same credit confirm modal
+   * gates the combined cost before anything is enqueued.
+   */
+  const [selectMode, setSelectMode] = useState(false);
+  const [batchSelection, setBatchSelection] = useState<string[]>([]);
+  const [batchConfirmOpen, setBatchConfirmOpen] = useState(false);
+  const [batchRunning, setBatchRunning] = useState(false);
+
+  const batchTemplates = useMemo(
+    () => batchSelection
+      .map((id) => templates.find((template) => template.id === id))
+      .filter((template): template is ApiTemplate => !!template),
+    [batchSelection, templates],
+  );
+  const batchCredits = batchTemplates.reduce(
+    (total, template) => total + (template.estimated_credits_per_run || 0),
+    0,
+  );
+
+  const exitSelectMode = () => {
+    setSelectMode(false);
+    setBatchSelection([]);
+  };
+
+  const toggleBatchSelection = (templateId: string) =>
+    setBatchSelection((current) =>
+      current.includes(templateId)
+        ? current.filter((id) => id !== templateId)
+        : [...current, templateId],
+    );
+
+  /** Derives a template's inputs the same way the single-run builder does. */
+  const batchInputFieldsFor = (template: ApiTemplate): InputField[] => {
+    if (template.input_schema?.length) {
+      return template.input_schema.map((field) => ({
+        key: field.key,
+        label: field.label,
+        type: field.type || "image",
+        required: field.required ?? true,
+        hint: field.hint,
+      }));
+    }
+    const staticInputs = getStaticInputs(template.name);
+    if (staticInputs?.length) return staticInputs;
+    return [{ key: "product_image", label: "Product image", type: "image", required: true }];
+  };
+
+  /** Fills a template from the active brand; reports anything still missing. */
+  const buildBatchRunInputs = (template: ApiTemplate) => {
+    const fields = batchInputFieldsFor(template);
+    const plan = planBrandAutofill(
+      fields.map((field) => ({
+        key: field.key,
+        label: field.label,
+        type: field.type,
+        assetType: field.requirement?.assetType ?? null,
+      })),
+      { brand: activeBrand!, products: brandProducts, models: brandModels },
+    );
+
+    const inputs: Record<string, string> = {};
+    const missing: string[] = [];
+
+    for (const field of fields) {
+      const value = field.type === "image" ? plan.images[field.key]?.url ?? "" : plan.texts[field.key] ?? "";
+      if (value) {
+        inputs[field.key] = value;
+      } else if (field.required) {
+        missing.push(field.label);
+      }
+    }
+
+    return { inputs, missing };
+  };
+
+  const requestBatchRun = async () => {
+    if (!batchTemplates.length) return;
+    if (!user) {
+      navigate("/auth?mode=signup", { state: { redirectTo: "/app/templates" } });
+      return;
+    }
+    if (!activeBrand) {
+      toast({
+        title: "Choose a brand first",
+        description: "Batch runs use your active brand's saved assets.",
+        variant: "destructive",
+      });
+      return;
+    }
+    if (!isPrivilegedUser) {
+      if (!hasActiveMembership) {
+        toast({
+          title: "Membership required",
+          description: "Your billing state is not active yet.",
+          variant: "destructive",
+        });
+        return;
+      }
+      if (displayedCreditBalance < batchCredits) {
+        toast({
+          title: "Credits not available",
+          description: `These ${batchTemplates.length} runs cost ${batchCredits} credits and your balance is ${displayedCreditBalance}.`,
+          variant: "destructive",
+        });
+        return;
+      }
+    }
+    setBatchConfirmOpen(true);
+  };
+
+  const confirmBatchRun = async () => {
+    setBatchConfirmOpen(false);
+    if (!batchTemplates.length || !activeBrand) return;
+
+    setBatchRunning(true);
+    const skipped: string[] = [];
+    let queued = 0;
+
+    try {
+      for (const template of batchTemplates) {
+        if (!template.versionId) {
+          skipped.push(`${template.name} — no live version`);
+          continue;
+        }
+
+        const { inputs, missing } = buildBatchRunInputs(template);
+        if (missing.length) {
+          skipped.push(`${template.name} — needs ${missing.join(", ")}`);
+          continue;
+        }
+
+        try {
+          const data = await startTemplateRun(template.versionId, inputs);
+          if (data?.error) throw new Error(String(data.error));
+          if (!data?.jobId) throw new Error("no job id returned");
+          queued += 1;
+          if (isPrivilegedUser) {
+            recordAdminVisualCreditUsage(template.estimated_credits_per_run || 0);
+          }
+        } catch (error) {
+          skipped.push(
+            `${template.name} — ${error instanceof Error ? error.message : "could not start"}`,
+          );
+        }
+      }
+
+      if (isPrivilegedUser) setAdminVisualSpent(getAdminVisualCreditsSpent());
+      void refetchRecentRuns();
+      void refreshProfile();
+
+      if (queued) {
+        toast({
+          title: `${queued} ${queued === 1 ? "campaign" : "campaigns"} queued`,
+          description: skipped.length
+            ? `Skipped ${skipped.length}: ${skipped.join(" · ")}`
+            : "Track them in your campaign history.",
+        });
+      } else {
+        toast({
+          title: "Nothing was queued",
+          description: skipped.join(" · ") || "No runnable templates in the selection.",
+          variant: "destructive",
+        });
+      }
+
+      if (queued) exitSelectMode();
+    } finally {
+      setBatchRunning(false);
+    }
+  };
+
   const handleRun = async () => {
     if (!selectedTemplate) return;
     if (!user) {
