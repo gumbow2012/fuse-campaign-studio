@@ -46,6 +46,7 @@ import MembershipPage from "@/pages/mvp/MembershipPage";
 import ContactPage from "@/pages/mvp/ContactPage";
 import CreatorProgramPage from "@/pages/mvp/CreatorProgramPage";
 import CreatorApplyPage from "@/pages/mvp/CreatorApplyPage";
+import CreatorsDirectoryPage from "@/pages/mvp/CreatorsDirectoryPage";
 import ForgotPasswordPage from "@/pages/mvp/ForgotPasswordPage";
 import HomePage from "@/pages/mvp/HomePage";
 import NotFoundPage from "@/pages/mvp/NotFoundPage";
