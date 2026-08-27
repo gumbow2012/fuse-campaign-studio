@@ -9,7 +9,9 @@ import { PageTracking } from "@/hooks/usePageTracking";
 import CreditTopUpSuccessWatcher from "@/components/mvp/CreditTopUpSuccessWatcher";
 import CustomerRoute from "@/components/CustomerRoute";
 import BrandProfilesPage from "@/pages/BrandProfilesPage";
+import BrandOnboardingPage from "@/pages/BrandOnboardingPage";
 import AvatarProfilesPage from "@/pages/AvatarProfilesPage";
+
 import AdminRoute from "@/components/AdminRoute";
 import BuilderRoute from "@/components/BuilderRoute";
 import CreatorRoute from "@/components/CreatorRoute";
