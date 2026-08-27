@@ -389,7 +389,7 @@ export default function BrandProfilesPage() {
             <TabsTrigger value="brands">Brands</TabsTrigger>
             <TabsTrigger value="products">Products &amp; garments</TabsTrigger>
             <TabsTrigger value="models">Models</TabsTrigger>
-            <TabsTrigger value="library">Library</TabsTrigger>
+            <TabsTrigger value="library">Brand assets</TabsTrigger>
           </TabsList>
 
           <TabsContent value="dashboard" className="mt-6">
@@ -675,7 +675,14 @@ export default function BrandProfilesPage() {
           </TabsContent>
 
           <TabsContent value="library" className="mt-6">
-            <BrandLibraryPanel assets={libraryAssets} loading={libraryQuery.isLoading} />
+            <BrandLibraryPanel
+              assets={libraryAssets}
+              loading={libraryQuery.isLoading || productsQuery.isLoading}
+              activeBrand={activeBrand}
+              products={products}
+              avatars={avatars}
+              onEditProduct={() => setTab("products")}
+            />
           </TabsContent>
         </Tabs>
       </main>
