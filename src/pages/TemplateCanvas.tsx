@@ -23,7 +23,9 @@ import {
   resolveTemplateBranchInputIndex,
 } from "@/lib/templateBuilder";
 import CastConfigPanel from "@/components/lab/CastConfigPanel";
+import QuickPublishButton from "@/components/lab/QuickPublishButton";
 import { parseCastConfig, type CastConfig } from "@/lib/castConfig";
+
 
 type TemplateInput = {
   id: string;
