@@ -6,7 +6,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { Boxes, CreditCard, LayoutDashboard, LogOut, Shield, Ticket, User, Users, Zap } from "lucide-react";
+import { Boxes, CreditCard, FolderHeart, LayoutDashboard, LogOut, Shield, Ticket, User, Users, Zap } from "lucide-react";
 import CreditPackDialog from "@/components/mvp/CreditPackDialog";
 import FeatureNewBadge from "@/components/FeatureNewBadge";
 import { avatarInitials } from "@/lib/avatarImage";
