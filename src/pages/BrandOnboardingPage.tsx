@@ -524,7 +524,10 @@ export default function BrandOnboardingPage() {
               productCount: brandProducts.length,
               castCount: readModelIds(brand).length,
               dnaPresent: Boolean(
-                dna && ((dna.tags?.length ?? 0) > 0 || (dna.tone ?? "").trim().length > 0),
+                dna &&
+                  ((dna.styleSignals?.length ?? 0) > 0 ||
+                    (dna.tone ?? "").trim().length > 0 ||
+                    (dna.referenceBrands?.length ?? 0) > 0),
               ),
             })}
             onClose={() => {
