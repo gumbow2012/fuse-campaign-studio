@@ -16,7 +16,7 @@ describe("auth page contract", () => {
     expect(source).toContain("supabase.auth.resetPasswordForEmail");
     expect(source).toContain("supabase.auth.signInWithOAuth");
     expect(source).toContain('provider: "google"');
-    expect(source).toContain('redirectTo: getAbsoluteSiteUrl("/auth")');
+    expect(source).toContain("redirectTo: oauthRedirectTo");
     expect(source).toContain("Continue with Google");
   });
 });
