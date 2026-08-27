@@ -19,7 +19,6 @@ import {
   ImageSlot,
   LABEL,
   ColorPalette,
-  useUploader,
 } from "@/components/brand/BrandEditors";
 import {
   createBrandProfile,
@@ -36,6 +35,7 @@ import { deriveBrandReadiness, readBrandFlags, type ReadinessStatus } from "@/li
 import BrandImportPanel, { type BrandImportConfirmation } from "@/components/brand/BrandImportPanel";
 import BrandIdentityStep, { type ColorRole } from "@/components/brand/BrandIdentityStep";
 import BrandProductsStep from "@/components/brand/BrandProductsStep";
+import BrandCreativeDnaStep, { type CreativeDnaValue } from "@/components/brand/BrandCreativeDnaStep";
 import CastLibrary from "@/components/cast/CastLibrary";
 import { takeBrandImport } from "@/services/brandImport";
 
@@ -44,23 +44,8 @@ const STEPS = [
   { id: 2, label: "Identity", optional: false },
   { id: 3, label: "Products", optional: true },
   { id: 4, label: "Models", optional: true },
-  { id: 5, label: "Visual style", optional: true },
+  { id: 5, label: "Creative DNA", optional: true },
   { id: 6, label: "Finish", optional: false },
-];
-
-const STYLE_TAGS = [
-  "Streetwear",
-  "Editorial",
-  "Luxury",
-  "Minimal",
-  "Grunge",
-  "Y2K",
-  "Neon night",
-  "Studio clean",
-  "Film grain",
-  "High contrast",
-  "Warm daylight",
-  "Cinematic",
 ];
 
 const STATUS_MARK: Record<ReadinessStatus, { mark: string; className: string }> = {
@@ -340,8 +325,6 @@ export default function BrandOnboardingPage() {
   const optional = STEPS.find((entry) => entry.id === step)?.optional ?? false;
   const maxReachable = Math.max(step, ...readiness.completedSteps, 1);
 
-
-  const style = { tags, tone, references, notes };
 
   return (
     <div className="min-h-screen bg-slate-950 text-white">
