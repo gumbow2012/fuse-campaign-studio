@@ -143,13 +143,19 @@ export default function BrandOnboardingPage() {
   const [neutralPalette, setNeutralPalette] = useState(false);
   // Step 4
   const [modelIds, setModelIds] = useState<string[]>([]);
-  // Step 5
-  const [tags, setTags] = useState<string[]>([]);
-  const [tone, setTone] = useState("");
-  const [references, setReferences] = useState<string[]>([]);
-  const [notes, setNotes] = useState("");
-  const [tagDraft, setTagDraft] = useState("");
-  const { busy: refBusy, upload: uploadRef } = useUploader();
+  // Step 5 — Creative DNA (Phase 6)
+  const [dna, setDna] = useState<CreativeDnaValue>({
+    styleSignals: [],
+    tone: "",
+    instagram: null,
+    pinterest: null,
+    referenceBrands: [],
+    referenceImages: [],
+    notes: "",
+  });
+  const patchDna = (patch: Partial<CreativeDnaValue>) =>
+    setDna((current) => ({ ...current, ...patch }));
+
 
   const hydratedFor = useMemo(() => brand?.id ?? null, [brand?.id]);
   useEffect(() => {
