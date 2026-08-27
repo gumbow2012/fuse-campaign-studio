@@ -151,18 +151,32 @@ export function deriveBrandReadiness(
       items: [
         {
           key: "dna",
-          label: "Style tags or tone",
+          // Recommended: satisfied by style signals, tone, or reference brands.
+          label: "Style signals, tone or reference brands",
           level: "recommended",
-          done: Boolean(visualStyle && (visualStyle.tags.length > 0 || visualStyle.tone.trim())),
+          done: Boolean(
+            visualStyle &&
+              (visualStyle.styleSignals.length > 0 ||
+                visualStyle.tags.length > 0 ||
+                visualStyle.tone.trim().length > 0 ||
+                visualStyle.referenceBrands.length > 0),
+          ),
         },
         {
           key: "references",
-          label: "Reference images",
+          label: "Taste references (images or links)",
           level: "optional",
-          done: Boolean(visualStyle && visualStyle.references.length > 0),
+          done: Boolean(
+            visualStyle &&
+              (visualStyle.referenceImages.length > 0 ||
+                visualStyle.references.length > 0 ||
+                visualStyle.instagram ||
+                visualStyle.pinterest),
+          ),
         },
       ],
     },
+
   ];
 
   const sections = raw.map((section) => ({ ...section, status: statusFor(section.items) }));
