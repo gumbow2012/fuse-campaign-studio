@@ -173,12 +173,63 @@ async function resolvePublicUserId(
 }
 
 /**
+ * PUBLIC earned achievements (additive, READ-ONLY). Only rows that are actually
+ * unlocked are returned, and only display fields — never criteria, rewards or
+ * progress toward locked achievements. Failure degrades to an empty list.
+ */
+async function loadPublicAchievements(
+  admin: ReturnType<typeof createAdminClient>,
+  creatorUserId: string,
+) {
+  const { data: unlocked, error } = await admin
+    .from("user_achievements")
+    .select("achievement_key,unlocked_at")
+    .eq("user_id", creatorUserId)
+    .not("unlocked_at", "is", null)
+    .order("unlocked_at", { ascending: false });
+  if (error) return [];
+
+  const rows = (unlocked ?? []) as Array<Record<string, unknown>>;
+  const keys = rows.map((row) => String(row.achievement_key)).filter(Boolean);
+  if (!keys.length) return [];
+
+  const { data: definitions } = await admin
+    .from("achievement_definitions")
+    .select("key,title,description,icon,tier,category")
+    .in("key", keys)
+    .eq("active", true);
+
+  const byKey = new Map<string, Record<string, unknown>>();
+  for (const definition of (definitions ?? []) as Array<Record<string, unknown>>) {
+    byKey.set(String(definition.key), definition);
+  }
+
+  return rows
+    .map((row) => {
+      const key = String(row.achievement_key);
+      const definition = byKey.get(key);
+      if (!definition) return null;
+      return {
+        key,
+        title: definition.title ? String(definition.title) : key,
+        description: definition.description ? String(definition.description) : null,
+        icon: definition.icon ? String(definition.icon) : null,
+        tier: definition.tier ? String(definition.tier) : null,
+        category: definition.category ? String(definition.category) : null,
+        unlocked_at: row.unlocked_at ? String(row.unlocked_at) : null,
+      };
+    })
+    .filter(Boolean);
+}
+
+/**
  * SOCIAL (additive): public follower count + the viewer's own follow state +
  * the PUBLIC verification fields.
  *
  * `verification_reason` is admin-only and is NEVER selected or returned here.
  */
 const PUBLIC_VERIFICATION_FIELDS = "verification_status,verified_at";
+
 
 async function loadSocial(
   admin: ReturnType<typeof createAdminClient>,
@@ -241,8 +292,12 @@ Deno.serve(async (req) => {
       // token on this request — never from the request body.
       const viewer = await getOptionalUser(req, admin);
       const social = await loadSocial(admin, userId, viewer?.id ?? null);
+      const achievements = await loadPublicAchievements(admin, userId);
 
-      if (!(await hasCreatorRole(admin, userId))) return json({ ...emptyPortfolio, ...social });
+      if (!(await hasCreatorRole(admin, userId))) {
+        return json({ ...emptyPortfolio, ...social, achievements });
+      }
+
 
       const result = await loadTemplates(admin, userId);
       // Public mode: public-safe template/review fields only. No author PII,
@@ -261,6 +316,8 @@ Deno.serve(async (req) => {
         buckets: result.buckets,
         reviewStatusTracked: result.reviewStatusTracked,
         ...social,
+        achievements,
+
       });
     }
 
