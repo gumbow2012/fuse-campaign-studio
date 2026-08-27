@@ -197,6 +197,12 @@ export default function BrandOnboardingPage() {
     return () => window.removeEventListener("keydown", onKey);
   }, [navigate]);
 
+  // Funnel: one started event per step the user actually lands on.
+  useEffect(() => {
+    track("brand_step_started", { step: stepKey(step) });
+  }, [step]);
+
+
   const refreshBrands = () => {
     queryClient.invalidateQueries({ queryKey: ["brand-profiles"] });
     queryClient.invalidateQueries({ queryKey: ["active-brand-id"] });
