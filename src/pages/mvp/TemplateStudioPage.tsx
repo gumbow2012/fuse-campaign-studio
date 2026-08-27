@@ -2124,6 +2124,12 @@ export default function TemplateStudioPage() {
                 );
               })}
             </div>
+            {favoritesOnly && !visibleTemplates.length ? (
+              <div className="mt-5 rounded-[1.5rem] border border-white/8 bg-black/20 p-4 text-sm text-slate-300">
+                No favorites yet — tap the heart on any template to save it here.
+              </div>
+            ) : null}
+
             {activeFilterCount && templates.length && !visibleTemplates.length ? (
               <div className="mt-5 rounded-[1.5rem] border border-white/8 bg-black/20 p-4 text-sm text-slate-300">
                 No templates match these performance filters yet.
