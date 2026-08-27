@@ -1830,6 +1830,30 @@ export default function TemplateStudioPage() {
           />
         ) : null}
 
+        {/* RETENTION P3 — deterministic personalized (or honestly "popular") row. */}
+        {user && !hasActiveCampaignWorkspace ? (
+          <ForYouRow
+            className="mt-8"
+            mode={forYou.mode}
+            entries={forYou.entries}
+            brandName={forYou.mode === "personalized" ? activeBrand?.name ?? null : null}
+            renderMedia={(template) => (
+              <TemplateVibeMedia template={template} className="aspect-[9/16] w-full object-cover" />
+            )}
+            fitFor={(template) => (activeBrand ? templateFitMap[String(template.id)] ?? null : null)}
+            canFavorite={canFavorite}
+            isFavorite={(id) => isFavorite(id)}
+            onToggleFavorite={(id) => toggleFavorite(id)}
+            onSelect={(template) => {
+              track("for_you_template_clicked", { template_id: template.id });
+              handleTemplateSelect(template.id);
+            }}
+            onShown={(mode, count) => track("for_you_shown", { mode, count })}
+          />
+        ) : null}
+
+
+
 
 
         {/* P6b — truthful affordability state after a restored pending run. */}
