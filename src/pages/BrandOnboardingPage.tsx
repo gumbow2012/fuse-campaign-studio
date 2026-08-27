@@ -128,6 +128,8 @@ export default function BrandOnboardingPage() {
   const [primaryLogo, setPrimaryLogo] = useState<string | null>(null);
   const [secondaryLogo, setSecondaryLogo] = useState<string | null>(null);
   const [colors, setColors] = useState<string[]>([]);
+  const [noLogo, setNoLogo] = useState(false);
+  const [neutralPalette, setNeutralPalette] = useState(false);
   // Step 4
   const [modelIds, setModelIds] = useState<string[]>([]);
   // Step 5
