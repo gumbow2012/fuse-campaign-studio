@@ -19,7 +19,6 @@ import {
   ImageSlot,
   LABEL,
   ColorPalette,
-  ProductEditor,
   useUploader,
 } from "@/components/brand/BrandEditors";
 import {
@@ -149,7 +148,6 @@ export default function BrandOnboardingPage() {
   const [references, setReferences] = useState<string[]>([]);
   const [notes, setNotes] = useState("");
   const [tagDraft, setTagDraft] = useState("");
-  const [addingProduct, setAddingProduct] = useState(false);
   const { busy: refBusy, upload: uploadRef } = useUploader();
 
   const hydratedFor = useMemo(() => brand?.id ?? null, [brand?.id]);
