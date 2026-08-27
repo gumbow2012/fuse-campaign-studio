@@ -24,6 +24,7 @@ import { uploadTemplateCoverAsset, uploadTemplateReferenceAsset } from "../_shar
 import { nextEdgeOrder, sortEdgesByExecutionOrder } from "../_shared/edge-order.ts";
 import { normalizeCastConfig } from "../_shared/cast-config.ts";
 import { assertVersionActivatable } from "../_shared/fork-run.ts";
+import { countTemplateDeliverables } from "../_shared/template-pricing.ts";
 
 
 type Action =
@@ -32,6 +33,8 @@ type Action =
   | "clone_version"
   | "activate_version"
   | "publish_gate"
+  | "quick_publish_gate"
+  | "quick_publish_version"
   | "unpublish_template"
   | "update_template"
   | "update_cast_config"
@@ -40,6 +43,7 @@ type Action =
   | "add_edge"
   | "reorder_edge"
   | "delete_edge";
+
 
 type NodeType = "user_input" | "image_gen" | "video_gen" | "prompt";
 type StarterPreset = "campaign" | "reference" | "blank";
