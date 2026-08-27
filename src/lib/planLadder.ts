@@ -1,4 +1,4 @@
-import { Building2, Crown, Layers, Rocket, Sparkles, Zap, type LucideIcon } from "lucide-react";
+import { Building2, Crown, Layers, Package, Rocket, Sparkles, Zap, type LucideIcon } from "lucide-react";
 import { STRIPE_TIERS, type StripeTierKey } from "@/lib/stripe-config";
 
 /**
