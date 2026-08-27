@@ -286,13 +286,23 @@ export default function BrandOnboardingPage() {
       }
       if (step === 4) metaPatch.modelIds = modelIds;
       if (step === 5) {
+        // Creative DNA — extends the existing visualStyle object; tags /
+        // references stay as legacy mirrors for older readers.
+        const existing = readVisualStyle(brand);
         metaPatch.visualStyle = {
-          tags,
-          tone: tone.trim(),
-          references,
-          notes: notes.trim(),
+          ...(existing ?? {}),
+          styleSignals: dna.styleSignals,
+          tags: dna.styleSignals,
+          tone: dna.tone.trim(),
+          instagram: dna.instagram,
+          pinterest: dna.pinterest,
+          referenceBrands: dna.referenceBrands,
+          referenceImages: dna.referenceImages,
+          references: dna.referenceImages,
+          notes: dna.notes.trim(),
         };
       }
+
       const metadata = { ...((brand.metadata ?? {}) as Record<string, unknown>), ...metaPatch };
       await patchBrandProfile(brand.id, { ...patch, metadata } as never);
       return nextStep;
