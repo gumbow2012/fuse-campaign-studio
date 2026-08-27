@@ -736,11 +736,17 @@ export default function TemplateStudioPage() {
 
   // Achievements: a completed campaign is a real signal — evaluate once per run.
   const achievementRunRef = useRef<string | null>(null);
+  // P7 — set when a restored/first run auto-starts, consumed on completion.
+  const firstGenerationPendingRef = useRef(false);
   useEffect(() => {
     if (studioMode !== "complete" || !activeRunId) return;
     if (achievementRunRef.current === activeRunId) return;
     achievementRunRef.current = activeRunId;
     track("campaign_complete", { template_id: selectedTemplateId ?? null });
+    if (firstGenerationPendingRef.current) {
+      firstGenerationPendingRef.current = false;
+      track("first_generation_completed", { template_id: selectedTemplateId ?? null });
+    }
     void evaluateAndAnnounce();
   }, [studioMode, activeRunId]);
 
@@ -1273,6 +1279,43 @@ export default function TemplateStudioPage() {
     [castSelection, files, textInputs],
   );
 
+  // ---- P7: logged-out conversion funnel (instrumentation only, once per moment) ----
+  const anonViewedRef = useRef<string | null>(null);
+  const anonBuilderStartedRef = useRef<string | null>(null);
+  const anonInputKeysRef = useRef<Set<string>>(new Set());
+
+  useEffect(() => {
+    if (user || !selectedTemplateId) return;
+    if (anonViewedRef.current === selectedTemplateId) return;
+    anonViewedRef.current = selectedTemplateId;
+    track("anonymous_template_view", { template_id: selectedTemplateId });
+  }, [selectedTemplateId, user]);
+
+  useEffect(() => {
+    if (user || !selectedTemplateId) return;
+    const filled: string[] = [
+      ...Object.entries(files).filter(([, value]) => Boolean(value)).map(([key]) => `file:${key}`),
+      ...Object.entries(anonUploads)
+        .filter(([, entry]) => entry.status === "ready")
+        .map(([key]) => `file:${key}`),
+      ...Object.entries(textInputs)
+        .filter(([, value]) => Boolean(value && String(value).trim()))
+        .map(([key]) => `text:${key}`),
+      ...Object.entries(castSelection).filter(([, value]) => Boolean(value)).map(([key]) => `cast:${key}`),
+    ];
+    if (!filled.length) return;
+    if (anonBuilderStartedRef.current !== selectedTemplateId) {
+      anonBuilderStartedRef.current = selectedTemplateId;
+      track("anonymous_builder_started", { template_id: selectedTemplateId });
+    }
+    for (const key of filled) {
+      const scoped = `${selectedTemplateId}:${key}`;
+      if (anonInputKeysRef.current.has(scoped)) continue;
+      anonInputKeysRef.current.add(scoped);
+      track("anonymous_input_added", { template_id: selectedTemplateId, kind: key.split(":")[0] });
+    }
+  }, [anonUploads, castSelection, files, selectedTemplateId, textInputs, user]);
+
   const openGenerateAuthGate = () => {
     if (selectedTemplate) {
       setPendingGenerationIntent({
@@ -1292,6 +1335,10 @@ export default function TemplateStudioPage() {
       });
 
     }
+    track("anonymous_generate_clicked", {
+      template_id: selectedTemplate ? String(selectedTemplate.id) : null,
+      has_inputs: gateHasInputs,
+    });
     track("generate_auth_gate_shown", {
       templateId: selectedTemplate ? String(selectedTemplate.id) : null,
       has_inputs: gateHasInputs,
@@ -1635,6 +1682,7 @@ export default function TemplateStudioPage() {
       description: `${selectedTemplate.name} is starting now.`,
     });
     track("first_generation_started", { template_id: selectedTemplate.id, credits: required });
+    firstGenerationPendingRef.current = true;
     void handleRun();
   }, [
     autoRunIntent,
