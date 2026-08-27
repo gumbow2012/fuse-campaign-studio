@@ -9,6 +9,7 @@ import { StreakProvider } from "@/hooks/useStreak";
 import { PageTracking } from "@/hooks/usePageTracking";
 import { PageViewTracker } from "@/lib/analytics/usePageViews";
 import CreditTopUpSuccessWatcher from "@/components/mvp/CreditTopUpSuccessWatcher";
+import WelcomeActivationModal from "@/components/brand/WelcomeActivationModal";
 import CustomerRoute from "@/components/CustomerRoute";
 import BrandProfilesPage from "@/pages/BrandProfilesPage";
 import BrandOnboardingPage from "@/pages/BrandOnboardingPage";
@@ -82,6 +83,7 @@ const App = () => (
           <PageTracking />
           <PageViewTracker />
           <CreditTopUpSuccessWatcher />
+          <WelcomeActivationModal />
           <Routes>
             <Route path="/" element={<HomePage />} />
             <Route path="/about" element={<AboutPage />} />

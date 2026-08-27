@@ -18,6 +18,7 @@ import {
   type BrandActivationNudge,
   type BrandActivationState,
 } from "@/lib/brandActivation";
+import { readLocalActivationState } from "@/lib/brandActivationLocal";
 
 export interface UseBrandActivation {
   nudge: BrandActivationNudge;
@@ -48,7 +49,12 @@ export function useBrandActivation(): UseBrandActivation {
     );
   }, [activeBrand, productsQuery.data]);
 
-  const activationState = useMemo(() => readActivationState(activeBrand), [activeBrand]);
+  // Without a brand row there is nowhere on the server to keep cadence state,
+  // so fall back to the local (non-critical) store.
+  const activationState = useMemo(
+    () => (activeBrand ? readActivationState(activeBrand) : readLocalActivationState(userId)),
+    [activeBrand, userId],
+  );
 
   const completionPercent = useMemo(() => computeBrandCompletion(readiness).percent, [readiness]);
 

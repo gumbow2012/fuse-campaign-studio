@@ -27,6 +27,8 @@ export const ONBOARDING_ROUTE = "/app/brand/onboarding";
 export interface BrandActivationState {
   deferredAt?: string;
   dismissedAt?: string;
+  /** When the welcome modal was last actually shown. */
+  shownAt?: string;
   lastReminderType?: string;
   lastReminderAt?: string;
 }
@@ -127,6 +129,7 @@ export function readActivationState(brand: BrandProfile | null): BrandActivation
   return {
     deferredAt: text("deferredAt"),
     dismissedAt: text("dismissedAt"),
+    shownAt: text("shownAt"),
     lastReminderType: text("lastReminderType"),
     lastReminderAt: text("lastReminderAt"),
   };
