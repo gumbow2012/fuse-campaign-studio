@@ -20,6 +20,8 @@ import { useAuth } from "@/contexts/AuthContext";
 import { accentStyle, resolveAccent } from "@/lib/creatorAccents";
 import { CreatorPerformanceProof } from "@/components/CreatorPerformance";
 import CreatorVerificationBadge from "@/components/CreatorVerificationBadge";
+import CreatorTemplateCatalog from "@/components/creator/CreatorTemplateCatalog";
+import CreatorAchievementsPanel from "@/components/creator/CreatorAchievementsPanel";
 import { toast } from "@/hooks/use-toast";
 import { evaluateAndAnnounce } from "@/services/achievements";
 import { followCreator, unfollowCreator } from "@/services/creatorFollows";
