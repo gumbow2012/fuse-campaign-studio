@@ -23,11 +23,8 @@ import {
   writePendingAuthIntent,
 } from "@/lib/pendingAuthIntent";
 
-const FUSE_ICON_SRC = "/fuse-icon.png?v=20260519";
-const FUSE_WORDMARK_SRC = "/fuse-wordmark.png?v=20260519";
-
 const CARD_SHELL =
-  "rounded-[2rem] border border-white/10 bg-slate-950/75 p-6 shadow-[0_24px_80px_rgba(0,0,0,0.45)] backdrop-blur-xl sm:p-8";
+  "rounded-[1.75rem] border border-white/10 bg-slate-950/75 px-6 py-7 shadow-[0_24px_80px_rgba(0,0,0,0.45)] backdrop-blur-xl sm:px-8 sm:py-8";
 
 export default function AuthPage() {
   const [searchParams] = useSearchParams();
@@ -37,7 +34,7 @@ export default function AuthPage() {
   const paidAccess = searchParams.get("paid") === "true";
   const [invited, setInvited] = useState(false);
   const initialMode: AuthMode = searchParams.get("mode") === "signup" ? "signup" : "signin";
-  const [mode, setMode] = useState<AuthMode>(initialMode);
+
 
   // ---- pending intent: captured on arrival, replayed after auth ----------
   const intent = useMemo(() => {
