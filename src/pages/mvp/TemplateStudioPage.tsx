@@ -55,6 +55,12 @@ import {
 
 import { type TemplateAssetRequirement } from "@/lib/templateAssetRequirements";
 import { resolveInputRole } from "@/lib/templateInputSources";
+import { useBrand } from "@/contexts/BrandContext";
+import { planBrandAutofill } from "@/lib/brandAutofill";
+import { listProductProfiles } from "@/services/productProfiles";
+import { listMyAvatars, listFuseAvatars } from "@/services/avatarProfiles";
+import { readModelIds } from "@/services/brandProfiles";
+
 import { readPublicFailure, type PublicGenerationFailure } from "@/lib/generationFailure";
 import { createFork } from "@/services/templateForks";
 import CampaignHistoryLauncher from "@/components/campaigns/CampaignHistoryLauncher";
