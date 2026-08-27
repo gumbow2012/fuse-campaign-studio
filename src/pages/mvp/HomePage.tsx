@@ -1,15 +1,19 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowRight, Clapperboard, Gem, Layers3, Shirt, Sparkles, Upload, Wand2 } from "lucide-react";
+import { ArrowRight, Clapperboard, Gem, Layers3, Shirt, Sparkles, Upload, Wand2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import SiteShell from "@/components/mvp/SiteShell";
 import PageMeta from "@/components/mvp/PageMeta";
 import { useAuth } from "@/contexts/AuthContext";
+import { useBrand } from "@/contexts/BrandContext";
 import { fetchTemplates, type ApiTemplate } from "@/services/fuseApi";
 import CreatorVerificationBadge from "@/components/CreatorVerificationBadge";
 import { listFollowedCreatorIds } from "@/services/creatorFollows";
 import { listPublicCreatorProfiles, type CreatorProfile } from "@/services/creatorProfile";
+import { listProductProfiles, type ProductProfileType } from "@/services/productProfiles";
+import { readVisualStyle } from "@/services/brandProfiles";
+import { rankTemplatesForBrand } from "@/lib/brandRelevance";
 import { cn } from "@/lib/utils";
 import {
   allocateHomeMedia,
@@ -354,6 +358,60 @@ export default function HomePage() {
       .slice(0, 12);
   }, [templates, followedCreatorIds, user]);
 
+  /* ---------------------- brand personalization (additive) ---------------------- */
+
+  const { activeBrand, activeBrandId } = useBrand();
+
+  const { data: brandProducts = [] } = useQuery({
+    queryKey: ["home-brand-products", user?.id ?? "", activeBrandId ?? ""],
+    queryFn: () => listProductProfiles(user?.id ?? ""),
+    enabled: !!user && !!activeBrandId,
+    staleTime: 5 * 60 * 1000,
+    retry: false,
+  });
+
+  /** Real, saved signals only: this brand's product types + its visual-style tags. */
+  const brandSignals = useMemo(() => {
+    const productTypes = Array.from(
+      new Set(
+        brandProducts
+          .filter((product) => product.brand_id && product.brand_id === activeBrandId)
+          .map((product) => product.type),
+      ),
+    ) as ProductProfileType[];
+    const styleTags = readVisualStyle(activeBrand)?.tags ?? [];
+    return { productTypes, styleTags };
+  }, [brandProducts, activeBrandId, activeBrand]);
+
+  /** Empty when nothing genuinely matches — the shelf is then never rendered. */
+  const recommended = useMemo(() => {
+    if (!activeBrand) return [];
+    return rankTemplatesForBrand(templates, brandSignals, 6)
+      .map((row) => {
+        const media = resolveMedia(row.template);
+        return media ? { entry: { template: row.template, media } as Entry, reasons: row.reasons } : null;
+      })
+      .filter(Boolean as unknown as (value: { entry: Entry; reasons: string[] } | null) => value is {
+        entry: Entry;
+        reasons: string[];
+      });
+  }, [activeBrand, templates, brandSignals]);
+
+  const [brandNudgeDismissed, setBrandNudgeDismissed] = useState(
+    () => typeof window !== "undefined" && window.localStorage.getItem("fuse.brandNudge") === "off",
+  );
+  const dismissBrandNudge = () => {
+    setBrandNudgeDismissed(true);
+    try {
+      window.localStorage.setItem("fuse.brandNudge", "off");
+    } catch {
+      /* storage unavailable — dismissal stays session-only */
+    }
+  };
+  const showBrandNudge = !!user && !activeBrand && !brandNudgeDismissed;
+
+
+
   const topRoas = useMemo(
     () =>
       allocatedEntries
@@ -576,7 +634,71 @@ export default function HomePage() {
         </section>
       )}
 
+      {/* 2.5 · BRAND PERSONALIZATION — additive only, never a filter */}
+      {showBrandNudge && (
+        <section className="container pt-8">
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-cyan-200/20 bg-cyan-300/[0.04] px-5 py-4">
+            <div className="flex items-center gap-3">
+              <Sparkles className="h-4 w-4 shrink-0 text-cyan-200" />
+              <Link
+                to="/app/brand"
+                className="text-sm text-slate-200 transition hover:text-white"
+              >
+                Build your brand to personalize your marketplace
+                <ArrowRight className="ml-2 inline h-3.5 w-3.5 text-cyan-200" />
+              </Link>
+            </div>
+            <button
+              type="button"
+              onClick={dismissBrandNudge}
+              aria-label="Dismiss brand personalization tip"
+              className="rounded-full p-1 text-slate-500 transition hover:text-white"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        </section>
+      )}
+
+      {activeBrand && recommended.length > 0 && (
+        <section className="container border-t border-white/10 py-12">
+          <div className="flex flex-wrap items-end justify-between gap-4">
+            <div>
+              <SectionLabel>For your brand</SectionLabel>
+              <SectionHeading>Recommended for {activeBrand.name}</SectionHeading>
+              <p className="mt-3 max-w-xl text-sm leading-6 text-slate-400">
+                Matched to your saved products and brand style. The full catalog stays below.
+              </p>
+            </div>
+            <Button asChild variant="ghost" className="rounded-full text-cyan-100 hover:text-white">
+              <Link to="/app/brand">
+                Brand workspace
+                <ArrowRight className="h-4 w-4" />
+              </Link>
+            </Button>
+          </div>
+          <MediaShelf>
+            {recommended.map(({ entry, reasons }, index) => (
+              <div key={`recommended-${entry.template.id}-${index}`} className="shrink-0">
+                <TemplateCard
+                  entry={entry}
+                  index={index}
+                  eager={index < 2}
+                  performance={perfMap[String(entry.template.id ?? "")]}
+                />
+                {reasons.length > 0 && (
+                  <p className="mt-2 w-[248px] truncate font-display text-[10px] uppercase tracking-[0.18em] text-cyan-100/80 sm:w-[272px]">
+                    {reasons.join(" · ")}
+                  </p>
+                )}
+              </div>
+            ))}
+          </MediaShelf>
+        </section>
+      )}
+
       {/* 3 · SHELVES */}
+
       <Shelf
         id="from-creators-you-follow"
         label="Your creators"
