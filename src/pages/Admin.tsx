@@ -794,18 +794,9 @@ const Admin = () => {
           </TabsContent>
 
           <TabsContent value="credits">
-            <div className="rounded-xl border border-border/40 bg-card p-5 max-w-md">
-              <h3 className="text-sm font-bold text-foreground mb-4">Adjust User Credits</h3>
-              <div className="space-y-3">
-                <Input placeholder="User ID (UUID)" value={creditUserId} onChange={e => setCreditUserId(e.target.value)} className="bg-secondary border-border text-foreground" />
-                <Input placeholder="Amount (+/-)" type="number" value={creditAmount} onChange={e => setCreditAmount(e.target.value)} className="bg-secondary border-border text-foreground" />
-                <Input placeholder="Reason" value={creditDesc} onChange={e => setCreditDesc(e.target.value)} className="bg-secondary border-border text-foreground" />
-                <Button onClick={adjustCredits} disabled={!creditUserId || !creditAmount} className="gradient-primary text-primary-foreground font-bold border-0">
-                  Adjust Credits
-                </Button>
-              </div>
-            </div>
+            <AdminCreditControl />
           </TabsContent>
+
 
           <TabsContent value="projects">
             {/* Pending projects needing fulfillment */}
