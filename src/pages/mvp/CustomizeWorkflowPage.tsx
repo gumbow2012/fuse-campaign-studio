@@ -251,6 +251,38 @@ export default function CustomizeWorkflowPage() {
     return map;
   }, [nodes]);
 
+  /** Human-readable provenance for a reference thumbnail. Media only. */
+  const provenanceLabel = useCallback(
+    (ref: ForkNodeMediaItem) => {
+      if (ref.role) return ref.role === "start" ? "Start" : "End";
+      if (ref.sourceNodeId) {
+        const upstream = nodes.find((node) => node.id === ref.sourceNodeId);
+        const number = numbering.get(ref.sourceNodeId);
+        return `#${number ?? "?"} · ${kindLabel(upstream?.node_type ?? "").toUpperCase()}`;
+      }
+      return "Brand asset";
+    },
+    [nodes, numbering],
+  );
+
+  const decoratedMedia = useCallback(
+    (node: PersonalGraphNode) => {
+      const media = node.media;
+      if (!media) return null;
+      return {
+        output: media.output,
+        unavailable: media.unavailable,
+        references: media.references.map((ref) => ({
+          url: ref.url,
+          type: ref.type,
+          role: ref.role,
+          label: provenanceLabel(ref),
+        })),
+      };
+    },
+    [provenanceLabel],
+  );
+
   const flowNodes = useMemo<GraphCanvasNode[]>(
     () =>
       nodes.map((node) => {
@@ -295,12 +327,15 @@ export default function CustomizeWorkflowPage() {
             expected: null,
             deliverable: node.node_type === "output" ? true : null,
             portIds: [],
+            media: decoratedMedia(node),
+            onOpenMedia: (url: string, type: "image" | "video") => setLightbox({ url, type }),
             // READ-ONLY: no onAddPort / onPromptCommit / onUploadReference / onRunNode.
           },
         };
       }),
-    [nodes, incomingByNode, fork?.promptVisibility, positions, layout, numbering, outputNumbering],
+    [nodes, incomingByNode, fork?.promptVisibility, positions, layout, numbering, outputNumbering, decoratedMedia],
   );
+
 
   const flowEdges = useMemo<Edge[]>(
     () =>
