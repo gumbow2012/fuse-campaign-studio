@@ -41,6 +41,20 @@ export default function SiteIntelligence() {
     },
   });
 
+  // Phase 7 — brand activation funnel. RPC fails closed for non-admins.
+  const funnel = useQuery({
+    queryKey: ["admin-activation-funnel", days],
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc("admin_activation_funnel" as never, {
+        days,
+      } as never);
+      if (error) throw error;
+      return normalizeFunnel(data);
+    },
+  });
+
+
+
   const chartData = (daily.data ?? []).map((row) => ({
     ...row,
     label: new Date(row.day).toLocaleDateString("en-US", { month: "short", day: "numeric" }),
