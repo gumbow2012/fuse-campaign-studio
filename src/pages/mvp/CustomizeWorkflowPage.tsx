@@ -44,6 +44,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { toast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
 import {
   createFork,
   estimateForkRun,
@@ -51,10 +52,12 @@ import {
   resetFork,
   runFork,
   updateFork,
+  type ForkNodeMediaItem,
   type PersonalGraph,
   type PersonalGraphNode,
   type TemplateFork,
 } from "@/services/templateForks";
+
 
 const PROMPTABLE = ["prompt", "image_gen", "video_gen"];
 
@@ -156,6 +159,8 @@ export default function CustomizeWorkflowPage() {
   const [railOpen, setRailOpen] = useState(false);
   const [inspectorOpen, setInspectorOpen] = useState(false);
   const [positions, setPositions] = useState<Record<string, { x: number; y: number }>>({});
+  const [lightbox, setLightbox] = useState<{ url: string; type: "image" | "video" } | null>(null);
+
   const runKeyRef = useRef<string | null>(null);
   const graphRef = useRef<PersonalGraph | null>(null);
   const autosaveTimer = useRef<number | null>(null);
