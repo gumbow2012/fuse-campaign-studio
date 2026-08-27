@@ -48,6 +48,12 @@ const STEPS = [
   { id: 6, label: "Finish", optional: false },
 ];
 
+/** Safe non-PII step descriptor for analytics, e.g. "3_products". */
+function stepKey(id: number): string {
+  const label = STEPS.find((entry) => entry.id === id)?.label ?? "unknown";
+  return `${id}_${label.toLowerCase().replace(/[^a-z0-9]+/g, "_")}`;
+}
+
 function StepRail({
   step,
   maxReachable,
