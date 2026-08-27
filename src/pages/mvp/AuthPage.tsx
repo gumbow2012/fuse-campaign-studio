@@ -17,7 +17,6 @@ import { useQuery } from "@tanstack/react-query";
 import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp";
 import { ArrowRight, Boxes, Check, Gift, Layers, Shirt, Sparkles, Wand2 } from "lucide-react";
 import { FALLBACK_GIFS } from "@/lib/homeMediaAllocator";
-import ExampleOutput from "@/components/ExampleOutput";
 
 const BENEFITS = [
   { icon: Layers, title: "Campaign Templates", copy: "Pick creative instead of writing prompts." },
@@ -358,11 +357,6 @@ export default function AuthPage() {
                     />
                   </div>
                 ))}
-                <div className="hidden shrink-0 lg:block">
-                  <div className="scale-[0.72] origin-bottom-left">
-                    <ExampleOutput />
-                  </div>
-                </div>
               </div>
 
               {signup ? (
