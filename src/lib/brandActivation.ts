@@ -19,6 +19,9 @@ export const ACTIVATION_EVENTS = {
   onboardingResumed: "brand_onboarding_resumed",
   onboardingCompleted: "brand_onboarding_completed",
   assetSavedToBrand: "campaign_asset_saved_to_brand",
+  productAdded: "brand_product_added",
+  castAdded: "brand_cast_added",
+  creativeDnaAdded: "brand_creative_dna_added",
 } as const;
 
 export const ONBOARDING_ROUTE = "/app/brand/onboarding";
