@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { CheckCircle2, Loader2, Plus, RefreshCw, Trophy, UserPlus, X } from "lucide-react";
+import { CheckCircle2, Loader2, Mail, Plus, RefreshCw, Send, Trophy, UserPlus, X } from "lucide-react";
 import SiteShell from "@/components/mvp/SiteShell";
 import PageMeta from "@/components/mvp/PageMeta";
 import { Button } from "@/components/ui/button";
