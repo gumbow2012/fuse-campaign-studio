@@ -5,6 +5,7 @@ import { buildTemplateInputPlan } from "../_shared/template-inputs.ts";
 import { readEdgeOrder, sortEdgesByExecutionOrder } from "../_shared/edge-order.ts";
 import { getNodeAssetRequirement, getNodeEditorConfig } from "../_shared/template-editor.ts";
 import { readCastConfig } from "../_shared/cast-config.ts";
+import { resolveCustomizability } from "../_shared/template-fork.ts";
 
 function readNodeSortOrder(node: any, fallbackIndex = 999) {
   const raw = node?.prompt_config?.sort_order;
