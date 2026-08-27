@@ -1770,7 +1770,21 @@ export default function TemplateStudioPage() {
         aria-hidden={authGateOpen}
       >
       <section className="container py-12 md:py-16">
+        {/* RETENTION P5 — light personalized greeting anchoring the logged-in home. */}
+        {user && !hasActiveCampaignWorkspace ? (
+          <div className="mb-8 flex flex-wrap items-center gap-3">
+            <h2 className="font-display text-lg font-bold uppercase tracking-[0.18em] text-white sm:text-xl">
+              Welcome back
+              {activeBrand?.name ? (
+                <span className="text-cyan-200"> — {activeBrand.name}</span>
+              ) : null}
+            </h2>
+            <StreakChip />
+          </div>
+        ) : null}
+
         <div className="flex flex-wrap items-end justify-between gap-6">
+
           <div>
             <p className="text-[11px] font-semibold uppercase tracking-[0.3em] text-cyan-100">
               {isPublicTemplateBrowser ? "Campaign Builder" : "Post-Purchase Studio"}
