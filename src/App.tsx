@@ -93,6 +93,8 @@ const App = () => (
           <CreditTopUpSuccessWatcher />
           <BrandActivationReminders />
           <WelcomeActivationModal />
+          <PlanOfferModal />
+
           <Routes>
             <Route path="/" element={<HomePage />} />
             <Route path="/about" element={<AboutPage />} />
