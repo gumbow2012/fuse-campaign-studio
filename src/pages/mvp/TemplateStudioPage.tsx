@@ -673,15 +673,18 @@ export default function TemplateStudioPage() {
     : null;
 
   const templateDetailQuery = useQuery<TemplateDetail | null>({
+    // P1: the detail is public via lab-template-detail, so logged-out visitors
+    // can open and configure the builder. Anonymous visitors need a live
+    // version id (the legacy token path is authenticated-only).
+    enabled: !!selectedTemplate && (!!user || !!selectedTemplate.versionId),
     queryKey: ["mvp-template-detail", selectedTemplateDetailCacheId],
-    enabled: !!selectedTemplate && !!user,
     placeholderData: selectedTemplateDetailCacheId
       ? loadCachedTemplateDetail(selectedTemplateDetailCacheId)
       : null,
     staleTime: 60_000,
     queryFn: async () => {
       if (!selectedTemplate || !selectedTemplateDetailCacheId) return null;
-      const token = await getAccessToken();
+      const token = user ? await getAccessToken() : "";
       const detail = await fetchTemplateDetail(token, selectedTemplate);
       storeCachedTemplateDetail(selectedTemplateDetailCacheId, detail);
       return detail;
