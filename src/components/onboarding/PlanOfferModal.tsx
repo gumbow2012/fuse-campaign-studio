@@ -109,7 +109,10 @@ export default function PlanOfferModal() {
       setOpen(true);
       markPlanOfferSeen(user.id);
       track("onboarding_plan_offer_shown", { plan: profile.plan ?? "free" });
+      // P7 funnel — canonical event name for the offer moment (fires once).
+      track("onboarding_offer_shown", { plan_key: profile.plan ?? "free" });
     };
+
 
     void check();
     return () => {
