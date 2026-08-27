@@ -9,7 +9,7 @@ import {
   requireAdminUser,
 } from "../_shared/supabase-admin.ts";
 
-type Action = "list" | "invite" | "revoke" | "review_queue" | "set_verification";
+type Action = "list" | "invite" | "resend" | "revoke" | "review_queue" | "set_verification";
 
 type Body = {
   action?: Action;
@@ -76,7 +76,9 @@ Deno.serve(async (req) => {
 
       const { data: invites, error: inviteError } = await admin
         .from("creator_invites")
-        .select("id, email, status, invited_by, created_at, accepted_at")
+        .select(
+          "id, email, status, invited_by, created_at, accepted_at, email_status, provider_message_id, delivered_at, bounced_at, failure_reason, last_sent_at, sent_count",
+        )
         .order("created_at", { ascending: false });
       if (inviteError) throw new Error(inviteError.message);
 
@@ -89,11 +91,12 @@ Deno.serve(async (req) => {
 
       const { data: existingInvite } = await admin
         .from("creator_invites")
-        .select("id, status")
+        .select("id, status, sent_count")
         .eq("email", email)
         .maybeSingle();
 
       let inviteId = (existingInvite as any)?.id as string | undefined;
+      let sentCount = Number((existingInvite as any)?.sent_count ?? 0);
       if (inviteId) {
         const { error } = await admin
           .from("creator_invites")
@@ -104,21 +107,38 @@ Deno.serve(async (req) => {
         const { data: inserted, error } = await admin
           .from("creator_invites")
           .insert({ email, invited_by: user.id, status: "pending" })
-          .select("id")
+          .select("id, sent_count")
           .single();
         if (error) throw new Error(error.message);
         inviteId = (inserted as any).id;
+        sentCount = Number((inserted as any)?.sent_count ?? 0);
       }
 
       const { error: inviteError } = await admin.auth.admin.inviteUserByEmail(email);
 
       if (!inviteError) {
-        return json({ ok: true, inviteId, emailSent: true, grantedImmediately: false });
+        // Honest status: the provider accepted the send. Delivery is NOT confirmed here.
+        await admin
+          .from("creator_invites")
+          .update({
+            email_status: "provider_accepted",
+            last_sent_at: new Date().toISOString(),
+            sent_count: sentCount + 1,
+            failure_reason: null,
+          })
+          .eq("id", inviteId!);
+        return json({ ok: true, inviteId, emailSent: true, grantedImmediately: false, emailStatus: "provider_accepted" });
       }
 
       const message = inviteError.message ?? "";
       const alreadyExists = /already|registered|exists/i.test(message);
-      if (!alreadyExists) throw new Error(message || "Could not send invite email");
+      if (!alreadyExists) {
+        await admin
+          .from("creator_invites")
+          .update({ email_status: "failed", failure_reason: message.slice(0, 500) || "Send failed" })
+          .eq("id", inviteId!);
+        return json({ ok: false, inviteId, emailSent: false, emailStatus: "failed", reason: message || "Could not send invite email" });
+      }
 
       // User already exists — grant the creator role right away.
       const { data: profile, error: profileError } = await admin
@@ -142,6 +162,52 @@ Deno.serve(async (req) => {
       if (acceptError) throw new Error(acceptError.message);
 
       return json({ ok: true, inviteId, emailSent: false, grantedImmediately: true, userId: targetId });
+    }
+
+    if (action === "resend") {
+      // Admin already verified above via requireAdminUser; re-assert intent explicitly.
+      if (!user?.id) throw new Error("Admin access required");
+      const inviteId = typeof body.inviteId === "string" ? body.inviteId.trim() : "";
+      if (!inviteId) throw new Error("inviteId is required");
+
+      const { data: invite, error: loadError } = await admin
+        .from("creator_invites")
+        .select("id, email, sent_count")
+        .eq("id", inviteId)
+        .maybeSingle();
+      if (loadError) throw new Error(loadError.message);
+      if (!invite) throw new Error("Invite not found");
+
+      const email = cleanEmail((invite as any).email);
+      if (!email.includes("@")) throw new Error("This invite has no valid email");
+      const sentCount = Number((invite as any).sent_count ?? 0);
+
+      const { error: sendError } = await admin.auth.admin.inviteUserByEmail(email);
+
+      const patch = sendError
+        ? { email_status: "failed", failure_reason: (sendError.message ?? "Send failed").slice(0, 500) }
+        : {
+            email_status: "provider_accepted",
+            failure_reason: null,
+            last_sent_at: new Date().toISOString(),
+            sent_count: sentCount + 1,
+          };
+
+      const { data: updated, error: updateError } = await admin
+        .from("creator_invites")
+        .update(patch)
+        .eq("id", inviteId)
+        .select(
+          "id, email, status, invited_by, created_at, accepted_at, email_status, provider_message_id, delivered_at, bounced_at, failure_reason, last_sent_at, sent_count",
+        )
+        .single();
+      if (updateError) throw new Error(updateError.message);
+
+      return json({
+        ok: !sendError,
+        reason: sendError ? (sendError.message ?? "Could not send invite email") : null,
+        invite: updated,
+      });
     }
 
     if (action === "revoke") {
