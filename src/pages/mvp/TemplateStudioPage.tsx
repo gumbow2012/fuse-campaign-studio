@@ -1394,6 +1394,8 @@ export default function TemplateStudioPage() {
       }
 
       setRunPhase("preparing");
+      track("inputs_ready", { template_id: selectedTemplate.id });
+      track("generate", { template_id: selectedTemplate.id });
 
 
       const inputs = Object.fromEntries(
