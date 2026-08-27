@@ -2065,12 +2065,18 @@ export default function TemplateStudioPage() {
                               if (nextFile) advanceFromInput(field.key);
                             }}
                             libraryAsset={libraryAssets[field.key] ?? null}
-                            onLibrarySelect={(asset) => {
-                              setFiles((current) => ({ ...current, [field.key]: null }));
-                              setLibraryAssets((current) => ({ ...current, [field.key]: asset }));
-                              releaseAutofill(field.key);
-                              advanceFromInput(field.key);
-                            }}
+                            // P1: saved-library / brand pickers are account features.
+                            // Logged-out visitors configure with local files only.
+                            onLibrarySelect={
+                              user
+                                ? (asset) => {
+                                    setFiles((current) => ({ ...current, [field.key]: null }));
+                                    setLibraryAssets((current) => ({ ...current, [field.key]: asset }));
+                                    releaseAutofill(field.key);
+                                    advanceFromInput(field.key);
+                                  }
+                                : undefined
+                            }
                             onClear={() => {
                               setFiles((current) => ({ ...current, [field.key]: null }));
                               setLibraryAssets((current) => ({ ...current, [field.key]: null }));
