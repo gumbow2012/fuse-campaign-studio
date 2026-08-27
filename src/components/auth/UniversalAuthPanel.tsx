@@ -242,7 +242,7 @@ export default function UniversalAuthPanel({
   };
 
   const busy = submitting || resetting || Boolean(oauthPending);
-  const submitLabel = mode === "signup" ? emailCtaLabel : "Sign in";
+  const submitLabel = mode === "signup" ? emailCtaLabel : "Continue";
 
   return (
     <div className={className}>
