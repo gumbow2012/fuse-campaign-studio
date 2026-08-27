@@ -38,7 +38,7 @@ import CastLibrary from "@/components/cast/CastLibrary";
 import BrandReviewStep from "@/components/brand/BrandReviewStep";
 import { takeBrandImport } from "@/services/brandImport";
 import { track } from "@/lib/analytics/track";
-import { describeBrandKnowledge } from "@/lib/brandActivation";
+import { ACTIVATION_EVENTS, describeBrandKnowledge } from "@/lib/brandActivation";
 import BrandReadyCelebration from "@/components/brand/BrandReadyCelebration";
 
 const STEPS = [
