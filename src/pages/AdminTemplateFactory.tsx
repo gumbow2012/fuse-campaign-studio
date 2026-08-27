@@ -545,14 +545,25 @@ export default function AdminTemplateFactory() {
                 Curated trend references that brief new template concepts.
               </p>
             </div>
-            <Button
-              size="sm"
-              className="rounded-full bg-cyan-300 text-slate-950 hover:bg-cyan-200"
-              onClick={() => setForm({ ...EMPTY_FORM })}
-            >
-              <Plus className="mr-2 h-4 w-4" />
-              Add reference
-            </Button>
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                className={`rounded-full border-white/15 ${sortByScore ? "bg-cyan-300/15 text-cyan-100" : "bg-white/5"}`}
+                onClick={() => setSortByScore((prev) => !prev)}
+              >
+                <ArrowDownWideNarrow className="mr-2 h-3.5 w-3.5" />
+                {sortByScore ? "Sorted by heuristic" : "Sort by heuristic"}
+              </Button>
+              <Button
+                size="sm"
+                className="rounded-full bg-cyan-300 text-slate-950 hover:bg-cyan-200"
+                onClick={() => setForm({ ...EMPTY_FORM })}
+              >
+                <Plus className="mr-2 h-4 w-4" />
+                Add reference
+              </Button>
+            </div>
           </div>
 
           {referencesLoading ? (
@@ -567,7 +578,8 @@ export default function AdminTemplateFactory() {
             </Card>
           ) : (
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {references.map((reference) => (
+              {sortedReferences.map((reference) => (
+
                 <Card key={reference.id} className="overflow-hidden border-white/10 bg-white/[0.03]">
                   <div className="aspect-[4/3] w-full bg-black/40">
                     {reference.image_url ? (
