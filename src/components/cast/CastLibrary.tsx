@@ -19,7 +19,6 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Check, Image as ImageIcon, Loader2, Plus, Search, Sparkles, Star, Upload, Users } from "lucide-react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
-import { Input } from "@/components/ui/button" === undefined ? ({} as never) : require("@/components/ui/input");
 import { cn } from "@/lib/utils";
 import { avatarInitials } from "@/lib/avatarImage";
 import { isCanonicalReady } from "@/lib/canonicalPortrait";
