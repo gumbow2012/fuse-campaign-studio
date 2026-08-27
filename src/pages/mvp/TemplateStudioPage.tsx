@@ -2492,7 +2492,23 @@ export default function TemplateStudioPage() {
         onDownload={handleDownloadCampaign}
         onRemix={handleRemixCampaign}
       />
+      </div>
+
+      {/* P2 — logged-out Generate click: blur the builder, gate on auth. */}
+      <GenerateAuthGateModal
+        open={authGateOpen}
+        templateId={selectedTemplate ? String(selectedTemplate.id) : null}
+        returnTo={gateReturnTo}
+        onClose={() => {
+          setAuthGateOpen(false);
+          track("generate_auth_gate_dismissed", {
+            templateId: selectedTemplate ? String(selectedTemplate.id) : null,
+            has_inputs: gateHasInputs,
+          });
+        }}
+      />
     </SiteShell>
+
 
   );
 }
