@@ -2116,6 +2116,72 @@ export default function GenerationStudio() {
                   <FieldHelper>Clip length in seconds.</FieldHelper>
                 </div>
               ) : null}
+
+              {/* VIDEO only — optional camera movement instruction.
+                  Placeholder chips for now: per-preset preview clips are a
+                  separate (paid) generation batch to be added later. */}
+              {isVideo ? (
+                <div>
+                  <SectionTitle hint={cameraMovement && movementFragment ? cameraMovement.name.toUpperCase() : "OPTIONAL"}>
+                    CAMERA MOVEMENT
+                  </SectionTitle>
+                  <div className="flex flex-wrap gap-2">
+                    {CAMERA_MOVEMENT_PRESETS.map((preset) => {
+                      const active = preset.id === cameraMovementId;
+                      return (
+                        <button
+                          key={preset.id}
+                          type="button"
+                          title={preset.description}
+                          aria-pressed={active}
+                          onClick={() => setCameraMovementId(preset.id)}
+                          className={cn(
+                            "flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 font-display text-[12px] font-semibold tracking-[0.04em] transition-colors",
+                            active
+                              ? "border-[hsl(var(--electric-blue)/0.55)] bg-[hsl(var(--electric-blue)/0.15)] text-[hsl(var(--electric-cyan))]"
+                              : "border-white/12 bg-black/30 text-foreground/80 hover:bg-white/[0.06]",
+                          )}
+                        >
+                          {/* previewUrl hook: real clips drop in here later without a redesign. */}
+                          {preset.previewUrl ? (
+                            <video
+                              src={preset.previewUrl}
+                              muted
+                              loop
+                              playsInline
+                              preload="none"
+                              className="h-6 w-9 rounded object-cover"
+                            />
+                          ) : (
+                            <span className="grid h-6 w-9 place-items-center rounded bg-white/[0.06]">
+                              <Film size={12} className="opacity-70" />
+                            </span>
+                          )}
+                          {preset.name.toUpperCase()}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {movementFragment ? (
+                    <div className="mt-3 rounded-lg border border-white/10 bg-black/30 p-3">
+                      <p className="font-display text-[11px] font-semibold tracking-[0.08em] text-muted-foreground">
+                        APPENDED TO YOUR PROMPT
+                      </p>
+                      <p className="mt-1.5 text-[13px] leading-relaxed text-foreground/85">{movementFragment}</p>
+                      <button
+                        type="button"
+                        onClick={() => setCameraMovementId(DEFAULT_CAMERA_MOVEMENT_ID)}
+                        className="mt-2 font-display text-[12px] font-semibold tracking-[0.06em] text-[hsl(var(--electric-cyan))] hover:underline"
+                      >
+                        REMOVE MOVEMENT
+                      </button>
+                    </div>
+                  ) : (
+                    <FieldHelper>Optional — adds one camera instruction to your prompt.</FieldHelper>
+                  )}
+                </div>
+              ) : null}
+
             </FusePanel>
 
             {/* Generate */}
