@@ -94,6 +94,8 @@ export default function TemplateDetailDialog({
   performance?: TemplatePerformanceRow | null;
 }) {
   const templateId = template?.id ? String(template.id) : "";
+  const { activeBrand } = useBrand();
+  const { assets: brandFitAssets } = useBrandFitAssets();
   const { data: performanceRows = [] } = useQuery<TemplatePerformanceRow[]>({
     queryKey: ["template-performance-rows", templateId],
     queryFn: () => loadTemplatePerformanceRows(templateId),
@@ -103,6 +105,8 @@ export default function TemplateDetailDialog({
   });
 
   if (!template) return null;
+
+  const brandFit = brandFitAssets ? deriveTemplateFit(template, brandFitAssets) : null;
 
   const quickFacts = [
     { label: "Inputs", value: `${facts.inputCount}` },
