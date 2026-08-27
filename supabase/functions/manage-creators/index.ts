@@ -9,7 +9,7 @@ import {
   requireAdminUser,
 } from "../_shared/supabase-admin.ts";
 
-type Action = "list" | "invite" | "revoke" | "review_queue" | "set_verification";
+type Action = "list" | "invite" | "resend" | "revoke" | "review_queue" | "set_verification";
 
 type Body = {
   action?: Action;
