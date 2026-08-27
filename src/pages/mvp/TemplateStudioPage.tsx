@@ -1223,7 +1223,7 @@ export default function TemplateStudioPage() {
 
 
 
-  const handleTemplateSelect = (templateId: string) => {
+  const handleTemplateSelect = (templateId: string, options?: { alwaysReveal?: boolean }) => {
     setSelectedTemplateId(templateId);
     setFiles({});
     setAnonUploads({});
@@ -1238,12 +1238,15 @@ export default function TemplateStudioPage() {
     setAutofilledKeys({});
     autofillAppliedRef.current = "";
 
-    if (window.matchMedia("(max-width: 1279px)").matches) {
+    // Cards far from the builder (e.g. the "For you" row at the top of the page)
+    // must always scroll the builder into view, otherwise a click looks inert.
+    if (options?.alwaysReveal || window.matchMedia("(max-width: 1279px)").matches) {
       window.requestAnimationFrame(() => {
         runnerSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
       });
     }
   };
+
 
   /*
    * Phase 4 — marketplace multi-select batch run.
@@ -1862,8 +1865,9 @@ export default function TemplateStudioPage() {
             onToggleFavorite={(id) => toggleFavorite(id)}
             onSelect={(template) => {
               track("for_you_template_clicked", { template_id: template.id });
-              handleTemplateSelect(template.id);
+              handleTemplateSelect(template.id, { alwaysReveal: true });
             }}
+
             onShown={(mode, count) => track("for_you_shown", { mode, count })}
           />
         ) : null}
