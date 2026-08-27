@@ -33,6 +33,7 @@ import {
 } from "@/services/brandProfiles";
 import { listMyAvatars } from "@/services/avatarProfiles";
 import { listProductProfiles } from "@/services/productProfiles";
+import { deriveBrandReadiness, readBrandFlags, type ReadinessStatus } from "@/lib/brandReadiness";
 
 const STEPS = [
   { id: 1, label: "Brand basics", optional: false },
@@ -58,31 +59,51 @@ const STYLE_TAGS = [
   "Cinematic",
 ];
 
-function StepRail({ step }: { step: number }) {
+const STATUS_MARK: Record<ReadinessStatus, { mark: string; className: string }> = {
+  complete: { mark: "✓ COMPLETE", className: "border-cyan-300/50 bg-cyan-300/10 text-cyan-100" },
+  "recommended-missing": { mark: "⚠ RECOMMENDED", className: "border-amber-300/40 bg-amber-300/10 text-amber-100" },
+  "optional-missing": { mark: "○ OPTIONAL", className: "border-white/10 bg-white/[0.03] text-slate-400" },
+  "required-missing": { mark: "✕ REQUIRED", className: "border-rose-400/40 bg-rose-400/10 text-rose-100" },
+};
+
+function StepRail({
+  step,
+  maxReachable,
+  onJump,
+}: {
+  step: number;
+  maxReachable: number;
+  onJump: (id: number) => void;
+}) {
   return (
     <div className="flex flex-wrap items-center gap-2">
       {STEPS.map((entry) => {
         const state = entry.id === step ? "current" : entry.id < step ? "done" : "todo";
+        const clickable = entry.id <= Math.max(step, maxReachable);
         return (
-          <span
+          <button
             key={entry.id}
+            type="button"
+            disabled={!clickable}
+            onClick={() => clickable && onJump(entry.id)}
             className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] transition ${
               state === "current"
                 ? "border-cyan-300/60 bg-cyan-300/10 text-cyan-100"
                 : state === "done"
-                  ? "border-white/10 bg-white/[0.04] text-slate-300"
+                  ? "border-white/10 bg-white/[0.04] text-slate-300 hover:text-white"
                   : "border-white/10 text-slate-500"
-            }`}
+            } ${clickable ? "cursor-pointer" : "cursor-default"}`}
             aria-current={state === "current" ? "step" : undefined}
           >
             {state === "done" ? <Check className="h-3 w-3" /> : null}
             {entry.label}
-          </span>
+          </button>
         );
       })}
     </div>
   );
 }
+
 
 export default function BrandOnboardingPage() {
   const navigate = useNavigate();
@@ -107,6 +128,8 @@ export default function BrandOnboardingPage() {
   const [primaryLogo, setPrimaryLogo] = useState<string | null>(null);
   const [secondaryLogo, setSecondaryLogo] = useState<string | null>(null);
   const [colors, setColors] = useState<string[]>([]);
+  const [noLogo, setNoLogo] = useState(false);
+  const [neutralPalette, setNeutralPalette] = useState(false);
   // Step 4
   const [modelIds, setModelIds] = useState<string[]>([]);
   // Step 5
@@ -127,6 +150,9 @@ export default function BrandOnboardingPage() {
     setPrimaryLogo(brand.primary_logo_url ?? null);
     setSecondaryLogo(brand.secondary_logo_url ?? null);
     setColors(brand.colors ?? []);
+    const flags = readBrandFlags(brand);
+    setNoLogo(flags.noLogo);
+    setNeutralPalette(flags.neutralPalette);
     setModelIds(readModelIds(brand));
     const style = readVisualStyle(brand);
     setTags(style?.tags ?? []);
@@ -163,17 +189,27 @@ export default function BrandOnboardingPage() {
     queryClient.invalidateQueries({ queryKey: ["active-brand-id"] });
   };
 
-  function onboardingPatch(target: BrandProfile | null, nextStep: number, completed: number) {
+  // Readiness is derived from SAVED data only — never from "step visited".
+  const readiness = useMemo(
+    () =>
+      deriveBrandReadiness(
+        brand,
+        productsQuery.data ?? [],
+        readModelIds(brand),
+        readVisualStyle(brand),
+      ),
+    [brand, productsQuery.data],
+  );
+
+  function onboardingPatch(target: BrandProfile | null, nextStep: number) {
     const current = readOnboarding(target);
-    const completedSteps = Array.from(new Set([...(current?.completedSteps ?? []), completed])).sort(
-      (a, b) => a - b,
-    );
+    const completedSteps = Array.from(new Set(readiness.completedSteps)).sort((a, b) => a - b);
     return {
       onboarding: {
         currentStep: nextStep,
         completedSteps,
         startedAt: current?.startedAt || new Date().toISOString(),
-        completedAt: nextStep >= 6 && completed >= 5 ? new Date().toISOString() : (current?.completedAt ?? null),
+        completedAt: current?.completedAt ?? null,
       },
     };
   }
@@ -188,7 +224,7 @@ export default function BrandOnboardingPage() {
           name: trimmed,
           website: website.trim() || null,
           description: description.trim() || null,
-          metadata: onboardingPatch(null, nextStep, 1),
+          metadata: onboardingPatch(null, nextStep),
         });
         if (!created) throw new Error("Could not create the brand.");
         setBrandId(created.id);
@@ -209,7 +245,11 @@ export default function BrandOnboardingPage() {
         patch.secondary_logo_url = secondaryLogo;
         patch.colors = colors;
       }
-      const metaPatch: Record<string, unknown> = { ...onboardingPatch(brand, nextStep, step) };
+      const metaPatch: Record<string, unknown> = { ...onboardingPatch(brand, nextStep) };
+      if (step === 2) {
+        metaPatch.noLogo = noLogo;
+        metaPatch.neutralPalette = neutralPalette;
+      }
       if (step === 4) metaPatch.modelIds = modelIds;
       if (step === 5) {
         metaPatch.visualStyle = {
@@ -232,29 +272,30 @@ export default function BrandOnboardingPage() {
 
   const finish = useMutation({
     mutationFn: async () => {
-      if (brand) {
-        await patchBrandMetadata(brand, {
-          onboarding: {
-            ...(readOnboarding(brand) ?? {
-              currentStep: 6,
-              completedSteps: [1],
-              startedAt: new Date().toISOString(),
-            }),
-            currentStep: 6,
-            completedAt: new Date().toISOString(),
-          },
-        });
-      }
+      if (!brand) return;
+      if (!readiness.ready) throw new Error("Complete the required items first.");
+      const current = readOnboarding(brand);
+      await patchBrandMetadata(brand, {
+        onboarding: {
+          currentStep: 6,
+          completedSteps: readiness.completedSteps,
+          startedAt: current?.startedAt || new Date().toISOString(),
+          // Only stamped when every REQUIRED item is actually satisfied.
+          completedAt: current?.completedAt ?? new Date().toISOString(),
+        },
+      });
     },
     onSuccess: () => {
       refreshBrands();
       navigate("/app/brand");
     },
-    onError: () => navigate("/app/brand"),
+    onError: (error) => toast.error(error instanceof Error ? error.message : "Could not finish"),
   });
 
   const canContinue = step !== 1 || name.trim().length > 0;
   const optional = STEPS.find((entry) => entry.id === step)?.optional ?? false;
+  const maxReachable = Math.max(step, ...readiness.completedSteps, 1);
+
 
   const style = { tags, tone, references, notes };
 
@@ -278,7 +319,7 @@ export default function BrandOnboardingPage() {
         </div>
 
         <div className="mt-6">
-          <StepRail step={step} />
+          <StepRail step={step} maxReachable={maxReachable} onJump={setStep} />
           <div className="mt-3 h-1 w-full overflow-hidden rounded-full bg-white/10">
             <div
               className="h-full rounded-full bg-cyan-300 transition-all"
@@ -334,10 +375,29 @@ export default function BrandOnboardingPage() {
                 <ImageSlot label="Primary logo" url={primaryLogo} onChange={setPrimaryLogo} />
                 <ImageSlot label="Secondary logo" url={secondaryLogo} onChange={setSecondaryLogo} />
               </div>
+              <label className="mt-3 flex items-center gap-2 text-[11px] uppercase tracking-[0.16em] text-slate-400">
+                <input
+                  type="checkbox"
+                  checked={noLogo}
+                  onChange={(event) => setNoLogo(event.target.checked)}
+                  className="h-3.5 w-3.5 accent-cyan-300"
+                />
+                No logo yet
+              </label>
               <div className="mt-6">
                 <p className={LABEL}>Brand colors</p>
                 <ColorPalette colors={colors} onChange={setColors} />
+                <label className="mt-3 flex items-center gap-2 text-[11px] uppercase tracking-[0.16em] text-slate-400">
+                  <input
+                    type="checkbox"
+                    checked={neutralPalette}
+                    onChange={(event) => setNeutralPalette(event.target.checked)}
+                    className="h-3.5 w-3.5 accent-cyan-300"
+                  />
+                  Use neutral palette
+                </label>
               </div>
+
             </div>
           ) : null}
 
@@ -552,55 +612,79 @@ export default function BrandOnboardingPage() {
 
           {step === 6 ? (
             <div className={CARD}>
-              <p className={LABEL}>Step 6 — Finish</p>
-              <h2 className="mt-2 text-2xl">{brand?.name ?? "Your brand"} is ready.</h2>
-              <ul className="mt-5 space-y-2 text-sm text-slate-300">
-                {[
-                  { label: "Brand basics", done: Boolean(brand?.name) },
-                  {
-                    label: "Identity (logo + colors)",
-                    done: Boolean((brand?.primary_logo_url || brand?.secondary_logo_url) && (brand?.colors.length ?? 0) > 0),
-                  },
-                  { label: `Products (${brandProducts.length})`, done: brandProducts.length > 0 },
-                  { label: `Models (${modelIds.length})`, done: modelIds.length > 0 },
-                  { label: "Visual style", done: style.tags.length > 0 || style.tone.trim().length > 0 },
-                ].map((entry) => (
-                  <li key={entry.label} className="flex items-center gap-2">
-                    <span
-                      className={`inline-flex h-5 w-5 items-center justify-center rounded-full border ${
-                        entry.done ? "border-cyan-300/50 bg-cyan-300/10 text-cyan-200" : "border-white/10 text-slate-500"
-                      }`}
+              <p className={LABEL}>Step 6 — Review</p>
+              <h2 className="mt-2 text-2xl">
+                {brand?.name?.trim() || "Your brand"}
+                {readiness.ready ? " is ready." : " — a few things left."}
+              </h2>
+              <ul className="mt-5 space-y-3 text-sm text-slate-300">
+                {readiness.sections.map((section) => {
+                  const mark = STATUS_MARK[section.status];
+                  const missing = section.items.filter((item) => !item.done);
+                  return (
+                    <li
+                      key={section.key}
+                      className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-white/10 bg-black/20 px-4 py-3"
                     >
-                      {entry.done ? <Check className="h-3 w-3" /> : null}
-                    </span>
-                    {entry.label}
-                  </li>
-                ))}
+                      <span className="flex flex-wrap items-center gap-3">
+                        <span
+                          className={`rounded-full border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] ${mark.className}`}
+                        >
+                          {mark.mark}
+                        </span>
+                        <span>
+                          {section.label}
+                          {missing.length ? (
+                            <span className="ml-2 text-xs text-slate-500">
+                              {missing.map((item) => item.label).join(" · ")}
+                            </span>
+                          ) : null}
+                        </span>
+                      </span>
+                      {section.status !== "complete" ? (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={() => setStep(section.step)}
+                          className="h-8 rounded-full border-white/12 bg-white/[0.03] px-3 text-[10px] uppercase tracking-[0.16em]"
+                        >
+                          Go back &amp; complete
+                        </Button>
+                      ) : null}
+                    </li>
+                  );
+                })}
               </ul>
               <Button
                 type="button"
                 onClick={() => finish.mutate()}
-                disabled={finish.isPending}
+                disabled={finish.isPending || !readiness.ready}
                 className="mt-6 rounded-full bg-cyan-300 px-6 py-5 text-[12px] font-semibold uppercase tracking-[0.16em] text-slate-950 hover:bg-cyan-200"
               >
                 {finish.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
-                Enter your Brand Workspace
+                {readiness.ready
+                  ? "Enter Brand Workspace"
+                  : `Complete ${readiness.requiredMissing} required item${readiness.requiredMissing === 1 ? "" : "s"}`}
               </Button>
+              {readiness.ready && readiness.recommendedMissing > 0 ? (
+                <p className="mt-3 text-xs text-slate-500">You can complete these later.</p>
+              ) : null}
             </div>
           ) : null}
         </div>
 
-        {step < 6 ? (
-          <div className="mt-8 flex flex-wrap items-center justify-between gap-3">
-            <Button
-              type="button"
-              variant="ghost"
-              disabled={step === 1}
-              onClick={() => setStep((current) => Math.max(1, current - 1))}
-              className="rounded-full text-[11px] uppercase tracking-[0.16em] text-slate-400"
-            >
-              <ArrowLeft className="h-3.5 w-3.5" /> Back
-            </Button>
+        <div className="mt-8 flex flex-wrap items-center justify-between gap-3">
+          <Button
+            type="button"
+            variant="ghost"
+            disabled={step === 1}
+            onClick={() => setStep((current) => Math.max(1, current - 1))}
+            className="rounded-full text-[11px] uppercase tracking-[0.16em] text-slate-400"
+          >
+            <ArrowLeft className="h-3.5 w-3.5" /> Back
+          </Button>
+          {step < 6 ? (
+
             <div className="flex items-center gap-2">
               {optional ? (
                 <Button
@@ -622,8 +706,9 @@ export default function BrandOnboardingPage() {
                 Continue <ArrowRight className="h-3.5 w-3.5" />
               </Button>
             </div>
-          </div>
-        ) : null}
+          ) : null}
+        </div>
+
       </main>
     </div>
   );
