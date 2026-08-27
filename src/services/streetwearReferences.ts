@@ -77,6 +77,39 @@ export async function analyzeStreetwearReference(referenceId: string): Promise<{
   };
 }
 
+/** TF2 — compile a stored blueprint into a DRAFT template graph (no generation runs). */
+export async function compileStreetwearReference(referenceId: string): Promise<{
+  templateId: string;
+  versionId: string;
+  templateName: string;
+  shotCount: number;
+}> {
+  const { data, error } = await supabase.functions.invoke("template-factory", {
+    body: { action: "compile_blueprint", referenceId },
+  });
+  if (error) throw error;
+  const payload = data as
+    | {
+        ok?: boolean;
+        reason?: string;
+        templateId?: string;
+        versionId?: string;
+        templateName?: string;
+        shotCount?: number;
+      }
+    | null;
+  if (!payload?.ok || !payload.templateId || !payload.versionId) {
+    throw new Error(payload?.reason ?? "Compile failed");
+  }
+  return {
+    templateId: payload.templateId,
+    versionId: payload.versionId,
+    templateName: payload.templateName ?? "Draft template",
+    shotCount: payload.shotCount ?? 0,
+  };
+}
+
+
 
 export async function listStreetwearReferences(): Promise<StreetwearReference[]> {
   const { data, error } = await supabase
