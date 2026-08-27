@@ -388,6 +388,7 @@ export async function fetchTemplateDetail(
   );
   const t = data.template || data;
   return {
+    canCustomize: false,
     user_inputs: (t.input_manifest || t.user_inputs || []).map((field) => ({
       key: String(field.key),
       label: String(field.label),
