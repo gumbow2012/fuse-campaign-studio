@@ -49,3 +49,27 @@ export async function importBrandFromWebsite(url: string): Promise<BrandImportRe
   }
   return payload;
 }
+
+/**
+ * Client-only handoff between the /app/brand empty state and the wizard.
+ * Session storage — never a database write.
+ */
+const STASH_KEY = "fuse.brandImport.candidates";
+
+export function stashBrandImport(payload: unknown) {
+  try {
+    sessionStorage.setItem(STASH_KEY, JSON.stringify(payload));
+  } catch {
+    /* storage unavailable — the wizard just starts empty */
+  }
+}
+
+export function takeBrandImport<T>(): T | null {
+  try {
+    const raw = sessionStorage.getItem(STASH_KEY);
+    sessionStorage.removeItem(STASH_KEY);
+    return raw ? (JSON.parse(raw) as T) : null;
+  } catch {
+    return null;
+  }
+}
