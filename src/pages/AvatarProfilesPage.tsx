@@ -1,12 +1,15 @@
 /**
- * FT6 — "My Avatars" management. Model + management only: no generation,
- * no wiring into the template runner yet.
+ * FT6 / Phase 5 — "My Avatars" management. Saved cast members are used by
+ * generation (start-template-run cast_config), so they are reusable everywhere.
  */
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Check, Loader2, Plus, Star, Trash2, Upload, X } from "lucide-react";
 import Navbar from "@/components/Navbar";
+import { useNavigate, useSearchParams } from "react-router-dom";
+import { ArrowLeft } from "lucide-react";
+import { CastPortrait } from "@/components/cast/CastLibrary";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -41,11 +44,7 @@ function AvatarCard({
   return (
     <div className="overflow-hidden rounded-[1.25rem] border border-white/10 bg-white/[0.03]">
       <div className="relative aspect-[3/4] bg-black/50">
-        {avatar.thumbnail_url ? (
-          <img src={avatar.thumbnail_url} alt={avatar.name} className="h-full w-full object-cover" />
-        ) : (
-          <div className="flex h-full items-center justify-center text-xs text-slate-600">No image</div>
-        )}
+        <CastPortrait avatar={avatar} />
         {onFavorite ? (
           <button
             type="button"
@@ -87,7 +86,7 @@ function AvatarCard({
   );
 }
 
-function AvatarCreator({ onDone }: { onDone: () => void }) {
+function AvatarCreator({ onDone, intent = "upload" }: { onDone: () => void; intent?: "generate" | "upload" }) {
   const queryClient = useQueryClient();
   const [name, setName] = useState("");
   const [notes, setNotes] = useState("");
@@ -140,7 +139,9 @@ function AvatarCreator({ onDone }: { onDone: () => void }) {
 
   return (
     <div className={CARD}>
-      <p className="text-lg font-semibold">Create your Avatar</p>
+      <p className="text-lg font-semibold">
+        {intent === "generate" ? "Describe your cast member" : "Turn your photos into a cast member"}
+      </p>
       <p className="mt-1 text-sm text-slate-400">
         Upload 1–{MAX_REFERENCES} clear images of the person. We store them as references only.
       </p>
@@ -297,6 +298,20 @@ export default function AvatarProfilesPage() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const [creating, setCreating] = useState(false);
+  const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
+  const createIntent = searchParams.get("create") === "generate" ? "generate" : "upload";
+  const backTo = searchParams.get("from");
+
+  useEffect(() => {
+    if (searchParams.get("create")) setCreating(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const goBack = () => {
+    if (backTo) navigate(backTo);
+    else navigate(-1);
+  };
 
   const myAvatars = useQuery({
     queryKey: ["my-avatars", user?.id],
@@ -331,15 +346,22 @@ export default function AvatarProfilesPage() {
     <div className="min-h-screen bg-slate-950 text-white">
       <Navbar />
       <main className="mx-auto w-full max-w-6xl px-5 pb-24 pt-28">
+        <button
+          type="button"
+          onClick={goBack}
+          className="mb-5 inline-flex items-center gap-1.5 rounded-full border border-white/12 bg-white/[0.03] px-3 py-1.5 text-[11px] uppercase tracking-[0.16em] text-slate-300 hover:text-white"
+        >
+          <ArrowLeft className="h-3.5 w-3.5" /> Back
+        </button>
         <h1 className="font-display text-3xl font-semibold tracking-tight">My Avatars</h1>
         <p className="mt-3 max-w-2xl text-sm text-slate-400">
-          Save a cast member once and reuse them across campaigns. Management only for now — avatars
-          aren't wired into generation yet.
+          Save a cast member once and reuse them across every campaign — in the Brand Workspace and
+          in the campaign runner.
         </p>
 
         <div className="mt-8 space-y-5">
           {creating ? (
-            <AvatarCreator onDone={() => setCreating(false)} />
+            <AvatarCreator intent={createIntent} onDone={() => setCreating(false)} />
           ) : (
             <Button
               type="button"
