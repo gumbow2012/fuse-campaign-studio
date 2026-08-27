@@ -262,6 +262,14 @@ const App = () => (
               }
             />
             <Route
+              path="/app/lab/madden-media"
+              element={
+                <BuilderRoute>
+                  <MaddenMediaStudio />
+                </BuilderRoute>
+              }
+            />
+            <Route
 
               path="/app/lab/outfit-swap"
               element={
