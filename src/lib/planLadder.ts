@@ -123,6 +123,30 @@ export const PLAN_LADDER: PlanLadderEntry[] = [
     ctaLabel: "Choose Plus",
   },
   {
+    // Designed tier — no Stripe price exists yet, so checkout MUST stay gated.
+    // Placed by price so the ladder stays monotonic ($59 Plus → $75 Capsule → $149 Pro).
+    key: "capsule",
+    name: "Capsule",
+    tagline: "For a full capsule drop",
+    badge: "Coming soon",
+    icon: Package,
+    description: "Enough campaign volume to shoot an entire capsule collection in one month.",
+    price: 75,
+    annualPrice: 60,
+    monthlyCredits: 10000,
+    creditsLabel: "10,000 credits/mo",
+    goodFor: "One full capsule drop a month",
+    benefits: [
+      "Everything in Plus",
+      "Volume for a complete capsule drop",
+      "FUSE Cast + My Avatars",
+      "Higher concurrency",
+      "Campaign history + versions",
+    ],
+    checkout: "gated",
+    ctaLabel: "Join the Capsule waitlist",
+  },
+  {
     key: "pro",
     name: STRIPE_TIERS.pro.name,
     tagline: "For active brands",
