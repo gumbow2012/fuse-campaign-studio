@@ -12,6 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Link } from "react-router-dom";
 import AdminCreditControl from "@/components/admin/AdminCreditControl";
 import AdminOverviewStrip from "@/components/admin/AdminOverviewStrip";
+import AdminReferrals from "@/components/admin/AdminReferrals";
 
 const EXAMPLE_INPUT_SCHEMA = JSON.stringify(
   [
