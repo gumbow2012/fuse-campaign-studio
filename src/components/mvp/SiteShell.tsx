@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { Link, NavLink, useNavigate } from "react-router-dom";
-import { Clapperboard, ClipboardCheck, Gem, Home, Layers3, Mail, Menu, Shirt, Sparkles, Star, UsersRound } from "lucide-react";
+import { Clapperboard, ClipboardCheck, Film, Gem, Home, Layers3, Mail, Menu, Shirt, Sparkles, Star, UsersRound } from "lucide-react";
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
