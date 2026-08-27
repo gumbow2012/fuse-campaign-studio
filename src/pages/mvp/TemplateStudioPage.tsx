@@ -44,6 +44,7 @@ import { libraryKindForAssetType, saveLibraryAsset } from "@/services/libraryAss
 import { getStaticInputs } from "@/services/templateInputMap";
 import CreditConfirmModal from "@/components/CreditConfirmModal";
 import { trackEvent } from "@/lib/metaPixel";
+import { track } from "@/lib/analytics/track";
 import { loadTemplatePerformance, type TemplatePerformanceMap } from "@/services/templatePerformance";
 import { PerformanceBlock, PerformanceBadges, PerformanceDisclaimer } from "@/components/TemplatePerformance";
 import FilterDropdown, { type FilterOption } from "@/components/templates/FilterDropdown";
