@@ -1,4 +1,4 @@
-import { Building2, Crown, Layers, Rocket, Sparkles, Zap, type LucideIcon } from "lucide-react";
+import { Building2, Crown, Layers, Package, Rocket, Sparkles, Zap, type LucideIcon } from "lucide-react";
 import { STRIPE_TIERS, type StripeTierKey } from "@/lib/stripe-config";
 
 /**
@@ -13,6 +13,7 @@ import { STRIPE_TIERS, type StripeTierKey } from "@/lib/stripe-config";
  *
  * STRIPE OBJECTS STILL TO BE CREATED (none of these exist today):
  *   - PLUS monthly ($59)
+ *   - CAPSULE monthly ($75)
  *   - TEAM monthly ($699)
  *   - ANNUAL prices for EVERY plan: Starter, Plus, Pro, Studio, Team
  *   (FREE needs no Stripe product.)
@@ -120,6 +121,30 @@ export const PLAN_LADDER: PlanLadderEntry[] = [
     ],
     checkout: "gated",
     ctaLabel: "Choose Plus",
+  },
+  {
+    // Designed tier — no Stripe price exists yet, so checkout MUST stay gated.
+    // Placed by price so the ladder stays monotonic ($59 Plus → $75 Capsule → $149 Pro).
+    key: "capsule",
+    name: "Capsule",
+    tagline: "For a full capsule drop",
+    badge: "Coming soon",
+    icon: Package,
+    description: "Enough campaign volume to shoot an entire capsule collection in one month.",
+    price: 75,
+    annualPrice: 60,
+    monthlyCredits: 10000,
+    creditsLabel: "10,000 credits/mo",
+    goodFor: "One full capsule drop a month",
+    benefits: [
+      "Everything in Plus",
+      "Volume for a complete capsule drop",
+      "FUSE Cast + My Avatars",
+      "Higher concurrency",
+      "Campaign history + versions",
+    ],
+    checkout: "gated",
+    ctaLabel: "Join the Capsule waitlist",
   },
   {
     key: "pro",

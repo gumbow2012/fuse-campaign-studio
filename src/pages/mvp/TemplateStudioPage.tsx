@@ -554,9 +554,26 @@ export default function TemplateStudioPage() {
 
   const activeFilterCount = Object.values(perfFilters).filter(Boolean).length;
 
+  /** Output-type segment — reads the existing template output_type, no new engine. */
+  const [outputTypeFilter, setOutputTypeFilter] = useState<"all" | "image" | "video">("all");
+
+  const outputTypeCounts = useMemo(() => {
+    let image = 0;
+    let video = 0;
+    for (const template of templates) {
+      if ((template.output_type ?? "").toLowerCase() === "video") video += 1;
+      else image += 1;
+    }
+    return { all: templates.length, image, video };
+  }, [templates]);
+
   const visibleTemplates = useMemo(() => {
-    if (!activeFilterCount) return templates;
+    if (!activeFilterCount && outputTypeFilter === "all") return templates;
     return templates.filter((template) => {
+      if (outputTypeFilter !== "all") {
+        const isVideo = (template.output_type ?? "").toLowerCase() === "video";
+        if (outputTypeFilter === "video" ? !isVideo : isVideo) return false;
+      }
       const row = performanceMap[String(template.id ?? "")] ?? null;
       if (perfFilters.roas && !matchesRoasFilter(row, perfFilters.roas)) return false;
       if (perfFilters.aov && !matchesAovFilter(row, perfFilters.aov)) return false;
@@ -569,7 +586,7 @@ export default function TemplateStudioPage() {
       }
       return true;
     });
-  }, [activeFilterCount, perfFilters, performanceMap, templates]);
+  }, [activeFilterCount, outputTypeFilter, perfFilters, performanceMap, templates]);
 
 
   // TR10b — deep-link straight into the running workspace for a specific run
@@ -1531,6 +1548,34 @@ export default function TemplateStudioPage() {
                 Could not load templates.
               </div>
             ) : null}
+
+            <div
+              role="group"
+              aria-label="Filter by output type"
+              className="mt-4 inline-flex rounded-full border border-white/10 bg-white/[0.04] p-1"
+            >
+              {([
+                { key: "all", label: "All" },
+                { key: "image", label: "Image" },
+                { key: "video", label: "Video" },
+              ] as const).map((segment) => (
+                <button
+                  key={segment.key}
+                  type="button"
+                  onClick={() => setOutputTypeFilter(segment.key)}
+                  aria-pressed={outputTypeFilter === segment.key}
+                  className={cn(
+                    "rounded-full px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] transition-colors motion-reduce:transition-none",
+                    outputTypeFilter === segment.key
+                      ? "bg-cyan-300 text-slate-950"
+                      : "text-slate-300 hover:text-white",
+                  )}
+                >
+                  {segment.label}
+                  <span className="ml-1 opacity-60">{outputTypeCounts[segment.key]}</span>
+                </button>
+              ))}
+            </div>
 
             <div className="mt-4 flex flex-wrap items-center gap-2">
               {filterDefinitions.map((filter) => (
