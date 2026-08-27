@@ -89,6 +89,8 @@ const AdminAnalytics = () => {
             </div>
           </>
         )}
+
+        <SiteIntelligence />
       </div>
     </div>
   );
