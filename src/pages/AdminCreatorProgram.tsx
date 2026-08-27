@@ -437,6 +437,89 @@ const AdminCreatorProgram = () => {
 
         <section className={`mt-6 ${panel}`}>
           <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.18em] text-foreground/70">
+            <Mail className="h-4 w-4 text-cyan-300" />
+            Invite delivery ({invites.length})
+          </div>
+
+          <div className="mt-4 overflow-x-auto">
+            {invites.length === 0 ? (
+              <p className={emptyState}>No creator invites yet.</p>
+            ) : (
+              <table className="w-full min-w-[820px] text-left text-xs">
+                <thead className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+                  <tr>
+                    <th className="py-2 pr-3">Email</th>
+                    <th className="py-2 pr-3">Status</th>
+                    <th className="py-2 pr-3">Sent</th>
+                    <th className="py-2 pr-3">Delivery</th>
+                    <th className="py-2 pr-3">Accepted</th>
+                    <th className="py-2" />
+                  </tr>
+                </thead>
+                <tbody>
+                  {invites.map((row) => {
+                    const emailStatus = (row.email_status ?? "pending").toLowerCase();
+                    const failed = emailStatus === "failed" || emailStatus === "bounced";
+                    return (
+                      <tr key={row.id} className="border-t border-white/10 align-top">
+                        <td className="py-3 pr-3 text-foreground">{row.email ?? "—"}</td>
+                        <td className="py-3 pr-3 capitalize text-muted-foreground">{row.status || "pending"}</td>
+                        <td className="py-3 pr-3 text-muted-foreground">
+                          {row.last_sent_at ? (
+                            <>
+                              {formatDate(row.last_sent_at)}
+                              <span className="ml-1 text-foreground/60">×{row.sent_count ?? 1}</span>
+                            </>
+                          ) : (
+                            "—"
+                          )}
+                        </td>
+                        <td className="py-3 pr-3">
+                          {emailStatus === "delivered" ? (
+                            <span className="text-emerald-300">Delivered ✓ {formatDate(row.delivered_at)}</span>
+                          ) : emailStatus === "provider_accepted" ? (
+                            <span className="text-cyan-300">Provider accepted ✓ (delivery unconfirmed)</span>
+                          ) : failed ? (
+                            <span className="text-rose-300">
+                              Delivery failed
+                              {row.failure_reason ? (
+                                <span className="block text-muted-foreground">{row.failure_reason}</span>
+                              ) : null}
+                            </span>
+                          ) : (
+                            <span className="text-muted-foreground">—</span>
+                          )}
+                        </td>
+                        <td className="py-3 pr-3 text-muted-foreground">
+                          {row.accepted_at ? `Joined ${formatDate(row.accepted_at)}` : "—"}
+                        </td>
+                        <td className="py-3">
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant={failed ? "default" : "outline"}
+                            onClick={() => void resendInvite(row)}
+                            disabled={busy === `resend-${row.id}`}
+                          >
+                            {busy === `resend-${row.id}` ? (
+                              <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
+                            ) : (
+                              <Send className="mr-2 h-3.5 w-3.5" />
+                            )}
+                            Resend invite
+                          </Button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            )}
+          </div>
+        </section>
+
+        <section className={`mt-6 ${panel}`}>
+          <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.18em] text-foreground/70">
             <Trophy className="h-4 w-4 text-cyan-300" />
             New challenge
           </div>
