@@ -2151,7 +2151,7 @@ export default function TemplateStudioPage() {
                               : submitting || isRunning
                                 ? "Generating..."
                                 : !user
-                                  ? "Sign in to generate"
+                                  ? "Generate campaign →"
                                   : isPrivilegedUser
                                     ? "Generate campaign"
                                     : `Generate campaign · ${creditsRequired} cr`}
@@ -2160,12 +2160,8 @@ export default function TemplateStudioPage() {
                     </div>
 
                     {!user ? (
-                      <p className="mt-3 text-sm leading-6 text-cyan-100">
-                        Sign in or create an account before generating campaigns or buying credits.
-                        {" "}
-                        <Link to="/auth?mode=signup" className="underline underline-offset-4">
-                          Create account
-                        </Link>
+                      <p className="mt-3 text-sm leading-6 text-slate-400">
+                        Configure everything here — your files stay on this device until you generate.
                       </p>
                     ) : profileIsResolving ? (
                       <p className="mt-3 text-sm leading-6 text-cyan-100">
