@@ -43,7 +43,7 @@ export default function PlanComparisonMatrix({ plan, subscriptionStatus }: Props
 
   return (
     <div className="overflow-x-auto">
-      <table className="w-full min-w-[720px] border-collapse text-sm">
+      <table className="w-full min-w-[820px] border-collapse text-sm">
         <thead className="sticky top-0 z-10 bg-[#0B1120]/95 backdrop-blur">
           <tr>
             <th className="w-[220px] px-3 py-3 text-left text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
