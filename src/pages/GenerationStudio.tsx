@@ -91,12 +91,18 @@ import {
   SectionTitle,
   SegmentedControl,
 } from "@/components/fuse/FuseUI";
+import {
+  CAMERA_MOVEMENT_PRESETS,
+  DEFAULT_CAMERA_MOVEMENT_ID,
+  getCameraMovementPreset,
+} from "@/lib/generationStudio/cameraMovementPresets";
 
 import {
   IMAGE_FLAT_USD as IMAGE_FALLBACK_USD,
   costPreview,
   creditsFromUsd,
 } from "@/lib/costEstimate";
+
 
 
 const MAX_REFERENCES = 15;
