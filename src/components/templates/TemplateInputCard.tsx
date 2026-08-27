@@ -62,7 +62,10 @@ interface TemplateInputCardProps {
   displayLabel?: string;
   /** Cast-supported templates: the existing cast selector, shown inside the Add dialog. */
   castPanel?: ReactNode;
+  /** Phase 10: subtle provenance note when the slot was autofilled ("From ACME"). */
+  sourceNote?: string | null;
 }
+
 
 const SOURCE_ICONS: Record<AssetSourceKind, typeof Upload> = {
   upload: Upload,
@@ -83,7 +86,9 @@ export default function TemplateInputCard({
   highlighted = false,
   displayLabel,
   castPanel,
+  sourceNote,
 }: TemplateInputCardProps) {
+
   const inputRef = useRef<HTMLInputElement>(null);
   /*
    * Local validation state machine: idle → validating → checking → ready|warning|error.
@@ -218,6 +223,12 @@ export default function TemplateInputCard({
           >
             {isFilled ? "✓ Ready" : required ? "Required" : "Optional"}
           </span>
+          {sourceNote && isFilled ? (
+            <span className="mt-1 ml-2 inline-block rounded-full border border-white/10 bg-white/[0.04] px-2 py-0.5 font-display text-[9px] uppercase tracking-[0.18em] text-slate-400">
+              {sourceNote}
+            </span>
+          ) : null}
+
         </div>
         <UploadGuide
           slotLabel={heading}

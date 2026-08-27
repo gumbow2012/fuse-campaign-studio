@@ -55,6 +55,12 @@ import {
 
 import { type TemplateAssetRequirement } from "@/lib/templateAssetRequirements";
 import { resolveInputRole } from "@/lib/templateInputSources";
+import { useBrand } from "@/contexts/BrandContext";
+import { planBrandAutofill } from "@/lib/brandAutofill";
+import { listProductProfiles } from "@/services/productProfiles";
+import { listMyAvatars, listFuseAvatars } from "@/services/avatarProfiles";
+import { readModelIds } from "@/services/brandProfiles";
+
 import { readPublicFailure, type PublicGenerationFailure } from "@/lib/generationFailure";
 import { createFork } from "@/services/templateForks";
 import CampaignHistoryLauncher from "@/components/campaigns/CampaignHistoryLauncher";
@@ -415,6 +421,10 @@ export default function TemplateStudioPage() {
   /** FT4: assets picked from the reusable library (already stored URLs). */
   const [libraryAssets, setLibraryAssets] = useState<Record<string, { url: string; name?: string | null } | null>>({});
   const [textInputs, setTextInputs] = useState<Record<string, string>>({});
+  /** Phase 10: keys filled by brand autofill → the brand they came from. */
+  const [autofilledKeys, setAutofilledKeys] = useState<Record<string, string>>({});
+  const autofillAppliedRef = useRef<string>("");
+
   const [jobId, setJobId] = useState<string | null>(null);
   const [creatingFork, setCreatingFork] = useState(false);
   const [workflowUpgradeDialogOpen, setWorkflowUpgradeDialogOpen] = useState(false);
@@ -440,6 +450,38 @@ export default function TemplateStudioPage() {
   const slotRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
   const isPrivilegedUser = hasAppAccess;
+
+  /* Phase 10 — the remembered brand + its saved assets (read-only sources). */
+  const { activeBrand, activeBrandId } = useBrand();
+  const brandProductsQuery = useQuery({
+    queryKey: ["product-profiles", user?.id ?? "anon"],
+    queryFn: () => listProductProfiles(user?.id ?? ""),
+    enabled: !!user?.id && !!activeBrandId,
+    staleTime: 30_000,
+  });
+  const brandModelIds = useMemo(() => readModelIds(activeBrand), [activeBrand]);
+  const brandModelsQuery = useQuery({
+    queryKey: ["autofill-avatars", user?.id ?? "anon"],
+    queryFn: async () => {
+      const [mine, fuse] = await Promise.all([listMyAvatars(user?.id ?? ""), listFuseAvatars()]);
+      return [...mine, ...fuse];
+    },
+    enabled: !!user?.id && !!activeBrandId && brandModelIds.length > 0,
+    staleTime: 30_000,
+  });
+
+  const brandProducts = useMemo(
+    () => (brandProductsQuery.data ?? []).filter((profile) => profile.brand_id === activeBrandId),
+    [brandProductsQuery.data, activeBrandId],
+  );
+  /** Associated models, kept in metadata.modelIds order. */
+  const brandModels = useMemo(() => {
+    const pool = brandModelsQuery.data ?? [];
+    return brandModelIds
+      .map((id) => pool.find((avatar) => avatar.id === id))
+      .filter((avatar): avatar is NonNullable<typeof avatar> => !!avatar);
+  }, [brandModelsQuery.data, brandModelIds]);
+
 
   const templatesQuery = useQuery<ApiTemplate[]>({
     queryKey: ["mvp-templates"],
@@ -858,6 +900,98 @@ export default function TemplateStudioPage() {
     });
   };
 
+  /*
+   * Phase 10 — deterministic brand autofill.
+   * Pre-populates ONLY empty slots with assets already saved on the active
+   * brand, writing the exact same `libraryAssets` / `textInputs` state the
+   * customer would produce through the pickers. The submit/charge path,
+   * validation and cost display are untouched.
+   */
+  const autofillSignature = `${selectedTemplateId}|${activeBrandId ?? ""}`;
+  const autofillFieldKeys = inputFields.map((field) => field.key).join(",");
+
+  useEffect(() => {
+    if (!activeBrand || !inputFields.length) return;
+    if (brandProductsQuery.isLoading || brandModelsQuery.isLoading) return;
+    if (autofillAppliedRef.current === autofillSignature) return;
+    autofillAppliedRef.current = autofillSignature;
+
+    const plan = planBrandAutofill(
+      inputFields.map((field) => ({
+        key: field.key,
+        label: field.label,
+        type: field.type,
+        assetType: field.requirement?.assetType ?? null,
+      })),
+      { brand: activeBrand, products: brandProducts, models: brandModels },
+    );
+
+    const applied: string[] = [];
+
+    setLibraryAssets((current) => {
+      const next = { ...current };
+      for (const [key, asset] of Object.entries(plan.images)) {
+        if (files[key] || current[key]?.url) continue;
+        next[key] = asset;
+        applied.push(key);
+      }
+      return next;
+    });
+
+    setTextInputs((current) => {
+      const next = { ...current };
+      for (const [key, value] of Object.entries(plan.texts)) {
+        if (current[key]?.trim()) continue;
+        next[key] = value;
+        applied.push(key);
+      }
+      return next;
+    });
+
+    if (applied.length) {
+      setAutofilledKeys((current) => {
+        const next = { ...current };
+        for (const key of applied) next[key] = activeBrand.name;
+        return next;
+      });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    autofillSignature,
+    autofillFieldKeys,
+    activeBrand,
+    brandProducts,
+    brandModels,
+    brandProductsQuery.isLoading,
+    brandModelsQuery.isLoading,
+  ]);
+
+  /** Clears every slot autofilled from the brand — user values are never touched. */
+  /** Once the user touches a slot it is theirs — drop the autofill marker. */
+  const releaseAutofill = (key: string) =>
+    setAutofilledKeys((current) => {
+      if (!(key in current)) return current;
+      const next = { ...current };
+      delete next[key];
+      return next;
+    });
+
+  const clearAutofilled = () => {
+
+    const keys = Object.keys(autofilledKeys);
+    if (!keys.length) return;
+    setLibraryAssets((current) => {
+      const next = { ...current };
+      for (const key of keys) next[key] = null;
+      return next;
+    });
+    setTextInputs((current) => {
+      const next = { ...current };
+      for (const key of keys) next[key] = "";
+      return next;
+    });
+    setAutofilledKeys({});
+  };
 
 
   const creditsRequired = selectedTemplate?.estimated_credits_per_run ?? 0;
@@ -951,6 +1085,9 @@ export default function TemplateStudioPage() {
     setInputsExpanded(false);
     setResult(null);
     setCastSelection({});
+    setAutofilledKeys({});
+    autofillAppliedRef.current = "";
+
     if (window.matchMedia("(max-width: 1279px)").matches) {
       window.requestAnimationFrame(() => {
         runnerSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -1513,8 +1650,25 @@ export default function TemplateStudioPage() {
                           style={{ width: `${readinessPercent}%` }}
                         />
                       </div>
+                      {Object.keys(autofilledKeys).length ? (
+                        <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+                          <p className="text-[11px] text-slate-400">
+                            Pre-filled from{" "}
+                            <span className="text-slate-200">{activeBrand?.name}</span> — change or
+                            remove any slot as usual.
+                          </p>
+                          <button
+                            type="button"
+                            onClick={clearAutofilled}
+                            className="font-display text-[10px] uppercase tracking-[0.18em] text-slate-400 transition hover:text-white"
+                          >
+                            Clear autofilled
+                          </button>
+                        </div>
+                      ) : null}
                     </div>
                   ) : null}
+
 
                   {/* Cast lives inside the face slot when a face slot exists. */}
                   {castEnabled && !castSlotFieldKey ? (
@@ -1548,6 +1702,10 @@ export default function TemplateStudioPage() {
                             highlighted={focusedInputKey === field.key}
                             file={files[field.key] ?? null}
                             requirement={field.requirement}
+                            sourceNote={
+                              autofilledKeys[field.key] ? `From ${autofilledKeys[field.key]}` : null
+                            }
+
                             castPanel={
                               castEnabled && field.key === castSlotFieldKey ? (
                                 <CastSelector
@@ -1561,31 +1719,41 @@ export default function TemplateStudioPage() {
                             onFileChange={(nextFile) => {
                               setFiles((current) => ({ ...current, [field.key]: nextFile }));
                               setLibraryAssets((current) => ({ ...current, [field.key]: null }));
+                              releaseAutofill(field.key);
                               if (nextFile) advanceFromInput(field.key);
                             }}
                             libraryAsset={libraryAssets[field.key] ?? null}
                             onLibrarySelect={(asset) => {
                               setFiles((current) => ({ ...current, [field.key]: null }));
                               setLibraryAssets((current) => ({ ...current, [field.key]: asset }));
+                              releaseAutofill(field.key);
                               advanceFromInput(field.key);
                             }}
                             onClear={() => {
                               setFiles((current) => ({ ...current, [field.key]: null }));
                               setLibraryAssets((current) => ({ ...current, [field.key]: null }));
+                              releaseAutofill(field.key);
                             }}
                           />
                         </div>
                       ) : (
                         <div key={field.key} className="rounded-[1.25rem] border border-white/10 bg-black/25 p-3">
-                          <p className="mb-2 truncate text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-200">
-                            {field.label}
+                          <p className="mb-2 flex items-center gap-2 truncate text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-200">
+                            <span className="truncate">{field.label}</span>
+                            {autofilledKeys[field.key] ? (
+                              <span className="shrink-0 rounded-full border border-white/10 bg-white/[0.04] px-2 py-0.5 font-display text-[9px] tracking-[0.18em] text-slate-400">
+                                From {autofilledKeys[field.key]}
+                              </span>
+                            ) : null}
                           </p>
+
                           {field.type === "prompt" ? (
                             <Textarea
                               value={textInputs[field.key] ?? ""}
-                              onChange={(event) =>
-                                setTextInputs((current) => ({ ...current, [field.key]: event.target.value }))
-                              }
+                              onChange={(event) => {
+                                releaseAutofill(field.key);
+                                setTextInputs((current) => ({ ...current, [field.key]: event.target.value }));
+                              }}
                               rows={3}
                               placeholder={field.label}
                               className="min-h-[92px] rounded-[0.9rem] border-white/10 bg-white/[0.03] text-white"
@@ -1593,9 +1761,10 @@ export default function TemplateStudioPage() {
                           ) : (
                             <Input
                               value={textInputs[field.key] ?? ""}
-                              onChange={(event) =>
-                                setTextInputs((current) => ({ ...current, [field.key]: event.target.value }))
-                              }
+                              onChange={(event) => {
+                                releaseAutofill(field.key);
+                                setTextInputs((current) => ({ ...current, [field.key]: event.target.value }));
+                              }}
                               placeholder={field.label}
                               className="h-11 rounded-[0.9rem] border-white/10 bg-white/[0.03] text-white"
                             />
