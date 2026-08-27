@@ -17,7 +17,7 @@ import { toast } from "@/hooks/use-toast";
 import { track } from "@/lib/analytics/track";
 import { supabase } from "@/integrations/supabase/client";
 import { getAbsoluteSiteUrl } from "@/lib/site-url";
-import { ArrowRight, Eye, EyeOff, Loader2 } from "lucide-react";
+import { ArrowRight, Eye, EyeOff, Loader2, ShieldCheck } from "lucide-react";
 
 export const APPLE_AUTH_ENABLED = import.meta.env.VITE_ENABLE_APPLE_AUTH === "true";
 export const MICROSOFT_AUTH_ENABLED = import.meta.env.VITE_ENABLE_MICROSOFT_AUTH === "true";
