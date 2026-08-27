@@ -6,7 +6,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { Boxes, CreditCard, LayoutDashboard, LogOut, Shield, Ticket, User, Users, Zap } from "lucide-react";
+import { Boxes, CreditCard, FolderHeart, LayoutDashboard, LogOut, Shield, Ticket, User, Users, Zap } from "lucide-react";
 import CreditPackDialog from "@/components/mvp/CreditPackDialog";
 import FeatureNewBadge from "@/components/FeatureNewBadge";
 import { avatarInitials } from "@/lib/avatarImage";
@@ -140,6 +140,7 @@ export function AccountMenuContent({
         ) : null}
         <MenuLink to="/app/brand" icon={Boxes} label="Brand & Products" />
         <MenuLink to="/app/avatars" icon={Users} label="My Avatars" featureKey="my_avatars" />
+        <MenuLink to="/app/collections" icon={FolderHeart} label="My Collections" />
       </div>
 
       <div className="my-2 h-px bg-white/10" />

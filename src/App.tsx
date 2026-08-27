@@ -53,6 +53,8 @@ import NotFoundPage from "@/pages/mvp/NotFoundPage";
 import ResetPasswordPage from "@/pages/mvp/ResetPasswordPage";
 import TemplateStudioPage from "@/pages/mvp/TemplateStudioPage";
 import CampaignLibraryPage from "@/pages/mvp/CampaignLibraryPage";
+import CollectionsPage from "@/pages/mvp/CollectionsPage";
+import PublicCollectionPage from "@/pages/mvp/PublicCollectionPage";
 import NotificationsPage from "@/pages/mvp/NotificationsPage";
 import CustomizeWorkflowPage from "@/pages/mvp/CustomizeWorkflowPage";
 
@@ -79,6 +81,15 @@ const App = () => (
             <Route path="/creators/browse" element={<CreatorsDirectoryPage />} />
             <Route path="/creators/apply" element={<CreatorApplyPage />} />
             <Route path="/auth" element={<AuthPage />} />
+            <Route path="/c/:slug" element={<PublicCollectionPage />} />
+            <Route
+              path="/app/collections"
+              element={
+                <CustomerRoute>
+                  <CollectionsPage />
+                </CustomerRoute>
+              }
+            />
             <Route path="/forgot-password" element={<ForgotPasswordPage />} />
             <Route path="/reset-password" element={<ResetPasswordPage />} />
 
