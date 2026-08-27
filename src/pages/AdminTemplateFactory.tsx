@@ -282,6 +282,32 @@ export default function AdminTemplateFactory() {
     onSettled: () => setAnalyzingId(null),
   });
 
+  const [compilingId, setCompilingId] = useState<string | null>(null);
+
+  const compileMutation = useMutation({
+    mutationFn: async (referenceId: string) => {
+      setCompilingId(referenceId);
+      return compileStreetwearReference(referenceId);
+    },
+    onSuccess: (result) => {
+      invalidateReferences();
+      queryClient.invalidateQueries({ queryKey: ["admin-template-workbench"] });
+      toast({
+        title: "Draft template created",
+        description: `${result.templateName} · ${result.shotCount} shot${result.shotCount === 1 ? "" : "s"} — open the Node Workbench to review, then ⚡ Quick Publish.`,
+      });
+    },
+    onError: (error: unknown) => {
+      toast({
+        title: "Could not compile blueprint",
+        description: error instanceof Error ? error.message : "Unknown error",
+        variant: "destructive",
+      });
+    },
+    onSettled: () => setCompilingId(null),
+  });
+
+
 
 
   const openEdit = (reference: StreetwearReference) => {
