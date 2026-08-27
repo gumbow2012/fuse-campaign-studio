@@ -179,10 +179,16 @@ export default function BrandOnboardingPage() {
     setNeutralPalette(flags.neutralPalette);
     setModelIds(readModelIds(brand));
     const style = readVisualStyle(brand);
-    setTags(style?.tags ?? []);
-    setTone(style?.tone ?? "");
-    setReferences(style?.references ?? []);
-    setNotes(style?.notes ?? "");
+    setDna({
+      styleSignals: style?.styleSignals ?? [],
+      tone: style?.tone ?? "",
+      instagram: style?.instagram ?? null,
+      pinterest: style?.pinterest ?? null,
+      referenceBrands: style?.referenceBrands ?? [],
+      referenceImages: style?.referenceImages ?? [],
+      notes: style?.notes ?? "",
+    });
+
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hydratedFor]);
 
