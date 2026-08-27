@@ -926,7 +926,18 @@ export default function CustomizeWorkflowPage() {
         </div>
       </div>
 
+      <Dialog open={!!lightbox} onOpenChange={(open) => !open && setLightbox(null)}>
+        <DialogContent className="max-w-3xl border-white/10 bg-[#0c101c] p-3">
+          {lightbox?.type === "video" ? (
+            <video src={lightbox.url} controls autoPlay muted loop className="max-h-[75vh] w-full rounded-lg" />
+          ) : lightbox ? (
+            <img src={lightbox.url} alt="Workflow media" className="max-h-[75vh] w-full rounded-lg object-contain" />
+          ) : null}
+        </DialogContent>
+      </Dialog>
+
       <AlertDialog open={resetOpen} onOpenChange={setResetOpen}>
+
         <AlertDialogContent className="border-white/10 bg-[#0c101c] text-slate-100">
           <AlertDialogHeader>
             <AlertDialogTitle className="font-display tracking-[0.12em]">RESET TO ORIGINAL?</AlertDialogTitle>
