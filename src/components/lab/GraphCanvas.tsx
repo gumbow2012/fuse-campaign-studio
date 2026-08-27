@@ -149,7 +149,101 @@ const PortDot = ({ type }: { type: PortType }) => (
 
 const handleBase = "!h-4 !w-4 !rounded-full !border-2 !border-background !opacity-100 transition-transform hover:!scale-125";
 
+type NodeMedia = NonNullable<GraphCanvasNodeData["media"]>;
+
+const MediaThumb = ({
+  url,
+  type,
+  caption,
+  onOpen,
+}: {
+  url: string;
+  type: "image" | "video";
+  caption: string;
+  onOpen?: (url: string, type: "image" | "video") => void;
+}) => (
+  <button
+    type="button"
+    className="nodrag group w-16 shrink-0 text-left"
+    onClick={(event) => {
+      event.stopPropagation();
+      onOpen?.(url, type);
+    }}
+  >
+    {type === "video" ? (
+      <video
+        src={url}
+        muted
+        loop
+        playsInline
+        preload="metadata"
+        className="h-16 w-16 rounded-lg border border-border/50 bg-background/70 object-cover"
+        onMouseEnter={(event) => void event.currentTarget.play().catch(() => undefined)}
+        onMouseLeave={(event) => event.currentTarget.pause()}
+      />
+    ) : (
+      <img
+        src={url}
+        alt={caption}
+        loading="lazy"
+        className="h-16 w-16 rounded-lg border border-border/50 bg-background/70 object-cover"
+      />
+    )}
+    <span className="mt-1 block truncate text-[9px] uppercase tracking-[0.1em] text-muted-foreground">
+      {caption}
+    </span>
+  </button>
+);
+
+/** Compact references/output strip. Media only — never prompt text. */
+const NodeMediaStrip = ({
+  media,
+  onOpen,
+}: {
+  media: NodeMedia;
+  onOpen?: (url: string, type: "image" | "video") => void;
+}) => {
+  if (media.unavailable && !media.output && !media.references.length) {
+    return (
+      <p className="mt-2 text-[10px] uppercase tracking-[0.12em] text-muted-foreground/70">
+        Reference unavailable
+      </p>
+    );
+  }
+  return (
+    <div className="mt-2 space-y-2">
+      {media.references.length ? (
+        <div>
+          <p className="text-[9px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+            References / Inputs
+          </p>
+          <div className="nowheel mt-1 flex gap-1.5 overflow-x-auto pb-1">
+            {media.references.slice(0, 6).map((ref, index) => (
+              <MediaThumb
+                key={`${ref.url}-${index}`}
+                url={ref.url}
+                type={ref.type}
+                caption={ref.role ? ref.role.toUpperCase() : ref.label ?? `Ref ${index + 1}`}
+                onOpen={onOpen}
+              />
+            ))}
+          </div>
+        </div>
+      ) : null}
+      {media.output ? (
+        <div>
+          <p className="text-[9px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Output</p>
+          <div className="mt-1 flex gap-1.5">
+            <MediaThumb url={media.output.url} type={media.output.type} caption="Result" onOpen={onOpen} />
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+};
+
 const TemplateFlowNode = ({ id, data, selected }: NodeProps<GraphCanvasNode>) => {
+
   const Icon = KIND_ICON[data.kind];
   const inputPorts = inputPortsFor(data);
   const outputPort = outputPortFor(data);
