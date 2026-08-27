@@ -358,6 +358,60 @@ export default function HomePage() {
       .slice(0, 12);
   }, [templates, followedCreatorIds, user]);
 
+  /* ---------------------- brand personalization (additive) ---------------------- */
+
+  const { activeBrand, activeBrandId } = useBrand();
+
+  const { data: brandProducts = [] } = useQuery({
+    queryKey: ["home-brand-products", user?.id ?? "", activeBrandId ?? ""],
+    queryFn: () => listProductProfiles(user?.id ?? ""),
+    enabled: !!user && !!activeBrandId,
+    staleTime: 5 * 60 * 1000,
+    retry: false,
+  });
+
+  /** Real, saved signals only: this brand's product types + its visual-style tags. */
+  const brandSignals = useMemo(() => {
+    const productTypes = Array.from(
+      new Set(
+        brandProducts
+          .filter((product) => product.brand_id && product.brand_id === activeBrandId)
+          .map((product) => product.type),
+      ),
+    ) as ProductProfileType[];
+    const styleTags = readVisualStyle(activeBrand)?.tags ?? [];
+    return { productTypes, styleTags };
+  }, [brandProducts, activeBrandId, activeBrand]);
+
+  /** Empty when nothing genuinely matches — the shelf is then never rendered. */
+  const recommended = useMemo(() => {
+    if (!activeBrand) return [];
+    return rankTemplatesForBrand(templates, brandSignals, 6)
+      .map((row) => {
+        const media = resolveMedia(row.template);
+        return media ? { entry: { template: row.template, media } as Entry, reasons: row.reasons } : null;
+      })
+      .filter(Boolean as unknown as (value: { entry: Entry; reasons: string[] } | null) => value is {
+        entry: Entry;
+        reasons: string[];
+      });
+  }, [activeBrand, templates, brandSignals]);
+
+  const [brandNudgeDismissed, setBrandNudgeDismissed] = useState(
+    () => typeof window !== "undefined" && window.localStorage.getItem("fuse.brandNudge") === "off",
+  );
+  const dismissBrandNudge = () => {
+    setBrandNudgeDismissed(true);
+    try {
+      window.localStorage.setItem("fuse.brandNudge", "off");
+    } catch {
+      /* storage unavailable — dismissal stays session-only */
+    }
+  };
+  const showBrandNudge = !!user && !activeBrand && !brandNudgeDismissed;
+
+
+
   const topRoas = useMemo(
     () =>
       allocatedEntries
