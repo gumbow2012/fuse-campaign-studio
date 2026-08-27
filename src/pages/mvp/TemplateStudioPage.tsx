@@ -1485,22 +1485,22 @@ export default function TemplateStudioPage() {
         <div className="flex flex-wrap items-end justify-between gap-6">
           <div>
             <p className="text-[11px] font-semibold uppercase tracking-[0.3em] text-cyan-100">
-              {isPublicTemplateBrowser ? "Template Page" : "Post-Purchase Studio"}
+              {isPublicTemplateBrowser ? "Campaign Builder" : "Post-Purchase Studio"}
             </p>
             <h1 className="mt-3 font-display text-2xl font-bold leading-tight text-white sm:text-4xl">
               {isPublicTemplateBrowser
-                ? "Choose a campaign template."
+                ? "Build your campaign. No account needed yet."
                 : "Your template is ready. Upload your assets."}
             </h1>
             <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-300 md:text-base">
               {isPublicTemplateBrowser
-                ? "Each template turns your brand assets into ready-to-use vertical videos. Browse before checkout."
+                ? "Pick a template, add your assets and set up the run — you only sign in when you generate."
                 : "The selected workflow is loaded. Add the required assets, confirm the run cost, and generate campaign videos."}
             </p>
           </div>
           {isPublicTemplateBrowser ? (
             <div className="rounded-[1.5rem] border border-emerald-300/20 bg-emerald-300/[0.08] px-5 py-4 text-sm leading-6 text-emerald-50">
-              Browse first. Unlock only after you choose a template.
+              Set everything up free. Sign in only to generate.
             </div>
           ) : (
             <CreditRemainingMeter
