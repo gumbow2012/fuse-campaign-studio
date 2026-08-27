@@ -303,6 +303,17 @@ export default function BrandOnboardingPage() {
     },
     onSuccess: (nextStep) => {
       track("brand_step_completed", { step: stepKey(step) });
+      // Phase 7 activation analytics — safe props only, fire-and-forget.
+      try {
+        if (step === 4 && modelIds.length > 0) {
+          track(ACTIVATION_EVENTS.castAdded, { source: "onboarding_models_step" });
+        }
+        if (step === 5 && (dna.styleSignals.length > 0 || dna.tone.trim() || dna.referenceBrands.length > 0)) {
+          track(ACTIVATION_EVENTS.creativeDnaAdded, { source: "onboarding_creative_dna_step" });
+        }
+      } catch {
+        /* analytics must never break onboarding */
+      }
       refreshBrands();
       setStep(nextStep);
     },
