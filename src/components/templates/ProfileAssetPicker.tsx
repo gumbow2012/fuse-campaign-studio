@@ -20,7 +20,9 @@ import { useAuth } from "@/contexts/AuthContext";
 import { brandProfileAssets, listBrandProfiles } from "@/services/brandProfiles";
 import { listProductProfiles } from "@/services/productProfiles";
 import type { TemplateAssetType } from "@/lib/templateAssetRequirements";
+import { preferredRoles } from "@/lib/brandAutofill";
 import { cn } from "@/lib/utils";
+
 
 interface ProfileAssetPickerProps {
   assetType?: TemplateAssetType | null;
