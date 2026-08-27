@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { Link, NavLink, useNavigate } from "react-router-dom";
-import { Clapperboard, ClipboardCheck, Gem, Home, Info, Layers3, Mail, Menu, Shirt, Sparkles, Star, UsersRound } from "lucide-react";
+import { Clapperboard, ClipboardCheck, Gem, Home, Layers3, Mail, Menu, Shirt, Sparkles, Star, UsersRound } from "lucide-react";
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -10,7 +10,9 @@ import { CreditChip } from "@/components/CreditChip";
 import NotificationCenter from "@/components/NotificationCenter";
 import { AccountPopover } from "@/components/AccountMenu";
 import FeatureNewBadge from "@/components/FeatureNewBadge";
+import SiteFooter from "@/components/mvp/SiteFooter";
 import type { FeatureKey } from "@/lib/featureRegistry";
+
 
 const focusRing =
   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/80 focus-visible:ring-offset-2 focus-visible:ring-offset-background";
@@ -23,7 +25,6 @@ const PRIMARY_LINKS: PrimaryLink[] = [
   { label: "New Drops", href: "/#new-today" },
   { label: "Creators", to: "/creators" },
   { label: "Pricing", to: "/pricing" },
-  { label: "About", to: "/about" },
   { label: "Contact", to: "/contact" },
 ];
 
@@ -296,9 +297,6 @@ export default function SiteShell({ children }: { children: ReactNode }) {
                 <NavLink to="/pricing" className={textNavLinkClass}>
                   Pricing
                 </NavLink>
-                <NavLink to="/about" className={iconNavLinkClass} aria-label="About" title="About">
-                  <Info className="h-4 w-4" aria-hidden="true" />
-                </NavLink>
                 <NavLink to="/contact" className={iconNavLinkClass} aria-label="Contact" title="Contact">
                   <Mail className="h-4 w-4" aria-hidden="true" />
                 </NavLink>
@@ -383,22 +381,8 @@ export default function SiteShell({ children }: { children: ReactNode }) {
 
       <main className="relative">{children}</main>
 
-      <footer className="relative border-t border-white/10 py-8">
-        <div className="container flex flex-col items-center gap-2 text-center text-xs text-muted-foreground sm:flex-row sm:justify-between sm:text-left">
-          <p>© {new Date().getFullYear()} FUSE</p>
-          <p>
-            Built by{" "}
-            <a
-              href="https://maddenmedia.ai"
-              target="_blank"
-              rel="noreferrer"
-              className="text-foreground underline underline-offset-4 hover:text-cyan-100"
-            >
-              Madden Media
-            </a>
-          </p>
-        </div>
-      </footer>
+      <SiteFooter />
+
     </div>
   );
 }

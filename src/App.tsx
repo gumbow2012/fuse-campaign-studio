@@ -46,6 +46,9 @@ import AuthPage from "@/pages/mvp/AuthPage";
 import BillingPage from "@/pages/mvp/BillingPage";
 import MembershipPage from "@/pages/mvp/MembershipPage";
 import ContactPage from "@/pages/mvp/ContactPage";
+import FaqPage from "@/pages/mvp/FaqPage";
+import TermsPage from "@/pages/mvp/TermsPage";
+import PrivacyPage from "@/pages/mvp/PrivacyPage";
 import CreatorProgramPage from "@/pages/mvp/CreatorProgramPage";
 import CreatorApplyPage from "@/pages/mvp/CreatorApplyPage";
 import CreatorsDirectoryPage from "@/pages/mvp/CreatorsDirectoryPage";
@@ -80,6 +83,9 @@ const App = () => (
             <Route path="/about" element={<AboutPage />} />
             <Route path="/pricing" element={<BillingPage />} />
             <Route path="/contact" element={<ContactPage />} />
+            <Route path="/faq" element={<FaqPage />} />
+            <Route path="/terms" element={<TermsPage />} />
+            <Route path="/privacy" element={<PrivacyPage />} />
             <Route path="/creators" element={<CreatorProgramPage />} />
             <Route path="/creators/browse" element={<CreatorsDirectoryPage />} />
             <Route path="/creators/apply" element={<CreatorApplyPage />} />
