@@ -87,7 +87,7 @@ export default function GenerateAuthGateModal({ open, onClose, templateId, retur
           className="mt-7"
           oauthRedirectTo={redirectTo}
           emailRedirectTo={redirectTo}
-          emailCtaLabel="Create account &amp; generate"
+          emailCtaLabel={"Create account & generate"}
           onBeforeRedirect={() => writePendingAuthIntent({ returnTo, templateId: templateId ?? undefined })}
           onAuthenticated={() => {
             // P4 owns the auto-run; here we just leave the captured intent in
