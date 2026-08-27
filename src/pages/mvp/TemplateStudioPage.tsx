@@ -1636,15 +1636,21 @@ export default function TemplateStudioPage() {
 
             {/* Phase 5 — contextual activation moment above the grid. */}
             {activeBrand ? (
-              <p className="mt-2 font-display text-[11px] font-semibold uppercase tracking-[0.2em] text-cyan-100">
-                For {activeBrand.name}
-                {readyForBrandCount > 0 ? (
-                  <span className="ml-2 text-slate-400">
-                    {readyForBrandCount} ready to run with your saved assets
-                  </span>
-                ) : null}
-              </p>
+              <div className="mt-2">
+                <p className="font-display text-[11px] font-semibold uppercase tracking-[0.2em] text-cyan-100">
+                  Recommended for {activeBrand.name}
+                  {readyForBrandCount > 0 ? (
+                    <span className="ml-2 text-slate-400">
+                      {readyForBrandCount} ready to run with your saved assets
+                    </span>
+                  ) : null}
+                </p>
+                <p className="mt-1 text-[11px] leading-relaxed text-slate-400">
+                  Based on your saved products and brand assets.
+                </p>
+              </div>
             ) : (
+
               <div className="mt-3 rounded-[1rem] border border-cyan-200/20 bg-cyan-300/[0.05] px-3.5 py-3">
                 <p className="font-display text-[10px] font-semibold uppercase tracking-[0.18em] text-cyan-100">
                   See which campaigns are ready for your brand
