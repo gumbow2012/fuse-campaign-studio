@@ -238,7 +238,7 @@ export default function PlanTierCards({
         onClick={() => setShowAll((open) => !open)}
         className="rounded-full border-white/15 bg-white/5 text-foreground hover:bg-white/10"
       >
-        {showAll ? "Show featured plans" : "View all plans"}
+        {showAll ? "Show featured plans" : "View all plans — incl. Free & Capsule"}
       </Button>
 
       <GatedPlanDialog
