@@ -10,6 +10,47 @@ type PathRow = { path: string; views: number; sessions: number };
 
 const RANGES = [7, 30, 90] as const;
 
+type FunnelStep = { label: string; count: number };
+
+/** Canonical activation funnel order + the keys the RPC may use per step. */
+const FUNNEL_STEPS: { label: string; keys: string[] }[] = [
+  { label: "New accounts", keys: ["new_accounts", "accounts", "signups"] },
+  { label: "Brand started", keys: ["brand_started", "brands_started"] },
+  { label: "Brand set up", keys: ["brand_set_up", "brand_setup", "brands_set_up", "brand_complete"] },
+  { label: "Product added", keys: ["product_added", "products_added"] },
+  { label: "First template run", keys: ["first_template_run", "first_run", "template_run"] },
+];
+
+function toCount(value: unknown): number {
+  const parsed = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+/**
+ * Accepts either a single row of named counts or a row-per-step shape
+ * ({ step, count }) so the funnel renders whichever the RPC returns.
+ */
+function normalizeFunnel(data: unknown): FunnelStep[] {
+  const rows = Array.isArray(data) ? data : data ? [data] : [];
+  if (!rows.length) return [];
+  const flat: Record<string, unknown> = {};
+  for (const row of rows as Record<string, unknown>[]) {
+    if (!row || typeof row !== "object") continue;
+    const stepKey = row.step ?? row.step_key ?? row.stage ?? row.name;
+    const stepCount = row.count ?? row.users ?? row.value ?? row.total;
+    if (typeof stepKey === "string" && stepCount !== undefined) {
+      flat[stepKey.toLowerCase()] = stepCount;
+      continue;
+    }
+    for (const [key, value] of Object.entries(row)) flat[key.toLowerCase()] = value;
+  }
+  const steps = FUNNEL_STEPS.map(({ label, keys }) => {
+    const match = keys.find((key) => flat[key] !== undefined);
+    return { label, count: match ? toCount(flat[match]) : 0 };
+  });
+  return steps.some((step) => step.count > 0) ? steps : [];
+}
+
 /** Admin-only site analytics. The RPCs fail closed for non-admins. */
 export default function SiteIntelligence() {
   const [days, setDays] = useState<number>(30);
@@ -40,6 +81,22 @@ export default function SiteIntelligence() {
       return (data ?? []) as PathRow[];
     },
   });
+
+  // Phase 7 — brand activation funnel. RPC fails closed for non-admins.
+  const funnel = useQuery({
+    queryKey: ["admin-activation-funnel", days],
+    queryFn: async () => {
+      // Arg name differs across deployments — try `days`, fall back to `_days`.
+      let response = await supabase.rpc("admin_activation_funnel" as never, { days } as never);
+      if (response.error) {
+        response = await supabase.rpc("admin_activation_funnel" as never, { _days: days } as never);
+      }
+      if (response.error) throw response.error;
+      return normalizeFunnel(response.data);
+    },
+  });
+
+
 
   const chartData = (daily.data ?? []).map((row) => ({
     ...row,
@@ -100,6 +157,32 @@ export default function SiteIntelligence() {
               <p className="text-sm text-muted-foreground">No events recorded in this range yet.</p>
             )}
           </div>
+
+          <div>
+            <p className="mb-1 text-[10px] font-bold uppercase tracking-[0.18em] text-muted-foreground">
+              Brand activation funnel
+            </p>
+            <p className="mb-3 text-xs text-muted-foreground">
+              Reflects tracking from deployment forward — earlier activity is not backfilled.
+            </p>
+            {funnel.error ? (
+              <p className="text-sm text-muted-foreground">Activation funnel is unavailable for this account.</p>
+            ) : (funnel.data ?? []).length ? (
+              <Table
+                head={["Step", "Count", "Step conversion"]}
+                rows={(funnel.data ?? []).map((row, index, all) => {
+                  const previous = index > 0 ? all[index - 1].count : null;
+                  const rate =
+                    previous && previous > 0 ? `${Math.round((row.count / previous) * 100)}%` : index === 0 ? "—" : "0%";
+                  return [row.label, row.count.toLocaleString("en-US"), rate];
+                })}
+              />
+            ) : (
+              <p className="text-sm text-muted-foreground">No activation data recorded in this range yet.</p>
+            )}
+          </div>
+
+
 
           <div className="grid gap-6 lg:grid-cols-2">
             <div>

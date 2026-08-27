@@ -4,7 +4,7 @@
  * mirrored into metadata.onboarding so setup can be resumed at any time.
  */
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, ArrowRight, Check, Loader2, Sparkles, X } from "lucide-react";
@@ -38,7 +38,7 @@ import CastLibrary from "@/components/cast/CastLibrary";
 import BrandReviewStep from "@/components/brand/BrandReviewStep";
 import { takeBrandImport } from "@/services/brandImport";
 import { track } from "@/lib/analytics/track";
-import { describeBrandKnowledge } from "@/lib/brandActivation";
+import { ACTIVATION_EVENTS, describeBrandKnowledge } from "@/lib/brandActivation";
 import BrandReadyCelebration from "@/components/brand/BrandReadyCelebration";
 
 const STEPS = [
@@ -204,6 +204,25 @@ export default function BrandOnboardingPage() {
     track("brand_step_started", { step: stepKey(step) });
   }, [step]);
 
+  // Phase 7: re-entering an incomplete brand counts as a RESUME (once per brand).
+  const resumeTracked = useRef<string | null>(null);
+  useEffect(() => {
+    if (!brand || resumeTracked.current === brand.id) return;
+    const state = readOnboarding(brand);
+    if (state?.completedAt) return;
+    resumeTracked.current = brand.id;
+    try {
+      track(ACTIVATION_EVENTS.onboardingResumed, {
+        brand_setup_complete: false,
+        step: stepKey(step),
+      });
+    } catch {
+      /* analytics must never break onboarding */
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [brand?.id]);
+
+
 
   const [celebrating, setCelebrating] = useState(false);
 
@@ -303,6 +322,17 @@ export default function BrandOnboardingPage() {
     },
     onSuccess: (nextStep) => {
       track("brand_step_completed", { step: stepKey(step) });
+      // Phase 7 activation analytics — safe props only, fire-and-forget.
+      try {
+        if (step === 4 && modelIds.length > 0) {
+          track(ACTIVATION_EVENTS.castAdded, { source: "onboarding_models_step" });
+        }
+        if (step === 5 && (dna.styleSignals.length > 0 || dna.tone.trim() || dna.referenceBrands.length > 0)) {
+          track(ACTIVATION_EVENTS.creativeDnaAdded, { source: "onboarding_creative_dna_step" });
+        }
+      } catch {
+        /* analytics must never break onboarding */
+      }
       refreshBrands();
       setStep(nextStep);
     },
