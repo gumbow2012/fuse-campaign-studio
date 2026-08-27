@@ -706,8 +706,9 @@ export default function BrandOnboardingPage() {
                 Continue <ArrowRight className="h-3.5 w-3.5" />
               </Button>
             </div>
-          </div>
-        ) : null}
+          ) : null}
+        </div>
+
       </main>
     </div>
   );
