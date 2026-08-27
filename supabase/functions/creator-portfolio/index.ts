@@ -292,8 +292,12 @@ Deno.serve(async (req) => {
       // token on this request — never from the request body.
       const viewer = await getOptionalUser(req, admin);
       const social = await loadSocial(admin, userId, viewer?.id ?? null);
+      const achievements = await loadPublicAchievements(admin, userId);
 
-      if (!(await hasCreatorRole(admin, userId))) return json({ ...emptyPortfolio, ...social });
+      if (!(await hasCreatorRole(admin, userId))) {
+        return json({ ...emptyPortfolio, ...social, achievements });
+      }
+
 
       const result = await loadTemplates(admin, userId);
       // Public mode: public-safe template/review fields only. No author PII,
