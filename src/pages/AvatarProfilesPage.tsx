@@ -17,7 +17,6 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
-import { uploadRunInputFile } from "@/services/runInputUpload";
 import {
   AVATAR_UPLOAD_TIPS,
   createUserAvatar,
@@ -25,6 +24,7 @@ import {
   listFuseAvatars,
   listMyAvatars,
   toggleFavorite,
+  uploadAvatarReference,
   type AvatarProfile,
 } from "@/services/avatarProfiles";
 
