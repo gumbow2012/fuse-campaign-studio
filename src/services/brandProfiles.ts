@@ -139,6 +139,70 @@ export async function setActiveBrand(brandId: string): Promise<void> {
   if (error) throw error;
 }
 
+/** Phase 6 — brand aesthetic captured during onboarding. */
+export interface BrandVisualStyle {
+  tags: string[];
+  tone: string;
+  references: string[];
+  notes: string;
+}
+
+/** Phase 8 — wizard progress so setup can always be resumed. */
+export interface BrandOnboardingState {
+  currentStep: number;
+  completedSteps: number[];
+  startedAt: string;
+  completedAt: string | null;
+}
+
+export function readVisualStyle(brand: BrandProfile | null): BrandVisualStyle | null {
+  const raw = (brand?.metadata ?? {}) as Record<string, unknown>;
+  const value = raw.visualStyle as Record<string, unknown> | undefined;
+  if (!value || typeof value !== "object") return null;
+  return {
+    tags: Array.isArray(value.tags) ? value.tags.map(String).filter(Boolean) : [],
+    tone: typeof value.tone === "string" ? value.tone : "",
+    references: Array.isArray(value.references) ? value.references.map(String).filter(Boolean) : [],
+    notes: typeof value.notes === "string" ? value.notes : "",
+  };
+}
+
+export function readOnboarding(brand: BrandProfile | null): BrandOnboardingState | null {
+  const raw = (brand?.metadata ?? {}) as Record<string, unknown>;
+  const value = raw.onboarding as Record<string, unknown> | undefined;
+  if (!value || typeof value !== "object") return null;
+  return {
+    currentStep: Number(value.currentStep) || 1,
+    completedSteps: Array.isArray(value.completedSteps) ? value.completedSteps.map(Number) : [],
+    startedAt: typeof value.startedAt === "string" ? value.startedAt : "",
+    completedAt: typeof value.completedAt === "string" ? value.completedAt : null,
+  };
+}
+
+export function readModelIds(brand: BrandProfile | null): string[] {
+  const raw = (brand?.metadata ?? {}) as Record<string, unknown>;
+  return Array.isArray(raw.modelIds) ? raw.modelIds.map(String).filter(Boolean) : [];
+}
+
+/** Partial update — only the provided columns are written. */
+export async function patchBrandProfile(
+  id: string,
+  patch: Partial<BrandProfileInput>,
+): Promise<void> {
+  const { error } = await table().update({ ...patch }).eq("id", id);
+  if (error) throw error;
+}
+
+/** Shallow-merges keys into brand_profiles.metadata (autosave-safe). */
+export async function patchBrandMetadata(
+  brand: BrandProfile,
+  patch: Record<string, unknown>,
+): Promise<void> {
+  const metadata = { ...((brand.metadata ?? {}) as Record<string, unknown>), ...patch };
+  await patchBrandProfile(brand.id, { metadata });
+}
+
+
 
 /** Brand images usable as template inputs (logos, tagged by role). */
 export function brandProfileAssets(brand: BrandProfile): { role: string; url: string }[] {
