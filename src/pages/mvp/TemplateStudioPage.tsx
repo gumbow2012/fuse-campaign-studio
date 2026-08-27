@@ -45,7 +45,7 @@ import { cn } from "@/lib/utils";
 import { canInitiateFork, resolveCustomizeState } from "@/lib/customizeGating";
 import { sortTemplatesForStudio } from "@/lib/templateOrdering";
 import { fetchTemplateDetail, fetchTemplates, type ApiTemplate, type RunFeedbackRecord, type TemplateDetail } from "@/services/fuseApi";
-import { uploadRunInputFile } from "@/services/runInputUpload";
+import { uploadAnonymousRunInput, uploadRunInputFile } from "@/services/runInputUpload";
 import { libraryKindForAssetType, saveLibraryAsset } from "@/services/libraryAssets";
 import { getStaticInputs } from "@/services/templateInputMap";
 import CreditConfirmModal from "@/components/CreditConfirmModal";
