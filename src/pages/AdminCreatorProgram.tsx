@@ -61,6 +61,7 @@ const AdminCreatorProgram = () => {
   const [busy, setBusy] = useState<string | null>(null);
   const [applications, setApplications] = useState<CreatorApplicationRow[]>([]);
   const [challenges, setChallenges] = useState<CreatorChallengeRow[]>([]);
+  const [invites, setInvites] = useState<InviteRow[]>([]);
   const [filter, setFilter] = useState<StatusFilter>("pending");
 
   const [draftTitle, setDraftTitle] = useState("");
@@ -73,12 +74,21 @@ const AdminCreatorProgram = () => {
 
   const [edits, setEdits] = useState<Record<string, Partial<CreatorChallengeRow>>>({});
 
+  const loadInvites = useCallback(async () => {
+    const { data, error } = await supabase.functions.invoke("manage-creators", {
+      body: { action: "list" },
+    });
+    if (error) return;
+    setInvites(((data as { invites?: InviteRow[] } | null)?.invites ?? []) as InviteRow[]);
+  }, []);
+
   const loadAll = useCallback(async () => {
     setLoading(true);
     try {
       const [apps, list] = await Promise.all([loadCreatorApplications(), loadAllChallenges()]);
       setApplications(apps);
       setChallenges(list);
+      await loadInvites();
     } catch (error) {
       toast({
         title: "Could not load creator program data",
@@ -88,7 +98,47 @@ const AdminCreatorProgram = () => {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [loadInvites]);
+
+  const resendInvite = useCallback(
+    async (row: InviteRow) => {
+      const mins = minutesSince(row.last_sent_at);
+      if (mins !== null && mins < 10) {
+        const ok = window.confirm(`Already sent ${mins}m ago — resend anyway?`);
+        if (!ok) return;
+      }
+      setBusy(`resend-${row.id}`);
+      try {
+        const { data, error } = await supabase.functions.invoke("manage-creators", {
+          body: { action: "resend", inviteId: row.id },
+        });
+        if (error) throw new Error(error.message);
+        const result = data as { ok?: boolean; reason?: string | null } | null;
+        if (result?.ok) {
+          toast({
+            title: "Invite re-sent",
+            description: "The email provider accepted the send. Delivery is not confirmed yet.",
+          });
+        } else {
+          toast({
+            title: "Resend failed",
+            description: result?.reason ?? "The provider rejected the send.",
+            variant: "destructive",
+          });
+        }
+        await loadInvites();
+      } catch (error) {
+        toast({
+          title: "Resend failed",
+          description: error instanceof Error ? error.message : "Unknown error",
+          variant: "destructive",
+        });
+      } finally {
+        setBusy(null);
+      }
+    },
+    [loadInvites],
+  );
 
   useEffect(() => {
     void loadAll();
