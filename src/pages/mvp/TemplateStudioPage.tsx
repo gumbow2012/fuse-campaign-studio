@@ -88,6 +88,7 @@ import { readModelIds } from "@/services/brandProfiles";
 import { readPublicFailure, type PublicGenerationFailure } from "@/lib/generationFailure";
 import { createFork } from "@/services/templateForks";
 import CampaignHistoryLauncher from "@/components/campaigns/CampaignHistoryLauncher";
+import ContinueCreatingStrip from "@/components/campaigns/ContinueCreatingStrip";
 import CampaignHistoryDrawer from "@/components/campaigns/CampaignHistoryDrawer";
 import { useCampaignHistory } from "@/hooks/useCampaignHistory";
 
