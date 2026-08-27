@@ -223,6 +223,12 @@ export default function TemplateInputCard({
           >
             {isFilled ? "✓ Ready" : required ? "Required" : "Optional"}
           </span>
+          {sourceNote && isFilled ? (
+            <span className="mt-1 ml-2 inline-block rounded-full border border-white/10 bg-white/[0.04] px-2 py-0.5 font-display text-[9px] uppercase tracking-[0.18em] text-slate-400">
+              {sourceNote}
+            </span>
+          ) : null}
+
         </div>
         <UploadGuide
           slotLabel={heading}
