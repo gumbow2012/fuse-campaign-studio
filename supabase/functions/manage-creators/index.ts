@@ -76,7 +76,9 @@ Deno.serve(async (req) => {
 
       const { data: invites, error: inviteError } = await admin
         .from("creator_invites")
-        .select("id, email, status, invited_by, created_at, accepted_at")
+        .select(
+          "id, email, status, invited_by, created_at, accepted_at, email_status, provider_message_id, delivered_at, bounced_at, failure_reason, last_sent_at, sent_count",
+        )
         .order("created_at", { ascending: false });
       if (inviteError) throw new Error(inviteError.message);
 
