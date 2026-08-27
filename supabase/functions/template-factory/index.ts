@@ -473,6 +473,11 @@ Deno.serve(async (req) => {
       return json(await analyzeReference(body, admin));
     }
 
+    if (action === "compile_blueprint") {
+      return json(await compileBlueprint(body, admin, access.user.id));
+    }
+
+
     return json({ ok: false, reason: `Unknown action: ${action || "(none)"}` }, 400);
   } catch (error) {
     return json({ ok: false, reason: errorMessage(error) }, 500);
