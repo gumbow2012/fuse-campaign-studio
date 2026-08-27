@@ -481,7 +481,92 @@ async function applyCreditPackTopup(args: {
   };
 }
 
+/**
+ * R3 — referral paid qualification + referrer reward.
+ * Best-effort and fully self-contained: any failure is logged and swallowed so
+ * billing/membership results are never affected. Amounts always come from
+ * referral_program_config (never hardcoded).
+ */
+async function maybeRewardReferrer(args: {
+  admin: ReturnType<typeof createAdminClient>;
+  userId: string;
+  amountPaidCents: number;
+  stripeEventId: string;
+}) {
+  const { admin, userId, amountPaidCents, stripeEventId } = args;
+  try {
+    if (!userId || amountPaidCents <= 0) return;
+
+    const { data: config } = await admin
+      .from("referral_program_config")
+      .select("enabled, referrer_bonus_credits_on_paid")
+      .limit(1)
+      .maybeSingle();
+
+    const rewardCredits = Number(config?.referrer_bonus_credits_on_paid ?? 0);
+    if (!config?.enabled || !Number.isFinite(rewardCredits) || rewardCredits <= 0) return;
+
+    const { data: attribution } = await admin
+      .from("referral_attributions")
+      .select("id, referrer_user_id, referred_user_id")
+      .eq("referred_user_id", userId)
+      .eq("status", "ATTRIBUTED")
+      .maybeSingle();
+    if (!attribution?.id || !attribution.referrer_user_id) return;
+
+    // Idempotency: UNIQUE(attribution_id, reward_type) makes the second event a no-op.
+    const { data: insertedRows, error: insertError } = await admin
+      .from("referral_rewards")
+      .upsert(
+        {
+          attribution_id: attribution.id,
+          referrer_user_id: attribution.referrer_user_id,
+          referred_user_id: attribution.referred_user_id,
+          reward_type: "referrer_qualified",
+          credits_amount: rewardCredits,
+          stripe_event_id: stripeEventId,
+        },
+        { onConflict: "attribution_id,reward_type", ignoreDuplicates: true },
+      )
+      .select("id");
+
+    if (insertError) throw new Error(insertError.message);
+    const created = Array.isArray(insertedRows) ? insertedRows[0] : insertedRows;
+    if (!created?.id) return; // already rewarded
+
+    const { error: creditError } = await admin.rpc("apply_credit_transaction", {
+      p_user_id: attribution.referrer_user_id,
+      p_amount: rewardCredits,
+      p_type: "adjustment",
+      p_description: "Referral reward — referred member qualified",
+      p_template_id: null,
+      p_project_id: null,
+      p_step_id: null,
+    });
+    if (creditError) throw new Error(creditError.message);
+
+    const nowIso = new Date().toISOString();
+    await admin
+      .from("referral_attributions")
+      .update({ status: "REWARDED", qualified_at: nowIso, rewarded_at: nowIso })
+      .eq("id", attribution.id);
+
+    await admin.from("user_notifications").insert({
+      user_id: attribution.referrer_user_id,
+      type: "referral",
+      title: "🎁 Referral qualified",
+      body: `You earned ${rewardCredits.toLocaleString()} FUSE credits.`,
+      action_label: "View referrals",
+      action_url: "/referrals",
+      metadata: { attribution_id: attribution.id, credits_amount: rewardCredits },
+    });
+  } catch (error) {
+    console.error("[referrals] paid qualification failed", errorMessage(error));
+  }
+}
+
 export function createCheckoutHandler(mode: StripeBillingMode) {
+
   return async (req: Request) => {
     if (req.method === "OPTIONS") {
       return new Response(null, { status: 204, headers: corsHeaders });
