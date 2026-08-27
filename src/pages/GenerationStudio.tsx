@@ -91,12 +91,18 @@ import {
   SectionTitle,
   SegmentedControl,
 } from "@/components/fuse/FuseUI";
+import {
+  CAMERA_MOVEMENT_PRESETS,
+  DEFAULT_CAMERA_MOVEMENT_ID,
+  getCameraMovementPreset,
+} from "@/lib/generationStudio/cameraMovementPresets";
 
 import {
   IMAGE_FLAT_USD as IMAGE_FALLBACK_USD,
   costPreview,
   creditsFromUsd,
 } from "@/lib/costEstimate";
+
 
 
 const MAX_REFERENCES = 15;
@@ -860,6 +866,9 @@ export default function GenerationStudio() {
   const [quality, setQuality] = useState("2K");
   const [duration, setDuration] = useState(5);
   const [generateAudio, setGenerateAudio] = useState(true);
+  /** VIDEO only — optional camera movement instruction appended to the prompt. */
+  const [cameraMovementId, setCameraMovementId] = useState<string>(DEFAULT_CAMERA_MOVEMENT_ID);
+
   const [generations, setGenerations] = useState<Generation[]>([]);
   const [library, setLibrary] = useState<string[]>(() => readReferenceLibrary());
   const [selected, setSelected] = useState<string[]>([]);
@@ -880,6 +889,11 @@ export default function GenerationStudio() {
     [modelKey],
   );
   const isVideo = model.kind === "video";
+
+  /** Selected movement fragment (video only, empty for "None"). */
+  const cameraMovement = isVideo ? getCameraMovementPreset(cameraMovementId) : undefined;
+  const movementFragment = cameraMovement?.promptFragment?.trim() ?? "";
+
 
   /** Live dollar + credit estimate; updates with model, duration and quality. */
   const estimatedCostUsd = useMemo(() => {
@@ -1482,11 +1496,13 @@ export default function GenerationStudio() {
 
 
   const handleGenerate = () => {
-    const text = prompt.trim();
-    if (!text) {
+    const base = prompt.trim();
+    if (!base) {
       toast.error("Describe the scene you imagine first");
       return;
     }
+    // Video only: append the optional camera movement instruction. Nothing else changes.
+    const text = movementFragment ? `${base}\n\n${movementFragment}` : base;
 
     const urls = references.map((entry) => entry.url);
     const payload: Record<string, unknown> = {
@@ -1494,6 +1510,7 @@ export default function GenerationStudio() {
       kind: model.kind,
       model: model.key,
       prompt: text,
+
       // Only send the secondary param the selected model truly accepts.
       ...(model.resolutions.length && quality
         ? { [model.paramField ?? "resolution"]: quality }
@@ -2099,6 +2116,72 @@ export default function GenerationStudio() {
                   <FieldHelper>Clip length in seconds.</FieldHelper>
                 </div>
               ) : null}
+
+              {/* VIDEO only — optional camera movement instruction.
+                  Placeholder chips for now: per-preset preview clips are a
+                  separate (paid) generation batch to be added later. */}
+              {isVideo ? (
+                <div>
+                  <SectionTitle hint={cameraMovement && movementFragment ? cameraMovement.name.toUpperCase() : "OPTIONAL"}>
+                    CAMERA MOVEMENT
+                  </SectionTitle>
+                  <div className="flex flex-wrap gap-2">
+                    {CAMERA_MOVEMENT_PRESETS.map((preset) => {
+                      const active = preset.id === cameraMovementId;
+                      return (
+                        <button
+                          key={preset.id}
+                          type="button"
+                          title={preset.description}
+                          aria-pressed={active}
+                          onClick={() => setCameraMovementId(preset.id)}
+                          className={cn(
+                            "flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 font-display text-[12px] font-semibold tracking-[0.04em] transition-colors",
+                            active
+                              ? "border-[hsl(var(--electric-blue)/0.55)] bg-[hsl(var(--electric-blue)/0.15)] text-[hsl(var(--electric-cyan))]"
+                              : "border-white/12 bg-black/30 text-foreground/80 hover:bg-white/[0.06]",
+                          )}
+                        >
+                          {/* previewUrl hook: real clips drop in here later without a redesign. */}
+                          {preset.previewUrl ? (
+                            <video
+                              src={preset.previewUrl}
+                              muted
+                              loop
+                              playsInline
+                              preload="none"
+                              className="h-6 w-9 rounded object-cover"
+                            />
+                          ) : (
+                            <span className="grid h-6 w-9 place-items-center rounded bg-white/[0.06]">
+                              <Film size={12} className="opacity-70" />
+                            </span>
+                          )}
+                          {preset.name.toUpperCase()}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {movementFragment ? (
+                    <div className="mt-3 rounded-lg border border-white/10 bg-black/30 p-3">
+                      <p className="font-display text-[11px] font-semibold tracking-[0.08em] text-muted-foreground">
+                        APPENDED TO YOUR PROMPT
+                      </p>
+                      <p className="mt-1.5 text-[13px] leading-relaxed text-foreground/85">{movementFragment}</p>
+                      <button
+                        type="button"
+                        onClick={() => setCameraMovementId(DEFAULT_CAMERA_MOVEMENT_ID)}
+                        className="mt-2 font-display text-[12px] font-semibold tracking-[0.06em] text-[hsl(var(--electric-cyan))] hover:underline"
+                      >
+                        REMOVE MOVEMENT
+                      </button>
+                    </div>
+                  ) : (
+                    <FieldHelper>Optional — adds one camera instruction to your prompt.</FieldHelper>
+                  )}
+                </div>
+              ) : null}
+
             </FusePanel>
 
             {/* Generate */}
