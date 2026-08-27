@@ -32,6 +32,9 @@ import { deriveBrandReadiness } from "@/lib/brandReadiness";
 import { stashBrandImport } from "@/services/brandImport";
 import BrandModelsPanel from "@/components/brand/BrandModelsPanel";
 import BrandLibraryPanel from "@/components/brand/BrandLibraryPanel";
+import BrandReadyCelebration, { hasCelebratedBrand } from "@/components/brand/BrandReadyCelebration";
+import { buildBrandAssetLibrary } from "@/services/brandAssetLibrary";
+import { describeBrandKnowledge } from "@/lib/brandActivation";
 import {
   deleteBrandProfile,
   readModelIds,
@@ -258,6 +261,26 @@ export default function BrandProfilesPage() {
   );
 
 
+  const assetLibrary = useMemo(
+    () =>
+      buildBrandAssetLibrary({
+        brand: activeBrand ?? null,
+        products,
+        avatars,
+        libraryAssets,
+      }),
+    [activeBrand, products, avatars, libraryAssets],
+  );
+  const knownAssetCount = assetLibrary.counts.all;
+
+  // Celebration: fires once per brand when required setup is satisfied.
+  const [celebrating, setCelebrating] = useState(false);
+  useEffect(() => {
+    if (!activeBrand || !readiness.ready) return;
+    if (hasCelebratedBrand(activeBrand.id)) return;
+    setCelebrating(true);
+  }, [activeBrand, readiness.ready]);
+
   const removeBrand = useMutation({
     mutationFn: (id: string) => deleteBrandProfile(id),
     onSuccess: () => {
@@ -457,9 +480,13 @@ export default function BrandProfilesPage() {
               />
               <DashboardCard
                 icon={<Shirt className="h-5 w-5" />}
-                title="Products & garments (optional)"
+                title="Products (optional)"
                 done={enhancements.products}
-                detail={`${brandProducts.length} saved for this brand.`}
+                detail={
+                  brandProducts.length
+                    ? `${brandProducts.length} product${brandProducts.length === 1 ? "" : "s"} — compatible campaigns are one-click.`
+                    : "Add products to make compatible campaigns one-click."
+                }
                 cta={enhancements.products ? "Manage products" : "Add products"}
                 onClick={() => {
                   setTab("products");
@@ -468,14 +495,14 @@ export default function BrandProfilesPage() {
               />
               <DashboardCard
                 icon={<Users className="h-5 w-5" />}
-                title="Models / FUSE Cast (optional)"
+                title="Cast (optional)"
                 done={enhancements.models}
                 detail={
                   brandModelCount
                     ? `${brandModelCount} model${brandModelCount === 1 ? "" : "s"} linked to this brand.`
                     : `${avatars.length} model${avatars.length === 1 ? "" : "s"} saved — none linked to this brand yet.`
                 }
-                cta={enhancements.models ? "Manage models" : "Add models"}
+                cta={enhancements.models ? "Manage cast" : "Choose cast"}
                 onClick={() => setTab("models")}
               />
               <DashboardCard
@@ -487,7 +514,7 @@ export default function BrandProfilesPage() {
                     ? [visualStyle?.tags.slice(0, 3).join(", "), visualStyle?.tone].filter(Boolean).join(" · ")
                     : "Tags, tone and references FUSE should always respect."
                 }
-                cta={enhancements.visualStyle ? "Edit your style" : "Set your style"}
+                cta={enhancements.visualStyle ? "Edit your style" : "Add references"}
                 onClick={() =>
                   activeBrand
                     ? navigate(`/app/brand/onboarding?brand=${activeBrand.id}&step=5`)
@@ -497,10 +524,10 @@ export default function BrandProfilesPage() {
 
               <DashboardCard
                 icon={<Images className="h-5 w-5" />}
-                title="Saved assets (optional)"
-                done={enhancements.assets}
-                detail={`${libraryAssets.length} asset${libraryAssets.length === 1 ? "" : "s"} in your library.`}
-                cta="Open library"
+                title="Assets (optional)"
+                done={knownAssetCount > 0}
+                detail={`${knownAssetCount} known asset${knownAssetCount === 1 ? "" : "s"} across identity, products, cast and uploads.`}
+                cta="Browse"
                 onClick={() => setTab("library")}
               />
             </div>
@@ -685,6 +712,19 @@ export default function BrandProfilesPage() {
             />
           </TabsContent>
         </Tabs>
+
+        <BrandReadyCelebration
+          open={celebrating}
+          brandId={activeBrand?.id ?? null}
+          brandName={activeBrand?.name ?? ""}
+          knows={describeBrandKnowledge({
+            brand: activeBrand ?? null,
+            productCount: brandProducts.length,
+            castCount: brandModelCount,
+            dnaPresent: enhancements.visualStyle,
+          })}
+          onClose={() => setCelebrating(false)}
+        />
       </main>
     </div>
   );
