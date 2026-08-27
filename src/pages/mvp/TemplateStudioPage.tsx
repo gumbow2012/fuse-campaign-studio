@@ -1271,7 +1271,9 @@ export default function TemplateStudioPage() {
           .filter(([, file]) => Boolean(file))
           .map(([key]) => key),
         returnTo: gateReturnTo,
+        creditCost: isPrivilegedUser ? 0 : creditsRequired,
         capturedAt: Date.now(),
+
       });
     }
     track("generate_auth_gate_shown", {

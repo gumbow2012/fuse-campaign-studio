@@ -18,6 +18,9 @@ export type PendingGenerationIntent = {
   pendingFileKeys: string[];
   /** Internal path to return to after auth. */
   returnTo: string;
+  /** Credits the configured run would cost (0 when unknown). */
+  creditCost?: number;
+
   capturedAt: number;
 };
 
