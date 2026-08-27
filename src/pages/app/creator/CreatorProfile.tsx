@@ -15,6 +15,7 @@ import { ExternalLink, Instagram, MapPin, Music2, Pencil } from "lucide-react";
 import SiteShell from "@/components/mvp/SiteShell";
 import PageMeta from "@/components/mvp/PageMeta";
 import { Button } from "@/components/ui/button";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAuth } from "@/contexts/AuthContext";
 import { accentStyle, resolveAccent } from "@/lib/creatorAccents";
 import { CreatorPerformanceProof } from "@/components/CreatorPerformance";
