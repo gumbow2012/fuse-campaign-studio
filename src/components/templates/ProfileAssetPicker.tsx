@@ -33,24 +33,8 @@ interface ProfileAssetPickerProps {
   title?: string;
 }
 
-/** Roles that best match an FT2 assetType — used only to sort suggestions. */
-function preferredRoles(assetType?: TemplateAssetType | null): string[] {
-  switch (assetType) {
-    case "garment-front":
-      return ["front"];
-    case "garment-back":
-      return ["back"];
-    case "logo":
-      return ["logo", "primary logo", "secondary logo"];
-    case "packaging":
-      return ["packaging"];
-    case "product":
-    case "jewelry":
-      return ["front", "macro", "detail"];
-    default:
-      return [];
-  }
-}
+/** Roles that best match an FT2 assetType — shared with the brand autofill. */
+
 
 interface ProfileGroup {
   id: string;
