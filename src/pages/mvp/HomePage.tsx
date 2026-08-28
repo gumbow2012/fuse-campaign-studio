@@ -186,7 +186,8 @@ function TemplateCard({
   const outputs = outputLabel(entry.template);
   const vibe = entry.template.category ?? entry.template.tags?.[0] ?? null;
   const templateId = String(entry.template.id ?? "");
-  const templateHref = templateId ? `/app/templates?template=${encodeURIComponent(templateId)}` : "/app/templates";
+  const templateHref = builderHref(templateId);
+
 
   return (
     <article className="group relative w-[248px] shrink-0 overflow-hidden rounded-[1.25rem] border border-white/10 bg-slate-950/80 transition-colors hover:border-cyan-200/40 sm:w-[272px]">
