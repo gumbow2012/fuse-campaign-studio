@@ -787,6 +787,13 @@ const GraphCanvasInner = ({
             if (!edge.id.startsWith("pending-")) onDeleteEdge(edge.id);
           }
         }}
+        onNodesDelete={(deleted) => {
+          if (!onDeleteNode) return;
+          for (const node of deleted) {
+            if (node.deletable === false) continue;
+            onDeleteNode(node.id);
+          }
+        }}
         elementsSelectable
         edgesFocusable
         deleteKeyCode={["Delete", "Backspace"]}
