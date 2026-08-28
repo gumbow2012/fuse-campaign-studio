@@ -33,6 +33,8 @@ type Body = {
   slotKey?: string | null;
   sampleUrl?: string | null;
   outputExposed?: boolean | null;
+  required?: boolean | null;
+  keepEditorMode?: boolean | null;
   detachAsset?: boolean | null;
   videoModel?: string | null;
   duration?: number | string | null;
@@ -147,6 +149,10 @@ Deno.serve(async (req) => {
       nextPromptConfig.editor_slot_key = normalizeNullable(body.slotKey);
     }
 
+    if ("required" in body && node.node_type === "user_input") {
+      nextPromptConfig.required = typeof body.required === "boolean" ? body.required : true;
+    }
+
     if ("sampleUrl" in body && node.node_type === "user_input") {
       nextPromptConfig.sample_url = normalizeNullable(body.sampleUrl);
     }
@@ -244,7 +250,11 @@ Deno.serve(async (req) => {
       });
 
       nextDefaultAssetId = uploadedAsset.id;
-      nextPromptConfig.editor_mode = "reference";
+      // keepEditorMode lets an authored "upload" input keep its mode while
+      // carrying a default fallback asset (used by optional inputs).
+      if (body.keepEditorMode !== true) {
+        nextPromptConfig.editor_mode = "reference";
+      }
       nextPromptConfig.weavy_exposed = false;
       delete nextPromptConfig.sample_url;
     }
