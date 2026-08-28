@@ -79,9 +79,19 @@ export function clearPendingAuthIntent() {
   }
 }
 
-/** Where to land after a successful auth. */
+export const DEFAULT_AUTH_DESTINATION = "/app/templates";
+
+/** An authenticated user must never be routed back into the auth surface. */
+function isAuthPath(path: string): boolean {
+  return path === "/auth" || path.startsWith("/auth?") || path.startsWith("/auth/");
+}
+
+/** Where to land after a successful auth. Never resolves to /auth. */
 export function resolveIntentDestination(intent: PendingAuthIntent): string {
-  if (intent.returnTo) return intent.returnTo;
-  if (intent.templateId) return `/app/templates?template=${encodeURIComponent(intent.templateId)}`;
-  return "/app/templates";
+  const candidate = intent.returnTo
+    ? intent.returnTo
+    : intent.templateId
+      ? `/app/templates?template=${encodeURIComponent(intent.templateId)}`
+      : DEFAULT_AUTH_DESTINATION;
+  return isAuthPath(candidate) ? DEFAULT_AUTH_DESTINATION : candidate;
 }
