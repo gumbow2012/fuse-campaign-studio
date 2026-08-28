@@ -212,7 +212,9 @@ export default function TemplateInputCard({
         <div className="min-w-0 flex-1">
           <p className="truncate font-display text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-200">
             {heading}
+            {isFilled ? <span className="ml-1.5 text-emerald-300">✓</span> : null}
           </p>
+
           <span
             className={cn(
               "mt-1 inline-block rounded-full border px-2 py-0.5 font-display text-[9px] uppercase tracking-[0.18em]",
