@@ -171,6 +171,7 @@ function TemplateCard({
   eager,
   index = 0,
   performance,
+  runs,
 }: {
   entry: Entry;
   badge?: { tone: "new" | "trending" | "creator"; label: string };
@@ -178,12 +179,17 @@ function TemplateCard({
   eager?: boolean;
   index?: number;
   performance?: TemplatePerformanceRow;
+  /** Real run count from public_template_popularity — omitted when unavailable. */
+  runs?: number | null;
 }) {
   const outputs = outputLabel(entry.template);
   const vibe = entry.template.category ?? entry.template.tags?.[0] ?? null;
+  const templateId = String(entry.template.id ?? "");
+  const templateHref = templateId ? `/app/templates?template=${encodeURIComponent(templateId)}` : "/app/templates";
 
   return (
     <article className="group relative w-[248px] shrink-0 overflow-hidden rounded-[1.25rem] border border-white/10 bg-slate-950/80 transition-colors hover:border-cyan-200/40 sm:w-[272px]">
+      <Link to={templateHref} className="absolute inset-0 z-10" aria-label={`Open ${entry.template.name}`} />
       <div className="relative aspect-[9/16] overflow-hidden bg-black">
         <AutoMedia
           media={entry.media}
@@ -197,8 +203,8 @@ function TemplateCard({
             <Badge tone={badge.tone}>{badge.label}</Badge>
           </div>
         )}
-        <div className="absolute right-3 top-3">
-          <AddToCollectionButton templateId={String(entry.template.id ?? "")} />
+        <div className="absolute right-3 top-3 z-20">
+          <AddToCollectionButton templateId={templateId} />
         </div>
       </div>
       <div className="absolute inset-x-0 bottom-0 p-4">
@@ -209,6 +215,12 @@ function TemplateCard({
         <p className="mt-1 text-[10px] uppercase tracking-[0.16em] text-slate-400">
           {[vibe, outputs].filter(Boolean).join(" · ")}
         </p>
+        {/* Real popularity only — nothing is rendered when the RPC has no row. */}
+        {typeof runs === "number" && runs > 0 && (
+          <p className="mt-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-cyan-100">
+            {runs.toLocaleString()} run{runs === 1 ? "" : "s"}
+          </p>
+        )}
         {creator ? (
           <p className="mt-1 text-[10px] text-slate-400">by {creator}</p>
         ) : (
@@ -217,14 +229,15 @@ function TemplateCard({
         <Button
           asChild
           size="sm"
-          className="mt-3 h-9 w-full rounded-full bg-cyan-300 text-[12px] font-semibold uppercase tracking-[0.14em] text-slate-950 hover:bg-cyan-200"
+          className="relative z-20 mt-3 h-9 w-full rounded-full bg-cyan-300 text-[12px] font-semibold uppercase tracking-[0.14em] text-slate-950 hover:bg-cyan-200"
         >
-          <Link to="/app/templates">Use Template</Link>
+          <Link to={templateHref}>Use Template</Link>
         </Button>
       </div>
     </article>
   );
 }
+
 
 
 function MediaShelf({ children }: { children: React.ReactNode }) {
