@@ -549,7 +549,7 @@ const TemplateFlowNode = ({ id, data, selected }: NodeProps<GraphCanvasNode>) =>
 
 const nodeTypes = { templateNode: TemplateFlowNode };
 
-type DeletableEdgeData = { onDelete?: (edgeId: string) => void; refLabel?: string };
+type DeletableEdgeData = { onDelete?: (edgeId: string) => void; refLabel?: string; edgeId?: string | null };
 
 const DeletableEdge = ({
   id,
@@ -609,7 +609,8 @@ const DeletableEdge = ({
               aria-label="Remove connection"
               onClick={(event) => {
                 event.stopPropagation();
-                data?.onDelete?.(id);
+                const realId = data?.edgeId ?? null;
+                if (realId) data?.onDelete?.(realId);
               }}
               className="flex h-5 w-5 items-center justify-center rounded-full border border-destructive/60 bg-background/95 text-destructive shadow-lg transition hover:bg-destructive hover:text-destructive-foreground"
             >
@@ -784,7 +785,9 @@ const GraphCanvasInner = ({
         }}
         onEdgesDelete={(deleted) => {
           for (const edge of deleted) {
-            if (!edge.id.startsWith("pending-")) onDeleteEdge(edge.id);
+            if (edge.id.startsWith("pending-")) continue;
+            const realId = (edge.data as { edgeId?: string | null } | undefined)?.edgeId ?? null;
+            if (realId) onDeleteEdge(realId);
           }
         }}
         onNodesDelete={(deleted) => {
