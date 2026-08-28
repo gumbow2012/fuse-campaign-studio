@@ -12,6 +12,8 @@ type PlanCheckoutOptions = {
   brandName?: string;
   templateId?: string;
   templateName?: string;
+  /** Internal path to land on after a successful checkout. Never /auth. */
+  returnPath?: string;
   onRedirect?: () => void;
 };
 
@@ -43,6 +45,7 @@ export function useMembershipCheckout() {
           brandName: options.brandName,
           templateId: options.templateId,
           templateName: options.templateName,
+          returnPath: options.returnPath,
         },
       });
       if (error) throw error;
