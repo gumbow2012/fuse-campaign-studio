@@ -398,6 +398,7 @@ export default function OutfitSwap() {
    * they are NOT sent to generation in this phase.
    */
   const [slotUploading, setSlotUploading] = useState<string | null>(null);
+  const [expandedRefs, setExpandedRefs] = useState<Set<number>>(new Set());
   const uploadGarmentSlot = useCallback(
     async (index: number, slot: GarmentSlot, file: File | undefined) => {
       if (!file) return;
