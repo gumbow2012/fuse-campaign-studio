@@ -368,6 +368,14 @@ async function startGeneration(
         fallbackFlatUsd: imageModel.fallbackFlatUsd ?? IMAGE_FALLBACK_USD,
       });
 
+      await chargeStudioCredits(admin, {
+        generationId: inserted.id,
+        userId: args.userId,
+        privileged: args.privileged === true,
+        estimatedCostUsd,
+        kind,
+      });
+
       const falInput = built.input;
 
       const requestId = await submitFalJob(endpointId, falInput, webhookUrl);
