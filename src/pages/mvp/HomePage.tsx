@@ -251,18 +251,23 @@ function MediaShelf({ children }: { children: React.ReactNode }) {
 function Shelf({
   label,
   heading,
+  description,
   entries,
   badge,
   id,
   perfMap,
+  runsMap,
   showDisclaimer,
 }: {
   label: string;
   heading: string;
+  description?: string;
   entries: Entry[];
   badge?: { tone: "new" | "trending" | "creator"; label: string };
   id?: string;
   perfMap?: TemplatePerformanceMap;
+  /** templateId → real run count. Missing ids simply render no count. */
+  runsMap?: Record<string, number>;
   showDisclaimer?: boolean;
 }) {
   if (!entries.length) return null;
@@ -272,6 +277,9 @@ function Shelf({
         <div>
           <SectionLabel>{label}</SectionLabel>
           <SectionHeading>{heading}</SectionHeading>
+          {description ? (
+            <p className="mt-3 max-w-xl text-sm leading-6 text-slate-400">{description}</p>
+          ) : null}
         </div>
         <Button asChild variant="ghost" className="rounded-full text-cyan-100 hover:text-white">
           <Link to="/app/templates">
@@ -289,6 +297,7 @@ function Shelf({
             index={index}
             eager={index < 2}
             performance={perfMap?.[String(entry.template.id ?? "")]}
+            runs={runsMap?.[String(entry.template.id ?? "")] ?? null}
           />
         ))}
       </MediaShelf>
@@ -296,6 +305,7 @@ function Shelf({
     </section>
   );
 }
+
 
 
 /* ---------------------------------- page ---------------------------------- */
