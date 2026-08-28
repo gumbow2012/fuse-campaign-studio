@@ -2024,11 +2024,13 @@ export default function OutfitSwap() {
                             {frame ? `${frame.time.toFixed(2)}s` : `Frame ${index + 1}`}
                           </span>
                           <span className="flex items-center gap-2">
+                            <QaBadge qa={qaReport[index]} />
                             <span className="text-[10px] text-cyan-200/70">
                               {costPreview(swap.estimatedCredits, swap.estimatedCostUsd)}
                             </span>
                             <StatusPill generation={swap} />
                           </span>
+
                         </div>
                         <button
                           type="button"
