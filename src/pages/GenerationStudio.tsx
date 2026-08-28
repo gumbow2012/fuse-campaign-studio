@@ -2045,6 +2045,8 @@ export default function GenerationStudio() {
                 </FieldHelper>
               )}
             </FusePanel>
+            )}
+
 
             {/* Creative direction */}
             <FusePanel>
