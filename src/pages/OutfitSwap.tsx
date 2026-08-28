@@ -788,6 +788,14 @@ export default function OutfitSwap() {
       // the previous request exactly as it was.
       const frameAnalysis =
         analysis?.frames.find((entry) => entry.frameId === `frame-${frameIndex}`) ?? null;
+      // PHASE 6: this frame's manual overrides (if any) are folded in here. With
+      // no overrides the payload is byte-for-byte the Phase 5 request.
+      const resolved = applyFrameOverrides({
+        frameSubjects: frameAnalysis?.subjects ?? [],
+        castAssignment,
+        modelAssignment,
+        overrides: frameOverrides[frameIndex],
+      });
       const data = await callOutfitSwap<{ generation: SwapGeneration }>({
         action: "swap_frame",
         sourceFrameUrl: frame.url,
@@ -799,9 +807,9 @@ export default function OutfitSwap() {
         aspectRatio: meta?.aspectRatio,
         extraPrompt,
         resolution: "2K",
-        frameSubjects: frameAnalysis?.subjects ?? [],
-        castAssignment,
-        modelAssignment,
+        frameSubjects: resolved.frameSubjects,
+        castAssignment: resolved.castAssignment,
+        modelAssignment: resolved.modelAssignment,
       });
       setSwaps((prev) => ({ ...prev, [frameIndex]: data.generation }));
       setApproved((prev) => {
@@ -809,9 +817,17 @@ export default function OutfitSwap() {
         next.delete(frameIndex);
         return next;
       });
+      // A fresh render invalidates the old verdict — QA re-evaluates it.
+      setQaReport((prev) => {
+        if (!prev[frameIndex]) return prev;
+        const next = { ...prev };
+        delete next[frameIndex];
+        return next;
+      });
     },
-    [frames, garments, meta, extraPrompt, analysis, castAssignment, modelAssignment],
+    [frames, garments, meta, extraPrompt, analysis, castAssignment, modelAssignment, frameOverrides],
   );
+
 
 
   const runSelectedSwaps = useCallback(async () => {
