@@ -187,6 +187,8 @@ export async function analyzeOutfitSwapSource(
  * phase.
  */
 export type OutfitSwapGarment = {
+  /** Stable id inside the run — used by the Phase 3 cast assignment. */
+  id: string;
   /** Primary reference used by generation today (mirrors `frontUrl`). */
   url: string;
   name: string;
@@ -200,3 +202,76 @@ export type OutfitSwapGarment = {
   detailUrl?: string | null;
   sideUrl?: string | null;
 };
+
+/* ------------------------------------------------------------------ *
+ * PHASE 3 — SUBJECT → GARMENT ASSIGNMENT (mapping + storage only)
+ * ------------------------------------------------------------------ */
+
+/** Wardrobe assigned to ONE detected subject track. */
+export type OutfitSwapSubjectWardrobe = {
+  topGarmentId: string | null;
+  bottomGarmentId: string | null;
+};
+
+/** subject track id → assigned garment ids. */
+export type OutfitSwapCastAssignment = Record<string, OutfitSwapSubjectWardrobe>;
+
+const TOP_TYPES = ["Shirt / Top", "Hoodie / Jacket"];
+const BOTTOM_TYPES = ["Pants", "Shorts"];
+
+export function isTopGarment(garment: OutfitSwapGarment) {
+  return TOP_TYPES.includes(garment.type);
+}
+
+export function isBottomGarment(garment: OutfitSwapGarment) {
+  return BOTTOM_TYPES.includes(garment.type);
+}
+
+/**
+ * Offers an obvious mapping when one exists — never applied silently, the user
+ * accepts or changes it. Returns null when there is nothing obvious to suggest.
+ */
+export function suggestCastAssignment(
+  subjectIds: string[],
+  garments: OutfitSwapGarment[],
+): OutfitSwapCastAssignment | null {
+  if (!subjectIds.length || !garments.length) return null;
+  const tops = garments.filter(isTopGarment);
+  const bottoms = garments.filter(isBottomGarment);
+  if (!tops.length && !bottoms.length) return null;
+
+  const pick = (pool: OutfitSwapGarment[], index: number) => {
+    if (!pool.length) return null;
+    // One item for everyone, otherwise one per subject in order.
+    return (pool.length === 1 ? pool[0] : pool[index % pool.length]).id;
+  };
+
+  const suggestion: OutfitSwapCastAssignment = {};
+  subjectIds.forEach((subjectId, index) => {
+    suggestion[subjectId] = {
+      topGarmentId: pick(tops, index),
+      bottomGarmentId: pick(bottoms, index),
+    };
+  });
+  return suggestion;
+}
+
+const CAST_KEY = (fingerprint: string) => `fuse-outfit-swap-cast-v1:${fingerprint}`;
+
+/** The mapping is stored with the run so returning here does not recompute it. */
+export function loadCastAssignment(fingerprint: string): OutfitSwapCastAssignment | null {
+  try {
+    const raw = window.localStorage.getItem(CAST_KEY(fingerprint));
+    return raw ? (JSON.parse(raw) as OutfitSwapCastAssignment) : null;
+  } catch {
+    return null;
+  }
+}
+
+export function saveCastAssignment(fingerprint: string, assignment: OutfitSwapCastAssignment) {
+  try {
+    window.localStorage.setItem(CAST_KEY(fingerprint), JSON.stringify(assignment));
+  } catch {
+    // Assignment is a convenience mapping — a storage failure must not break the run.
+  }
+}

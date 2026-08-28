@@ -52,6 +52,12 @@ import {
   callOutfitSwap,
   createTemplateFromOutfitSwap,
   persistTemplateLayout,
+  loadCastAssignment,
+  saveCastAssignment,
+  suggestCastAssignment,
+  isBottomGarment,
+  isTopGarment,
+  type OutfitSwapCastAssignment,
   type OutfitSwapGarment,
   type OutfitSwapSourceAnalysis,
   type OutfitSwapTemplateResult,
@@ -184,6 +190,77 @@ function GarmentSlotUpload({
 
 
 
+/** One detected subject track + its assigned wardrobe (mapping only). */
+function SubjectCastCard({
+  label,
+  description,
+  portraitUrl,
+  garments,
+  wardrobe,
+  onChange,
+}: {
+  label: string;
+  description: string;
+  portraitUrl: string | null;
+  garments: Garment[];
+  wardrobe: { topGarmentId: string | null; bottomGarmentId: string | null } | null;
+  onChange: (slot: "topGarmentId" | "bottomGarmentId", garmentId: string | null) => void;
+}) {
+  const tops = garments.filter(isTopGarment);
+  const bottoms = garments.filter(isBottomGarment);
+  const name = (garment: Garment) => garment.label || garment.name || garment.type;
+
+  const renderSlot = (
+    slotLabel: string,
+    slot: "topGarmentId" | "bottomGarmentId",
+    pool: Garment[],
+    value: string | null,
+  ) => (
+    <div>
+      <label className="mb-1 block text-[10px] uppercase tracking-[0.14em] text-cyan-200/70">
+        {slotLabel}
+      </label>
+      <select
+        value={value ?? ""}
+        onChange={(event) => onChange(slot, event.target.value || null)}
+        className={SELECT_CLASS}
+      >
+        <option value="">Unassigned</option>
+        {/* The library is reusable — one garment can dress several subjects. */}
+        {(pool.length ? pool : garments).map((garment) => (
+          <option key={garment.id} value={garment.id}>
+            {name(garment)}
+          </option>
+        ))}
+      </select>
+    </div>
+  );
+
+  return (
+    <div className="rounded-2xl border border-white/10 bg-black/25 p-2.5">
+      <div className="flex gap-3">
+        <div className="h-24 w-16 shrink-0 overflow-hidden rounded-xl border border-white/10 bg-black/50">
+          {portraitUrl ? (
+            <img src={portraitUrl} alt={label} className="h-full w-full object-cover object-top" />
+          ) : null}
+        </div>
+        <div className="min-w-0 flex-1 space-y-2">
+          <div className="min-w-0">
+            <p className="text-[11px] font-semibold tracking-wide text-cyan-100">{label}</p>
+            {description ? (
+              <p className="truncate text-[10px] text-muted-foreground" title={description}>
+                {description}
+              </p>
+            ) : null}
+          </div>
+          {renderSlot("Top", "topGarmentId", tops, wardrobe?.topGarmentId ?? null)}
+          {renderSlot("Bottom", "bottomGarmentId", bottoms, wardrobe?.bottomGarmentId ?? null)}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function StatusPill({ generation }: { generation?: SwapGeneration }) {
   if (!generation) return <span className="text-[11px] text-muted-foreground">Not generated</span>;
   const label = generation.status === "complete"
@@ -304,6 +381,11 @@ export default function OutfitSwap() {
   >("idle");
   const [analysis, setAnalysis] = useState<OutfitSwapSourceAnalysis | null>(null);
   const [analysisError, setAnalysisError] = useState<string | null>(null);
+  const [analysisFingerprint, setAnalysisFingerprint] = useState<string | null>(null);
+  // PHASE 3 — subject track id → assigned garment ids. Mapping only: it is
+  // stored with the run and is NOT sent to the generation calls in this phase.
+  const [castAssignment, setCastAssignment] = useState<OutfitSwapCastAssignment>({});
+  const [suggestionDismissed, setSuggestionDismissed] = useState(false);
 
   const [garments, setGarments] = useState<Garment[]>([]);
   const [uploadingGarment, setUploadingGarment] = useState(false);
@@ -356,6 +438,9 @@ export default function OutfitSwap() {
       );
       setAnalysisStage("orientation");
       setAnalysis(result.analysis);
+      setAnalysisFingerprint(result.fingerprint);
+      setSuggestionDismissed(false);
+      setCastAssignment(loadCastAssignment(result.fingerprint) ?? {});
       setAnalysisStage("done");
     } catch (error) {
       setAnalysisError(error instanceof Error ? error.message : "Could not analyse that clip");
@@ -434,6 +519,10 @@ export default function OutfitSwap() {
         const compressed = await compressImageFile(file);
         const stored = await uploadToStorage(folder, compressed, compressed.name);
         uploaded.push({
+          id:
+            typeof crypto !== "undefined" && "randomUUID" in crypto
+              ? crypto.randomUUID()
+              : `garment-${Date.now()}-${Math.random().toString(16).slice(2)}`,
           // FRONT is the primary reference: `url` mirrors `frontUrl` so the
           // existing generation call keeps working unchanged.
           url: stored.url,
@@ -488,6 +577,60 @@ export default function OutfitSwap() {
       }
     },
     [],
+  );
+
+  /* --------------------- 3b. Cast assignment (mapping only) ------------------ */
+
+  const subjectTracks = useMemo(
+    () => (analysis && analysis.subjectCount > 1 ? analysis.subjectTracks : []),
+    [analysis],
+  );
+
+  const suggestedAssignment = useMemo(
+    () => suggestCastAssignment(subjectTracks.map((track) => track.subjectId), garments),
+    [subjectTracks, garments],
+  );
+
+  const hasAssignment = useMemo(
+    () =>
+      subjectTracks.some((track) => {
+        const entry = castAssignment[track.subjectId];
+        return Boolean(entry?.topGarmentId || entry?.bottomGarmentId);
+      }),
+    [subjectTracks, castAssignment],
+  );
+
+  // Stored with the run so navigating back never recomputes the mapping.
+  useEffect(() => {
+    if (!analysisFingerprint) return;
+    saveCastAssignment(analysisFingerprint, castAssignment);
+  }, [analysisFingerprint, castAssignment]);
+
+  const setSubjectGarment = useCallback(
+    (subjectId: string, slot: "topGarmentId" | "bottomGarmentId", garmentId: string | null) => {
+      setCastAssignment((prev) => ({
+        ...prev,
+        [subjectId]: {
+          topGarmentId: prev[subjectId]?.topGarmentId ?? null,
+          bottomGarmentId: prev[subjectId]?.bottomGarmentId ?? null,
+          [slot]: garmentId,
+        },
+      }));
+    },
+    [],
+  );
+
+  /** The source frame where this track first appears — used as its portrait. */
+  const subjectPortrait = useCallback(
+    (appearsStart: number) => {
+      if (!frames.length) return null;
+      let best = frames[0];
+      for (const frame of frames) {
+        if (Math.abs(frame.time - appearsStart) < Math.abs(best.time - appearsStart)) best = frame;
+      }
+      return best.url;
+    },
+    [frames],
   );
 
   /* ------------------------------ 4. Frame swaps ---------------------------- */
@@ -1215,6 +1358,58 @@ export default function OutfitSwap() {
                 />
               </div>
             </SectionCard>
+
+            {/* PHASE 3 — only appears when the clip really has multiple subjects.
+                One subject keeps the flow exactly as simple as before. */}
+            {subjectTracks.length > 1 ? (
+              <SectionCard
+                step={4}
+                title="Assign your cast"
+                hint="Assign wardrobe once per subject — the same product can go on more than one person."
+              >
+                {suggestedAssignment && !hasAssignment && !suggestionDismissed ? (
+                  <div className="mb-3 flex flex-wrap items-center gap-2 rounded-xl border border-cyan-200/25 bg-cyan-400/5 px-3 py-2 text-[11px] text-cyan-100">
+                    <span>Suggested assignment available — you can change anything after applying.</span>
+                    <Button
+                      size="sm"
+                      onClick={() => setCastAssignment(suggestedAssignment)}
+                      className="h-6 rounded-lg bg-cyan-400/20 px-2 text-[10px] uppercase tracking-[0.12em] text-cyan-100 hover:bg-cyan-400/30"
+                    >
+                      Use suggestion
+                    </Button>
+                    <button
+                      type="button"
+                      onClick={() => setSuggestionDismissed(true)}
+                      className="text-[10px] uppercase tracking-[0.12em] text-foreground/50 hover:text-foreground/80"
+                    >
+                      Dismiss
+                    </button>
+                  </div>
+                ) : null}
+
+                {garments.length ? (
+                  <div className="grid gap-2.5 sm:grid-cols-2">
+                    {subjectTracks.map((track, index) => (
+                      <SubjectCastCard
+                        key={track.subjectId}
+                        label={`Subject ${index + 1}`}
+                        description={track.description}
+                        portraitUrl={subjectPortrait(track.appearsStart)}
+                        garments={garments}
+                        wardrobe={castAssignment[track.subjectId] ?? null}
+                        onChange={(slot, garmentId) => setSubjectGarment(track.subjectId, slot, garmentId)}
+                      />
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-[11px] text-muted-foreground">
+                    Add clothing references above to assign them to each subject.
+                  </p>
+                )}
+              </SectionCard>
+            ) : null}
+
+
 
             <SectionCard step={5} title="Video generation" hint="Your clip, rebuilt in the new wardrobe.">
               <div className="space-y-3">
