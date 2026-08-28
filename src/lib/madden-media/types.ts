@@ -121,7 +121,15 @@ export function createEmptyProjectState(): MaddenProjectState {
       environment: createSlot("environment"),
     },
     shots: [],
-    settings: { aspectRatio: "9:16", lookName: "", globalNotes: "" },
+    settings: {
+      aspectRatio: "9:16",
+      lookName: "",
+      globalNotes: "",
+      cinematographyId: null,
+      lightingId: null,
+      environmentId: null,
+    },
+
   };
 }
 
