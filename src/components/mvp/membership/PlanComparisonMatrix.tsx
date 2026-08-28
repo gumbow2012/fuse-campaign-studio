@@ -1,4 +1,4 @@
-import { PLAN_LADDER, type PlanLadderEntry } from "@/lib/planLadder";
+import { SALE_PLAN_LADDER, type PlanLadderEntry } from "@/lib/planLadder";
 
 type Props = {
   plan: string | null | undefined;
@@ -31,7 +31,7 @@ const ROWS: Row[] = [
   { label: "Run campaign templates", value: from("starter") },
   { label: "Full template library", value: from("starter") },
   { label: "Saved brand assets", value: from("starter") },
-  { label: "FUSE Cast + My Avatars", value: from("capsule") },
+  { label: "FUSE Cast + My Avatars", value: from("pro") },
   { label: "Workflow customization", value: from("pro") },
   { label: "Private workflow forks", value: from("pro") },
   { label: "Creator Program eligible", value: from("pro") },
@@ -50,7 +50,7 @@ export default function PlanComparisonMatrix({ plan, subscriptionStatus }: Props
             <th className="w-[220px] px-3 py-3 text-left text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
               Feature
             </th>
-            {PLAN_LADDER.map((entry) => {
+            {SALE_PLAN_LADDER.map((entry) => {
               const isCurrent = isActive && plan === entry.key;
               return (
                 <th
@@ -77,7 +77,7 @@ export default function PlanComparisonMatrix({ plan, subscriptionStatus }: Props
           {ROWS.map((row) => (
             <tr key={row.label} className="border-t border-white/5">
               <td className="sticky left-0 bg-[#0B1120]/95 px-3 py-2.5 text-slate-300">{row.label}</td>
-              {PLAN_LADDER.map((entry) => {
+              {SALE_PLAN_LADDER.map((entry) => {
                 const value = row.value(entry);
                 return (
                   <td

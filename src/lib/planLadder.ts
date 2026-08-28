@@ -66,6 +66,12 @@ export type PlanLadderEntry = {
   ctaLabel: string;
   recommended?: boolean;
   featured?: boolean;
+  /**
+   * HIDDEN FROM SALE — definition kept intact (so historical records and future
+   * re-enablement work) but never rendered as a pricing card. Flip to false once a
+   * real purchasable Stripe price exists.
+   */
+  hiddenFromSale?: boolean;
   isFreeState?: boolean;
 };
 
@@ -92,6 +98,7 @@ export const PLAN_LADDER: PlanLadderEntry[] = [
     checkout: "none",
     ctaLabel: "Start free",
     isFreeState: true,
+    featured: true,
   },
   {
     key: "starter",
@@ -127,7 +134,6 @@ export const PLAN_LADDER: PlanLadderEntry[] = [
     badge: "Coming soon",
     icon: Package,
     accent: "violet",
-    recommendation: "MOST POPULAR",
     description: "Enough campaign volume to shoot an entire capsule collection in one month.",
     price: 60,
     annualPrice: 48,
@@ -142,7 +148,8 @@ export const PLAN_LADDER: PlanLadderEntry[] = [
     ],
     checkout: "gated",
     ctaLabel: "Join the Capsule waitlist",
-    featured: true,
+    // No live $60 price → hidden from every pricing surface (see hiddenFromSale).
+    hiddenFromSale: true,
   },
   {
     key: "pro",
@@ -159,7 +166,7 @@ export const PLAN_LADDER: PlanLadderEntry[] = [
     creditsLabel: `${STRIPE_TIERS.pro.monthlyCredits.toLocaleString()} credits/mo`,
     goodFor: "A campaign every week, all month",
     benefits: [
-      "Everything in Capsule",
+      "Everything in Starter",
       "Workflow customization",
       "Advanced generation controls",
       "Campaign versions + revisions",
@@ -219,7 +226,10 @@ export const PLAN_LADDER: PlanLadderEntry[] = [
   },
 ];
 
-export const FEATURED_PLANS = PLAN_LADDER.filter((entry) => entry.featured);
+/** Every plan that may be rendered/sold today. Capsule is hidden until it has a price. */
+export const SALE_PLAN_LADDER = PLAN_LADDER.filter((entry) => !entry.hiddenFromSale);
+
+export const FEATURED_PLANS = SALE_PLAN_LADDER.filter((entry) => entry.featured);
 
 /** Selector label — the exact percent lives on each card (it can vary by plan). */
 export const ANNUAL_SAVINGS_LABEL = "Best savings";

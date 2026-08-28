@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import GatedPlanDialog from "@/components/mvp/membership/GatedPlanDialog";
 import PlanComparisonMatrix from "@/components/mvp/membership/PlanComparisonMatrix";
 import {
-  PLAN_LADDER,
+  SALE_PLAN_LADDER,
   WELCOME_CREDITS_ONCE,
   isCheckoutLive,
   type PlanAccentKey,
@@ -291,8 +291,8 @@ function PlanCard({
   );
 }
 
-/** Mobile stack order — Capsule first, Free stays a quiet entry at the end. */
-const MOBILE_ORDER = ["capsule", "starter", "pro", "studio", "team", "free"];
+/** Card order — Free first, then the live paid ladder. Team lives under "View all plans". */
+const MOBILE_ORDER = ["free", "starter", "pro", "studio", "team"];
 const mobileRank = (entry: PlanLadderEntry) => {
   const index = MOBILE_ORDER.indexOf(entry.key);
   return index === -1 ? MOBILE_ORDER.length : index;
@@ -316,7 +316,7 @@ export default function PlanTierCards({
   const hasActivePaidPlan =
     currentPlan !== "free" && (subscriptionStatus === "active" || subscriptionStatus === "trialing");
 
-  const visible = (showAll ? PLAN_LADDER : PLAN_LADDER.filter((entry) => entry.featured))
+  const visible = (showAll ? SALE_PLAN_LADDER : SALE_PLAN_LADDER.filter((entry) => entry.featured))
     .slice()
     .sort((a, b) => mobileRank(a) - mobileRank(b));
 
@@ -365,7 +365,7 @@ export default function PlanTierCards({
         onClick={() => setShowAll((open) => !open)}
         className="w-full rounded-full border-white/15 bg-white/5 text-foreground hover:bg-white/10 sm:w-auto"
       >
-        {showAll ? "Show featured plans" : "View all plans — incl. Free & Team"}
+        {showAll ? "Show featured plans" : "View all plans — incl. Team"}
       </Button>
 
       {comparison ? (
