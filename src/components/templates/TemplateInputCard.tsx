@@ -36,7 +36,6 @@ import { libraryKindForAssetType } from "@/services/libraryAssets";
 
 import { runUploadChecks, type UploadCheckResult, type UploadCheckState } from "@/lib/uploadChecks";
 import {
-  inputRoleWord,
   resolveInputRole,
   resolveInputSources,
   type AssetSourceKind,
@@ -163,7 +162,6 @@ export default function TemplateInputCard({
   }, [file, requirement?.transparencyRecommended]);
 
   const role = resolveInputRole(label, requirement?.assetType);
-  const roleWord = inputRoleWord(label, role);
   const heading = displayLabel ?? label;
   const sources = resolveInputSources(label, role, Boolean(castPanel));
   const availableSources = sources.filter((source) =>
@@ -212,7 +210,9 @@ export default function TemplateInputCard({
         <div className="min-w-0 flex-1">
           <p className="truncate font-display text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-200">
             {heading}
+            {isFilled ? <span className="ml-1.5 text-emerald-300">✓</span> : null}
           </p>
+
           <span
             className={cn(
               "mt-1 inline-block rounded-full border px-2 py-0.5 font-display text-[9px] uppercase tracking-[0.18em]",
@@ -296,9 +296,10 @@ export default function TemplateInputCard({
           <span className="flex h-7 w-7 items-center justify-center rounded-full border border-cyan-200/35 text-cyan-100">
             <Plus className="h-3.5 w-3.5" />
           </span>
-          <span className="font-display text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-200">
-            Add {roleWord}
+          <span className="truncate font-display text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-200">
+            Add {heading}
           </span>
+
         </button>
       )}
 
