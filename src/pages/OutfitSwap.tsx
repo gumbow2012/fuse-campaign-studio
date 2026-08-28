@@ -508,6 +508,60 @@ export default function OutfitSwap() {
     [],
   );
 
+  /* --------------------- 3b. Cast assignment (mapping only) ------------------ */
+
+  const subjectTracks = useMemo(
+    () => (analysis && analysis.subjectCount > 1 ? analysis.subjectTracks : []),
+    [analysis],
+  );
+
+  const suggestedAssignment = useMemo(
+    () => suggestCastAssignment(subjectTracks.map((track) => track.subjectId), garments),
+    [subjectTracks, garments],
+  );
+
+  const hasAssignment = useMemo(
+    () =>
+      subjectTracks.some((track) => {
+        const entry = castAssignment[track.subjectId];
+        return Boolean(entry?.topGarmentId || entry?.bottomGarmentId);
+      }),
+    [subjectTracks, castAssignment],
+  );
+
+  // Stored with the run so navigating back never recomputes the mapping.
+  useEffect(() => {
+    if (!analysisFingerprint) return;
+    saveCastAssignment(analysisFingerprint, castAssignment);
+  }, [analysisFingerprint, castAssignment]);
+
+  const setSubjectGarment = useCallback(
+    (subjectId: string, slot: "topGarmentId" | "bottomGarmentId", garmentId: string | null) => {
+      setCastAssignment((prev) => ({
+        ...prev,
+        [subjectId]: {
+          topGarmentId: prev[subjectId]?.topGarmentId ?? null,
+          bottomGarmentId: prev[subjectId]?.bottomGarmentId ?? null,
+          [slot]: garmentId,
+        },
+      }));
+    },
+    [],
+  );
+
+  /** The source frame where this track first appears — used as its portrait. */
+  const subjectPortrait = useCallback(
+    (appearsStart: number) => {
+      if (!frames.length) return null;
+      let best = frames[0];
+      for (const frame of frames) {
+        if (Math.abs(frame.time - appearsStart) < Math.abs(best.time - appearsStart)) best = frame;
+      }
+      return best.url;
+    },
+    [frames],
+  );
+
   /* ------------------------------ 4. Frame swaps ---------------------------- */
 
   /** Merge a fresh generation record into whichever collection owns it. */
