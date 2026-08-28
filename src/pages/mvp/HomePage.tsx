@@ -535,20 +535,29 @@ export default function HomePage() {
               <span className="text-cyan-200">already built.</span>
             </h1>
             <p className="mt-5 max-w-xl text-lg leading-8 text-slate-300">
-              Pick a proven creative. Add your brand. FUSE does the rest.
+              Pick one. Add your brand. Generate.
             </p>
 
-            {/* Role-aware CTAs — Explore Templates is always primary. */}
+            {/* CONVERSION: primary CTA drops straight into the builder on the top
+                trending template — browsing is demoted to a secondary link. */}
             <div className="mt-7 flex flex-wrap items-center gap-3">
               <Button
                 asChild
                 size="lg"
                 className="rounded-full bg-cyan-300 px-8 font-semibold text-slate-950 hover:bg-cyan-200"
               >
-                <Link to="/app/templates">
-                  Explore Templates
+                <Link to={startCampaignHref}>
+                  Start a campaign
                   <ArrowRight className="h-4 w-4" />
                 </Link>
+              </Button>
+
+              <Button
+                asChild
+                variant="ghost"
+                className="rounded-full px-4 text-sm text-slate-300 hover:text-white"
+              >
+                <Link to="/app/templates">Explore templates</Link>
               </Button>
 
               {!user ? (
@@ -561,6 +570,7 @@ export default function HomePage() {
                   <Link to="/auth?mode=signup">Sign up free</Link>
                 </Button>
               ) : null}
+
 
               {isCreator ? (
                 <Button
