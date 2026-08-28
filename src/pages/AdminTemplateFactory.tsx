@@ -787,65 +787,87 @@ export default function AdminTemplateFactory() {
                       </a>
                     ) : null}
 
-                    <div className="mt-4 flex flex-wrap items-center gap-2">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="rounded-full border-cyan-300/30 bg-cyan-300/10 text-cyan-100 hover:bg-cyan-300/20"
-                        disabled={!reference.image_url || analyzingId === reference.id}
-                        onClick={() => analyzeMutation.mutate(reference)}
-                      >
-                        {analyzingId === reference.id ? (
-                          <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
-                        ) : (
-                          <Sparkles className="mr-2 h-3.5 w-3.5" />
-                        )}
-                        {analyzingId === reference.id
-                          ? "Analyzing…"
-                          : reference.blueprint
-                            ? "Re-analyze"
-                            : "Analyze"}
-                      </Button>
-                      {reference.blueprint ? (
+                    <PipelineTrack done={pipeline.done} />
+
+                    <div className="mt-3 flex flex-wrap items-center gap-2">
+                      {!pipeline.analyzed ? (
                         <Button
                           size="sm"
-                          variant="outline"
-                          className="rounded-full border-emerald-300/30 bg-emerald-300/10 text-emerald-100 hover:bg-emerald-300/20"
-                          disabled={compilingId === reference.id}
-                          onClick={() => compileMutation.mutate(reference.id)}
+                          className="rounded-full bg-cyan-300 text-slate-950 hover:bg-cyan-200"
+                          disabled={!reference.image_url || analyzingId === reference.id}
+                          onClick={() => analyzeMutation.mutate(reference)}
                         >
-                          {compilingId === reference.id ? (
+                          {analyzingId === reference.id ? (
                             <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
                           ) : (
-                            <Network className="mr-2 h-3.5 w-3.5" />
+                            <Sparkles className="mr-2 h-3.5 w-3.5" />
                           )}
-                          {compilingId === reference.id
-                            ? "Compiling…"
-                            : reference.compiled_template_id
-                              ? "Recompile"
-                              : "Compile to template"}
+                          {analyzingId === reference.id ? "Analyzing…" : "Analyze"}
                         </Button>
-                      ) : null}
-                      {reference.blueprint ? (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="rounded-full border-white/15 bg-white/5"
-                          disabled={scoringId === reference.id}
-                          onClick={() => scoreMutation.mutate(reference)}
-                        >
-                          {scoringId === reference.id ? (
-                            <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
-                          ) : (
-                            <Gauge className="mr-2 h-3.5 w-3.5" />
-                          )}
-                          {scoringId === reference.id
-                            ? "Scoring…"
-                            : reference.viral_score === null
-                              ? "Score"
-                              : "Rescore"}
-                        </Button>
-                      ) : null}
+                      ) : (
+                        <>
+                          {!pipeline.scored ? (
+                            <Button
+                              size="sm"
+                              className="rounded-full bg-cyan-300 text-slate-950 hover:bg-cyan-200"
+                              disabled={scoringId === reference.id}
+                              onClick={() => scoreMutation.mutate(reference)}
+                            >
+                              {scoringId === reference.id ? (
+                                <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
+                              ) : (
+                                <Gauge className="mr-2 h-3.5 w-3.5" />
+                              )}
+                              {scoringId === reference.id ? "Scoring…" : "Score"}
+                            </Button>
+                          ) : null}
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className={`rounded-full ${
+                              pipeline.compiled
+                                ? "border-white/15 bg-white/5"
+                                : "border-emerald-300/30 bg-emerald-300/10 text-emerald-100 hover:bg-emerald-300/20"
+                            }`}
+                            disabled={compilingId === reference.id}
+                            onClick={() => compileMutation.mutate(reference.id)}
+                          >
+                            {compilingId === reference.id ? (
+                              <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
+                            ) : (
+                              <Network className="mr-2 h-3.5 w-3.5" />
+                            )}
+                            {compilingId === reference.id
+                              ? "Compiling…"
+                              : pipeline.compiled
+                                ? "Recompile"
+                                : "Compile to template"}
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="rounded-full text-[11px] text-muted-foreground"
+                            disabled={!reference.image_url || analyzingId === reference.id}
+                            onClick={() => analyzeMutation.mutate(reference)}
+                          >
+                            {analyzingId === reference.id ? (
+                              <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
+                            ) : null}
+                            {analyzingId === reference.id ? "Analyzing…" : "Re-analyze"}
+                          </Button>
+                          {pipeline.scored ? (
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="rounded-full text-[11px] text-muted-foreground"
+                              disabled={scoringId === reference.id}
+                              onClick={() => scoreMutation.mutate(reference)}
+                            >
+                              {scoringId === reference.id ? "Scoring…" : "Rescore"}
+                            </Button>
+                          ) : null}
+                        </>
+                      )}
 
                       {!reference.image_url ? (
                         <span className="text-[11px] text-muted-foreground">
@@ -855,24 +877,57 @@ export default function AdminTemplateFactory() {
                     </div>
 
                     {reference.compiled_template_id ? (
-                      <div className="mt-3 rounded-xl border border-emerald-300/25 bg-emerald-300/5 p-3">
+                      <div
+                        className={`mt-3 rounded-xl border p-3 ${
+                          pipeline.published
+                            ? "border-emerald-400/30 bg-emerald-400/[0.07]"
+                            : "border-emerald-300/25 bg-emerald-300/5"
+                        }`}
+                      >
                         <div className="flex flex-wrap items-center gap-2">
                           <Badge className="rounded-full border-emerald-300/30 bg-emerald-300/10 text-emerald-100">
-                            Compiled ✓
+                            {pipeline.published ? "Live ✓" : "Draft created ✓"}
                           </Badge>
                           <span className="text-[11px] text-muted-foreground">
-                            Draft template created — review it, then ⚡ Quick Publish.
+                            {pipeline.published
+                              ? `Active v${pipeline.activeVersion?.version_number ?? 1} — available in the marketplace.`
+                              : "Review the graph, then ⚡ Quick Publish."}
                           </span>
                         </div>
-                        <Link
-                          to={`/admin/templates?template=${reference.compiled_template_id}`}
-                          className="mt-2 inline-flex items-center gap-1 text-xs text-emerald-200 hover:underline"
-                        >
-                          Open Node Workbench
-                          <ExternalLink className="h-3 w-3" />
-                        </Link>
+                        <div className="mt-2 flex flex-wrap items-center gap-3">
+                          <Link
+                            to={`/app/lab/canvas${pipeline.draftVersion ? `?versionId=${pipeline.draftVersion.id}` : ""}`}
+                            className="inline-flex items-center gap-1 text-xs text-emerald-200 hover:underline"
+                          >
+                            Open Node Workbench
+                            <ExternalLink className="h-3 w-3" />
+                          </Link>
+                          {pipeline.published ? (
+                            <Link
+                              to={`/app/templates?template=${reference.compiled_template_id}`}
+                              className="inline-flex items-center gap-1 text-xs text-cyan-200 hover:underline"
+                            >
+                              View in marketplace
+                              <ExternalLink className="h-3 w-3" />
+                            </Link>
+                          ) : pipeline.draftVersion ? (
+                            <QuickPublishButton
+                              versionId={pipeline.draftVersion.id}
+                              templateName={pipeline.template?.name ?? reference.title}
+                              versionNumber={pipeline.draftVersion.version_number}
+                              size="sm"
+                              variant="outline"
+                              onPublished={() => {
+                                void queryClient.invalidateQueries({
+                                  queryKey: ["admin-template-workbench-catalog"],
+                                });
+                              }}
+                            />
+                          ) : null}
+                        </div>
                       </div>
                     ) : null}
+
 
                     {typeof reference.viral_score === "number" ? (
                       <ViralScorePanel
