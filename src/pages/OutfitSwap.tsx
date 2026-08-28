@@ -11,6 +11,7 @@ import {
   Plus,
   RefreshCw,
   Shirt,
+  ShieldCheck,
   Sparkles,
   Trash2,
   Upload,
@@ -49,6 +50,8 @@ import {
 
 import {
   analyzeOutfitSwapSource,
+  analyzeOutfitSwapQa,
+  applyFrameOverrides,
   callOutfitSwap,
   createTemplateFromOutfitSwap,
   persistTemplateLayout,
@@ -57,19 +60,30 @@ import {
   suggestCastAssignment,
   loadModelAssignment,
   saveModelAssignment,
+  loadQaReport,
+  saveQaReport,
+  loadFrameOverrides,
+  saveFrameOverrides,
+  structuralFrameQa,
   primarySubjectId,
   isBottomGarment,
   isTopGarment,
   KEEP_ORIGINAL_MODEL,
   type OutfitSwapCastAssignment,
+  type OutfitSwapFrameOverride,
+  type OutfitSwapFrameOverrides,
+  type OutfitSwapFrameSubject,
   type OutfitSwapGarment,
   type OutfitSwapModelAssignment,
+  type OutfitSwapQaReport,
   type OutfitSwapSubjectModel,
   type OutfitSwapSourceAnalysis,
   type OutfitSwapTemplateResult,
   type SwapGeneration,
 } from "@/services/outfitSwap";
 import SubjectModelSelector from "@/components/outfitswap/SubjectModelSelector";
+import FrameQaPanel, { QaBadge } from "@/components/outfitswap/FrameQaPanel";
+
 import { useAuth } from "@/contexts/AuthContext";
 import { extractFrames, frameTimestamps, loadVideo, readMeta, type VideoMeta } from "@/lib/videoFrames";
 import { compressImageFile } from "@/lib/imageCompress";
@@ -410,6 +424,13 @@ export default function OutfitSwap() {
   // PHASE 4 — subject track id → chosen model. Stored with the run only; the
   // swap / video calls still run the clothing-only (keep original) contract.
   const [modelAssignment, setModelAssignment] = useState<OutfitSwapModelAssignment>({});
+  // PHASE 6 — per-frame QA verdicts + tucked-away manual overrides. Analysis
+  // only: nothing here ever triggers a paid generation on its own.
+  const [qaReport, setQaReport] = useState<OutfitSwapQaReport>({});
+  const [frameOverrides, setFrameOverrides] = useState<OutfitSwapFrameOverrides>({});
+  const [qaRunning, setQaRunning] = useState(false);
+
+
 
 
   const [garments, setGarments] = useState<Garment[]>([]);
@@ -467,6 +488,11 @@ export default function OutfitSwap() {
       setSuggestionDismissed(false);
       setCastAssignment(loadCastAssignment(result.fingerprint) ?? {});
       setModelAssignment(loadModelAssignment(result.fingerprint) ?? {});
+      // PHASE 6: restore QA verdicts + overrides so back-nav never recomputes.
+      setQaReport(loadQaReport(result.fingerprint));
+      setFrameOverrides(loadFrameOverrides(result.fingerprint));
+
+
 
       setAnalysisStage("done");
     } catch (error) {
@@ -763,6 +789,14 @@ export default function OutfitSwap() {
       // the previous request exactly as it was.
       const frameAnalysis =
         analysis?.frames.find((entry) => entry.frameId === `frame-${frameIndex}`) ?? null;
+      // PHASE 6: this frame's manual overrides (if any) are folded in here. With
+      // no overrides the payload is byte-for-byte the Phase 5 request.
+      const resolved = applyFrameOverrides({
+        frameSubjects: frameAnalysis?.subjects ?? [],
+        castAssignment,
+        modelAssignment,
+        overrides: frameOverrides[frameIndex],
+      });
       const data = await callOutfitSwap<{ generation: SwapGeneration }>({
         action: "swap_frame",
         sourceFrameUrl: frame.url,
@@ -774,9 +808,9 @@ export default function OutfitSwap() {
         aspectRatio: meta?.aspectRatio,
         extraPrompt,
         resolution: "2K",
-        frameSubjects: frameAnalysis?.subjects ?? [],
-        castAssignment,
-        modelAssignment,
+        frameSubjects: resolved.frameSubjects,
+        castAssignment: resolved.castAssignment,
+        modelAssignment: resolved.modelAssignment,
       });
       setSwaps((prev) => ({ ...prev, [frameIndex]: data.generation }));
       setApproved((prev) => {
@@ -784,9 +818,17 @@ export default function OutfitSwap() {
         next.delete(frameIndex);
         return next;
       });
+      // A fresh render invalidates the old verdict — QA re-evaluates it.
+      setQaReport((prev) => {
+        if (!prev[frameIndex]) return prev;
+        const next = { ...prev };
+        delete next[frameIndex];
+        return next;
+      });
     },
-    [frames, garments, meta, extraPrompt, analysis, castAssignment, modelAssignment],
+    [frames, garments, meta, extraPrompt, analysis, castAssignment, modelAssignment, frameOverrides],
   );
+
 
 
   const runSelectedSwaps = useCallback(async () => {
@@ -1055,6 +1097,188 @@ export default function OutfitSwap() {
         .sort((a, b) => a - b),
     [swaps],
   );
+
+  /* ---------------------- 4b. PHASE 6 — QA + overrides ---------------------- */
+
+  const frameSubjectsFor = useCallback(
+    (frameIndex: number): OutfitSwapFrameSubject[] =>
+      analysis?.frames.find((entry) => entry.frameId === `frame-${frameIndex}`)?.subjects ?? [],
+    [analysis],
+  );
+
+  // Persist QA + overrides with the run so back-nav never recomputes them.
+  useEffect(() => {
+    if (!analysisFingerprint) return;
+    saveQaReport(analysisFingerprint, qaReport);
+  }, [analysisFingerprint, qaReport]);
+
+  useEffect(() => {
+    if (!analysisFingerprint) return;
+    saveFrameOverrides(analysisFingerprint, frameOverrides);
+  }, [analysisFingerprint, frameOverrides]);
+
+  /**
+   * STRUCTURAL pass — free, local, instant. Every finished rebuild gets a
+   * verdict from what we already know; a vision check can upgrade it later.
+   */
+  useEffect(() => {
+    const completed = swapEntries.filter(
+      (index) => swaps[index]?.status === "complete" && swaps[index]?.outputUrl,
+    );
+    if (!completed.length) return;
+    setQaReport((prev) => {
+      let changed = false;
+      const next = { ...prev };
+      for (const index of completed) {
+        if (next[index]) continue;
+        next[index] = structuralFrameQa({
+          frameIndex: index,
+          frameSubjects: frameSubjectsFor(index),
+          castAssignment,
+          hasOutput: true,
+        });
+        changed = true;
+      }
+      return changed ? next : prev;
+    });
+  }, [swapEntries, swaps, castAssignment, frameSubjectsFor]);
+
+  const qaCounts = useMemo(() => {
+    let passed = 0;
+    let check = 0;
+    let failed = 0;
+    for (const index of swapEntries) {
+      const status = qaReport[index]?.status;
+      if (status === "PASSED") passed += 1;
+      else if (status === "CHECK") check += 1;
+      else if (status === "FAILED") failed += 1;
+    }
+    return { passed, check, failed };
+  }, [swapEntries, qaReport]);
+
+  /**
+   * VISION QA — Gemini analysis of the already-rebuilt frames. No generation,
+   * no provider spend, results cached server side by input fingerprint.
+   */
+  const runVisionQa = useCallback(async () => {
+    const candidates = swapEntries.filter(
+      (index) => swaps[index]?.status === "complete" && swaps[index]?.outputUrl && frames[index],
+    );
+    if (!candidates.length) {
+      toast.error("Nothing to check yet");
+      return;
+    }
+    setQaRunning(true);
+    try {
+      const garmentName = (id: string | null | undefined) =>
+        garments.find((garment) => garment.id === id)?.name ||
+        garments.find((garment) => garment.id === id)?.type ||
+        "none";
+
+      const requests = candidates.map((index) => {
+        const subjects = frameSubjectsFor(index);
+        const overrides = frameOverrides[index];
+        const resolved = applyFrameOverrides({
+          frameSubjects: subjects,
+          castAssignment,
+          modelAssignment,
+          overrides,
+        });
+        return {
+          frameIndex: index,
+          sourceFrameUrl: frames[index].url,
+          rebuiltUrl: swaps[index].outputUrl as string,
+          expectedSubjectCount: subjects.length,
+          expectations: subjects.map((subject) => {
+            const wardrobe = resolved.castAssignment[subject.subjectId];
+            const model = resolved.modelAssignment[subject.subjectId];
+            return {
+              subjectId: subject.subjectId,
+              wardrobe: `top ${garmentName(wardrobe?.topGarmentId)}, bottom ${garmentName(
+                wardrobe?.bottomGarmentId,
+              )}`,
+              model: !model || model.modelSource === "keep_original" ? "original person" : "replaced model",
+            };
+          }),
+        };
+      });
+
+      // Batched: each frame costs two images, so send small chunks.
+      const chunks: (typeof requests)[] = [];
+      for (let i = 0; i < requests.length; i += 6) chunks.push(requests.slice(i, i + 6));
+
+      const results = [] as Awaited<ReturnType<typeof analyzeOutfitSwapQa>>["frames"];
+      for (const chunk of chunks) {
+        const result = await analyzeOutfitSwapQa(chunk);
+        results.push(...(result.frames ?? []).map((entry) => ({ ...entry, checkedAt: result.checkedAt })));
+      }
+
+      setQaReport((prev) => {
+        const next = { ...prev };
+        for (const entry of results) next[entry.frameIndex] = { ...entry, needsRegenerate: false };
+        return next;
+      });
+      const flagged = results.filter((entry) => entry.status !== "PASSED").length;
+      toast.success(
+        flagged
+          ? `QA done — ${flagged} frame${flagged === 1 ? "" : "s"} need a look`
+          : "QA done — all frames passed",
+      );
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not run the QA check");
+    } finally {
+      setQaRunning(false);
+    }
+  }, [
+    swapEntries,
+    swaps,
+    frames,
+    garments,
+    castAssignment,
+    modelAssignment,
+    frameOverrides,
+    frameSubjectsFor,
+  ]);
+
+  /** Bulk-approve everything that passed QA so only problem frames need eyes. */
+  const approveAllPassed = useCallback(() => {
+    const passed = swapEntries.filter(
+      (index) => swaps[index]?.status === "complete" && qaReport[index]?.status === "PASSED",
+    );
+    if (!passed.length) {
+      toast.error("No frames have passed QA yet");
+      return;
+    }
+    setApproved((prev) => {
+      const next = new Set(prev);
+      for (const index of passed) next.add(index);
+      return next;
+    });
+    toast.success(`${passed.length} frame${passed.length === 1 ? "" : "s"} approved`);
+  }, [swapEntries, swaps, qaReport]);
+
+  /**
+   * A manual override is STORED only — the frame is flagged for regeneration
+   * and the user triggers that render explicitly. No automatic spend.
+   */
+  const applyOverride = useCallback(
+    (frameIndex: number, subjectId: string, patch: OutfitSwapFrameOverride) => {
+      setFrameOverrides((prev) => ({
+        ...prev,
+        [frameIndex]: {
+          ...(prev[frameIndex] ?? {}),
+          [subjectId]: { ...(prev[frameIndex]?.[subjectId] ?? {}), ...patch },
+        },
+      }));
+      setQaReport((prev) =>
+        prev[frameIndex]
+          ? { ...prev, [frameIndex]: { ...prev[frameIndex], needsRegenerate: true } }
+          : prev,
+      );
+    },
+    [],
+  );
+
 
   /* ------------------- Serialize this run into a real template -------------- */
 
@@ -1749,7 +1973,41 @@ export default function OutfitSwap() {
 
             <SectionCard step={4} title="Review swaps" hint="Approve the frames that will drive the rebuild.">
               {swapEntries.length ? (
+                <div className="mb-3 flex flex-wrap items-center gap-2 rounded-2xl border border-white/10 bg-black/25 px-2.5 py-2">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={qaRunning}
+                    onClick={() => void runVisionQa()}
+                    className="rounded-lg border-white/15 bg-transparent text-[11px]"
+                  >
+                    {qaRunning ? (
+                      <Loader2 size={12} className="animate-spin" />
+                    ) : (
+                      <ShieldCheck size={12} />
+                    )}
+                    {qaRunning ? "Checking…" : "Run quality check"}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={!qaCounts.passed}
+                    onClick={approveAllPassed}
+                    className="rounded-lg border-emerald-300/40 bg-transparent text-[11px] text-emerald-200"
+                  >
+                    <Check size={12} /> Approve all passed
+                    {qaCounts.passed ? ` (${qaCounts.passed})` : ""}
+                  </Button>
+                  <span className="ml-auto flex items-center gap-2 text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
+                    <span className="text-emerald-200">{qaCounts.passed} passed</span>
+                    <span className="text-amber-200">{qaCounts.check} check</span>
+                    {qaCounts.failed ? <span className="text-red-300">{qaCounts.failed} failed</span> : null}
+                  </span>
+                </div>
+              ) : null}
+              {swapEntries.length ? (
                 <div className="grid gap-3 sm:grid-cols-2">
+
                   {swapEntries.map((index) => {
                     const swap = swaps[index];
                     const frame = frames[index];
@@ -1767,11 +2025,13 @@ export default function OutfitSwap() {
                             {frame ? `${frame.time.toFixed(2)}s` : `Frame ${index + 1}`}
                           </span>
                           <span className="flex items-center gap-2">
+                            <QaBadge qa={qaReport[index]} />
                             <span className="text-[10px] text-cyan-200/70">
                               {costPreview(swap.estimatedCredits, swap.estimatedCostUsd)}
                             </span>
                             <StatusPill generation={swap} />
                           </span>
+
                         </div>
                         <button
                           type="button"
@@ -1840,7 +2100,21 @@ export default function OutfitSwap() {
                             <Trash2 size={12} />
                           </Button>
                         </div>
+                        {swap.status === "complete" ? (
+                          <FrameQaPanel
+                            qa={qaReport[index]}
+                            frameSubjects={frameSubjectsFor(index)}
+                            garments={garments}
+                            castAssignment={castAssignment}
+                            modelAssignment={modelAssignment}
+                            overrides={frameOverrides[index]}
+                            userId={user?.id}
+                            onOverride={(subjectId, patch) => applyOverride(index, subjectId, patch)}
+                            onRegenerate={() => void swapFrame(index)}
+                          />
+                        ) : null}
                       </article>
+
                     );
                   })}
                 </div>
