@@ -158,6 +158,7 @@ export default function PublicCollectionPage() {
           "A curated FUSE drop of AI campaign templates."
         }
         path={`/c/${slug}`}
+        image={cover}
       />
 
       <div className="container space-y-8 py-10">

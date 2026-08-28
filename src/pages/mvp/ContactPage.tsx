@@ -1,5 +1,6 @@
 import { FormEvent, useState } from "react";
 import SiteShell from "@/components/mvp/SiteShell";
+import PageMeta from "@/components/mvp/PageMeta";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -38,6 +39,11 @@ export default function ContactPage() {
 
   return (
     <SiteShell>
+      <PageMeta
+        title="Contact FUSE — Talk to the campaign team"
+        description="Get in touch with FUSE about campaign templates, brand onboarding, the creator program or partnership questions."
+        path="/contact"
+      />
       <section className="container grid gap-8 py-16 md:py-24 lg:grid-cols-[0.8fr_1.2fr]">
         <div className="space-y-5">
           <div>

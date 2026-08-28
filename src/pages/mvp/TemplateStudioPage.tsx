@@ -14,6 +14,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import SiteShell from "@/components/mvp/SiteShell";
+import PageMeta from "@/components/mvp/PageMeta";
 import BrandActivationBanner from "@/components/brand/BrandActivationBanner";
 import TemplateFitBadge from "@/components/brand/TemplateFitBadge";
 import BuildBrandAfterRunCard from "@/components/brand/BuildBrandAfterRunCard";
@@ -1767,6 +1768,25 @@ export default function TemplateStudioPage() {
 
   return (
     <SiteShell>
+      {/* Dynamic template detail meta — real name/description/preview only. */}
+      <PageMeta
+        title={
+          selectedTemplate?.name
+            ? `${selectedTemplate.name} · FUSE`
+            : "Campaign Template Marketplace · FUSE"
+        }
+        description={
+          selectedTemplate?.description?.trim().slice(0, 155) ||
+          "Browse FUSE campaign templates, add your brand assets, and generate a full campaign."
+        }
+        path={
+          selectedTemplate?.id
+            ? `/app/templates?template=${encodeURIComponent(String(selectedTemplate.id))}`
+            : "/app/templates"
+        }
+        image={selectedTemplate?.preview_url ?? null}
+      />
+
       <div
         className={cn(
           "transition-[filter,opacity] duration-200",

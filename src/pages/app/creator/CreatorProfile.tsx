@@ -189,6 +189,8 @@ export default function CreatorProfile() {
           "A FUSE creator profile: specialties, portfolio links and published templates."
         }
         path={`/creator/${handle}`}
+        image={profile?.banner_url ?? profile?.avatar_url ?? null}
+        type="profile"
       />
 
       <div className="mx-auto w-full max-w-4xl space-y-6 px-4 py-8" style={accentStyle(accent)}>
