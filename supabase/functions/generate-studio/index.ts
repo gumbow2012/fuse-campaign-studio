@@ -44,6 +44,28 @@ function creditsFromUsd(usd: number | null | undefined) {
   return Math.max(1, Math.ceil(usd / USD_PER_CREDIT));
 }
 
+/** Race-safe: only the caller that flips credits_refunded false->true refunds. */
+async function refundStudioCreditsIfNeeded(admin: AdminClient, generationId: string) {
+  const { data } = await admin
+    .from("studio_generations")
+    .update({ credits_refunded: true })
+    .eq("id", generationId)
+    .eq("credits_refunded", false)
+    .gt("charged_credits", 0)
+    .select("user_id, charged_credits")
+    .maybeSingle();
+  if (!data) return;
+  await admin.rpc("apply_credit_transaction", {
+    p_user_id: data.user_id,
+    p_amount: data.charged_credits,
+    p_type: "refund",
+    p_description: `Image Studio refund (${generationId})`,
+    p_template_id: null,
+    p_project_id: null,
+    p_step_id: null,
+  });
+}
+
 async function estimateUsd(args: {
   endpointId: string;
   seconds?: number | null;
