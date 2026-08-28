@@ -2099,7 +2099,21 @@ export default function OutfitSwap() {
                             <Trash2 size={12} />
                           </Button>
                         </div>
+                        {swap.status === "complete" ? (
+                          <FrameQaPanel
+                            qa={qaReport[index]}
+                            frameSubjects={frameSubjectsFor(index)}
+                            garments={garments}
+                            castAssignment={castAssignment}
+                            modelAssignment={modelAssignment}
+                            overrides={frameOverrides[index]}
+                            userId={user?.id}
+                            onOverride={(subjectId, patch) => applyOverride(index, subjectId, patch)}
+                            onRegenerate={() => void swapFrame(index)}
+                          />
+                        ) : null}
                       </article>
+
                     );
                   })}
                 </div>
