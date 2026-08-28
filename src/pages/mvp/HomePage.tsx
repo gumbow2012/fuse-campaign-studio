@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import SiteShell from "@/components/mvp/SiteShell";
 import PageMeta from "@/components/mvp/PageMeta";
 import { useAuth } from "@/contexts/AuthContext";
+import { supabase } from "@/integrations/supabase/client";
 import { useBrand } from "@/contexts/BrandContext";
 import { fetchTemplates, type ApiTemplate } from "@/services/fuseApi";
 import CreatorVerificationBadge from "@/components/CreatorVerificationBadge";
@@ -171,6 +172,7 @@ function TemplateCard({
   eager,
   index = 0,
   performance,
+  runs,
 }: {
   entry: Entry;
   badge?: { tone: "new" | "trending" | "creator"; label: string };
@@ -178,12 +180,17 @@ function TemplateCard({
   eager?: boolean;
   index?: number;
   performance?: TemplatePerformanceRow;
+  /** Real run count from public_template_popularity — omitted when unavailable. */
+  runs?: number | null;
 }) {
   const outputs = outputLabel(entry.template);
   const vibe = entry.template.category ?? entry.template.tags?.[0] ?? null;
+  const templateId = String(entry.template.id ?? "");
+  const templateHref = templateId ? `/app/templates?template=${encodeURIComponent(templateId)}` : "/app/templates";
 
   return (
     <article className="group relative w-[248px] shrink-0 overflow-hidden rounded-[1.25rem] border border-white/10 bg-slate-950/80 transition-colors hover:border-cyan-200/40 sm:w-[272px]">
+      <Link to={templateHref} className="absolute inset-0 z-10" aria-label={`Open ${entry.template.name}`} />
       <div className="relative aspect-[9/16] overflow-hidden bg-black">
         <AutoMedia
           media={entry.media}
@@ -197,8 +204,8 @@ function TemplateCard({
             <Badge tone={badge.tone}>{badge.label}</Badge>
           </div>
         )}
-        <div className="absolute right-3 top-3">
-          <AddToCollectionButton templateId={String(entry.template.id ?? "")} />
+        <div className="absolute right-3 top-3 z-20">
+          <AddToCollectionButton templateId={templateId} />
         </div>
       </div>
       <div className="absolute inset-x-0 bottom-0 p-4">
@@ -209,6 +216,12 @@ function TemplateCard({
         <p className="mt-1 text-[10px] uppercase tracking-[0.16em] text-slate-400">
           {[vibe, outputs].filter(Boolean).join(" · ")}
         </p>
+        {/* Real popularity only — nothing is rendered when the RPC has no row. */}
+        {typeof runs === "number" && runs > 0 && (
+          <p className="mt-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-cyan-100">
+            {runs.toLocaleString()} run{runs === 1 ? "" : "s"}
+          </p>
+        )}
         {creator ? (
           <p className="mt-1 text-[10px] text-slate-400">by {creator}</p>
         ) : (
@@ -217,14 +230,15 @@ function TemplateCard({
         <Button
           asChild
           size="sm"
-          className="mt-3 h-9 w-full rounded-full bg-cyan-300 text-[12px] font-semibold uppercase tracking-[0.14em] text-slate-950 hover:bg-cyan-200"
+          className="relative z-20 mt-3 h-9 w-full rounded-full bg-cyan-300 text-[12px] font-semibold uppercase tracking-[0.14em] text-slate-950 hover:bg-cyan-200"
         >
-          <Link to="/app/templates">Use Template</Link>
+          <Link to={templateHref}>Use Template</Link>
         </Button>
       </div>
     </article>
   );
 }
+
 
 
 function MediaShelf({ children }: { children: React.ReactNode }) {
@@ -238,18 +252,23 @@ function MediaShelf({ children }: { children: React.ReactNode }) {
 function Shelf({
   label,
   heading,
+  description,
   entries,
   badge,
   id,
   perfMap,
+  runsMap,
   showDisclaimer,
 }: {
   label: string;
   heading: string;
+  description?: string;
   entries: Entry[];
   badge?: { tone: "new" | "trending" | "creator"; label: string };
   id?: string;
   perfMap?: TemplatePerformanceMap;
+  /** templateId → real run count. Missing ids simply render no count. */
+  runsMap?: Record<string, number>;
   showDisclaimer?: boolean;
 }) {
   if (!entries.length) return null;
@@ -259,6 +278,9 @@ function Shelf({
         <div>
           <SectionLabel>{label}</SectionLabel>
           <SectionHeading>{heading}</SectionHeading>
+          {description ? (
+            <p className="mt-3 max-w-xl text-sm leading-6 text-slate-400">{description}</p>
+          ) : null}
         </div>
         <Button asChild variant="ghost" className="rounded-full text-cyan-100 hover:text-white">
           <Link to="/app/templates">
@@ -276,6 +298,7 @@ function Shelf({
             index={index}
             eager={index < 2}
             performance={perfMap?.[String(entry.template.id ?? "")]}
+            runs={runsMap?.[String(entry.template.id ?? "")] ?? null}
           />
         ))}
       </MediaShelf>
@@ -285,10 +308,11 @@ function Shelf({
 }
 
 
+
 /* ---------------------------------- page ---------------------------------- */
 
 export default function HomePage() {
-  const { user, isCreator } = useAuth();
+  const { user, isCreator, isAdmin } = useAuth();
 
   const { data: templates = [] } = useQuery({
     queryKey: ["mvp-templates"],
@@ -311,9 +335,39 @@ export default function HomePage() {
     retry: false,
   });
 
+  /**
+   * REAL popularity only. `public_template_popularity` is a public RPC over the
+   * last 90 days of runs; if it errors or has no row for a template, the count is
+   * simply absent — never estimated, never faked.
+   */
+  const { data: popularity = {} as Record<string, number> } = useQuery({
+    queryKey: ["public-template-popularity", 90],
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc("public_template_popularity" as never, { days: 90 } as never);
+      if (error) return {} as Record<string, number>;
+      const map: Record<string, number> = {};
+      for (const row of (data ?? []) as { template_id?: string; runs?: number }[]) {
+        if (row?.template_id) map[String(row.template_id)] = Number(row.runs ?? 0);
+      }
+      return map;
+    },
+    staleTime: 10 * 60 * 1000,
+    retry: false,
+  });
+
   // Single dedup allocator — every section draws from here.
   const allocation = useMemo(() => allocateHomeMedia(templates), [templates]);
   const { hero: heroPair, trending, newToday, creatorDrops, categories, mediaWall } = allocation;
+
+  /** TRENDING — ordered by real run counts; catalog order is the tiebreaker. */
+  const trendingRanked = useMemo(() => {
+    const runsOf = (entry: Entry) => popularity[String(entry.template.id ?? "")] ?? 0;
+    return trending
+      .map((entry, index) => ({ entry, index }))
+      .sort((a, b) => runsOf(b.entry) - runsOf(a.entry) || a.index - b.index)
+      .map((row) => row.entry);
+  }, [trending, popularity]);
+
 
   const original = heroPair[0] ?? null;
   const yourVersion = heroPair[1] ?? null;
@@ -484,6 +538,7 @@ export default function HomePage() {
               Pick a proven creative. Add your brand. FUSE does the rest.
             </p>
 
+            {/* Role-aware CTAs — Explore Templates is always primary. */}
             <div className="mt-7 flex flex-wrap items-center gap-3">
               <Button
                 asChild
@@ -495,15 +550,41 @@ export default function HomePage() {
                   <ArrowRight className="h-4 w-4" />
                 </Link>
               </Button>
-              <Button
-                asChild
-                size="lg"
-                variant="outline"
-                className="rounded-full border-white/15 bg-transparent px-7 text-slate-200 hover:bg-white/10"
-              >
-                <Link to="/app/lab/canvas">Create a Template</Link>
-              </Button>
+
+              {!user ? (
+                <Button
+                  asChild
+                  size="lg"
+                  variant="outline"
+                  className="rounded-full border-white/15 bg-transparent px-7 text-slate-200 hover:bg-white/10"
+                >
+                  <Link to="/auth?mode=signup">Sign up free</Link>
+                </Button>
+              ) : null}
+
+              {isCreator ? (
+                <Button
+                  asChild
+                  size="lg"
+                  variant="outline"
+                  className="rounded-full border-white/15 bg-transparent px-7 text-slate-200 hover:bg-white/10"
+                >
+                  <Link to="/app/creator">Creator Dashboard</Link>
+                </Button>
+              ) : null}
+
+              {(isCreator || isAdmin) && (
+                <Button
+                  asChild
+                  size="lg"
+                  variant="ghost"
+                  className="rounded-full px-6 text-slate-300 hover:text-white"
+                >
+                  <Link to="/app/lab/canvas">Create a Template</Link>
+                </Button>
+              )}
             </div>
+
 
             <p className="mt-5 text-[11px] font-semibold uppercase tracking-[0.24em] text-slate-400">
               No prompts · New templates daily · Performance tracked
@@ -583,31 +664,32 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* 2 · LIVE DROP */}
+      {/* 2 · NEW DROPS BAR — real recently activated templates only, hidden when none */}
       {newToday.length > 0 && (
         <section className="border-b border-white/10 bg-white/[0.02]">
           <div className="container flex flex-wrap items-center justify-between gap-4 py-5">
             <div className="flex items-center gap-4">
               <span className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.24em] text-emerald-300">
                 <span className="h-2 w-2 animate-pulse rounded-full bg-emerald-300" />
-                New drop live
+                New drops live
               </span>
               <p className="font-display text-sm font-semibold uppercase tracking-[0.14em] text-white">
-                Raw Street Vol. 01
+                {newToday.length} new campaign{newToday.length === 1 ? "" : "s"}
                 <span className="ml-3 text-[11px] font-medium tracking-[0.18em] text-slate-400">
-                  {newToday.length} new campaign{newToday.length === 1 ? "" : "s"}
+                  just added to the marketplace
                 </span>
               </p>
             </div>
             <Button asChild variant="ghost" className="rounded-full text-cyan-100 hover:text-white">
               <a href="#new-today">
-                View drop
+                View drops
                 <ArrowRight className="h-4 w-4" />
               </a>
             </Button>
           </div>
         </section>
       )}
+
 
       {/* 2.5 · BRAND PERSONALIZATION — additive only, never a filter */}
       {showBrandNudge && (
@@ -672,7 +754,27 @@ export default function HomePage() {
         </section>
       )}
 
-      {/* 3 · SHELVES */}
+      {/* 3 · SHELVES — TRENDING first (real popularity), then NEW DROPS */}
+
+      <Shelf
+        id="trending-now"
+        label="Trending now"
+        heading="What brands are using right now"
+        description="Ordered by real template runs over the last 90 days."
+        entries={trendingRanked}
+        perfMap={perfMap}
+        runsMap={popularity}
+        badge={{ tone: "trending", label: "Trending" }}
+      />
+      <Shelf
+        id="new-today"
+        label="New drops"
+        heading="Just added to the marketplace"
+        entries={newToday}
+        perfMap={perfMap}
+        runsMap={popularity}
+        badge={{ tone: "new", label: "New" }}
+      />
 
       <Shelf
         id="from-creators-you-follow"
@@ -680,12 +782,14 @@ export default function HomePage() {
         heading="From creators you follow"
         entries={followedEntries}
         perfMap={perfMap}
+        runsMap={popularity}
       />
       <Shelf
         label="Top ROAS"
         heading="Highest returning campaigns"
         entries={topRoas}
         perfMap={perfMap}
+        runsMap={popularity}
         showDisclaimer
       />
       <Shelf
@@ -693,22 +797,8 @@ export default function HomePage() {
         heading="Proven on the most ad spend"
         entries={mostTested}
         perfMap={perfMap}
+        runsMap={popularity}
         showDisclaimer
-      />
-      <Shelf
-        label="Trending now"
-        heading="What brands are using right now"
-        entries={trending}
-        perfMap={perfMap}
-        badge={{ tone: "trending", label: "Trending" }}
-      />
-      <Shelf
-        id="new-today"
-        label="New today"
-        heading="Just added to the marketplace"
-        entries={newToday}
-        perfMap={perfMap}
-        badge={{ tone: "new", label: "New" }}
       />
 
       {creators.length > 0 && (
@@ -716,6 +806,7 @@ export default function HomePage() {
           label="Creator drops"
           heading="Built by FUSE creators"
           entries={creatorDrops}
+          runsMap={popularity}
         />
       )}
       {categories.map((shelf) => (
@@ -724,22 +815,24 @@ export default function HomePage() {
           label={shelf.title}
           heading={`${shelf.title} campaigns`}
           entries={shelf.entries}
+          runsMap={popularity}
         />
       ))}
 
       {/* 4 · THREE STEPS */}
       <section className="container border-t border-white/10 py-12">
         <SectionLabel>Three steps</SectionLabel>
+        <SectionHeading>From template to campaign.</SectionHeading>
         <div className="mt-6 grid gap-3 sm:grid-cols-3">
           {[
-            { n: "01", title: "Pick", copy: "Find a campaign you want.", icon: Layers3 },
+            { n: "01", title: "Pick", copy: "Choose a campaign from the marketplace.", icon: Layers3 },
             {
               n: "02",
-              title: "Upload",
-              copy: "Add your product, logo and optional cast.",
+              title: "Add your brand",
+              copy: "Drop in your product, logo and optional cast.",
               icon: Upload,
             },
-            { n: "03", title: "Generate", copy: "FUSE rebuilds it for your brand.", icon: Wand2 },
+            { n: "03", title: "Generate", copy: "FUSE rebuilds the whole campaign for you.", icon: Wand2 },
           ].map((step) => (
             <div
               key={step.n}
@@ -757,6 +850,36 @@ export default function HomePage() {
           ))}
         </div>
       </section>
+
+      {/* 4.5 · WHY FUSE — qualitative only, no fabricated stats */}
+      <section className="container border-t border-white/10 py-12">
+        <SectionLabel>Why FUSE</SectionLabel>
+        <SectionHeading>The creative is already done.</SectionHeading>
+        <div className="mt-6 grid gap-3 sm:grid-cols-3">
+          {[
+            {
+              title: "No prompts",
+              copy: "You never write a prompt. Every template already carries the direction, lighting and sequencing.",
+            },
+            {
+              title: "Creative already proven",
+              copy: "Templates come from campaigns creators actually shot — you start from a finished idea, not a blank page.",
+            },
+            {
+              title: "New drops constantly",
+              copy: "Creators keep publishing new campaigns to the marketplace, so the catalog keeps growing.",
+            },
+          ].map((item) => (
+            <div key={item.title} className="rounded-2xl border border-white/10 bg-white/[0.03] px-5 py-6">
+              <p className="font-display text-lg font-semibold uppercase tracking-[0.04em] text-white">
+                {item.title}
+              </p>
+              <p className="mt-2 text-sm leading-6 text-slate-300">{item.copy}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+
 
       {/* 5 · CREATOR PROGRAM */}
       <section className="container border-t border-white/10 py-12">
@@ -804,8 +927,19 @@ export default function HomePage() {
             )}
           </div>
 
+          {/* FEATURED CREATORS — real public creator_profiles rows only. */}
           {creators.length > 0 && (
-            <div className="mt-10 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            <>
+            <div className="mt-10 flex flex-wrap items-end justify-between gap-3">
+              <SectionLabel>Featured creators</SectionLabel>
+              <Button asChild variant="ghost" className="rounded-full text-cyan-100 hover:text-white">
+                <Link to="/creators">
+                  All creators
+                  <ArrowRight className="h-4 w-4" />
+                </Link>
+              </Button>
+            </div>
+            <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
               {creators.map((creator: CreatorProfile) => (
                 <Link
                   key={creator.id}
@@ -833,6 +967,7 @@ export default function HomePage() {
                 </Link>
               ))}
             </div>
+            </>
           )}
         </div>
       </section>
