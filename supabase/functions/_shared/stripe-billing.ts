@@ -602,7 +602,10 @@ export function createCheckoutHandler(mode: StripeBillingMode) {
         brandName?: string;
         templateId?: string;
         templateName?: string;
+        returnPath?: string;
       };
+      const returnPath = sanitizeReturnPath(body.returnPath);
+
 
       const checkoutEmail = normalizeCheckoutEmail(body.email);
       if (typeof body.email === "string" && body.email.trim() && !checkoutEmail) {
