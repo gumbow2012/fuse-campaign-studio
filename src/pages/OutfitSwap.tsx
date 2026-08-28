@@ -1047,6 +1047,83 @@ export default function OutfitSwap() {
                         <X size={12} />
                       </button>
                     </div>
+
+                    {/* PHASE 2 — structured refs. FRONT is the primary ref used by
+                        generation; BACK/DETAIL/SIDE are captured + stored only. */}
+                    <div className="mt-2.5 space-y-2 border-t border-white/10 pt-2.5">
+                      <label className="flex cursor-pointer items-center justify-between gap-3">
+                        <span className="text-[10px] uppercase tracking-[0.14em] text-cyan-200/70">
+                          Has back design
+                        </span>
+                        <Switch
+                          checked={garment.hasBackDesign}
+                          onCheckedChange={(checked) =>
+                            setGarments((prev) =>
+                              prev.map((item, i) =>
+                                i === index ? { ...item, hasBackDesign: checked } : item,
+                              ),
+                            )
+                          }
+                        />
+                      </label>
+
+                      {garment.hasBackDesign ? (
+                        <GarmentSlotUpload
+                          label="Back"
+                          required
+                          url={garment.backUrl}
+                          busy={slotUploading === `${index}:back`}
+                          onPick={(file) => void uploadGarmentSlot(index, "back", file)}
+                          onClear={() =>
+                            setGarments((prev) =>
+                              prev.map((item, i) => (i === index ? { ...item, backUrl: null } : item)),
+                            )
+                          }
+                        />
+                      ) : null}
+
+                      {expandedRefs.has(index) ? (
+                        <div className="space-y-2">
+                          <GarmentSlotUpload
+                            label="Detail"
+                            url={garment.detailUrl ?? null}
+                            busy={slotUploading === `${index}:detail`}
+                            onPick={(file) => void uploadGarmentSlot(index, "detail", file)}
+                            onClear={() =>
+                              setGarments((prev) =>
+                                prev.map((item, i) => (i === index ? { ...item, detailUrl: null } : item)),
+                              )
+                            }
+                          />
+                          <GarmentSlotUpload
+                            label="Side"
+                            url={garment.sideUrl ?? null}
+                            busy={slotUploading === `${index}:side`}
+                            onPick={(file) => void uploadGarmentSlot(index, "side", file)}
+                            onClear={() =>
+                              setGarments((prev) =>
+                                prev.map((item, i) => (i === index ? { ...item, sideUrl: null } : item)),
+                              )
+                            }
+                          />
+                        </div>
+                      ) : null}
+
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setExpandedRefs((prev) => {
+                            const next = new Set(prev);
+                            if (next.has(index)) next.delete(index);
+                            else next.add(index);
+                            return next;
+                          })
+                        }
+                        className="text-[10px] uppercase tracking-[0.14em] text-foreground/50 transition-colors hover:text-cyan-200"
+                      >
+                        {expandedRefs.has(index) ? "Hide extra references" : "Add more references"}
+                      </button>
+                    </div>
                   </div>
                 ))}
                 <button
