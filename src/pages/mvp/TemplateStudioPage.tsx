@@ -1232,7 +1232,16 @@ export default function TemplateStudioPage() {
 
 
 
+  /* Presentation-only emphasis when the builder swaps to another campaign. */
+  useEffect(() => {
+    if (!selectedTemplateId) return;
+    setBuilderJustSwitched(true);
+    const timer = window.setTimeout(() => setBuilderJustSwitched(false), 900);
+    return () => window.clearTimeout(timer);
+  }, [selectedTemplateId]);
+
   const handleTemplateSelect = (templateId: string, options?: { alwaysReveal?: boolean }) => {
+
     setSelectedTemplateId(templateId);
     setFiles({});
     setAnonUploads({});
