@@ -384,7 +384,9 @@ function VideoProgress({
 
 
 export default function OutfitSwap() {
+  const { user } = useAuth();
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
+
   const [videoPreview, setVideoPreview] = useState<string | null>(null);
   const [meta, setMeta] = useState<VideoMeta | null>(null);
   const [uploadingVideo, setUploadingVideo] = useState(false);
