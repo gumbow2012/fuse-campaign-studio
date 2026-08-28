@@ -1242,10 +1242,19 @@ export default function TemplateStudioPage() {
     // Cards far from the builder (e.g. the "For you" row at the top of the page)
     // must always scroll the builder into view, otherwise a click looks inert.
     if (options?.alwaysReveal || window.matchMedia("(max-width: 1279px)").matches) {
+      // Defer past the re-render/paint of the newly selected template, then only
+      // scroll if the builder isn't already comfortably in view (desktop side-by-side).
       window.requestAnimationFrame(() => {
-        runnerSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+        window.requestAnimationFrame(() => {
+          const node = runnerSectionRef.current;
+          if (!node) return;
+          const { top } = node.getBoundingClientRect();
+          if (top >= 0 && top < window.innerHeight * 0.5) return;
+          node.scrollIntoView({ behavior: "smooth", block: "start" });
+        });
       });
     }
+
   };
 
 
