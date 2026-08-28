@@ -30,6 +30,7 @@ import {
   type AssemblyFrameSubject,
   type AssemblyGarment,
   type AssemblySubjectModel,
+  buildReconstructionPromptV2,
   requiresFusedAssembly,
 } from "../_shared/outfit-swap-assembly.ts";
 
@@ -429,6 +430,10 @@ async function startReconstruction(admin: AdminClient, args: {
   aspectRatio?: string;
   generateAudio?: boolean;
   extraPrompt?: string;
+  // PHASE 7 context (optional — omitted requests keep the legacy prompt).
+  frameSubjects?: AssemblyFrameSubject[];
+  castAssignment?: Record<string, any>;
+  modelAssignment?: Record<string, any>;
   webhookBase: string;
 }) {
   const referenceUrls = cleanUrls(args.frameUrls);
@@ -439,10 +444,29 @@ async function startReconstruction(admin: AdminClient, args: {
   );
   const endpointId = referenceToVideoEndpoint(videoModel.key);
   const duration = clampSeedanceDuration(args.duration ?? 5, videoModel);
-  const prompt = buildReconstructionPrompt({
+  const legacyPrompt = buildReconstructionPrompt({
     garments: Array.isArray(args.garments) ? args.garments : [],
     extra: args.extraPrompt,
   });
+  // PHASE 7: multi-subject / model-swap / back-design runs get the enriched
+  // reconstruction prompt built from the same structured facts as Phase 5.
+  // Simple single-subject clothing-only runs get `legacyPrompt` verbatim.
+  const resolvedVideoModels = await resolveSubjectModels(admin, args.userId, args.modelAssignment);
+  const reconstruction = buildReconstructionPromptV2({
+    legacyPrompt,
+    frameSubjects: args.frameSubjects ?? [],
+    garments: (Array.isArray(args.garments) ? args.garments : []) as AssemblyGarment[],
+    castAssignment: args.castAssignment ?? {},
+    modelAssignment: resolvedVideoModels,
+    extraPrompt: args.extraPrompt,
+  });
+  const prompt = reconstruction.prompt;
+  if (reconstruction.enriched) {
+    console.log(
+      "[outfit-swap][phase7][enriched-reconstruction]",
+      JSON.stringify(reconstruction.plan),
+    );
+  }
 
   const { data: inserted, error: insertError } = await admin
     .from("studio_generations")
@@ -499,6 +523,8 @@ async function startReconstruction(admin: AdminClient, args: {
           feature: "outfit-swap",
           stage: "reconstruction",
           video_model: videoModel.key,
+          reconstruction_mode: reconstruction.enriched ? "fused_multi_subject" : "legacy",
+          reconstruction_plan: reconstruction.enriched ? reconstruction.plan : null,
         },
       })
       .eq("id", inserted.id)
@@ -763,6 +789,10 @@ Deno.serve(async (req) => {
         aspectRatio: body.aspectRatio,
         generateAudio: body.generateAudio,
         extraPrompt: body.extraPrompt,
+        // PHASE 7 context (optional — omitted requests keep the legacy prompt).
+        frameSubjects: Array.isArray(body.frameSubjects) ? body.frameSubjects : [],
+        castAssignment: body.castAssignment ?? {},
+        modelAssignment: body.modelAssignment ?? {},
         webhookBase,
       });
       return json({ generation });

@@ -915,6 +915,20 @@ export default function OutfitSwap() {
     }
     setReconstructing(true);
     try {
+      // PHASE 7: union of the analysed subject tracks across frames. The server
+      // uses these facts only to enrich the prompt for multi-subject /
+      // model-swap / back-design runs; a simple run sends an empty list and
+      // keeps the legacy prompt.
+      const subjectUnion = (() => {
+        const seen = new Map<string, OutfitSwapFrameSubject>();
+        for (const frame of analysis?.frames ?? []) {
+          for (const subject of frame.subjects ?? []) {
+            if (!seen.has(subject.subjectId)) seen.set(subject.subjectId, subject);
+          }
+        }
+        return Array.from(seen.values());
+      })();
+
       const data = await callOutfitSwap<{ generation: SwapGeneration }>({
         action: "reconstruct",
         frameUrls: approvedUrls,
@@ -927,6 +941,9 @@ export default function OutfitSwap() {
         preserveAudio,
         generateAudio: preserveAudio,
         extraPrompt,
+        frameSubjects: subjectUnion,
+        castAssignment,
+        modelAssignment,
       });
       // Non-blocking: each click is its own record, so several can run at once.
       setVideos((prev) => [data.generation, ...prev]);
@@ -936,7 +953,20 @@ export default function OutfitSwap() {
     } finally {
       setReconstructing(false);
     }
-  }, [approvedUrls, garments, videoModel, resolution, preserveAudio, meta, extraPrompt, videoDuration]);
+  }, [
+    approvedUrls,
+    garments,
+    videoModel,
+    resolution,
+    preserveAudio,
+    meta,
+    extraPrompt,
+    videoDuration,
+    analysis,
+    castAssignment,
+    modelAssignment,
+  ]);
+
 
   /** Stops tracking and frees the UI, even if the provider job keeps running. */
   const cancelVideo = useCallback(async () => {
