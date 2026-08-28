@@ -341,3 +341,233 @@ export function saveModelAssignment(fingerprint: string, assignment: OutfitSwapM
   }
 }
 
+
+/* ------------------------------------------------------------------ *
+ * PHASE 6 — FRAME QA + MANUAL OVERRIDES (analysis only, never generation)
+ * ------------------------------------------------------------------ */
+
+export type OutfitSwapQaStatus = "PASSED" | "CHECK" | "FAILED";
+
+/** One rebuilt frame's quality verdict. Never triggers a paid provider call. */
+export type OutfitSwapFrameQa = {
+  frameIndex: number;
+  status: OutfitSwapQaStatus;
+  issues: string[];
+  detectedPeople: number;
+  expectedPeople: number;
+  faceCorruption?: "none" | "minor" | "severe";
+  garmentCorruption?: "none" | "minor" | "severe";
+  wardrobeMatch?: "yes" | "unclear" | "no";
+  confidence: number;
+  notes?: string;
+  /** `structural` = local rule check only, `vision` = Gemini analysis pass. */
+  source: "structural" | "vision";
+  checkedAt?: string | null;
+  /** Set locally after a manual override so the user can choose to regenerate. */
+  needsRegenerate?: boolean;
+};
+
+/** frame index → QA verdict. */
+export type OutfitSwapQaReport = Record<number, OutfitSwapFrameQa>;
+
+export type OutfitSwapQaResult = {
+  cached: boolean;
+  fingerprint: string;
+  version: string;
+  checkedAt: string | null;
+  frames: OutfitSwapFrameQa[];
+};
+
+export type OutfitSwapQaRequestFrame = {
+  frameIndex: number;
+  sourceFrameUrl: string;
+  rebuiltUrl: string;
+  expectedSubjectCount: number;
+  expectations: { subjectId: string; wardrobe: string; model: string }[];
+};
+
+/**
+ * Lightweight Gemini VISION check on the already-rebuilt frames. Analysis only:
+ * it never generates an image or video and never spends generation credits.
+ */
+export async function analyzeOutfitSwapQa(
+  frames: OutfitSwapQaRequestFrame[],
+  options: { force?: boolean } = {},
+): Promise<OutfitSwapQaResult> {
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+
+  const response = await fetch(`${SUPABASE_URL}/functions/v1/outfit-swap-qa`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      apikey: SUPABASE_PUBLISHABLE_KEY,
+      Authorization: `Bearer ${session?.access_token ?? SUPABASE_PUBLISHABLE_KEY}`,
+    },
+    body: JSON.stringify({ frames, force: options.force === true }),
+  });
+
+  const data = await response.json().catch(() => null);
+  if (!response.ok || data?.error) {
+    throw new Error(data?.error ?? `QA check failed (${response.status})`);
+  }
+  return data as OutfitSwapQaResult;
+}
+
+/**
+ * Structural fallback used when no vision check has run yet: it only validates
+ * what we already know locally (expected subject count and whether every track
+ * in the frame carries an assignment). Anything unverifiable is CHECK.
+ */
+export function structuralFrameQa(args: {
+  frameIndex: number;
+  frameSubjects: OutfitSwapFrameSubject[];
+  castAssignment: OutfitSwapCastAssignment;
+  hasOutput: boolean;
+}): OutfitSwapFrameQa {
+  const { frameIndex, frameSubjects, castAssignment, hasOutput } = args;
+  const issues: string[] = [];
+  let status: OutfitSwapQaStatus = "PASSED";
+  const check = (issue: string) => {
+    issues.push(issue);
+    if (status !== "FAILED") status = "CHECK";
+  };
+
+  if (!hasOutput) {
+    return {
+      frameIndex,
+      status: "CHECK",
+      issues: ["Frame has no rebuilt image yet"],
+      detectedPeople: 0,
+      expectedPeople: frameSubjects.length,
+      confidence: 0,
+      source: "structural",
+    };
+  }
+
+  if (frameSubjects.length > 1) {
+    for (const subject of frameSubjects) {
+      const wardrobe = castAssignment[subject.subjectId];
+      if (!wardrobe || (!wardrobe.topGarmentId && !wardrobe.bottomGarmentId)) {
+        check(`No wardrobe assigned to ${subject.subjectId}`);
+      }
+    }
+  }
+  for (const subject of frameSubjects) {
+    if (subject.confidence < 0.5) check(`Low-confidence subject read (${subject.subjectId})`);
+    else if (subject.garmentOrientation === "UNCERTAIN" || subject.occlusion === "heavy") {
+      check("Garment orientation is hard to read in this frame");
+    }
+  }
+
+  return {
+    frameIndex,
+    status,
+    issues,
+    detectedPeople: frameSubjects.length,
+    expectedPeople: frameSubjects.length,
+    confidence: frameSubjects.length
+      ? Math.min(...frameSubjects.map((subject) => subject.confidence))
+      : 0.5,
+    source: "structural",
+  };
+}
+
+/**
+ * A per-frame manual correction. This never changes any other frame and never
+ * re-runs generation on its own — the user regenerates that frame explicitly.
+ */
+export type OutfitSwapFrameOverride = {
+  topGarmentId?: string | null;
+  bottomGarmentId?: string | null;
+  model?: OutfitSwapSubjectModel | null;
+  /** Forces which garment reference side this frame conditions on. */
+  forceGarmentSide?: "front" | "back" | null;
+};
+
+/** frame index → subject track id → override. */
+export type OutfitSwapFrameOverrides = Record<number, Record<string, OutfitSwapFrameOverride>>;
+
+const QA_KEY = (fingerprint: string) => `fuse-outfit-swap-qa-v1:${fingerprint}`;
+const OVERRIDE_KEY = (fingerprint: string) => `fuse-outfit-swap-frame-overrides-v1:${fingerprint}`;
+
+export function loadQaReport(fingerprint: string): OutfitSwapQaReport {
+  try {
+    const raw = window.localStorage.getItem(QA_KEY(fingerprint));
+    return raw ? (JSON.parse(raw) as OutfitSwapQaReport) : {};
+  } catch {
+    return {};
+  }
+}
+
+export function saveQaReport(fingerprint: string, report: OutfitSwapQaReport) {
+  try {
+    window.localStorage.setItem(QA_KEY(fingerprint), JSON.stringify(report));
+  } catch {
+    // QA is advisory — a storage failure must never break the run.
+  }
+}
+
+export function loadFrameOverrides(fingerprint: string): OutfitSwapFrameOverrides {
+  try {
+    const raw = window.localStorage.getItem(OVERRIDE_KEY(fingerprint));
+    return raw ? (JSON.parse(raw) as OutfitSwapFrameOverrides) : {};
+  } catch {
+    return {};
+  }
+}
+
+export function saveFrameOverrides(fingerprint: string, overrides: OutfitSwapFrameOverrides) {
+  try {
+    window.localStorage.setItem(OVERRIDE_KEY(fingerprint), JSON.stringify(overrides));
+  } catch {
+    // Overrides are a convenience — a storage failure must never break the run.
+  }
+}
+
+/**
+ * Applies this frame's overrides to the request payload pieces. Forcing a
+ * garment side is expressed as the frame's `garmentOrientation`, which is what
+ * the Phase 5 server assembly already uses to pick the front/back reference —
+ * so no executor or backend contract changes.
+ */
+export function applyFrameOverrides(args: {
+  frameSubjects: OutfitSwapFrameSubject[];
+  castAssignment: OutfitSwapCastAssignment;
+  modelAssignment: OutfitSwapModelAssignment;
+  overrides: Record<string, OutfitSwapFrameOverride> | undefined;
+}) {
+  const { frameSubjects, castAssignment, modelAssignment, overrides } = args;
+  if (!overrides || !Object.keys(overrides).length) {
+    return { frameSubjects, castAssignment, modelAssignment };
+  }
+
+  const nextSubjects = frameSubjects.map((subject) => {
+    const side = overrides[subject.subjectId]?.forceGarmentSide;
+    if (!side) return subject;
+    return {
+      ...subject,
+      garmentOrientation: (side === "back" ? "BACK" : "FRONT") as OutfitSwapOrientation,
+    };
+  });
+
+  const nextCast: OutfitSwapCastAssignment = { ...castAssignment };
+  const nextModels: OutfitSwapModelAssignment = { ...modelAssignment };
+  for (const [subjectId, override] of Object.entries(overrides)) {
+    if (override.topGarmentId !== undefined || override.bottomGarmentId !== undefined) {
+      const current = nextCast[subjectId] ?? { topGarmentId: null, bottomGarmentId: null };
+      nextCast[subjectId] = {
+        topGarmentId:
+          override.topGarmentId !== undefined ? override.topGarmentId : current.topGarmentId,
+        bottomGarmentId:
+          override.bottomGarmentId !== undefined
+            ? override.bottomGarmentId
+            : current.bottomGarmentId,
+      };
+    }
+    if (override.model) nextModels[subjectId] = override.model;
+  }
+
+  return { frameSubjects: nextSubjects, castAssignment: nextCast, modelAssignment: nextModels };
+}
