@@ -1981,23 +1981,79 @@ const TemplateCanvas = () => {
     }
   }, [buildAuthHeaders, detail, invokeWorkbench, refreshAfterMutation]);
 
-  const deleteSelectedNode = useCallback(async () => {
-    if (!selectedNode || !detail) return;
-    const confirmed = window.confirm(`Delete node ${selectedNode.nodeNumber ?? ""} "${selectedNode.name}" and its connected edges?`);
-    if (!confirmed) return;
+  const deletingNodeIdsRef = useRef<Set<string>>(new Set());
+
+  const deleteNodeById = useCallback(async (nodeId: string) => {
+    if (!detail || !nodeId) return;
+    if (deletingNodeIdsRef.current.has(nodeId)) return;
+    deletingNodeIdsRef.current.add(nodeId);
     setMutating("delete-node");
     try {
-      await invokeWorkbench({ action: "delete_node", nodeId: selectedNode.id });
-      setSelectedNodeId(null);
+      await invokeWorkbench({ action: "delete_node", nodeId });
+      setSelectedNodeId((current) => (current === nodeId ? null : current));
       await refreshAfterMutation(detail.versionId);
       toast({ title: "Node deleted" });
     } catch (deleteError) {
       const message = deleteError instanceof Error ? deleteError.message : "Could not delete node";
       toast({ title: "Delete failed", description: message, variant: "destructive" });
     } finally {
+      deletingNodeIdsRef.current.delete(nodeId);
       setMutating(null);
     }
-  }, [detail, invokeWorkbench, refreshAfterMutation, selectedNode]);
+  }, [detail, invokeWorkbench, refreshAfterMutation]);
+
+  const deleteSelectedNode = useCallback(async () => {
+    if (!selectedNode || !detail) return;
+    const confirmed = window.confirm(`Delete node ${selectedNode.nodeNumber ?? ""} "${selectedNode.name}" and its connected edges?`);
+    if (!confirmed) return;
+    await deleteNodeById(selectedNode.id);
+  }, [deleteNodeById, detail, selectedNode]);
+
+  const nodeClipboardRef = useRef<{
+    nodeType: string;
+    editorMode?: "upload" | "reference";
+    expected?: string;
+    prompt: string;
+    outputExposed: boolean | null;
+    position: { x: number; y: number } | null;
+  } | null>(null);
+
+  const pasteClipboardNode = useCallback(async () => {
+    const clip = nodeClipboardRef.current;
+    if (!clip || !detail) return;
+    setMutating("add-node");
+    try {
+      const created = await invokeWorkbench({
+        action: "add_node",
+        versionId: detail.versionId,
+        nodeType: clip.nodeType,
+        editorMode: clip.editorMode,
+        expected: clip.expected,
+        prompt: clip.prompt,
+        outputExposed: clip.outputExposed ?? false,
+      });
+      const createdNodeId = typeof created.nodeId === "string" ? created.nodeId : null;
+      if (createdNodeId) {
+        const base = clip.position ?? viewportApiRef.current?.getCenter() ?? { x: 320, y: 240 };
+        setPositions((current) => ({
+          ...current,
+          [createdNodeId]: { x: Math.round(base.x + 48), y: Math.round(base.y + 48) },
+        }));
+      }
+      await refreshAfterMutation(detail.versionId);
+      if (createdNodeId) {
+        setSelectedNodeId(createdNodeId);
+        setFocusNodeId(createdNodeId);
+      }
+      toast({ title: "Block pasted" });
+    } catch (pasteError) {
+      const message = pasteError instanceof Error ? pasteError.message : "Could not paste block";
+      toast({ title: "Paste failed", description: message, variant: "destructive" });
+    } finally {
+      setMutating(null);
+    }
+  }, [detail, invokeWorkbench, refreshAfterMutation]);
+
 
   const addEdge = useCallback(async (targetNodeId?: string) => {
     const resolvedTargetNodeId = targetNodeId || edgeDraft.targetNodeId;
