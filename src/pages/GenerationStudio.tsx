@@ -1877,8 +1877,76 @@ export default function GenerationStudio() {
               </Popover>
             </FusePanel>
 
+            {/* Frame anchors — models that support a tail/end image (Kling 3.0) */}
+            {supportsEndFrame ? (
+              <FusePanel>
+                <SectionTitle hint={lastFrame ? "start + end" : "start only"}>
+                  FRAME ANCHORS
+                </SectionTitle>
+                <div className="grid grid-cols-2 gap-3">
+                  {([0, 1] as const).map((slot) => {
+                    const entry = slot === 0 ? firstFrame : lastFrame;
+                    const disabled = slot === 1 && !firstFrame;
+                    return (
+                      <div key={slot} className="space-y-2">
+                        <p className="font-display text-[12px] font-semibold tracking-[0.08em] text-foreground/80">
+                          {slot === 0 ? "FIRST FRAME" : "LAST FRAME"}
+                          <span className="ml-1.5 text-[11px] font-normal tracking-normal text-muted-foreground">
+                            {slot === 0 ? "required" : "optional"}
+                          </span>
+                        </p>
+                        <label
+                          className={cn(
+                            "relative flex aspect-square w-full cursor-pointer items-center justify-center overflow-hidden rounded-xl border border-dashed border-white/20 bg-white/[0.02] transition-colors hover:border-[hsl(var(--electric-blue)/0.5)]",
+                            disabled && "pointer-events-none opacity-50",
+                          )}
+                        >
+                          {entry ? (
+                            <img
+                              src={entry.url}
+                              alt={slot === 0 ? "First frame reference" : "Last frame reference"}
+                              className="h-full w-full object-cover"
+                            />
+                          ) : uploading ? (
+                            <Loader2 size={16} className="animate-spin text-muted-foreground" />
+                          ) : (
+                            <Plus size={16} className="text-muted-foreground" />
+                          )}
+                          <input
+                            type="file"
+                            accept="image/*"
+                            className="hidden"
+                            disabled={disabled}
+                            onChange={(event) => {
+                              const file = event.target.files?.[0];
+                              event.target.value = "";
+                              if (file) void setFrameSlot(slot, file);
+                            }}
+                          />
+                        </label>
+                        {entry ? (
+                          <button
+                            type="button"
+                            onClick={() => clearFrameSlot(slot)}
+                            className="text-[12px] text-muted-foreground transition-colors hover:text-foreground"
+                          >
+                            Remove
+                          </button>
+                        ) : null}
+                      </div>
+                    );
+                  })}
+                </div>
+                <FieldHelper>
+                  Last frame is optional — leave it empty for a single-image animation.
+                </FieldHelper>
+              </FusePanel>
+            ) : null}
+
             {/* Reference stack */}
+            {supportsEndFrame ? null : (
             <FusePanel
+
               onDragOver={(event) => {
                 event.preventDefault();
                 setDragActive(true);
