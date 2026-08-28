@@ -55,16 +55,25 @@ import {
   loadCastAssignment,
   saveCastAssignment,
   suggestCastAssignment,
+  loadModelAssignment,
+  saveModelAssignment,
+  primarySubjectId,
   isBottomGarment,
   isTopGarment,
+  KEEP_ORIGINAL_MODEL,
   type OutfitSwapCastAssignment,
   type OutfitSwapGarment,
+  type OutfitSwapModelAssignment,
+  type OutfitSwapSubjectModel,
   type OutfitSwapSourceAnalysis,
   type OutfitSwapTemplateResult,
   type SwapGeneration,
 } from "@/services/outfitSwap";
+import SubjectModelSelector from "@/components/outfitswap/SubjectModelSelector";
+import { useAuth } from "@/contexts/AuthContext";
 import { extractFrames, frameTimestamps, loadVideo, readMeta, type VideoMeta } from "@/lib/videoFrames";
 import { compressImageFile } from "@/lib/imageCompress";
+
 
 const GARMENT_TYPES = [
   "Shirt / Top",
