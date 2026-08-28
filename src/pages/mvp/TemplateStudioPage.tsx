@@ -8,6 +8,7 @@ import {
   Film,
   GitBranch,
   Heart,
+  Info,
   Loader2,
   
   Network,
@@ -32,6 +33,7 @@ import CampaignOutputsPanel from "@/components/templates/CampaignOutputsPanel";
 import CampaignResults from "@/components/templates/CampaignResults";
 import RegenerateOutputDialog from "@/components/templates/RegenerateOutputDialog";
 import { useOutputRegeneration } from "@/hooks/useOutputRegeneration";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 import { evaluateAndAnnounce } from "@/services/achievements";
 import { useAuth } from "@/contexts/AuthContext";
@@ -1148,6 +1150,14 @@ export default function TemplateStudioPage() {
 
   const creditsRequired = selectedTemplate?.estimated_credits_per_run ?? 0;
   const selectedTemplateOutputCount = getTemplateOutputCount(selectedTemplate);
+  const [outputSplitOpen, setOutputSplitOpen] = useState(false);
+  const outputSplit = useMemo(() => {
+    const images = Number(selectedTemplate?.counts?.imageOutputs ?? 0);
+    const videos = Number(selectedTemplate?.counts?.videoOutputs ?? 0);
+    if (!images && !videos) return null;
+    if (!images || !videos) return null;
+    return `${images} images · ${videos} videos`;
+  }, [selectedTemplate]);
   const creditBalance = profile?.credits_balance ?? null;
   const displayedCreditBalance = creditBalance ?? 0;
   const profileIsResolving = !!user && !isPrivilegedUser && !profile;
@@ -2375,46 +2385,36 @@ export default function TemplateStudioPage() {
                       <span className="rounded-full border border-white/10 px-3 py-1 text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
                         {formatCount(inputFields.length, "input", "inputs")}
                       </span>
-                      <span className="rounded-full border border-white/10 px-3 py-1 text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
-                        {formatCount(selectedTemplateOutputCount, "output", "outputs")}
-                      </span>
-                      <span className="rounded-full border border-white/10 px-3 py-1 text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
+                      {outputSplit ? (
+                        <button
+                          type="button"
+                          onClick={() => setOutputSplitOpen((prev) => !prev)}
+                          aria-expanded={outputSplitOpen}
+                          className="rounded-full border border-white/10 px-3 py-1 text-[10px] uppercase tracking-[0.2em] text-muted-foreground transition-colors hover:border-white/25 hover:text-slate-200"
+                        >
+                          {formatCount(selectedTemplateOutputCount, "output", "outputs")}
+                          <span aria-hidden className="ml-1">{outputSplitOpen ? "▴" : "▾"}</span>
+                          {outputSplitOpen ? <span className="ml-2 normal-case tracking-normal text-slate-300">{outputSplit}</span> : null}
+                        </button>
+                      ) : (
+                        <span className="rounded-full border border-white/10 px-3 py-1 text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
+                          {formatCount(selectedTemplateOutputCount, "output", "outputs")}
+                        </span>
+                      )}
+                      <span className="inline-flex items-center gap-1 rounded-full border border-white/10 px-3 py-1 text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
                         {isPrivilegedUser ? <span className="line-through decoration-cyan-200/90 decoration-2">{creditsRequired} cr</span> : `${creditsRequired} cr`}
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <button type="button" aria-label="Run cost info" className="text-slate-400 transition-colors hover:text-slate-200">
+                              <Info className="h-3 w-3" />
+                            </button>
+                          </TooltipTrigger>
+                          <TooltipContent>Estimated run cost for this template.</TooltipContent>
+                        </Tooltip>
                       </span>
                     </div>
                   </div>
 
-                  {/* P1: logged-out visitors see the same expectation summary,
-                      then the real (local-only) builder below it. */}
-                  {isPublicTemplateBrowser ? (
-                    <div className="rounded-[1.5rem] border border-emerald-300/20 bg-emerald-300/[0.07] p-5">
-                      <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-emerald-100">
-                        What this template makes
-                      </p>
-                      <div className="mt-4 grid gap-3 text-sm text-slate-200 sm:grid-cols-2">
-                        <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
-                          <p className="text-[10px] uppercase tracking-[0.2em] text-slate-500">Your inputs</p>
-                          <p className="mt-2 text-2xl font-semibold text-white">
-                            {formatCount(inputFields.length, "input", "inputs")}
-                          </p>
-                        </div>
-                        <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
-                          <p className="text-[10px] uppercase tracking-[0.2em] text-slate-500">Expected output</p>
-                          <p className="mt-2 text-2xl font-semibold text-white">
-                            {formatCount(selectedTemplateOutputCount, "video", "videos")}
-                          </p>
-                        </div>
-                        <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
-                          <p className="text-[10px] uppercase tracking-[0.2em] text-slate-500">Run cost</p>
-                          <p className="mt-2 text-2xl font-semibold text-white">{creditsRequired} credits</p>
-                        </div>
-                        <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
-                          <p className="text-[10px] uppercase tracking-[0.2em] text-slate-500">Use case</p>
-                          <p className="mt-2 text-base font-semibold text-white">Campaign drop template</p>
-                        </div>
-                      </div>
-                    </div>
-                  ) : null}
 
                   {(
                     <>
