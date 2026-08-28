@@ -334,9 +334,39 @@ export default function HomePage() {
     retry: false,
   });
 
+  /**
+   * REAL popularity only. `public_template_popularity` is a public RPC over the
+   * last 90 days of runs; if it errors or has no row for a template, the count is
+   * simply absent — never estimated, never faked.
+   */
+  const { data: popularity = {} as Record<string, number> } = useQuery({
+    queryKey: ["public-template-popularity", 90],
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc("public_template_popularity" as never, { days: 90 } as never);
+      if (error) return {} as Record<string, number>;
+      const map: Record<string, number> = {};
+      for (const row of (data ?? []) as { template_id?: string; runs?: number }[]) {
+        if (row?.template_id) map[String(row.template_id)] = Number(row.runs ?? 0);
+      }
+      return map;
+    },
+    staleTime: 10 * 60 * 1000,
+    retry: false,
+  });
+
   // Single dedup allocator — every section draws from here.
   const allocation = useMemo(() => allocateHomeMedia(templates), [templates]);
   const { hero: heroPair, trending, newToday, creatorDrops, categories, mediaWall } = allocation;
+
+  /** TRENDING — ordered by real run counts; catalog order is the tiebreaker. */
+  const trendingRanked = useMemo(() => {
+    const runsOf = (entry: Entry) => popularity[String(entry.template.id ?? "")] ?? 0;
+    return trending
+      .map((entry, index) => ({ entry, index }))
+      .sort((a, b) => runsOf(b.entry) - runsOf(a.entry) || a.index - b.index)
+      .map((row) => row.entry);
+  }, [trending, popularity]);
+
 
   const original = heroPair[0] ?? null;
   const yourVersion = heroPair[1] ?? null;
