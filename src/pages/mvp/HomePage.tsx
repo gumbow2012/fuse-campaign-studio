@@ -754,7 +754,27 @@ export default function HomePage() {
         </section>
       )}
 
-      {/* 3 · SHELVES */}
+      {/* 3 · SHELVES — TRENDING first (real popularity), then NEW DROPS */}
+
+      <Shelf
+        id="trending-now"
+        label="Trending now"
+        heading="What brands are using right now"
+        description="Ordered by real template runs over the last 90 days."
+        entries={trendingRanked}
+        perfMap={perfMap}
+        runsMap={popularity}
+        badge={{ tone: "trending", label: "Trending" }}
+      />
+      <Shelf
+        id="new-today"
+        label="New drops"
+        heading="Just added to the marketplace"
+        entries={newToday}
+        perfMap={perfMap}
+        runsMap={popularity}
+        badge={{ tone: "new", label: "New" }}
+      />
 
       <Shelf
         id="from-creators-you-follow"
@@ -762,12 +782,14 @@ export default function HomePage() {
         heading="From creators you follow"
         entries={followedEntries}
         perfMap={perfMap}
+        runsMap={popularity}
       />
       <Shelf
         label="Top ROAS"
         heading="Highest returning campaigns"
         entries={topRoas}
         perfMap={perfMap}
+        runsMap={popularity}
         showDisclaimer
       />
       <Shelf
@@ -775,22 +797,8 @@ export default function HomePage() {
         heading="Proven on the most ad spend"
         entries={mostTested}
         perfMap={perfMap}
+        runsMap={popularity}
         showDisclaimer
-      />
-      <Shelf
-        label="Trending now"
-        heading="What brands are using right now"
-        entries={trending}
-        perfMap={perfMap}
-        badge={{ tone: "trending", label: "Trending" }}
-      />
-      <Shelf
-        id="new-today"
-        label="New today"
-        heading="Just added to the marketplace"
-        entries={newToday}
-        perfMap={perfMap}
-        badge={{ tone: "new", label: "New" }}
       />
 
       {creators.length > 0 && (
@@ -798,6 +806,7 @@ export default function HomePage() {
           label="Creator drops"
           heading="Built by FUSE creators"
           entries={creatorDrops}
+          runsMap={popularity}
         />
       )}
       {categories.map((shelf) => (
@@ -806,22 +815,24 @@ export default function HomePage() {
           label={shelf.title}
           heading={`${shelf.title} campaigns`}
           entries={shelf.entries}
+          runsMap={popularity}
         />
       ))}
 
       {/* 4 · THREE STEPS */}
       <section className="container border-t border-white/10 py-12">
         <SectionLabel>Three steps</SectionLabel>
+        <SectionHeading>From template to campaign.</SectionHeading>
         <div className="mt-6 grid gap-3 sm:grid-cols-3">
           {[
-            { n: "01", title: "Pick", copy: "Find a campaign you want.", icon: Layers3 },
+            { n: "01", title: "Pick", copy: "Choose a campaign from the marketplace.", icon: Layers3 },
             {
               n: "02",
-              title: "Upload",
-              copy: "Add your product, logo and optional cast.",
+              title: "Add your brand",
+              copy: "Drop in your product, logo and optional cast.",
               icon: Upload,
             },
-            { n: "03", title: "Generate", copy: "FUSE rebuilds it for your brand.", icon: Wand2 },
+            { n: "03", title: "Generate", copy: "FUSE rebuilds the whole campaign for you.", icon: Wand2 },
           ].map((step) => (
             <div
               key={step.n}
@@ -839,6 +850,36 @@ export default function HomePage() {
           ))}
         </div>
       </section>
+
+      {/* 4.5 · WHY FUSE — qualitative only, no fabricated stats */}
+      <section className="container border-t border-white/10 py-12">
+        <SectionLabel>Why FUSE</SectionLabel>
+        <SectionHeading>The creative is already done.</SectionHeading>
+        <div className="mt-6 grid gap-3 sm:grid-cols-3">
+          {[
+            {
+              title: "No prompts",
+              copy: "You never write a prompt. Every template already carries the direction, lighting and sequencing.",
+            },
+            {
+              title: "Creative already proven",
+              copy: "Templates come from campaigns creators actually shot — you start from a finished idea, not a blank page.",
+            },
+            {
+              title: "New drops constantly",
+              copy: "Creators keep publishing new campaigns to the marketplace, so the catalog keeps growing.",
+            },
+          ].map((item) => (
+            <div key={item.title} className="rounded-2xl border border-white/10 bg-white/[0.03] px-5 py-6">
+              <p className="font-display text-lg font-semibold uppercase tracking-[0.04em] text-white">
+                {item.title}
+              </p>
+              <p className="mt-2 text-sm leading-6 text-slate-300">{item.copy}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+
 
       {/* 5 · CREATOR PROGRAM */}
       <section className="container border-t border-white/10 py-12">
