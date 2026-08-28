@@ -3,7 +3,7 @@ import { Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
 import { useAnimatedNumber } from "@/hooks/useAnimatedNumber";
-import { PLAN_LADDER } from "@/lib/planLadder";
+import { PLAN_LADDER, WELCOME_CREDITS_ONCE } from "@/lib/planLadder";
 
 /** Compact horizontal "YOUR MEMBERSHIP" strip placed above plan cards. */
 export default function CompactAccountBar({ onManage }: { onManage?: () => void }) {
@@ -60,7 +60,11 @@ export default function CompactAccountBar({ onManage }: { onManage?: () => void 
       ) : (
         <>
           <span className="hidden text-slate-600 sm:inline">·</span>
-          <span className="text-sm text-slate-400">No active monthly credits</span>
+          <span className="text-sm text-slate-400">
+            {credits > 0
+              ? `${animatedCredits.toLocaleString()} credits · no monthly refill`
+              : `${WELCOME_CREDITS_ONCE} welcome credits · one-time`}
+          </span>
         </>
       )}
 
