@@ -31,6 +31,12 @@ import {
   type MaddenProfileOf,
 } from "@/lib/madden-media/wardrobe";
 
+import {
+  normalizeRecipeConfig,
+  type MaddenRecipe,
+  type MaddenRecipeConfig,
+} from "@/lib/madden-media/recipes";
+
 const TABLE = "madden_media_projects";
 
 function fail(error: unknown, fallback: string): never {
@@ -356,3 +362,63 @@ export const analyzeOutfit = (imageUrls: string[]) =>
 export const analyzeJewelry = (imageUrls: string[]) =>
   invokeAnalysis("analyze_jewelry", imageUrls, normalizeJewelryAttributes);
 
+
+/* ------------------------------------------------------------------ *
+ * M5 — recipes (public.madden_recipes)
+ * ------------------------------------------------------------------ *
+ * Builtin recipes live in code (lib/madden-media/recipes.ts). This layer only
+ * reads/writes the user's own non-builtin rows. Structured data only.
+ */
+
+const RECIPES_TABLE = "madden_recipes";
+const RECIPE_SELECT = "id, name, config, tags, builtin, thumbnail, created_at";
+
+function toRecipe(row: Record<string, unknown>): MaddenRecipe {
+  return {
+    id: String(row.id),
+    name: String(row.name ?? "Untitled recipe"),
+    tags: Array.isArray(row.tags) ? (row.tags as unknown[]).map((t) => String(t)) : [],
+    builtin: row.builtin === true,
+    thumbnail: row.thumbnail ? String(row.thumbnail) : null,
+    config: normalizeRecipeConfig(row.config),
+    createdAt: String(row.created_at ?? ""),
+  };
+}
+
+/** Rows readable by RLS: builtin rows plus the signed-in user's own. */
+export async function listUserRecipes(): Promise<MaddenRecipe[]> {
+  const { data, error } = await looseTable(RECIPES_TABLE)
+    .select(RECIPE_SELECT)
+    .order("created_at", { ascending: false })
+    .limit(200);
+  if (error) fail(error, "Could not load your recipes");
+  return ((data as Record<string, unknown>[] | null) ?? []).map(toRecipe);
+}
+
+export async function saveUserRecipe(input: {
+  name: string;
+  tags?: string[];
+  config: MaddenRecipeConfig;
+  thumbnail?: string | null;
+}): Promise<MaddenRecipe> {
+  const userId = await requireUserId();
+  const { data, error } = await looseTable(RECIPES_TABLE)
+    .insert({
+      user_id: userId,
+      name: input.name.trim() || "Untitled recipe",
+      tags: input.tags ?? [],
+      builtin: false,
+      thumbnail: input.thumbnail ?? null,
+      config: input.config as unknown as Record<string, unknown>,
+    })
+    .select(RECIPE_SELECT)
+    .maybeSingle();
+  if (error) fail(error, "Could not save that recipe");
+  if (!data) throw new Error("Could not save that recipe");
+  return toRecipe(data as Record<string, unknown>);
+}
+
+export async function deleteUserRecipe(id: string): Promise<void> {
+  const { error } = await looseTable(RECIPES_TABLE).delete().eq("id", id);
+  if (error) fail(error, "Could not delete that recipe");
+}
