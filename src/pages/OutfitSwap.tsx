@@ -352,7 +352,7 @@ export default function OutfitSwap() {
       setUploadingVideo(false);
       setExtracting(false);
     }
-  }, []);
+  }, [runSourceAnalysis]);
 
   /* -------------------------- 3. Garment references ------------------------- */
 
