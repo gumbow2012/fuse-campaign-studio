@@ -275,3 +275,69 @@ export function saveCastAssignment(fingerprint: string, assignment: OutfitSwapCa
     // Assignment is a convenience mapping — a storage failure must not break the run.
   }
 }
+
+/* ------------------------------------------------------------------ *
+ * PHASE 4 — MODEL / PERSON REFERENCE (choose + store only)
+ * ------------------------------------------------------------------ */
+
+/**
+ * Where the person for a subject track comes from.
+ *  - keep_original: today's behaviour — the source identity is preserved and
+ *    only the clothing changes. This is the default and the only value the
+ *    current (clothing-only) generation path knows about.
+ *  - avatar / cast: an existing avatar_profiles row picked with the shared
+ *    FUSE Cast picker (My avatars = USER, FUSE Cast = FUSE).
+ *  - upload: 1–5 loose reference photos forming a temporary, project-scoped
+ *    identity set. These are NEVER auto-saved into "My avatars".
+ */
+export type OutfitSwapModelSource = "keep_original" | "upload" | "avatar" | "cast";
+
+export const MAX_MODEL_REFERENCES = 5;
+
+export type OutfitSwapSubjectModel = {
+  modelSource: OutfitSwapModelSource;
+  avatarId?: string | null;
+  uploadedRefUrls?: string[];
+};
+
+/** subject track id → chosen model. Stored with the run, not sent to generation. */
+export type OutfitSwapModelAssignment = Record<string, OutfitSwapSubjectModel>;
+
+export const KEEP_ORIGINAL_MODEL: OutfitSwapSubjectModel = {
+  modelSource: "keep_original",
+  avatarId: null,
+  uploadedRefUrls: [],
+};
+
+/** True when nothing about the source person changes (today's behaviour). */
+export function isKeepOriginal(model: OutfitSwapSubjectModel | null | undefined) {
+  return !model || model.modelSource === "keep_original";
+}
+
+/**
+ * The subject a single-subject run refers to. Phase 1 analysis always gives us
+ * a stable track id; the fallback keeps storage keys stable if it is missing.
+ */
+export function primarySubjectId(analysis: OutfitSwapSourceAnalysis | null): string {
+  return analysis?.subjectTracks[0]?.subjectId ?? "subject-1";
+}
+
+const MODEL_KEY = (fingerprint: string) => `fuse-outfit-swap-models-v1:${fingerprint}`;
+
+export function loadModelAssignment(fingerprint: string): OutfitSwapModelAssignment | null {
+  try {
+    const raw = window.localStorage.getItem(MODEL_KEY(fingerprint));
+    return raw ? (JSON.parse(raw) as OutfitSwapModelAssignment) : null;
+  } catch {
+    return null;
+  }
+}
+
+export function saveModelAssignment(fingerprint: string, assignment: OutfitSwapModelAssignment) {
+  try {
+    window.localStorage.setItem(MODEL_KEY(fingerprint), JSON.stringify(assignment));
+  } catch {
+    // The model choice is stored for convenience — a failure must not break the run.
+  }
+}
+

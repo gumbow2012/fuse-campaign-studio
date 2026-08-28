@@ -55,16 +55,25 @@ import {
   loadCastAssignment,
   saveCastAssignment,
   suggestCastAssignment,
+  loadModelAssignment,
+  saveModelAssignment,
+  primarySubjectId,
   isBottomGarment,
   isTopGarment,
+  KEEP_ORIGINAL_MODEL,
   type OutfitSwapCastAssignment,
   type OutfitSwapGarment,
+  type OutfitSwapModelAssignment,
+  type OutfitSwapSubjectModel,
   type OutfitSwapSourceAnalysis,
   type OutfitSwapTemplateResult,
   type SwapGeneration,
 } from "@/services/outfitSwap";
+import SubjectModelSelector from "@/components/outfitswap/SubjectModelSelector";
+import { useAuth } from "@/contexts/AuthContext";
 import { extractFrames, frameTimestamps, loadVideo, readMeta, type VideoMeta } from "@/lib/videoFrames";
 import { compressImageFile } from "@/lib/imageCompress";
+
 
 const GARMENT_TYPES = [
   "Shirt / Top",
@@ -190,7 +199,7 @@ function GarmentSlotUpload({
 
 
 
-/** One detected subject track + its assigned wardrobe (mapping only). */
+/** One detected subject track + its model choice and assigned wardrobe (mapping only). */
 function SubjectCastCard({
   label,
   description,
@@ -198,6 +207,9 @@ function SubjectCastCard({
   garments,
   wardrobe,
   onChange,
+  userId,
+  model,
+  onModelChange,
 }: {
   label: string;
   description: string;
@@ -205,7 +217,11 @@ function SubjectCastCard({
   garments: Garment[];
   wardrobe: { topGarmentId: string | null; bottomGarmentId: string | null } | null;
   onChange: (slot: "topGarmentId" | "bottomGarmentId", garmentId: string | null) => void;
+  userId?: string | null;
+  model: OutfitSwapSubjectModel | null;
+  onModelChange: (next: OutfitSwapSubjectModel) => void;
 }) {
+
   const tops = garments.filter(isTopGarment);
   const bottoms = garments.filter(isBottomGarment);
   const name = (garment: Garment) => garment.label || garment.name || garment.type;
@@ -253,8 +269,11 @@ function SubjectCastCard({
               </p>
             ) : null}
           </div>
+          {/* PHASE 4 — model choice per subject (stored only, generation unchanged). */}
+          <SubjectModelSelector userId={userId} model={model} onChange={onModelChange} compact />
           {renderSlot("Top", "topGarmentId", tops, wardrobe?.topGarmentId ?? null)}
           {renderSlot("Bottom", "bottomGarmentId", bottoms, wardrobe?.bottomGarmentId ?? null)}
+
         </div>
       </div>
     </div>
@@ -365,7 +384,9 @@ function VideoProgress({
 
 
 export default function OutfitSwap() {
+  const { user } = useAuth();
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
+
   const [videoPreview, setVideoPreview] = useState<string | null>(null);
   const [meta, setMeta] = useState<VideoMeta | null>(null);
   const [uploadingVideo, setUploadingVideo] = useState(false);
@@ -386,6 +407,10 @@ export default function OutfitSwap() {
   // stored with the run and is NOT sent to the generation calls in this phase.
   const [castAssignment, setCastAssignment] = useState<OutfitSwapCastAssignment>({});
   const [suggestionDismissed, setSuggestionDismissed] = useState(false);
+  // PHASE 4 — subject track id → chosen model. Stored with the run only; the
+  // swap / video calls still run the clothing-only (keep original) contract.
+  const [modelAssignment, setModelAssignment] = useState<OutfitSwapModelAssignment>({});
+
 
   const [garments, setGarments] = useState<Garment[]>([]);
   const [uploadingGarment, setUploadingGarment] = useState(false);
@@ -441,6 +466,8 @@ export default function OutfitSwap() {
       setAnalysisFingerprint(result.fingerprint);
       setSuggestionDismissed(false);
       setCastAssignment(loadCastAssignment(result.fingerprint) ?? {});
+      setModelAssignment(loadModelAssignment(result.fingerprint) ?? {});
+
       setAnalysisStage("done");
     } catch (error) {
       setAnalysisError(error instanceof Error ? error.message : "Could not analyse that clip");
@@ -605,6 +632,22 @@ export default function OutfitSwap() {
     if (!analysisFingerprint) return;
     saveCastAssignment(analysisFingerprint, castAssignment);
   }, [analysisFingerprint, castAssignment]);
+
+  /* ------------------- 3c. Model / person choice (storage only) --------------- */
+
+  useEffect(() => {
+    if (!analysisFingerprint) return;
+    saveModelAssignment(analysisFingerprint, modelAssignment);
+  }, [analysisFingerprint, modelAssignment]);
+
+  const setSubjectModel = useCallback((subjectId: string, next: OutfitSwapSubjectModel) => {
+    setModelAssignment((prev) => ({ ...prev, [subjectId]: next }));
+  }, []);
+
+  /** The single-subject run still talks about exactly one person. */
+  const soloSubjectId = useMemo(() => primarySubjectId(analysis), [analysis]);
+  const soloModel = modelAssignment[soloSubjectId] ?? KEEP_ORIGINAL_MODEL;
+
 
   const setSubjectGarment = useCallback(
     (subjectId: string, slot: "topGarmentId" | "bottomGarmentId", garmentId: string | null) => {
@@ -1359,9 +1402,24 @@ export default function OutfitSwap() {
               </div>
             </SectionCard>
 
+            {/* PHASE 4 — single-subject runs get ONE simple model control.
+                "Keep original" (the default) is exactly today's behaviour. */}
+            {subjectTracks.length > 1 ? null : (
+              <div className="rounded-3xl border border-white/10 bg-white/[0.03] p-4 backdrop-blur-xl sm:p-5">
+                <div className="max-w-sm">
+                  <SubjectModelSelector
+                    userId={user?.id ?? null}
+                    model={soloModel}
+                    onChange={(next) => setSubjectModel(soloSubjectId, next)}
+                  />
+                </div>
+              </div>
+            )}
+
             {/* PHASE 3 — only appears when the clip really has multiple subjects.
                 One subject keeps the flow exactly as simple as before. */}
             {subjectTracks.length > 1 ? (
+
               <SectionCard
                 step={4}
                 title="Assign your cast"
@@ -1398,6 +1456,10 @@ export default function OutfitSwap() {
                         garments={garments}
                         wardrobe={castAssignment[track.subjectId] ?? null}
                         onChange={(slot, garmentId) => setSubjectGarment(track.subjectId, slot, garmentId)}
+                        userId={user?.id ?? null}
+                        model={modelAssignment[track.subjectId] ?? KEEP_ORIGINAL_MODEL}
+                        onModelChange={(next) => setSubjectModel(track.subjectId, next)}
+
                       />
                     ))}
                   </div>
