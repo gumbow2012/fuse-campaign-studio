@@ -128,13 +128,29 @@ function extractSubscriptionPeriod(subscription: StripeObject) {
   };
 }
 
+/**
+ * Internal-path allowlist for the post-checkout landing page. An authenticated
+ * checkout must return into the APP — never to /auth (which would show the
+ * account-creation UI to a user who already has a session).
+ */
+export function sanitizeReturnPath(raw: unknown): string | null {
+  if (typeof raw !== "string") return null;
+  const value = raw.trim();
+  if (!value.startsWith("/")) return null;
+  if (value.startsWith("//") || value.startsWith("/\\")) return null;
+  if (value.startsWith("/auth")) return null;
+  if (value.length > 512) return null;
+  return value;
+}
+
 function billingReturnUrl(
   origin: string,
   mode: StripeBillingMode,
   outcome: "success" | "canceled",
-  intent?: { templateId?: string | null; templateName?: string | null },
+  intent?: { templateId?: string | null; templateName?: string | null; returnPath?: string | null },
 ) {
-  const url = new URL(outcome === "success" ? "/auth" : "/pricing", origin);
+  const successPath = intent?.returnPath ?? "/auth";
+  const url = new URL(outcome === "success" ? successPath : "/pricing", origin);
   url.searchParams.set(outcome, "true");
   if (outcome === "success") {
     url.searchParams.set("paid", "true");
@@ -155,6 +171,7 @@ function billingReturnUrl(
   }
   return url.toString();
 }
+
 
 function normalizeCheckoutEmail(value: unknown) {
   if (typeof value !== "string") return null;
