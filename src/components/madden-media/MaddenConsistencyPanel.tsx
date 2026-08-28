@@ -8,7 +8,7 @@
  * Owned entirely by Madden Media Studio. Nothing here imports Cinema,
  * Jewelry Swap, Outfit Swap, Generation Studio or Templates. No generation.
  */
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { Loader2, Sparkles, Trash2, Upload, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
