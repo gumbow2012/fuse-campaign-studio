@@ -158,19 +158,11 @@ function TemplateRow({
           {template?.name ?? "Unknown template"}
         </p>
         <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[9px] uppercase tracking-[0.18em]">
-          <span
-            className={cn(
-              "rounded-full border px-2 py-0.5",
-              template?.live
-                ? "border-emerald-300/30 bg-emerald-300/10 text-emerald-100"
-                : "border-amber-300/30 bg-amber-300/10 text-amber-100",
-            )}
-          >
-            {template?.live ? "Live" : "Draft"}
-          </span>
-          {template?.category ? (
-            <span className="rounded-full border border-white/10 px-2 py-0.5 text-slate-400">
-              {template.category}
+          {/* "Live" means the template has an active non-fork version (the only
+              templates this page loads). No draft flag exists on fuse_templates. */}
+          {template?.live ? (
+            <span className="rounded-full border border-emerald-300/30 bg-emerald-300/10 px-2 py-0.5 text-emerald-100">
+              Live
             </span>
           ) : null}
           {template?.createdBy ? (
@@ -508,7 +500,7 @@ export default function AdminMerchandising() {
     if (!query) return true;
     return (
       template.name.toLowerCase().includes(query) ||
-      (template.category ?? "").toLowerCase().includes(query)
+      (template.description ?? "").toLowerCase().includes(query)
     );
   });
 
@@ -707,7 +699,7 @@ export default function AdminMerchandising() {
                     <span className="min-w-0 flex-1">
                       <span className="block truncate text-sm font-semibold text-white">{template.name}</span>
                       <span className="block truncate text-[11px] text-slate-400">
-                        {template.category ?? "Uncategorized"}
+                        {template.description ?? ""}
                       </span>
                     </span>
                   </button>
