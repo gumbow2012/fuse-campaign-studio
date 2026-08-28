@@ -1151,10 +1151,8 @@ export default function TemplateStudioPage() {
   const creditBalance = profile?.credits_balance ?? null;
   const displayedCreditBalance = creditBalance ?? 0;
   const profileIsResolving = !!user && !isPrivilegedUser && !profile;
-  const hasActiveMembership =
-    isPrivilegedUser ||
-    profile?.subscription_status === "active" ||
-    profile?.subscription_status === "trialing";
+  // FREEMIUM: generation is gated on credits, not on membership status.
+
   const adminVisualRemaining = getAdminVisualCreditsRemaining();
   const creditCycleTotal = isPrivilegedUser
     ? ADMIN_VISUAL_BUDGET_TOTAL
@@ -1451,14 +1449,6 @@ export default function TemplateStudioPage() {
       return;
     }
     if (!isPrivilegedUser) {
-      if (!hasActiveMembership) {
-        toast({
-          title: "Membership required",
-          description: "Your billing state is not active yet.",
-          variant: "destructive",
-        });
-        return;
-      }
       if (displayedCreditBalance < batchCredits) {
         toast({
           title: "Credits not available",
@@ -1860,7 +1850,7 @@ export default function TemplateStudioPage() {
               label={isPrivilegedUser ? "Team Credits Remaining" : "Credits Remaining"}
               percent={creditsRemainingPercent}
               value={creditsRemainingValue}
-              showTopUp={!!user && !!profile && !isPrivilegedUser && hasActiveMembership && displayedCreditBalance <= 0}
+              showTopUp={!!user && !!profile && !isPrivilegedUser && displayedCreditBalance <= 0}
             />
           )}
         </div>
@@ -2684,14 +2674,13 @@ export default function TemplateStudioPage() {
                       </p>
                     ) : profileIsResolving ? (
                       <p className="mt-3 text-sm leading-6 text-cyan-100">
-                        Checking your membership and credit balance.
+                        Checking your credit balance.
                       </p>
-                    ) : !hasActiveMembership ? (
+                    ) : blockedByCredits ? (
                       <p className="mt-3 text-sm leading-6 text-amber-100">
-                        Active membership required before generating campaigns.
-                        {" "}
-                        <Link to="/pricing" className="underline underline-offset-4">
-                          Open membership
+                        Not enough credits — buy credits or{" "}
+                        <Link to="/membership?tab=upgrade" className="underline underline-offset-4">
+                          upgrade your plan
                         </Link>
                       </p>
                     ) : null}

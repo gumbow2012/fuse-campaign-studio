@@ -425,12 +425,8 @@ async function handleRunFork(
     }
   }
 
-  if (!privileged) {
-    const subscriptionStatus = String((profile as any)?.subscription_status ?? "").toLowerCase();
-    if (!["active", "trialing"].includes(subscriptionStatus)) {
-      throw new ForkRunError("MEMBERSHIP_REQUIRED", "Active membership required before running workflows", 402);
-    }
-  }
+  // FREEMIUM: no membership precondition. The credit charge below
+  // (apply_credit_transaction, refunded on failure) is the real gate.
 
   // 4) CHARGE + RUN — same charge/job/run path as a normal run.
   const inputNodes = compiledNodes.filter((node) => node.node_type === "user_input");
@@ -693,19 +689,8 @@ Deno.serve(async (req) => {
 
     let creditCost = 0;
     if (user && !bypassCredits) {
-      const { data: profile, error: profileError } = await admin
-        .from("profiles")
-        .select("subscription_status")
-        .eq("user_id", user.id)
-        .maybeSingle();
-      if (profileError) throw new Error(profileError.message);
-      if (!profile) throw new Error("Profile not found");
-
-      const subscriptionStatus = String(profile.subscription_status ?? "").toLowerCase();
-      if (!["active", "trialing"].includes(subscriptionStatus)) {
-        throw new Error("Active membership required before running templates.");
-      }
-
+      // FREEMIUM: any signed-in user may run as long as they can afford it.
+      // The credit charge (and refund-on-failure) below is the only gate.
       creditCost = getTemplateCreditCost(templateName, deliverableCounts);
     }
 
