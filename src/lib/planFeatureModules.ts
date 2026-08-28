@@ -1,116 +1,74 @@
 /**
- * Grouped FEATURE MODULES for the pricing cards — 2–3 labeled boxes per plan
- * instead of one long checklist.
+ * PLAN DIFFERENTIATORS for the pricing cards.
  *
- * AUDITED: every line below maps to a capability the product actually gates
- * today (marketplace templates, Brand Workspace, saved assets, campaign history,
- * credit top-ups, FUSE Cast/avatars, workflow customization, team workspace).
- * Nothing claims priority generation, SLAs or concurrency — those are NOT
- * implemented, so they are not sold here.
+ * Short, non-redundant lists: each plan states what it adds over the plan below it,
+ * so nothing repeats down the ladder ("Full campaign templates" is a Starter line and
+ * is never restated on Capsule/Pro/Studio).
+ *
+ * AUDITED: every line maps to a capability the product actually gates today
+ * (marketplace templates, Brand Workspace, saved assets, campaign history, credit
+ * top-ups, FUSE Cast/avatars, workflow customization, private forks, team workspace).
+ * Nothing claims priority generation, SLAs or concurrency — those are NOT implemented,
+ * so they are not sold here.
  */
 
-export type PlanFeatureModule = {
-  label: string;
+import { WELCOME_CREDITS_ONCE } from "@/lib/planLadder";
+
+export type PlanDifferentiators = {
+  /** "Everything in Starter, plus:" — omitted for Free. */
+  inherits: string | null;
+  /** 4–6 real differentiators. Everything else lives in the comparison table. */
   items: string[];
 };
 
-const MODULES: Record<string, PlanFeatureModule[]> = {
-  free: [
-    {
-      label: "Explore FUSE",
-      items: ["Browse the campaign marketplace", "Free-eligible templates", "Preview creator campaigns"],
-    },
-    {
-      label: "Your Brand",
-      items: ["Brand Workspace setup", "100 welcome credits"],
-    },
-  ],
-  starter: [
-    {
-      label: "Campaign Engine",
-      items: ["Full campaign templates", "Image templates", "Campaign history"],
-    },
-    {
-      label: "Your Brand",
-      items: ["Brand Workspace", "Saved products + brand assets"],
-    },
-    {
-      label: "More Creative Capacity",
-      items: ["Monthly credits included", "Credit top-ups"],
-    },
-  ],
-  plus: [
-    {
-      label: "Campaign Engine",
-      items: ["Everything in Starter", "FUSE Cast"],
-    },
-    {
-      label: "Your Brand",
-      items: ["Your own avatars", "Saved products + brand assets"],
-    },
-    {
-      label: "More Creative Capacity",
-      items: ["Higher monthly credits", "Higher campaign volume"],
-    },
-  ],
-  capsule: [
-    {
-      label: "Campaign Engine",
-      items: ["Everything in Starter", "FUSE Cast", "Full campaign templates"],
-    },
-    {
-      label: "Your Brand",
-      items: ["Brand Workspace", "Your own avatars", "Saved products + brand assets"],
-    },
-    {
-      label: "More Creative Capacity",
-      items: ["Enough credits for a full capsule drop", "Credit top-ups"],
-    },
-  ],
-  pro: [
-    {
-      label: "Campaign Engine",
-      items: ["Everything in Capsule", "Workflow customization", "Campaign versions + revisions"],
-    },
-    {
-      label: "Your Brand",
-      items: ["Private template forks", "Saved products + brand assets"],
-    },
-    {
-      label: "More Creative Capacity",
-      items: ["A campaign every week, all month", "Credit top-ups"],
-    },
-  ],
-  studio: [
-    {
-      label: "Campaign Engine",
-      items: ["Everything in Pro", "Full advanced toolset", "Campaign versions + revisions"],
-    },
-    {
-      label: "Your Brand",
-      items: ["Largest saved-asset library", "Private template forks"],
-    },
-    {
-      label: "More Creative Capacity",
-      items: ["Multiple campaigns every week", "Credit top-ups"],
-    },
-  ],
-  team: [
-    {
-      label: "Team Workspace",
-      items: ["Shared team workspace", "3 seats included", "Roles and permissions"],
-    },
-    {
-      label: "Campaign Engine",
-      items: ["Everything in Studio", "Workflow customization"],
-    },
-    {
-      label: "More Creative Capacity",
-      items: ["Shared team credit pool"],
-    },
-  ],
+const DIFFERENTIATORS: Record<string, PlanDifferentiators> = {
+  free: {
+    inherits: null,
+    items: [
+      "Browse the campaign marketplace",
+      "Free-eligible templates",
+      "Brand Workspace setup",
+      `${WELCOME_CREDITS_ONCE} welcome credits (one-time)`,
+    ],
+  },
+  starter: {
+    inherits: null,
+    items: [
+      "Full campaign templates",
+      "Image templates",
+      "Saved products + brand assets",
+      "Campaign history",
+      "Credit top-ups",
+    ],
+  },
+  capsule: {
+    inherits: "Starter",
+    items: ["FUSE Cast", "2.5x the monthly credits", "Built for weekly creative testing"],
+  },
+  pro: {
+    inherits: "Capsule",
+    items: [
+      "Workflow customization",
+      "Private workflow forks",
+      "Advanced generation controls",
+      "Campaign versions + revisions",
+    ],
+  },
+  studio: {
+    inherits: "Pro",
+    items: ["Highest monthly allowance", "Full advanced toolkit"],
+  },
+  team: {
+    inherits: "Studio",
+    items: ["Shared team workspace", "3 seats included", "Roles and permissions", "Shared team credit pool"],
+  },
+  /** Retired from sale — kept so historical Plus records still render something truthful. */
+  plus: {
+    inherits: "Starter",
+    items: ["FUSE Cast", "Your own avatars", "Higher monthly credits"],
+  },
 };
 
-export function planFeatureModules(planKey: string): PlanFeatureModule[] {
-  return MODULES[planKey] ?? [];
+export function planDifferentiators(planKey: string): PlanDifferentiators {
+  return DIFFERENTIATORS[planKey] ?? { inherits: null, items: [] };
 }

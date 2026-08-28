@@ -6,17 +6,15 @@ import GatedPlanDialog from "@/components/mvp/membership/GatedPlanDialog";
 import PlanComparisonMatrix from "@/components/mvp/membership/PlanComparisonMatrix";
 import {
   PLAN_LADDER,
+  WELCOME_CREDITS_ONCE,
   isCheckoutLive,
   type PlanAccentKey,
   type PlanLadderEntry,
 } from "@/lib/planLadder";
 import { formatMoney, getPlanOffer, type BillingPeriod } from "@/lib/planOffer";
-import { planFeatureModules } from "@/lib/planFeatureModules";
-import {
-  approxCampaignRangeLabel,
-  approxImageGenerationsLabel,
-  approxShortVideosLabel,
-} from "@/lib/creditOutputs";
+import { planDifferentiators } from "@/lib/planFeatureModules";
+import { MEDIAN_CAMPAIGN_TOOLTIP, typicalCapacityLabel } from "@/lib/creditOutputs";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import type { STRIPE_TIERS } from "@/lib/stripe-config";
 
 export type BillingCycle = BillingPeriod;
@@ -165,10 +163,8 @@ function PlanCard({
   const offer = getPlanOffer(entry, "monthly", null);
 
   const credits = offer.monthlyCredits ?? 0;
-  const campaignRange = approxCampaignRangeLabel(credits);
-  const imageEquivalent = approxImageGenerationsLabel(credits);
-  const videoEquivalent = approxShortVideosLabel(credits);
-  const modules = planFeatureModules(entry.key);
+  const capacity = typicalCapacityLabel(credits);
+  const { inherits, items } = planDifferentiators(entry.key);
   const elevated = entry.recommendation === "MOST POPULAR";
 
   return (
@@ -206,25 +202,29 @@ function PlanCard({
       <p className={`mt-3 text-[11px] uppercase tracking-[0.2em] ${accent.tagline}`}>{entry.tagline}</p>
       <p className="mt-2 text-sm leading-6 text-slate-300">{entry.description}</p>
 
-      {/* 3 — CREDIT BLOCK with truthful creation-capacity equivalents */}
+      {/* 3 — CREDIT BLOCK + typical campaign capacity (median-based equivalent) */}
       <div className={`mt-4 rounded-xl border px-3.5 py-3 ${accent.creditBlock}`}>
         <p className={`flex items-center gap-1.5 font-display text-sm font-bold ${accent.metric}`}>
           <Sparkle className="h-3.5 w-3.5" aria-hidden />
           {credits > 0 ? `${credits.toLocaleString()} credits/month` : entry.creditsLabel}
         </p>
-        {campaignRange ? (
-          <p className="mt-1.5 text-[13px] font-semibold text-white">{campaignRange}</p>
+        {capacity ? (
+          <TooltipProvider delayDuration={150}>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <p className="mt-1.5 cursor-help text-[11px] uppercase tracking-[0.16em] text-slate-400">
+                  Typical capacity ·{" "}
+                  <span className="text-[13px] font-semibold normal-case tracking-normal text-white">
+                    {capacity}
+                  </span>
+                </p>
+              </TooltipTrigger>
+              <TooltipContent className="max-w-[260px] text-xs">{MEDIAN_CAMPAIGN_TOOLTIP}</TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
         ) : (
           <p className="mt-1.5 text-[13px] font-semibold text-white">{entry.goodFor}</p>
         )}
-        {imageEquivalent || videoEquivalent ? (
-          <p className="mt-1 text-[11px] leading-4 text-slate-400">
-            {[imageEquivalent, videoEquivalent].filter(Boolean).join(" · ")}
-          </p>
-        ) : null}
-        <p className="mt-1 text-[10px] uppercase tracking-[0.16em] text-slate-500">
-          Approximate — real cost depends on outputs
-        </p>
       </div>
 
       {/* 4 — price (real current price only) */}
@@ -238,7 +238,9 @@ function PlanCard({
           {entry.isFreeState ? null : <span className="ml-1 text-sm font-medium text-slate-400">/month</span>}
         </p>
         {entry.isFreeState ? (
-          <p className="mt-1 text-xs text-slate-400">$0 · 100 welcome credits</p>
+          <p className="mt-1 text-xs text-slate-400">
+            $0 · {WELCOME_CREDITS_ONCE} welcome credits · one-time
+          </p>
         ) : offer.purchasable ? (
           <p className="mt-1 text-xs text-slate-400">Billed monthly · cancel anytime</p>
         ) : (
@@ -269,28 +271,28 @@ function PlanCard({
         {!isCurrent && !isAdmin ? <ArrowRight className="h-4 w-4" /> : null}
       </Button>
 
-      {/* 6 — grouped FEATURE MODULES */}
-      <div className="mt-5 flex-1 space-y-2.5">
-        {modules.map((module) => (
-          <div key={module.label} className={`rounded-xl border px-3 py-2.5 ${accent.module}`}>
-            <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">{module.label}</p>
-            <ul className="mt-1.5 space-y-1.5">
-              {module.items.map((item) => (
-                <li key={item} className="flex items-start gap-2 text-[12.5px] leading-5 text-slate-200">
-                  <Check className={`mt-0.5 h-3.5 w-3.5 shrink-0 ${accent.metric}`} aria-hidden />
-                  <span>{item}</span>
-                </li>
-              ))}
-            </ul>
-          </div>
-        ))}
+      {/* 6 — 4–6 real differentiators. Everything else → "Compare all features". */}
+      <div className="mt-5 flex-1">
+        {inherits ? (
+          <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">
+            Everything in {inherits}, plus:
+          </p>
+        ) : null}
+        <ul className={`space-y-1.5 ${inherits ? "mt-2" : ""}`}>
+          {items.slice(0, 6).map((item) => (
+            <li key={item} className="flex items-start gap-2 text-[12.5px] leading-5 text-slate-200">
+              <Check className={`mt-0.5 h-3.5 w-3.5 shrink-0 ${accent.metric}`} aria-hidden />
+              <span>{item}</span>
+            </li>
+          ))}
+        </ul>
       </div>
     </article>
   );
 }
 
 /** Mobile stack order — Capsule first, Free stays a quiet entry at the end. */
-const MOBILE_ORDER = ["capsule", "starter", "pro", "studio", "team", "plus", "free"];
+const MOBILE_ORDER = ["capsule", "starter", "pro", "studio", "team", "free"];
 const mobileRank = (entry: PlanLadderEntry) => {
   const index = MOBILE_ORDER.indexOf(entry.key);
   return index === -1 ? MOBILE_ORDER.length : index;
@@ -363,7 +365,7 @@ export default function PlanTierCards({
         onClick={() => setShowAll((open) => !open)}
         className="w-full rounded-full border-white/15 bg-white/5 text-foreground hover:bg-white/10 sm:w-auto"
       >
-        {showAll ? "Show featured plans" : "View all plans — incl. Free, Plus & Team"}
+        {showAll ? "Show featured plans" : "View all plans — incl. Free & Team"}
       </Button>
 
       {comparison ? (

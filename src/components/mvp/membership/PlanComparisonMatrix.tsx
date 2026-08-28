@@ -14,7 +14,8 @@ type Props = {
  *
  * Deliberately short: one flat, scannable list of the highest-signal differentiators.
  */
-const ORDER = ["free", "starter", "plus", "capsule", "pro", "studio", "team"];
+/** Plus is retired from sale and absent from PLAN_LADDER, so it is not a column here. */
+const ORDER = ["free", "starter", "capsule", "pro", "studio", "team"];
 const rank = (entry: PlanLadderEntry) => ORDER.indexOf(entry.key);
 
 const YES = "Included";
@@ -30,8 +31,9 @@ const ROWS: Row[] = [
   { label: "Run campaign templates", value: from("starter") },
   { label: "Full template library", value: from("starter") },
   { label: "Saved brand assets", value: from("starter") },
-  { label: "FUSE Cast + My Avatars", value: from("plus") },
+  { label: "FUSE Cast + My Avatars", value: from("capsule") },
   { label: "Workflow customization", value: from("pro") },
+  { label: "Private workflow forks", value: from("pro") },
   { label: "Creator Program eligible", value: from("pro") },
   { label: "Full advanced toolset", value: from("studio") },
   { label: "Team workspace + seats", value: (e) => (e.key === "team" ? "3 seats" : NO) },

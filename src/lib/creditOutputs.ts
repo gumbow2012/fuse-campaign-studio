@@ -33,38 +33,31 @@ export function approxOutputLabel(credits: number | null | undefined) {
   return `approx ${images.toLocaleString()} images / mo`;
 }
 
-/* ------------------------- Credit value (tangible) ------------------------- */
+/* ------------------------- Campaign capacity (tangible) ------------------------- */
 
 /**
- * A "campaign" costs very differently depending on whether it is image-only or
- * includes video, so the equivalent is expressed as a RANGE built from the real
- * rates in creditCosts.ts — never a single model presented as universal.
- *
- * Low end  = a lean image-only campaign (4 image passes).
- * High end = an image + video campaign (2 image passes + a 10s clip on the most
- *            expensive video rate we actually run).
+ * A FUSE campaign is a MULTI-OUTPUT graph, not a single generation. This constant is the
+ * real MEDIAN credit charge across published template runs — derived from actual run
+ * charges, not from a single-generation price. Refresh it periodically as the published
+ * template mix changes.
  */
-export function campaignCreditRange() {
-  const imageCredits = creditsForImage();
-  const lean = imageCredits * 4;
-  const heaviestPerSecond = Math.max(
-    ...VIDEO_COST_MODEL_LIST.map((rate) => videoUsdPerSecond(rate.key, rate.supportsAudio)),
-  );
-  const rich = imageCredits * 2 + usdToCredits(heaviestPerSecond * 10);
-  return { lean, rich };
+export const MEDIAN_CAMPAIGN_COST = 945;
+
+export const MEDIAN_CAMPAIGN_TOOLTIP =
+  "Based on the current median published FUSE campaign cost of 945 credits. Actual usage varies by template.";
+
+/** Typical number of full campaigns a monthly credit allowance covers. */
+export function typicalCampaigns(credits: number | null | undefined) {
+  const value = Number(credits ?? 0);
+  if (!Number.isFinite(value) || value <= 0) return 0;
+  return Math.floor(value / MEDIAN_CAMPAIGN_COST);
 }
 
-/** "≈ 8–34 full campaigns" — a truthful range, or null when there is no budget. */
-export function approxCampaignRangeLabel(credits: number | null | undefined) {
-  const value = Number(credits ?? 0);
-  if (!Number.isFinite(value) || value <= 0) return null;
-  const { lean, rich } = campaignCreditRange();
-  const most = Math.floor(value / lean);
-  const fewest = Math.floor(value / rich);
-  if (most < 1) return null;
-  if (fewest < 1) return `≈ up to ${most.toLocaleString()} full campaigns`;
-  if (fewest === most) return `≈ ${most.toLocaleString()} full campaigns`;
-  return `≈ ${fewest.toLocaleString()}–${most.toLocaleString()} full campaigns`;
+/** "≈ 8 full campaigns" — a single truthful equivalent, never a wide range. */
+export function typicalCapacityLabel(credits: number | null | undefined) {
+  const count = typicalCampaigns(credits);
+  if (count < 1) return null;
+  return `≈ ${count.toLocaleString()} full campaign${count === 1 ? "" : "s"}`;
 }
 
 /** "≈ 1,530 image generations" — the unambiguous single-pass equivalent. */

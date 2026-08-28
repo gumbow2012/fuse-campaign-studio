@@ -10,7 +10,7 @@ import PlanCalculator from "@/components/mvp/membership/PlanCalculator";
 const CADENCE = [
   { id: "occasional", label: "Occasionally", plan: "starter" },
   { id: "monthly", label: "1-2 a month", plan: "starter" },
-  { id: "weekly", label: "Weekly", plan: "plus" },
+  { id: "weekly", label: "Weekly", plan: "capsule" },
   { id: "often", label: "Multiple per week", plan: "pro" },
 ] as const;
 
@@ -20,11 +20,11 @@ const WORKING = [
 ] as const;
 
 const CAST = [
-  { id: "yes", label: "Yes, I want FUSE Cast", plan: "plus" },
+  { id: "yes", label: "Yes, I want FUSE Cast", plan: "capsule" },
   { id: "no", label: "Not right now", plan: null },
 ] as const;
 
-const ORDER = ["free", "starter", "plus", "capsule", "pro", "studio", "team"];
+const ORDER = ["free", "starter", "capsule", "pro", "studio", "team"];
 
 export default function FindYourPlan() {
   const [cadence, setCadence] = useState<string | null>(null);
