@@ -49,6 +49,8 @@ import {
 
 import {
   analyzeOutfitSwapSource,
+  analyzeOutfitSwapQa,
+  applyFrameOverrides,
   callOutfitSwap,
   createTemplateFromOutfitSwap,
   persistTemplateLayout,
@@ -57,19 +59,30 @@ import {
   suggestCastAssignment,
   loadModelAssignment,
   saveModelAssignment,
+  loadQaReport,
+  saveQaReport,
+  loadFrameOverrides,
+  saveFrameOverrides,
+  structuralFrameQa,
   primarySubjectId,
   isBottomGarment,
   isTopGarment,
   KEEP_ORIGINAL_MODEL,
   type OutfitSwapCastAssignment,
+  type OutfitSwapFrameOverride,
+  type OutfitSwapFrameOverrides,
+  type OutfitSwapFrameSubject,
   type OutfitSwapGarment,
   type OutfitSwapModelAssignment,
+  type OutfitSwapQaReport,
   type OutfitSwapSubjectModel,
   type OutfitSwapSourceAnalysis,
   type OutfitSwapTemplateResult,
   type SwapGeneration,
 } from "@/services/outfitSwap";
 import SubjectModelSelector from "@/components/outfitswap/SubjectModelSelector";
+import FrameQaPanel, { QaBadge } from "@/components/outfitswap/FrameQaPanel";
+
 import { useAuth } from "@/contexts/AuthContext";
 import { extractFrames, frameTimestamps, loadVideo, readMeta, type VideoMeta } from "@/lib/videoFrames";
 import { compressImageFile } from "@/lib/imageCompress";
