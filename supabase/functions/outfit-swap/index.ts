@@ -19,6 +19,19 @@ import {
   submitFalJob,
   videoFallbackUsdPerSecond,
 } from "../_shared/fal.ts";
+import {
+  IDENTITY_AUTHORITY_BLOCK,
+  identityReferencePack,
+  readConsistencyProfile,
+} from "../_shared/identity-lock.ts";
+import {
+  type AssembledFrameEdit,
+  assembleFrameEdit,
+  type AssemblyFrameSubject,
+  type AssemblyGarment,
+  type AssemblySubjectModel,
+  requiresFusedAssembly,
+} from "../_shared/outfit-swap-assembly.ts";
 
 /**
  * Outfit Swap: per-frame nano-banana wardrobe edits + one Seedance
@@ -379,6 +392,12 @@ async function startSwapFrame(admin: AdminClient, args: {
           frame_time: Number(args.frameTime ?? 0),
           person: String(args.person ?? "Everyone"),
           garments,
+          // PHASE 5: the request architecture used for this frame. `fused` frames
+          // handle every visible subject in ONE edit — never a second pass.
+          assembly_mode: assembly ? assembly.mode : "legacy_single_subject",
+          ...(assembly
+            ? { assembly_plan: assembly.plan, assembly_verification_pending: true }
+            : {}),
         },
       })
       .eq("id", inserted.id)
@@ -724,6 +743,10 @@ Deno.serve(async (req) => {
         aspectRatio: body.aspectRatio,
         resolution: body.resolution,
         extraPrompt: body.extraPrompt,
+        // PHASE 5 context (optional — omitted requests keep the legacy path).
+        frameSubjects: Array.isArray(body.frameSubjects) ? body.frameSubjects : [],
+        castAssignment: body.castAssignment ?? {},
+        modelAssignment: body.modelAssignment ?? {},
         webhookBase,
       });
       return json({ generation });
