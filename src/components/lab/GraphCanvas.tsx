@@ -633,6 +633,7 @@ type GraphCanvasProps = {
   onNodeMoved: (nodeId: string, position: { x: number; y: number }) => void;
   onConnectNodes: (sourceNodeId: string, targetNodeId: string, targetHandleId?: string | null) => void;
   onDeleteEdge: (edgeId: string) => void;
+  onDeleteNode?: (nodeId: string) => void;
   className?: string;
   focusNodeId?: string | null;
   onViewportApiReady?: (api: { getCenter: () => { x: number; y: number } }) => void;
@@ -646,6 +647,7 @@ const GraphCanvasInner = ({
   onNodeMoved,
   onConnectNodes,
   onDeleteEdge,
+  onDeleteNode,
   className,
   focusNodeId,
   onViewportApiReady,
@@ -783,6 +785,13 @@ const GraphCanvasInner = ({
         onEdgesDelete={(deleted) => {
           for (const edge of deleted) {
             if (!edge.id.startsWith("pending-")) onDeleteEdge(edge.id);
+          }
+        }}
+        onNodesDelete={(deleted) => {
+          if (!onDeleteNode) return;
+          for (const node of deleted) {
+            if (node.deletable === false) continue;
+            onDeleteNode(node.id);
           }
         }}
         elementsSelectable
