@@ -633,6 +633,7 @@ type GraphCanvasProps = {
   onNodeMoved: (nodeId: string, position: { x: number; y: number }) => void;
   onConnectNodes: (sourceNodeId: string, targetNodeId: string, targetHandleId?: string | null) => void;
   onDeleteEdge: (edgeId: string) => void;
+  onDeleteNode?: (nodeId: string) => void;
   className?: string;
   focusNodeId?: string | null;
   onViewportApiReady?: (api: { getCenter: () => { x: number; y: number } }) => void;
