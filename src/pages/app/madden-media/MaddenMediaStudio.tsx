@@ -7,6 +7,7 @@ import MaddenJewelryPanel from "@/components/madden-media/MaddenJewelryPanel";
 import MaddenPresetPicker from "@/components/madden-media/MaddenPresetPicker";
 import MaddenShotBoard from "@/components/madden-media/MaddenShotBoard";
 import MaddenRecipePanel from "@/components/madden-media/MaddenRecipePanel";
+import MaddenPromptPreview from "@/components/madden-media/MaddenPromptPreview";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { MADDEN_CINEMATOGRAPHY_PRESETS } from "@/lib/madden-media/cinematographyPresets";
@@ -223,6 +224,20 @@ export default function MaddenMediaStudio() {
     }
   };
 
+  const handlePromptChange = (value: string) => {
+    setState((prev) => ({
+      ...prev,
+      settings: { ...prev.settings, promptOverride: value, promptUserEdited: true },
+    }));
+  };
+
+  const handleResetPrompt = () => {
+    setState((prev) => ({
+      ...prev,
+      settings: { ...prev.settings, promptOverride: "", promptUserEdited: false },
+    }));
+  };
+
   const saveLabel =
     saveState === "saving"
       ? "Saving…"
@@ -342,6 +357,12 @@ export default function MaddenMediaStudio() {
               </div>
             </div>
 
+
+            <MaddenPromptPreview
+              state={state}
+              onPromptChange={handlePromptChange}
+              onResetPrompt={handleResetPrompt}
+            />
 
             <MaddenShotBoard
               shots={state.shots}
