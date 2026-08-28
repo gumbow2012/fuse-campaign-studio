@@ -51,6 +51,7 @@ import {
   callOutfitSwap,
   createTemplateFromOutfitSwap,
   persistTemplateLayout,
+  type OutfitSwapGarment,
   type OutfitSwapSourceAnalysis,
   type OutfitSwapTemplateResult,
   type SwapGeneration,
