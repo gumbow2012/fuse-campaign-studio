@@ -286,16 +286,22 @@ export default function PlanOfferModal() {
           role="dialog"
           aria-modal="true"
           aria-label="Unlock more FUSE"
-          className="relative my-auto w-full max-w-[860px] rounded-[1.75rem] border border-white/10 bg-slate-950/95 p-5 shadow-[0_28px_90px_rgba(0,0,0,0.6)] sm:p-8"
+          className={cn(
+            "relative my-auto w-full rounded-[1.75rem] border border-white/10 bg-slate-950/95 p-6 shadow-[0_28px_90px_rgba(0,0,0,0.6)] sm:p-10",
+            // One paid plan → focused, narrow single-offer layout.
+            // More than one → keep the wider multi-column pricing width.
+            singleOffer ? "max-w-[880px]" : "max-w-[1140px]",
+          )}
         >
           <button
             type="button"
             onClick={close}
             aria-label="Close"
-            className="absolute right-3 top-3 rounded-full p-2 text-slate-400 transition-colors hover:bg-white/5 hover:text-white"
+            className="absolute right-5 top-5 rounded-full p-2 text-slate-400 transition-colors hover:bg-white/5 hover:text-white sm:right-6 sm:top-6"
           >
             <X className="h-4 w-4" />
           </button>
+
 
           {afford ? (
             <div className="py-2">
