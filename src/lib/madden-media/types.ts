@@ -167,6 +167,15 @@ export function normalizeProjectState(raw: unknown): MaddenProjectState {
         typeof value.settings?.lookName === "string" ? value.settings.lookName : "",
       globalNotes:
         typeof value.settings?.globalNotes === "string" ? value.settings.globalNotes : "",
+      cinematographyId:
+        typeof value.settings?.cinematographyId === "string"
+          ? value.settings.cinematographyId
+          : null,
+      lightingId:
+        typeof value.settings?.lightingId === "string" ? value.settings.lightingId : null,
+      environmentId:
+        typeof value.settings?.environmentId === "string" ? value.settings.environmentId : null,
     },
+
   };
 }
