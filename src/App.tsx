@@ -30,6 +30,8 @@ import AdminCreatorProgram from "@/pages/AdminCreatorProgram";
 import AdminFuseCast from "@/pages/AdminFuseCast";
 import AdminTemplateImport from "@/pages/AdminTemplateImport";
 import AdminTemplateFactory from "@/pages/AdminTemplateFactory";
+import AdminMerchandising from "@/pages/AdminMerchandising";
+
 import AdminTemplates from "@/pages/AdminTemplates";
 import FlowEmbed from "@/pages/FlowEmbed";
 
@@ -379,6 +381,15 @@ const App = () => (
             />
 
             <Route
+              path="/admin/templates/merchandising"
+              element={
+                <AdminRoute>
+                  <AdminMerchandising />
+                </AdminRoute>
+              }
+            />
+
+            <Route
               path="/admin/templates/factory"
               element={
                 <AdminRoute>
@@ -386,6 +397,7 @@ const App = () => (
                 </AdminRoute>
               }
             />
+
 
 
             <Route

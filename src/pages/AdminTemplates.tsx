@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
-import { Factory, GitBranch, Loader2, Network, TestTube2 } from "lucide-react";
+import { Factory, GitBranch, LayoutGrid, Loader2, Network, TestTube2 } from "lucide-react";
 import SiteShell from "@/components/mvp/SiteShell";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -97,6 +97,13 @@ export default function AdminTemplates() {
           </div>
           <div className="flex flex-wrap gap-2">
             <Button asChild size="sm" variant="outline" className="rounded-full border-white/15 bg-white/5">
+              <Link to="/admin/templates/merchandising">
+                <LayoutGrid className="mr-2 h-4 w-4" />
+                Merchandising
+              </Link>
+            </Button>
+            <Button asChild size="sm" variant="outline" className="rounded-full border-white/15 bg-white/5">
+
               <Link to="/admin/templates/factory">
                 <Factory className="mr-2 h-4 w-4" />
                 Template Factory
