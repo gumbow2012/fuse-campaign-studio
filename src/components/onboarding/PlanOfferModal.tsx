@@ -114,21 +114,22 @@ function CompactPlanCard({
         {ctaLabel}
       </Button>
 
-      <div className="mt-3 flex-1 space-y-2">
-        {modules.map((module) => (
-          <div key={module.label} className="rounded-xl border border-white/10 bg-white/[0.02] px-2.5 py-2">
-            <p className="text-[9.5px] font-bold uppercase tracking-[0.18em] text-slate-400">{module.label}</p>
-            <ul className="mt-1 space-y-1">
-              {module.items.map((item) => (
-                <li key={item} className="flex items-start gap-2 text-[12px] leading-5 text-slate-300">
-                  <Check className={cn("mt-0.5 h-3.5 w-3.5 shrink-0", accent.check)} aria-hidden />
-                  {item}
-                </li>
-              ))}
-            </ul>
-          </div>
-        ))}
+      <div className="mt-3 flex-1">
+        {inherits ? (
+          <p className="text-[9.5px] font-bold uppercase tracking-[0.18em] text-slate-400">
+            Everything in {inherits}, plus:
+          </p>
+        ) : null}
+        <ul className={cn("space-y-1", inherits && "mt-1.5")}>
+          {items.slice(0, 5).map((item) => (
+            <li key={item} className="flex items-start gap-2 text-[12px] leading-5 text-slate-300">
+              <Check className={cn("mt-0.5 h-3.5 w-3.5 shrink-0", accent.check)} aria-hidden />
+              {item}
+            </li>
+          ))}
+        </ul>
       </div>
+
     </div>
   );
 }
