@@ -1097,6 +1097,188 @@ export default function OutfitSwap() {
     [swaps],
   );
 
+  /* ---------------------- 4b. PHASE 6 — QA + overrides ---------------------- */
+
+  const frameSubjectsFor = useCallback(
+    (frameIndex: number): OutfitSwapFrameSubject[] =>
+      analysis?.frames.find((entry) => entry.frameId === `frame-${frameIndex}`)?.subjects ?? [],
+    [analysis],
+  );
+
+  // Persist QA + overrides with the run so back-nav never recomputes them.
+  useEffect(() => {
+    if (!analysisFingerprint) return;
+    saveQaReport(analysisFingerprint, qaReport);
+  }, [analysisFingerprint, qaReport]);
+
+  useEffect(() => {
+    if (!analysisFingerprint) return;
+    saveFrameOverrides(analysisFingerprint, frameOverrides);
+  }, [analysisFingerprint, frameOverrides]);
+
+  /**
+   * STRUCTURAL pass — free, local, instant. Every finished rebuild gets a
+   * verdict from what we already know; a vision check can upgrade it later.
+   */
+  useEffect(() => {
+    const completed = swapEntries.filter(
+      (index) => swaps[index]?.status === "complete" && swaps[index]?.outputUrl,
+    );
+    if (!completed.length) return;
+    setQaReport((prev) => {
+      let changed = false;
+      const next = { ...prev };
+      for (const index of completed) {
+        if (next[index]) continue;
+        next[index] = structuralFrameQa({
+          frameIndex: index,
+          frameSubjects: frameSubjectsFor(index),
+          castAssignment,
+          hasOutput: true,
+        });
+        changed = true;
+      }
+      return changed ? next : prev;
+    });
+  }, [swapEntries, swaps, castAssignment, frameSubjectsFor]);
+
+  const qaCounts = useMemo(() => {
+    let passed = 0;
+    let check = 0;
+    let failed = 0;
+    for (const index of swapEntries) {
+      const status = qaReport[index]?.status;
+      if (status === "PASSED") passed += 1;
+      else if (status === "CHECK") check += 1;
+      else if (status === "FAILED") failed += 1;
+    }
+    return { passed, check, failed };
+  }, [swapEntries, qaReport]);
+
+  /**
+   * VISION QA — Gemini analysis of the already-rebuilt frames. No generation,
+   * no provider spend, results cached server side by input fingerprint.
+   */
+  const runVisionQa = useCallback(async () => {
+    const candidates = swapEntries.filter(
+      (index) => swaps[index]?.status === "complete" && swaps[index]?.outputUrl && frames[index],
+    );
+    if (!candidates.length) {
+      toast.error("Nothing to check yet");
+      return;
+    }
+    setQaRunning(true);
+    try {
+      const garmentName = (id: string | null | undefined) =>
+        garments.find((garment) => garment.id === id)?.name ||
+        garments.find((garment) => garment.id === id)?.type ||
+        "none";
+
+      const requests = candidates.map((index) => {
+        const subjects = frameSubjectsFor(index);
+        const overrides = frameOverrides[index];
+        const resolved = applyFrameOverrides({
+          frameSubjects: subjects,
+          castAssignment,
+          modelAssignment,
+          overrides,
+        });
+        return {
+          frameIndex: index,
+          sourceFrameUrl: frames[index].url,
+          rebuiltUrl: swaps[index].outputUrl as string,
+          expectedSubjectCount: subjects.length,
+          expectations: subjects.map((subject) => {
+            const wardrobe = resolved.castAssignment[subject.subjectId];
+            const model = resolved.modelAssignment[subject.subjectId];
+            return {
+              subjectId: subject.subjectId,
+              wardrobe: `top ${garmentName(wardrobe?.topGarmentId)}, bottom ${garmentName(
+                wardrobe?.bottomGarmentId,
+              )}`,
+              model: !model || model.modelSource === "keep_original" ? "original person" : "replaced model",
+            };
+          }),
+        };
+      });
+
+      // Batched: each frame costs two images, so send small chunks.
+      const chunks: (typeof requests)[] = [];
+      for (let i = 0; i < requests.length; i += 6) chunks.push(requests.slice(i, i + 6));
+
+      const results = [] as Awaited<ReturnType<typeof analyzeOutfitSwapQa>>["frames"];
+      for (const chunk of chunks) {
+        const result = await analyzeOutfitSwapQa(chunk);
+        results.push(...(result.frames ?? []).map((entry) => ({ ...entry, checkedAt: result.checkedAt })));
+      }
+
+      setQaReport((prev) => {
+        const next = { ...prev };
+        for (const entry of results) next[entry.frameIndex] = { ...entry, needsRegenerate: false };
+        return next;
+      });
+      const flagged = results.filter((entry) => entry.status !== "PASSED").length;
+      toast.success(
+        flagged
+          ? `QA done — ${flagged} frame${flagged === 1 ? "" : "s"} need a look`
+          : "QA done — all frames passed",
+      );
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not run the QA check");
+    } finally {
+      setQaRunning(false);
+    }
+  }, [
+    swapEntries,
+    swaps,
+    frames,
+    garments,
+    castAssignment,
+    modelAssignment,
+    frameOverrides,
+    frameSubjectsFor,
+  ]);
+
+  /** Bulk-approve everything that passed QA so only problem frames need eyes. */
+  const approveAllPassed = useCallback(() => {
+    const passed = swapEntries.filter(
+      (index) => swaps[index]?.status === "complete" && qaReport[index]?.status === "PASSED",
+    );
+    if (!passed.length) {
+      toast.error("No frames have passed QA yet");
+      return;
+    }
+    setApproved((prev) => {
+      const next = new Set(prev);
+      for (const index of passed) next.add(index);
+      return next;
+    });
+    toast.success(`${passed.length} frame${passed.length === 1 ? "" : "s"} approved`);
+  }, [swapEntries, swaps, qaReport]);
+
+  /**
+   * A manual override is STORED only — the frame is flagged for regeneration
+   * and the user triggers that render explicitly. No automatic spend.
+   */
+  const applyOverride = useCallback(
+    (frameIndex: number, subjectId: string, patch: OutfitSwapFrameOverride) => {
+      setFrameOverrides((prev) => ({
+        ...prev,
+        [frameIndex]: {
+          ...(prev[frameIndex] ?? {}),
+          [subjectId]: { ...(prev[frameIndex]?.[subjectId] ?? {}), ...patch },
+        },
+      }));
+      setQaReport((prev) =>
+        prev[frameIndex]
+          ? { ...prev, [frameIndex]: { ...prev[frameIndex], needsRegenerate: true } }
+          : prev,
+      );
+    },
+    [],
+  );
+
+
   /* ------------------- Serialize this run into a real template -------------- */
 
   const canMakeTemplate = frames.length > 0 && garments.length > 0 && approvedFrames.length > 0;
