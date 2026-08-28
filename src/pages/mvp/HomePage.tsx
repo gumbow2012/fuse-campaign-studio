@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import SiteShell from "@/components/mvp/SiteShell";
 import PageMeta from "@/components/mvp/PageMeta";
 import { useAuth } from "@/contexts/AuthContext";
+import { supabase } from "@/integrations/supabase/client";
 import { useBrand } from "@/contexts/BrandContext";
 import { fetchTemplates, type ApiTemplate } from "@/services/fuseApi";
 import CreatorVerificationBadge from "@/components/CreatorVerificationBadge";
