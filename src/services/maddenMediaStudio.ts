@@ -210,3 +210,140 @@ function toSubjectProfile(row: Record<string, unknown>): MaddenSubjectProfile {
     updatedAt: String(row.updated_at ?? ""),
   };
 }
+
+/* ------------------------------------------------------------------ *
+ * M3 — outfit + jewelry profiles (same madden_profiles table)
+ * ------------------------------------------------------------------ *
+ * Independent of the subject module: an artist can keep one subject and swap
+ * outfit or jewelry freely. Analysis is Gemini VISION only — no generation.
+ */
+
+const PROFILE_SELECT = "id, name, data, thumbnail_url, updated_at";
+
+async function listProfilesOfKind<T>(
+  kind: "outfit" | "jewelry",
+  normalize: (raw: unknown) => T,
+  fallbackName: string,
+): Promise<MaddenProfileOf<T>[]> {
+  const { data, error } = await looseTable(PROFILES_TABLE)
+    .select(PROFILE_SELECT)
+    .eq("kind", kind)
+    .order("updated_at", { ascending: false })
+    .limit(100);
+  if (error) fail(error, `Could not load your saved ${kind}s`);
+  return ((data as Record<string, unknown>[] | null) ?? []).map((row) => ({
+    id: String(row.id),
+    name: String(row.name ?? fallbackName),
+    thumbnailUrl: row.thumbnail_url ? String(row.thumbnail_url) : null,
+    data: normalize(row.data),
+    updatedAt: String(row.updated_at ?? ""),
+  }));
+}
+
+async function saveProfileOfKind<T extends { referenceUrls: string[] }>(
+  kind: "outfit" | "jewelry",
+  input: { id?: string | null; name: string; data: T; thumbnailUrl?: string | null },
+  normalize: (raw: unknown) => T,
+  fallbackName: string,
+): Promise<MaddenProfileOf<T>> {
+  const userId = await requireUserId();
+  const name = input.name.trim() || fallbackName;
+  const payload = {
+    name,
+    kind,
+    data: input.data as unknown as Record<string, unknown>,
+    thumbnail_url: input.thumbnailUrl ?? input.data.referenceUrls[0] ?? null,
+  };
+
+  const query = input.id
+    ? looseTable(PROFILES_TABLE).update(payload).eq("id", input.id)
+    : looseTable(PROFILES_TABLE).insert({ ...payload, user_id: userId });
+
+  const { data, error } = await query.select(PROFILE_SELECT).maybeSingle();
+  if (error) fail(error, `Could not save that ${kind}`);
+  if (!data) throw new Error(`Could not save that ${kind}`);
+  const row = data as Record<string, unknown>;
+  return {
+    id: String(row.id),
+    name: String(row.name ?? fallbackName),
+    thumbnailUrl: row.thumbnail_url ? String(row.thumbnail_url) : null,
+    data: normalize(row.data),
+    updatedAt: String(row.updated_at ?? ""),
+  };
+}
+
+export async function deleteMaddenProfile(id: string): Promise<void> {
+  const { error } = await looseTable(PROFILES_TABLE).delete().eq("id", id);
+  if (error) fail(error, "Could not delete that profile");
+}
+
+export const listOutfitProfiles = () =>
+  listProfilesOfKind("outfit", normalizeOutfitData, "Untitled outfit");
+
+export const saveOutfitProfile = (input: {
+  id?: string | null;
+  name: string;
+  data: MaddenOutfitProfileData;
+  thumbnailUrl?: string | null;
+}) => saveProfileOfKind("outfit", input, normalizeOutfitData, "Untitled outfit");
+
+export const listJewelryProfiles = () =>
+  listProfilesOfKind("jewelry", normalizeJewelryData, "Untitled jewelry set");
+
+export const saveJewelryProfile = (input: {
+  id?: string | null;
+  name: string;
+  data: MaddenJewelryProfileData;
+  thumbnailUrl?: string | null;
+}) => saveProfileOfKind("jewelry", input, normalizeJewelryData, "Untitled jewelry set");
+
+export type AnalyzeAttributesResult<T> =
+  | {
+      ok: true;
+      attributes: T;
+      analysis: { version: string; model: string; analyzedAt: string };
+      analyzedUrls: string[];
+    }
+  | { ok: false; reason: string };
+
+async function invokeAnalysis<T>(
+  action: "analyze_outfit" | "analyze_jewelry",
+  imageUrls: string[],
+  normalize: (raw: unknown) => T,
+): Promise<AnalyzeAttributesResult<T>> {
+  if (imageUrls.length === 0) {
+    return { ok: false, reason: "Add at least one reference image first." };
+  }
+  const { data, error } = await supabase.functions.invoke("madden-media-studio", {
+    body: { action, imageUrls },
+  });
+  if (error) return { ok: false, reason: error.message || "Reference analysis failed." };
+  const result = data as Record<string, unknown> | null;
+  if (!result || result.ok !== true) {
+    return {
+      ok: false,
+      reason: String(result?.reason ?? "Analysis could not read those images."),
+    };
+  }
+  return {
+    ok: true,
+    attributes: normalize(result.attributes),
+    analysis: {
+      version: String(result.version ?? ""),
+      model: String(result.model ?? ""),
+      analyzedAt: new Date().toISOString(),
+    },
+    analyzedUrls: Array.isArray(result.analyzedUrls)
+      ? (result.analyzedUrls as unknown[]).map((url) => String(url))
+      : imageUrls,
+  };
+}
+
+/** Structured garment-consistency extraction. Never names a brand or person. */
+export const analyzeOutfit = (imageUrls: string[]) =>
+  invokeAnalysis("analyze_outfit", imageUrls, normalizeOutfitAttributes);
+
+/** Jewelry-only extraction — the reference's scene/hands/box are ignored. */
+export const analyzeJewelry = (imageUrls: string[]) =>
+  invokeAnalysis("analyze_jewelry", imageUrls, normalizeJewelryAttributes);
+
