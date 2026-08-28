@@ -12,7 +12,7 @@
  */
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Check, Loader2, Package, X, Zap } from "lucide-react";
+import { Check, Loader2, X, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
@@ -39,7 +39,6 @@ import { setPlanOfferActive } from "@/lib/planOfferVisibility";
 const WELCOME_CREDITS = WELCOME_CREDITS_ONCE;
 
 const STARTER = PLAN_LADDER.find((entry) => entry.key === "starter")!;
-const CAPSULE = PLAN_LADDER.find((entry) => entry.key === "capsule")!;
 
 /**
  * Compressed version of the pricing card system (PlanTierCards) so both
@@ -266,16 +265,10 @@ export default function PlanOfferModal() {
     void startPlanCheckout("starter", { returnPath: destination });
   };
 
-  const handleCapsule = () => {
-    choiceMade.current = true;
-    void persistOfferState("capsule");
-    track("onboarding_plan_choice", { choice: "capsule" });
-    track("capsule_selected", { plan_key: "capsule" });
-    setGatedOpen(true);
-  };
+
 
   if (!open) {
-    return <GatedPlanDialog open={gatedOpen} onOpenChange={setGatedOpen} planName={CAPSULE.name} />;
+    return <GatedPlanDialog open={gatedOpen} onOpenChange={setGatedOpen} planName={null} />;
   }
 
   return (
@@ -349,7 +342,7 @@ export default function PlanOfferModal() {
                 Get enough credits to build full campaigns — or continue free with {WELCOME_CREDITS} credits.
               </p>
 
-              <div className="mt-6 grid gap-3">
+              <div className="mt-6 grid gap-3 sm:max-w-md">
                 {/* STARTER — live Stripe checkout */}
                 <CompactPlanCard
                   entry={STARTER}
@@ -391,7 +384,7 @@ export default function PlanOfferModal() {
         </div>
       </div>
 
-      <GatedPlanDialog open={gatedOpen} onOpenChange={setGatedOpen} planName={CAPSULE.name} />
+      <GatedPlanDialog open={gatedOpen} onOpenChange={setGatedOpen} planName={null} />
     </>
   );
 }
