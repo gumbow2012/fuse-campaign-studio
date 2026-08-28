@@ -47,6 +47,10 @@ export type MaddenShot = {
   durationSeconds: number;
   /** Slots this shot inherits. Empty = inherit every locked slot. */
   inheritSlots: MaddenSlotKind[];
+  /** M7: per-shot cinematography preset id; falls back to the project preset. */
+  cinematographyId?: string | null;
+  /** M7: the shot-pack entry this shot came from, when applied from a pack. */
+  packShotKey?: string | null;
 };
 
 export type MaddenSettings = {
@@ -64,7 +68,10 @@ export type MaddenSettings = {
   promptOverride?: string;
   /** M6: true once the user edits the prompt — their text then wins. */
   promptUserEdited?: boolean;
+  /** M7: the selected shot pack id (see lib/madden-media/shotPacks.ts). */
+  shotPackId?: string | null;
 };
+
 
 
 export type MaddenProjectState = {
