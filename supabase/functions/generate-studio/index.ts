@@ -456,6 +456,14 @@ async function startGeneration(
       fallbackUsdPerSecond: videoFallbackUsdPerSecond(videoModel, generateAudio) ?? null,
     });
 
+    await chargeStudioCredits(admin, {
+      generationId: inserted.id,
+      userId: args.userId,
+      privileged: args.privileged === true,
+      estimatedCostUsd,
+      kind,
+    });
+
     let requestId: string;
     let payload: Record<string, unknown>;
 
