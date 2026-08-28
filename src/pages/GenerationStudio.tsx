@@ -367,6 +367,15 @@ function statusLabel(status: Generation["status"], progress: number) {
 
 
 
+/** Error carrying the edge function HTTP status (402 = out of credits). */
+class StudioRequestError extends Error {
+  status?: number;
+  constructor(message: string, status?: number) {
+    super(message);
+    this.status = status;
+  }
+}
+
 async function callStudio(body: Record<string, unknown>) {
   const { data, error } = await supabase.functions.invoke("generate-studio", { body });
   if (error) {
