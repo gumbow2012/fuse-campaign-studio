@@ -15,13 +15,8 @@ import { useMembershipCheckout } from "@/hooks/useMembershipCheckout";
 import { supabase } from "@/integrations/supabase/client";
 import { track } from "@/lib/analytics/track";
 import { CREDIT_PACKS, STRIPE_TIERS } from "@/lib/stripe-config";
-import {
-  checkoutEventId,
-  clearPendingCheckout,
-  readPendingCheckout,
-  trackEvent,
-  trackEventOnce,
-} from "@/lib/metaPixel";
+import { clearPendingCheckout, readPendingCheckout, trackEvent } from "@/lib/metaPixel";
+
 
 
 
@@ -76,23 +71,9 @@ export default function BillingPage() {
 
     if (success) {
       const pending = readPendingCheckout();
-      const sessionId = searchParams.get("session_id");
-      const onceKey = `purchase.${sessionId ?? pending?.startedAt ?? searchParams.toString()}`;
-      trackEventOnce(
-        onceKey,
-        "Purchase",
-        { value: pending?.value, currency: "USD", content_type: "product" },
-        sessionId ? checkoutEventId("Purchase", sessionId) : undefined,
-      );
-      if (!pending || pending.mode === "subscription") {
-        trackEventOnce(
-          `subscribe.${sessionId ?? pending?.startedAt ?? searchParams.toString()}`,
-          "Subscribe",
-          { value: pending?.value, currency: "USD" },
-          sessionId ? checkoutEventId("Subscribe", sessionId) : undefined,
-        );
-      }
+      // Meta Purchase/Subscribe are reported server-side via CAPI (single source of truth).
       track("paid", { mode: pending?.mode ?? "subscription" });
+
       // P7 funnel — checkout returned successful (already guarded once per session).
       track("checkout_completed", { mode: pending?.mode ?? "subscription" });
       clearPendingCheckout();

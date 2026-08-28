@@ -11,7 +11,7 @@ import SiteShell from "@/components/mvp/SiteShell";
 import PageMeta from "@/components/mvp/PageMeta";
 import { useAuth } from "@/contexts/AuthContext";
 import { getAbsoluteSiteUrl } from "@/lib/site-url";
-import { checkoutEventId, clearPendingCheckout, readPendingCheckout, trackEventOnce } from "@/lib/metaPixel";
+import { clearPendingCheckout, trackEventOnce } from "@/lib/metaPixel";
 import { track } from "@/lib/analytics/track";
 import { readPendingReferralCode, storePendingReferralCode } from "@/lib/pendingReferral";
 import { usePendingReferral } from "@/hooks/usePendingReferral";
@@ -60,28 +60,12 @@ export default function AuthPage() {
 
   usePendingReferral();
 
-  // Paid checkout return telemetry (unchanged behaviour).
+  // Paid checkout return: Meta Purchase/Subscribe are reported server-side via CAPI only.
   useEffect(() => {
     if (searchParams.get("success") !== "true" && !paidAccess) return;
-    const pending = readPendingCheckout();
-    const sessionId = searchParams.get("session_id");
-    const onceKey = sessionId ?? pending?.startedAt ?? searchParams.toString();
-    trackEventOnce(
-      `purchase.${onceKey}`,
-      "Purchase",
-      { value: pending?.value, currency: "USD", content_type: "product" },
-      sessionId ? checkoutEventId("Purchase", sessionId) : undefined,
-    );
-    if (!pending || pending.mode === "subscription") {
-      trackEventOnce(
-        `subscribe.${onceKey}`,
-        "Subscribe",
-        { value: pending?.value, currency: "USD" },
-        sessionId ? checkoutEventId("Subscribe", sessionId) : undefined,
-      );
-    }
     clearPendingCheckout();
   }, [paidAccess, searchParams]);
+
 
   // Already signed in (including an OAuth redirect return) → intended destination.
   useEffect(() => {
