@@ -11,9 +11,12 @@ import { STRIPE_TIERS, type StripeTierKey } from "@/lib/stripe-config";
  * `checkout: "gated"` → no Stripe price exists yet; the CTA opens the graceful early-access
  *                       action (see GatedPlanDialog). NEVER map a gated plan to another price.
  *
+ * PLUS is retired from new sales: it is NOT part of PLAN_LADDER and never renders as a
+ * purchasable card. Its definition + price mapping stay intact (LEGACY_HIDDEN_PLANS) so
+ * existing records keep resolving.
+ *
  * STRIPE OBJECTS STILL TO BE CREATED (none of these exist today):
- *   - PLUS monthly ($59)
- *   - CAPSULE monthly ($75)
+ *   - CAPSULE monthly ($60)
  *   - TEAM monthly ($699)
  *   - ANNUAL prices for EVERY plan: Starter, Plus, Pro, Studio, Team
  *   (FREE needs no Stripe product.)
@@ -23,6 +26,9 @@ import { STRIPE_TIERS, type StripeTierKey } from "@/lib/stripe-config";
  */
 
 export type PlanCheckoutMode = "live" | "gated" | "none";
+
+/** One-time welcome grant for a fresh free account. No monthly refill on Free. */
+export const WELCOME_CREDITS_ONCE = 250;
 
 /** One controlled accent per plan — dark FUSE system, not a rainbow page. */
 export type PlanAccentKey = "graphite" | "cyan" | "sky" | "violet" | "lime" | "magenta" | "royal";
@@ -67,7 +73,7 @@ export const PLAN_LADDER: PlanLadderEntry[] = [
   {
     key: "free",
     name: "Free",
-    tagline: "Explore FUSE",
+    tagline: "Try FUSE",
     badge: "Free",
     icon: Sparkles,
     accent: "graphite",
@@ -75,13 +81,13 @@ export const PLAN_LADDER: PlanLadderEntry[] = [
     price: 0,
     annualPrice: 0,
     monthlyCredits: 0,
-    creditsLabel: "100 welcome credits",
+    creditsLabel: `${WELCOME_CREDITS_ONCE} welcome credits · one-time`,
     goodFor: "Trying FUSE on free-eligible templates",
     benefits: [
-      "Explore FUSE",
+      "Try FUSE",
       "Free-eligible templates",
       "Brand Workspace",
-      "100 welcome credits",
+      `${WELCOME_CREDITS_ONCE} welcome credits (one-time)`,
     ],
     checkout: "none",
     ctaLabel: "Start free",
@@ -90,7 +96,7 @@ export const PLAN_LADDER: PlanLadderEntry[] = [
   {
     key: "starter",
     name: STRIPE_TIERS.starter.name,
-    tagline: "For first drops",
+    tagline: "First drops",
     badge: "Entry",
     icon: Zap,
     accent: "cyan",
@@ -114,48 +120,25 @@ export const PLAN_LADDER: PlanLadderEntry[] = [
     featured: true,
   },
   {
-    key: "plus",
-    name: "Plus",
-    tagline: "For weekly content",
-    badge: "Growing",
-    icon: Layers,
-    accent: "sky",
-    description: "For brands posting every week, with FUSE Cast and your own avatars.",
-    price: 59,
-    annualPrice: 47,
-    monthlyCredits: 7500,
-    creditsLabel: "7,500 credits/mo",
-    goodFor: "Weekly campaign content",
-    benefits: [
-      "Everything in Starter",
-      "More monthly credits",
-      "FUSE Cast",
-      "Higher campaign capacity",
-    ],
-    checkout: "gated",
-    ctaLabel: "Choose Plus",
-  },
-  {
-    // Designed tier — no Stripe price exists yet, so checkout MUST stay gated.
-    // Placed by price so the ladder stays monotonic ($59 Plus → $75 Capsule → $149 Pro).
+    // Designed tier — no $60 Stripe price exists yet, so checkout MUST stay gated.
     key: "capsule",
     name: "Capsule",
-    tagline: "For a full capsule drop",
+    tagline: "Weekly drops",
     badge: "Coming soon",
     icon: Package,
     accent: "violet",
     recommendation: "MOST POPULAR",
     description: "Enough campaign volume to shoot an entire capsule collection in one month.",
-    price: 75,
-    annualPrice: 60,
-    monthlyCredits: 10000,
-    creditsLabel: "10,000 credits/mo",
-    goodFor: "One full capsule drop a month",
+    price: 60,
+    annualPrice: 48,
+    monthlyCredits: 7500,
+    creditsLabel: "7,500 credits/mo",
+    goodFor: "Weekly drops, every week",
     benefits: [
       "Everything in Starter",
-      "More monthly credits",
       "FUSE Cast",
-      "Higher campaign capacity",
+      "2.5x the monthly credits",
+      "Built for weekly creative testing",
     ],
     checkout: "gated",
     ctaLabel: "Join the Capsule waitlist",
@@ -164,7 +147,7 @@ export const PLAN_LADDER: PlanLadderEntry[] = [
   {
     key: "pro",
     name: STRIPE_TIERS.pro.name,
-    tagline: "For active brands",
+    tagline: "Active brands",
     badge: "Advanced",
     icon: Rocket,
     accent: "lime",
@@ -214,7 +197,7 @@ export const PLAN_LADDER: PlanLadderEntry[] = [
   {
     key: "team",
     name: "Team",
-    tagline: "For agencies + teams",
+    tagline: "Agencies + teams",
     badge: "Teams",
     icon: Building2,
     accent: "royal",
@@ -248,4 +231,44 @@ export function isCheckoutLive(entry: PlanLadderEntry, cycle: "monthly" | "annua
 
 export function planPrice(entry: PlanLadderEntry, cycle: "monthly" | "annual") {
   return cycle === "annual" ? entry.annualPrice : entry.price;
+}
+
+/**
+ * RETIRED FROM SALE — kept for safety only (0 active subscribers, but the plan key and
+ * any price mapping must keep resolving for historical records). Never rendered as a
+ * purchasable card and intentionally absent from PLAN_LADDER.
+ */
+export const LEGACY_HIDDEN_PLANS: PlanLadderEntry[] = [
+  {
+    key: "plus",
+    name: "Plus",
+    tagline: "For weekly content",
+    badge: "Growing",
+    icon: Layers,
+    accent: "sky",
+    description: "For brands posting every week, with FUSE Cast and your own avatars.",
+    price: 59,
+    annualPrice: 47,
+    monthlyCredits: 7500,
+    creditsLabel: "7,500 credits/mo",
+    goodFor: "Weekly campaign content",
+    benefits: [
+      "Everything in Starter",
+      "More monthly credits",
+      "FUSE Cast",
+      "Higher campaign capacity",
+    ],
+    checkout: "gated",
+    ctaLabel: "Choose Plus",
+  },
+];
+
+/** Resolve any plan key, including retired ones. */
+export function findPlanEntry(planKey: string | null | undefined): PlanLadderEntry | null {
+  if (!planKey) return null;
+  return (
+    PLAN_LADDER.find((entry) => entry.key === planKey) ??
+    LEGACY_HIDDEN_PLANS.find((entry) => entry.key === planKey) ??
+    null
+  );
 }
