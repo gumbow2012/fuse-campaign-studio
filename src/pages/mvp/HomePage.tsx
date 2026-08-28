@@ -664,7 +664,20 @@ export default function HomePage() {
         </div>
       </section>
 
+      {/* 1.5 · TRENDING ABOVE THE FOLD — one click from landing into the builder */}
+      <Shelf
+        id="trending-now"
+        label="Trending now"
+        heading="What brands are using right now"
+        description="Ordered by real template runs over the last 90 days."
+        entries={trendingRanked}
+        perfMap={perfMap}
+        runsMap={popularity}
+        badge={{ tone: "trending", label: "Trending" }}
+      />
+
       {/* 2 · NEW DROPS BAR — real recently activated templates only, hidden when none */}
+
       {newToday.length > 0 && (
         <section className="border-b border-white/10 bg-white/[0.02]">
           <div className="container flex flex-wrap items-center justify-between gap-4 py-5">
