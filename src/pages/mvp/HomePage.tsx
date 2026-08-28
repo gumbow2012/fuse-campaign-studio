@@ -322,7 +322,20 @@ function Shelf({
 
 
 
+/** Shape returned by the public `get_marketplace_shelves()` RPC. */
+type MerchandisedShelf = {
+  id?: string;
+  slug?: string;
+  title?: string;
+  subtitle?: string | null;
+  sort_order?: number;
+  is_visible?: boolean;
+  is_algorithmic?: boolean;
+  templates?: { template_id?: string; name?: string; pinned?: boolean; sort_order?: number }[] | null;
+};
+
 /* ---------------------------------- page ---------------------------------- */
+
 
 export default function HomePage() {
   const { user, isCreator, isAdmin } = useAuth();
@@ -368,9 +381,56 @@ export default function HomePage() {
     retry: false,
   });
 
+  /**
+   * MERCHANDISING — admin-curated shelves (`/admin/templates/merchandising`).
+   * `get_marketplace_shelves()` is public and returns visible shelves in
+   * sort_order with their templates in the exact admin order. Failures fall
+   * back to the existing popularity-driven homepage.
+   */
+  const { data: merchShelves = [] as MerchandisedShelf[] } = useQuery({
+    queryKey: ["home-marketplace-shelves"],
+    queryFn: async (): Promise<MerchandisedShelf[]> => {
+      const { data, error } = await supabase.rpc("get_marketplace_shelves" as never);
+      if (error) return [];
+      return ((data ?? []) as unknown as MerchandisedShelf[]).filter(Boolean);
+    },
+    staleTime: 5 * 60 * 1000,
+    retry: false,
+  });
+
   // Single dedup allocator — every section draws from here.
   const allocation = useMemo(() => allocateHomeMedia(templates), [templates]);
   const { hero: heroPair, trending, newToday, creatorDrops, categories, mediaWall } = allocation;
+
+  /**
+   * Curated editorial shelves, joined to the loaded template objects so cards
+   * render with today's media/vibe. Algorithmic shelves keep their auto
+   * behavior and are excluded here. Empty shelves are dropped.
+   */
+  const curatedShelves = useMemo(() => {
+    if (!templates.length || !merchShelves.length) return [];
+    const byId = new Map(templates.map((template) => [String(template.id ?? ""), template]));
+    return merchShelves
+      .filter((shelf) => shelf && shelf.is_algorithmic !== true && shelf.is_visible !== false)
+      .map((shelf) => {
+        const entries = (shelf.templates ?? [])
+          .map((row) => {
+            const template = byId.get(String(row?.template_id ?? ""));
+            if (!template) return null;
+            const media = resolveMedia(template);
+            return media ? ({ template, media } as Entry) : null;
+          })
+          .filter(Boolean as unknown as (value: Entry | null) => value is Entry);
+        return {
+          id: String(shelf.id ?? shelf.slug ?? ""),
+          slug: String(shelf.slug ?? ""),
+          title: String(shelf.title ?? shelf.slug ?? "Featured"),
+          subtitle: typeof shelf.subtitle === "string" && shelf.subtitle.trim() ? shelf.subtitle : undefined,
+          entries,
+        };
+      })
+      .filter((shelf) => shelf.entries.length > 0);
+  }, [merchShelves, templates]);
 
   /** TRENDING — ordered by real run counts; catalog order is the tiebreaker. */
   const trendingRanked = useMemo(() => {
@@ -381,13 +441,19 @@ export default function HomePage() {
       .map((row) => row.entry);
   }, [trending, popularity]);
   /**
-   * Hero primary CTA target: the top-ranked real trending template, else the hero
-   * template, else the gallery. Works logged-out (the builder is public).
+   * Hero primary CTA target: the first template of the top curated shelf when
+   * merchandising is configured, else the top-ranked real trending template,
+   * else the hero template. Works logged-out (the builder is public).
    */
   const startCampaignHref = useMemo(() => {
-    const top = trendingRanked[0]?.template.id ?? heroPair[0]?.template.id ?? null;
+    const top =
+      curatedShelves[0]?.entries[0]?.template.id ??
+      trendingRanked[0]?.template.id ??
+      heroPair[0]?.template.id ??
+      null;
     return builderHref(top);
-  }, [trendingRanked, heroPair]);
+  }, [curatedShelves, trendingRanked, heroPair]);
+
 
   const original = heroPair[0] ?? null;
   const yourVersion = heroPair[1] ?? null;
@@ -696,7 +762,22 @@ export default function HomePage() {
         </div>
       </section>
 
+      {/* 1.4 · CURATED SHELVES — exact order from /admin/templates/merchandising */}
+      {curatedShelves.map((shelf) => (
+        <Shelf
+          key={shelf.id}
+          id={`shelf-${shelf.slug}`}
+          label="Curated"
+          heading={shelf.title}
+          description={shelf.subtitle}
+          entries={shelf.entries}
+          perfMap={perfMap}
+          runsMap={popularity}
+        />
+      ))}
+
       {/* 1.5 · TRENDING ABOVE THE FOLD — one click from landing into the builder */}
+
       <Shelf
         id="trending-now"
         label="Trending now"
