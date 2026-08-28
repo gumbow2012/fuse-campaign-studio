@@ -637,6 +637,7 @@ async function expireGeneration(admin: AdminClient, row: any, privileged = false
     .eq("id", row.id)
     .select("*")
     .maybeSingle();
+  await refundStudioCreditsIfNeeded(admin, row.id);
   return serializeGeneration(updated ?? { ...row, status: "failed" }, privileged);
 }
 
