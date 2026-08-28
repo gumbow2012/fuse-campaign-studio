@@ -71,7 +71,7 @@ export default function RegenerateOutputDialog({
             <p>{errorMessage}</p>
             {insufficientCredits ? (
               <Link
-                to="/app/membership"
+                to="/membership"
                 className="mt-1 inline-block underline underline-offset-2"
                 onClick={() => onOpenChange(false)}
               >
