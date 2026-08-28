@@ -199,7 +199,7 @@ function GarmentSlotUpload({
 
 
 
-/** One detected subject track + its assigned wardrobe (mapping only). */
+/** One detected subject track + its model choice and assigned wardrobe (mapping only). */
 function SubjectCastCard({
   label,
   description,
@@ -207,6 +207,9 @@ function SubjectCastCard({
   garments,
   wardrobe,
   onChange,
+  userId,
+  model,
+  onModelChange,
 }: {
   label: string;
   description: string;
@@ -214,7 +217,11 @@ function SubjectCastCard({
   garments: Garment[];
   wardrobe: { topGarmentId: string | null; bottomGarmentId: string | null } | null;
   onChange: (slot: "topGarmentId" | "bottomGarmentId", garmentId: string | null) => void;
+  userId?: string | null;
+  model: OutfitSwapSubjectModel | null;
+  onModelChange: (next: OutfitSwapSubjectModel) => void;
 }) {
+
   const tops = garments.filter(isTopGarment);
   const bottoms = garments.filter(isBottomGarment);
   const name = (garment: Garment) => garment.label || garment.name || garment.type;
