@@ -11,7 +11,7 @@ import SiteShell from "@/components/mvp/SiteShell";
 import PageMeta from "@/components/mvp/PageMeta";
 import { useAuth } from "@/contexts/AuthContext";
 import { getAbsoluteSiteUrl } from "@/lib/site-url";
-import { checkoutEventId, clearPendingCheckout, readPendingCheckout, trackEventOnce } from "@/lib/metaPixel";
+import { clearPendingCheckout, trackEventOnce } from "@/lib/metaPixel";
 import { track } from "@/lib/analytics/track";
 import { readPendingReferralCode, storePendingReferralCode } from "@/lib/pendingReferral";
 import { usePendingReferral } from "@/hooks/usePendingReferral";
