@@ -1465,6 +1465,45 @@ export default function GenerationStudio() {
     [references.length, rememberReferences],
   );
 
+  /**
+   * Kling end-frame models take TWO ordered anchors: references[0] = first frame
+   * (startImageUrl) and references[1] = last frame (endImageUrl). The generation
+   * payload is unchanged — this only guarantees that ordering from the UI.
+   */
+  const supportsEndFrame = isVideo && Boolean(model.supportsEndFrame);
+  const firstFrame = references[0] ?? null;
+  const lastFrame = references[1] ?? null;
+
+  const setFrameSlot = useCallback(
+    async (slot: 0 | 1, file: File) => {
+      if (!file.type.startsWith("image/")) return;
+      setUploading(true);
+      try {
+        const url = await uploadRunInputFile(file);
+        setReferences((prev) => {
+          const next = [...prev];
+          if (slot === 1 && next.length === 0) {
+            next.push({ url, label: "Last frame" });
+          } else {
+            next[slot] = { url, label: slot === 0 ? "First frame" : "Last frame" };
+          }
+          return next.filter(Boolean).slice(0, MAX_REFERENCES);
+        });
+        rememberReferences([url]);
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : "Could not upload the image");
+      } finally {
+        setUploading(false);
+      }
+    },
+    [rememberReferences],
+  );
+
+  const clearFrameSlot = useCallback((slot: 0 | 1) => {
+    setReferences((prev) => prev.filter((_, index) => index !== slot));
+  }, []);
+
+
   /** Keyboard/accessibility fallback reorder — mutates the real references array. */
   const moveReference = (index: number, delta: number) => {
     setReferences((prev) => {
