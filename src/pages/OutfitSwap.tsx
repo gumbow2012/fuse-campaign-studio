@@ -230,6 +230,13 @@ export default function OutfitSwap() {
   const [extractProgress, setExtractProgress] = useState(0);
   const [selectedFrames, setSelectedFrames] = useState<Set<number>>(new Set());
 
+  // PHASE 1 source analysis (detection only — no generation, no provider spend).
+  const [analysisStage, setAnalysisStage] = useState<
+    "idle" | "frames" | "subjects" | "orientation" | "done" | "error"
+  >("idle");
+  const [analysis, setAnalysis] = useState<OutfitSwapSourceAnalysis | null>(null);
+  const [analysisError, setAnalysisError] = useState<string | null>(null);
+
   const [garments, setGarments] = useState<Garment[]>([]);
   const [uploadingGarment, setUploadingGarment] = useState(false);
   const [extraPrompt, setExtraPrompt] = useState("");
