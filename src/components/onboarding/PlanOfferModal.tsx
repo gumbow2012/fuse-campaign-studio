@@ -72,7 +72,7 @@ function CompactPlanCard({
   const { inherits, items } = planDifferentiators(entry.key);
 
   return (
-    <div className={cn("relative flex flex-col rounded-[1.25rem] border p-4 sm:p-5", accent.shell)}>
+    <div className={cn("relative flex flex-col rounded-[1.35rem] border p-5 sm:p-6", accent.shell)}>
       {tag ? (
         <span className="absolute right-4 top-4 rounded-full border border-white/20 bg-white/10 px-2 py-0.5 font-display text-[9px] font-bold uppercase tracking-[0.18em] text-white">
           {tag}
@@ -85,49 +85,51 @@ function CompactPlanCard({
         </p>
       </div>
 
-      <div className={cn("mt-3 rounded-xl border px-3 py-2.5", accent.block)}>
-        <p className={cn("font-display text-[13px] font-bold", accent.text)}>
+      <div className={cn("mt-4 rounded-xl border px-3.5 py-3", accent.block)}>
+        <p className={cn("font-display text-[14px] font-bold", accent.text)}>
           ✦ {credits > 0 ? `${credits.toLocaleString()} credits/month` : entry.creditsLabel}
         </p>
         {capacity ? (
-          <p className="mt-1 text-[10px] uppercase tracking-[0.16em] text-slate-400" title={MEDIAN_CAMPAIGN_TOOLTIP}>
+          <p className="mt-1.5 text-[10px] uppercase tracking-[0.16em] text-slate-400" title={MEDIAN_CAMPAIGN_TOOLTIP}>
             Typical capacity ·{" "}
             <span className="text-[12.5px] font-semibold normal-case tracking-normal text-white">{capacity}</span>
           </p>
         ) : null}
       </div>
 
-      <p className="mt-3 font-display text-2xl font-bold tracking-[-0.03em] text-white">
+      <p className="mt-5 font-display text-[2rem] font-bold leading-none tracking-[-0.03em] text-white">
         ${offer.effectiveMonthly}
         <span className="ml-1 text-sm font-medium text-slate-400">/mo</span>
       </p>
-      <p className="mt-0.5 text-[11px] text-slate-500">{footnote}</p>
-      <p className="mt-2 text-[13px] font-semibold text-white">{headline}</p>
+      <p className="mt-1.5 text-[11px] text-slate-500">{footnote}</p>
+      <p className="mt-3 text-[13.5px] font-semibold text-white">{headline}</p>
 
       <Button
         onClick={onSelect}
         disabled={ctaLoading}
-        className={cn("mt-3 w-full rounded-full font-semibold", accent.cta)}
+        size="lg"
+        className={cn("mt-4 w-full rounded-full text-[14px] font-semibold", accent.cta)}
       >
         {ctaLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
         {ctaLabel}
       </Button>
 
-      <div className="mt-3 flex-1">
+      <div className="mt-5 flex-1 border-t border-white/10 pt-4">
         {inherits ? (
           <p className="text-[9.5px] font-bold uppercase tracking-[0.18em] text-slate-400">
             Everything in {inherits}, plus:
           </p>
         ) : null}
-        <ul className={cn("space-y-1", inherits && "mt-1.5")}>
+        <ul className={cn("space-y-1.5", inherits && "mt-2")}>
           {items.slice(0, 5).map((item) => (
-            <li key={item} className="flex items-start gap-2 text-[12px] leading-5 text-slate-300">
+            <li key={item} className="flex items-start gap-2 text-[12.5px] leading-5 text-slate-300">
               <Check className={cn("mt-0.5 h-3.5 w-3.5 shrink-0", accent.check)} aria-hidden />
               {item}
             </li>
           ))}
         </ul>
       </div>
+
 
     </div>
   );
