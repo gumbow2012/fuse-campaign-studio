@@ -35,6 +35,18 @@ import { PerformanceBlock, PerformanceDisclaimer } from "@/components/TemplatePe
 
 /* --------------------------------- pieces --------------------------------- */
 
+/**
+ * CONVERSION: deep-link straight into the campaign builder for one template.
+ * `/app/templates?template=<id>` is the builder's supported deep link (the
+ * `/app/templates/run` path is a query-dropping redirect in App.tsx).
+ * Falls back to the plain gallery when no template id is known.
+ */
+function builderHref(templateId?: string | null) {
+  const id = templateId ? String(templateId) : "";
+  return id ? `/app/templates?template=${encodeURIComponent(id)}` : "/app/templates";
+}
+
+
 function SectionLabel({ children }: { children: React.ReactNode }) {
   return (
     <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-cyan-100">{children}</p>
