@@ -1,4 +1,4 @@
-// MADDEN MEDIA STUDIO — M2 backend (subject consistency analysis only).
+// MADDEN MEDIA STUDIO — M2/M3 backend (consistency analysis only).
 //
 // HARD BOUNDARIES:
 //   * This function is OWNED BY Madden Media Studio. It does not import, call
