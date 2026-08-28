@@ -11,6 +11,7 @@ import {
   Plus,
   RefreshCw,
   Shirt,
+  ShieldCheck,
   Sparkles,
   Trash2,
   Upload,
