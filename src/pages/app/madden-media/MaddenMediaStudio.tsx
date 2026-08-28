@@ -6,6 +6,7 @@ import MaddenOutfitPanel from "@/components/madden-media/MaddenOutfitPanel";
 import MaddenJewelryPanel from "@/components/madden-media/MaddenJewelryPanel";
 import MaddenPresetPicker from "@/components/madden-media/MaddenPresetPicker";
 import MaddenShotBoard from "@/components/madden-media/MaddenShotBoard";
+import MaddenRecipePanel from "@/components/madden-media/MaddenRecipePanel";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { MADDEN_CINEMATOGRAPHY_PRESETS } from "@/lib/madden-media/cinematographyPresets";
@@ -21,7 +22,14 @@ import {
 } from "@/lib/madden-media/types";
 
 import {
+  applyRecipeToState,
+  buildRecipeConfigFromState,
+  type MaddenRecipe,
+} from "@/lib/madden-media/recipes";
+
+import {
   createProject,
+  saveUserRecipe,
   deleteProject,
   listProjects,
   loadProject,
@@ -33,6 +41,8 @@ const AUTOSAVE_DELAY_MS = 1200;
 
 export default function MaddenMediaStudio() {
   const [projects, setProjects] = useState<MaddenProjectSummary[]>([]);
+  const [recipeRefreshKey, setRecipeRefreshKey] = useState(0);
+  const presetsRef = useRef<HTMLDivElement | null>(null);
   const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
   const [name, setName] = useState("");
   const [state, setState] = useState<MaddenProjectState>(() => createEmptyProjectState());
@@ -181,6 +191,38 @@ export default function MaddenMediaStudio() {
     setState((prev) => ({ ...prev, shots: prev.shots.filter((shot) => shot.id !== id) }));
   };
 
+  const applyRecipe = (recipe: MaddenRecipe) => {
+    let skipped: MaddenSlotKind[] = [];
+    setState((prev) => {
+      const result = applyRecipeToState(prev, recipe.config);
+      skipped = result.skipped;
+      return result.next;
+    });
+    if (skipped.length > 0) {
+      toast.success(`${recipe.name} applied — kept your locked ${skipped.join(", ")}`);
+    } else {
+      toast.success(`${recipe.name} applied`);
+    }
+  };
+
+  const customizeRecipe = (recipe: MaddenRecipe) => {
+    applyRecipe(recipe);
+    setTimeout(() => {
+      presetsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 60);
+  };
+
+  const saveCurrentAsRecipe = async (recipeName: string) => {
+    try {
+      const config = buildRecipeConfigFromState(state);
+      await saveUserRecipe({ name: recipeName, tags: [], config });
+      setRecipeRefreshKey((key) => key + 1);
+      toast.success("Recipe saved");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not save that recipe");
+    }
+  };
+
   const saveLabel =
     saveState === "saving"
       ? "Saving…"
@@ -241,7 +283,14 @@ export default function MaddenMediaStudio() {
               />
             </div>
 
-            <div className="grid gap-4 md:grid-cols-2">
+            <MaddenRecipePanel
+              onApply={applyRecipe}
+              onCustomize={customizeRecipe}
+              onSaveCurrent={saveCurrentAsRecipe}
+              refreshKey={recipeRefreshKey}
+            />
+
+            <div ref={presetsRef} className="grid gap-4 md:grid-cols-2">
               <MaddenPresetPicker
                 title="Cinematography"
                 description="Camera, lens and framing language applied across the board."
