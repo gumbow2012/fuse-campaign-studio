@@ -52,6 +52,12 @@ import {
   callOutfitSwap,
   createTemplateFromOutfitSwap,
   persistTemplateLayout,
+  loadCastAssignment,
+  saveCastAssignment,
+  suggestCastAssignment,
+  isBottomGarment,
+  isTopGarment,
+  type OutfitSwapCastAssignment,
   type OutfitSwapGarment,
   type OutfitSwapSourceAnalysis,
   type OutfitSwapTemplateResult,
@@ -304,6 +310,11 @@ export default function OutfitSwap() {
   >("idle");
   const [analysis, setAnalysis] = useState<OutfitSwapSourceAnalysis | null>(null);
   const [analysisError, setAnalysisError] = useState<string | null>(null);
+  const [analysisFingerprint, setAnalysisFingerprint] = useState<string | null>(null);
+  // PHASE 3 — subject track id → assigned garment ids. Mapping only: it is
+  // stored with the run and is NOT sent to the generation calls in this phase.
+  const [castAssignment, setCastAssignment] = useState<OutfitSwapCastAssignment>({});
+  const [suggestionDismissed, setSuggestionDismissed] = useState(false);
 
   const [garments, setGarments] = useState<Garment[]>([]);
   const [uploadingGarment, setUploadingGarment] = useState(false);
@@ -356,6 +367,9 @@ export default function OutfitSwap() {
       );
       setAnalysisStage("orientation");
       setAnalysis(result.analysis);
+      setAnalysisFingerprint(result.fingerprint);
+      setSuggestionDismissed(false);
+      setCastAssignment(loadCastAssignment(result.fingerprint) ?? {});
       setAnalysisStage("done");
     } catch (error) {
       setAnalysisError(error instanceof Error ? error.message : "Could not analyse that clip");
@@ -434,6 +448,10 @@ export default function OutfitSwap() {
         const compressed = await compressImageFile(file);
         const stored = await uploadToStorage(folder, compressed, compressed.name);
         uploaded.push({
+          id:
+            typeof crypto !== "undefined" && "randomUUID" in crypto
+              ? crypto.randomUUID()
+              : `garment-${Date.now()}-${Math.random().toString(16).slice(2)}`,
           // FRONT is the primary reference: `url` mirrors `frontUrl` so the
           // existing generation call keeps working unchanged.
           url: stored.url,
