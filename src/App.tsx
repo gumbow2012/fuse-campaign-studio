@@ -392,6 +392,16 @@ const App = () => (
             />
 
             <Route
+              path="/admin/experiments/product-launch"
+              element={
+                <AdminRoute>
+                  <AdminProductLaunchPrototype />
+                </AdminRoute>
+              }
+            />
+
+
+            <Route
               path="/admin/templates/factory"
               element={
                 <AdminRoute>
