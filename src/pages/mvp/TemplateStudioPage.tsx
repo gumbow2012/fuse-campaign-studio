@@ -1148,6 +1148,14 @@ export default function TemplateStudioPage() {
 
   const creditsRequired = selectedTemplate?.estimated_credits_per_run ?? 0;
   const selectedTemplateOutputCount = getTemplateOutputCount(selectedTemplate);
+  const [outputSplitOpen, setOutputSplitOpen] = useState(false);
+  const outputSplit = useMemo(() => {
+    const images = Number(selectedTemplate?.counts?.imageOutputs ?? 0);
+    const videos = Number(selectedTemplate?.counts?.videoOutputs ?? 0);
+    if (!images && !videos) return null;
+    if (!images || !videos) return null;
+    return `${images} images · ${videos} videos`;
+  }, [selectedTemplate]);
   const creditBalance = profile?.credits_balance ?? null;
   const displayedCreditBalance = creditBalance ?? 0;
   const profileIsResolving = !!user && !isPrivilegedUser && !profile;
