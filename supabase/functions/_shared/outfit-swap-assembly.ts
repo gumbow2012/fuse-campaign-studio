@@ -395,3 +395,133 @@ export function assembleFrameEdit(args: {
     },
   };
 }
+
+/* ------------------------------------------------------------------------- *
+ * PHASE 7 — video reconstruction prompt enrichment.
+ *
+ * The Seedance reference-to-video pass stays exactly as it is today for the
+ * simple case (1 subject, keep_original, no back designs): callers pass their
+ * existing legacy prompt through and it is returned untouched. Only runs that
+ * needed the Phase 5 fused assembly get the enriched prompt, built from the
+ * SAME structured facts (subject tracks, cast assignment, model assignment).
+ *
+ * This is pure string assembly — it never calls a provider and never triggers
+ * a generation. The approved rebuilt stills remain the reference frames.
+ * ------------------------------------------------------------------------- */
+
+export type ReconstructionPromptResult = {
+  prompt: string;
+  enriched: boolean;
+  plan: {
+    subjectCount: number;
+    subjects: {
+      subjectId: string;
+      modelSource: AssemblyModelSource;
+      top: string | null;
+      bottom: string | null;
+      hasBackDesign: boolean;
+    }[];
+  };
+};
+
+function garmentDescriptor(garment: AssemblyGarment | undefined): string | null {
+  if (!garment) return null;
+  const label = trimmed(garment.label);
+  const type = trimmed(garment.type).toLowerCase();
+  return label && type ? `${label} (${type})` : label || type || null;
+}
+
+/**
+ * Builds the reconstruction prompt for the video pass.
+ * `legacyPrompt` is returned VERBATIM whenever the run did not need fused
+ * assembly, guaranteeing byte-identical behaviour for single-subject runs.
+ */
+export function buildReconstructionPromptV2(args: {
+  legacyPrompt: string;
+  frameSubjects?: AssemblyFrameSubject[] | null;
+  garments?: AssemblyGarment[] | null;
+  castAssignment?: Record<string, AssemblySubjectWardrobe> | null;
+  modelAssignment?: Record<string, AssemblySubjectModel> | null;
+  extraPrompt?: string | null;
+}): ReconstructionPromptResult {
+  const subjects = (args.frameSubjects ?? []).filter((subject) => trimmed(subject?.subjectId));
+  const garments = args.garments ?? [];
+  const cast = args.castAssignment ?? {};
+  const models = args.modelAssignment ?? {};
+
+  const needsEnrichment = requiresFusedAssembly({
+    frameSubjects: subjects,
+    garments,
+    castAssignment: cast,
+    modelAssignment: models,
+  });
+
+  const garmentById = new Map<string, AssemblyGarment>();
+  for (const garment of garments) {
+    const id = trimmed(garment?.id);
+    if (id) garmentById.set(id, garment);
+  }
+
+  const planSubjects: ReconstructionPromptResult["plan"]["subjects"] = subjects.map((subject) => {
+    const subjectId = trimmed(subject.subjectId);
+    const wardrobe = cast[subjectId] ?? {};
+    const top = garmentById.get(trimmed(wardrobe.topGarmentId));
+    const bottom = garmentById.get(trimmed(wardrobe.bottomGarmentId));
+    return {
+      subjectId,
+      modelSource: normalizeModelSource(models[subjectId]?.modelSource),
+      top: garmentDescriptor(top),
+      bottom: garmentDescriptor(bottom),
+      hasBackDesign: Boolean(top?.hasBackDesign || bottom?.hasBackDesign),
+    };
+  });
+
+  if (!needsEnrichment) {
+    return {
+      prompt: args.legacyPrompt,
+      enriched: false,
+      plan: { subjectCount: subjects.length, subjects: planSubjects },
+    };
+  }
+
+  const count = planSubjects.length;
+  const lines: string[] = [
+    "Recreate the source video exactly: same motion, same action, same timing, same camera movement and framing, same environment and lighting.",
+    "The approved reference frames are the absolute authority for who each person is and what each person wears — reproduce them faithfully in motion.",
+    count
+      ? `There are exactly ${count} ${count === 1 ? "person" : "people"} in this video. Never add, remove, duplicate or merge people.`
+      : "Keep the exact same number of people as in the source video.",
+    "Each person keeps their own identity and their own wardrobe for the entire clip. No person morphing, no face blending, no swapping wardrobe or identity between people, no identity or garment drift between shots.",
+  ];
+
+  planSubjects.forEach((subject, order) => {
+    const label = count > 1 ? `Person ${order + 1}` : "The subject";
+    const identity = subject.modelSource === "keep_original"
+      ? "keeps the original person's face, hair, skin tone and body proportions exactly as in the reference frames"
+      : "has the replacement model's identity exactly as locked in the reference frames — that face, hair, skin tone and body proportions, with no drift toward anyone else";
+    const wardrobe = [subject.top ? `top: ${subject.top}` : null, subject.bottom ? `bottom: ${subject.bottom}` : null]
+      .filter(Boolean)
+      .join(", ");
+    lines.push(
+      `${label} ${identity}${wardrobe ? `, and wears exactly ${wardrobe}` : ""}, consistently in every frame.`,
+    );
+    if (subject.hasBackDesign) {
+      lines.push(
+        `${label}'s garment has a distinct back graphic: when they turn away show the exact rear print from the reference frames, and the exact front print when facing camera — never mirror or invent artwork.`,
+      );
+    }
+  });
+
+  lines.push(
+    "Keep every logo, colorway, graphic placement, text, material and garment construction identical across the whole clip.",
+    "Do not change the environment, background, lighting, or any clothing, jewelry, shoes or accessories that were not replaced.",
+    "Same video, same people, new wardrobe.",
+    trimmed(args.extraPrompt),
+  );
+
+  return {
+    prompt: lines.filter(Boolean).join(" "),
+    enriched: true,
+    plan: { subjectCount: count, subjects: planSubjects },
+  };
+}
