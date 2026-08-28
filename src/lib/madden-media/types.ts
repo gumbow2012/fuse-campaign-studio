@@ -56,7 +56,12 @@ export type MaddenSettings = {
   lookName: string;
   /** Notes that apply to the whole project. */
   globalNotes: string;
+  /** M4: selected builtin preset ids (see lib/madden-media/*Presets.ts). */
+  cinematographyId: string | null;
+  lightingId: string | null;
+  environmentId: string | null;
 };
+
 
 export type MaddenProjectState = {
   /** Schema version so later phases can migrate saved states safely. */
