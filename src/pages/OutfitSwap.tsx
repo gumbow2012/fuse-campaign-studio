@@ -1288,6 +1288,58 @@ export default function OutfitSwap() {
               </div>
             </SectionCard>
 
+            {/* PHASE 3 — only appears when the clip really has multiple subjects.
+                One subject keeps the flow exactly as simple as before. */}
+            {subjectTracks.length > 1 ? (
+              <SectionCard
+                step={4}
+                title="Assign your cast"
+                hint="Assign wardrobe once per subject — the same product can go on more than one person."
+              >
+                {suggestedAssignment && !hasAssignment && !suggestionDismissed ? (
+                  <div className="mb-3 flex flex-wrap items-center gap-2 rounded-xl border border-cyan-200/25 bg-cyan-400/5 px-3 py-2 text-[11px] text-cyan-100">
+                    <span>Suggested assignment available — you can change anything after applying.</span>
+                    <Button
+                      size="sm"
+                      onClick={() => setCastAssignment(suggestedAssignment)}
+                      className="h-6 rounded-lg bg-cyan-400/20 px-2 text-[10px] uppercase tracking-[0.12em] text-cyan-100 hover:bg-cyan-400/30"
+                    >
+                      Use suggestion
+                    </Button>
+                    <button
+                      type="button"
+                      onClick={() => setSuggestionDismissed(true)}
+                      className="text-[10px] uppercase tracking-[0.12em] text-foreground/50 hover:text-foreground/80"
+                    >
+                      Dismiss
+                    </button>
+                  </div>
+                ) : null}
+
+                {garments.length ? (
+                  <div className="grid gap-2.5 sm:grid-cols-2">
+                    {subjectTracks.map((track, index) => (
+                      <SubjectCastCard
+                        key={track.subjectId}
+                        label={`Subject ${index + 1}`}
+                        description={track.description}
+                        portraitUrl={subjectPortrait(track.appearsStart)}
+                        garments={garments}
+                        wardrobe={castAssignment[track.subjectId] ?? null}
+                        onChange={(slot, garmentId) => setSubjectGarment(track.subjectId, slot, garmentId)}
+                      />
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-[11px] text-muted-foreground">
+                    Add clothing references above to assign them to each subject.
+                  </p>
+                )}
+              </SectionCard>
+            ) : null}
+
+
+
             <SectionCard step={5} title="Video generation" hint="Your clip, rebuilt in the new wardrobe.">
               <div className="space-y-3">
                 <div className="grid grid-cols-2 gap-2">
