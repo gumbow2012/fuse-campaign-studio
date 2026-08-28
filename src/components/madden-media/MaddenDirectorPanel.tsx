@@ -105,10 +105,10 @@ export default function MaddenDirectorPanel({ state, disabled, onApply }: Props)
     const result = await requestMaddenDirection(state, id);
     setLoading(false);
     setRan(true);
-    if (!result.ok) {
+    if (result.ok !== true) {
       setProposals([]);
       setNotes([]);
-      setError(result.reason);
+      setError("reason" in result ? result.reason : "The Director could not run.");
       return;
     }
     setProposals(result.proposals);
