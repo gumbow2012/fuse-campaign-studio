@@ -2747,7 +2747,87 @@ const TemplateCanvas = () => {
                   <div className="space-y-2">
                     <Label>Slot Key</Label>
                     <Input value={draft.slotKey} onChange={(event) => setDraft((current) => current ? { ...current, slotKey: event.target.value } : current)} />
+                    {duplicateSlotKey ? (
+                      <div className="flex flex-wrap items-center gap-2 rounded-xl border border-destructive/50 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+                        <span>Duplicate slot key — inputs with the same key merge into one. Make it unique.</span>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          onClick={() =>
+                            setDraft((current) =>
+                              current
+                                ? {
+                                    ...current,
+                                    slotKey: uniqueSlotKey(
+                                      current.slotKey || current.displayLabel || "input",
+                                      inputSlotKeys
+                                        .filter((entry) => entry.id !== selectedNode.id)
+                                        .map((entry) => entry.slotKey),
+                                    ),
+                                  }
+                                : current,
+                            )
+                          }
+                        >
+                          Make unique
+                        </Button>
+                      </div>
+                    ) : null}
                   </div>
+                  {draft.editorMode === "upload" ? (
+                    <div className="space-y-3 rounded-2xl border border-border/50 bg-background/50 p-3">
+                      <div className="flex items-center justify-between gap-3">
+                        <div>
+                          <Label>Required input</Label>
+                          <p className="mt-1 text-[11px] text-muted-foreground">
+                            {draft.required ? "Customers must upload this." : "Customers may skip this — the default asset is used instead."}
+                          </p>
+                        </div>
+                        <Switch
+                          checked={draft.required}
+                          onCheckedChange={(checked) => setDraft((current) => current ? { ...current, required: checked } : current)}
+                        />
+                      </div>
+                      {!draft.required ? (
+                        <div className="space-y-3">
+                          <div className="flex items-center justify-between gap-3">
+                            <Label>Default asset (fallback)</Label>
+                            {selectedNode.defaultAssetId ? (
+                              <span className="font-mono text-[10px] text-muted-foreground">{selectedNode.defaultAssetId.slice(0, 8)}</span>
+                            ) : null}
+                          </div>
+                          {referenceUploadPreview ? (
+                            <img src={referenceUploadPreview} alt="Default asset preview" className="h-32 w-full rounded-xl border border-border/50 bg-background object-contain" />
+                          ) : selectedNode.defaultAssetUrl ? (
+                            <img src={selectedNode.defaultAssetUrl} alt={selectedNode.name} className="h-32 w-full rounded-xl border border-border/50 bg-background object-contain" />
+                          ) : (
+                            <div className="flex h-32 items-center justify-center rounded-xl border border-dashed border-border/60 bg-background/50 text-xs text-muted-foreground">
+                              No default asset attached
+                            </div>
+                          )}
+                          <div className="flex gap-2">
+                            <Input type="file" accept="image/*" onChange={(event) => handleReferenceUploadFile(event.target.files?.[0] ?? null)} />
+                            <Button
+                              type="button"
+                              size="icon"
+                              variant="outline"
+                              onClick={() => void uploadReferenceAsset()}
+                              disabled={!referenceUploadFile || uploadingReference}
+                              title="Upload default asset"
+                            >
+                              {uploadingReference ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+                            </Button>
+                          </div>
+                          {optionalWithoutDefault ? (
+                            <p className="rounded-xl border border-destructive/50 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+                              Optional inputs need a default asset — without one, generation fails when a customer skips this input.
+                            </p>
+                          ) : null}
+                        </div>
+                      ) : null}
+                    </div>
+                  ) : null}
                   {draft.editorMode === "reference" ? (
                     <div className="space-y-3 rounded-2xl border border-border/50 bg-background/50 p-3">
                       <div className="flex items-center justify-between gap-3">
