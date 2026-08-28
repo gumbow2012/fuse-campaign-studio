@@ -1586,6 +1586,17 @@ export default function GenerationStudio() {
           setGenerations((prev) => [generation, ...prev.filter((e) => e.id !== generation.id)]);
         }
       } catch (error) {
+        const status = error instanceof StudioRequestError ? error.status : undefined;
+        if (status === 402) {
+          toast.error("Not enough credits", {
+            description: "Top up your credits to run this generation.",
+            action: {
+              label: "Buy credits",
+              onClick: () => window.location.assign("/membership"),
+            },
+          });
+          return;
+        }
         toast.error(error instanceof Error ? error.message : "Could not start the generation");
       }
     })();
