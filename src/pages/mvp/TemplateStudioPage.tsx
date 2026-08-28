@@ -1908,16 +1908,10 @@ export default function TemplateStudioPage() {
             </p>
             <div className="mt-4 flex flex-wrap gap-2">
               <Button asChild className="rounded-full bg-cyan-300 px-5 font-semibold text-slate-950 hover:bg-cyan-200">
-                <Link to="/app/membership">View Starter</Link>
-              </Button>
-              <Button
-                variant="outline"
-                onClick={() => setRestoreAfford(null)}
-                className="rounded-full border-white/15 bg-white/5 text-foreground hover:bg-white/10"
-              >
-                Explore free templates
+                <Link to="/membership">View Starter</Link>
               </Button>
             </div>
+
           </div>
         ) : null}
 
