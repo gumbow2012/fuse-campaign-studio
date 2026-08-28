@@ -163,7 +163,7 @@ export default function TemplateInputCard({
   }, [file, requirement?.transparencyRecommended]);
 
   const role = resolveInputRole(label, requirement?.assetType);
-  const roleWord = inputRoleWord(label, role);
+  void inputRoleWord;
   const heading = displayLabel ?? label;
   const sources = resolveInputSources(label, role, Boolean(castPanel));
   const availableSources = sources.filter((source) =>
