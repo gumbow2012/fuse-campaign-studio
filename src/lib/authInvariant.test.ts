@@ -26,8 +26,8 @@ describe("post-auth destination", () => {
   });
 
   it("rejects external return targets", () => {
-    expect(sanitizeReturnTo("https://evil.example.com")).toBeNull();
-    expect(sanitizeReturnTo("//evil.example.com")).toBeNull();
+    expect(sanitizeReturnTo("https://evil.example.com")).toBeFalsy();
+    expect(sanitizeReturnTo("//evil.example.com")).toBeFalsy();
   });
 });
 
