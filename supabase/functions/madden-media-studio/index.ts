@@ -428,6 +428,27 @@ Deno.serve(async (req) => {
       return json(await analyzeSubject(body));
     }
 
+    if (action === "analyze_outfit") {
+      return json(
+        await analyzeWithSchema(body, {
+          schema: OUTFIT_SCHEMA,
+          prompt: buildOutfitPrompt,
+          version: OUTFIT_ANALYSIS_VERSION,
+        }),
+      );
+    }
+
+    if (action === "analyze_jewelry") {
+      return json(
+        await analyzeWithSchema(body, {
+          schema: JEWELRY_SCHEMA,
+          prompt: buildJewelryPromptForMadden,
+          version: JEWELRY_ANALYSIS_VERSION,
+        }),
+      );
+    }
+
+
     return json({ ok: false, reason: `Unknown action: ${action || "(none)"}` }, 400);
   } catch (error) {
     return json({ ok: false, reason: errorMessage(error) }, 401);
