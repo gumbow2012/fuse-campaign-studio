@@ -175,7 +175,7 @@ export function normalizeProjectState(raw: unknown): MaddenProjectState {
   return {
     version: 1,
     slots,
-    shots: Array.isArray(value.shots) ? (value.shots as MaddenShot[]) : [],
+    shots: normalizeShots(value.shots),
     settings: {
       aspectRatio: "9:16",
       lookName:
@@ -193,7 +193,11 @@ export function normalizeProjectState(raw: unknown): MaddenProjectState {
       promptOverride:
         typeof value.settings?.promptOverride === "string" ? value.settings.promptOverride : "",
       promptUserEdited: value.settings?.promptUserEdited === true,
+      shotPackId:
+        typeof value.settings?.shotPackId === "string" ? value.settings.shotPackId : null,
     },
+
+
 
   };
 }
