@@ -141,7 +141,9 @@ export function createEmptyProjectState(): MaddenProjectState {
       environmentId: null,
       promptOverride: "",
       promptUserEdited: false,
+      shotPackId: null,
     },
+
 
   };
 }
