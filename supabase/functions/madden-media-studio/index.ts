@@ -414,7 +414,136 @@ async function analyzeWithSchema(
   }
 }
 
+/* ------------------------------------------------------------------ *
+ * M8 — Madden Director (TEXT analysis only, proposals only)
+ * ------------------------------------------------------------------ *
+ * Gemini TEXT call. It NEVER mutates a project: it returns structured
+ * creative-direction PROPOSALS the user applies explicitly in the UI.
+ * No image or video generation, no credit spend.
+ */
+
+const DIRECTOR_VERSION = "madden-director-v1";
+
+const DIRECTOR_SCHEMA = {
+  type: Type.OBJECT,
+  properties: {
+    proposals: {
+      type: Type.ARRAY,
+      items: {
+        type: Type.OBJECT,
+        properties: {
+          title: { type: Type.STRING },
+          mood: { type: Type.STRING },
+          rationale: { type: Type.STRING },
+          changes: {
+            type: Type.OBJECT,
+            properties: {
+              cinematographyId: { type: Type.STRING },
+              lightingId: { type: Type.STRING },
+              environmentId: { type: Type.STRING },
+              lookName: { type: Type.STRING },
+              globalNotes: { type: Type.STRING },
+              lockSlots: { type: Type.ARRAY, items: { type: Type.STRING } },
+            },
+            required: [
+              "cinematographyId",
+              "lightingId",
+              "environmentId",
+              "lookName",
+              "globalNotes",
+              "lockSlots",
+            ],
+          },
+        },
+        required: ["title", "mood", "rationale", "changes"],
+      },
+    },
+    notes: { type: Type.ARRAY, items: { type: Type.STRING } },
+  },
+  required: ["proposals", "notes"],
+};
+
+function buildDirectorPrompt(context: Record<string, unknown>, brief: string) {
+  return [
+    "You are the DIRECTOR for a vertical 9:16 short-form music/streetwear video studio.",
+    "",
+    "TASK: propose 3 distinct creative-direction adjustments for the project below.",
+    `MOOD BRIEF: ${brief}`,
+    "",
+    "You may ONLY choose preset ids that appear in context.allowed.* — never invent an",
+    "id, and leave a field as an empty string when you do not want to change it.",
+    "`lockSlots` may only contain: subject, outfit, jewelry, environment.",
+    "",
+    "ABSOLUTE RULES:",
+    "- You are PROPOSING ONLY. Never assume anything is applied.",
+    "- NEVER name or imply a real person, artist, celebrity, brand, label or designer.",
+    "- NEVER infer or output protected or sensitive attributes.",
+    "- Never suggest bypassing any provider policy or safety rule.",
+    "- Do not restate the subject's identity; the reference images are the authority.",
+    "- Keep `rationale` to two short sentences of craft reasoning.",
+    "",
+    "PROJECT CONTEXT (JSON):",
+    JSON.stringify(context).slice(0, 12_000),
+    "",
+    "Return strict JSON matching the provided schema. No prose outside JSON.",
+  ].join("\n");
+}
+
+async function runDirector(body: Record<string, unknown>) {
+  const context = (body.context ?? null) as Record<string, unknown> | null;
+  if (!context || typeof context !== "object") {
+    return { ok: false as const, reason: "Open a project first." };
+  }
+  const brief = String(body.brief ?? "").trim() ||
+    "Propose the strongest creative direction for this project as it stands.";
+
+  const apiKey = Deno.env.get("GEMINI_API_KEY")?.trim();
+  if (!apiKey) {
+    return { ok: false as const, reason: "The Director is not configured yet." };
+  }
+
+  try {
+    const ai = new GoogleGenAI({ apiKey });
+    const response = await ai.models.generateContent({
+      model: GEMINI_ANALYSIS_MODEL,
+      contents: [
+        { role: "user", parts: [{ text: buildDirectorPrompt(context, brief) }] },
+      ] as any,
+      config: {
+        responseMimeType: "application/json",
+        responseSchema: DIRECTOR_SCHEMA as any,
+        maxOutputTokens: 4096,
+        temperature: 0.7,
+      },
+    });
+
+    const text = (response.text ?? "").trim();
+    if (!text) {
+      return { ok: false as const, reason: "The Director returned nothing — try again." };
+    }
+
+    let parsed: Record<string, unknown>;
+    try {
+      parsed = JSON.parse(text) as Record<string, unknown>;
+    } catch {
+      return { ok: false as const, reason: "The Director returned an unreadable result." };
+    }
+
+    return {
+      ok: true as const,
+      version: DIRECTOR_VERSION,
+      model: GEMINI_ANALYSIS_MODEL,
+      proposals: Array.isArray(parsed.proposals) ? parsed.proposals : [],
+      notes: Array.isArray(parsed.notes) ? parsed.notes : [],
+    };
+  } catch (error) {
+    console.error("madden director failed:", errorMessage(error));
+    return { ok: false as const, reason: errorMessage(error) };
+  }
+}
+
 Deno.serve(async (req) => {
+
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
   try {
