@@ -349,7 +349,7 @@ export default function PlanOfferModal() {
                 Get enough credits to build full campaigns — or continue free with {WELCOME_CREDITS} credits.
               </p>
 
-              <div className="mt-6 grid gap-3 md:grid-cols-2">
+              <div className="mt-6 grid gap-3">
                 {/* STARTER — live Stripe checkout */}
                 <CompactPlanCard
                   entry={STARTER}
@@ -368,23 +368,6 @@ export default function PlanOfferModal() {
                   onSelect={handleStarter}
                 />
 
-                {/* CAPSULE — no Stripe price yet, early-access flow only */}
-                <CompactPlanCard
-                  entry={CAPSULE}
-                  icon={Package}
-                  tag="Most popular"
-                  accent={{
-                    shell: "border-violet-400/35 bg-violet-500/[0.09]",
-                    text: "text-violet-100",
-                    check: "text-violet-200",
-                    block: "border-violet-400/30 bg-violet-500/[0.10]",
-                    cta: "bg-violet-400 text-slate-950 hover:bg-violet-300",
-                  }}
-                  headline="Create consistently."
-                  footnote="Early access — not open for checkout yet"
-                  ctaLabel={`Choose ${CAPSULE.name}`}
-                  onSelect={handleCapsule}
-                />
               </div>
 
 
