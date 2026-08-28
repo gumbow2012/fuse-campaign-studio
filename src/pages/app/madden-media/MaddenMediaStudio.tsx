@@ -6,8 +6,10 @@ import MaddenOutfitPanel from "@/components/madden-media/MaddenOutfitPanel";
 import MaddenJewelryPanel from "@/components/madden-media/MaddenJewelryPanel";
 import MaddenPresetPicker from "@/components/madden-media/MaddenPresetPicker";
 import MaddenShotBoard from "@/components/madden-media/MaddenShotBoard";
+import MaddenShotPackPanel from "@/components/madden-media/MaddenShotPackPanel";
 import MaddenRecipePanel from "@/components/madden-media/MaddenRecipePanel";
 import MaddenPromptPreview from "@/components/madden-media/MaddenPromptPreview";
+
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { MADDEN_CINEMATOGRAPHY_PRESETS } from "@/lib/madden-media/cinematographyPresets";
