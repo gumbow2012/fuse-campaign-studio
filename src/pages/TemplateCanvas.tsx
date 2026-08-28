@@ -2626,6 +2626,7 @@ const TemplateCanvas = () => {
               onNodeMoved={handleCanvasNodeMoved}
               onConnectNodes={(source, target, targetHandle) => void connectNodesOnCanvas(source, target, targetHandle)}
               onDeleteEdge={(edgeId) => void deleteEdge(edgeId)}
+              onDeleteNode={(nodeId) => void deleteNodeById(nodeId)}
               focusNodeId={focusNodeId}
               onViewportApiReady={(api) => {
                 viewportApiRef.current = api;
