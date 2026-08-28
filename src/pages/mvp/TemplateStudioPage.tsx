@@ -2356,7 +2356,13 @@ export default function TemplateStudioPage() {
             <>
             <section
               ref={runnerSectionRef}
-              className="scroll-mt-24 rounded-[2rem] border border-white/10 bg-slate-950/75 p-6 shadow-[0_24px_80px_rgba(0,0,0,0.35)] backdrop-blur-xl"
+              className={cn(
+                "scroll-mt-24 rounded-[2rem] border bg-slate-950/75 p-6 shadow-[0_24px_80px_rgba(0,0,0,0.35)] backdrop-blur-xl transition-[box-shadow,border-color] duration-500 motion-reduce:transition-none",
+                builderJustSwitched
+                  ? "border-cyan-300/50 shadow-[0_0_0_3px_rgba(34,211,238,0.14),0_24px_80px_rgba(0,0,0,0.35)]"
+                  : "border-white/10",
+              )}
+
             >
               {!selectedTemplate ? (
                 <div className="flex min-h-[220px] items-center justify-center text-slate-400">Select a template to begin.</div>
