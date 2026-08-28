@@ -382,6 +382,21 @@ const TEMPLATE_INPUT_SLOT_OPTIONS: TemplateInputSlotOption[] = [
 
 const DEFAULT_TEMPLATE_INPUT_SLOT_KEYS = ["top_garment", "bottom_garment", "logo"];
 
+/** Slugify a label into a usable editor_slot_key. */
+function slugifySlotKey(value: string) {
+  return value.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+}
+
+/** Build a slot key that does not collide with any existing input slot key. */
+function uniqueSlotKey(base: string, taken: Iterable<string>) {
+  const used = new Set(Array.from(taken).map((key) => key.trim().toLowerCase()).filter(Boolean));
+  const root = slugifySlotKey(base) || "input";
+  if (!used.has(root)) return root;
+  let index = 2;
+  while (used.has(`${root}-${index}`)) index += 1;
+  return `${root}-${index}`;
+}
+
 function inputSlotOption(slotKey: string) {
   return TEMPLATE_INPUT_SLOT_OPTIONS.find((option) => option.key === slotKey) ?? TEMPLATE_INPUT_SLOT_OPTIONS[0];
 }
@@ -1030,6 +1045,28 @@ const TemplateCanvas = () => {
     [detail?.nodes, selectedNodeId],
   );
 
+  const inputSlotKeys = useMemo(
+    () =>
+      (detail?.nodes ?? [])
+        .filter((node) => node.nodeType === "user_input")
+        .map((node) => ({ id: node.id, slotKey: (node.editor?.slotKey ?? "").trim() })),
+    [detail?.nodes],
+  );
+
+  const duplicateSlotKey = useMemo(() => {
+    if (!selectedNode || selectedNode.nodeType !== "user_input" || !draft) return false;
+    const current = draft.slotKey.trim().toLowerCase();
+    if (!current) return false;
+    return inputSlotKeys.some(
+      (entry) => entry.id !== selectedNode.id && entry.slotKey.toLowerCase() === current,
+    );
+  }, [draft, inputSlotKeys, selectedNode]);
+
+  const optionalWithoutDefault = useMemo(() => {
+    if (!selectedNode || selectedNode.nodeType !== "user_input" || !draft) return false;
+    return !draft.required && !selectedNode.defaultAssetId && !draft.sampleUrl.trim();
+  }, [draft, selectedNode]);
+
   const edgeDraftSourceNode = useMemo(
     () => detail?.nodes.find((node) => node.id === edgeDraft.sourceNodeId),
     [detail?.nodes, edgeDraft.sourceNodeId],
@@ -1556,8 +1593,8 @@ const TemplateCanvas = () => {
 
   const uploadReferenceAsset = useCallback(async () => {
     if (!detail || !selectedNode || !draft || !referenceUploadFile) return;
-    if (selectedNode.nodeType !== "user_input" || draft.editorMode !== "reference") {
-      toast({ title: "Pick a hidden reference input first", variant: "destructive" });
+    if (selectedNode.nodeType !== "user_input") {
+      toast({ title: "Pick an input node first", variant: "destructive" });
       return;
     }
 
@@ -1574,7 +1611,8 @@ const TemplateCanvas = () => {
           nodeId: selectedNode.id,
           displayLabel: draft.displayLabel,
           expected: draft.expected,
-          editorMode: "reference",
+          editorMode: draft.editorMode,
+          keepEditorMode: draft.editorMode === "upload",
           slotKey: draft.slotKey,
           referenceFile: {
             filename: referenceUploadFile.name,
@@ -1938,6 +1976,16 @@ const TemplateCanvas = () => {
         versionId: detail.versionId,
         nodeType: isInput ? "user_input" : kind,
         editorMode: isInput ? kind : undefined,
+        // Every new input gets its own slot key; identical keys merge into a
+        // single customer input in the builder.
+        slotKey: isInput
+          ? uniqueSlotKey(
+              kind === "reference" ? "reference" : `input-${(detail.nodes ?? []).filter((node) => node.nodeType === "user_input").length + 1}`,
+              (detail.nodes ?? [])
+                .filter((node) => node.nodeType === "user_input")
+                .map((node) => node.editor?.slotKey ?? ""),
+            )
+          : undefined,
         expected: isPromptBlock ? undefined : kind === "video_gen" ? "video" : "image",
         prompt: "",
         outputExposed: kind === "image_gen" || kind === "video_gen",
