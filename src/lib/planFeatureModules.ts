@@ -46,7 +46,7 @@ const DIFFERENTIATORS: Record<string, PlanDifferentiators> = {
     items: ["FUSE Cast", "2.5x the monthly credits", "Built for weekly creative testing"],
   },
   pro: {
-    inherits: "Capsule",
+    inherits: "Starter",
     items: [
       "Workflow customization",
       "Private workflow forks",
