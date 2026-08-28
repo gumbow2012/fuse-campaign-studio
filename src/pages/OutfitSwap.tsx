@@ -343,6 +343,8 @@ export default function OutfitSwap() {
         .filter((index) => index % Math.max(1, Math.ceil(uploaded.length / 4)) === 0);
       setSelectedFrames(new Set(spread));
       toast.success(`${uploaded.length} source frames extracted`);
+      void runSourceAnalysis(uploaded);
+
 
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Could not process that video");
