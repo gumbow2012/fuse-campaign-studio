@@ -496,6 +496,8 @@ export default function TemplateStudioPage() {
   /** Auto-advance: the next unfilled slot gets a subtle highlight + scroll focus. */
   const [focusedInputKey, setFocusedInputKey] = useState<string | null>(null);
   const slotRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  const appliedTemplateParamRef = useRef<string | null>(null);
+
 
   const isPrivilegedUser = hasAppAccess;
 
