@@ -423,6 +423,13 @@ export default function OutfitSwap() {
   // PHASE 4 — subject track id → chosen model. Stored with the run only; the
   // swap / video calls still run the clothing-only (keep original) contract.
   const [modelAssignment, setModelAssignment] = useState<OutfitSwapModelAssignment>({});
+  // PHASE 6 — per-frame QA verdicts + tucked-away manual overrides. Analysis
+  // only: nothing here ever triggers a paid generation on its own.
+  const [qaReport, setQaReport] = useState<OutfitSwapQaReport>({});
+  const [frameOverrides, setFrameOverrides] = useState<OutfitSwapFrameOverrides>({});
+  const [qaRunning, setQaRunning] = useState(false);
+
+
 
 
   const [garments, setGarments] = useState<Garment[]>([]);
