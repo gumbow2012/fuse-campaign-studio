@@ -8,6 +8,11 @@ import MaddenPresetPicker from "@/components/madden-media/MaddenPresetPicker";
 import MaddenShotBoard from "@/components/madden-media/MaddenShotBoard";
 import MaddenShotPackPanel from "@/components/madden-media/MaddenShotPackPanel";
 import MaddenRecipePanel from "@/components/madden-media/MaddenRecipePanel";
+import MaddenDirectorPanel from "@/components/madden-media/MaddenDirectorPanel";
+import {
+  applyDirectorProposal,
+  type MaddenDirectorProposal,
+} from "@/lib/madden-media/director";
 import MaddenPromptPreview from "@/components/madden-media/MaddenPromptPreview";
 
 import { Textarea } from "@/components/ui/textarea";
@@ -233,6 +238,20 @@ export default function MaddenMediaStudio() {
     }
   };
 
+  const applyDirection = (proposal: MaddenDirectorProposal) => {
+    let skipped: MaddenSlotKind[] = [];
+    setState((prev) => {
+      const result = applyDirectorProposal(prev, proposal);
+      skipped = result.skipped;
+      return result.next;
+    });
+    if (skipped.length > 0) {
+      toast.success(`${proposal.title} applied — kept your locked ${skipped.join(", ")}`);
+    } else {
+      toast.success(`${proposal.title} applied`);
+    }
+  };
+
   const applyShotPack = (pack: MaddenShotPack) => {
     setState((prev) => applyShotPackToState(prev, pack));
     toast.success(`${pack.name} applied — ${pack.shots.length} shots`);
@@ -372,6 +391,12 @@ export default function MaddenMediaStudio() {
               </div>
             </div>
 
+
+            <MaddenDirectorPanel
+              state={state}
+              disabled={!activeProjectId}
+              onApply={applyDirection}
+            />
 
             <MaddenPromptPreview
               state={state}
