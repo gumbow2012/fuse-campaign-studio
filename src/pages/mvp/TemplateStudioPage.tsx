@@ -496,6 +496,8 @@ export default function TemplateStudioPage() {
   /** Auto-advance: the next unfilled slot gets a subtle highlight + scroll focus. */
   const [focusedInputKey, setFocusedInputKey] = useState<string | null>(null);
   const slotRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  const appliedTemplateParamRef = useRef<string | null>(null);
+
 
   const isPrivilegedUser = hasAppAccess;
 
@@ -671,16 +673,19 @@ export default function TemplateStudioPage() {
   useEffect(() => {
     const requestedTemplate = searchParams.get("template");
     if (!requestedTemplate || !templates.length) return;
+    if (appliedTemplateParamRef.current === requestedTemplate) return;
     const normalizedRequest = requestedTemplate.toLowerCase();
     const match = templates.find((template) =>
       template.id.toLowerCase() === normalizedRequest ||
       template.name.toLowerCase() === normalizedRequest ||
       template.versionId?.toLowerCase() === normalizedRequest,
     );
-    if (match && match.id !== selectedTemplateId) {
+    if (match) {
+      appliedTemplateParamRef.current = requestedTemplate;
       setSelectedTemplateId(match.id);
     }
-  }, [searchParams, selectedTemplateId, templates]);
+  }, [searchParams, templates]);
+
 
   useEffect(() => {
     if (!templates.length) return;
