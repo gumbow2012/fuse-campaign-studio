@@ -84,7 +84,9 @@ const VIDEO_MODELS = [
 ];
 
 type Frame = { time: number; url: string };
-type Garment = { url: string; name: string; type: string; label: string; person: string };
+/** PHASE 2: structured refs; `url` still mirrors FRONT for generation. */
+type Garment = OutfitSwapGarment;
+type GarmentSlot = "front" | "back" | "detail" | "side";
 
 const SELECT_CLASS =
   "w-full rounded-lg border border-white/12 bg-black/40 px-2.5 py-1.5 text-xs text-foreground outline-none transition-colors hover:border-cyan-200/40 focus:border-cyan-200/60";
