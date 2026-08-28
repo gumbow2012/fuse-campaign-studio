@@ -182,9 +182,11 @@ export default function GenerateAuthGateModal({ open, onClose, templateId, retur
             onBeforeRedirect={() => writePendingAuthIntent({ returnTo, templateId: templateId ?? undefined })}
             onAuthenticated={() => {
               track("generate_auth_completed", { template_id: templateId ?? null });
-              // The next phase owns the auto-run; here we just leave the
-              // captured intent in place and continue on this route.
+              // Leave the captured intent in place, then CLOSE the gate so the
+              // normal post-auth flow can advance (plan offer → restore/auto-run).
+              // Never leave the user staring at the gate after a successful auth.
               void getPendingGenerationIntent();
+              onClose();
             }}
           />
 
