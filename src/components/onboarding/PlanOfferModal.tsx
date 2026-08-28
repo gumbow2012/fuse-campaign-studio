@@ -18,10 +18,10 @@ import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
-import { PLAN_LADDER, type PlanLadderEntry } from "@/lib/planLadder";
+import { PLAN_LADDER, WELCOME_CREDITS_ONCE, type PlanLadderEntry } from "@/lib/planLadder";
 import { getPlanOffer } from "@/lib/planOffer";
-import { planFeatureModules } from "@/lib/planFeatureModules";
-import { approxCampaignRangeLabel, approxImageGenerationsLabel } from "@/lib/creditOutputs";
+import { planDifferentiators } from "@/lib/planFeatureModules";
+import { MEDIAN_CAMPAIGN_TOOLTIP, typicalCapacityLabel } from "@/lib/creditOutputs";
 import type { LucideIcon } from "lucide-react";
 import { useMembershipCheckout } from "@/hooks/useMembershipCheckout";
 import GatedPlanDialog from "@/components/mvp/membership/GatedPlanDialog";
@@ -36,7 +36,7 @@ import { readPendingAuthIntent, resolveIntentDestination } from "@/lib/pendingAu
 import { track } from "@/lib/analytics/track";
 import { setPlanOfferActive } from "@/lib/planOfferVisibility";
 
-const WELCOME_CREDITS = 100;
+const WELCOME_CREDITS = WELCOME_CREDITS_ONCE;
 
 const STARTER = PLAN_LADDER.find((entry) => entry.key === "starter")!;
 const CAPSULE = PLAN_LADDER.find((entry) => entry.key === "capsule")!;
@@ -69,9 +69,8 @@ function CompactPlanCard({
 }) {
   const offer = getPlanOffer(entry, "monthly", null);
   const credits = offer.monthlyCredits ?? 0;
-  const campaignRange = approxCampaignRangeLabel(credits);
-  const imageEquivalent = approxImageGenerationsLabel(credits);
-  const modules = planFeatureModules(entry.key).slice(0, 2);
+  const capacity = typicalCapacityLabel(credits);
+  const { inherits, items } = planDifferentiators(entry.key);
 
   return (
     <div className={cn("relative flex flex-col rounded-[1.25rem] border p-4 sm:p-5", accent.shell)}>
@@ -91,8 +90,12 @@ function CompactPlanCard({
         <p className={cn("font-display text-[13px] font-bold", accent.text)}>
           ✦ {credits > 0 ? `${credits.toLocaleString()} credits/month` : entry.creditsLabel}
         </p>
-        {campaignRange ? <p className="mt-1 text-[12.5px] font-semibold text-white">{campaignRange}</p> : null}
-        {imageEquivalent ? <p className="mt-0.5 text-[11px] text-slate-400">{imageEquivalent}</p> : null}
+        {capacity ? (
+          <p className="mt-1 text-[10px] uppercase tracking-[0.16em] text-slate-400" title={MEDIAN_CAMPAIGN_TOOLTIP}>
+            Typical capacity ·{" "}
+            <span className="text-[12.5px] font-semibold normal-case tracking-normal text-white">{capacity}</span>
+          </p>
+        ) : null}
       </div>
 
       <p className="mt-3 font-display text-2xl font-bold tracking-[-0.03em] text-white">
