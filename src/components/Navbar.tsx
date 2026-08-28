@@ -305,6 +305,14 @@ const MobileMenu = ({ onClose }: { onClose: () => void }) => {
 
         {user ? (
           <>
+            {!canUseBuilder ? (
+              <div className="space-y-1">
+                <p className="px-3 font-display text-[10px] font-bold uppercase tracking-[0.15em] text-muted-foreground">
+                  Tools
+                </p>
+                <DrawerLink to="/app/lab/studio">Image Studio</DrawerLink>
+              </div>
+            ) : null}
             {canUseBuilder ? (
               <div className="space-y-1">
                 <p className="px-3 font-display text-[10px] font-bold uppercase tracking-[0.15em] text-muted-foreground">
