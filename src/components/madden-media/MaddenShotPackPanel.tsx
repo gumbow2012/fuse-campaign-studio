@@ -472,7 +472,7 @@ function ShotRow({
             </pre>
           </div>
 
-          {viewing ? (
+          {advanced && viewing ? (
             <div>
               <p className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">
                 Snapshot {position + 1} of {total}
@@ -486,6 +486,7 @@ function ShotRow({
               </pre>
             </div>
           ) : null}
+
         </div>
       ) : null}
     </div>
