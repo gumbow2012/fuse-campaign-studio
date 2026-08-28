@@ -31,6 +31,8 @@ import AdminFuseCast from "@/pages/AdminFuseCast";
 import AdminTemplateImport from "@/pages/AdminTemplateImport";
 import AdminTemplateFactory from "@/pages/AdminTemplateFactory";
 import AdminMerchandising from "@/pages/AdminMerchandising";
+import AdminProductLaunchPrototype from "@/pages/AdminProductLaunchPrototype";
+
 
 import AdminTemplates from "@/pages/AdminTemplates";
 import FlowEmbed from "@/pages/FlowEmbed";
@@ -388,6 +390,16 @@ const App = () => (
                 </AdminRoute>
               }
             />
+
+            <Route
+              path="/admin/experiments/product-launch"
+              element={
+                <AdminRoute>
+                  <AdminProductLaunchPrototype />
+                </AdminRoute>
+              }
+            />
+
 
             <Route
               path="/admin/templates/factory"
