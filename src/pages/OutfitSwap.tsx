@@ -466,6 +466,8 @@ export default function OutfitSwap() {
       setAnalysisFingerprint(result.fingerprint);
       setSuggestionDismissed(false);
       setCastAssignment(loadCastAssignment(result.fingerprint) ?? {});
+      setModelAssignment(loadModelAssignment(result.fingerprint) ?? {});
+
       setAnalysisStage("done");
     } catch (error) {
       setAnalysisError(error instanceof Error ? error.message : "Could not analyse that clip");
