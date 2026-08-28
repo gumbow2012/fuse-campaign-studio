@@ -8,6 +8,7 @@ import {
   Film,
   GitBranch,
   Heart,
+  Info,
   Loader2,
   
   Network,
@@ -32,6 +33,7 @@ import CampaignOutputsPanel from "@/components/templates/CampaignOutputsPanel";
 import CampaignResults from "@/components/templates/CampaignResults";
 import RegenerateOutputDialog from "@/components/templates/RegenerateOutputDialog";
 import { useOutputRegeneration } from "@/hooks/useOutputRegeneration";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 import { evaluateAndAnnounce } from "@/services/achievements";
 import { useAuth } from "@/contexts/AuthContext";
