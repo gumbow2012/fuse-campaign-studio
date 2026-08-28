@@ -705,6 +705,8 @@ async function syncGeneration(admin: AdminClient, row: any, privileged = false) 
       .select("*")
       .single();
 
+    await refundStudioCreditsIfNeeded(admin, row.id);
+
     return serializeGeneration(updated ?? row, privileged);
   }
 }
