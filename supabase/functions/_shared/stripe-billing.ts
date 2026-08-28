@@ -705,8 +705,9 @@ export function createCheckoutHandler(mode: StripeBillingMode) {
             template_name: templateName ?? "",
           },
         },
-        success_url: billingReturnUrl(origin, mode, "success", { templateId, templateName }),
-        cancel_url: billingReturnUrl(origin, mode, "canceled", { templateId, templateName }),
+        success_url: billingReturnUrl(origin, mode, "success", { templateId, templateName, returnPath }),
+        cancel_url: billingReturnUrl(origin, mode, "canceled", { templateId, templateName, returnPath }),
+
       });
 
       await logAuditEvent({
