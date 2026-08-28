@@ -291,7 +291,7 @@ export default function MaddenMediaStudio() {
                   }}
                 />
               </div>
-
+            </div>
 
 
             <MaddenShotBoard
