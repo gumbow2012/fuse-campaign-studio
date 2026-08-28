@@ -5,7 +5,8 @@ import {
   createAdminClient,
   errorMessage,
   json,
-  requireBuilderUser,
+  getUserRoles,
+  requireUser,
 } from "../_shared/supabase-admin.ts";
 import {
   clampSeedanceDuration,
@@ -41,6 +42,28 @@ type AdminClient = ReturnType<typeof createAdminClient>;
 function creditsFromUsd(usd: number | null | undefined) {
   if (!usd || !Number.isFinite(usd) || usd <= 0) return null;
   return Math.max(1, Math.ceil(usd / USD_PER_CREDIT));
+}
+
+/** Race-safe: only the caller that flips credits_refunded false->true refunds. */
+async function refundStudioCreditsIfNeeded(admin: AdminClient, generationId: string) {
+  const { data } = await admin
+    .from("studio_generations")
+    .update({ credits_refunded: true })
+    .eq("id", generationId)
+    .eq("credits_refunded", false)
+    .gt("charged_credits", 0)
+    .select("user_id, charged_credits")
+    .maybeSingle();
+  if (!data) return;
+  await admin.rpc("apply_credit_transaction", {
+    p_user_id: data.user_id,
+    p_amount: data.charged_credits,
+    p_type: "refund",
+    p_description: `Image Studio refund (${generationId})`,
+    p_template_id: null,
+    p_project_id: null,
+    p_step_id: null,
+  });
 }
 
 async function estimateUsd(args: {
@@ -293,6 +316,50 @@ function requestedAspect(value: unknown) {
   return raw && raw.toLowerCase() !== "auto" ? raw : null;
 }
 
+/**
+ * Charges the generation BEFORE the provider submit. Throws INSUFFICIENT_CREDITS
+ * so the caller never submits an unpaid generation. Admin/dev are not charged.
+ */
+async function chargeStudioCredits(
+  admin: AdminClient,
+  args: {
+    generationId: string;
+    userId: string;
+    privileged: boolean;
+    estimatedCostUsd: number | null;
+    kind: string;
+  },
+) {
+  const credits = creditsFromUsd(args.estimatedCostUsd) ?? 0;
+  if (args.privileged || credits <= 0) return;
+
+  const { error: creditError } = await admin.rpc("apply_credit_transaction", {
+    p_user_id: args.userId,
+    p_amount: -credits,
+    p_type: "run_template",
+    p_description: `Image Studio ${args.kind}`,
+    p_template_id: null,
+    p_project_id: null,
+    p_step_id: null,
+  });
+  if (creditError) {
+    await admin
+      .from("studio_generations")
+      .update({
+        status: "failed",
+        error_log: "INSUFFICIENT_CREDITS",
+        completed_at: new Date().toISOString(),
+      })
+      .eq("id", args.generationId);
+    throw new Error("INSUFFICIENT_CREDITS");
+  }
+
+  await admin
+    .from("studio_generations")
+    .update({ charged_credits: credits })
+    .eq("id", args.generationId);
+}
+
 async function startGeneration(
   admin: AdminClient,
   args: { input: StartInput; userId: string; privileged?: boolean },
@@ -343,6 +410,14 @@ async function startGeneration(
       const estimatedCostUsd = await estimateUsd({
         endpointId,
         fallbackFlatUsd: imageModel.fallbackFlatUsd ?? IMAGE_FALLBACK_USD,
+      });
+
+      await chargeStudioCredits(admin, {
+        generationId: inserted.id,
+        userId: args.userId,
+        privileged: args.privileged === true,
+        estimatedCostUsd,
+        kind,
       });
 
       const falInput = built.input;
@@ -425,6 +500,14 @@ async function startGeneration(
       fallbackUsdPerSecond: videoFallbackUsdPerSecond(videoModel, generateAudio) ?? null,
     });
 
+    await chargeStudioCredits(admin, {
+      generationId: inserted.id,
+      userId: args.userId,
+      privileged: args.privileged === true,
+      estimatedCostUsd,
+      kind,
+    });
+
     let requestId: string;
     let payload: Record<string, unknown>;
 
@@ -501,6 +584,7 @@ async function startGeneration(
         completed_at: new Date().toISOString(),
       })
       .eq("id", inserted.id);
+    await refundStudioCreditsIfNeeded(admin, inserted.id);
     throw error;
   }
 }
@@ -553,6 +637,7 @@ async function expireGeneration(admin: AdminClient, row: any, privileged = false
     .eq("id", row.id)
     .select("*")
     .maybeSingle();
+  await refundStudioCreditsIfNeeded(admin, row.id);
   return serializeGeneration(updated ?? { ...row, status: "failed" }, privileged);
 }
 
@@ -620,6 +705,8 @@ async function syncGeneration(admin: AdminClient, row: any, privileged = false) 
       .select("*")
       .single();
 
+    await refundStudioCreditsIfNeeded(admin, row.id);
+
     return serializeGeneration(updated ?? row, privileged);
   }
 }
@@ -673,6 +760,7 @@ Deno.serve(async (req) => {
             completed_at: new Date().toISOString(),
           })
           .eq("id", row.id);
+        await refundStudioCreditsIfNeeded(admin, row.id);
         return json({ ok: true });
       }
 
@@ -706,10 +794,11 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const access = await requireBuilderUser(req, admin);
-    const user = access.user;
+    // Open to ANY signed-in user; credits are the gate, not a role.
+    const user = await requireUser(req, admin);
+    const roles = await getUserRoles(user.id, admin);
     // Raw provider failure detail is assembled ONLY for admin/dev callers.
-    const privileged = access.isAdmin === true || access.isDev === true;
+    const privileged = roles.includes("admin") || roles.includes("dev");
     const body = await req.json().catch(() => ({})) as StartInput & {
       action?: string;
       generationId?: string;
@@ -833,7 +922,7 @@ Deno.serve(async (req) => {
 
     if (action === "backfill_previews") {
       /** GS-PERF6: admin/dev-only, idempotent thumbnail backfill. */
-      if (!access.isAdmin && !access.isDev) throw new Error("Admin access required");
+      if (!privileged) throw new Error("Admin access required");
 
       const { data: rows, error } = await admin
         .from("studio_generations")
@@ -926,6 +1015,9 @@ Deno.serve(async (req) => {
     return json({ generation });
   } catch (error) {
     const message = errorMessage(error);
+    if (/INSUFFICIENT_CREDITS|Insufficient credits/i.test(message)) {
+      return json({ error: "Not enough credits for this generation." }, 402);
+    }
     const status = /access required|authorization|Authentication|bearer/i.test(message) ? 401 : 400;
     return json({ error: message }, status);
   }

@@ -367,6 +367,15 @@ function statusLabel(status: Generation["status"], progress: number) {
 
 
 
+/** Error carrying the edge function HTTP status (402 = out of credits). */
+class StudioRequestError extends Error {
+  status?: number;
+  constructor(message: string, status?: number) {
+    super(message);
+    this.status = status;
+  }
+}
+
 async function callStudio(body: Record<string, unknown>) {
   const { data, error } = await supabase.functions.invoke("generate-studio", { body });
   if (error) {
@@ -386,7 +395,10 @@ async function callStudio(body: Record<string, unknown>) {
         message = "Generation timed out — please retry.";
       } else if (!parsed) message = `Generation request failed (${context.status}) — please retry.`;
     }
-    throw new Error(message || "Generation timed out — please retry.");
+    throw new StudioRequestError(
+      message || "Generation timed out — please retry.",
+      (error as { context?: Response }).context?.status,
+    );
   }
   if ((data as any)?.error) throw new Error(String((data as any).error));
   return data as any;
@@ -1574,6 +1586,17 @@ export default function GenerationStudio() {
           setGenerations((prev) => [generation, ...prev.filter((e) => e.id !== generation.id)]);
         }
       } catch (error) {
+        const status = error instanceof StudioRequestError ? error.status : undefined;
+        if (status === 402) {
+          toast.error("Not enough credits", {
+            description: "Top up your credits to run this generation.",
+            action: {
+              label: "Buy credits",
+              onClick: () => window.location.assign("/membership"),
+            },
+          });
+          return;
+        }
         toast.error(error instanceof Error ? error.message : "Could not start the generation");
       }
     })();

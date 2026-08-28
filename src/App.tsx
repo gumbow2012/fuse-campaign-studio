@@ -254,9 +254,9 @@ const App = () => (
             <Route
               path="/app/lab/studio"
               element={
-                <BuilderRoute>
+                <CustomerRoute>
                   <GenerationStudio />
-                </BuilderRoute>
+                </CustomerRoute>
               }
             />
             <Route
