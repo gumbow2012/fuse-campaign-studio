@@ -436,7 +436,23 @@ const Navbar = () => {
           >
             Pricing
           </Link>
-          {canUseBuilder ? <ToolsMenu /> : null}
+          {canUseBuilder ? (
+            <ToolsMenu />
+          ) : user ? (
+            <Link
+              to="/app/lab/studio"
+              aria-current={pathname.startsWith("/app/lab/studio") ? "page" : undefined}
+              className={cn(
+                "hidden lg:inline-flex rounded-lg px-3 py-1.5 font-sans text-sm transition-colors duration-200 motion-reduce:transition-none",
+                FOCUS_RING,
+                pathname.startsWith("/app/lab/studio")
+                  ? "bg-primary/10 font-semibold text-foreground"
+                  : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              Image Studio
+            </Link>
+          ) : null}
         </div>
 
         {/* Right side */}
