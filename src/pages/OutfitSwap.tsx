@@ -1402,9 +1402,24 @@ export default function OutfitSwap() {
               </div>
             </SectionCard>
 
+            {/* PHASE 4 — single-subject runs get ONE simple model control.
+                "Keep original" (the default) is exactly today's behaviour. */}
+            {subjectTracks.length > 1 ? null : (
+              <div className="rounded-3xl border border-white/10 bg-white/[0.03] p-4 backdrop-blur-xl sm:p-5">
+                <div className="max-w-sm">
+                  <SubjectModelSelector
+                    userId={user?.id ?? null}
+                    model={soloModel}
+                    onChange={(next) => setSubjectModel(soloSubjectId, next)}
+                  />
+                </div>
+              </div>
+            )}
+
             {/* PHASE 3 — only appears when the clip really has multiple subjects.
                 One subject keeps the flow exactly as simple as before. */}
             {subjectTracks.length > 1 ? (
+
               <SectionCard
                 step={4}
                 title="Assign your cast"
