@@ -487,6 +487,11 @@ export default function OutfitSwap() {
       setSuggestionDismissed(false);
       setCastAssignment(loadCastAssignment(result.fingerprint) ?? {});
       setModelAssignment(loadModelAssignment(result.fingerprint) ?? {});
+      // PHASE 6: restore QA verdicts + overrides so back-nav never recomputes.
+      setQaReport(loadQaReport(result.fingerprint));
+      setFrameOverrides(loadFrameOverrides(result.fingerprint));
+
+
 
       setAnalysisStage("done");
     } catch (error) {
