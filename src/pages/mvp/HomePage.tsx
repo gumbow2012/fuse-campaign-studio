@@ -538,6 +538,7 @@ export default function HomePage() {
               Pick a proven creative. Add your brand. FUSE does the rest.
             </p>
 
+            {/* Role-aware CTAs — Explore Templates is always primary. */}
             <div className="mt-7 flex flex-wrap items-center gap-3">
               <Button
                 asChild
@@ -549,15 +550,41 @@ export default function HomePage() {
                   <ArrowRight className="h-4 w-4" />
                 </Link>
               </Button>
-              <Button
-                asChild
-                size="lg"
-                variant="outline"
-                className="rounded-full border-white/15 bg-transparent px-7 text-slate-200 hover:bg-white/10"
-              >
-                <Link to="/app/lab/canvas">Create a Template</Link>
-              </Button>
+
+              {!user ? (
+                <Button
+                  asChild
+                  size="lg"
+                  variant="outline"
+                  className="rounded-full border-white/15 bg-transparent px-7 text-slate-200 hover:bg-white/10"
+                >
+                  <Link to="/auth?mode=signup">Sign up free</Link>
+                </Button>
+              ) : null}
+
+              {isCreator ? (
+                <Button
+                  asChild
+                  size="lg"
+                  variant="outline"
+                  className="rounded-full border-white/15 bg-transparent px-7 text-slate-200 hover:bg-white/10"
+                >
+                  <Link to="/app/creator">Creator Dashboard</Link>
+                </Button>
+              ) : null}
+
+              {(isCreator || isAdmin) && (
+                <Button
+                  asChild
+                  size="lg"
+                  variant="ghost"
+                  className="rounded-full px-6 text-slate-300 hover:text-white"
+                >
+                  <Link to="/app/lab/canvas">Create a Template</Link>
+                </Button>
+              )}
             </div>
+
 
             <p className="mt-5 text-[11px] font-semibold uppercase tracking-[0.24em] text-slate-400">
               No prompts · New templates daily · Performance tracked
