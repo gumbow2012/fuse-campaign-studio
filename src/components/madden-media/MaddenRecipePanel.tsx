@@ -49,12 +49,16 @@ function matchesQuery(recipe: MaddenRecipe, query: string) {
 function RecipeCard({
   recipe,
   disabled,
+  starred,
+  onToggleFavorite,
   onApply,
   onCustomize,
   onDelete,
 }: {
   recipe: MaddenRecipe;
   disabled?: boolean;
+  starred: boolean;
+  onToggleFavorite: () => void;
   onApply: () => void;
   onCustomize: () => void;
   onDelete?: () => void;
@@ -77,21 +81,35 @@ function RecipeCard({
       </div>
 
       <div className="flex flex-1 flex-col gap-2 p-3">
-        <div className="flex items-start justify-between gap-2">
+        <div className="flex items-start justify-between gap-1">
           <h4 className="text-sm font-semibold leading-tight tracking-tight">{recipe.name}</h4>
-          {onDelete ? (
+          <div className="flex shrink-0 items-center">
             <Button
               type="button"
               variant="ghost"
               size="icon"
-              className="h-6 w-6 shrink-0 text-muted-foreground"
-              aria-label={`Delete ${recipe.name}`}
-              onClick={onDelete}
+              className="h-7 w-7 text-muted-foreground"
+              aria-label={starred ? `Unfavorite ${recipe.name}` : `Favorite ${recipe.name}`}
+              aria-pressed={starred}
+              onClick={onToggleFavorite}
             >
-              <Trash2 className="h-3 w-3" />
+              <Star className={`h-3 w-3 ${starred ? "fill-primary text-primary" : ""}`} />
             </Button>
-          ) : null}
+            {onDelete ? (
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7 text-muted-foreground"
+                aria-label={`Delete ${recipe.name}`}
+                onClick={onDelete}
+              >
+                <Trash2 className="h-3 w-3" />
+              </Button>
+            ) : null}
+          </div>
         </div>
+
 
         {parts.length > 0 ? (
           <p className="text-[11px] leading-snug text-muted-foreground">{parts.join(" · ")}</p>
