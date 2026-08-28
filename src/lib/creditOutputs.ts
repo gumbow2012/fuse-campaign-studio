@@ -73,3 +73,26 @@ export function approxImageGenerationsLabel(credits: number | null | undefined) 
   if (!images) return null;
   return `≈ ${images.toLocaleString()} image generations`;
 }
+
+/* --------------------------- Short video equivalents --------------------------- */
+
+/** Credit cost of one 5s clip on the cheapest / most expensive rate we run. */
+export function shortVideoCreditRange() {
+  const perSecond = VIDEO_COST_MODEL_LIST.map((rate) => videoUsdPerSecond(rate.key, false));
+  const cheapest = usdToCredits(Math.min(...perSecond) * 5);
+  const priciest = usdToCredits(Math.max(...perSecond) * 5);
+  return { cheapest, priciest };
+}
+
+/** "≈ 12–46 short videos (5s)" — a truthful range, never a single model. */
+export function approxShortVideosLabel(credits: number | null | undefined) {
+  const value = Number(credits ?? 0);
+  if (!Number.isFinite(value) || value <= 0) return null;
+  const { cheapest, priciest } = shortVideoCreditRange();
+  const most = Math.floor(value / cheapest);
+  const fewest = Math.floor(value / priciest);
+  if (most < 1) return null;
+  if (fewest < 1) return `≈ up to ${most.toLocaleString()} short videos (5s)`;
+  if (fewest === most) return `≈ ${most.toLocaleString()} short videos (5s)`;
+  return `≈ ${fewest.toLocaleString()}–${most.toLocaleString()} short videos (5s)`;
+}
