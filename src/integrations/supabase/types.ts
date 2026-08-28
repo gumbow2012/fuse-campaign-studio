@@ -818,6 +818,7 @@ export type Database = {
           email: string
           id: string
           name: string | null
+          onboarding_plan_offer: string
           plan: string | null
           stripe_customer_id: string | null
           subscription_status: string | null
@@ -831,6 +832,7 @@ export type Database = {
           email: string
           id?: string
           name?: string | null
+          onboarding_plan_offer?: string
           plan?: string | null
           stripe_customer_id?: string | null
           subscription_status?: string | null
@@ -844,6 +846,7 @@ export type Database = {
           email?: string
           id?: string
           name?: string | null
+          onboarding_plan_offer?: string
           plan?: string | null
           stripe_customer_id?: string | null
           subscription_status?: string | null
@@ -1667,6 +1670,7 @@ export type Database = {
           email: string
           id: string
           name: string
+          onboarding_plan_offer: string
           plan: string
           stripe_customer_id: string
           stripe_price_id: string
@@ -1691,6 +1695,7 @@ export type Database = {
         }
         Returns: boolean
       }
+      set_onboarding_plan_offer: { Args: { _state: string }; Returns: string }
       touch_user_streak: {
         Args: never
         Returns: {
