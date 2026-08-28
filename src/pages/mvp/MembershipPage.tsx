@@ -9,7 +9,6 @@ import MembershipFaq from "@/components/mvp/membership/MembershipFaq";
 import PlanTierCards, { type BillingCycle } from "@/components/mvp/membership/PlanTierCards";
 import CreditTopUpModule from "@/components/mvp/membership/CreditTopUpModule";
 import CreditMixCalculator from "@/components/mvp/membership/CreditMixCalculator";
-import PlanComparisonMatrix from "@/components/mvp/membership/PlanComparisonMatrix";
 import CreditsOverviewCard from "@/components/mvp/membership/CreditsOverviewCard";
 import EarnCreditsCard from "@/components/mvp/membership/EarnCreditsCard";
 import CreditUsageHistory from "@/components/mvp/membership/CreditUsageHistory";
@@ -38,7 +37,6 @@ export default function MembershipPage() {
   const { isAdmin, profile } = useAuth();
   const { loading, startPlanCheckout, startCreditTopUp } = useMembershipCheckout();
   const [billingCycle, setBillingCycle] = useState<BillingCycle>("monthly");
-  const [showComparison, setShowComparison] = useState(false);
   const [selectedCreditAmount, setSelectedCreditAmount] = useState<number | null>(null);
 
   const paramTab = searchParams.get("tab");
