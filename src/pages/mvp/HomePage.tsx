@@ -380,10 +380,18 @@ export default function HomePage() {
       .sort((a, b) => runsOf(b.entry) - runsOf(a.entry) || a.index - b.index)
       .map((row) => row.entry);
   }, [trending, popularity]);
-
+  /**
+   * Hero primary CTA target: the top-ranked real trending template, else the hero
+   * template, else the gallery. Works logged-out (the builder is public).
+   */
+  const startCampaignHref = useMemo(() => {
+    const top = trendingRanked[0]?.template.id ?? heroPair[0]?.template.id ?? null;
+    return builderHref(top);
+  }, [trendingRanked, heroPair]);
 
   const original = heroPair[0] ?? null;
   const yourVersion = heroPair[1] ?? null;
+
 
   /** Every entry already claimed by the allocator — perf shelves reuse these only. */
   const allocatedEntries = useMemo(
