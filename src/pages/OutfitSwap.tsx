@@ -190,6 +190,77 @@ function GarmentSlotUpload({
 
 
 
+/** One detected subject track + its assigned wardrobe (mapping only). */
+function SubjectCastCard({
+  label,
+  description,
+  portraitUrl,
+  garments,
+  wardrobe,
+  onChange,
+}: {
+  label: string;
+  description: string;
+  portraitUrl: string | null;
+  garments: Garment[];
+  wardrobe: { topGarmentId: string | null; bottomGarmentId: string | null } | null;
+  onChange: (slot: "topGarmentId" | "bottomGarmentId", garmentId: string | null) => void;
+}) {
+  const tops = garments.filter(isTopGarment);
+  const bottoms = garments.filter(isBottomGarment);
+  const name = (garment: Garment) => garment.label || garment.name || garment.type;
+
+  const renderSlot = (
+    slotLabel: string,
+    slot: "topGarmentId" | "bottomGarmentId",
+    pool: Garment[],
+    value: string | null,
+  ) => (
+    <div>
+      <label className="mb-1 block text-[10px] uppercase tracking-[0.14em] text-cyan-200/70">
+        {slotLabel}
+      </label>
+      <select
+        value={value ?? ""}
+        onChange={(event) => onChange(slot, event.target.value || null)}
+        className={SELECT_CLASS}
+      >
+        <option value="">Unassigned</option>
+        {/* The library is reusable — one garment can dress several subjects. */}
+        {(pool.length ? pool : garments).map((garment) => (
+          <option key={garment.id} value={garment.id}>
+            {name(garment)}
+          </option>
+        ))}
+      </select>
+    </div>
+  );
+
+  return (
+    <div className="rounded-2xl border border-white/10 bg-black/25 p-2.5">
+      <div className="flex gap-3">
+        <div className="h-24 w-16 shrink-0 overflow-hidden rounded-xl border border-white/10 bg-black/50">
+          {portraitUrl ? (
+            <img src={portraitUrl} alt={label} className="h-full w-full object-cover object-top" />
+          ) : null}
+        </div>
+        <div className="min-w-0 flex-1 space-y-2">
+          <div className="min-w-0">
+            <p className="text-[11px] font-semibold tracking-wide text-cyan-100">{label}</p>
+            {description ? (
+              <p className="truncate text-[10px] text-muted-foreground" title={description}>
+                {description}
+              </p>
+            ) : null}
+          </div>
+          {renderSlot("Top", "topGarmentId", tops, wardrobe?.topGarmentId ?? null)}
+          {renderSlot("Bottom", "bottomGarmentId", bottoms, wardrobe?.bottomGarmentId ?? null)}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function StatusPill({ generation }: { generation?: SwapGeneration }) {
   if (!generation) return <span className="text-[11px] text-muted-foreground">Not generated</span>;
   const label = generation.status === "complete"
