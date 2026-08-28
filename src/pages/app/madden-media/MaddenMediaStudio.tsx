@@ -16,6 +16,8 @@ import {
 import MaddenPromptPreview from "@/components/madden-media/MaddenPromptPreview";
 
 import { Textarea } from "@/components/ui/textarea";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { MADDEN_CINEMATOGRAPHY_PRESETS } from "@/lib/madden-media/cinematographyPresets";
 import { MADDEN_LIGHTING_PRESETS } from "@/lib/madden-media/lightingPresets";
@@ -63,6 +65,20 @@ export default function MaddenMediaStudio() {
   const [state, setState] = useState<MaddenProjectState>(() => createEmptyProjectState());
   const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [busy, setBusy] = useState(false);
+  /** M9: Advanced view (deep controls). Default OFF — simple view. */
+  const [advanced, setAdvanced] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return window.localStorage.getItem("madden-media:advanced") === "true";
+  });
+
+  const toggleAdvanced = (next: boolean) => {
+    setAdvanced(next);
+    try {
+      window.localStorage.setItem("madden-media:advanced", String(next));
+    } catch {
+      /* non-fatal */
+    }
+  };
 
   /** Suppresses autosave while a load replaces the working state. */
   const restoringRef = useRef(false);
@@ -285,7 +301,7 @@ export default function MaddenMediaStudio() {
 
   return (
     <SiteShell>
-      <div className="mx-auto w-full max-w-6xl space-y-6 px-4 py-8">
+      <div className="mx-auto w-full max-w-6xl space-y-6 px-3 py-6 sm:px-4 sm:py-8">
         <header>
           <p className="text-[11px] uppercase tracking-[0.22em] text-muted-foreground">
             Madden Media Studio
@@ -295,8 +311,21 @@ export default function MaddenMediaStudio() {
           </h1>
           <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
             Vertical 9:16 short-form built around locked subject, outfit, jewelry and environment
-            continuity. This is the workspace foundation — nothing generates yet.
+            continuity. Work top to bottom: subject → outfit &amp; jewelry → look → shot pack →
+            direction → prompt. Nothing generates yet.
           </p>
+
+          <div className="mt-4 flex flex-wrap items-center gap-3 rounded-xl border border-border/60 bg-card/40 px-3 py-2">
+            <Switch id="madden-advanced" checked={advanced} onCheckedChange={toggleAdvanced} />
+            <Label htmlFor="madden-advanced" className="text-xs font-medium">
+              Advanced
+            </Label>
+            <span className="text-[11px] text-muted-foreground">
+              {advanced
+                ? "Showing per-category consistency locks, raw prompt editing and compiled payloads."
+                : "Simple view — deeper controls stay hidden until you need them."}
+            </span>
+          </div>
         </header>
 
         <MaddenProjectSwitcher
@@ -319,14 +348,17 @@ export default function MaddenMediaStudio() {
           <div className="space-y-4">
             <div className="grid gap-4 md:grid-cols-2">
               <MaddenSubjectPanel
+                advanced={advanced}
                 slot={state.slots.subject}
                 onBind={(patch) => updateSlot("subject", patch as Partial<MaddenSlot>)}
               />
               <MaddenOutfitPanel
+                advanced={advanced}
                 slot={state.slots.outfit}
                 onBind={(patch) => updateSlot("outfit", patch as Partial<MaddenSlot>)}
               />
               <MaddenJewelryPanel
+                advanced={advanced}
                 slot={state.slots.jewelry}
                 onBind={(patch) => updateSlot("jewelry", patch as Partial<MaddenSlot>)}
               />
@@ -344,6 +376,7 @@ export default function MaddenMediaStudio() {
                 title="Cinematography"
                 description="Camera, lens and framing language applied across the board."
                 presets={MADDEN_CINEMATOGRAPHY_PRESETS}
+                favoriteScope="cinematography"
                 selectedId={state.settings.cinematographyId}
                 onSelect={(id) =>
                   setState((prev) => ({
@@ -356,6 +389,7 @@ export default function MaddenMediaStudio() {
                 title="Lighting"
                 description="The lighting setup every shot inherits."
                 presets={MADDEN_LIGHTING_PRESETS}
+                favoriteScope="lighting"
                 selectedId={state.settings.lightingId}
                 onSelect={(id) =>
                   setState((prev) => ({
@@ -369,6 +403,7 @@ export default function MaddenMediaStudio() {
                   title="Environment"
                   description="Location and scene continuity — this also fills the project's environment slot."
                   presets={MADDEN_ENVIRONMENT_PRESETS}
+                  favoriteScope="environment"
                   selectedId={state.settings.environmentId}
                   onSelect={(id) => {
                     const preset = id
@@ -402,20 +437,24 @@ export default function MaddenMediaStudio() {
               state={state}
               onPromptChange={handlePromptChange}
               onResetPrompt={handleResetPrompt}
+              advanced={advanced}
             />
 
             <MaddenShotPackPanel
               projectId={activeProjectId}
               state={state}
               onApplyPack={applyShotPack}
+              advanced={advanced}
             />
 
-            <MaddenShotBoard
-              shots={state.shots}
-              onAdd={addShot}
-              onChange={updateShot}
-              onRemove={removeShot}
-            />
+            {advanced ? (
+              <MaddenShotBoard
+                shots={state.shots}
+                onAdd={addShot}
+                onChange={updateShot}
+                onRemove={removeShot}
+              />
+            ) : null}
 
 
             <section className="rounded-2xl border border-border/60 bg-card/50 p-4">
