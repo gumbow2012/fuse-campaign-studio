@@ -754,18 +754,9 @@ export default function HomePage() {
         </section>
       )}
 
-      {/* 3 · SHELVES — TRENDING first (real popularity), then NEW DROPS */}
+      {/* 3 · SHELVES — trending is rendered above the fold; NEW DROPS next */}
 
-      <Shelf
-        id="trending-now"
-        label="Trending now"
-        heading="What brands are using right now"
-        description="Ordered by real template runs over the last 90 days."
-        entries={trendingRanked}
-        perfMap={perfMap}
-        runsMap={popularity}
-        badge={{ tone: "trending", label: "Trending" }}
-      />
+
       <Shelf
         id="new-today"
         label="New drops"
