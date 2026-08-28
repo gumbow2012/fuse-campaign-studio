@@ -794,10 +794,11 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const access = await requireBuilderUser(req, admin);
-    const user = access.user;
+    // Open to ANY signed-in user; credits are the gate, not a role.
+    const user = await requireUser(req, admin);
+    const roles = await getUserRoles(user.id, admin);
     // Raw provider failure detail is assembled ONLY for admin/dev callers.
-    const privileged = access.isAdmin === true || access.isDev === true;
+    const privileged = roles.includes("admin") || roles.includes("dev");
     const body = await req.json().catch(() => ({})) as StartInput & {
       action?: string;
       generationId?: string;
