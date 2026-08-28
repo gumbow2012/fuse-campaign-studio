@@ -548,10 +548,45 @@ export default function TemplateStudioPage() {
     staleTime: 60_000,
   });
 
-  const templates = useMemo(
-    () => sortTemplatesForStudio((templatesQuery.data ?? EMPTY_TEMPLATES).filter((template) => template.is_active)),
-    [templatesQuery.data],
-  );
+  /* Admin-curated "Featured" shelf leads the grid (same source as HomePage). */
+  const shelvesQuery = useQuery({
+    queryKey: ["studio-marketplace-shelves"],
+    queryFn: async () => {
+      const { data } = await supabase.rpc("get_marketplace_shelves" as never);
+      return (data ?? []) as unknown[];
+    },
+    staleTime: 300_000,
+    retry: false,
+  });
+
+  const featuredIdsInOrder = useMemo<string[]>(() => {
+    const shelves = (shelvesQuery.data ?? []) as Array<{
+      slug?: string;
+      templates?: Array<{ id?: string | null }> | null;
+    }>;
+    const featured = shelves.find((shelf) => shelf?.slug === "featured");
+    return (featured?.templates ?? [])
+      .map((template) => (template?.id ? String(template.id) : ""))
+      .filter(Boolean);
+  }, [shelvesQuery.data]);
+
+  const templates = useMemo(() => {
+    const active = (templatesQuery.data ?? EMPTY_TEMPLATES).filter((template) => template.is_active);
+    if (!featuredIdsInOrder.length) return sortTemplatesForStudio(active);
+
+    const byId = new Map(active.map((template) => [String(template.id), template]));
+    const featured: typeof active = [];
+    const seen = new Set<string>();
+    for (const id of featuredIdsInOrder) {
+      const template = byId.get(id);
+      if (!template || seen.has(id)) continue;
+      seen.add(id);
+      featured.push(template);
+    }
+    const rest = sortTemplatesForStudio(active.filter((template) => !seen.has(String(template.id))));
+    return [...featured, ...rest];
+  }, [templatesQuery.data, featuredIdsInOrder]);
+
 
   const templateFitMap = useMemo<Record<string, TemplateFit>>(() => {
     if (!brandFitAssets) return {};
