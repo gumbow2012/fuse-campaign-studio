@@ -270,6 +270,7 @@ export default function MaddenShotPackPanel({
               onToggle={() => setOpenShotId((prev) => (prev === shot.id ? null : shot.id))}
               generating={generatingId === shot.id}
               onGenerate={() => void handleGenerate(shot)}
+              advanced={advanced}
             />
           ))
         )}
@@ -292,6 +293,7 @@ type RowProps = {
   onToggle: () => void;
   generating: boolean;
   onGenerate: () => void;
+  advanced: boolean;
 };
 
 function ShotRow({
@@ -306,6 +308,7 @@ function ShotRow({
   onToggle,
   generating,
   onGenerate,
+  advanced,
 }: RowProps) {
   const compiled = useMemo(() => maddenShotPromptCompiler(state, shot), [shot, state]);
   const preset = findPreset(
