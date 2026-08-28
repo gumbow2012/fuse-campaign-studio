@@ -311,7 +311,7 @@ function Shelf({
 /* ---------------------------------- page ---------------------------------- */
 
 export default function HomePage() {
-  const { user, isCreator } = useAuth();
+  const { user, isCreator, isAdmin } = useAuth();
 
   const { data: templates = [] } = useQuery({
     queryKey: ["mvp-templates"],
