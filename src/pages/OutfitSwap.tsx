@@ -633,6 +633,22 @@ export default function OutfitSwap() {
     saveCastAssignment(analysisFingerprint, castAssignment);
   }, [analysisFingerprint, castAssignment]);
 
+  /* ------------------- 3c. Model / person choice (storage only) --------------- */
+
+  useEffect(() => {
+    if (!analysisFingerprint) return;
+    saveModelAssignment(analysisFingerprint, modelAssignment);
+  }, [analysisFingerprint, modelAssignment]);
+
+  const setSubjectModel = useCallback((subjectId: string, next: OutfitSwapSubjectModel) => {
+    setModelAssignment((prev) => ({ ...prev, [subjectId]: next }));
+  }, []);
+
+  /** The single-subject run still talks about exactly one person. */
+  const soloSubjectId = useMemo(() => primarySubjectId(analysis), [analysis]);
+  const soloModel = modelAssignment[soloSubjectId] ?? KEEP_ORIGINAL_MODEL;
+
+
   const setSubjectGarment = useCallback(
     (subjectId: string, slot: "topGarmentId" | "bottomGarmentId", garmentId: string | null) => {
       setCastAssignment((prev) => ({
