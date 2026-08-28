@@ -342,54 +342,58 @@ export default function PlanOfferModal() {
             </div>
           ) : (
             <>
-              <h2 className="pr-8 font-display text-[1.5rem] font-bold leading-tight tracking-[-0.03em] text-white sm:text-[1.9rem]">
-                UNLOCK MORE FUSE.
-              </h2>
-              <p className="mt-2.5 max-w-[46rem] text-sm leading-6 text-slate-400">
-                Get enough credits to build full campaigns — or continue free with {WELCOME_CREDITS} credits.
-              </p>
+              <div
+                className={cn(
+                  "mx-auto flex w-full flex-col",
+                  singleOffer ? "max-w-[640px] items-stretch" : "max-w-none",
+                )}
+              >
+                <h2 className="pr-8 font-display text-[1.6rem] font-bold leading-[1.1] tracking-[-0.03em] text-white sm:text-[2.05rem]">
+                  UNLOCK MORE FUSE.
+                </h2>
+                <p className="mt-3 text-[13.5px] leading-6 text-slate-400">
+                  Get enough credits to build full campaigns — or continue free with {WELCOME_CREDITS} credits.
+                </p>
 
-              <div className="mt-6 grid gap-3 sm:max-w-md">
-                {/* STARTER — live Stripe checkout */}
-                <CompactPlanCard
-                  entry={STARTER}
-                  icon={Zap}
-                  accent={{
-                    shell: "border-cyan-300/30 bg-cyan-300/[0.06]",
-                    text: "text-cyan-100",
-                    check: "text-cyan-200",
-                    block: "border-cyan-300/25 bg-cyan-300/[0.07]",
-                    cta: "bg-cyan-300 text-slate-950 hover:bg-cyan-200",
-                  }}
-                  headline="Start creating."
-                  footnote="Billed monthly · cancel anytime"
-                  ctaLabel={`Start with ${STARTER.name} →`}
-                  ctaLoading={checkoutLoading === "starter"}
-                  onSelect={handleStarter}
-                />
+                <div className={cn("mt-7", singleOffer ? "grid gap-3" : "grid gap-3 sm:grid-cols-2")}>
+                  {/* STARTER — live Stripe checkout */}
+                  <CompactPlanCard
+                    entry={STARTER}
+                    icon={Zap}
+                    accent={{
+                      shell: "border-cyan-300/30 bg-cyan-300/[0.06]",
+                      text: "text-cyan-100",
+                      check: "text-cyan-200",
+                      block: "border-cyan-300/25 bg-cyan-300/[0.07]",
+                      cta: "bg-cyan-300 text-slate-950 hover:bg-cyan-200",
+                    }}
+                    headline="Start creating."
+                    footnote="Billed monthly · cancel anytime"
+                    ctaLabel={`Start with ${STARTER.name} →`}
+                    ctaLoading={checkoutLoading === "starter"}
+                    onSelect={handleStarter}
+                  />
+                </div>
 
+                <div className="mt-5 text-center">
+                  <button
+                    type="button"
+                    onClick={() => void handleFree()}
+                    disabled={granting}
+                    className="inline-flex items-center gap-1.5 rounded-full px-2 py-1 text-[11.5px] font-normal text-slate-500 transition-colors hover:text-slate-300 disabled:opacity-60"
+                  >
+                    {granting ? <Loader2 className="h-3 w-3 animate-spin" /> : null}
+                    Continue with free — {WELCOME_CREDITS} credits
+                  </button>
+                </div>
               </div>
-
-
-
-              <div className="mt-4 text-center">
-                <button
-                  type="button"
-                  onClick={() => void handleFree()}
-                  disabled={granting}
-                  className="inline-flex items-center gap-1.5 rounded-full px-2 py-1 text-[11.5px] font-normal text-slate-500 transition-colors hover:text-slate-300 disabled:opacity-60"
-                >
-                  {granting ? <Loader2 className="h-3 w-3 animate-spin" /> : null}
-                  Continue with free — {WELCOME_CREDITS} credits
-                </button>
-              </div>
-
             </>
           )}
         </div>
       </div>
 
       <GatedPlanDialog open={gatedOpen} onOpenChange={setGatedOpen} planName={null} />
+
     </>
   );
 }
