@@ -714,6 +714,12 @@ export default function AdminTemplateFactory() {
                 No references yet. Add the first trend reference to start the board.
               </CardContent>
             </Card>
+          ) : !pipelineReferences.length ? (
+            <Card className="border-white/10 bg-white/[0.03]">
+              <CardContent className="py-12 text-center text-sm text-muted-foreground">
+                No references in this stage.
+              </CardContent>
+            </Card>
           ) : (
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {pipelineReferences.map(({ reference, pipeline }) => (
