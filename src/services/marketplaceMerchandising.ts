@@ -39,7 +39,6 @@ export interface MerchTemplate {
   id: string;
   name: string;
   description: string | null;
-  category: string | null;
   previewUrl: string | null;
   createdBy: string | null;
   live: boolean;
@@ -69,7 +68,7 @@ export async function loadMerchandising(): Promise<MerchandisingSnapshot> {
     db
       .from("template_versions")
       .select(
-        "id, template_id, is_active, fork_id, fuse_templates!inner(id, name, description, category, preview_url, created_by)",
+        "id, template_id, is_active, fork_id, fuse_templates!inner(id, name, description, preview_url, created_by)",
       )
       .eq("is_active", true)
       .is("fork_id", null),
@@ -107,7 +106,6 @@ export async function loadMerchandising(): Promise<MerchandisingSnapshot> {
       id: String(template.id),
       name: String(template.name ?? "Untitled template"),
       description: text(template.description),
-      category: text(template.category),
       previewUrl: text(template.preview_url),
       createdBy: text(template.created_by),
       live: true,
