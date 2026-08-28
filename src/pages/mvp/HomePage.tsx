@@ -322,7 +322,20 @@ function Shelf({
 
 
 
+/** Shape returned by the public `get_marketplace_shelves()` RPC. */
+type MerchandisedShelf = {
+  id?: string;
+  slug?: string;
+  title?: string;
+  subtitle?: string | null;
+  sort_order?: number;
+  is_visible?: boolean;
+  is_algorithmic?: boolean;
+  templates?: { template_id?: string; name?: string; pinned?: boolean; sort_order?: number }[] | null;
+};
+
 /* ---------------------------------- page ---------------------------------- */
+
 
 export default function HomePage() {
   const { user, isCreator, isAdmin } = useAuth();
