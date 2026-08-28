@@ -316,6 +316,50 @@ function requestedAspect(value: unknown) {
   return raw && raw.toLowerCase() !== "auto" ? raw : null;
 }
 
+/**
+ * Charges the generation BEFORE the provider submit. Throws INSUFFICIENT_CREDITS
+ * so the caller never submits an unpaid generation. Admin/dev are not charged.
+ */
+async function chargeStudioCredits(
+  admin: AdminClient,
+  args: {
+    generationId: string;
+    userId: string;
+    privileged: boolean;
+    estimatedCostUsd: number | null;
+    kind: string;
+  },
+) {
+  const credits = creditsFromUsd(args.estimatedCostUsd) ?? 0;
+  if (args.privileged || credits <= 0) return;
+
+  const { error: creditError } = await admin.rpc("apply_credit_transaction", {
+    p_user_id: args.userId,
+    p_amount: -credits,
+    p_type: "run_template",
+    p_description: `Image Studio ${args.kind}`,
+    p_template_id: null,
+    p_project_id: null,
+    p_step_id: null,
+  });
+  if (creditError) {
+    await admin
+      .from("studio_generations")
+      .update({
+        status: "failed",
+        error_log: "INSUFFICIENT_CREDITS",
+        completed_at: new Date().toISOString(),
+      })
+      .eq("id", args.generationId);
+    throw new Error("INSUFFICIENT_CREDITS");
+  }
+
+  await admin
+    .from("studio_generations")
+    .update({ charged_credits: credits })
+    .eq("id", args.generationId);
+}
+
 async function startGeneration(
   admin: AdminClient,
   args: { input: StartInput; userId: string; privileged?: boolean },
