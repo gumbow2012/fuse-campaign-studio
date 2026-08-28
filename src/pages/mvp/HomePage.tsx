@@ -233,7 +233,7 @@ function TemplateCard({
           size="sm"
           className="relative z-20 mt-3 h-9 w-full rounded-full bg-cyan-300 text-[12px] font-semibold uppercase tracking-[0.14em] text-slate-950 hover:bg-cyan-200"
         >
-          <Link to={templateHref}>Use Template</Link>
+          <Link to={templateHref}>Make this yours →</Link>
         </Button>
       </div>
     </article>
