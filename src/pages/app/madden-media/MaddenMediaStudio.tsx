@@ -226,7 +226,13 @@ export default function MaddenMediaStudio() {
     }
   };
 
+  const applyShotPack = (pack: MaddenShotPack) => {
+    setState((prev) => applyShotPackToState(prev, pack));
+    toast.success(`${pack.name} applied — ${pack.shots.length} shots`);
+  };
+
   const handlePromptChange = (value: string) => {
+
     setState((prev) => ({
       ...prev,
       settings: { ...prev.settings, promptOverride: value, promptUserEdited: true },
