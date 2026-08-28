@@ -165,7 +165,7 @@ export const MADDEN_BUILTIN_RECIPES: MaddenRecipe[] = [
     lookName: "Mirror Fit Check",
     lockSlots: ["outfit"],
   }),
-  recipe("subway Ghost", "Subway Ghost", ["transit", "night", "kinetic"], {
+  recipe("subway-ghost", "Subway Ghost", ["transit", "night", "kinetic"], {
     cinematographyId: "tracking-dolly",
     lightingId: "overcast-flat",
     environmentId: "subway-platform",
@@ -200,7 +200,7 @@ export const MADDEN_BUILTIN_RECIPES: MaddenRecipe[] = [
     lookName: "Elevator Tension",
     lockSlots: IDENTITY_SLOTS,
   }),
-  recipe("rave Room", "Rave Room", ["party", "crowd", "neon"], {
+  recipe("rave-room", "Rave Room", ["party", "crowd", "neon"], {
     cinematographyId: "handheld-verite",
     lightingId: "neon-night",
     environmentId: "warehouse-party",
