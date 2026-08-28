@@ -270,73 +270,44 @@ export default function PlanOfferModal() {
               </p>
 
               <div className="mt-6 grid gap-3 md:grid-cols-2">
-                {/* STARTER — live checkout */}
-                <div className="flex flex-col rounded-[1.25rem] border border-cyan-300/30 bg-cyan-300/[0.06] p-4 sm:p-5">
-                  <div className="flex items-center gap-2">
-                    <Zap className="h-4 w-4 text-cyan-200" aria-hidden />
-                    <p className="font-display text-[11px] font-bold uppercase tracking-[0.22em] text-cyan-100">
-                      {STARTER.name}
-                    </p>
-                  </div>
-                  <p className="mt-2 font-display text-2xl font-bold tracking-[-0.03em] text-white">
-                    ${STARTER.price}
-                    <span className="ml-1 text-sm font-medium text-slate-400">/mo</span>
-                  </p>
-                  <p className="text-xs text-cyan-100/90">{creditsLabel(STARTER.monthlyCredits)}</p>
-                  <p className="mt-2 text-[13px] font-semibold text-white">Start creating.</p>
-                  <ul className="mt-3 flex-1 space-y-1.5">
-                    {STARTER_BENEFITS.map((benefit) => (
-                      <li key={benefit} className="flex items-start gap-2 text-[12.5px] leading-5 text-slate-300">
-                        <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-cyan-200" aria-hidden />
-                        {benefit}
-                      </li>
-                    ))}
-                  </ul>
-                  <Button
-                    onClick={handleStarter}
-                    disabled={checkoutLoading === "starter"}
-                    className="mt-4 w-full rounded-full bg-cyan-300 font-semibold text-slate-950 hover:bg-cyan-200"
-                  >
-                    {checkoutLoading === "starter" ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-                    Start with {STARTER.name} →
-                  </Button>
-                </div>
+                {/* STARTER — live Stripe checkout */}
+                <CompactPlanCard
+                  entry={STARTER}
+                  icon={Zap}
+                  accent={{
+                    shell: "border-cyan-300/30 bg-cyan-300/[0.06]",
+                    text: "text-cyan-100",
+                    check: "text-cyan-200",
+                    block: "border-cyan-300/25 bg-cyan-300/[0.07]",
+                    cta: "bg-cyan-300 text-slate-950 hover:bg-cyan-200",
+                  }}
+                  headline="Start creating."
+                  footnote="Billed monthly · cancel anytime"
+                  ctaLabel={`Start with ${STARTER.name} →`}
+                  ctaLoading={checkoutLoading === "starter"}
+                  onSelect={handleStarter}
+                />
 
-                {/* CAPSULE — no live price yet, early-access flow */}
-                <div className="relative flex flex-col rounded-[1.25rem] border border-violet-400/30 bg-violet-500/[0.08] p-4 sm:p-5">
-                  <span className="absolute right-4 top-4 rounded-full border border-violet-300/40 bg-violet-400/15 px-2 py-0.5 font-display text-[9px] font-bold uppercase tracking-[0.18em] text-violet-100">
-                    Most popular
-                  </span>
-                  <div className="flex items-center gap-2">
-                    <Package className="h-4 w-4 text-violet-200" aria-hidden />
-                    <p className="font-display text-[11px] font-bold uppercase tracking-[0.22em] text-violet-100">
-                      {CAPSULE.name}
-                    </p>
-                  </div>
-                  <p className="mt-2 font-display text-2xl font-bold tracking-[-0.03em] text-white">
-                    ${CAPSULE.price}
-                    <span className="ml-1 text-sm font-medium text-slate-400">/mo</span>
-                  </p>
-                  <p className="text-xs text-violet-100/90">{creditsLabel(CAPSULE.monthlyCredits)}</p>
-                  <p className="mt-2 text-[13px] font-semibold text-white">Create consistently.</p>
-                  <ul className="mt-3 flex-1 space-y-1.5">
-                    {CAPSULE_BENEFITS.map((benefit) => (
-                      <li key={benefit} className="flex items-start gap-2 text-[12.5px] leading-5 text-slate-300">
-                        <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-violet-200" aria-hidden />
-                        {benefit}
-                      </li>
-                    ))}
-                  </ul>
-                  <Button
-                    onClick={handleCapsule}
-                    className={cn(
-                      "mt-4 w-full rounded-full bg-violet-400 font-semibold text-slate-950 hover:bg-violet-300",
-                    )}
-                  >
-                    Choose {CAPSULE.name}
-                  </Button>
-                </div>
+                {/* CAPSULE — no Stripe price yet, early-access flow only */}
+                <CompactPlanCard
+                  entry={CAPSULE}
+                  icon={Package}
+                  tag="Most popular"
+                  accent={{
+                    shell: "border-violet-400/35 bg-violet-500/[0.09]",
+                    text: "text-violet-100",
+                    check: "text-violet-200",
+                    block: "border-violet-400/30 bg-violet-500/[0.10]",
+                    cta: "bg-violet-400 text-slate-950 hover:bg-violet-300",
+                  }}
+                  headline="Create consistently."
+                  footnote="Early access — not open for checkout yet"
+                  ctaLabel={`Choose ${CAPSULE.name}`}
+                  onSelect={handleCapsule}
+                />
               </div>
+
+
 
               <div className="mt-6 text-center">
                 <button
