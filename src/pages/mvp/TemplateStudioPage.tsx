@@ -1151,10 +1151,8 @@ export default function TemplateStudioPage() {
   const creditBalance = profile?.credits_balance ?? null;
   const displayedCreditBalance = creditBalance ?? 0;
   const profileIsResolving = !!user && !isPrivilegedUser && !profile;
-  const hasActiveMembership =
-    isPrivilegedUser ||
-    profile?.subscription_status === "active" ||
-    profile?.subscription_status === "trialing";
+  // FREEMIUM: generation is gated on credits, not on membership status.
+
   const adminVisualRemaining = getAdminVisualCreditsRemaining();
   const creditCycleTotal = isPrivilegedUser
     ? ADMIN_VISUAL_BUDGET_TOTAL
