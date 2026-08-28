@@ -422,3 +422,116 @@ export async function deleteUserRecipe(id: string): Promise<void> {
   const { error } = await looseTable(RECIPES_TABLE).delete().eq("id", id);
   if (error) fail(error, "Could not delete that recipe");
 }
+
+
+/* ------------------------------------------------------------------ *
+ * M7 — shot generation history (public.studio_generations)
+ * ------------------------------------------------------------------ *
+ * Append-only by construction: a generation is an immutable snapshot row.
+ * Nothing here updates or deletes an existing row, and nothing calls a paid
+ * provider — the snapshot records what WOULD be sent, pending live
+ * generation verification. Rows are tagged through the shared metadata
+ * pattern inside input_payload: feature="madden-media" + madden_project_id +
+ * shot_id. The studio_generations schema is untouched.
+ */
+
+const GENERATIONS_TABLE = "studio_generations";
+const GENERATION_SELECT =
+  "id, kind, status, prompt, output_url, output_type, input_payload, created_at";
+export const MADDEN_GENERATION_FEATURE = "madden-media";
+export const MADDEN_GENERATION_KIND = "madden-media";
+/** Snapshot persisted, no provider called yet. */
+export const MADDEN_GENERATION_PENDING_STATUS = "pending_verification";
+
+export type MaddenGenerationSnapshot = {
+  feature: string;
+  maddenProjectId: string;
+  shotId: string;
+  shotPackId: string | null;
+  aspectRatio: "9:16";
+  shot: {
+    title: string;
+    direction: string;
+    durationSeconds: number;
+    cinematographyId: string | null;
+  };
+  presets: {
+    cinematographyId: string | null;
+    lightingId: string | null;
+    environmentId: string | null;
+  };
+  referenceUrls: string[];
+  compiledAt: string;
+  verification: "live_generation_verification_pending";
+};
+
+export type MaddenShotGeneration = {
+  id: string;
+  projectId: string;
+  shotId: string;
+  status: string;
+  prompt: string;
+  outputUrl: string | null;
+  outputType: string | null;
+  snapshot: MaddenGenerationSnapshot | null;
+  createdAt: string;
+};
+
+function toShotGeneration(row: Record<string, unknown>): MaddenShotGeneration {
+  const payload = (row.input_payload ?? {}) as Record<string, unknown>;
+  const snapshot = (payload.snapshot ?? null) as MaddenGenerationSnapshot | null;
+  return {
+    id: String(row.id),
+    projectId: String(payload.madden_project_id ?? snapshot?.maddenProjectId ?? ""),
+    shotId: String(payload.shot_id ?? snapshot?.shotId ?? ""),
+    status: String(row.status ?? MADDEN_GENERATION_PENDING_STATUS),
+    prompt: row.prompt ? String(row.prompt) : "",
+    outputUrl: row.output_url ? String(row.output_url) : null,
+    outputType: row.output_type ? String(row.output_type) : null,
+    snapshot,
+    createdAt: String(row.created_at ?? ""),
+  };
+}
+
+/** Every Madden generation for a project, oldest first (history order). */
+export async function listMaddenGenerations(
+  projectId: string,
+): Promise<MaddenShotGeneration[]> {
+  const { data, error } = await looseTable(GENERATIONS_TABLE)
+    .select(GENERATION_SELECT)
+    .eq("kind", MADDEN_GENERATION_KIND)
+    .order("created_at", { ascending: true })
+    .limit(500);
+  if (error) fail(error, "Could not load this project's generation history");
+  return ((data as Record<string, unknown>[] | null) ?? [])
+    .map(toShotGeneration)
+    .filter((row) => row.projectId === projectId);
+}
+
+/** Appends an immutable snapshot. Never overwrites a previous generation. */
+export async function recordMaddenShotGeneration(input: {
+  projectId: string;
+  shotId: string;
+  prompt: string;
+  snapshot: MaddenGenerationSnapshot;
+}): Promise<MaddenShotGeneration> {
+  const userId = await requireUserId();
+  const { data, error } = await looseTable(GENERATIONS_TABLE)
+    .insert({
+      user_id: userId,
+      kind: MADDEN_GENERATION_KIND,
+      status: MADDEN_GENERATION_PENDING_STATUS,
+      prompt: input.prompt,
+      input_payload: {
+        feature: MADDEN_GENERATION_FEATURE,
+        madden_project_id: input.projectId,
+        shot_id: input.shotId,
+        snapshot: input.snapshot,
+      } as unknown as Record<string, unknown>,
+    })
+    .select(GENERATION_SELECT)
+    .maybeSingle();
+  if (error) fail(error, "Could not save that generation snapshot");
+  if (!data) throw new Error("Could not save that generation snapshot");
+  return toShotGeneration(data as Record<string, unknown>);
+}
