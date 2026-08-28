@@ -922,7 +922,7 @@ Deno.serve(async (req) => {
 
     if (action === "backfill_previews") {
       /** GS-PERF6: admin/dev-only, idempotent thumbnail backfill. */
-      if (!access.isAdmin && !access.isDev) throw new Error("Admin access required");
+      if (!privileged) throw new Error("Admin access required");
 
       const { data: rows, error } = await admin
         .from("studio_generations")
