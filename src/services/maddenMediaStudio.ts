@@ -21,6 +21,15 @@ import {
   type MaddenSubjectProfile,
   type MaddenSubjectProfileData,
 } from "@/lib/madden-media/subject";
+import {
+  normalizeJewelryAttributes,
+  normalizeJewelryData,
+  normalizeOutfitAttributes,
+  normalizeOutfitData,
+  type MaddenJewelryProfileData,
+  type MaddenOutfitProfileData,
+  type MaddenProfileOf,
+} from "@/lib/madden-media/wardrobe";
 
 const TABLE = "madden_media_projects";
 
