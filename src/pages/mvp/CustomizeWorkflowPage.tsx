@@ -886,7 +886,7 @@ export default function CustomizeWorkflowPage() {
         {needsCredits && (
           <p className="mt-2 text-sm text-amber-200">
             You don't have enough credits for this run.{" "}
-            <Link to="/app/membership" className="underline">
+            <Link to="/membership" className="underline">
               Top up your credits
             </Link>{" "}
             and try again.
