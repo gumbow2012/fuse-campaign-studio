@@ -8,6 +8,7 @@ import {
   Network,
   ArrowDownWideNarrow,
   ChevronDown,
+  Check,
   Gauge,
   Pencil,
   Plus,
@@ -35,6 +36,7 @@ import {
   VIRAL_SCORE_DISCLAIMER,
   type ViralFactor,
 } from "@/lib/templateFactory/viralScore";
+import QuickPublishButton from "@/components/lab/QuickPublishButton";
 import { supabase } from "@/integrations/supabase/client";
 import {
   analyzeStreetwearReference,
@@ -198,6 +200,101 @@ function BlueprintPanel({
   );
 }
 
+/** TF4 — reference pipeline stages, derived only from real data. */
+const REFERENCE_STAGES = [
+  { key: "reference", label: "Reference" },
+  { key: "analyzed", label: "Analyzed" },
+  { key: "scored", label: "Scored" },
+  { key: "compiled", label: "Compiled" },
+  { key: "published", label: "Live" },
+] as const;
+
+type ReferenceStageKey = (typeof REFERENCE_STAGES)[number]["key"];
+
+type ReferencePipeline = {
+  analyzed: boolean;
+  scored: boolean;
+  compiled: boolean;
+  published: boolean;
+  template: WorkbenchTemplate | null;
+  activeVersion: WorkbenchVersion | null;
+  draftVersion: WorkbenchVersion | null;
+  done: Record<ReferenceStageKey, boolean>;
+};
+
+function referencePipeline(
+  reference: StreetwearReference,
+  template: WorkbenchTemplate | null,
+): ReferencePipeline {
+  const analyzed = !!reference.blueprint;
+  const scored = typeof reference.viral_score === "number";
+  const compiled = !!reference.compiled_template_id;
+  const activeVersion = template?.versions.find((version) => version.is_active) ?? null;
+  const draftVersion = activeVersion ?? template?.versions[0] ?? null;
+  // Published is truthful: the compiled template must actually have an active version.
+  const published = compiled && !!activeVersion;
+  return {
+    analyzed,
+    scored,
+    compiled,
+    published,
+    template,
+    activeVersion,
+    draftVersion,
+    done: { reference: true, analyzed, scored, compiled, published },
+  };
+}
+
+type StageFilter = "all" | "needs_analysis" | "ready_to_compile" | "compiled" | "live";
+
+const STAGE_FILTERS: Array<{ key: StageFilter; label: string }> = [
+  { key: "all", label: "All" },
+  { key: "needs_analysis", label: "Needs analysis" },
+  { key: "ready_to_compile", label: "Ready to compile" },
+  { key: "compiled", label: "Compiled / unpublished" },
+  { key: "live", label: "Live" },
+];
+
+function matchesStageFilter(pipeline: ReferencePipeline, filter: StageFilter): boolean {
+  switch (filter) {
+    case "needs_analysis":
+      return !pipeline.analyzed;
+    case "ready_to_compile":
+      return pipeline.analyzed && !pipeline.compiled;
+    case "compiled":
+      return pipeline.compiled && !pipeline.published;
+    case "live":
+      return pipeline.published;
+    default:
+      return true;
+  }
+}
+
+function PipelineTrack({ done }: { done: Record<ReferenceStageKey, boolean> }) {
+  return (
+    <div className="mt-4 flex flex-wrap items-center gap-1.5">
+      {REFERENCE_STAGES.map((stage, index) => {
+        const complete = done[stage.key];
+        return (
+          <div key={stage.key} className="flex items-center gap-1.5">
+            {index > 0 ? <span className="h-px w-3 bg-white/15" aria-hidden /> : null}
+            <span
+              className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] ${
+                complete
+                  ? "border-cyan-300/35 bg-cyan-300/10 text-cyan-100"
+                  : "border-white/10 bg-white/[0.03] text-muted-foreground"
+              }`}
+            >
+              {complete ? <Check className="h-3 w-3" /> : null}
+              {stage.label}
+            </span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 const BAND_TONE: Record<string, string> = {
   high: "border-emerald-300/30 bg-emerald-300/10 text-emerald-100",
   solid: "border-cyan-300/30 bg-cyan-300/10 text-cyan-100",
@@ -291,13 +388,30 @@ export default function AdminTemplateFactory() {
     return grouped;
   }, [templates]);
 
-  const [sortByScore, setSortByScore] = useState(false);
+  const [sortByScore, setSortByScore] = useState(true);
+  const [stageFilter, setStageFilter] = useState<StageFilter>("all");
 
-  const sortedReferences = useMemo(() => {
-    const list = [...(references ?? [])];
-    if (!sortByScore) return list;
-    return list.sort((a, b) => (b.viral_score ?? -1) - (a.viral_score ?? -1));
-  }, [references, sortByScore]);
+  const templateById = useMemo(() => {
+    const map = new Map<string, WorkbenchTemplate>();
+    for (const template of templates ?? []) map.set(template.id, template);
+    return map;
+  }, [templates]);
+
+  /** Each reference paired with its truthful pipeline state, filtered + sorted. */
+  const pipelineReferences = useMemo(() => {
+    const rows = (references ?? []).map((reference) => ({
+      reference,
+      pipeline: referencePipeline(
+        reference,
+        reference.compiled_template_id ? templateById.get(reference.compiled_template_id) ?? null : null,
+      ),
+    }));
+    const filtered = rows.filter((row) => matchesStageFilter(row.pipeline, stageFilter));
+    if (!sortByScore) return filtered;
+    return filtered.sort(
+      (a, b) => (b.reference.viral_score ?? -1) - (a.reference.viral_score ?? -1),
+    );
+  }, [references, templateById, stageFilter, sortByScore]);
 
   const invalidateReferences = () => {
     void queryClient.invalidateQueries({ queryKey: ["streetwear-references"] });
@@ -463,8 +577,9 @@ export default function AdminTemplateFactory() {
             <p className={TINY_LABEL}>Admin · Supply</p>
             <h1 className="mt-2 text-3xl font-black tracking-tight">Template Factory</h1>
             <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
-              Pipeline overview of every graph template plus the curated streetwear intelligence board
-              that informs what gets built next.
+              The reference board is the primary factory workflow: analyze a reference, score it,
+              compile it into a draft template, then publish. The supply pipeline below tracks every
+              graph template.
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -555,6 +670,20 @@ export default function AdminTemplateFactory() {
               </p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
+              {STAGE_FILTERS.map((filter) => (
+                <button
+                  key={filter.key}
+                  type="button"
+                  onClick={() => setStageFilter(filter.key)}
+                  className={`rounded-full border px-3 py-1 text-[11px] font-semibold transition-colors ${
+                    stageFilter === filter.key
+                      ? "border-cyan-300/40 bg-cyan-300/15 text-cyan-100"
+                      : "border-white/10 bg-white/[0.03] text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  {filter.label}
+                </button>
+              ))}
               <Button
                 size="sm"
                 variant="outline"
@@ -585,9 +714,15 @@ export default function AdminTemplateFactory() {
                 No references yet. Add the first trend reference to start the board.
               </CardContent>
             </Card>
+          ) : !pipelineReferences.length ? (
+            <Card className="border-white/10 bg-white/[0.03]">
+              <CardContent className="py-12 text-center text-sm text-muted-foreground">
+                No references in this stage.
+              </CardContent>
+            </Card>
           ) : (
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {sortedReferences.map((reference) => (
+              {pipelineReferences.map(({ reference, pipeline }) => (
 
                 <Card key={reference.id} className="overflow-hidden border-white/10 bg-white/[0.03]">
                   <div className="aspect-[4/3] w-full bg-black/40">
@@ -658,65 +793,87 @@ export default function AdminTemplateFactory() {
                       </a>
                     ) : null}
 
-                    <div className="mt-4 flex flex-wrap items-center gap-2">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="rounded-full border-cyan-300/30 bg-cyan-300/10 text-cyan-100 hover:bg-cyan-300/20"
-                        disabled={!reference.image_url || analyzingId === reference.id}
-                        onClick={() => analyzeMutation.mutate(reference)}
-                      >
-                        {analyzingId === reference.id ? (
-                          <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
-                        ) : (
-                          <Sparkles className="mr-2 h-3.5 w-3.5" />
-                        )}
-                        {analyzingId === reference.id
-                          ? "Analyzing…"
-                          : reference.blueprint
-                            ? "Re-analyze"
-                            : "Analyze"}
-                      </Button>
-                      {reference.blueprint ? (
+                    <PipelineTrack done={pipeline.done} />
+
+                    <div className="mt-3 flex flex-wrap items-center gap-2">
+                      {!pipeline.analyzed ? (
                         <Button
                           size="sm"
-                          variant="outline"
-                          className="rounded-full border-emerald-300/30 bg-emerald-300/10 text-emerald-100 hover:bg-emerald-300/20"
-                          disabled={compilingId === reference.id}
-                          onClick={() => compileMutation.mutate(reference.id)}
+                          className="rounded-full bg-cyan-300 text-slate-950 hover:bg-cyan-200"
+                          disabled={!reference.image_url || analyzingId === reference.id}
+                          onClick={() => analyzeMutation.mutate(reference)}
                         >
-                          {compilingId === reference.id ? (
+                          {analyzingId === reference.id ? (
                             <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
                           ) : (
-                            <Network className="mr-2 h-3.5 w-3.5" />
+                            <Sparkles className="mr-2 h-3.5 w-3.5" />
                           )}
-                          {compilingId === reference.id
-                            ? "Compiling…"
-                            : reference.compiled_template_id
-                              ? "Recompile"
-                              : "Compile to template"}
+                          {analyzingId === reference.id ? "Analyzing…" : "Analyze"}
                         </Button>
-                      ) : null}
-                      {reference.blueprint ? (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="rounded-full border-white/15 bg-white/5"
-                          disabled={scoringId === reference.id}
-                          onClick={() => scoreMutation.mutate(reference)}
-                        >
-                          {scoringId === reference.id ? (
-                            <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
-                          ) : (
-                            <Gauge className="mr-2 h-3.5 w-3.5" />
-                          )}
-                          {scoringId === reference.id
-                            ? "Scoring…"
-                            : reference.viral_score === null
-                              ? "Score"
-                              : "Rescore"}
-                        </Button>
-                      ) : null}
+                      ) : (
+                        <>
+                          {!pipeline.scored ? (
+                            <Button
+                              size="sm"
+                              className="rounded-full bg-cyan-300 text-slate-950 hover:bg-cyan-200"
+                              disabled={scoringId === reference.id}
+                              onClick={() => scoreMutation.mutate(reference)}
+                            >
+                              {scoringId === reference.id ? (
+                                <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
+                              ) : (
+                                <Gauge className="mr-2 h-3.5 w-3.5" />
+                              )}
+                              {scoringId === reference.id ? "Scoring…" : "Score"}
+                            </Button>
+                          ) : null}
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className={`rounded-full ${
+                              pipeline.compiled
+                                ? "border-white/15 bg-white/5"
+                                : "border-emerald-300/30 bg-emerald-300/10 text-emerald-100 hover:bg-emerald-300/20"
+                            }`}
+                            disabled={compilingId === reference.id}
+                            onClick={() => compileMutation.mutate(reference.id)}
+                          >
+                            {compilingId === reference.id ? (
+                              <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
+                            ) : (
+                              <Network className="mr-2 h-3.5 w-3.5" />
+                            )}
+                            {compilingId === reference.id
+                              ? "Compiling…"
+                              : pipeline.compiled
+                                ? "Recompile"
+                                : "Compile to template"}
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="rounded-full text-[11px] text-muted-foreground"
+                            disabled={!reference.image_url || analyzingId === reference.id}
+                            onClick={() => analyzeMutation.mutate(reference)}
+                          >
+                            {analyzingId === reference.id ? (
+                              <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
+                            ) : null}
+                            {analyzingId === reference.id ? "Analyzing…" : "Re-analyze"}
+                          </Button>
+                          {pipeline.scored ? (
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="rounded-full text-[11px] text-muted-foreground"
+                              disabled={scoringId === reference.id}
+                              onClick={() => scoreMutation.mutate(reference)}
+                            >
+                              {scoringId === reference.id ? "Scoring…" : "Rescore"}
+                            </Button>
+                          ) : null}
+                        </>
+                      )}
 
                       {!reference.image_url ? (
                         <span className="text-[11px] text-muted-foreground">
@@ -726,24 +883,57 @@ export default function AdminTemplateFactory() {
                     </div>
 
                     {reference.compiled_template_id ? (
-                      <div className="mt-3 rounded-xl border border-emerald-300/25 bg-emerald-300/5 p-3">
+                      <div
+                        className={`mt-3 rounded-xl border p-3 ${
+                          pipeline.published
+                            ? "border-emerald-400/30 bg-emerald-400/[0.07]"
+                            : "border-emerald-300/25 bg-emerald-300/5"
+                        }`}
+                      >
                         <div className="flex flex-wrap items-center gap-2">
                           <Badge className="rounded-full border-emerald-300/30 bg-emerald-300/10 text-emerald-100">
-                            Compiled ✓
+                            {pipeline.published ? "Live ✓" : "Draft created ✓"}
                           </Badge>
                           <span className="text-[11px] text-muted-foreground">
-                            Draft template created — review it, then ⚡ Quick Publish.
+                            {pipeline.published
+                              ? `Active v${pipeline.activeVersion?.version_number ?? 1} — available in the marketplace.`
+                              : "Review the graph, then ⚡ Quick Publish."}
                           </span>
                         </div>
-                        <Link
-                          to={`/admin/templates?template=${reference.compiled_template_id}`}
-                          className="mt-2 inline-flex items-center gap-1 text-xs text-emerald-200 hover:underline"
-                        >
-                          Open Node Workbench
-                          <ExternalLink className="h-3 w-3" />
-                        </Link>
+                        <div className="mt-2 flex flex-wrap items-center gap-3">
+                          <Link
+                            to={`/app/lab/canvas${pipeline.draftVersion ? `?versionId=${pipeline.draftVersion.id}` : ""}`}
+                            className="inline-flex items-center gap-1 text-xs text-emerald-200 hover:underline"
+                          >
+                            Open Node Workbench
+                            <ExternalLink className="h-3 w-3" />
+                          </Link>
+                          {pipeline.published ? (
+                            <Link
+                              to={`/app/templates?template=${reference.compiled_template_id}`}
+                              className="inline-flex items-center gap-1 text-xs text-cyan-200 hover:underline"
+                            >
+                              View in marketplace
+                              <ExternalLink className="h-3 w-3" />
+                            </Link>
+                          ) : pipeline.draftVersion ? (
+                            <QuickPublishButton
+                              versionId={pipeline.draftVersion.id}
+                              templateName={pipeline.template?.name ?? reference.title}
+                              versionNumber={pipeline.draftVersion.version_number}
+                              size="sm"
+                              variant="outline"
+                              onPublished={() => {
+                                void queryClient.invalidateQueries({
+                                  queryKey: ["admin-template-workbench-catalog"],
+                                });
+                              }}
+                            />
+                          ) : null}
+                        </div>
                       </div>
                     ) : null}
+
 
                     {typeof reference.viral_score === "number" ? (
                       <ViralScorePanel
