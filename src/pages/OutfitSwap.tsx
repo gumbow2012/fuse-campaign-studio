@@ -532,6 +532,11 @@ export default function OutfitSwap() {
       toast.error("Add at least one clothing reference");
       return;
     }
+    // BACK is required once the user says the garment has a back design.
+    if (garments.some((garment) => garment.hasBackDesign && !garment.backUrl)) {
+      toast.error("Add the back image for every product marked with a back design");
+      return;
+    }
     const indices = [...selectedFrames].sort((a, b) => a - b);
     if (!indices.length) {
       toast.error("Select the frames you want to swap");
