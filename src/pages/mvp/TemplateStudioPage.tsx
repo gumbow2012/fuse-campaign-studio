@@ -2239,20 +2239,26 @@ export default function TemplateStudioPage() {
                         <span>{formatCount(outputCount, "output", "outputs")}</span>
                       </div>
 
-                      <span className={cn(
-                        "inline-flex w-full items-center justify-center rounded-full px-4 py-2 text-sm font-semibold transition-colors",
-                        selected
-                          ? "bg-cyan-300 text-slate-950"
-                          : "border border-white/10 bg-white/[0.04] text-white group-hover:bg-white/[0.08]",
-                      )}>
+                      {/* Single action: the whole card opens the campaign in the builder.
+                          This is a non-interactive affordance only — no second step. */}
+                      <span
+                        aria-hidden="true"
+                        className={cn(
+                          "flex items-center gap-1.5 font-display text-[10px] font-semibold uppercase tracking-[0.2em]",
+                          selected && !selectMode
+                            ? "text-cyan-200"
+                            : "text-slate-500 group-hover:text-cyan-200",
+                        )}
+                      >
                         {selectMode
                           ? batchSelected
-                            ? "Selected for batch"
+                            ? "✓ Selected for batch"
                             : "Tap to select"
                           : selected
-                            ? "Selected"
-                            : "Use this template"}
+                            ? "✓ Open in builder"
+                            : "Open in builder →"}
                       </span>
+
                     </div>
                   </div>
                 );
