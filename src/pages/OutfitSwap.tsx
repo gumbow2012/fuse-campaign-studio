@@ -1456,6 +1456,10 @@ export default function OutfitSwap() {
                         garments={garments}
                         wardrobe={castAssignment[track.subjectId] ?? null}
                         onChange={(slot, garmentId) => setSubjectGarment(track.subjectId, slot, garmentId)}
+                        userId={user?.id ?? null}
+                        model={modelAssignment[track.subjectId] ?? KEEP_ORIGINAL_MODEL}
+                        onModelChange={(next) => setSubjectModel(track.subjectId, next)}
+
                       />
                     ))}
                   </div>
