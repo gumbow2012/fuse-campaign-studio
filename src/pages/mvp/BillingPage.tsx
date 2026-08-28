@@ -15,13 +15,8 @@ import { useMembershipCheckout } from "@/hooks/useMembershipCheckout";
 import { supabase } from "@/integrations/supabase/client";
 import { track } from "@/lib/analytics/track";
 import { CREDIT_PACKS, STRIPE_TIERS } from "@/lib/stripe-config";
-import {
-  checkoutEventId,
-  clearPendingCheckout,
-  readPendingCheckout,
-  trackEvent,
-  trackEventOnce,
-} from "@/lib/metaPixel";
+import { clearPendingCheckout, readPendingCheckout, trackEvent } from "@/lib/metaPixel";
+
 
 
 
