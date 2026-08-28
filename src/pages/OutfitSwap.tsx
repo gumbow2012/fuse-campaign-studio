@@ -407,6 +407,10 @@ export default function OutfitSwap() {
   // stored with the run and is NOT sent to the generation calls in this phase.
   const [castAssignment, setCastAssignment] = useState<OutfitSwapCastAssignment>({});
   const [suggestionDismissed, setSuggestionDismissed] = useState(false);
+  // PHASE 4 — subject track id → chosen model. Stored with the run only; the
+  // swap / video calls still run the clothing-only (keep original) contract.
+  const [modelAssignment, setModelAssignment] = useState<OutfitSwapModelAssignment>({});
+
 
   const [garments, setGarments] = useState<Garment[]>([]);
   const [uploadingGarment, setUploadingGarment] = useState(false);
