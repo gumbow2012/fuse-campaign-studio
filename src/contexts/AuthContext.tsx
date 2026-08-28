@@ -17,7 +17,10 @@ interface Profile {
   subscription_period_start: string | null;
   subscription_period_end: string | null;
   subscription_cycle_credits: number;
+  /** Post-auth onboarding plan-offer decision (server-owned, decided once). */
+  onboarding_plan_offer?: string | null;
 }
+
 
 export type AuthStatus =
   | "initializing_session"
