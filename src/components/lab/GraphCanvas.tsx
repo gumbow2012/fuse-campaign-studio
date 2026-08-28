@@ -647,6 +647,7 @@ const GraphCanvasInner = ({
   onNodeMoved,
   onConnectNodes,
   onDeleteEdge,
+  onDeleteNode,
   className,
   focusNodeId,
   onViewportApiReady,
