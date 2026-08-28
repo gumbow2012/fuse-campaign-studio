@@ -2054,6 +2054,39 @@ const TemplateCanvas = () => {
     }
   }, [detail, invokeWorkbench, refreshAfterMutation]);
 
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (!(event.metaKey || event.ctrlKey)) return;
+      const key = event.key.toLowerCase();
+      if (key !== "c" && key !== "v") return;
+      const target = event.target as HTMLElement | null;
+      if (target && (target.isContentEditable || /^(input|textarea|select)$/i.test(target.tagName))) return;
+      if (key === "c") {
+        if (!selectedNode) return;
+        nodeClipboardRef.current = {
+          nodeType: selectedNode.nodeType,
+          editorMode: selectedNode.nodeType === "user_input" ? selectedNode.editor?.mode ?? "upload" : undefined,
+          expected:
+            selectedNode.nodeType === "prompt"
+              ? undefined
+              : selectedNode.editor?.expected ?? selectedNode.expected ?? undefined,
+          prompt: selectedNode.prompt ?? "",
+          outputExposed:
+            typeof selectedNode.editor?.outputExposed === "boolean" ? selectedNode.editor.outputExposed : null,
+          position: positions[selectedNode.id] ?? null,
+        };
+        event.preventDefault();
+        toast({ title: "Block copied" });
+        return;
+      }
+      if (!nodeClipboardRef.current) return;
+      event.preventDefault();
+      void pasteClipboardNode();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [pasteClipboardNode, positions, selectedNode]);
+
 
   const addEdge = useCallback(async (targetNodeId?: string) => {
     const resolvedTargetNodeId = targetNodeId || edgeDraft.targetNodeId;
