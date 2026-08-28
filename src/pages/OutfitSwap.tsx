@@ -1162,8 +1162,50 @@ export default function OutfitSwap() {
                   : "Frames appear here once a clip is processed."
               }
             >
+              {/* Detection-only status — no generation happens here. */}
+              {frames.length && analysisStage !== "idle" ? (
+                <div className="mb-3 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2 text-[11px]">
+                  {analysisStage === "done" && analysis ? (
+                    <div className="flex flex-wrap items-center gap-2 text-cyan-100">
+                      <span className="font-semibold tracking-wide">
+                        {analysis.subjectCount === 1
+                          ? "1 SUBJECT DETECTED ✓"
+                          : `✓ ${analysis.subjectCount} SUBJECTS`}
+                      </span>
+                      <span className="text-muted-foreground">·</span>
+                      <span className="text-muted-foreground">✓ {analysis.frameCount} FRAMES</span>
+                    </div>
+                  ) : analysisStage === "error" ? (
+                    <div className="flex flex-wrap items-center gap-2 text-muted-foreground">
+                      <span>{analysisError ?? "Clip analysis unavailable"}</span>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => void runSourceAnalysis(frames)}
+                        className="h-6 rounded-lg border-white/15 bg-transparent text-[10px]"
+                      >
+                        Retry
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2 text-muted-foreground">
+                      <Loader2 size={12} className="animate-spin text-cyan-200" />
+                      <span>
+                        Analyzing video…{" "}
+                        {analysisStage === "frames"
+                          ? "· detecting frames"
+                          : analysisStage === "subjects"
+                            ? "· detecting subjects"
+                            : "· tracking wardrobe orientation"}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              ) : null}
+
               {frames.length ? (
                 <>
+
                   <div className="flex gap-2 overflow-x-auto pb-2">
                     {frames.map((frame, index) => {
                       const isSelected = selectedFrames.has(index);
