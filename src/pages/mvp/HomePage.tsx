@@ -664,31 +664,32 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* 2 · LIVE DROP */}
+      {/* 2 · NEW DROPS BAR — real recently activated templates only, hidden when none */}
       {newToday.length > 0 && (
         <section className="border-b border-white/10 bg-white/[0.02]">
           <div className="container flex flex-wrap items-center justify-between gap-4 py-5">
             <div className="flex items-center gap-4">
               <span className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.24em] text-emerald-300">
                 <span className="h-2 w-2 animate-pulse rounded-full bg-emerald-300" />
-                New drop live
+                New drops live
               </span>
               <p className="font-display text-sm font-semibold uppercase tracking-[0.14em] text-white">
-                Raw Street Vol. 01
+                {newToday.length} new campaign{newToday.length === 1 ? "" : "s"}
                 <span className="ml-3 text-[11px] font-medium tracking-[0.18em] text-slate-400">
-                  {newToday.length} new campaign{newToday.length === 1 ? "" : "s"}
+                  just added to the marketplace
                 </span>
               </p>
             </div>
             <Button asChild variant="ghost" className="rounded-full text-cyan-100 hover:text-white">
               <a href="#new-today">
-                View drop
+                View drops
                 <ArrowRight className="h-4 w-4" />
               </a>
             </Button>
           </div>
         </section>
       )}
+
 
       {/* 2.5 · BRAND PERSONALIZATION — additive only, never a filter */}
       {showBrandNudge && (
