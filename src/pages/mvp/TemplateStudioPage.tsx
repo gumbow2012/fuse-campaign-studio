@@ -14,6 +14,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import SiteShell from "@/components/mvp/SiteShell";
+import PageMeta from "@/components/mvp/PageMeta";
 import BrandActivationBanner from "@/components/brand/BrandActivationBanner";
 import TemplateFitBadge from "@/components/brand/TemplateFitBadge";
 import BuildBrandAfterRunCard from "@/components/brand/BuildBrandAfterRunCard";
