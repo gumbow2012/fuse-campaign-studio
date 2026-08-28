@@ -760,6 +760,7 @@ Deno.serve(async (req) => {
             completed_at: new Date().toISOString(),
           })
           .eq("id", row.id);
+        await refundStudioCreditsIfNeeded(admin, row.id);
         return json({ ok: true });
       }
 
