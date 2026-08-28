@@ -60,6 +60,10 @@ export type MaddenSettings = {
   cinematographyId: string | null;
   lightingId: string | null;
   environmentId: string | null;
+  /** M6: the user's edited prompt, when they have taken over from the compiler. */
+  promptOverride?: string;
+  /** M6: true once the user edits the prompt — their text then wins. */
+  promptUserEdited?: boolean;
 };
 
 
@@ -128,6 +132,8 @@ export function createEmptyProjectState(): MaddenProjectState {
       cinematographyId: null,
       lightingId: null,
       environmentId: null,
+      promptOverride: "",
+      promptUserEdited: false,
     },
 
   };
@@ -175,6 +181,9 @@ export function normalizeProjectState(raw: unknown): MaddenProjectState {
         typeof value.settings?.lightingId === "string" ? value.settings.lightingId : null,
       environmentId:
         typeof value.settings?.environmentId === "string" ? value.settings.environmentId : null,
+      promptOverride:
+        typeof value.settings?.promptOverride === "string" ? value.settings.promptOverride : "",
+      promptUserEdited: value.settings?.promptUserEdited === true,
     },
 
   };
