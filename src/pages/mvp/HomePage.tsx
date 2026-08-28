@@ -762,7 +762,22 @@ export default function HomePage() {
         </div>
       </section>
 
+      {/* 1.4 · CURATED SHELVES — exact order from /admin/templates/merchandising */}
+      {curatedShelves.map((shelf) => (
+        <Shelf
+          key={shelf.id}
+          id={`shelf-${shelf.slug}`}
+          label="Curated"
+          heading={shelf.title}
+          description={shelf.subtitle}
+          entries={shelf.entries}
+          perfMap={perfMap}
+          runsMap={popularity}
+        />
+      ))}
+
       {/* 1.5 · TRENDING ABOVE THE FOLD — one click from landing into the builder */}
+
       <Shelf
         id="trending-now"
         label="Trending now"
