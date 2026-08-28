@@ -753,6 +753,33 @@ export type Database = {
         }
         Relationships: []
       }
+      outfit_swap_analyses: {
+        Row: {
+          analysis: Json
+          analyzed_at: string
+          fingerprint: string
+          id: string
+          user_id: string
+          version: string
+        }
+        Insert: {
+          analysis: Json
+          analyzed_at?: string
+          fingerprint: string
+          id?: string
+          user_id: string
+          version?: string
+        }
+        Update: {
+          analysis?: Json
+          analyzed_at?: string
+          fingerprint?: string
+          id?: string
+          user_id?: string
+          version?: string
+        }
+        Relationships: []
+      }
       payouts: {
         Row: {
           amount_cents: number

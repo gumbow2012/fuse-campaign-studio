@@ -47,9 +47,11 @@ import {
 
 
 import {
+  analyzeOutfitSwapSource,
   callOutfitSwap,
   createTemplateFromOutfitSwap,
   persistTemplateLayout,
+  type OutfitSwapSourceAnalysis,
   type OutfitSwapTemplateResult,
   type SwapGeneration,
 } from "@/services/outfitSwap";
@@ -228,6 +230,13 @@ export default function OutfitSwap() {
   const [extractProgress, setExtractProgress] = useState(0);
   const [selectedFrames, setSelectedFrames] = useState<Set<number>>(new Set());
 
+  // PHASE 1 source analysis (detection only — no generation, no provider spend).
+  const [analysisStage, setAnalysisStage] = useState<
+    "idle" | "frames" | "subjects" | "orientation" | "done" | "error"
+  >("idle");
+  const [analysis, setAnalysis] = useState<OutfitSwapSourceAnalysis | null>(null);
+  const [analysisError, setAnalysisError] = useState<string | null>(null);
+
   const [garments, setGarments] = useState<Garment[]>([]);
   const [uploadingGarment, setUploadingGarment] = useState(false);
   const [extraPrompt, setExtraPrompt] = useState("");
@@ -258,6 +267,34 @@ export default function OutfitSwap() {
 
   /* ---------------------------- 1. Source video ---------------------------- */
 
+  /**
+   * Detection-only pass over the extracted source frames. Never generates and
+   * never touches the swap / reconstruction calls; results are cached server
+   * side by input fingerprint so returning here does not recompute.
+   */
+  const runSourceAnalysis = useCallback(async (uploaded: Frame[]) => {
+    if (!uploaded.length) return;
+    setAnalysisError(null);
+    setAnalysis(null);
+    setAnalysisStage("frames");
+    try {
+      setAnalysisStage("subjects");
+      const result = await analyzeOutfitSwapSource(
+        uploaded.map((frame, index) => ({
+          frameId: `frame-${index}`,
+          timestamp: frame.time,
+          imageUrl: frame.url,
+        })),
+      );
+      setAnalysisStage("orientation");
+      setAnalysis(result.analysis);
+      setAnalysisStage("done");
+    } catch (error) {
+      setAnalysisError(error instanceof Error ? error.message : "Could not analyse that clip");
+      setAnalysisStage("error");
+    }
+  }, []);
+
   const handleVideoFile = useCallback(async (file: File) => {
     const objectUrl = URL.createObjectURL(file);
     setVideoPreview(objectUrl);
@@ -265,7 +302,11 @@ export default function OutfitSwap() {
     setSwaps({});
     setApproved(new Set());
     setSelectedFrames(new Set());
+    setAnalysis(null);
+    setAnalysisError(null);
+    setAnalysisStage("idle");
     // The video library is intentionally preserved across new source clips.
+
 
     try {
       const element = await loadVideo(objectUrl);
@@ -302,6 +343,8 @@ export default function OutfitSwap() {
         .filter((index) => index % Math.max(1, Math.ceil(uploaded.length / 4)) === 0);
       setSelectedFrames(new Set(spread));
       toast.success(`${uploaded.length} source frames extracted`);
+      void runSourceAnalysis(uploaded);
+
 
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Could not process that video");
@@ -309,7 +352,7 @@ export default function OutfitSwap() {
       setUploadingVideo(false);
       setExtracting(false);
     }
-  }, []);
+  }, [runSourceAnalysis]);
 
   /* -------------------------- 3. Garment references ------------------------- */
 
@@ -1119,8 +1162,50 @@ export default function OutfitSwap() {
                   : "Frames appear here once a clip is processed."
               }
             >
+              {/* Detection-only status — no generation happens here. */}
+              {frames.length && analysisStage !== "idle" ? (
+                <div className="mb-3 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2 text-[11px]">
+                  {analysisStage === "done" && analysis ? (
+                    <div className="flex flex-wrap items-center gap-2 text-cyan-100">
+                      <span className="font-semibold tracking-wide">
+                        {analysis.subjectCount === 1
+                          ? "1 SUBJECT DETECTED ✓"
+                          : `✓ ${analysis.subjectCount} SUBJECTS`}
+                      </span>
+                      <span className="text-muted-foreground">·</span>
+                      <span className="text-muted-foreground">✓ {analysis.frameCount} FRAMES</span>
+                    </div>
+                  ) : analysisStage === "error" ? (
+                    <div className="flex flex-wrap items-center gap-2 text-muted-foreground">
+                      <span>{analysisError ?? "Clip analysis unavailable"}</span>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => void runSourceAnalysis(frames)}
+                        className="h-6 rounded-lg border-white/15 bg-transparent text-[10px]"
+                      >
+                        Retry
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2 text-muted-foreground">
+                      <Loader2 size={12} className="animate-spin text-cyan-200" />
+                      <span>
+                        Analyzing video…{" "}
+                        {analysisStage === "frames"
+                          ? "· detecting frames"
+                          : analysisStage === "subjects"
+                            ? "· detecting subjects"
+                            : "· tracking wardrobe orientation"}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              ) : null}
+
               {frames.length ? (
                 <>
+
                   <div className="flex gap-2 overflow-x-auto pb-2">
                     {frames.map((frame, index) => {
                       const isSelected = selectedFrames.has(index);

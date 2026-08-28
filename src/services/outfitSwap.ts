@@ -96,3 +96,79 @@ export function persistTemplateLayout(
     // Layout is a convenience only — the canvas falls back to auto lanes.
   }
 }
+
+/* ------------------------------------------------------------------ *
+ * PHASE 1 — SOURCE ANALYSIS (analysis only, never generation)
+ * ------------------------------------------------------------------ */
+
+export type OutfitSwapOrientation =
+  | "FRONT"
+  | "BACK"
+  | "LEFT_3_4"
+  | "RIGHT_3_4"
+  | "SIDE"
+  | "OCCLUDED"
+  | "UNCERTAIN";
+
+export type OutfitSwapFrameSubject = {
+  subjectId: string;
+  faceOrientation: OutfitSwapOrientation;
+  bodyOrientation: OutfitSwapOrientation;
+  garmentOrientation: OutfitSwapOrientation;
+  torsoVisibility: number;
+  garmentVisibility: number;
+  occlusion: "none" | "partial" | "heavy";
+  confidence: number;
+};
+
+export type OutfitSwapSourceAnalysis = {
+  version: string;
+  frameCount: number;
+  subjectCount: number;
+  subjectTracks: {
+    subjectId: string;
+    description: string;
+    appearsStart: number;
+    appearsEnd: number;
+    frameCount: number | null;
+    confidence: number;
+  }[];
+  frames: { frameId: string; timestamp: number; subjects: OutfitSwapFrameSubject[] }[];
+};
+
+export type OutfitSwapAnalysisResult = {
+  cached: boolean;
+  fingerprint: string;
+  version: string;
+  analyzedAt: string | null;
+  analysis: OutfitSwapSourceAnalysis;
+};
+
+/**
+ * Detects the subjects (with stable temporal ids) and wardrobe orientation in
+ * the already-extracted source frames. This performs NO generation and does not
+ * touch the frame-edit or video reconstruction paths.
+ */
+export async function analyzeOutfitSwapSource(
+  frames: { frameId: string; timestamp: number; imageUrl: string }[],
+): Promise<OutfitSwapAnalysisResult> {
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+
+  const response = await fetch(`${SUPABASE_URL}/functions/v1/outfit-swap-analyze`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      apikey: SUPABASE_PUBLISHABLE_KEY,
+      Authorization: `Bearer ${session?.access_token ?? SUPABASE_PUBLISHABLE_KEY}`,
+    },
+    body: JSON.stringify({ frames }),
+  });
+
+  const data = await response.json().catch(() => null);
+  if (!response.ok || data?.error) {
+    throw new Error(data?.error ?? `Analysis failed (${response.status})`);
+  }
+  return data as OutfitSwapAnalysisResult;
+}
