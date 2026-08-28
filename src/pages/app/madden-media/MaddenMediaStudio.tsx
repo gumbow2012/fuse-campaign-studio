@@ -364,12 +364,19 @@ export default function MaddenMediaStudio() {
               onResetPrompt={handleResetPrompt}
             />
 
+            <MaddenShotPackPanel
+              projectId={activeProjectId}
+              state={state}
+              onApplyPack={applyShotPack}
+            />
+
             <MaddenShotBoard
               shots={state.shots}
               onAdd={addShot}
               onChange={updateShot}
               onRemove={removeShot}
             />
+
 
             <section className="rounded-2xl border border-border/60 bg-card/50 p-4">
               <h3 className="font-semibold tracking-tight">Project notes</h3>
