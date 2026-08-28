@@ -5,7 +5,8 @@ import {
   createAdminClient,
   errorMessage,
   json,
-  requireBuilderUser,
+  getUserRoles,
+  requireUser,
 } from "../_shared/supabase-admin.ts";
 import {
   clampSeedanceDuration,
