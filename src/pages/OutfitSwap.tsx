@@ -369,7 +369,14 @@ export default function OutfitSwap() {
         const compressed = await compressImageFile(file);
         const stored = await uploadToStorage(folder, compressed, compressed.name);
         uploaded.push({
+          // FRONT is the primary reference: `url` mirrors `frontUrl` so the
+          // existing generation call keeps working unchanged.
           url: stored.url,
+          frontUrl: stored.url,
+          hasBackDesign: false,
+          backUrl: null,
+          detailUrl: null,
+          sideUrl: null,
           name: file.name,
           type: GARMENT_TYPES[0],
           label: "",
@@ -384,6 +391,38 @@ export default function OutfitSwap() {
       setUploadingGarment(false);
     }
   }, []);
+
+  /**
+   * Uploads one extra structured reference for a garment. FRONT replaces the
+   * primary ref (keeping `url` in sync); BACK / DETAIL / SIDE are stored only —
+   * they are NOT sent to generation in this phase.
+   */
+  const [slotUploading, setSlotUploading] = useState<string | null>(null);
+  const uploadGarmentSlot = useCallback(
+    async (index: number, slot: GarmentSlot, file: File | undefined) => {
+      if (!file) return;
+      setSlotUploading(`${index}:${slot}`);
+      try {
+        const folder = await createOutfitSwapFolder();
+        const compressed = await compressImageFile(file);
+        const stored = await uploadToStorage(folder, compressed, compressed.name);
+        setGarments((prev) =>
+          prev.map((item, i) => {
+            if (i !== index) return item;
+            if (slot === "front") return { ...item, frontUrl: stored.url, url: stored.url };
+            if (slot === "back") return { ...item, backUrl: stored.url };
+            if (slot === "detail") return { ...item, detailUrl: stored.url };
+            return { ...item, sideUrl: stored.url };
+          }),
+        );
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : "Could not upload that reference");
+      } finally {
+        setSlotUploading(null);
+      }
+    },
+    [],
+  );
 
   /* ------------------------------ 4. Frame swaps ---------------------------- */
 
