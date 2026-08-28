@@ -212,6 +212,9 @@ Deno.serve(async (req) => {
             isUserFacingInput,
             isReferenceInput,
             sampleUrl,
+            required: node.node_type === "user_input"
+              ? editorConfig.requirement?.required ?? null
+              : null,
           },
 
         };

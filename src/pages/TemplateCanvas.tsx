@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Switch } from "@/components/ui/switch";
 import { toast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { CANONICAL_REQUIRED_LABEL, isCanonicalReady } from "@/lib/canonicalPortrait";
@@ -148,6 +149,7 @@ type TemplateDetailNode = {
     sampleUrl?: string | null;
     isUserFacingInput?: boolean;
     isReferenceInput?: boolean;
+    required?: boolean | null;
   };
 };
 
@@ -192,6 +194,7 @@ type NodeDraft = {
   prompt: string;
   editorMode: "upload" | "reference";
   slotKey: string;
+  required: boolean;
   sampleUrl: string;
   outputExposed: boolean | null;
   videoModel: VideoModelKey;
@@ -379,6 +382,21 @@ const TEMPLATE_INPUT_SLOT_OPTIONS: TemplateInputSlotOption[] = [
 ];
 
 const DEFAULT_TEMPLATE_INPUT_SLOT_KEYS = ["top_garment", "bottom_garment", "logo"];
+
+/** Slugify a label into a usable editor_slot_key. */
+function slugifySlotKey(value: string) {
+  return value.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+}
+
+/** Build a slot key that does not collide with any existing input slot key. */
+function uniqueSlotKey(base: string, taken: Iterable<string>) {
+  const used = new Set(Array.from(taken).map((key) => key.trim().toLowerCase()).filter(Boolean));
+  const root = slugifySlotKey(base) || "input";
+  if (!used.has(root)) return root;
+  let index = 2;
+  while (used.has(`${root}-${index}`)) index += 1;
+  return `${root}-${index}`;
+}
 
 function inputSlotOption(slotKey: string) {
   return TEMPLATE_INPUT_SLOT_OPTIONS.find((option) => option.key === slotKey) ?? TEMPLATE_INPUT_SLOT_OPTIONS[0];
@@ -1028,6 +1046,28 @@ const TemplateCanvas = () => {
     [detail?.nodes, selectedNodeId],
   );
 
+  const inputSlotKeys = useMemo(
+    () =>
+      (detail?.nodes ?? [])
+        .filter((node) => node.nodeType === "user_input")
+        .map((node) => ({ id: node.id, slotKey: (node.editor?.slotKey ?? "").trim() })),
+    [detail?.nodes],
+  );
+
+  const duplicateSlotKey = useMemo(() => {
+    if (!selectedNode || selectedNode.nodeType !== "user_input" || !draft) return false;
+    const current = draft.slotKey.trim().toLowerCase();
+    if (!current) return false;
+    return inputSlotKeys.some(
+      (entry) => entry.id !== selectedNode.id && entry.slotKey.toLowerCase() === current,
+    );
+  }, [draft, inputSlotKeys, selectedNode]);
+
+  const optionalWithoutDefault = useMemo(() => {
+    if (!selectedNode || selectedNode.nodeType !== "user_input" || !draft) return false;
+    return !draft.required && !selectedNode.defaultAssetId && !draft.sampleUrl.trim();
+  }, [draft, selectedNode]);
+
   const edgeDraftSourceNode = useMemo(
     () => detail?.nodes.find((node) => node.id === edgeDraft.sourceNodeId),
     [detail?.nodes, edgeDraft.sourceNodeId],
@@ -1048,6 +1088,7 @@ const TemplateCanvas = () => {
       prompt: selectedNode.prompt ?? "",
       editorMode: selectedNode.editor?.mode ?? "upload",
       slotKey: selectedNode.editor?.slotKey ?? "",
+      required: selectedNode.editor?.required !== false,
       sampleUrl: selectedNode.editor?.sampleUrl ?? selectedNode.defaultAssetUrl ?? "",
       outputExposed: typeof selectedNode.editor?.outputExposed === "boolean" ? selectedNode.editor.outputExposed : null,
       videoModel: resolveVideoModelOption(selectedNode.editor?.videoModel).key,
@@ -1524,6 +1565,7 @@ const TemplateCanvas = () => {
           prompt: draft.prompt,
           editorMode: selectedNode.nodeType === "user_input" ? draft.editorMode : null,
           slotKey: selectedNode.nodeType === "user_input" ? draft.slotKey : null,
+          ...(selectedNode.nodeType === "user_input" ? { required: draft.required } : {}),
           sampleUrl: selectedNode.nodeType === "user_input" ? draft.sampleUrl : null,
           outputExposed: selectedNode.nodeType === "image_gen" || selectedNode.nodeType === "video_gen" ? draft.outputExposed : null,
           ...(selectedNode.nodeType === "video_gen"
@@ -1552,8 +1594,8 @@ const TemplateCanvas = () => {
 
   const uploadReferenceAsset = useCallback(async () => {
     if (!detail || !selectedNode || !draft || !referenceUploadFile) return;
-    if (selectedNode.nodeType !== "user_input" || draft.editorMode !== "reference") {
-      toast({ title: "Pick a hidden reference input first", variant: "destructive" });
+    if (selectedNode.nodeType !== "user_input") {
+      toast({ title: "Pick an input node first", variant: "destructive" });
       return;
     }
 
@@ -1570,7 +1612,8 @@ const TemplateCanvas = () => {
           nodeId: selectedNode.id,
           displayLabel: draft.displayLabel,
           expected: draft.expected,
-          editorMode: "reference",
+          editorMode: draft.editorMode,
+          keepEditorMode: draft.editorMode === "upload",
           slotKey: draft.slotKey,
           referenceFile: {
             filename: referenceUploadFile.name,
@@ -1934,6 +1977,16 @@ const TemplateCanvas = () => {
         versionId: detail.versionId,
         nodeType: isInput ? "user_input" : kind,
         editorMode: isInput ? kind : undefined,
+        // Every new input gets its own slot key; identical keys merge into a
+        // single customer input in the builder.
+        slotKey: isInput
+          ? uniqueSlotKey(
+              kind === "reference" ? "reference" : `input-${(detail.nodes ?? []).filter((node) => node.nodeType === "user_input").length + 1}`,
+              (detail.nodes ?? [])
+                .filter((node) => node.nodeType === "user_input")
+                .map((node) => node.editor?.slotKey ?? ""),
+            )
+          : undefined,
         expected: isPromptBlock ? undefined : kind === "video_gen" ? "video" : "image",
         prompt: "",
         outputExposed: kind === "image_gen" || kind === "video_gen",
@@ -2695,7 +2748,87 @@ const TemplateCanvas = () => {
                   <div className="space-y-2">
                     <Label>Slot Key</Label>
                     <Input value={draft.slotKey} onChange={(event) => setDraft((current) => current ? { ...current, slotKey: event.target.value } : current)} />
+                    {duplicateSlotKey ? (
+                      <div className="flex flex-wrap items-center gap-2 rounded-xl border border-destructive/50 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+                        <span>Duplicate slot key — inputs with the same key merge into one. Make it unique.</span>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          onClick={() =>
+                            setDraft((current) =>
+                              current
+                                ? {
+                                    ...current,
+                                    slotKey: uniqueSlotKey(
+                                      current.slotKey || current.displayLabel || "input",
+                                      inputSlotKeys
+                                        .filter((entry) => entry.id !== selectedNode.id)
+                                        .map((entry) => entry.slotKey),
+                                    ),
+                                  }
+                                : current,
+                            )
+                          }
+                        >
+                          Make unique
+                        </Button>
+                      </div>
+                    ) : null}
                   </div>
+                  {draft.editorMode === "upload" ? (
+                    <div className="space-y-3 rounded-2xl border border-border/50 bg-background/50 p-3">
+                      <div className="flex items-center justify-between gap-3">
+                        <div>
+                          <Label>Required input</Label>
+                          <p className="mt-1 text-[11px] text-muted-foreground">
+                            {draft.required ? "Customers must upload this." : "Customers may skip this — the default asset is used instead."}
+                          </p>
+                        </div>
+                        <Switch
+                          checked={draft.required}
+                          onCheckedChange={(checked) => setDraft((current) => current ? { ...current, required: checked } : current)}
+                        />
+                      </div>
+                      {!draft.required ? (
+                        <div className="space-y-3">
+                          <div className="flex items-center justify-between gap-3">
+                            <Label>Default asset (fallback)</Label>
+                            {selectedNode.defaultAssetId ? (
+                              <span className="font-mono text-[10px] text-muted-foreground">{selectedNode.defaultAssetId.slice(0, 8)}</span>
+                            ) : null}
+                          </div>
+                          {referenceUploadPreview ? (
+                            <img src={referenceUploadPreview} alt="Default asset preview" className="h-32 w-full rounded-xl border border-border/50 bg-background object-contain" />
+                          ) : selectedNode.defaultAssetUrl ? (
+                            <img src={selectedNode.defaultAssetUrl} alt={selectedNode.name} className="h-32 w-full rounded-xl border border-border/50 bg-background object-contain" />
+                          ) : (
+                            <div className="flex h-32 items-center justify-center rounded-xl border border-dashed border-border/60 bg-background/50 text-xs text-muted-foreground">
+                              No default asset attached
+                            </div>
+                          )}
+                          <div className="flex gap-2">
+                            <Input type="file" accept="image/*" onChange={(event) => handleReferenceUploadFile(event.target.files?.[0] ?? null)} />
+                            <Button
+                              type="button"
+                              size="icon"
+                              variant="outline"
+                              onClick={() => void uploadReferenceAsset()}
+                              disabled={!referenceUploadFile || uploadingReference}
+                              title="Upload default asset"
+                            >
+                              {uploadingReference ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+                            </Button>
+                          </div>
+                          {optionalWithoutDefault ? (
+                            <p className="rounded-xl border border-destructive/50 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+                              Optional inputs need a default asset — without one, generation fails when a customer skips this input.
+                            </p>
+                          ) : null}
+                        </div>
+                      ) : null}
+                    </div>
+                  ) : null}
                   {draft.editorMode === "reference" ? (
                     <div className="space-y-3 rounded-2xl border border-border/50 bg-background/50 p-3">
                       <div className="flex items-center justify-between gap-3">
