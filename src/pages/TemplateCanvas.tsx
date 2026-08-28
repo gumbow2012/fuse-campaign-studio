@@ -148,6 +148,7 @@ type TemplateDetailNode = {
     sampleUrl?: string | null;
     isUserFacingInput?: boolean;
     isReferenceInput?: boolean;
+    required?: boolean | null;
   };
 };
 
@@ -192,6 +193,7 @@ type NodeDraft = {
   prompt: string;
   editorMode: "upload" | "reference";
   slotKey: string;
+  required: boolean;
   sampleUrl: string;
   outputExposed: boolean | null;
   videoModel: VideoModelKey;
@@ -1048,6 +1050,7 @@ const TemplateCanvas = () => {
       prompt: selectedNode.prompt ?? "",
       editorMode: selectedNode.editor?.mode ?? "upload",
       slotKey: selectedNode.editor?.slotKey ?? "",
+      required: selectedNode.editor?.required !== false,
       sampleUrl: selectedNode.editor?.sampleUrl ?? selectedNode.defaultAssetUrl ?? "",
       outputExposed: typeof selectedNode.editor?.outputExposed === "boolean" ? selectedNode.editor.outputExposed : null,
       videoModel: resolveVideoModelOption(selectedNode.editor?.videoModel).key,
@@ -1524,6 +1527,7 @@ const TemplateCanvas = () => {
           prompt: draft.prompt,
           editorMode: selectedNode.nodeType === "user_input" ? draft.editorMode : null,
           slotKey: selectedNode.nodeType === "user_input" ? draft.slotKey : null,
+          ...(selectedNode.nodeType === "user_input" ? { required: draft.required } : {}),
           sampleUrl: selectedNode.nodeType === "user_input" ? draft.sampleUrl : null,
           outputExposed: selectedNode.nodeType === "image_gen" || selectedNode.nodeType === "video_gen" ? draft.outputExposed : null,
           ...(selectedNode.nodeType === "video_gen"
