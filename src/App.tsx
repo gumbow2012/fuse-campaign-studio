@@ -143,6 +143,14 @@ const App = () => (
               }
             />
             <Route
+              path="/account/developer"
+              element={
+                <CustomerRoute>
+                  <DeveloperApiKeysPage />
+                </CustomerRoute>
+              }
+            />
+            <Route
               path="/app/brand"
               element={
                 <CustomerRoute>
