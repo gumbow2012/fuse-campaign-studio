@@ -269,8 +269,11 @@ function SubjectCastCard({
               </p>
             ) : null}
           </div>
+          {/* PHASE 4 — model choice per subject (stored only, generation unchanged). */}
+          <SubjectModelSelector userId={userId} model={model} onChange={onModelChange} compact />
           {renderSlot("Top", "topGarmentId", tops, wardrobe?.topGarmentId ?? null)}
           {renderSlot("Bottom", "bottomGarmentId", bottoms, wardrobe?.bottomGarmentId ?? null)}
+
         </div>
       </div>
     </div>
