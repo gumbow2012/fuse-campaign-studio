@@ -35,6 +35,18 @@ import { PerformanceBlock, PerformanceDisclaimer } from "@/components/TemplatePe
 
 /* --------------------------------- pieces --------------------------------- */
 
+/**
+ * CONVERSION: deep-link straight into the campaign builder for one template.
+ * `/app/templates?template=<id>` is the builder's supported deep link (the
+ * `/app/templates/run` path is a query-dropping redirect in App.tsx).
+ * Falls back to the plain gallery when no template id is known.
+ */
+function builderHref(templateId?: string | null) {
+  const id = templateId ? String(templateId) : "";
+  return id ? `/app/templates?template=${encodeURIComponent(id)}` : "/app/templates";
+}
+
+
 function SectionLabel({ children }: { children: React.ReactNode }) {
   return (
     <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-cyan-100">{children}</p>
@@ -186,7 +198,8 @@ function TemplateCard({
   const outputs = outputLabel(entry.template);
   const vibe = entry.template.category ?? entry.template.tags?.[0] ?? null;
   const templateId = String(entry.template.id ?? "");
-  const templateHref = templateId ? `/app/templates?template=${encodeURIComponent(templateId)}` : "/app/templates";
+  const templateHref = builderHref(templateId);
+
 
   return (
     <article className="group relative w-[248px] shrink-0 overflow-hidden rounded-[1.25rem] border border-white/10 bg-slate-950/80 transition-colors hover:border-cyan-200/40 sm:w-[272px]">
@@ -232,7 +245,7 @@ function TemplateCard({
           size="sm"
           className="relative z-20 mt-3 h-9 w-full rounded-full bg-cyan-300 text-[12px] font-semibold uppercase tracking-[0.14em] text-slate-950 hover:bg-cyan-200"
         >
-          <Link to={templateHref}>Use Template</Link>
+          <Link to={templateHref}>Make this yours →</Link>
         </Button>
       </div>
     </article>
@@ -367,10 +380,18 @@ export default function HomePage() {
       .sort((a, b) => runsOf(b.entry) - runsOf(a.entry) || a.index - b.index)
       .map((row) => row.entry);
   }, [trending, popularity]);
-
+  /**
+   * Hero primary CTA target: the top-ranked real trending template, else the hero
+   * template, else the gallery. Works logged-out (the builder is public).
+   */
+  const startCampaignHref = useMemo(() => {
+    const top = trendingRanked[0]?.template.id ?? heroPair[0]?.template.id ?? null;
+    return builderHref(top);
+  }, [trendingRanked, heroPair]);
 
   const original = heroPair[0] ?? null;
   const yourVersion = heroPair[1] ?? null;
+
 
   /** Every entry already claimed by the allocator — perf shelves reuse these only. */
   const allocatedEntries = useMemo(
@@ -535,20 +556,29 @@ export default function HomePage() {
               <span className="text-cyan-200">already built.</span>
             </h1>
             <p className="mt-5 max-w-xl text-lg leading-8 text-slate-300">
-              Pick a proven creative. Add your brand. FUSE does the rest.
+              Pick one. Add your brand. Generate.
             </p>
 
-            {/* Role-aware CTAs — Explore Templates is always primary. */}
+            {/* CONVERSION: primary CTA drops straight into the builder on the top
+                trending template — browsing is demoted to a secondary link. */}
             <div className="mt-7 flex flex-wrap items-center gap-3">
               <Button
                 asChild
                 size="lg"
                 className="rounded-full bg-cyan-300 px-8 font-semibold text-slate-950 hover:bg-cyan-200"
               >
-                <Link to="/app/templates">
-                  Explore Templates
+                <Link to={startCampaignHref}>
+                  Start a campaign
                   <ArrowRight className="h-4 w-4" />
                 </Link>
+              </Button>
+
+              <Button
+                asChild
+                variant="ghost"
+                className="rounded-full px-4 text-sm text-slate-300 hover:text-white"
+              >
+                <Link to="/app/templates">Explore templates</Link>
               </Button>
 
               {!user ? (
@@ -561,6 +591,7 @@ export default function HomePage() {
                   <Link to="/auth?mode=signup">Sign up free</Link>
                 </Button>
               ) : null}
+
 
               {isCreator ? (
                 <Button
@@ -648,8 +679,9 @@ export default function HomePage() {
                     size="sm"
                     className="h-9 rounded-full bg-cyan-300 px-5 text-[12px] font-semibold uppercase tracking-[0.14em] text-slate-950 hover:bg-cyan-200"
                   >
-                    <Link to="/app/templates">Use this template</Link>
+                    <Link to={builderHref(original.template.id)}>Make this yours →</Link>
                   </Button>
+
                   {heroPerf && <PerformanceDisclaimer />}
                 </div>
               </div>
@@ -664,7 +696,20 @@ export default function HomePage() {
         </div>
       </section>
 
+      {/* 1.5 · TRENDING ABOVE THE FOLD — one click from landing into the builder */}
+      <Shelf
+        id="trending-now"
+        label="Trending now"
+        heading="What brands are using right now"
+        description="Ordered by real template runs over the last 90 days."
+        entries={trendingRanked}
+        perfMap={perfMap}
+        runsMap={popularity}
+        badge={{ tone: "trending", label: "Trending" }}
+      />
+
       {/* 2 · NEW DROPS BAR — real recently activated templates only, hidden when none */}
+
       {newToday.length > 0 && (
         <section className="border-b border-white/10 bg-white/[0.02]">
           <div className="container flex flex-wrap items-center justify-between gap-4 py-5">
@@ -754,18 +799,9 @@ export default function HomePage() {
         </section>
       )}
 
-      {/* 3 · SHELVES — TRENDING first (real popularity), then NEW DROPS */}
+      {/* 3 · SHELVES — trending is rendered above the fold; NEW DROPS next */}
 
-      <Shelf
-        id="trending-now"
-        label="Trending now"
-        heading="What brands are using right now"
-        description="Ordered by real template runs over the last 90 days."
-        entries={trendingRanked}
-        perfMap={perfMap}
-        runsMap={popularity}
-        badge={{ tone: "trending", label: "Trending" }}
-      />
+
       <Shelf
         id="new-today"
         label="New drops"
