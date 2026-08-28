@@ -3,6 +3,8 @@ import SiteShell from "@/components/mvp/SiteShell";
 import MaddenProjectSwitcher from "@/components/madden-media/MaddenProjectSwitcher";
 import MaddenSlotCard from "@/components/madden-media/MaddenSlotCard";
 import MaddenSubjectPanel from "@/components/madden-media/MaddenSubjectPanel";
+import MaddenOutfitPanel from "@/components/madden-media/MaddenOutfitPanel";
+import MaddenJewelryPanel from "@/components/madden-media/MaddenJewelryPanel";
 import MaddenShotBoard from "@/components/madden-media/MaddenShotBoard";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
@@ -226,10 +228,21 @@ export default function MaddenMediaStudio() {
                 slot={state.slots.subject}
                 onBind={(patch) => updateSlot("subject", patch as Partial<MaddenSlot>)}
               />
-              {MADDEN_SLOT_KINDS.filter((kind) => kind !== "subject").map((kind) => (
+              <MaddenOutfitPanel
+                slot={state.slots.outfit}
+                onBind={(patch) => updateSlot("outfit", patch as Partial<MaddenSlot>)}
+              />
+              <MaddenJewelryPanel
+                slot={state.slots.jewelry}
+                onBind={(patch) => updateSlot("jewelry", patch as Partial<MaddenSlot>)}
+              />
+              {MADDEN_SLOT_KINDS.filter(
+                (kind) => kind !== "subject" && kind !== "outfit" && kind !== "jewelry",
+              ).map((kind) => (
                 <MaddenSlotCard key={kind} slot={state.slots[kind]} onChange={updateSlot} />
               ))}
             </div>
+
 
             <MaddenShotBoard
               shots={state.shots}
