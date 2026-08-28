@@ -366,20 +366,18 @@ export default function PlanOfferModal() {
 
 
 
-              <div className="mt-6 text-center">
+              <div className="mt-4 text-center">
                 <button
                   type="button"
                   onClick={() => void handleFree()}
                   disabled={granting}
-                  className="inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-[13px] font-medium text-slate-300 underline underline-offset-4 transition-colors hover:text-cyan-100 disabled:opacity-60"
+                  className="inline-flex items-center gap-1.5 rounded-full px-2 py-1 text-[11.5px] font-normal text-slate-500 transition-colors hover:text-slate-300 disabled:opacity-60"
                 >
-                  {granting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+                  {granting ? <Loader2 className="h-3 w-3 animate-spin" /> : null}
                   Continue with free — {WELCOME_CREDITS} credits
                 </button>
-                <p className="mt-1.5 text-[11px] text-slate-500">
-                  Start with {WELCOME_CREDITS} FUSE credits. Upgrade anytime.
-                </p>
               </div>
+
             </>
           )}
         </div>
