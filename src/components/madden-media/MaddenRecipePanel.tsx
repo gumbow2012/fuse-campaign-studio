@@ -1,11 +1,21 @@
 /**
- * Madden Media Studio — M5 recipe cards.
+ * Madden Media Studio — M5 recipe cards (M9: search + favorites).
  *
  * Pure structured data + UI: builtin recipes come from code, user recipes from
  * public.madden_recipes. Nothing here generates or spends credits.
  */
 import { useEffect, useMemo, useState } from "react";
-import { AlertCircle, Loader2, Plus, Sliders, Sparkles, Trash2, Wand2 } from "lucide-react";
+import {
+  AlertCircle,
+  Loader2,
+  Plus,
+  Search,
+  Sliders,
+  Sparkles,
+  Star,
+  Trash2,
+  Wand2,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -14,6 +24,7 @@ import {
   describeRecipe,
   type MaddenRecipe,
 } from "@/lib/madden-media/recipes";
+import { partitionFavorites, useMaddenFavorites } from "@/lib/madden-media/favorites";
 import { deleteUserRecipe, listUserRecipes } from "@/services/maddenMediaStudio";
 
 type Props = {
@@ -24,6 +35,16 @@ type Props = {
   /** Bumped by the parent after a successful save to refresh "My Recipes". */
   refreshKey?: number;
 };
+
+function matchesQuery(recipe: MaddenRecipe, query: string) {
+  const q = query.trim().toLowerCase();
+  if (!q) return true;
+  return (
+    recipe.name.toLowerCase().includes(q) ||
+    recipe.tags.some((tag) => tag.toLowerCase().includes(q))
+  );
+}
+
 
 function RecipeCard({
   recipe,
