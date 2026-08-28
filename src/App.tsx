@@ -48,6 +48,7 @@ import TemplateCanvas from "@/pages/TemplateCanvas";
 import TemplateLab from "@/pages/TemplateLab";
 import AboutPage from "@/pages/mvp/AboutPage";
 import AccountPage from "@/pages/mvp/AccountPage";
+import DeveloperApiKeysPage from "@/pages/mvp/DeveloperApiKeysPage";
 import AuthPage from "@/pages/mvp/AuthPage";
 import ReferralCapturePage from "@/pages/mvp/ReferralCapturePage";
 import BillingPage from "@/pages/mvp/BillingPage";
