@@ -36,7 +36,6 @@ import { libraryKindForAssetType } from "@/services/libraryAssets";
 
 import { runUploadChecks, type UploadCheckResult, type UploadCheckState } from "@/lib/uploadChecks";
 import {
-  inputRoleWord,
   resolveInputRole,
   resolveInputSources,
   type AssetSourceKind,
@@ -163,7 +162,6 @@ export default function TemplateInputCard({
   }, [file, requirement?.transparencyRecommended]);
 
   const role = resolveInputRole(label, requirement?.assetType);
-  void inputRoleWord;
   const heading = displayLabel ?? label;
   const sources = resolveInputSources(label, role, Boolean(castPanel));
   const availableSources = sources.filter((source) =>
