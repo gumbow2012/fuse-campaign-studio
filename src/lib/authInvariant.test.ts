@@ -33,8 +33,11 @@ describe("post-auth destination", () => {
 
 describe("onboarding plan offer decision", () => {
   it("shows only for an explicitly undecided account", () => {
+    expect(offerDecisionPending(normalizeOfferState(null))).toBe(true);
     expect(offerDecisionPending(normalizeOfferState("unseen"))).toBe(true);
-    expect(offerDecisionPending(normalizeOfferState("shown"))).toBe(true);
+    // "shown" is terminal for rendering — the modal must never re-pop on a
+    // reload or route change once it has been displayed once.
+    expect(offerDecisionPending(normalizeOfferState("shown"))).toBe(false);
     for (const decided of ["free", "starter", "capsule", "dismissed"]) {
       expect(offerDecisionPending(normalizeOfferState(decided))).toBe(false);
     }

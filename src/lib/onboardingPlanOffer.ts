@@ -32,9 +32,13 @@ export function normalizeOfferState(raw: unknown): OnboardingPlanOfferState {
   return STATES.includes(value) ? value : "unseen";
 }
 
-/** Only an explicitly undecided account sees the onboarding offer. */
+/**
+ * Only a never-shown account sees the onboarding offer. "shown" is already a
+ * terminal render state — that is what stops the modal re-popping on every
+ * reload / route change.
+ */
 export function offerDecisionPending(state: OnboardingPlanOfferState): boolean {
-  return state === "unseen" || state === "shown";
+  return state === "unseen";
 }
 
 /** Persist the decision server-side. Failure is non-fatal (never blocks the app). */

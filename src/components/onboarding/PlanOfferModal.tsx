@@ -203,10 +203,11 @@ export default function PlanOfferModal() {
       dismissModal();
       return;
     }
-    void handleFree({ silent: true });
+    // Dismiss is still a decision: grant the credits, record "dismissed".
+    void handleFree({ silent: true, state: "dismissed" });
   };
 
-  const handleFree = async (options: { silent?: boolean } = {}) => {
+  const handleFree = async (options: { silent?: boolean; state?: "free" | "dismissed" } = {}) => {
     if (!user?.id) {
       dismissModal();
       return;
@@ -216,8 +217,8 @@ export default function PlanOfferModal() {
       const { data, error } = await supabase.rpc("grant_welcome_credits" as never);
       if (error) throw error;
       choiceMade.current = true;
-      await persistOfferState("free");
-      track("onboarding_plan_choice", { choice: "free" });
+      await persistOfferState(options.state ?? "free");
+      track("onboarding_plan_choice", { choice: options.state ?? "free" });
       track("free_selected", {});
       const grantResult = data as { granted?: boolean } | boolean | null;
       const wasGranted =
