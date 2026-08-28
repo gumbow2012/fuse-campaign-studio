@@ -266,6 +266,13 @@ export default function PlanOfferModal() {
     void startPlanCheckout("starter", { returnPath: destination });
   };
 
+  /**
+   * Layout gate: with exactly ONE paid plan on offer this is a focused,
+   * narrow, centered single-offer modal. If more paid plans are ever
+   * rendered here, the wider multi-column layout takes over automatically.
+   */
+  const paidPlans = [STARTER];
+  const singleOffer = paidPlans.length === 1;
 
 
   if (!open) {
