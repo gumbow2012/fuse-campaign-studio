@@ -28,16 +28,15 @@ import GatedPlanDialog from "@/components/mvp/membership/GatedPlanDialog";
 import { getPendingGenerationIntent } from "@/lib/pendingGenerationIntent";
 import {
   hasActivePaidSubscription,
-  markPlanOfferSeen,
-  planOfferSeen,
-  writePlanChoice,
+  normalizeOfferState,
+  offerDecisionPending,
+  persistOfferState,
 } from "@/lib/onboardingPlanOffer";
+import { readPendingAuthIntent, resolveIntentDestination } from "@/lib/pendingAuthIntent";
 import { track } from "@/lib/analytics/track";
 import { setPlanOfferActive } from "@/lib/planOfferVisibility";
 
 const WELCOME_CREDITS = 100;
-/** A "genuinely new" account — the offer is an onboarding step, not a nag. */
-const NEW_ACCOUNT_WINDOW_MS = 24 * 60 * 60 * 1000;
 
 const STARTER = PLAN_LADDER.find((entry) => entry.key === "starter")!;
 const CAPSULE = PLAN_LADDER.find((entry) => entry.key === "capsule")!;
@@ -144,55 +143,33 @@ export default function PlanOfferModal() {
   const [afford, setAfford] = useState<{ required: number; available: number } | null>(null);
   const decided = useRef(false);
 
-  const isNewAccount = useMemo(() => {
-    if (!user?.created_at) return false;
-    return Date.now() - new Date(user.created_at).getTime() < NEW_ACCOUNT_WINDOW_MS;
-  }, [user?.created_at]);
+  /**
+   * The decision is server-owned and taken ONCE:
+   * profiles.onboarding_plan_offer ∈ unseen|shown|free|starter|capsule|dismissed.
+   * Existing users (already decided) never see this onboarding step, and this
+   * surface never touches the session or routes back to /auth.
+   */
+  const offerState = useMemo(
+    () => normalizeOfferState(profile?.onboarding_plan_offer),
+    [profile?.onboarding_plan_offer],
+  );
+
+  /** Post-decision destination — pending generation intent, returnTo, else the app. */
+  const destination = useMemo(() => resolveIntentDestination(readPendingAuthIntent()), []);
 
   useEffect(() => {
     if (decided.current) return;
     if (!user?.id || !profile) return;
-    if (!isNewAccount) return;
-    if (planOfferSeen(user.id)) return;
+    if (!offerDecisionPending(offerState)) return;
     if (hasActivePaidSubscription(profile.plan, profile.subscription_status)) return;
 
-    let cancelled = false;
-
-    const check = async () => {
-      // Server-derived truth: a grant row means they already chose free.
-      try {
-        const { data, error } = await (supabase as unknown as {
-          from: (table: string) => {
-            select: (cols: string) => {
-              eq: (col: string, value: string) => { limit: (n: number) => Promise<{ data: unknown[] | null; error: unknown }> };
-            };
-          };
-        })
-          .from("welcome_credit_grants")
-          .select("id")
-          .eq("user_id", user.id)
-          .limit(1);
-        // A missing table/permission is not a reason to spam the modal forever,
-        // but it must not block a genuinely new account either.
-        if (!error && Array.isArray(data) && data.length > 0) return;
-      } catch {
-        /* fall through — local seen flag still guards repeat displays */
-      }
-      if (cancelled) return;
-      decided.current = true;
-      setOpen(true);
-      markPlanOfferSeen(user.id);
-      track("onboarding_plan_offer_shown", { plan: profile.plan ?? "free" });
-      // P7 funnel — canonical event name for the offer moment (fires once).
-      track("onboarding_offer_shown", { plan_key: profile.plan ?? "free" });
-    };
-
-
-    void check();
-    return () => {
-      cancelled = true;
-    };
-  }, [isNewAccount, profile, user?.id]);
+    decided.current = true;
+    setOpen(true);
+    void persistOfferState("shown");
+    track("onboarding_plan_offer_shown", { plan: profile.plan ?? "free" });
+    // P7 funnel — canonical event name for the offer moment (fires once).
+    track("onboarding_offer_shown", { plan_key: profile.plan ?? "free" });
+  }, [offerState, profile, user?.id]);
 
   // P6b — while this offer is on screen the builder must not auto-run.
   useEffect(() => {
@@ -204,24 +181,39 @@ export default function PlanOfferModal() {
   const choiceMade = useRef(false);
   const closeTracked = useRef(false);
 
-  const close = () => {
-    if (!choiceMade.current && !closeTracked.current) {
-      closeTracked.current = true;
-      track("onboarding_offer_closed", {});
-    }
+  const dismissModal = () => {
     setOpen(false);
     setGranted(false);
     setAfford(null);
   };
 
-  const handleFree = async () => {
-    if (!user?.id) return;
+  /**
+   * X / backdrop = CONTINUE FREE (deterministic): grant the one-time welcome
+   * credits and record the decision — never a dead end, never back to /auth.
+   */
+  const close = () => {
+    if (!choiceMade.current && !closeTracked.current) {
+      closeTracked.current = true;
+      track("onboarding_offer_closed", {});
+    }
+    if (choiceMade.current) {
+      dismissModal();
+      return;
+    }
+    void handleFree({ silent: true });
+  };
+
+  const handleFree = async (options: { silent?: boolean } = {}) => {
+    if (!user?.id) {
+      dismissModal();
+      return;
+    }
     setGranting(true);
     try {
       const { data, error } = await supabase.rpc("grant_welcome_credits" as never);
       if (error) throw error;
-      writePlanChoice(user.id, "free");
       choiceMade.current = true;
+      await persistOfferState("free");
       track("onboarding_plan_choice", { choice: "free" });
       track("free_selected", {});
       const grantResult = data as { granted?: boolean } | boolean | null;
@@ -229,6 +221,10 @@ export default function PlanOfferModal() {
         grantResult === true || (typeof grantResult === "object" && grantResult?.granted === true);
       if (wasGranted) track("welcome_credits_granted", { credits: WELCOME_CREDITS });
       const refreshed = await refreshProfile();
+      if (options.silent) {
+        dismissModal();
+        return;
+      }
       setGranted(true);
 
 
@@ -240,8 +236,13 @@ export default function PlanOfferModal() {
         setAfford({ required, available });
         return;
       }
-      window.setTimeout(close, 1400);
+      window.setTimeout(dismissModal, 1400);
     } catch (error) {
+      if (options.silent) {
+        // A dismiss must always close; the grant RPC is idempotent and retried later.
+        dismissModal();
+        return;
+      }
       toast({
         title: "Could not add your credits",
         description: error instanceof Error ? error.message : "Please try again.",
@@ -253,16 +254,17 @@ export default function PlanOfferModal() {
   };
 
   const handleStarter = () => {
-    if (user?.id) writePlanChoice(user.id, "starter");
     choiceMade.current = true;
+    void persistOfferState("starter");
     track("onboarding_plan_choice", { choice: "starter" });
     track("starter_selected", { plan_key: "starter" });
-    void startPlanCheckout("starter");
+    // Checkout returns INTO the app (never /auth) with the session intact.
+    void startPlanCheckout("starter", { returnPath: destination });
   };
 
   const handleCapsule = () => {
-    if (user?.id) writePlanChoice(user.id, "capsule");
     choiceMade.current = true;
+    void persistOfferState("capsule");
     track("onboarding_plan_choice", { choice: "capsule" });
     track("capsule_selected", { plan_key: "capsule" });
     setGatedOpen(true);
@@ -318,8 +320,8 @@ export default function PlanOfferModal() {
                 <Button
                   variant="outline"
                   onClick={() => {
-                    close();
-                    navigate("/app/templates");
+                    dismissModal();
+                    navigate(destination);
                   }}
                   className="rounded-full border-white/15 bg-white/5 text-foreground hover:bg-white/10"
                 >
