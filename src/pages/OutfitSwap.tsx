@@ -120,6 +120,70 @@ function SectionCard({
   );
 }
 
+/** One structured garment reference slot (upload / replace / clear). */
+function GarmentSlotUpload({
+  label,
+  url,
+  busy,
+  required,
+  onPick,
+  onClear,
+}: {
+  label: string;
+  url: string | null;
+  busy: boolean;
+  required?: boolean;
+  onPick: (file: File | undefined) => void;
+  onClear: () => void;
+}) {
+  return (
+    <div className="flex items-center gap-2 rounded-xl border border-white/10 bg-black/30 p-2">
+      {url ? (
+        <img src={url} alt={`${label} reference`} className="h-12 w-10 shrink-0 rounded-lg object-cover" />
+      ) : (
+        <div className="flex h-12 w-10 shrink-0 items-center justify-center rounded-lg border border-dashed border-white/15 text-foreground/40">
+          <Plus size={12} />
+        </div>
+      )}
+      <div className="min-w-0 flex-1">
+        <p className="text-[10px] uppercase tracking-[0.14em] text-cyan-200/70">
+          {label}
+          {required ? <span className="ml-1 text-red-300">required</span> : null}
+        </p>
+        <p className="truncate text-[11px] text-foreground/60">
+          {url ? "Stored" : required ? "Add the back image" : "Optional"}
+        </p>
+      </div>
+      {busy ? <Loader2 size={13} className="animate-spin text-cyan-200" /> : null}
+      <label className="cursor-pointer rounded-lg border border-white/15 bg-black/50 px-2 py-1 text-[10px] uppercase tracking-[0.12em] text-foreground/80 transition-colors hover:border-cyan-200/50">
+        {url ? "Replace" : "Upload"}
+        <input
+          type="file"
+          accept="image/*"
+          className="hidden"
+          onChange={(event) => {
+            const file = event.target.files?.[0];
+            event.target.value = "";
+            onPick(file);
+          }}
+        />
+      </label>
+      {url ? (
+        <button
+          type="button"
+          aria-label={`Remove ${label} reference`}
+          onClick={onClear}
+          className="rounded-lg border border-white/15 bg-black/50 p-1 text-foreground/70 transition-colors hover:border-red-400/60 hover:text-red-300"
+        >
+          <X size={11} />
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
+
+
 function StatusPill({ generation }: { generation?: SwapGeneration }) {
   if (!generation) return <span className="text-[11px] text-muted-foreground">Not generated</span>;
   const label = generation.status === "complete"
