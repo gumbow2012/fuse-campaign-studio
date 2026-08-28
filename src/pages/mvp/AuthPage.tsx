@@ -95,6 +95,23 @@ export default function AuthPage() {
     return stored && stored.includes("@") ? stored : null;
   }, [paidAccess]);
 
+  // HARD INVARIANT: while auth is hydrating OR a session exists, the
+  // account-creation UI must never render. Only an explicit sign-out brings it back.
+  const sessionPresent = Boolean(user);
+  if (authLoading || sessionPresent) {
+    return (
+      <SiteShell>
+        <PageMeta title="Signing you in — FUSE" description="Restoring your FUSE session." path="/auth" noindex />
+        <div className="container flex min-h-[calc(100vh-200px)] items-center justify-center py-8">
+          <div className="flex items-center gap-3 text-sm text-slate-400">
+            <Loader2 className="h-4 w-4 animate-spin text-cyan-300" />
+            {sessionPresent ? "Opening FUSE…" : "Checking your session…"}
+          </div>
+        </div>
+      </SiteShell>
+    );
+  }
+
   return (
     <SiteShell>
       <PageMeta
@@ -102,6 +119,7 @@ export default function AuthPage() {
         description="Enter FUSE. Continue with Google, or sign in with your email and password."
         path="/auth"
       />
+
 
       <section className="relative overflow-hidden">
         <div
