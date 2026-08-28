@@ -267,6 +267,34 @@ export default function OutfitSwap() {
 
   /* ---------------------------- 1. Source video ---------------------------- */
 
+  /**
+   * Detection-only pass over the extracted source frames. Never generates and
+   * never touches the swap / reconstruction calls; results are cached server
+   * side by input fingerprint so returning here does not recompute.
+   */
+  const runSourceAnalysis = useCallback(async (uploaded: Frame[]) => {
+    if (!uploaded.length) return;
+    setAnalysisError(null);
+    setAnalysis(null);
+    setAnalysisStage("frames");
+    try {
+      setAnalysisStage("subjects");
+      const result = await analyzeOutfitSwapSource(
+        uploaded.map((frame, index) => ({
+          frameId: `frame-${index}`,
+          timestamp: frame.time,
+          imageUrl: frame.url,
+        })),
+      );
+      setAnalysisStage("orientation");
+      setAnalysis(result.analysis);
+      setAnalysisStage("done");
+    } catch (error) {
+      setAnalysisError(error instanceof Error ? error.message : "Could not analyse that clip");
+      setAnalysisStage("error");
+    }
+  }, []);
+
   const handleVideoFile = useCallback(async (file: File) => {
     const objectUrl = URL.createObjectURL(file);
     setVideoPreview(objectUrl);
@@ -274,7 +302,11 @@ export default function OutfitSwap() {
     setSwaps({});
     setApproved(new Set());
     setSelectedFrames(new Set());
+    setAnalysis(null);
+    setAnalysisError(null);
+    setAnalysisStage("idle");
     // The video library is intentionally preserved across new source clips.
+
 
     try {
       const element = await loadVideo(objectUrl);
