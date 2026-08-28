@@ -16,12 +16,16 @@ import {
   Loader2,
   PlayCircle,
   RefreshCw,
+  Search,
+  Star,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 import { MADDEN_CINEMATOGRAPHY_PRESETS } from "@/lib/madden-media/cinematographyPresets";
 import { findPreset } from "@/lib/madden-media/presetTypes";
 import { maddenShotPromptCompiler } from "@/lib/madden-media/promptCompiler";
+import { partitionFavorites, useMaddenFavorites } from "@/lib/madden-media/favorites";
 import {
   MADDEN_SHOT_PACKS,
   findShotPack,
@@ -39,16 +43,40 @@ type Props = {
   projectId: string;
   state: MaddenProjectState;
   onApplyPack: (pack: MaddenShotPack) => void;
+  /** M9: per-shot cinematography overrides only show in Advanced view. */
+  advanced?: boolean;
 };
 
-export default function MaddenShotPackPanel({ projectId, state, onApplyPack }: Props) {
+export default function MaddenShotPackPanel({
+  projectId,
+  state,
+  onApplyPack,
+  advanced = false,
+}: Props) {
   const [history, setHistory] = useState<MaddenShotGeneration[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [generatingId, setGeneratingId] = useState<string | null>(null);
   const [openShotId, setOpenShotId] = useState<string | null>(null);
+  const [packQuery, setPackQuery] = useState("");
+  const { isFavorite, toggle } = useMaddenFavorites("shot-pack");
   /** Per-shot history cursor, so browsing never mutates a snapshot. */
   const [cursor, setCursor] = useState<Record<string, number>>({});
+
+  const visiblePacks = useMemo(() => {
+    const q = packQuery.trim().toLowerCase();
+    const matched = q
+      ? MADDEN_SHOT_PACKS.filter(
+          (pack) =>
+            pack.name.toLowerCase().includes(q) ||
+            pack.description.toLowerCase().includes(q) ||
+            pack.tags.some((tag) => tag.toLowerCase().includes(q)),
+        )
+      : MADDEN_SHOT_PACKS;
+    const { favorites, rest } = partitionFavorites(matched, (pack) => isFavorite(pack.id));
+    return [...favorites, ...rest];
+  }, [packQuery, isFavorite]);
+
 
   const activePack = findShotPack(state.settings.shotPackId ?? null);
 
