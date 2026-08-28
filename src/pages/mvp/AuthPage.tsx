@@ -16,7 +16,7 @@ import { track } from "@/lib/analytics/track";
 import { readPendingReferralCode, storePendingReferralCode } from "@/lib/pendingReferral";
 import { usePendingReferral } from "@/hooks/usePendingReferral";
 import UniversalAuthPanel, { type AuthMode } from "@/components/auth/UniversalAuthPanel";
-import { Sparkles } from "lucide-react";
+import { Loader2, Sparkles } from "lucide-react";
 import {
   resolveIntentDestination,
   sanitizeReturnTo,
@@ -49,7 +49,8 @@ export default function AuthPage() {
     });
   }, [searchParams]);
 
-  const destination = resolveIntentDestination(intent);
+  // resolveIntentDestination already refuses /auth; keep the belt-and-braces default.
+  const destination = resolveIntentDestination(intent) || "/app/templates";
 
   useEffect(() => {
     const referred = Boolean(searchParams.get("ref")) || Boolean(intent.referralCode);
