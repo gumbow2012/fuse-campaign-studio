@@ -1015,6 +1015,9 @@ Deno.serve(async (req) => {
     return json({ generation });
   } catch (error) {
     const message = errorMessage(error);
+    if (/INSUFFICIENT_CREDITS|Insufficient credits/i.test(message)) {
+      return json({ error: "Not enough credits for this generation." }, 402);
+    }
     const status = /access required|authorization|Authentication|bearer/i.test(message) ? 401 : 400;
     return json({ error: message }, status);
   }
