@@ -13,9 +13,11 @@
 import {
   MADDEN_SLOT_KINDS,
   type MaddenProjectState,
+  type MaddenShot,
   type MaddenSlot,
   type MaddenSlotKind,
 } from "@/lib/madden-media/types";
+
 import {
   MADDEN_SUBJECT_LOCK_CATEGORIES,
   MADDEN_SUBJECT_LOCK_LABELS,
@@ -388,3 +390,27 @@ export function resolveMaddenPrompt(
     compiled,
   };
 }
+
+/**
+ * M7 — per-shot compile. The shot keeps the project's locked subject / outfit /
+ * jewelry consistency and contributes only its own composition + direction.
+ * Pure: no provider call, no persistence.
+ */
+export function maddenShotPromptCompiler(
+  state: MaddenProjectState,
+  shot: MaddenShot,
+): MaddenCompiledPrompt {
+  const shotState: MaddenProjectState = {
+    ...state,
+    shots: [shot],
+    settings: {
+      ...state.settings,
+      cinematographyId: shot.cinematographyId ?? state.settings.cinematographyId,
+      // A project-level prompt override never masks a single shot's compile.
+      promptOverride: "",
+      promptUserEdited: false,
+    },
+  };
+  return maddenMediaPromptCompiler(shotState);
+}
+

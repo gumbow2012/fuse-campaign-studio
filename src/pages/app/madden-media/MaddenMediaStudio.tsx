@@ -6,8 +6,10 @@ import MaddenOutfitPanel from "@/components/madden-media/MaddenOutfitPanel";
 import MaddenJewelryPanel from "@/components/madden-media/MaddenJewelryPanel";
 import MaddenPresetPicker from "@/components/madden-media/MaddenPresetPicker";
 import MaddenShotBoard from "@/components/madden-media/MaddenShotBoard";
+import MaddenShotPackPanel from "@/components/madden-media/MaddenShotPackPanel";
 import MaddenRecipePanel from "@/components/madden-media/MaddenRecipePanel";
 import MaddenPromptPreview from "@/components/madden-media/MaddenPromptPreview";
+
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { MADDEN_CINEMATOGRAPHY_PRESETS } from "@/lib/madden-media/cinematographyPresets";
@@ -27,6 +29,13 @@ import {
   buildRecipeConfigFromState,
   type MaddenRecipe,
 } from "@/lib/madden-media/recipes";
+
+import {
+  applyShotPackToState,
+  type MaddenShotPack,
+} from "@/lib/madden-media/shotPacks";
+
+
 
 import {
   createProject,
@@ -224,7 +233,13 @@ export default function MaddenMediaStudio() {
     }
   };
 
+  const applyShotPack = (pack: MaddenShotPack) => {
+    setState((prev) => applyShotPackToState(prev, pack));
+    toast.success(`${pack.name} applied — ${pack.shots.length} shots`);
+  };
+
   const handlePromptChange = (value: string) => {
+
     setState((prev) => ({
       ...prev,
       settings: { ...prev.settings, promptOverride: value, promptUserEdited: true },
@@ -364,12 +379,19 @@ export default function MaddenMediaStudio() {
               onResetPrompt={handleResetPrompt}
             />
 
+            <MaddenShotPackPanel
+              projectId={activeProjectId}
+              state={state}
+              onApplyPack={applyShotPack}
+            />
+
             <MaddenShotBoard
               shots={state.shots}
               onAdd={addShot}
               onChange={updateShot}
               onRemove={removeShot}
             />
+
 
             <section className="rounded-2xl border border-border/60 bg-card/50 p-4">
               <h3 className="font-semibold tracking-tight">Project notes</h3>
