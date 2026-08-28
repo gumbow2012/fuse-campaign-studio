@@ -1,22 +1,25 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import SiteShell from "@/components/mvp/SiteShell";
 import MaddenProjectSwitcher from "@/components/madden-media/MaddenProjectSwitcher";
-import MaddenSlotCard from "@/components/madden-media/MaddenSlotCard";
 import MaddenSubjectPanel from "@/components/madden-media/MaddenSubjectPanel";
 import MaddenOutfitPanel from "@/components/madden-media/MaddenOutfitPanel";
 import MaddenJewelryPanel from "@/components/madden-media/MaddenJewelryPanel";
+import MaddenPresetPicker from "@/components/madden-media/MaddenPresetPicker";
 import MaddenShotBoard from "@/components/madden-media/MaddenShotBoard";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
+import { MADDEN_CINEMATOGRAPHY_PRESETS } from "@/lib/madden-media/cinematographyPresets";
+import { MADDEN_LIGHTING_PRESETS } from "@/lib/madden-media/lightingPresets";
+import { MADDEN_ENVIRONMENT_PRESETS } from "@/lib/madden-media/environmentPresets";
 import {
   createEmptyProjectState,
-  MADDEN_SLOT_KINDS,
   type MaddenProjectState,
   type MaddenProjectSummary,
   type MaddenShot,
   type MaddenSlot,
   type MaddenSlotKind,
 } from "@/lib/madden-media/types";
+
 import {
   createProject,
   deleteProject,
@@ -236,12 +239,59 @@ export default function MaddenMediaStudio() {
                 slot={state.slots.jewelry}
                 onBind={(patch) => updateSlot("jewelry", patch as Partial<MaddenSlot>)}
               />
-              {MADDEN_SLOT_KINDS.filter(
-                (kind) => kind !== "subject" && kind !== "outfit" && kind !== "jewelry",
-              ).map((kind) => (
-                <MaddenSlotCard key={kind} slot={state.slots[kind]} onChange={updateSlot} />
-              ))}
             </div>
+
+            <div className="grid gap-4 md:grid-cols-2">
+              <MaddenPresetPicker
+                title="Cinematography"
+                description="Camera, lens and framing language applied across the board."
+                presets={MADDEN_CINEMATOGRAPHY_PRESETS}
+                selectedId={state.settings.cinematographyId}
+                onSelect={(id) =>
+                  setState((prev) => ({
+                    ...prev,
+                    settings: { ...prev.settings, cinematographyId: id },
+                  }))
+                }
+              />
+              <MaddenPresetPicker
+                title="Lighting"
+                description="The lighting setup every shot inherits."
+                presets={MADDEN_LIGHTING_PRESETS}
+                selectedId={state.settings.lightingId}
+                onSelect={(id) =>
+                  setState((prev) => ({
+                    ...prev,
+                    settings: { ...prev.settings, lightingId: id },
+                  }))
+                }
+              />
+              <div className="md:col-span-2">
+                <MaddenPresetPicker
+                  title="Environment"
+                  description="Location and scene continuity — this also fills the project's environment slot."
+                  presets={MADDEN_ENVIRONMENT_PRESETS}
+                  selectedId={state.settings.environmentId}
+                  onSelect={(id) => {
+                    const preset = id
+                      ? MADDEN_ENVIRONMENT_PRESETS.find((p) => p.id === id) ?? null
+                      : null;
+                    setState((prev) => ({
+                      ...prev,
+                      settings: { ...prev.settings, environmentId: id },
+                      slots: {
+                        ...prev.slots,
+                        environment: {
+                          ...prev.slots.environment,
+                          name: preset?.name ?? "",
+                          description: preset?.promptFragment ?? "",
+                        },
+                      },
+                    }));
+                  }}
+                />
+              </div>
+
 
 
             <MaddenShotBoard
