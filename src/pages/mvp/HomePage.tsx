@@ -967,6 +967,7 @@ export default function HomePage() {
                 </Link>
               ))}
             </div>
+            </>
           )}
         </div>
       </section>
