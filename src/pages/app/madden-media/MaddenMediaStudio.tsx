@@ -31,6 +31,13 @@ import {
 } from "@/lib/madden-media/recipes";
 
 import {
+  applyShotPackToState,
+  type MaddenShotPack,
+} from "@/lib/madden-media/shotPacks";
+
+
+
+import {
   createProject,
   saveUserRecipe,
   deleteProject,
