@@ -850,6 +850,12 @@ export default function OutfitSwap() {
 
   /* ------------------------- Live dollar/credit preview --------------------- */
 
+  /**
+   * PHASE 5 cost contract: each selected frame is ONE image edit, no matter how
+   * many subjects, models or garment sides it conditions on. Subjects handled in
+   * a single fused frame edit must NOT multiply the frame count. Credit values
+   * are unchanged.
+   */
   const swapCostUsd = useMemo(
     () => IMAGE_FLAT_USD * resolutionMultiplier("2K") * Math.max(0, selectedFrames.size),
     [selectedFrames],
@@ -1727,6 +1733,9 @@ export default function OutfitSwap() {
                     {selectedFrames.size ? (
                       <span className="ml-1 font-medium text-cyan-100">
                         {costPreview(creditsFromUsd(swapCostUsd), swapCostUsd)}
+                        <span className="ml-1 text-muted-foreground">
+                          · 1 render per frame, all subjects included
+                        </span>
                       </span>
                     ) : null}
                   </p>
