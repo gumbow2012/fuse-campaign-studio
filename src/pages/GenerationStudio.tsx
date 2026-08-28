@@ -395,7 +395,10 @@ async function callStudio(body: Record<string, unknown>) {
         message = "Generation timed out — please retry.";
       } else if (!parsed) message = `Generation request failed (${context.status}) — please retry.`;
     }
-    throw new Error(message || "Generation timed out — please retry.");
+    throw new StudioRequestError(
+      message || "Generation timed out — please retry.",
+      (error as { context?: Response }).context?.status,
+    );
   }
   if ((data as any)?.error) throw new Error(String((data as any).error));
   return data as any;
