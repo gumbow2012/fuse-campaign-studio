@@ -927,8 +927,19 @@ export default function HomePage() {
             )}
           </div>
 
+          {/* FEATURED CREATORS — real public creator_profiles rows only. */}
           {creators.length > 0 && (
-            <div className="mt-10 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            <>
+            <div className="mt-10 flex flex-wrap items-end justify-between gap-3">
+              <SectionLabel>Featured creators</SectionLabel>
+              <Button asChild variant="ghost" className="rounded-full text-cyan-100 hover:text-white">
+                <Link to="/creators">
+                  All creators
+                  <ArrowRight className="h-4 w-4" />
+                </Link>
+              </Button>
+            </div>
+            <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
               {creators.map((creator: CreatorProfile) => (
                 <Link
                   key={creator.id}
