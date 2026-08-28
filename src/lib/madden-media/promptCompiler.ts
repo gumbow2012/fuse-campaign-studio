@@ -13,9 +13,11 @@
 import {
   MADDEN_SLOT_KINDS,
   type MaddenProjectState,
+  type MaddenShot,
   type MaddenSlot,
   type MaddenSlotKind,
 } from "@/lib/madden-media/types";
+
 import {
   MADDEN_SUBJECT_LOCK_CATEGORIES,
   MADDEN_SUBJECT_LOCK_LABELS,
