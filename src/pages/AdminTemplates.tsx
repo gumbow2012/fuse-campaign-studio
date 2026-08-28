@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
-import { Factory, GitBranch, Loader2, Network, TestTube2 } from "lucide-react";
+import { Factory, GitBranch, LayoutGrid, Loader2, Network, TestTube2 } from "lucide-react";
 import SiteShell from "@/components/mvp/SiteShell";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
