@@ -47,9 +47,11 @@ import {
 
 
 import {
+  analyzeOutfitSwapSource,
   callOutfitSwap,
   createTemplateFromOutfitSwap,
   persistTemplateLayout,
+  type OutfitSwapSourceAnalysis,
   type OutfitSwapTemplateResult,
   type SwapGeneration,
 } from "@/services/outfitSwap";
