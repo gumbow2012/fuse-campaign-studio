@@ -3,6 +3,8 @@ import SiteShell from "@/components/mvp/SiteShell";
 import MaddenProjectSwitcher from "@/components/madden-media/MaddenProjectSwitcher";
 import MaddenSlotCard from "@/components/madden-media/MaddenSlotCard";
 import MaddenSubjectPanel from "@/components/madden-media/MaddenSubjectPanel";
+import MaddenOutfitPanel from "@/components/madden-media/MaddenOutfitPanel";
+import MaddenJewelryPanel from "@/components/madden-media/MaddenJewelryPanel";
 import MaddenShotBoard from "@/components/madden-media/MaddenShotBoard";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
