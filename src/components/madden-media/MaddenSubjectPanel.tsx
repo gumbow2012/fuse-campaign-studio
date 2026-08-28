@@ -41,6 +41,7 @@ const MAX_REFERENCES = 4;
 
 type Props = {
   slot: MaddenSlot;
+  advanced?: boolean;
   onBind: (patch: {
     name?: string;
     profileId?: string | null;
@@ -49,7 +50,7 @@ type Props = {
   }) => void;
 };
 
-export default function MaddenSubjectPanel({ slot, onBind }: Props) {
+export default function MaddenSubjectPanel({ slot, onBind, advanced = false }: Props) {
   const [profiles, setProfiles] = useState<MaddenSubjectProfile[]>([]);
   const [name, setName] = useState(slot.name);
   const [data, setData] = useState<MaddenSubjectProfileData>(() =>
@@ -442,7 +443,8 @@ export default function MaddenSubjectPanel({ slot, onBind }: Props) {
         )}
       </div>
 
-      {/* Consistency locks */}
+      {/* Consistency locks — Advanced view only */}
+      {advanced ? (
       <div className="mt-5 rounded-xl border border-border/60 p-3">
         <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
           Consistency locks
@@ -478,6 +480,7 @@ export default function MaddenSubjectPanel({ slot, onBind }: Props) {
           ))}
         </div>
       </div>
+      ) : null}
     </section>
   );
 }

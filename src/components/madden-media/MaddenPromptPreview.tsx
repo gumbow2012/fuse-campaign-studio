@@ -17,9 +17,16 @@ type Props = {
   state: MaddenProjectState;
   onPromptChange: (value: string) => void;
   onResetPrompt: () => void;
+  /** M9: raw prompt editing + payload inspection are Advanced-only. */
+  advanced?: boolean;
 };
 
-export default function MaddenPromptPreview({ state, onPromptChange, onResetPrompt }: Props) {
+export default function MaddenPromptPreview({
+  state,
+  onPromptChange,
+  onResetPrompt,
+  advanced = false,
+}: Props) {
   const [showPayload, setShowPayload] = useState(false);
   const { autoPrompt, finalPrompt, userEdited, compiled } = useMemo(
     () => resolveMaddenPrompt(state),
@@ -85,7 +92,7 @@ export default function MaddenPromptPreview({ state, onPromptChange, onResetProm
         </ul>
       ) : null}
 
-      <div className="mt-4 grid gap-4 lg:grid-cols-2">
+      <div className={`mt-4 grid gap-4 ${advanced ? "lg:grid-cols-2" : ""}`}>
         <div>
           <div className="flex items-center justify-between gap-2">
             <p className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">
@@ -107,51 +114,61 @@ export default function MaddenPromptPreview({ state, onPromptChange, onResetProm
           </pre>
         </div>
 
-        <div>
-          <div className="flex items-center justify-between gap-2">
-            <p className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">
-              Final prompt
-            </p>
-            {userEdited ? (
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="h-6 text-[11px]"
-                onClick={onResetPrompt}
-              >
-                <RotateCcw className="mr-1 h-3 w-3" />
-                Reset to auto
-              </Button>
-            ) : null}
+        {advanced ? (
+          <div>
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">
+                Final prompt
+              </p>
+              {userEdited ? (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-6 text-[11px]"
+                  onClick={onResetPrompt}
+                >
+                  <RotateCcw className="mr-1 h-3 w-3" />
+                  Reset to auto
+                </Button>
+              ) : null}
+            </div>
+            <Textarea
+              value={draft}
+              onChange={(event) => onPromptChange(event.target.value)}
+              rows={12}
+              className="mt-2 font-mono text-[11px] leading-relaxed"
+              placeholder="Edit the compiled prompt to take over from the compiler"
+            />
           </div>
-          <Textarea
-            value={draft}
-            onChange={(event) => onPromptChange(event.target.value)}
-            rows={12}
-            className="mt-2 font-mono text-[11px] leading-relaxed"
-            placeholder="Edit the compiled prompt to take over from the compiler"
-          />
-        </div>
+        ) : null}
       </div>
 
+      {!advanced ? (
+        <p className="mt-3 text-[11px] text-muted-foreground">
+          Turn on Advanced to edit this prompt by hand or inspect the compiled payload.
+        </p>
+      ) : null}
+
       <div className="mt-4 flex flex-wrap items-center gap-3 rounded-xl border border-dashed border-border/60 p-3">
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          className="h-8 text-xs"
-          onClick={() => setShowPayload((prev) => !prev)}
-        >
-          <PlayCircle className="mr-1 h-3.5 w-3.5" />
-          {showPayload ? "Hide compiled payload" : "Preview compiled payload"}
-        </Button>
+        {advanced ? (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-8 text-xs"
+            onClick={() => setShowPayload((prev) => !prev)}
+          >
+            <PlayCircle className="mr-1 h-3.5 w-3.5" />
+            {showPayload ? "Hide compiled payload" : "Preview compiled payload"}
+          </Button>
+        ) : null}
         <span className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
           Live generation verification pending
         </span>
       </div>
 
-      {showPayload ? (
+      {advanced && showPayload ? (
         <pre className="mt-3 max-h-72 overflow-auto whitespace-pre-wrap rounded-xl border border-border/60 bg-muted/20 p-3 text-[11px] leading-relaxed text-muted-foreground">
           {payload}
         </pre>
