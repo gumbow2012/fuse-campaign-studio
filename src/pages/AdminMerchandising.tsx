@@ -469,7 +469,6 @@ export default function AdminMerchandising() {
         ...current,
         [shelfId]: (current[shelfId] ?? []).filter((row) => row.id !== item.id),
       }));
-      setBaseline((current) => (current ? current : current));
       toast.success("Removed from shelf");
       await refresh();
     } catch (cause) {
