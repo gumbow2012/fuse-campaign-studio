@@ -8,6 +8,14 @@
 import { supabase } from "@/integrations/supabase/client";
 import { looseTable } from "@/services/looseTable";
 import {
+  MADDEN_VARIATIONS,
+  buildDirectorContext,
+  findVariation,
+  normalizeDirectorProposals,
+  type MaddenDirectorProposal,
+  type MaddenVariationId,
+} from "@/lib/madden-media/director";
+import {
   createEmptyProjectState,
   normalizeProjectState,
   type MaddenMediaProject,
@@ -534,4 +542,48 @@ export async function recordMaddenShotGeneration(input: {
   if (error) fail(error, "Could not save that generation snapshot");
   if (!data) throw new Error("Could not save that generation snapshot");
   return toShotGeneration(data as Record<string, unknown>);
+}
+
+/* ------------------------------------------------------------------ *
+ * M8 — Madden Director (proposals only)
+ * ------------------------------------------------------------------ */
+
+export type MaddenDirectorResponse =
+  | { ok: true; proposals: MaddenDirectorProposal[]; notes: string[]; model: string }
+  | { ok: false; reason: string };
+
+/**
+ * Asks the Director for structured creative-direction PROPOSALS.
+ * Nothing is applied here — the caller merges a proposal only on user action.
+ */
+export async function requestMaddenDirection(
+  state: MaddenProjectState,
+  variationId: MaddenVariationId,
+): Promise<MaddenDirectorResponse> {
+  const variation = findVariation(variationId) ?? MADDEN_VARIATIONS[0];
+  const { data, error } = await supabase.functions.invoke("madden-media-studio", {
+    body: {
+      action: "director",
+      brief: variation.brief,
+      variationId: variation.id,
+      context: buildDirectorContext(state),
+    },
+  });
+  if (error) {
+    return { ok: false, reason: error.message || "The Director could not run." };
+  }
+  const result = data as Record<string, unknown> | null;
+  if (!result || result.ok !== true) {
+    return { ok: false, reason: String(result?.reason ?? "The Director could not run.") };
+  }
+  const proposals = normalizeDirectorProposals(result.proposals);
+  if (proposals.length === 0) {
+    return { ok: false, reason: "The Director had no usable suggestions — try again." };
+  }
+  return {
+    ok: true,
+    proposals,
+    notes: Array.isArray(result.notes) ? (result.notes as unknown[]).map(String) : [],
+    model: String(result.model ?? ""),
+  };
 }
