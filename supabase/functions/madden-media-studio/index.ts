@@ -577,6 +577,10 @@ Deno.serve(async (req) => {
       );
     }
 
+    if (action === "director") {
+      return json(await runDirector(body));
+    }
+
 
     return json({ ok: false, reason: `Unknown action: ${action || "(none)"}` }, 400);
   } catch (error) {
