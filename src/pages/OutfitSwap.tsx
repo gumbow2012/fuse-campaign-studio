@@ -26,6 +26,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
 import { Textarea } from "@/components/ui/textarea";
+import { Switch } from "@/components/ui/switch";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
   AlertDialog,
@@ -51,6 +52,7 @@ import {
   callOutfitSwap,
   createTemplateFromOutfitSwap,
   persistTemplateLayout,
+  type OutfitSwapGarment,
   type OutfitSwapSourceAnalysis,
   type OutfitSwapTemplateResult,
   type SwapGeneration,
@@ -84,7 +86,9 @@ const VIDEO_MODELS = [
 ];
 
 type Frame = { time: number; url: string };
-type Garment = { url: string; name: string; type: string; label: string; person: string };
+/** PHASE 2: structured refs; `url` still mirrors FRONT for generation. */
+type Garment = OutfitSwapGarment;
+type GarmentSlot = "front" | "back" | "detail" | "side";
 
 const SELECT_CLASS =
   "w-full rounded-lg border border-white/12 bg-black/40 px-2.5 py-1.5 text-xs text-foreground outline-none transition-colors hover:border-cyan-200/40 focus:border-cyan-200/60";
@@ -115,6 +119,70 @@ function SectionCard({
     </section>
   );
 }
+
+/** One structured garment reference slot (upload / replace / clear). */
+function GarmentSlotUpload({
+  label,
+  url,
+  busy,
+  required,
+  onPick,
+  onClear,
+}: {
+  label: string;
+  url: string | null;
+  busy: boolean;
+  required?: boolean;
+  onPick: (file: File | undefined) => void;
+  onClear: () => void;
+}) {
+  return (
+    <div className="flex items-center gap-2 rounded-xl border border-white/10 bg-black/30 p-2">
+      {url ? (
+        <img src={url} alt={`${label} reference`} className="h-12 w-10 shrink-0 rounded-lg object-cover" />
+      ) : (
+        <div className="flex h-12 w-10 shrink-0 items-center justify-center rounded-lg border border-dashed border-white/15 text-foreground/40">
+          <Plus size={12} />
+        </div>
+      )}
+      <div className="min-w-0 flex-1">
+        <p className="text-[10px] uppercase tracking-[0.14em] text-cyan-200/70">
+          {label}
+          {required ? <span className="ml-1 text-red-300">required</span> : null}
+        </p>
+        <p className="truncate text-[11px] text-foreground/60">
+          {url ? "Stored" : required ? "Add the back image" : "Optional"}
+        </p>
+      </div>
+      {busy ? <Loader2 size={13} className="animate-spin text-cyan-200" /> : null}
+      <label className="cursor-pointer rounded-lg border border-white/15 bg-black/50 px-2 py-1 text-[10px] uppercase tracking-[0.12em] text-foreground/80 transition-colors hover:border-cyan-200/50">
+        {url ? "Replace" : "Upload"}
+        <input
+          type="file"
+          accept="image/*"
+          className="hidden"
+          onChange={(event) => {
+            const file = event.target.files?.[0];
+            event.target.value = "";
+            onPick(file);
+          }}
+        />
+      </label>
+      {url ? (
+        <button
+          type="button"
+          aria-label={`Remove ${label} reference`}
+          onClick={onClear}
+          className="rounded-lg border border-white/15 bg-black/50 p-1 text-foreground/70 transition-colors hover:border-red-400/60 hover:text-red-300"
+        >
+          <X size={11} />
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
+
 
 function StatusPill({ generation }: { generation?: SwapGeneration }) {
   if (!generation) return <span className="text-[11px] text-muted-foreground">Not generated</span>;
@@ -366,7 +434,14 @@ export default function OutfitSwap() {
         const compressed = await compressImageFile(file);
         const stored = await uploadToStorage(folder, compressed, compressed.name);
         uploaded.push({
+          // FRONT is the primary reference: `url` mirrors `frontUrl` so the
+          // existing generation call keeps working unchanged.
           url: stored.url,
+          frontUrl: stored.url,
+          hasBackDesign: false,
+          backUrl: null,
+          detailUrl: null,
+          sideUrl: null,
           name: file.name,
           type: GARMENT_TYPES[0],
           label: "",
@@ -381,6 +456,39 @@ export default function OutfitSwap() {
       setUploadingGarment(false);
     }
   }, []);
+
+  /**
+   * Uploads one extra structured reference for a garment. FRONT replaces the
+   * primary ref (keeping `url` in sync); BACK / DETAIL / SIDE are stored only —
+   * they are NOT sent to generation in this phase.
+   */
+  const [slotUploading, setSlotUploading] = useState<string | null>(null);
+  const [expandedRefs, setExpandedRefs] = useState<Set<number>>(new Set());
+  const uploadGarmentSlot = useCallback(
+    async (index: number, slot: GarmentSlot, file: File | undefined) => {
+      if (!file) return;
+      setSlotUploading(`${index}:${slot}`);
+      try {
+        const folder = await createOutfitSwapFolder();
+        const compressed = await compressImageFile(file);
+        const stored = await uploadToStorage(folder, compressed, compressed.name);
+        setGarments((prev) =>
+          prev.map((item, i) => {
+            if (i !== index) return item;
+            if (slot === "front") return { ...item, frontUrl: stored.url, url: stored.url };
+            if (slot === "back") return { ...item, backUrl: stored.url };
+            if (slot === "detail") return { ...item, detailUrl: stored.url };
+            return { ...item, sideUrl: stored.url };
+          }),
+        );
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : "Could not upload that reference");
+      } finally {
+        setSlotUploading(null);
+      }
+    },
+    [],
+  );
 
   /* ------------------------------ 4. Frame swaps ---------------------------- */
 
@@ -488,6 +596,11 @@ export default function OutfitSwap() {
   const runSelectedSwaps = useCallback(async () => {
     if (!garments.length) {
       toast.error("Add at least one clothing reference");
+      return;
+    }
+    // BACK is required once the user says the garment has a back design.
+    if (garments.some((garment) => garment.hasBackDesign && !garment.backUrl)) {
+      toast.error("Add the back image for every product marked with a back design");
       return;
     }
     const indices = [...selectedFrames].sort((a, b) => a - b);
@@ -998,6 +1111,83 @@ export default function OutfitSwap() {
                         className="self-start rounded-lg border border-white/15 bg-black/50 p-1.5 text-foreground/70 transition-colors hover:border-red-400/60 hover:text-red-300"
                       >
                         <X size={12} />
+                      </button>
+                    </div>
+
+                    {/* PHASE 2 — structured refs. FRONT is the primary ref used by
+                        generation; BACK/DETAIL/SIDE are captured + stored only. */}
+                    <div className="mt-2.5 space-y-2 border-t border-white/10 pt-2.5">
+                      <label className="flex cursor-pointer items-center justify-between gap-3">
+                        <span className="text-[10px] uppercase tracking-[0.14em] text-cyan-200/70">
+                          Has back design
+                        </span>
+                        <Switch
+                          checked={garment.hasBackDesign}
+                          onCheckedChange={(checked) =>
+                            setGarments((prev) =>
+                              prev.map((item, i) =>
+                                i === index ? { ...item, hasBackDesign: checked } : item,
+                              ),
+                            )
+                          }
+                        />
+                      </label>
+
+                      {garment.hasBackDesign ? (
+                        <GarmentSlotUpload
+                          label="Back"
+                          required
+                          url={garment.backUrl}
+                          busy={slotUploading === `${index}:back`}
+                          onPick={(file) => void uploadGarmentSlot(index, "back", file)}
+                          onClear={() =>
+                            setGarments((prev) =>
+                              prev.map((item, i) => (i === index ? { ...item, backUrl: null } : item)),
+                            )
+                          }
+                        />
+                      ) : null}
+
+                      {expandedRefs.has(index) ? (
+                        <div className="space-y-2">
+                          <GarmentSlotUpload
+                            label="Detail"
+                            url={garment.detailUrl ?? null}
+                            busy={slotUploading === `${index}:detail`}
+                            onPick={(file) => void uploadGarmentSlot(index, "detail", file)}
+                            onClear={() =>
+                              setGarments((prev) =>
+                                prev.map((item, i) => (i === index ? { ...item, detailUrl: null } : item)),
+                              )
+                            }
+                          />
+                          <GarmentSlotUpload
+                            label="Side"
+                            url={garment.sideUrl ?? null}
+                            busy={slotUploading === `${index}:side`}
+                            onPick={(file) => void uploadGarmentSlot(index, "side", file)}
+                            onClear={() =>
+                              setGarments((prev) =>
+                                prev.map((item, i) => (i === index ? { ...item, sideUrl: null } : item)),
+                              )
+                            }
+                          />
+                        </div>
+                      ) : null}
+
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setExpandedRefs((prev) => {
+                            const next = new Set(prev);
+                            if (next.has(index)) next.delete(index);
+                            else next.add(index);
+                            return next;
+                          })
+                        }
+                        className="text-[10px] uppercase tracking-[0.14em] text-foreground/50 transition-colors hover:text-cyan-200"
+                      >
+                        {expandedRefs.has(index) ? "Hide extra references" : "Add more references"}
                       </button>
                     </div>
                   </div>

@@ -172,3 +172,31 @@ export async function analyzeOutfitSwapSource(
   }
   return data as OutfitSwapAnalysisResult;
 }
+
+/* ------------------------------------------------------------------ *
+ * PHASE 2 — STRUCTURED GARMENT REFERENCES (capture + storage only)
+ * ------------------------------------------------------------------ */
+
+/**
+ * A clothing reference in the Outfit Swap run.
+ *
+ * `url` stays the PRIMARY reference the generation already consumes and always
+ * mirrors `frontUrl`. `backUrl` / `detailUrl` / `sideUrl` are captured and
+ * persisted with the run, but are intentionally NOT wired into the swap or
+ * reconstruction calls yet — orientation-driven reference selection is a later
+ * phase.
+ */
+export type OutfitSwapGarment = {
+  /** Primary reference used by generation today (mirrors `frontUrl`). */
+  url: string;
+  name: string;
+  type: string;
+  label: string;
+  person: string;
+  /** FRONT reference (required) — the garment authority. */
+  frontUrl: string;
+  hasBackDesign: boolean;
+  backUrl: string | null;
+  detailUrl?: string | null;
+  sideUrl?: string | null;
+};
