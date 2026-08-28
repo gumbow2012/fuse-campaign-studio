@@ -72,7 +72,7 @@ function CompactPlanCard({
   const { inherits, items } = planDifferentiators(entry.key);
 
   return (
-    <div className={cn("relative flex flex-col rounded-[1.25rem] border p-4 sm:p-5", accent.shell)}>
+    <div className={cn("relative flex flex-col rounded-[1.35rem] border p-5 sm:p-6", accent.shell)}>
       {tag ? (
         <span className="absolute right-4 top-4 rounded-full border border-white/20 bg-white/10 px-2 py-0.5 font-display text-[9px] font-bold uppercase tracking-[0.18em] text-white">
           {tag}
@@ -85,49 +85,51 @@ function CompactPlanCard({
         </p>
       </div>
 
-      <div className={cn("mt-3 rounded-xl border px-3 py-2.5", accent.block)}>
-        <p className={cn("font-display text-[13px] font-bold", accent.text)}>
+      <div className={cn("mt-4 rounded-xl border px-3.5 py-3", accent.block)}>
+        <p className={cn("font-display text-[14px] font-bold", accent.text)}>
           ✦ {credits > 0 ? `${credits.toLocaleString()} credits/month` : entry.creditsLabel}
         </p>
         {capacity ? (
-          <p className="mt-1 text-[10px] uppercase tracking-[0.16em] text-slate-400" title={MEDIAN_CAMPAIGN_TOOLTIP}>
+          <p className="mt-1.5 text-[10px] uppercase tracking-[0.16em] text-slate-400" title={MEDIAN_CAMPAIGN_TOOLTIP}>
             Typical capacity ·{" "}
             <span className="text-[12.5px] font-semibold normal-case tracking-normal text-white">{capacity}</span>
           </p>
         ) : null}
       </div>
 
-      <p className="mt-3 font-display text-2xl font-bold tracking-[-0.03em] text-white">
+      <p className="mt-5 font-display text-[2rem] font-bold leading-none tracking-[-0.03em] text-white">
         ${offer.effectiveMonthly}
         <span className="ml-1 text-sm font-medium text-slate-400">/mo</span>
       </p>
-      <p className="mt-0.5 text-[11px] text-slate-500">{footnote}</p>
-      <p className="mt-2 text-[13px] font-semibold text-white">{headline}</p>
+      <p className="mt-1.5 text-[11px] text-slate-500">{footnote}</p>
+      <p className="mt-3 text-[13.5px] font-semibold text-white">{headline}</p>
 
       <Button
         onClick={onSelect}
         disabled={ctaLoading}
-        className={cn("mt-3 w-full rounded-full font-semibold", accent.cta)}
+        size="lg"
+        className={cn("mt-4 w-full rounded-full text-[14px] font-semibold", accent.cta)}
       >
         {ctaLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
         {ctaLabel}
       </Button>
 
-      <div className="mt-3 flex-1">
+      <div className="mt-5 flex-1 border-t border-white/10 pt-4">
         {inherits ? (
           <p className="text-[9.5px] font-bold uppercase tracking-[0.18em] text-slate-400">
             Everything in {inherits}, plus:
           </p>
         ) : null}
-        <ul className={cn("space-y-1", inherits && "mt-1.5")}>
+        <ul className={cn("space-y-1.5", inherits && "mt-2")}>
           {items.slice(0, 5).map((item) => (
-            <li key={item} className="flex items-start gap-2 text-[12px] leading-5 text-slate-300">
+            <li key={item} className="flex items-start gap-2 text-[12.5px] leading-5 text-slate-300">
               <Check className={cn("mt-0.5 h-3.5 w-3.5 shrink-0", accent.check)} aria-hidden />
               {item}
             </li>
           ))}
         </ul>
       </div>
+
 
     </div>
   );
@@ -266,6 +268,13 @@ export default function PlanOfferModal() {
     void startPlanCheckout("starter", { returnPath: destination });
   };
 
+  /**
+   * Layout gate: with exactly ONE paid plan on offer this is a focused,
+   * narrow, centered single-offer modal. If more paid plans are ever
+   * rendered here, the wider multi-column layout takes over automatically.
+   */
+  const paidPlans = [STARTER];
+  const singleOffer = paidPlans.length === 1;
 
 
   if (!open) {
@@ -286,16 +295,22 @@ export default function PlanOfferModal() {
           role="dialog"
           aria-modal="true"
           aria-label="Unlock more FUSE"
-          className="relative my-auto w-full max-w-[860px] rounded-[1.75rem] border border-white/10 bg-slate-950/95 p-5 shadow-[0_28px_90px_rgba(0,0,0,0.6)] sm:p-8"
+          className={cn(
+            "relative my-auto w-full rounded-[1.75rem] border border-white/10 bg-slate-950/95 p-6 shadow-[0_28px_90px_rgba(0,0,0,0.6)] sm:p-10",
+            // One paid plan → focused, narrow single-offer layout.
+            // More than one → keep the wider multi-column pricing width.
+            singleOffer ? "max-w-[880px]" : "max-w-[1140px]",
+          )}
         >
           <button
             type="button"
             onClick={close}
             aria-label="Close"
-            className="absolute right-3 top-3 rounded-full p-2 text-slate-400 transition-colors hover:bg-white/5 hover:text-white"
+            className="absolute right-5 top-5 rounded-full p-2 text-slate-400 transition-colors hover:bg-white/5 hover:text-white sm:right-6 sm:top-6"
           >
             <X className="h-4 w-4" />
           </button>
+
 
           {afford ? (
             <div className="py-2">
@@ -336,54 +351,58 @@ export default function PlanOfferModal() {
             </div>
           ) : (
             <>
-              <h2 className="pr-8 font-display text-[1.5rem] font-bold leading-tight tracking-[-0.03em] text-white sm:text-[1.9rem]">
-                UNLOCK MORE FUSE.
-              </h2>
-              <p className="mt-2.5 max-w-[46rem] text-sm leading-6 text-slate-400">
-                Get enough credits to build full campaigns — or continue free with {WELCOME_CREDITS} credits.
-              </p>
+              <div
+                className={cn(
+                  "mx-auto flex w-full flex-col",
+                  singleOffer ? "max-w-[640px] items-stretch" : "max-w-none",
+                )}
+              >
+                <h2 className="pr-8 font-display text-[1.6rem] font-bold leading-[1.1] tracking-[-0.03em] text-white sm:text-[2.05rem]">
+                  UNLOCK MORE FUSE.
+                </h2>
+                <p className="mt-3 text-[13.5px] leading-6 text-slate-400">
+                  Get enough credits to build full campaigns — or continue free with {WELCOME_CREDITS} credits.
+                </p>
 
-              <div className="mt-6 grid gap-3 sm:max-w-md">
-                {/* STARTER — live Stripe checkout */}
-                <CompactPlanCard
-                  entry={STARTER}
-                  icon={Zap}
-                  accent={{
-                    shell: "border-cyan-300/30 bg-cyan-300/[0.06]",
-                    text: "text-cyan-100",
-                    check: "text-cyan-200",
-                    block: "border-cyan-300/25 bg-cyan-300/[0.07]",
-                    cta: "bg-cyan-300 text-slate-950 hover:bg-cyan-200",
-                  }}
-                  headline="Start creating."
-                  footnote="Billed monthly · cancel anytime"
-                  ctaLabel={`Start with ${STARTER.name} →`}
-                  ctaLoading={checkoutLoading === "starter"}
-                  onSelect={handleStarter}
-                />
+                <div className={cn("mt-7", singleOffer ? "grid gap-3" : "grid gap-3 sm:grid-cols-2")}>
+                  {/* STARTER — live Stripe checkout */}
+                  <CompactPlanCard
+                    entry={STARTER}
+                    icon={Zap}
+                    accent={{
+                      shell: "border-cyan-300/30 bg-cyan-300/[0.06]",
+                      text: "text-cyan-100",
+                      check: "text-cyan-200",
+                      block: "border-cyan-300/25 bg-cyan-300/[0.07]",
+                      cta: "bg-cyan-300 text-slate-950 hover:bg-cyan-200",
+                    }}
+                    headline="Start creating."
+                    footnote="Billed monthly · cancel anytime"
+                    ctaLabel={`Start with ${STARTER.name} →`}
+                    ctaLoading={checkoutLoading === "starter"}
+                    onSelect={handleStarter}
+                  />
+                </div>
 
+                <div className="mt-5 text-center">
+                  <button
+                    type="button"
+                    onClick={() => void handleFree()}
+                    disabled={granting}
+                    className="inline-flex items-center gap-1.5 rounded-full px-2 py-1 text-[11.5px] font-normal text-slate-500 transition-colors hover:text-slate-300 disabled:opacity-60"
+                  >
+                    {granting ? <Loader2 className="h-3 w-3 animate-spin" /> : null}
+                    Continue with free — {WELCOME_CREDITS} credits
+                  </button>
+                </div>
               </div>
-
-
-
-              <div className="mt-4 text-center">
-                <button
-                  type="button"
-                  onClick={() => void handleFree()}
-                  disabled={granting}
-                  className="inline-flex items-center gap-1.5 rounded-full px-2 py-1 text-[11.5px] font-normal text-slate-500 transition-colors hover:text-slate-300 disabled:opacity-60"
-                >
-                  {granting ? <Loader2 className="h-3 w-3 animate-spin" /> : null}
-                  Continue with free — {WELCOME_CREDITS} credits
-                </button>
-              </div>
-
             </>
           )}
         </div>
       </div>
 
       <GatedPlanDialog open={gatedOpen} onOpenChange={setGatedOpen} planName={null} />
+
     </>
   );
 }
