@@ -147,33 +147,64 @@ export default function MaddenShotPackPanel({ projectId, state, onApplyPack }: P
       </header>
 
       {/* Pack picker ------------------------------------------------ */}
-      <div className="mt-4 grid gap-2 sm:grid-cols-3">
-        {MADDEN_SHOT_PACKS.map((pack) => {
+      <div className="relative mt-4">
+        <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+        <Input
+          value={packQuery}
+          onChange={(event) => setPackQuery(event.target.value)}
+          placeholder="Search shot packs by name or tag…"
+          className="pl-8"
+          aria-label="Search shot packs"
+        />
+      </div>
+
+      <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+        {visiblePacks.map((pack) => {
           const selected = pack.id === state.settings.shotPackId;
+          const starred = isFavorite(pack.id);
           return (
-            <button
+            <div
               key={pack.id}
-              type="button"
-              onClick={() => onApplyPack(pack)}
-              className={`rounded-xl border p-3 text-left transition-colors ${
+              className={`relative rounded-xl border transition-colors ${
                 selected
                   ? "border-primary/60 bg-primary/5"
                   : "border-border/60 bg-background/40 hover:border-border"
               }`}
             >
-              <div className="flex items-center justify-between gap-2">
-                <p className="text-sm font-medium">{pack.name}</p>
-                <span className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
-                  {pack.shots.length} shots
-                </span>
-              </div>
-              <p className="mt-1 text-[11px] leading-snug text-muted-foreground">
-                {pack.description}
-              </p>
-            </button>
+              <button
+                type="button"
+                onClick={() => onApplyPack(pack)}
+                className="w-full p-3 pr-10 text-left"
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-sm font-medium">{pack.name}</p>
+                  <span className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
+                    {pack.shots.length} shots
+                  </span>
+                </div>
+                <p className="mt-1 text-[11px] leading-snug text-muted-foreground">
+                  {pack.description}
+                </p>
+              </button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="absolute right-1 top-1 h-8 w-8 text-muted-foreground"
+                aria-label={starred ? `Unfavorite ${pack.name}` : `Favorite ${pack.name}`}
+                aria-pressed={starred}
+                onClick={() => toggle(pack.id)}
+              >
+                <Star className={`h-3.5 w-3.5 ${starred ? "fill-primary text-primary" : ""}`} />
+              </Button>
+            </div>
           );
         })}
+        {visiblePacks.length === 0 ? (
+          <p className="text-xs text-muted-foreground">No shot packs match that search.</p>
+        ) : null}
       </div>
+
 
       {activePack ? (
         <p className="mt-3 text-[11px] text-muted-foreground">
