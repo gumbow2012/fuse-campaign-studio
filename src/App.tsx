@@ -379,6 +379,15 @@ const App = () => (
             />
 
             <Route
+              path="/admin/templates/merchandising"
+              element={
+                <AdminRoute>
+                  <AdminMerchandising />
+                </AdminRoute>
+              }
+            />
+
+            <Route
               path="/admin/templates/factory"
               element={
                 <AdminRoute>
@@ -386,6 +395,7 @@ const App = () => (
                 </AdminRoute>
               }
             />
+
 
 
             <Route
