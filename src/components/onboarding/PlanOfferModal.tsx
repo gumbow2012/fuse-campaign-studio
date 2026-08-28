@@ -38,25 +38,95 @@ const NEW_ACCOUNT_WINDOW_MS = 24 * 60 * 60 * 1000;
 const STARTER = PLAN_LADDER.find((entry) => entry.key === "starter")!;
 const CAPSULE = PLAN_LADDER.find((entry) => entry.key === "capsule")!;
 
-const STARTER_BENEFITS = [
-  "Full campaign templates",
-  "Brand Workspace",
-  "Premium image templates",
-  "Saved products + brand assets",
-  "Campaign history",
-  "Credit top-ups",
-];
+/**
+ * Compressed version of the pricing card system (PlanTierCards) so both
+ * surfaces match. Pricing comes ONLY from getPlanOffer — with no active
+ * promotion there is no slash price, no % off and no savings line.
+ */
+function CompactPlanCard({
+  entry,
+  icon: Icon,
+  tag,
+  accent,
+  headline,
+  footnote,
+  ctaLabel,
+  ctaLoading,
+  onSelect,
+}: {
+  entry: PlanLadderEntry;
+  icon: LucideIcon;
+  tag?: string;
+  accent: { shell: string; text: string; check: string; block: string; cta: string };
+  headline: string;
+  footnote: string;
+  ctaLabel: string;
+  ctaLoading?: boolean;
+  onSelect: () => void;
+}) {
+  const offer = getPlanOffer(entry, "monthly", null);
+  const credits = offer.monthlyCredits ?? 0;
+  const campaignRange = approxCampaignRangeLabel(credits);
+  const imageEquivalent = approxImageGenerationsLabel(credits);
+  const modules = planFeatureModules(entry.key).slice(0, 2);
 
-const CAPSULE_BENEFITS = [
-  "Everything in Starter",
-  "More monthly credits",
-  "FUSE Cast",
-  "Higher campaign capacity",
-];
+  return (
+    <div className={cn("relative flex flex-col rounded-[1.25rem] border p-4 sm:p-5", accent.shell)}>
+      {tag ? (
+        <span className="absolute right-4 top-4 rounded-full border border-white/20 bg-white/10 px-2 py-0.5 font-display text-[9px] font-bold uppercase tracking-[0.18em] text-white">
+          {tag}
+        </span>
+      ) : null}
+      <div className="flex items-center gap-2">
+        <Icon className={cn("h-4 w-4", accent.check)} aria-hidden />
+        <p className={cn("font-display text-[11px] font-bold uppercase tracking-[0.22em]", accent.text)}>
+          {entry.name}
+        </p>
+      </div>
 
-function creditsLabel(credits: number | null) {
-  return credits ? `${credits.toLocaleString()} credits/mo` : "";
+      <div className={cn("mt-3 rounded-xl border px-3 py-2.5", accent.block)}>
+        <p className={cn("font-display text-[13px] font-bold", accent.text)}>
+          ✦ {credits > 0 ? `${credits.toLocaleString()} credits/month` : entry.creditsLabel}
+        </p>
+        {campaignRange ? <p className="mt-1 text-[12.5px] font-semibold text-white">{campaignRange}</p> : null}
+        {imageEquivalent ? <p className="mt-0.5 text-[11px] text-slate-400">{imageEquivalent}</p> : null}
+      </div>
+
+      <p className="mt-3 font-display text-2xl font-bold tracking-[-0.03em] text-white">
+        ${offer.effectiveMonthly}
+        <span className="ml-1 text-sm font-medium text-slate-400">/mo</span>
+      </p>
+      <p className="mt-0.5 text-[11px] text-slate-500">{footnote}</p>
+      <p className="mt-2 text-[13px] font-semibold text-white">{headline}</p>
+
+      <Button
+        onClick={onSelect}
+        disabled={ctaLoading}
+        className={cn("mt-3 w-full rounded-full font-semibold", accent.cta)}
+      >
+        {ctaLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+        {ctaLabel}
+      </Button>
+
+      <div className="mt-3 flex-1 space-y-2">
+        {modules.map((module) => (
+          <div key={module.label} className="rounded-xl border border-white/10 bg-white/[0.02] px-2.5 py-2">
+            <p className="text-[9.5px] font-bold uppercase tracking-[0.18em] text-slate-400">{module.label}</p>
+            <ul className="mt-1 space-y-1">
+              {module.items.map((item) => (
+                <li key={item} className="flex items-start gap-2 text-[12px] leading-5 text-slate-300">
+                  <Check className={cn("mt-0.5 h-3.5 w-3.5 shrink-0", accent.check)} aria-hidden />
+                  {item}
+                </li>
+              ))}
+            </ul>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
 }
+
 
 export default function PlanOfferModal() {
   const navigate = useNavigate();
