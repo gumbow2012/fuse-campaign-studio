@@ -148,7 +148,32 @@ export function createEmptyProjectState(): MaddenProjectState {
   };
 }
 
+/** M7: shots gained per-shot fields, so old rows are patched defensively. */
+export function normalizeShots(raw: unknown): MaddenShot[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .filter((entry): entry is Record<string, unknown> => Boolean(entry) && typeof entry === "object")
+    .map((entry, index) => ({
+      id: typeof entry.id === "string" && entry.id ? entry.id : `shot_${index}`,
+      title: typeof entry.title === "string" ? entry.title : `Shot ${index + 1}`,
+      direction: typeof entry.direction === "string" ? entry.direction : "",
+      durationSeconds:
+        typeof entry.durationSeconds === "number" && entry.durationSeconds > 0
+          ? entry.durationSeconds
+          : 5,
+      inheritSlots: Array.isArray(entry.inheritSlots)
+        ? (entry.inheritSlots as unknown[]).filter((kind): kind is MaddenSlotKind =>
+            MADDEN_SLOT_KINDS.includes(kind as MaddenSlotKind),
+          )
+        : [],
+      cinematographyId:
+        typeof entry.cinematographyId === "string" ? entry.cinematographyId : null,
+      packShotKey: typeof entry.packShotKey === "string" ? entry.packShotKey : null,
+    }));
+}
+
 /** Defensively normalises anything read out of the jsonb column. */
+
 export function normalizeProjectState(raw: unknown): MaddenProjectState {
   const base = createEmptyProjectState();
   if (!raw || typeof raw !== "object") return base;
