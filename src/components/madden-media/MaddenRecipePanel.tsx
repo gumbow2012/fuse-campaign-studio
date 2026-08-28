@@ -1,11 +1,21 @@
 /**
- * Madden Media Studio — M5 recipe cards.
+ * Madden Media Studio — M5 recipe cards (M9: search + favorites).
  *
  * Pure structured data + UI: builtin recipes come from code, user recipes from
  * public.madden_recipes. Nothing here generates or spends credits.
  */
 import { useEffect, useMemo, useState } from "react";
-import { AlertCircle, Loader2, Plus, Sliders, Sparkles, Trash2, Wand2 } from "lucide-react";
+import {
+  AlertCircle,
+  Loader2,
+  Plus,
+  Search,
+  Sliders,
+  Sparkles,
+  Star,
+  Trash2,
+  Wand2,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -14,6 +24,7 @@ import {
   describeRecipe,
   type MaddenRecipe,
 } from "@/lib/madden-media/recipes";
+import { partitionFavorites, useMaddenFavorites } from "@/lib/madden-media/favorites";
 import { deleteUserRecipe, listUserRecipes } from "@/services/maddenMediaStudio";
 
 type Props = {
@@ -25,15 +36,29 @@ type Props = {
   refreshKey?: number;
 };
 
+function matchesQuery(recipe: MaddenRecipe, query: string) {
+  const q = query.trim().toLowerCase();
+  if (!q) return true;
+  return (
+    recipe.name.toLowerCase().includes(q) ||
+    recipe.tags.some((tag) => tag.toLowerCase().includes(q))
+  );
+}
+
+
 function RecipeCard({
   recipe,
   disabled,
+  starred,
+  onToggleFavorite,
   onApply,
   onCustomize,
   onDelete,
 }: {
   recipe: MaddenRecipe;
   disabled?: boolean;
+  starred: boolean;
+  onToggleFavorite: () => void;
   onApply: () => void;
   onCustomize: () => void;
   onDelete?: () => void;
@@ -56,21 +81,35 @@ function RecipeCard({
       </div>
 
       <div className="flex flex-1 flex-col gap-2 p-3">
-        <div className="flex items-start justify-between gap-2">
+        <div className="flex items-start justify-between gap-1">
           <h4 className="text-sm font-semibold leading-tight tracking-tight">{recipe.name}</h4>
-          {onDelete ? (
+          <div className="flex shrink-0 items-center">
             <Button
               type="button"
               variant="ghost"
               size="icon"
-              className="h-6 w-6 shrink-0 text-muted-foreground"
-              aria-label={`Delete ${recipe.name}`}
-              onClick={onDelete}
+              className="h-7 w-7 text-muted-foreground"
+              aria-label={starred ? `Unfavorite ${recipe.name}` : `Favorite ${recipe.name}`}
+              aria-pressed={starred}
+              onClick={onToggleFavorite}
             >
-              <Trash2 className="h-3 w-3" />
+              <Star className={`h-3 w-3 ${starred ? "fill-primary text-primary" : ""}`} />
             </Button>
-          ) : null}
+            {onDelete ? (
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7 text-muted-foreground"
+                aria-label={`Delete ${recipe.name}`}
+                onClick={onDelete}
+              >
+                <Trash2 className="h-3 w-3" />
+              </Button>
+            ) : null}
+          </div>
         </div>
+
 
         {parts.length > 0 ? (
           <p className="text-[11px] leading-snug text-muted-foreground">{parts.join(" · ")}</p>
@@ -131,6 +170,8 @@ export default function MaddenRecipePanel({
   const [error, setError] = useState<string | null>(null);
   const [saveName, setSaveName] = useState("");
   const [saving, setSaving] = useState(false);
+  const [query, setQuery] = useState("");
+  const { isFavorite, toggle } = useMaddenFavorites("recipe");
 
   const load = async () => {
     setLoading(true);
@@ -170,6 +211,47 @@ export default function MaddenRecipePanel({
     }
   };
 
+  const allRecipes = useMemo(
+    () => [...MADDEN_BUILTIN_RECIPES, ...userRecipes],
+    [userRecipes],
+  );
+
+  const featured = useMemo(
+    () => MADDEN_FEATURED_RECIPES.filter((recipe) => matchesQuery(recipe, query)),
+    [query],
+  );
+  const builtins = useMemo(
+    () => MADDEN_BUILTIN_RECIPES.filter((recipe) => matchesQuery(recipe, query)),
+    [query],
+  );
+  const mine = useMemo(
+    () => userRecipes.filter((recipe) => matchesQuery(recipe, query)),
+    [userRecipes, query],
+  );
+  const favorites = useMemo(
+    () =>
+      partitionFavorites(allRecipes, (recipe) => isFavorite(recipe.id)).favorites.filter((recipe) =>
+        matchesQuery(recipe, query),
+      ),
+    [allRecipes, isFavorite, query],
+  );
+
+  const card = (recipe: MaddenRecipe, deletable = false) => (
+    <RecipeCard
+      key={recipe.id}
+      recipe={recipe}
+      disabled={disabled}
+      starred={isFavorite(recipe.id)}
+      onToggleFavorite={() => toggle(recipe.id)}
+      onApply={() => onApply(recipe)}
+      onCustomize={() => onCustomize(recipe)}
+      onDelete={deletable ? () => void handleDelete(recipe.id) : undefined}
+    />
+  );
+
+  const groupClass = "mt-2 grid gap-3 sm:grid-cols-2 lg:grid-cols-3";
+  const labelClass = "text-[11px] uppercase tracking-[0.16em] text-muted-foreground";
+
   return (
     <section className="rounded-2xl border border-border/60 bg-card/50 p-4">
       <header>
@@ -180,58 +262,56 @@ export default function MaddenRecipePanel({
         </p>
       </header>
 
-      <div className="mt-4">
-        <p className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">
-          Best-performing
-        </p>
-        <div className="mt-2 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {MADDEN_FEATURED_RECIPES.map((recipe) => (
-            <RecipeCard
-              key={recipe.id}
-              recipe={recipe}
-              disabled={disabled}
-              onApply={() => onApply(recipe)}
-              onCustomize={() => onCustomize(recipe)}
-            />
-          ))}
-        </div>
+      <div className="relative mt-3">
+        <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+        <Input
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          placeholder="Search recipes by name or tag…"
+          className="pl-8"
+          aria-label="Search recipes"
+        />
       </div>
 
-      <div className="mt-6">
-        <p className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">
-          All recipes
-        </p>
-        <div className="mt-2 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {MADDEN_BUILTIN_RECIPES.map((recipe) => (
-            <RecipeCard
-              key={recipe.id}
-              recipe={recipe}
-              disabled={disabled}
-              onApply={() => onApply(recipe)}
-              onCustomize={() => onCustomize(recipe)}
-            />
-          ))}
+      {favorites.length > 0 ? (
+        <div className="mt-4">
+          <p className={labelClass}>Favorites</p>
+          <div className={groupClass}>{favorites.map((recipe) => card(recipe, !recipe.builtin))}</div>
         </div>
+      ) : null}
+
+      {featured.length > 0 ? (
+        <div className="mt-6">
+          <p className={labelClass}>Best-performing</p>
+          <div className={groupClass}>{featured.map((recipe) => card(recipe))}</div>
+        </div>
+      ) : null}
+
+      <div className="mt-6">
+        <p className={labelClass}>All recipes</p>
+        {builtins.length === 0 ? (
+          <p className="mt-2 text-xs text-muted-foreground">No recipes match that search.</p>
+        ) : (
+          <div className={groupClass}>{builtins.map((recipe) => card(recipe))}</div>
+        )}
       </div>
 
       <div className="mt-6">
         <div className="flex flex-wrap items-end justify-between gap-3">
-          <p className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">
-            My recipes
-          </p>
-          <div className="flex items-center gap-2">
+          <p className={labelClass}>My recipes</p>
+          <div className="flex w-full items-center gap-2 sm:w-auto">
             <Input
               value={saveName}
               onChange={(event) => setSaveName(event.target.value)}
               placeholder="Name this look"
-              className="h-8 w-44 text-xs"
+              className="h-8 flex-1 text-xs sm:w-44 sm:flex-none"
               disabled={disabled || saving}
             />
             <Button
               type="button"
               size="sm"
               variant="outline"
-              className="h-8 text-xs"
+              className="h-8 shrink-0 text-xs"
               disabled={disabled || saving || !saveName.trim()}
               onClick={() => void handleSave()}
             >
@@ -266,26 +346,17 @@ export default function MaddenRecipePanel({
               Retry
             </Button>
           </div>
-        ) : userRecipes.length === 0 ? (
+        ) : mine.length === 0 ? (
           <div className="mt-3 rounded-xl border border-dashed border-border/60 p-6 text-center text-xs text-muted-foreground">
-            No saved recipes yet. Dial in your cinematography, lighting and environment, then save
-            the current setup as a recipe.
+            {userRecipes.length === 0
+              ? "No saved recipes yet. Dial in your cinematography, lighting and environment, then save the current setup as a recipe."
+              : "None of your recipes match that search."}
           </div>
         ) : (
-          <div className="mt-2 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {userRecipes.map((recipe) => (
-              <RecipeCard
-                key={recipe.id}
-                recipe={recipe}
-                disabled={disabled}
-                onApply={() => onApply(recipe)}
-                onCustomize={() => onCustomize(recipe)}
-                onDelete={() => void handleDelete(recipe.id)}
-              />
-            ))}
-          </div>
+          <div className={groupClass}>{mine.map((recipe) => card(recipe, true))}</div>
         )}
       </div>
     </section>
   );
 }
+

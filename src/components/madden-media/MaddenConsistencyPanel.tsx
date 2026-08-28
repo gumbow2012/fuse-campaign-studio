@@ -68,6 +68,8 @@ export type ConsistencyPanelProps<C extends string, D extends ConsistencyData<C>
   onSave: () => Promise<void>;
   onUseProfile: (profile: MaddenProfileOf<D>) => void;
   onDeleteProfile: (id: string) => Promise<void>;
+  /** M9: per-category consistency locks only show in Advanced view. */
+  advanced?: boolean;
 };
 
 export default function MaddenConsistencyPanel<C extends string, D extends ConsistencyData<C>>(
@@ -98,6 +100,7 @@ export default function MaddenConsistencyPanel<C extends string, D extends Consi
     onSave,
     onUseProfile,
     onDeleteProfile,
+    advanced = false,
   } = props;
 
   const [uploading, setUploading] = useState(false);
@@ -388,6 +391,7 @@ export default function MaddenConsistencyPanel<C extends string, D extends Consi
         )}
       </div>
 
+      {advanced ? (
       <div className="mt-5 rounded-xl border border-border/60 p-3">
         <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
           Consistency locks
@@ -427,6 +431,7 @@ export default function MaddenConsistencyPanel<C extends string, D extends Consi
           ))}
         </div>
       </div>
+      ) : null}
     </section>
   );
 }

@@ -30,6 +30,7 @@ import type { MaddenSlot } from "@/lib/madden-media/types";
 
 type Props = {
   slot: MaddenSlot;
+  advanced?: boolean;
   onBind: (patch: {
     name?: string;
     profileId?: string | null;
@@ -38,7 +39,7 @@ type Props = {
   }) => void;
 };
 
-export default function MaddenJewelryPanel({ slot, onBind }: Props) {
+export default function MaddenJewelryPanel({ slot, onBind, advanced = false }: Props) {
   const [profiles, setProfiles] = useState<MaddenJewelryProfile[]>([]);
   const [name, setName] = useState(slot.name);
   const [data, setData] = useState<MaddenJewelryProfileData>(() =>
@@ -72,6 +73,7 @@ export default function MaddenJewelryPanel({ slot, onBind }: Props) {
       categoryLabels={MADDEN_JEWELRY_LABELS}
       fields={MADDEN_JEWELRY_FIELDS}
       presentLabel="Worn"
+      advanced={advanced}
       slotLocked={slot.locked}
       slotName={name}
       profileId={slot.profileId ?? null}
