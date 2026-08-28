@@ -584,6 +584,7 @@ async function startGeneration(
         completed_at: new Date().toISOString(),
       })
       .eq("id", inserted.id);
+    await refundStudioCreditsIfNeeded(admin, inserted.id);
     throw error;
   }
 }
