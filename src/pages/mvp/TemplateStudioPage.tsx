@@ -497,6 +497,9 @@ export default function TemplateStudioPage() {
   const [focusedInputKey, setFocusedInputKey] = useState<string | null>(null);
   const slotRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const appliedTemplateParamRef = useRef<string | null>(null);
+  /** Presentation only: brief ring emphasis so a template switch is obvious on desktop. */
+  const [builderJustSwitched, setBuilderJustSwitched] = useState(false);
+
 
 
   const isPrivilegedUser = hasAppAccess;
