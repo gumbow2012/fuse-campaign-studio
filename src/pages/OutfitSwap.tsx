@@ -1972,7 +1972,41 @@ export default function OutfitSwap() {
 
             <SectionCard step={4} title="Review swaps" hint="Approve the frames that will drive the rebuild.">
               {swapEntries.length ? (
+                <div className="mb-3 flex flex-wrap items-center gap-2 rounded-2xl border border-white/10 bg-black/25 px-2.5 py-2">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={qaRunning}
+                    onClick={() => void runVisionQa()}
+                    className="rounded-lg border-white/15 bg-transparent text-[11px]"
+                  >
+                    {qaRunning ? (
+                      <Loader2 size={12} className="animate-spin" />
+                    ) : (
+                      <ShieldCheck size={12} />
+                    )}
+                    {qaRunning ? "Checking…" : "Run quality check"}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={!qaCounts.passed}
+                    onClick={approveAllPassed}
+                    className="rounded-lg border-emerald-300/40 bg-transparent text-[11px] text-emerald-200"
+                  >
+                    <Check size={12} /> Approve all passed
+                    {qaCounts.passed ? ` (${qaCounts.passed})` : ""}
+                  </Button>
+                  <span className="ml-auto flex items-center gap-2 text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
+                    <span className="text-emerald-200">{qaCounts.passed} passed</span>
+                    <span className="text-amber-200">{qaCounts.check} check</span>
+                    {qaCounts.failed ? <span className="text-red-300">{qaCounts.failed} failed</span> : null}
+                  </span>
+                </div>
+              ) : null}
+              {swapEntries.length ? (
                 <div className="grid gap-3 sm:grid-cols-2">
+
                   {swapEntries.map((index) => {
                     const swap = swaps[index];
                     const frame = frames[index];
