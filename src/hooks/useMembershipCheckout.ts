@@ -6,6 +6,7 @@ import { quoteCreditTopUp } from "@/lib/creditPricing";
 import { rememberPendingCheckout, trackEvent } from "@/lib/metaPixel";
 import { rememberPendingCreditTopUp } from "@/components/mvp/CreditTopUpSuccessWatcher";
 import { track } from "@/lib/analytics/track";
+import { getMetaMatchParams } from "@/lib/metaMatch";
 
 type PlanCheckoutOptions = {
   email?: string;
@@ -37,6 +38,7 @@ export function useMembershipCheckout() {
     track("checkout_started", { plan_key: String(tierKey), kind: "subscription" });
 
     setLoading(tierKey);
+    const metaMatch = getMetaMatchParams();
     try {
       const { data, error } = await supabase.functions.invoke("create-checkout", {
         body: {
@@ -46,6 +48,8 @@ export function useMembershipCheckout() {
           templateId: options.templateId,
           templateName: options.templateName,
           returnPath: options.returnPath,
+          fbc: metaMatch.fbc,
+          fbp: metaMatch.fbp,
         },
       });
       if (error) throw error;
@@ -72,9 +76,10 @@ export function useMembershipCheckout() {
     track("checkout_started", { kind: "credits", pack_key: String(packKey) });
 
     setLoading(packKey);
+    const packMatch = getMetaMatchParams();
     try {
       const { data, error } = await supabase.functions.invoke("create-credit-checkout", {
-        body: { packKey },
+        body: { packKey, fbc: packMatch.fbc, fbp: packMatch.fbp },
       });
       if (error) throw error;
       if (!data?.url) throw new Error("Stripe checkout URL not returned.");
@@ -106,9 +111,10 @@ export function useMembershipCheckout() {
     track("checkout_started", { kind: "credits", credits });
 
     setLoading(String(credits));
+    const topUpMatch = getMetaMatchParams();
     try {
       const { data, error } = await supabase.functions.invoke("create-credit-checkout", {
-        body: { credits },
+        body: { credits, fbc: topUpMatch.fbc, fbp: topUpMatch.fbp },
       });
       if (error) throw error;
       if (!data?.url) throw new Error("Stripe checkout URL not returned.");
