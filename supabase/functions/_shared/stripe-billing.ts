@@ -661,7 +661,7 @@ export function createCheckoutHandler(mode: StripeBillingMode) {
       const stripe = createStripeClient(getStripeSecretKey(mode));
       const { data: profile } = await admin
         .from("profiles")
-        .select("stripe_customer_id")
+        .select("stripe_customer_id, stripe_subscription_id, plan, subscription_status")
         .eq("user_id", checkoutIdentity.id)
         .maybeSingle();
 
@@ -678,6 +678,12 @@ export function createCheckoutHandler(mode: StripeBillingMode) {
           .eq("user_id", checkoutIdentity.id);
       }
 
+      // 20% off first month for first-time Starter subscribers only.
+      const hasPriorPaidSubscription = Boolean(profile?.stripe_subscription_id) ||
+        hasActivePaidMembership(profile) ||
+        (typeof profile?.plan === "string" && profile.plan !== "free" && !!profile.plan);
+      const applyStarterWelcomeCoupon = plan.key === "starter" && !hasPriorPaidSubscription;
+
       const origin = req.headers.get("origin") || "https://example.com";
       const session = await stripe.checkout.sessions.create({
         customer: customerId ?? undefined,
@@ -685,7 +691,11 @@ export function createCheckoutHandler(mode: StripeBillingMode) {
         client_reference_id: checkoutIdentity.id,
         line_items: [{ price: plan.priceId, quantity: 1 }],
         mode: "subscription",
-        allow_promotion_codes: true,
+        // Stripe rejects discounts + allow_promotion_codes together.
+        ...(applyStarterWelcomeCoupon
+          ? { discounts: [{ coupon: STARTER_WELCOME_COUPON_ID }] }
+          : { allow_promotion_codes: true }),
+
         metadata: {
           user_id: checkoutIdentity.id,
           plan_key: plan.key,
