@@ -335,82 +335,8 @@ export default function TemplateInputCard({
         </div>
       ) : null}
 
-      {/* ONE action → compact source menu. Sources are never permanently rendered. */}
-      <Dialog open={addOpen} onOpenChange={setAddOpen}>
-        <DialogContent className="max-w-sm border-white/10 bg-slate-950/95 text-white">
-          <DialogHeader>
-            <DialogTitle className="font-display text-xl tracking-[-0.02em]">{heading}</DialogTitle>
-            <DialogDescription className="text-slate-400">
-              Choose where this asset comes from.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-2">
-            {availableSources.map((source) => {
-              const Icon = SOURCE_ICONS[source.kind];
-              return (
-                <button
-                  key={`${source.kind}-${source.label}`}
-                  type="button"
-                  onClick={() => handleSource(source.kind)}
-                  className="flex w-full items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3 text-left transition hover:border-cyan-200/45 hover:bg-cyan-300/[0.05] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300/60"
-                >
-                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-white/10 text-cyan-100">
-                    <Icon className="h-4 w-4" />
-                  </span>
-                  <span className="min-w-0">
-                    <span className="block truncate text-sm font-semibold text-white">{source.label}</span>
-                    {source.hint ? (
-                      <span className="block truncate text-[11px] text-slate-400">{source.hint}</span>
-                    ) : null}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-        </DialogContent>
-      </Dialog>
+      {pickers}
 
-      {/* Existing pickers, opened on demand — same handlers as before. */}
-      {onLibrarySelect ? (
-        <>
-          <LibraryPickerDialog
-            trigger={null}
-            open={libraryOpen}
-            onOpenChange={setLibraryOpen}
-            kinds={requirement?.assetType ? [libraryKindForAssetType(requirement.assetType)] : []}
-            onSelect={(asset) => onLibrarySelect({ url: asset.url, name: asset.name })}
-          />
-          <ProfileAssetPicker
-            trigger={null}
-            open={profileOpen}
-            onOpenChange={setProfileOpen}
-            assetType={requirement?.assetType}
-            onSelect={onLibrarySelect}
-          />
-        </>
-      ) : null}
-
-      {castPanel ? (
-        <Dialog open={castOpen} onOpenChange={setCastOpen}>
-          <DialogContent className="max-w-2xl border-white/10 bg-slate-950/95 text-white">
-            <DialogHeader>
-              <DialogTitle className="font-display text-xl tracking-[-0.02em]">FUSE Cast</DialogTitle>
-              <DialogDescription className="text-slate-400">
-                Pick who appears in this campaign.
-              </DialogDescription>
-            </DialogHeader>
-            <div className="max-h-[60vh] overflow-y-auto pr-1">{castPanel}</div>
-          </DialogContent>
-        </Dialog>
-      ) : null}
-
-      <input
-        ref={inputRef}
-        type="file"
-        accept="image/*"
-        className="hidden"
-        onChange={(event) => onFileChange(event.target.files?.[0] ?? null)}
-      />
     </div>
   );
 }
