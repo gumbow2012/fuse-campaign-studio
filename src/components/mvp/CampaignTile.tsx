@@ -241,8 +241,8 @@ export default function CampaignTile({
           </button>
         ) : null}
       </div>
+    </div>
 
-      {overlay ? <div className="relative">{overlay}</div> : null}
     </div>
   );
 }
