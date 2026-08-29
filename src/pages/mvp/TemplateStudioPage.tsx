@@ -2657,7 +2657,90 @@ export default function TemplateStudioPage() {
                   return Date.now() - created < 21 * 24 * 60 * 60 * 1000;
                 })();
 
+                /* DESKTOP (lg+) — previous dense marketplace card. */
+                if (!isCompactLayout) {
+                  return (
+                    <div
+                      key={template.id}
+                      role="button"
+                      tabIndex={0}
+                      aria-label={`Open ${template.name}`}
+                      aria-pressed={selectMode ? batchSelected : undefined}
+                      onClick={() => {
+                        if (selectMode) {
+                          toggleBatchSelection(template.id);
+                          return;
+                        }
+                        track("campaign_select", { template_id: template.id });
+                        track("campaign_builder_open", { template_id: template.id });
+                        handleTemplateSelect(template.id);
+                      }}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter" || event.key === " ") {
+                          event.preventDefault();
+                          if (selectMode) toggleBatchSelection(template.id);
+                          else handleTemplateSelect(template.id);
+                        }
+                      }}
+                      className={cn(
+                        "group relative cursor-pointer overflow-hidden rounded-[0.9rem] bg-black text-left transition-shadow focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300",
+                        (selectMode ? batchSelected : selected)
+                          ? "ring-1 ring-cyan-300 shadow-[0_0_24px_-4px_rgba(34,211,238,0.55)]"
+                          : "ring-1 ring-white/10 hover:ring-white/25",
+                      )}
+                    >
+                      <TemplateVibeMedia
+                        template={template}
+                        className={cn(
+                          "w-full object-cover transition-transform duration-500 group-hover:scale-[1.03] motion-reduce:transition-none",
+                          feedTileAspect(String(template.id)),
+                        )}
+                      />
+                      <span className="pointer-events-none absolute inset-x-0 bottom-0 h-1/3 bg-gradient-to-t from-black/85 to-transparent" />
+                      <p className="pointer-events-none absolute bottom-2 left-2.5 right-8 line-clamp-2 font-display text-[11px] font-bold uppercase leading-[1.15] tracking-[0.1em] text-white drop-shadow-[0_1px_6px_rgba(0,0,0,0.9)] sm:text-[12px] sm:tracking-[0.12em]">
+                        {campaignDisplayName(template.name)}
+                      </p>
+
+                      {canFavorite && !selectMode ? (
+                        <FavoriteTemplateButton
+                          favorite={isFavorite(String(template.id))}
+                          onToggle={() => toggleFavorite(String(template.id))}
+                          className="absolute right-1.5 top-1.5"
+                        />
+                      ) : null}
+
+                      {selectMode ? (
+                        <span
+                          aria-hidden="true"
+                          className={cn(
+                            "absolute right-1.5 top-1.5 flex h-7 w-7 items-center justify-center rounded-full border backdrop-blur",
+                            batchSelected
+                              ? "border-cyan-300 bg-cyan-300 text-slate-950"
+                              : "border-white/25 bg-black/55 text-transparent",
+                          )}
+                        >
+                          <Check className="h-4 w-4" />
+                        </span>
+                      ) : (
+                        <button
+                          type="button"
+                          aria-label={`Details for ${template.name}`}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            track("template_view", { template_id: template.id });
+                            setDetailTemplateId(template.id);
+                          }}
+                          className="absolute bottom-1.5 right-1.5 flex h-6 w-6 items-center justify-center rounded-full border border-white/20 bg-black/60 text-white/85 backdrop-blur transition-colors hover:bg-black/85"
+                        >
+                          <Info className="h-3.5 w-3.5" />
+                        </button>
+                      )}
+                    </div>
+                  );
+                }
+
                 return (
+
                   <CampaignFeedCard
                     key={template.id}
                     templateId={String(template.id)}
