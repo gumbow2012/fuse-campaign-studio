@@ -2635,14 +2635,14 @@ export default function TemplateStudioPage() {
 
             {/* RESPONSIVE SEPARATION — <lg keeps the immersive single-dominant
                 feed (inline builder expands beneath the selected card's measured
-                row); lg+ restores the previous dense multi-column marketplace
-                grid beside the desktop runner. Same data + state either way. */}
+                row); lg+ restores the previous compact marketplace grid (3 per
+                row) beside the desktop runner. Same data + state either way. */}
             <div
               className={cn(
                 "mt-4 grid items-start sm:mt-5",
                 isCompactLayout
                   ? "grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-5"
-                  : "grid-cols-2 gap-2.5 sm:grid-cols-3 sm:gap-3 lg:grid-cols-4 xl:grid-cols-4 2xl:grid-cols-5",
+                  : "grid-cols-2 gap-3 sm:grid-cols-2 sm:gap-4 lg:grid-cols-3 lg:gap-4",
               )}
             >
 
