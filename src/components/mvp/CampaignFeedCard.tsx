@@ -175,7 +175,7 @@ export default function CampaignFeedCard({
         aria-pressed={selected}
         className="block w-full text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300"
       >
-        <div className="relative aspect-[4/5] w-full sm:aspect-[3/4] lg:aspect-[4/5]">
+        <div className="relative h-[66vh] min-h-[380px] max-h-[760px] w-full lg:h-auto lg:max-h-none lg:min-h-0 lg:aspect-[4/5]">
           <FeedMedia
             mediaKey={templateId}
             url={previewUrl}
