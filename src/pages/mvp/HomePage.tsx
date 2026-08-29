@@ -31,9 +31,10 @@ import {
   type TemplatePerformanceRow,
 } from "@/services/templatePerformance";
 import { PerformanceBlock, PerformanceDisclaimer } from "@/components/TemplatePerformance";
-import { formatCampaignOutputsLong } from "@/lib/campaignOutputs";
 import HeroWorkflowAnimation from "@/components/mvp/HeroWorkflowAnimation";
+import NewDropsShelf from "@/components/mvp/NewDropsShelf";
 import PromoOfferBar from "@/components/mvp/PromoOfferBar";
+
 import { track } from "@/lib/analytics/track";
 
 
@@ -729,17 +730,9 @@ export default function HomePage() {
 
 
 
-      {/* 1.4 · NEW DROPS — first shelf after the hero, hidden when empty */}
-      <Shelf
-        id="new-today"
-        label="New Drops"
-        heading="Just dropped"
-        description="The newest campaigns ready to run."
-        entries={newToday}
-        perfMap={perfMap}
-        runsMap={popularity}
-        badge={{ tone: "new", label: "New" }}
-      />
+      {/* 1.4 · NEW DROPS — video-first shelf flowing out of the hero, hidden when empty */}
+      <NewDropsShelf entries={newToday} />
+
 
       {/* 1.5 · TRENDING */}
       <Shelf
