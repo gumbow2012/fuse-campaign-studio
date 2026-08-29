@@ -721,8 +721,8 @@ export default function HomePage() {
                 </div>
                 <div className="mx-auto mt-4 max-w-[420px] space-y-2">
                   <div className="mx-auto h-4 w-40 animate-pulse rounded-full bg-white/[0.06]" />
-                  <div className="mx-auto h-9 w-44 animate-pulse rounded-full bg-white/[0.06]" />
                 </div>
+
               </div>
             ) : original ? (
               <div>
