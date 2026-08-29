@@ -506,6 +506,47 @@ export default function TemplateStudioPage() {
   /** Presentation only: brief ring emphasis so a template switch is obvious on desktop. */
   const [builderJustSwitched, setBuilderJustSwitched] = useState(false);
 
+  /*
+   * MOBILE / TABLET (<lg) inline builder placement.
+   * `gridColumns` mirrors the rendered grid (2 cols <640px, 3 cols at sm) so the
+   * inline builder can be injected right after the selected card's ACTUAL row.
+   * `isCompactLayout` is true below the lg breakpoint, where the desktop
+   * side-by-side builder is not rendered at all (one instance at a time).
+   */
+  const [gridColumns, setGridColumns] = useState(2);
+  const [isCompactLayout, setIsCompactLayout] = useState(false);
+  const inlineBuilderRef = useRef<HTMLDivElement | null>(null);
+  /** Session cache of pending local inputs per campaign (no upload, no spend). */
+  const inputDraftsRef = useRef<
+    Record<
+      string,
+      {
+        files: Record<string, File | null>;
+        libraryAssets: Record<string, { url: string; name?: string | null } | null>;
+        textInputs: Record<string, string>;
+        castSelection: CastSelection;
+        anonUploads: Record<string, { status: "uploading" | "ready" | "error"; url?: string; error?: string }>;
+      }
+    >
+  >({});
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const compact = window.matchMedia("(max-width: 1023.98px)");
+    const threeCols = window.matchMedia("(min-width: 640px)");
+    const sync = () => {
+      setIsCompactLayout(compact.matches);
+      setGridColumns(threeCols.matches ? 3 : 2);
+    };
+    sync();
+    compact.addEventListener("change", sync);
+    threeCols.addEventListener("change", sync);
+    return () => {
+      compact.removeEventListener("change", sync);
+      threeCols.removeEventListener("change", sync);
+    };
+  }, []);
+
 
 
   const isPrivilegedUser = hasAppAccess;
