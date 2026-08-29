@@ -2693,7 +2693,9 @@ export default function TemplateStudioPage() {
           <aside
             className={cn(
               "space-y-6",
-              hasActiveCampaignWorkspace ? "order-2 xl:order-1" : "xl:sticky xl:top-24 xl:self-start",
+              // Below lg the builder lives inline in the grid, so the desktop
+              // column is not rendered at all — exactly one active instance.
+              hasActiveCampaignWorkspace ? "order-2 xl:order-1" : "hidden lg:block xl:sticky xl:top-24 xl:self-start",
             )}
           >
             {/* Post-run: the setup panel collapses into a compact summary. */}
