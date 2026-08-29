@@ -2190,7 +2190,7 @@ export default function TemplateStudioPage() {
                         else handleTemplateSelect(template.id);
                       }
                     }}
-                    className={`group cursor-pointer overflow-hidden rounded-[1.5rem] border text-left transition-colors ${
+                    className={`group cursor-pointer overflow-hidden rounded-[1rem] border text-left transition-colors sm:rounded-[1.5rem] ${
                       selectMode && batchSelected
                         ? "border-cyan-300 bg-cyan-300/10 ring-2 ring-cyan-300/40"
                         : selected && !selectMode
