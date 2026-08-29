@@ -81,8 +81,13 @@ function TileMedia({ entry, eager, reduced }: { entry: Entry; eager: boolean; re
   );
 }
 
+const STRIP_CLASS =
+  "flex items-start justify-center gap-2.5 overflow-x-auto px-1 sm:gap-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden";
+const SQUARE_CLASS =
+  "block h-[88px] w-[88px] shrink-0 overflow-hidden rounded-[0.7rem] bg-black sm:h-[104px] sm:w-[104px] lg:h-[128px] lg:w-[128px]";
+
 function TileSkeleton() {
-  return <div className="aspect-square w-full animate-pulse rounded-[0.9rem] bg-white/[0.06]" />;
+  return <div className={cn(SQUARE_CLASS, "animate-pulse bg-white/[0.06]")} />;
 }
 
 export default function HeroCampaignTiles({
@@ -138,7 +143,7 @@ export default function HeroCampaignTiles({
   if (!tiles.length) {
     if (!loading) return null;
     return (
-      <div className={cn("grid grid-cols-2 gap-2.5 lg:grid-cols-4 lg:gap-4", className)}>
+      <div className={cn(STRIP_CLASS, className)}>
         <TileSkeleton />
         <TileSkeleton />
         <TileSkeleton />
@@ -150,7 +155,7 @@ export default function HeroCampaignTiles({
   return (
     <div
       ref={wrapRef}
-      className={cn("grid grid-cols-2 gap-2.5 lg:grid-cols-4 lg:gap-4", className)}
+      className={cn(STRIP_CLASS, className)}
     >
       {tiles.map((entry, index) => {
         const templateId = String(entry.template.id ?? "");
@@ -163,18 +168,21 @@ export default function HeroCampaignTiles({
               track("homepage_campaign_preview_click", { template_id: templateId, slot: index })
             }
             aria-label={`Open ${entry.template.name}`}
-            className="group relative block aspect-square overflow-hidden rounded-[0.9rem] bg-black focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300 focus-visible:ring-offset-2 focus-visible:ring-offset-background lg:rounded-[1.1rem]"
+            className="group shrink-0 focus-visible:outline-none"
           >
-            <div className="absolute inset-0 transition-transform duration-500 group-hover:scale-[1.04] motion-reduce:transition-none motion-reduce:group-hover:scale-100">
+            <div
+              className={cn(
+                SQUARE_CLASS,
+                "ring-1 ring-white/10 transition-transform duration-300 group-hover:scale-[1.03] group-focus-visible:ring-2 group-focus-visible:ring-cyan-300 motion-reduce:transition-none motion-reduce:group-hover:scale-100",
+              )}
+            >
               <TileMedia entry={entry} eager={index < 2} reduced={reduced} />
             </div>
-            <span className="pointer-events-none absolute inset-x-0 bottom-0 h-1/3 bg-gradient-to-t from-black/80 to-transparent" />
-            <span className="pointer-events-none absolute bottom-2 left-2.5 font-display text-[11px] font-bold uppercase tracking-[0.14em] text-white drop-shadow-[0_1px_6px_rgba(0,0,0,0.9)] lg:bottom-3 lg:left-3.5 lg:text-[13px]">
+            <span className="mt-1.5 block max-w-[88px] text-center font-sans text-[9.5px] font-bold uppercase leading-[1.15] tracking-[0.12em] text-slate-400 group-hover:text-white sm:max-w-[104px] sm:text-[10px] lg:max-w-[128px] lg:text-[11px]">
               {label}
             </span>
           </Link>
         );
       })}
-    </div>
   );
 }
