@@ -34,7 +34,9 @@ const PRIOR_PAID_STATUSES = new Set([
  */
 export function isStarterWelcomeOfferEligible(membership: MembershipLike): boolean {
   if (!membership) return true;
+  if ((membership.stripeSubscriptionId ?? "").trim()) return false;
   const plan = (membership.plan ?? "").trim().toLowerCase();
+
   if (plan && plan !== "free") return false;
   const status = (membership.subscriptionStatus ?? "").trim().toLowerCase();
   if (status && PRIOR_PAID_STATUSES.has(status)) return false;
