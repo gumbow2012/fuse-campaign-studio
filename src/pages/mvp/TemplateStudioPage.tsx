@@ -1870,16 +1870,17 @@ export default function TemplateStudioPage() {
             <p className="text-[11px] font-semibold uppercase tracking-[0.3em] text-cyan-100">
               {isPublicTemplateBrowser ? "Campaign Builder" : "Post-Purchase Studio"}
             </p>
-            <h1 className="mt-3 font-display text-2xl font-bold leading-tight text-white sm:text-4xl">
+            <h1 className="mt-2 font-display text-xl font-bold leading-tight text-white sm:mt-3 sm:text-4xl">
               {isPublicTemplateBrowser
                 ? "Build your campaign. No account needed yet."
                 : "Your template is ready. Upload your assets."}
             </h1>
-            <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-300 md:text-base">
+            <p className="mt-1.5 max-w-2xl text-[13px] leading-5 text-slate-300 sm:mt-3 sm:text-sm sm:leading-6 md:text-base">
               {isPublicTemplateBrowser
                 ? "Pick a template, add your assets and set up the run — you only sign in when you generate."
                 : "The selected workflow is loaded. Add the required assets, confirm the run cost, and generate campaign videos."}
             </p>
+
           </div>
           {isPublicTemplateBrowser ? (
             <div className="rounded-[1.5rem] border border-emerald-300/20 bg-emerald-300/[0.08] px-5 py-4 text-sm leading-6 text-emerald-50">
