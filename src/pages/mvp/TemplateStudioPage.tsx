@@ -774,6 +774,24 @@ export default function TemplateStudioPage() {
     }
   }, [searchParams, templates]);
 
+  /*
+   * Deep link (?template=<name>) on mobile/tablet: the grid renders, the card is
+   * selected, the inline builder mounts under its actual row — and only THEN do
+   * we make a small position adjustment, once columns/dimensions are known.
+   * UTM params in the URL are untouched.
+   */
+  const deepLinkRevealedRef = useRef(false);
+  useEffect(() => {
+    if (deepLinkRevealedRef.current) return;
+    if (!isCompactLayout || !templates.length) return;
+    if (!searchParams.get("template") || !selectedTemplateId) return;
+    deepLinkRevealedRef.current = true;
+    const timer = window.setTimeout(() => revealInlineBuilder(), 120);
+    return () => window.clearTimeout(timer);
+  }, [isCompactLayout, searchParams, selectedTemplateId, templates.length]);
+
+
+
 
   useEffect(() => {
     if (!templates.length) return;
