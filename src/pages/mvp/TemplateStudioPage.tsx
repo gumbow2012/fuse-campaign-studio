@@ -1955,11 +1955,23 @@ export default function TemplateStudioPage() {
         const latestHasActiveMembership = latestStatus === "active" || latestStatus === "trialing";
 
         if (latestBalance < creditsRequired) {
+          track("no_plan_generate_attempt", {
+            template_id: String(selectedTemplate.id),
+            credits_required: creditsRequired,
+            credit_balance: latestBalance,
+            has_paid_plan: latestHasActiveMembership,
+          });
           setPaywallOpen(true);
           return;
         }
 
         if (!latestHasActiveMembership && latestBalance <= 0) {
+          track("no_plan_generate_attempt", {
+            template_id: String(selectedTemplate.id),
+            credits_required: creditsRequired,
+            credit_balance: latestBalance,
+            has_paid_plan: false,
+          });
           setPaywallOpen(true);
           return;
         }
