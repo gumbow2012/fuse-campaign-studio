@@ -137,7 +137,13 @@ function extractSubscriptionPeriod(subscription: StripeObject) {
  * checkout must return into the APP — never to /auth (which would show the
  * account-creation UI to a user who already has a session).
  */
+export async function sha256Hex(value: string) {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
+  return Array.from(new Uint8Array(digest)).map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
 export function sanitizeReturnPath(raw: unknown): string | null {
+
   if (typeof raw !== "string") return null;
   const value = raw.trim();
   if (!value.startsWith("/")) return null;
