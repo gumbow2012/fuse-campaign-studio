@@ -643,7 +643,7 @@ export default function HomePage() {
           <div className="min-w-0">
             <h1
               className="font-display font-bold uppercase text-white"
-              style={{ fontSize: "clamp(38px, 6.6vw, 86px)", lineHeight: 0.97, letterSpacing: "-0.02em" }}
+              style={{ fontSize: "clamp(38px, 5.6vw, 72px)", lineHeight: 0.97, letterSpacing: "-0.02em" }}
             >
               One-click campaign
               <br />

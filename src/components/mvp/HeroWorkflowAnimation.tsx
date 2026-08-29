@@ -228,10 +228,10 @@ export default function HeroWorkflowAnimation({ compact = false }: { compact?: b
 
           {/* stage labels */}
           <g fontSize="7.5" fontWeight="600" letterSpacing="1.1" fill="rgba(203,213,225,0.75)">
-            <text x={46} y={148} textAnchor="middle">PRODUCTS</text>
+            <text x={4} y={148} textAnchor="start">PRODUCTS</text>
             <text x={149} y={148} textAnchor="middle">CAMPAIGN IMAGES</text>
             <text x={245} y={148} textAnchor="middle">VIDEO CLIPS</text>
-            <text x={330} y={148} textAnchor="middle">FINAL CAMPAIGN</text>
+            <text x={358} y={148} textAnchor="end">FINAL CAMPAIGN</text>
           </g>
         </svg>
 
