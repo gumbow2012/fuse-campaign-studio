@@ -281,7 +281,7 @@ export default function SiteShell({ children }: { children: ReactNode }) {
                       <>
                         <Button asChild className={cn("min-h-11 w-full rounded-full bg-cyan-300 text-slate-950 hover:bg-cyan-200", focusRing)}>
                           <Link to="/auth?mode=signup" onClick={closeMenu}>
-                            Sign up
+                            Try FUSE
                           </Link>
                         </Button>
                         <Button
