@@ -140,25 +140,20 @@ export default function NewDropsShelf({
   if (!rail.length) return null;
 
   return (
-    <section id="new-today" className="container pb-10 pt-4 sm:pt-6">
-      <div className="flex items-end justify-between gap-3">
-        <div>
-          <p className="text-[10.5px] font-bold uppercase tracking-[0.28em] text-cyan-200">Just dropped</p>
-          <h2 className="mt-1.5 font-display text-xl font-semibold uppercase tracking-[0.04em] text-white sm:text-2xl">
-            New drops
-          </h2>
-          <p className="mt-1.5 text-[12.5px] font-medium text-slate-300">
-            The newest campaigns ready to run.
-          </p>
-        </div>
+    <section id="new-today" className="container pb-8 pt-4 sm:pt-6">
+      <div className="flex items-center justify-between gap-3">
+        <h2 className="font-display text-lg font-bold uppercase tracking-[0.06em] text-white sm:text-xl">
+          New drops
+        </h2>
         <Link
           to="/app/templates"
           className="flex shrink-0 items-center gap-1 text-[11.5px] font-bold uppercase tracking-[0.16em] text-cyan-200 transition-colors hover:text-white"
         >
-          View all
+          Browse all
           <ArrowRight className="h-3.5 w-3.5" />
         </Link>
       </div>
+
 
       <div className="-mx-4 mt-4 flex snap-x snap-mandatory gap-3.5 overflow-x-auto px-4 pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:-mx-6 sm:px-6">
         {rail.map(({ entry, isNew }, index) => (
