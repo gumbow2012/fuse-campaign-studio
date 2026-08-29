@@ -31,9 +31,8 @@ import {
   type TemplatePerformanceRow,
 } from "@/services/templatePerformance";
 import { PerformanceBlock, PerformanceDisclaimer } from "@/components/TemplatePerformance";
-import HeroWorkflowAnimation from "@/components/mvp/HeroWorkflowAnimation";
+import HeroCampaignTiles from "@/components/mvp/HeroCampaignTiles";
 import NewDropsShelf from "@/components/mvp/NewDropsShelf";
-import PromoOfferBar from "@/components/mvp/PromoOfferBar";
 
 import { track } from "@/lib/analytics/track";
 
@@ -505,6 +504,20 @@ export default function HomePage() {
 
 
   /** Every entry already claimed by the allocator — perf shelves reuse these only. */
+  /** Hero previews: newest drops first, then trending, then any live campaign. */
+  const heroTiles = useMemo<Entry[]>(() => {
+    const seen = new Set<string>();
+    const rows: Entry[] = [];
+    for (const entry of [...newToday, ...trending, ...creatorDrops, ...mediaWall]) {
+      const key = String(entry.template.id ?? entry.template.name ?? "").trim().toLowerCase();
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
+      rows.push(entry);
+      if (rows.length >= 8) break;
+    }
+    return rows;
+  }, [newToday, trending, creatorDrops, mediaWall]);
+
   const allocatedEntries = useMemo(
     () => [
       ...heroPair,
