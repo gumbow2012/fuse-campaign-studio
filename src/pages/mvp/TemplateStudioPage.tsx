@@ -62,6 +62,8 @@ import { trackEvent } from "@/lib/metaPixel";
 import { track } from "@/lib/analytics/track";
 import GenerateAuthGateModal from "@/components/auth/GenerateAuthGateModal";
 import GeneratePaywallModal from "@/components/mvp/GeneratePaywallModal";
+import PlanActivationNotice from "@/components/mvp/PlanActivationNotice";
+
 import {
   clearPendingGenerationIntent,
   getPendingGenerationIntent,
