@@ -505,19 +505,45 @@ export default function HomePage() {
 
 
   /** Every entry already claimed by the allocator — perf shelves reuse these only. */
-  /** Hero previews: newest drops first, then trending, then any live campaign. */
+  /** Hero strip: pinned to four campaigns, falling back to allocator entries. */
   const heroTiles = useMemo<Entry[]>(() => {
-    const seen = new Set<string>();
-    const rows: Entry[] = [];
+    const pool: Entry[] = [];
+    const seenPool = new Set<string>();
     for (const entry of [...newToday, ...trending, ...creatorDrops, ...categories.flatMap((shelf) => shelf.entries)]) {
       const key = String(entry.template.id ?? entry.template.name ?? "").trim().toLowerCase();
-      if (!key || seen.has(key)) continue;
-      seen.add(key);
-      rows.push(entry);
-      if (rows.length >= 8) break;
+      if (!key || seenPool.has(key)) continue;
+      seenPool.add(key);
+      pool.push(entry);
+    }
+
+    const findByName = (needle: string): Entry | null => {
+      const template = templates.find((candidate) => {
+        const name = String(candidate.name ?? "").trim().toLowerCase();
+        return name === needle || name.includes(needle);
+      });
+      if (!template) return null;
+      const media = resolveMedia(template);
+      return media ? ({ template, media } as Entry) : null;
+    };
+
+    const pinned = ["airport tray", "warehouse", "spider man", "grillzzzz"];
+    const rows: Entry[] = [];
+    const used = new Set<string>();
+    const keyOf = (entry: Entry) =>
+      String(entry.template.id ?? entry.template.name ?? "").trim().toLowerCase();
+
+    for (const needle of pinned) {
+      const match = findByName(needle);
+      const chosen = match && !used.has(keyOf(match))
+        ? match
+        : pool.find((entry) => !used.has(keyOf(entry))) ?? null;
+      if (!chosen) continue;
+      used.add(keyOf(chosen));
+      rows.push(chosen);
     }
     return rows;
-  }, [newToday, trending, creatorDrops, categories]);
+  }, [templates, newToday, trending, creatorDrops, categories]);
+
 
   const allocatedEntries = useMemo(
     () => [
