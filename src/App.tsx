@@ -90,9 +90,17 @@ function BrandActivationReminders() {
   return null;
 }
 
+function UtmCapture() {
+  useEffect(() => {
+    captureUtmParams();
+  }, []);
+  return null;
+}
+
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <AuthProvider>
+
       <BrandProvider>
       <StreakProvider>
       <TooltipProvider>
