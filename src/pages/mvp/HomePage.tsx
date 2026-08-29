@@ -338,6 +338,12 @@ type MerchandisedShelf = {
 /* ---------------------------------- page ---------------------------------- */
 
 
+/** Hero showcase is pinned to the curated gif so it never varies with preview_url. */
+function curatedHeroMedia(entry: Entry): TemplateMedia {
+  const gif = CURATED_PREVIEW_GIFS.find((item) => item.match.test(entry.template.name))?.src;
+  return gif ? { url: gif, type: "image" } : entry.media;
+}
+
 export default function HomePage() {
   const { user, isCreator, isAdmin } = useAuth();
 
