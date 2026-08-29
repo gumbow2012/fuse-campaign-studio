@@ -219,8 +219,8 @@ export default function HeroWorkflowAnimation({ compact = false }: { compact?: b
           />
 
           {/* stage labels */}
-          <g fontSize="6.6" fontWeight="600" letterSpacing="0.7" fill="rgba(203,213,225,0.75)">
-            <text x={2} y={155} textAnchor="start">PRODUCTS</text>
+          <g fontSize="6.6" fontWeight="700" letterSpacing="0.7" fill="rgba(226,232,240,0.92)">
+            <text x={2} y={155} textAnchor="start">YOUR PRODUCTS</text>
             <text x={145} y={155} textAnchor="middle">CAMPAIGN IMAGES</text>
             <text x={241} y={155} textAnchor="middle">VIDEO CLIPS</text>
             <text x={358} y={155} textAnchor="end">FINAL</text>
