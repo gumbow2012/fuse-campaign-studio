@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { ArrowRight, Check, ChevronDown, Sparkle } from "lucide-react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import GatedPlanDialog from "@/components/mvp/membership/GatedPlanDialog";
 import PlanComparisonMatrix from "@/components/mvp/membership/PlanComparisonMatrix";
