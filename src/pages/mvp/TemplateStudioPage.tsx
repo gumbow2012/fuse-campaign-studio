@@ -2433,7 +2433,9 @@ export default function TemplateStudioPage() {
             ) : null}
 
             <div className="mt-4 grid grid-cols-2 gap-3 sm:mt-5 sm:grid-cols-3 sm:gap-4 lg:grid-cols-3">
-              {visibleTemplates.map((template) => {
+              {templateRows.map((row, rowIndex) => (
+                <Fragment key={`template-row-${rowIndex}`}>
+                  {row.map((template) => {
                 const selected = template.id === selectedTemplateId;
                 const batchSelected = batchSelection.includes(template.id);
                 const credits = template.estimated_credits_per_run || 0;
