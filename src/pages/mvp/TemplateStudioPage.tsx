@@ -2633,10 +2633,19 @@ export default function TemplateStudioPage() {
               </div>
             ) : null}
 
-            {/* Immersive content feed: ONE dominant card per row on mobile, two
-                large editorial columns from sm up. The inline builder still
-                expands directly beneath the selected card's measured row. */}
-            <div className="mt-4 grid grid-cols-1 items-start gap-4 sm:mt-5 sm:grid-cols-2 sm:gap-5">
+            {/* RESPONSIVE SEPARATION — <lg keeps the immersive single-dominant
+                feed (inline builder expands beneath the selected card's measured
+                row); lg+ restores the previous dense multi-column marketplace
+                grid beside the desktop runner. Same data + state either way. */}
+            <div
+              className={cn(
+                "mt-4 grid items-start sm:mt-5",
+                isCompactLayout
+                  ? "grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-5"
+                  : "grid-cols-2 gap-2.5 sm:grid-cols-3 sm:gap-3 lg:grid-cols-4 xl:grid-cols-4 2xl:grid-cols-5",
+              )}
+            >
+
               {templateRows.map((row, rowIndex) => (
                 <Fragment key={`template-row-${rowIndex}`}>
                   {row.map((template, columnIndex) => {
