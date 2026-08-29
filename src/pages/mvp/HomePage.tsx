@@ -698,7 +698,9 @@ export default function HomePage() {
           }}
         />
 
-        <div className="container relative py-7 text-center md:py-11">
+        {/* MOBILE / TABLET (<lg) — stacked hero: headline, copy, graph, tiles, CTA. */}
+        <div className="container relative py-7 text-center md:py-11 lg:hidden">
+
           <div className="mx-auto max-w-[1180px]">
             <h1
               className="mx-auto font-display font-bold uppercase text-white"
