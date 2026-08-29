@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import {
@@ -12,6 +12,7 @@ import {
   Loader2,
   
   Network,
+  Search,
   Sparkles,
 } from "lucide-react";
 import SiteShell from "@/components/mvp/SiteShell";
@@ -103,6 +104,7 @@ import StreakChip from "@/components/StreakChip";
 import CampaignHistoryDrawer from "@/components/campaigns/CampaignHistoryDrawer";
 import { useCampaignHistory } from "@/hooks/useCampaignHistory";
 import { formatCampaignOutputs, formatCampaignOutputsLong } from "@/lib/campaignOutputs";
+import { campaignDisplayName } from "@/lib/campaignDisplayName";
 
 
 /**
@@ -2511,21 +2513,6 @@ export default function TemplateStudioPage() {
                 >
                   Build your brand →
                 </button>
-                <div className="mt-3 hidden rounded-[1rem] border border-cyan-200/20 bg-cyan-300/[0.05] px-3.5 py-3 sm:block">
-                  <p className="font-display text-[10px] font-semibold uppercase tracking-[0.18em] text-cyan-100">
-                    See which campaigns are ready for your brand
-                  </p>
-                  <p className="mt-1 text-[11px] leading-relaxed text-slate-300">
-                    Build your brand once and FUSE can preload compatible inputs.
-                  </p>
-                  <button
-                    type="button"
-                    onClick={() => navigate(`${ONBOARDING_ROUTE}?step=1`)}
-                    className="mt-2 rounded-full border border-cyan-300/35 bg-cyan-300/10 px-3 py-1 font-display text-[10px] font-semibold uppercase tracking-[0.16em] text-cyan-100 transition hover:bg-cyan-300/20"
-                  >
-                    Build brand
-                  </button>
-                </div>
               </>
             )}
 
@@ -2633,7 +2620,7 @@ export default function TemplateStudioPage() {
               </div>
             ) : null}
 
-            <div className="mt-4 grid grid-cols-2 gap-3 sm:mt-5 sm:grid-cols-3 sm:gap-4 lg:grid-cols-3">
+            <div className="mt-4 grid grid-cols-2 items-start gap-2.5 sm:mt-5 sm:grid-cols-3 sm:gap-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6">
               {templateRows.map((row, rowIndex) => (
                 <Fragment key={`template-row-${rowIndex}`}>
                   {row.map((template) => {
@@ -2651,6 +2638,7 @@ export default function TemplateStudioPage() {
                     key={template.id}
                     role="button"
                     tabIndex={0}
+                    aria-label={`Open ${template.name}`}
                     aria-pressed={selectMode ? batchSelected : undefined}
                     onClick={() =>
                       selectMode ? toggleBatchSelection(template.id) : handleTemplateSelect(template.id)
@@ -2662,127 +2650,59 @@ export default function TemplateStudioPage() {
                         else handleTemplateSelect(template.id);
                       }
                     }}
-                    className={`group cursor-pointer overflow-hidden rounded-[1rem] border text-left transition-colors sm:rounded-[1.5rem] ${
-                      selectMode && batchSelected
-                        ? "border-cyan-300 bg-cyan-300/10 ring-2 ring-cyan-300/40"
-                        : selected && !selectMode
-                          ? "border-cyan-300 bg-cyan-300/10 ring-2 ring-cyan-300/40"
-                          : "border-white/8 bg-black/20 hover:border-white/20 hover:bg-white/[0.05]"
-                    }`}
+                    className={cn(
+                      "group relative cursor-pointer overflow-hidden rounded-[0.9rem] bg-black text-left transition-shadow focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300",
+                      (selectMode ? batchSelected : selected)
+                        ? "ring-1 ring-cyan-300 shadow-[0_0_24px_-4px_rgba(34,211,238,0.55)]"
+                        : "ring-1 ring-white/10 hover:ring-white/25",
+                    )}
                   >
-                    <div className="relative overflow-hidden bg-black/30">
-                      <TemplateVibeMedia
-                        template={template}
-                        className="aspect-[4/5] w-full object-cover transition-transform duration-500 group-hover:scale-[1.03] sm:aspect-[9/16]"
+                    <TemplateVibeMedia
+                      template={template}
+                      className={cn(
+                        "w-full object-cover transition-transform duration-500 group-hover:scale-[1.03] motion-reduce:transition-none",
+                        feedTileAspect(String(template.id)),
+                      )}
+                    />
+                    <span className="pointer-events-none absolute inset-x-0 bottom-0 h-1/3 bg-gradient-to-t from-black/85 to-transparent" />
+                    <p className="pointer-events-none absolute bottom-2 left-2.5 right-8 truncate font-display text-[11.5px] font-bold uppercase tracking-[0.12em] text-white drop-shadow-[0_1px_6px_rgba(0,0,0,0.9)] sm:text-[12.5px]">
+                      {campaignDisplayName(template.name)}
+                    </p>
+
+                    {canFavorite && !selectMode ? (
+                      <FavoriteTemplateButton
+                        favorite={isFavorite(String(template.id))}
+                        onToggle={() => toggleFavorite(String(template.id))}
+                        className="absolute right-1.5 top-1.5"
                       />
-                      <div className="pointer-events-none absolute inset-x-0 bottom-0 h-2/3 bg-gradient-to-t from-black/75 via-black/20 to-transparent" />
-                      <div className="absolute bottom-3 left-3 hidden rounded-full border border-white/15 bg-black/45 px-2.5 py-1 text-[9px] uppercase tracking-[0.18em] text-white/80 backdrop-blur sm:block">
-                        Vibe
-                      </div>
+                    ) : null}
 
-                      {canFavorite && !selectMode ? (
-                        <FavoriteTemplateButton
-                          favorite={isFavorite(String(template.id))}
-                          onToggle={() => toggleFavorite(String(template.id))}
-                          className="absolute bottom-3 right-3"
-                        />
-                      ) : null}
-
-                      {selectMode ? (
-                        <span
-                          aria-hidden="true"
-                          className={cn(
-                            "absolute right-3 top-3 flex h-7 w-7 items-center justify-center rounded-full border backdrop-blur",
-                            batchSelected
-                              ? "border-cyan-300 bg-cyan-300 text-slate-950"
-                              : "border-white/25 bg-black/55 text-transparent",
-                          )}
-                        >
-                          <Check className="h-4 w-4" />
-                        </span>
-                      ) : (
-                        <button
-                          type="button"
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            track("template_view", { template_id: template.id });
-                            setDetailTemplateId(template.id);
-                          }}
-                          className="absolute right-1.5 top-1.5 rounded-full border border-white/15 bg-black/55 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.14em] text-white/85 backdrop-blur transition-colors hover:bg-black/80 sm:right-3 sm:top-3 sm:px-3 sm:py-1 sm:tracking-[0.18em]"
-                        >
-                          Details
-                        </button>
-                      )}
-                    </div>
-
-
-                    <div className="space-y-2 p-2.5 sm:space-y-3 sm:p-4">
-                      {performance ? <div className="hidden sm:block"><PerformanceBlock row={performance} compact /></div> : null}
-                      {performance ? <div className="hidden sm:block"><PerformanceBadges row={performance} limit={3} /></div> : null}
-                      <div className="flex items-start justify-between gap-3">
-
-                        <div className="min-w-0">
-                          <p className="line-clamp-2 text-sm font-bold text-white sm:truncate sm:text-base sm:font-semibold">{template.name}</p>
-                          <p className="mt-1 hidden text-[10px] uppercase tracking-[0.2em] text-muted-foreground sm:block">
-                            {template.category || "Campaign drop template"}
-                          </p>
-                        </div>
-                        <div className="hidden shrink-0 rounded-full border border-white/10 px-3 py-1 text-[10px] uppercase tracking-[0.18em] text-slate-300 sm:block">
-                          {isPrivilegedUser ? <span className="line-through decoration-cyan-200/90 decoration-2">{credits} cr</span> : `${credits} cr`}
-                        </div>
-                      </div>
-
-                      <p className="text-xs text-slate-400 sm:hidden">
-                        {formatCampaignOutputs(template.counts)}
-                      </p>
-
-                      {template.description ? (
-                        <p className="hidden line-clamp-2 text-sm leading-6 text-slate-300 sm:block">
-                          {template.description}
-                        </p>
-                      ) : (
-                        <p className="hidden text-sm leading-6 text-slate-300 sm:block">
-                          Campaign drop template for ready-to-use vertical videos.
-                        </p>
-                      )}
-
-                      {activeBrand && templateFitMap[String(template.id)] ? (
-                        <div className="hidden sm:block">
-                          <TemplateFitBadge
-                            fit={templateFitMap[String(template.id)]}
-                            brandName={activeBrand.name}
-                          />
-                        </div>
-                      ) : null}
-
-                      <div className="hidden flex-wrap items-center justify-between gap-2 text-[10px] uppercase tracking-[0.18em] text-slate-400 sm:flex">
-                        <span>{formatCount(inputCount, "upload", "uploads")}</span>
-                        <span>{formatCampaignOutputs(template.counts)}</span>
-                      </div>
-
-
-                      {/* Single action: the whole card opens the campaign in the builder.
-                          This is a non-interactive affordance only — no second step. */}
+                    {selectMode ? (
                       <span
                         aria-hidden="true"
                         className={cn(
-                          "hidden items-center gap-1.5 font-display text-[10px] font-semibold uppercase tracking-[0.2em] sm:flex",
-                          selected && !selectMode
-                            ? "text-cyan-200"
-                            : "text-slate-500 group-hover:text-cyan-200",
+                          "absolute right-1.5 top-1.5 flex h-7 w-7 items-center justify-center rounded-full border backdrop-blur",
+                          batchSelected
+                            ? "border-cyan-300 bg-cyan-300 text-slate-950"
+                            : "border-white/25 bg-black/55 text-transparent",
                         )}
                       >
-                        {selectMode
-                          ? batchSelected
-                            ? "✓ Selected for batch"
-                            : "Tap to select"
-                          : selected
-                            ? "✓ Open in builder"
-                            : "Open in builder →"}
+                        <Check className="h-4 w-4" />
                       </span>
-
-                    </div>
-
+                    ) : (
+                      <button
+                        type="button"
+                        aria-label={`Details for ${template.name}`}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          track("template_view", { template_id: template.id });
+                          setDetailTemplateId(template.id);
+                        }}
+                        className="absolute bottom-1.5 right-1.5 flex h-6 w-6 items-center justify-center rounded-full border border-white/20 bg-black/60 text-white/85 backdrop-blur transition-colors hover:bg-black/85"
+                      >
+                        <Info className="h-3.5 w-3.5" />
+                      </button>
+                    )}
                   </div>
                 );
                   })}
