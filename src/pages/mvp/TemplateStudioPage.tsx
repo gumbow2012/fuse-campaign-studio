@@ -2095,6 +2095,10 @@ export default function TemplateStudioPage() {
     return rows;
   }, [gridColumns, visibleTemplates]);
 
+  const selectedRowIndex = templateRows.findIndex((row) =>
+    row.some((entry) => entry.id === selectedTemplateId),
+  );
+
   /*
    * MOBILE / TABLET inline builder. Only ONE instance exists at a time: below lg
    * the desktop aside is not rendered, above lg this node is null. All state is
