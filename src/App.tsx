@@ -60,6 +60,8 @@ import DeveloperApiKeysPage from "@/pages/mvp/DeveloperApiKeysPage";
 import AuthPage from "@/pages/mvp/AuthPage";
 import ReferralCapturePage from "@/pages/mvp/ReferralCapturePage";
 import BillingPage from "@/pages/mvp/BillingPage";
+import PaymentReturnPage from "@/pages/mvp/PaymentReturnPage";
+
 import MembershipPage from "@/pages/mvp/MembershipPage";
 import ContactPage from "@/pages/mvp/ContactPage";
 import FaqPage from "@/pages/mvp/FaqPage";
