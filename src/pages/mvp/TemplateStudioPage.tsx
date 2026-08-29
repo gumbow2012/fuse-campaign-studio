@@ -1489,6 +1489,26 @@ export default function TemplateStudioPage() {
     return () => window.clearTimeout(timer);
   }, [selectedTemplateId]);
 
+  /*
+   * Small, natural position adjustment for the inline (<lg) builder. Runs only
+   * after layout/columns exist, and only when the panel top is below the fold —
+   * never a jump to a global anchor, never centering.
+   */
+  const revealInlineBuilder = () => {
+    if (typeof window === "undefined") return;
+    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => {
+        const node = inlineBuilderRef.current;
+        if (!node) return;
+        const { top } = node.getBoundingClientRect();
+        const limit = window.innerHeight - 140;
+        if (top <= limit) return;
+        window.scrollBy({ top: top - limit, behavior: reduce ? "auto" : "smooth" });
+      });
+    });
+  };
+
   const handleTemplateSelect = (templateId: string, options?: { alwaysReveal?: boolean }) => {
     /* Cache the outgoing campaign's pending local inputs for this session, then
        restore anything previously configured for the incoming campaign.
