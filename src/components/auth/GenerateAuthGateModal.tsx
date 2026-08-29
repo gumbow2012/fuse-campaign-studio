@@ -190,9 +190,23 @@ export default function GenerateAuthGateModal({ open, onClose, templateId, retur
             }}
           />
 
+          {/* CHECKOUT-FIRST: buy now, no account/OTP. Stripe collects the email. */}
+          <button
+            type="button"
+            disabled={Boolean(checkoutLoading)}
+            onClick={() => {
+              track("guest_checkout_started", { template_id: templateId ?? null });
+              void startPlanCheckout("starter", { returnPath: returnTo, templateId: templateId ?? undefined });
+            }}
+            className="mt-4 w-full rounded-full border border-cyan-300/40 px-4 py-2.5 text-xs font-semibold uppercase tracking-[0.18em] text-cyan-100 transition-colors hover:bg-cyan-300/10 disabled:opacity-60"
+          >
+            {checkoutLoading ? "Opening checkout…" : "Skip signup — pay & generate"}
+          </button>
+
           <p className="mt-5 text-center text-[11px] leading-5 text-slate-500">
             Your uploads and campaign setup will be preserved.
           </p>
+
           <p className="mt-1.5 text-center text-[11px] leading-5 text-slate-500">
             By continuing, you agree to the{" "}
             <Link to="/terms" className="text-slate-300 underline underline-offset-2 hover:text-cyan-200">
