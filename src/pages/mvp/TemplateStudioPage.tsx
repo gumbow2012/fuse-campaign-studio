@@ -2080,6 +2080,82 @@ export default function TemplateStudioPage() {
 
   const isRunning = result?.status === "queued" || result?.status === "running" || result?.status === "video_pending";
 
+  /* Rows matching the ACTUAL rendered column count (2 <640px, 3 at sm). */
+  const templateRows = useMemo(() => {
+    const columns = Math.max(1, gridColumns);
+    const rows: ApiTemplate[][] = [];
+    for (let index = 0; index < visibleTemplates.length; index += columns) {
+      rows.push(visibleTemplates.slice(index, index + columns));
+    }
+    return rows;
+  }, [gridColumns, visibleTemplates]);
+
+  /*
+   * MOBILE / TABLET inline builder. Only ONE instance exists at a time: below lg
+   * the desktop aside is not rendered, above lg this node is null. All state is
+   * the page's own, so switching breakpoints keeps files / cast / readiness.
+   */
+  const inlineGenerateLabel = !user
+    ? "Generate campaign →"
+    : !requiredInputsAreReady
+      ? `Add ${Math.max(1, totalInputCount - readyInputCount)} more asset${totalInputCount - readyInputCount === 1 ? "" : "s"}`
+      : checkingCredits
+        ? "Checking credits..."
+        : runPhase === "uploading"
+          ? "Uploading assets..."
+          : runPhase === "preparing"
+            ? "Preparing campaign..."
+            : submitting || isRunning
+              ? "Generating..."
+              : isPrivilegedUser
+                ? "Generate campaign →"
+                : `Generate campaign → ${creditsRequired} cr`;
+
+  const inlineBuilderNode =
+    isCompactLayout && selectedTemplate && !selectMode && !hasActiveCampaignWorkspace ? (
+      <InlineCampaignBuilder
+        key={selectedTemplate.id}
+        ref={inlineBuilderRef}
+        templateName={selectedTemplate.name}
+        metaLine={`${formatCount(inputFields.length, "input", "inputs")} · ${formatCampaignOutputs(selectedTemplate.counts)} · ${creditsRequired} cr`}
+        readyCount={readyInputCount}
+        totalCount={totalInputCount}
+        creditsLabel={costDisplay}
+        topSlot={
+          castEnabled && !castSlotFieldKey ? (
+            <CastSelector
+              required={castRequired}
+              userId={user?.id ?? null}
+              selection={castSelection}
+              onSelectionChange={setCastSelection}
+            />
+          ) : undefined
+        }
+        generateDisabled={submitting || isRunning || (!!user && (!requiredInputsAreReady || blockedByCredits))}
+        generateLabel={inlineGenerateLabel}
+        onGenerate={() => void handleRun()}
+        onClose={() => setSelectedTemplateId("")}
+        footer={
+          blockedByCredits ? (
+            <p className="text-[11px] leading-relaxed text-amber-100">
+              You need {creditShortfall} more credit{creditShortfall === 1 ? "" : "s"} —{" "}
+              <Link to="/membership?tab=credits" className="underline underline-offset-4">
+                buy credits
+              </Link>
+            </p>
+          ) : !user ? (
+            <p className="text-[11px] leading-relaxed text-slate-400">
+              Your files stay on this device until you generate.
+            </p>
+          ) : null
+        }
+      >
+        {inputFields.map((field) => renderInputField(field, true))}
+      </InlineCampaignBuilder>
+    ) : null;
+
+
+
   return (
     <SiteShell>
       {/* Dynamic template detail meta — real name/description/preview only. */}
