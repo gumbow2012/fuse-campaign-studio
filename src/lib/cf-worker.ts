@@ -143,6 +143,78 @@ export async function uploadImageToWorker(
   return data as { imageUrl: string; key: string };
 }
 
+export interface RunTemplatePayload {
+  templateId: string;
+  inputs: Record<string, string>;
+}
+
+export interface RunTemplateResponse {
+  jobId: string;
+  status: string;
+  weavyRunId?: string;
+  error?: string;
+}
+
+/** Trigger a template run via the CF Worker. */
+export async function runTemplate(
+  payload: RunTemplatePayload,
+  token: string,
+): Promise<RunTemplateResponse> {
+  return cfFetch<RunTemplateResponse>("/api/run-template", {
+    method: "POST",
+    body: payload,
+    token,
+  });
+}
+
+export interface TriggerWeavyPayload {
+  projectId: string;
+  recipeId: string;
+  inputs: Record<string, string>;
+}
+
+export interface TriggerWeavyResponse {
+  weavyRunId: string;
+  status: string;
+  error?: string;
+}
+
+/** Tell the CF Worker to trigger a Weavy recipe for an existing project. */
+export async function triggerWeavy(
+  payload: TriggerWeavyPayload,
+  token: string,
+): Promise<TriggerWeavyResponse> {
+  return cfFetch<TriggerWeavyResponse>("/weavy/trigger", {
+    method: "POST",
+    body: payload,
+    token,
+  });
+}
+
+/* ──────────────── Weavy Run Recipe API ──────────────── */
+
+export interface RunWeavyRecipePayload {
+  recipeId: string;
+  graph: Record<string, unknown>;
+}
+
+export interface RunWeavyRecipeResponse {
+  runId?: string;
+  status: string;
+  error?: string;
+}
+
+/** Trigger a Weavy recipe run via the CF Worker (JWT-authenticated). */
+export async function runWeavyRecipe(
+  payload: RunWeavyRecipePayload,
+  token: string,
+): Promise<RunWeavyRecipeResponse> {
+  return cfFetch<RunWeavyRecipeResponse>("/api/weavy/run-recipe", {
+    method: "POST",
+    body: payload,
+    token,
+  });
+}
 
 export interface PapparaziJobStatus {
   status: "running" | "succeeded" | "failed" | "queued" | "complete";

@@ -7,10 +7,11 @@ import TemplatePreviewCarousel from "@/components/mvp/membership/TemplatePreview
 import FindYourPlan from "@/components/mvp/membership/FindYourPlan";
 import MembershipFaq from "@/components/mvp/membership/MembershipFaq";
 import PlanTierCards, { type BillingCycle } from "@/components/mvp/membership/PlanTierCards";
-import CreditTopUpModule from "@/components/mvp/membership/CreditTopUpModule";
+import CreditPackCards from "@/components/mvp/membership/CreditPackCards";
+import CreditSliderPanel from "@/components/mvp/membership/CreditSliderPanel";
 import CreditMixCalculator from "@/components/mvp/membership/CreditMixCalculator";
+import PlanComparisonMatrix from "@/components/mvp/membership/PlanComparisonMatrix";
 import CreditsOverviewCard from "@/components/mvp/membership/CreditsOverviewCard";
-import EarnCreditsCard from "@/components/mvp/membership/EarnCreditsCard";
 import CreditUsageHistory from "@/components/mvp/membership/CreditUsageHistory";
 import UsageProjectionPanel from "@/components/mvp/membership/UsageProjectionPanel";
 import PromoCodeEntry from "@/components/mvp/membership/PromoCodeEntry";
@@ -35,8 +36,9 @@ const isTabId = (value: string | null): value is TabId =>
 export default function MembershipPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const { isAdmin, profile } = useAuth();
-  const { loading, startPlanCheckout, startCreditTopUp } = useMembershipCheckout();
+  const { loading, startPlanCheckout, startCreditCheckout } = useMembershipCheckout();
   const [billingCycle, setBillingCycle] = useState<BillingCycle>("monthly");
+  const [showComparison, setShowComparison] = useState(false);
   const [selectedCreditAmount, setSelectedCreditAmount] = useState<number | null>(null);
 
   const paramTab = searchParams.get("tab");
@@ -108,7 +110,6 @@ export default function MembershipPage() {
           <div className="mt-6 space-y-6">
             <PlanTierCards
               hero
-              comparison
               billingCycle={billingCycle}
               onBillingCycleChange={setBillingCycle}
               loading={loading}
@@ -127,13 +128,35 @@ export default function MembershipPage() {
 
             <PromoCodeEntry />
 
+            <div>
+              <Button
+                variant="outline"
+                onClick={() => setShowComparison((open) => !open)}
+                className="rounded-full border-white/15 bg-white/5 text-foreground hover:bg-white/10"
+              >
+                {showComparison ? "Hide comparison" : "Compare everything"}
+              </Button>
+            </div>
+
+            {showComparison ? (
+              <section className="rounded-[2rem] border border-white/10 bg-white/[0.03] p-6 md:p-8">
+                <p className="text-[11px] uppercase tracking-[0.24em] text-muted-foreground">Compare everything</p>
+                <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-300">
+                  Every campaign in the marketplace is included from Starter up. Higher tiers add campaign capacity,
+                  Cast, avatars, priority turnaround and team workspaces.
+                </p>
+                <div className="mt-6">
+                  <PlanComparisonMatrix plan={profile?.plan} subscriptionStatus={profile?.subscription_status} />
+                </div>
+              </section>
+            ) : null}
 
             <MembershipFaq />
           </div>
         ) : null}
 
         {activeTab === "credits" ? (
-          <div className="mt-6 space-y-6">
+          <div className="mt-6">
             {hasActivePaidMembership || isAdmin ? (
               <section className="rounded-[2rem] border border-white/10 bg-white/[0.03] p-6 md:p-8">
                 <p className="text-[11px] uppercase tracking-[0.24em] text-muted-foreground">Top up credits</p>
@@ -145,15 +168,25 @@ export default function MembershipPage() {
                   payment clears.
                 </p>
                 <div className="mt-6">
-                  <CreditTopUpModule
+                  <CreditSliderPanel
                     loading={loading}
                     isAdmin={isAdmin}
                     onAmountChange={setSelectedCreditAmount}
-                    onCheckout={(credits) => {
+                    onCheckout={(packKey) => {
                       if (isAdmin) return;
-                      void startCreditTopUp(credits, {
-                        balanceBefore: Number(profile?.credits_balance ?? 0),
-                      });
+                      void startCreditCheckout(packKey);
+                    }}
+                  />
+                </div>
+
+                <p className="mt-8 text-[11px] uppercase tracking-[0.24em] text-muted-foreground">Buy extra credits</p>
+                <div className="mt-4">
+                  <CreditPackCards
+                    loading={loading}
+                    isAdmin={isAdmin}
+                    onCheckout={(packKey) => {
+                      if (isAdmin) return;
+                      void startCreditCheckout(packKey);
                     }}
                   />
                 </div>
@@ -183,15 +216,12 @@ export default function MembershipPage() {
                 </Button>
               </section>
             )}
-
-            <EarnCreditsCard />
           </div>
         ) : null}
 
         {activeTab === "usage" ? (
           <div className="mt-6 space-y-6">
             <CreditsOverviewCard buyCreditsHref="/membership?tab=credits" />
-            <EarnCreditsCard />
             <UsageProjectionPanel onNavigateTab={selectTab} />
             <CreditUsageHistory />
 

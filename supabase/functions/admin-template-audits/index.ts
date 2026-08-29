@@ -418,7 +418,7 @@ Deno.serve(async (req) => {
       const jobId = typeof body.jobId === "string" ? body.jobId : "";
       if (!jobId) throw new Error("jobId is required");
 
-      const job = await buildJobStatusResponse(admin, jobId, true, user.id, { includeSensitive: true });
+      const job = await buildJobStatusResponse(admin, jobId, true, user.id);
       const quickFeedbackRows = await loadQuickFeedback(admin, [jobId]);
       const adminAuditRows = await loadAdminAudits(admin, [jobId]);
       const outputReportRows = await loadOutputReports(admin, [jobId]);

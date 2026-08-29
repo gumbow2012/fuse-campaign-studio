@@ -31,11 +31,10 @@ import {
 import UploadGuide from "@/components/templates/UploadGuide";
 import LibraryPickerDialog from "@/components/templates/LibraryPickerDialog";
 import ProfileAssetPicker from "@/components/templates/ProfileAssetPicker";
-import SaveAssetToBrandPrompt from "@/components/brand/SaveAssetToBrandPrompt";
 import { libraryKindForAssetType } from "@/services/libraryAssets";
-
 import { runUploadChecks, type UploadCheckResult, type UploadCheckState } from "@/lib/uploadChecks";
 import {
+  inputRoleWord,
   resolveInputRole,
   resolveInputSources,
   type AssetSourceKind,
@@ -63,10 +62,7 @@ interface TemplateInputCardProps {
   displayLabel?: string;
   /** Cast-supported templates: the existing cast selector, shown inside the Add dialog. */
   castPanel?: ReactNode;
-  /** Phase 10: subtle provenance note when the slot was autofilled ("From ACME"). */
-  sourceNote?: string | null;
 }
-
 
 const SOURCE_ICONS: Record<AssetSourceKind, typeof Upload> = {
   upload: Upload,
@@ -87,17 +83,9 @@ export default function TemplateInputCard({
   highlighted = false,
   displayLabel,
   castPanel,
-  sourceNote,
 }: TemplateInputCardProps) {
-
   const inputRef = useRef<HTMLInputElement>(null);
-  /*
-   * Local validation state machine: idle → validating → checking → ready|warning|error.
-   * "validating" is the silent phase (no overlay); the "checking" overlay only
-   * appears if validation lasts longer than ~180ms. Every selection must reach
-   * a terminal state — no path may leave the card stuck in checking.
-   */
-  const [state, setState] = useState<UploadCheckState | "idle" | "validating">("idle");
+  const [state, setState] = useState<UploadCheckState | "idle">("idle");
   const [checks, setChecks] = useState<UploadCheckResult | null>(null);
   const [warningDismissed, setWarningDismissed] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
@@ -105,8 +93,6 @@ export default function TemplateInputCard({
   const [profileOpen, setProfileOpen] = useState(false);
   const [castOpen, setCastOpen] = useState(false);
 
-  /* One stable preview URL per selected file — revoked only when the file is
-     replaced/removed or the card unmounts, so the preview never flickers. */
   const previewUrl = useMemo(() => (file ? URL.createObjectURL(file) : null), [file]);
   useEffect(() => {
     return () => {
@@ -125,35 +111,18 @@ export default function TemplateInputCard({
 
     setWarningDismissed(false);
     setChecks(null);
-    setState("validating");
+    setState("uploading");
     const toChecking = window.setTimeout(() => {
       if (!cancelled) setState("checking");
     }, 180);
 
-    /*
-     * Terminal-state applier. The 180ms timer is cleared BEFORE the terminal
-     * state is applied, in BOTH resolve and reject paths — a fast check can
-     * never go ready and then be stomped back to "checking" by a late timer.
-     * The cancelled flag guarantees a stale file's completion never updates
-     * the card after a newer file was selected.
-     */
-    const finish = (result: UploadCheckResult) => {
-      if (cancelled) return;
-      window.clearTimeout(toChecking);
-      setChecks(result);
-      setState(result.state);
-    };
-
-    runUploadChecks(file, { transparencyRecommended: requirement?.transparencyRecommended })
-      .then(finish)
-      .catch(() =>
-        finish({
-          state: "error",
-          warnings: [],
-          error: "We couldn't check this image. Try uploading it again.",
-          notChecked: [],
-        }),
-      );
+    void runUploadChecks(file, { transparencyRecommended: requirement?.transparencyRecommended }).then(
+      (result) => {
+        if (cancelled) return;
+        setChecks(result);
+        setState(result.state);
+      },
+    );
 
     return () => {
       cancelled = true;
@@ -162,6 +131,7 @@ export default function TemplateInputCard({
   }, [file, requirement?.transparencyRecommended]);
 
   const role = resolveInputRole(label, requirement?.assetType);
+  const roleWord = inputRoleWord(label, role);
   const heading = displayLabel ?? label;
   const sources = resolveInputSources(label, role, Boolean(castPanel));
   const availableSources = sources.filter((source) =>
@@ -175,9 +145,7 @@ export default function TemplateInputCard({
   const showWarning = state === "warning" && !warningDismissed;
   const filledUrl = previewUrl ?? libraryAsset?.url ?? null;
   const assetName = file?.name ?? libraryAsset?.name ?? null;
-  /* Delayed loader: the overlay only exists past the 180ms mark, so fast
-     checks never flash a spinner. Local validation is NOT a server upload. */
-  const busy = state === "checking";
+  const busy = state === "uploading" || state === "checking";
   const isFilled = Boolean(filledUrl);
 
   const handleSource = (kind: AssetSourceKind) => {
@@ -208,14 +176,12 @@ export default function TemplateInputCard({
     >
       <div className="flex items-start gap-2">
         <div className="min-w-0 flex-1">
-          <p className="truncate font-display text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-200">
+          <p className="truncate text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-200">
             {heading}
-            {isFilled ? <span className="ml-1.5 text-emerald-300">✓</span> : null}
           </p>
-
           <span
             className={cn(
-              "mt-1 inline-block rounded-full border px-2 py-0.5 font-display text-[9px] uppercase tracking-[0.18em]",
+              "mt-1 inline-block rounded-full border px-2 py-0.5 text-[9px] uppercase tracking-[0.18em]",
               isFilled
                 ? "border-emerald-300/30 bg-emerald-300/10 text-emerald-200"
                 : required
@@ -225,12 +191,6 @@ export default function TemplateInputCard({
           >
             {isFilled ? "✓ Ready" : required ? "Required" : "Optional"}
           </span>
-          {sourceNote && isFilled ? (
-            <span className="mt-1 ml-2 inline-block rounded-full border border-white/10 bg-white/[0.04] px-2 py-0.5 font-display text-[9px] uppercase tracking-[0.18em] text-slate-400">
-              {sourceNote}
-            </span>
-          ) : null}
-
         </div>
         <UploadGuide
           slotLabel={heading}
@@ -254,7 +214,7 @@ export default function TemplateInputCard({
             {busy ? (
               <div className="absolute inset-0 flex items-center justify-center gap-2 bg-slate-950/70 text-[10px] uppercase tracking-[0.2em] text-cyan-100">
                 <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                Checking asset...
+                {state === "uploading" ? "Uploading" : "Checking"}
               </div>
             ) : null}
           </div>
@@ -275,12 +235,7 @@ export default function TemplateInputCard({
               Remove
             </button>
           </div>
-          {/* Phase 5 — one-click "remember this asset" after a manual upload. */}
-          {file && state !== "error" ? (
-            <SaveAssetToBrandPrompt file={file} assetType={requirement?.assetType ?? null} role={role} />
-          ) : null}
         </div>
-
       ) : (
         <button
           type="button"
@@ -296,10 +251,9 @@ export default function TemplateInputCard({
           <span className="flex h-7 w-7 items-center justify-center rounded-full border border-cyan-200/35 text-cyan-100">
             <Plus className="h-3.5 w-3.5" />
           </span>
-          <span className="truncate font-display text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-200">
-            Add {heading}
+          <span className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-200">
+            Add {roleWord}
           </span>
-
         </button>
       )}
 

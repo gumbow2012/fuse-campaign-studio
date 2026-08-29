@@ -149,9 +149,6 @@ verify_jwt = false
 [functions.analyze-jewelry-frames]
 verify_jwt = false
 
-[functions.madden-media-studio]
-verify_jwt = false
-
 [functions.cinema-studio]
 verify_jwt = false
 
@@ -166,10 +163,3 @@ verify_jwt = true
 
 [functions.provision-live-billing]
 verify_jwt = true
-
-[functions.brand-import]
-verify_jwt = false
-
-[functions.template-factory]
-verify_jwt = false
-

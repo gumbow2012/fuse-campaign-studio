@@ -10,50 +10,35 @@ export type Database = {
   // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
-    PostgrestVersion: "14.5"
+    PostgrestVersion: "14.17"
   }
   public: {
     Tables: {
       analytics_events: {
         Row: {
           created_at: string
-          event_name: string | null
-          event_type: string | null
+          event_type: string
           id: string
           metadata: Json | null
-          path: string | null
           project_id: string | null
-          props: Json
-          referrer: string | null
-          session_id: string | null
           template_id: string | null
           user_id: string | null
         }
         Insert: {
           created_at?: string
-          event_name?: string | null
-          event_type?: string | null
+          event_type: string
           id?: string
           metadata?: Json | null
-          path?: string | null
           project_id?: string | null
-          props?: Json
-          referrer?: string | null
-          session_id?: string | null
           template_id?: string | null
           user_id?: string | null
         }
         Update: {
           created_at?: string
-          event_name?: string | null
-          event_type?: string | null
+          event_type?: string
           id?: string
           metadata?: Json | null
-          path?: string | null
           project_id?: string | null
-          props?: Json
-          referrer?: string | null
-          session_id?: string | null
           template_id?: string | null
           user_id?: string | null
         }
@@ -73,102 +58,6 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
-      }
-      cinema_batch_config: {
-        Row: {
-          created_at: string
-          enabled: boolean
-          id: string
-          token: string
-          updated_at: string
-          usd_ceiling: number
-        }
-        Insert: {
-          created_at?: string
-          enabled?: boolean
-          id?: string
-          token: string
-          updated_at?: string
-          usd_ceiling?: number
-        }
-        Update: {
-          created_at?: string
-          enabled?: boolean
-          id?: string
-          token?: string
-          updated_at?: string
-          usd_ceiling?: number
-        }
-        Relationships: []
-      }
-      cinema_batch_queue: {
-        Row: {
-          attempts: number
-          category: string
-          created_at: string
-          error: string | null
-          generated_src: string | null
-          id: string
-          kind: string
-          name: string | null
-          preset_id: string
-          scene: string
-          status: string
-          updated_at: string
-        }
-        Insert: {
-          attempts?: number
-          category: string
-          created_at?: string
-          error?: string | null
-          generated_src?: string | null
-          id?: string
-          kind?: string
-          name?: string | null
-          preset_id: string
-          scene?: string
-          status?: string
-          updated_at?: string
-        }
-        Update: {
-          attempts?: number
-          category?: string
-          created_at?: string
-          error?: string | null
-          generated_src?: string | null
-          id?: string
-          kind?: string
-          name?: string | null
-          preset_id?: string
-          scene?: string
-          status?: string
-          updated_at?: string
-        }
-        Relationships: []
-      }
-      cinema_batch_spend: {
-        Row: {
-          created_at: string
-          id: string
-          kind: string
-          preset_id: string
-          usd: number
-        }
-        Insert: {
-          created_at?: string
-          id?: string
-          kind?: string
-          preset_id: string
-          usd?: number
-        }
-        Update: {
-          created_at?: string
-          id?: string
-          kind?: string
-          preset_id?: string
-          usd?: number
-        }
-        Relationships: []
       }
       cinema_control_tests: {
         Row: {
@@ -332,51 +221,6 @@ export type Database = {
           project_state?: Json
           updated_at?: string
           user_id?: string
-        }
-        Relationships: []
-      }
-      contests: {
-        Row: {
-          cover_url: string | null
-          created_at: string
-          description: string | null
-          ends_at: string | null
-          id: string
-          prize: string | null
-          sort_order: number
-          starts_at: string | null
-          status: string
-          subtitle: string | null
-          title: string
-          updated_at: string
-        }
-        Insert: {
-          cover_url?: string | null
-          created_at?: string
-          description?: string | null
-          ends_at?: string | null
-          id?: string
-          prize?: string | null
-          sort_order?: number
-          starts_at?: string | null
-          status?: string
-          subtitle?: string | null
-          title: string
-          updated_at?: string
-        }
-        Update: {
-          cover_url?: string | null
-          created_at?: string
-          description?: string | null
-          ends_at?: string | null
-          id?: string
-          prize?: string | null
-          sort_order?: number
-          starts_at?: string | null
-          status?: string
-          subtitle?: string | null
-          title?: string
-          updated_at?: string
         }
         Relationships: []
       }
@@ -633,66 +477,6 @@ export type Database = {
         }
         Relationships: []
       }
-      madden_media_projects: {
-        Row: {
-          created_at: string
-          id: string
-          name: string
-          project_state: Json
-          updated_at: string
-          user_id: string
-        }
-        Insert: {
-          created_at?: string
-          id?: string
-          name?: string
-          project_state?: Json
-          updated_at?: string
-          user_id: string
-        }
-        Update: {
-          created_at?: string
-          id?: string
-          name?: string
-          project_state?: Json
-          updated_at?: string
-          user_id?: string
-        }
-        Relationships: []
-      }
-      madden_profiles: {
-        Row: {
-          created_at: string
-          data: Json
-          id: string
-          kind: string
-          name: string
-          thumbnail_url: string | null
-          updated_at: string
-          user_id: string
-        }
-        Insert: {
-          created_at?: string
-          data?: Json
-          id?: string
-          kind: string
-          name?: string
-          thumbnail_url?: string | null
-          updated_at?: string
-          user_id: string
-        }
-        Update: {
-          created_at?: string
-          data?: Json
-          id?: string
-          kind?: string
-          name?: string
-          thumbnail_url?: string | null
-          updated_at?: string
-          user_id?: string
-        }
-        Relationships: []
-      }
       node_runs: {
         Row: {
           completed_at: string | null
@@ -750,33 +534,6 @@ export type Database = {
           updated_at?: string
           user_id?: string
           version_id?: string
-        }
-        Relationships: []
-      }
-      outfit_swap_analyses: {
-        Row: {
-          analysis: Json
-          analyzed_at: string
-          fingerprint: string
-          id: string
-          user_id: string
-          version: string
-        }
-        Insert: {
-          analysis: Json
-          analyzed_at?: string
-          fingerprint: string
-          id?: string
-          user_id: string
-          version?: string
-        }
-        Update: {
-          analysis?: Json
-          analyzed_at?: string
-          fingerprint?: string
-          id?: string
-          user_id?: string
-          version?: string
         }
         Relationships: []
       }
@@ -839,13 +596,11 @@ export type Database = {
       }
       profiles: {
         Row: {
-          avatar_url: string | null
           created_at: string
           credits_balance: number
           email: string
           id: string
           name: string | null
-          onboarding_plan_offer: string
           plan: string | null
           stripe_customer_id: string | null
           subscription_status: string | null
@@ -853,13 +608,11 @@ export type Database = {
           user_id: string
         }
         Insert: {
-          avatar_url?: string | null
           created_at?: string
           credits_balance?: number
           email: string
           id?: string
           name?: string | null
-          onboarding_plan_offer?: string
           plan?: string | null
           stripe_customer_id?: string | null
           subscription_status?: string | null
@@ -867,13 +620,11 @@ export type Database = {
           user_id: string
         }
         Update: {
-          avatar_url?: string | null
           created_at?: string
           credits_balance?: number
           email?: string
           id?: string
           name?: string | null
-          onboarding_plan_offer?: string
           plan?: string | null
           stripe_customer_id?: string | null
           subscription_status?: string | null
@@ -1092,7 +843,6 @@ export type Database = {
       }
       referral_rewards: {
         Row: {
-          attribution_id: string | null
           created_at: string
           credits_amount: number | null
           id: string
@@ -1100,10 +850,8 @@ export type Database = {
           referrer_user_id: string
           revenue_allocation_id: string | null
           reward_type: string
-          stripe_event_id: string | null
         }
         Insert: {
-          attribution_id?: string | null
           created_at?: string
           credits_amount?: number | null
           id?: string
@@ -1111,10 +859,8 @@ export type Database = {
           referrer_user_id: string
           revenue_allocation_id?: string | null
           reward_type: string
-          stripe_event_id?: string | null
         }
         Update: {
-          attribution_id?: string | null
           created_at?: string
           credits_amount?: number | null
           id?: string
@@ -1122,16 +868,8 @@ export type Database = {
           referrer_user_id?: string
           revenue_allocation_id?: string | null
           reward_type?: string
-          stripe_event_id?: string | null
         }
         Relationships: [
-          {
-            foreignKeyName: "referral_rewards_attribution_id_fkey"
-            columns: ["attribution_id"]
-            isOneToOne: false
-            referencedRelation: "referral_attributions"
-            referencedColumns: ["id"]
-          },
           {
             foreignKeyName: "referral_rewards_revenue_allocation_id_fkey"
             columns: ["revenue_allocation_id"]
@@ -1215,45 +953,6 @@ export type Database = {
           },
         ]
       }
-      streetwear_references: {
-        Row: {
-          category: string | null
-          created_at: string
-          created_by: string | null
-          id: string
-          image_url: string | null
-          notes: string | null
-          source_url: string | null
-          tags: string[]
-          title: string
-          updated_at: string
-        }
-        Insert: {
-          category?: string | null
-          created_at?: string
-          created_by?: string | null
-          id?: string
-          image_url?: string | null
-          notes?: string | null
-          source_url?: string | null
-          tags?: string[]
-          title: string
-          updated_at?: string
-        }
-        Update: {
-          category?: string | null
-          created_at?: string
-          created_by?: string | null
-          id?: string
-          image_url?: string | null
-          notes?: string | null
-          source_url?: string | null
-          tags?: string[]
-          title?: string
-          updated_at?: string
-        }
-        Relationships: []
-      }
       studio_generations: {
         Row: {
           completed_at: string | null
@@ -1313,92 +1012,6 @@ export type Database = {
           provider_request_id?: string | null
           status?: string
           updated_at?: string
-          user_id?: string
-        }
-        Relationships: []
-      }
-      template_collection_items: {
-        Row: {
-          collection_id: string
-          created_at: string
-          id: string
-          position: number
-          template_id: string
-        }
-        Insert: {
-          collection_id: string
-          created_at?: string
-          id?: string
-          position?: number
-          template_id: string
-        }
-        Update: {
-          collection_id?: string
-          created_at?: string
-          id?: string
-          position?: number
-          template_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "template_collection_items_collection_id_fkey"
-            columns: ["collection_id"]
-            isOneToOne: false
-            referencedRelation: "template_collections"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      template_collections: {
-        Row: {
-          cover_url: string | null
-          created_at: string
-          description: string | null
-          id: string
-          is_public: boolean
-          slug: string
-          title: string
-          updated_at: string
-          user_id: string
-        }
-        Insert: {
-          cover_url?: string | null
-          created_at?: string
-          description?: string | null
-          id?: string
-          is_public?: boolean
-          slug: string
-          title: string
-          updated_at?: string
-          user_id: string
-        }
-        Update: {
-          cover_url?: string | null
-          created_at?: string
-          description?: string | null
-          id?: string
-          is_public?: boolean
-          slug?: string
-          title?: string
-          updated_at?: string
-          user_id?: string
-        }
-        Relationships: []
-      }
-      template_favorites: {
-        Row: {
-          created_at: string
-          template_id: string
-          user_id: string
-        }
-        Insert: {
-          created_at?: string
-          template_id: string
-          user_id: string
-        }
-        Update: {
-          created_at?: string
-          template_id?: string
           user_id?: string
         }
         Relationships: []
@@ -1559,45 +1172,6 @@ export type Database = {
           },
         ]
       }
-      user_notifications: {
-        Row: {
-          action_label: string | null
-          action_url: string | null
-          body: string | null
-          created_at: string
-          id: string
-          metadata: Json
-          read_at: string | null
-          title: string
-          type: string
-          user_id: string
-        }
-        Insert: {
-          action_label?: string | null
-          action_url?: string | null
-          body?: string | null
-          created_at?: string
-          id?: string
-          metadata?: Json
-          read_at?: string | null
-          title: string
-          type?: string
-          user_id: string
-        }
-        Update: {
-          action_label?: string | null
-          action_url?: string | null
-          body?: string | null
-          created_at?: string
-          id?: string
-          metadata?: Json
-          read_at?: string | null
-          title?: string
-          type?: string
-          user_id?: string
-        }
-        Relationships: []
-      }
       user_roles: {
         Row: {
           id: string
@@ -1612,33 +1186,6 @@ export type Database = {
         Update: {
           id?: string
           role?: Database["public"]["Enums"]["app_role"]
-          user_id?: string
-        }
-        Relationships: []
-      }
-      user_streaks: {
-        Row: {
-          current_streak: number
-          last_active_on: string | null
-          longest_streak: number
-          total_active_days: number
-          updated_at: string
-          user_id: string
-        }
-        Insert: {
-          current_streak?: number
-          last_active_on?: string | null
-          longest_streak?: number
-          total_active_days?: number
-          updated_at?: string
-          user_id: string
-        }
-        Update: {
-          current_streak?: number
-          last_active_on?: string | null
-          longest_streak?: number
-          total_active_days?: number
-          updated_at?: string
           user_id?: string
         }
         Relationships: []
@@ -1663,41 +1210,13 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      analytics_daily: {
-        Args: { _days?: number }
-        Returns: {
-          day: string
-          events: number
-          sessions: number
-          users: number
-        }[]
-      }
-      analytics_event_counts: {
-        Args: { _days?: number }
-        Returns: {
-          event_name: string
-          events: number
-          sessions: number
-          users: number
-        }[]
-      }
-      analytics_top_paths: {
-        Args: { _days?: number }
-        Returns: {
-          path: string
-          sessions: number
-          views: number
-        }[]
-      }
       get_my_profile: {
         Args: never
         Returns: {
-          avatar_url: string
           credits_balance: number
           email: string
           id: string
           name: string
-          onboarding_plan_offer: string
           plan: string
           stripe_customer_id: string
           stripe_price_id: string
@@ -1721,24 +1240,6 @@ export type Database = {
           _user_id: string
         }
         Returns: boolean
-      }
-      set_onboarding_plan_offer: { Args: { _state: string }; Returns: string }
-      touch_user_streak: {
-        Args: never
-        Returns: {
-          current_streak: number
-          last_active_on: string | null
-          longest_streak: number
-          total_active_days: number
-          updated_at: string
-          user_id: string
-        }
-        SetofOptions: {
-          from: "*"
-          to: "user_streaks"
-          isOneToOne: true
-          isSetofReturn: false
-        }
       }
     }
     Enums: {

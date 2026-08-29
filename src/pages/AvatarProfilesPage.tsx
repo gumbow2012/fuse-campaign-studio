@@ -1,15 +1,12 @@
 /**
- * FT6 / Phase 5 — "My Avatars" management. Saved cast members are used by
- * generation (start-template-run cast_config), so they are reusable everywhere.
+ * FT6 — "My Avatars" management. Model + management only: no generation,
+ * no wiring into the template runner yet.
  */
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Check, Loader2, Plus, Star, Trash2, Upload, X } from "lucide-react";
 import Navbar from "@/components/Navbar";
-import { useNavigate, useSearchParams } from "react-router-dom";
-import { ArrowLeft } from "lucide-react";
-import { CastPortrait } from "@/components/cast/CastLibrary";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -17,6 +14,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
+import { uploadRunInputFile } from "@/services/runInputUpload";
 import {
   AVATAR_UPLOAD_TIPS,
   createUserAvatar,
@@ -24,7 +22,6 @@ import {
   listFuseAvatars,
   listMyAvatars,
   toggleFavorite,
-  uploadAvatarReference,
   type AvatarProfile,
 } from "@/services/avatarProfiles";
 
@@ -44,7 +41,11 @@ function AvatarCard({
   return (
     <div className="overflow-hidden rounded-[1.25rem] border border-white/10 bg-white/[0.03]">
       <div className="relative aspect-[3/4] bg-black/50">
-        <CastPortrait avatar={avatar} />
+        {avatar.thumbnail_url ? (
+          <img src={avatar.thumbnail_url} alt={avatar.name} className="h-full w-full object-cover" />
+        ) : (
+          <div className="flex h-full items-center justify-center text-xs text-slate-600">No image</div>
+        )}
         {onFavorite ? (
           <button
             type="button"
@@ -86,89 +87,45 @@ function AvatarCard({
   );
 }
 
-interface ReferenceSlot {
-  id: string;
-  label: string;
-  preview: string;
-  url: string | null;
-  status: "uploading" | "done" | "error";
-  error?: string;
-}
-
-const SLOT_LABELS = ["Front", "3/4 view", "Profile", "Full body", "Detail"];
-
-function AvatarCreator({ onDone, intent = "upload" }: { onDone: () => void; intent?: "generate" | "upload" }) {
+function AvatarCreator({ onDone }: { onDone: () => void }) {
   const queryClient = useQueryClient();
   const [name, setName] = useState("");
   const [notes, setNotes] = useState("");
   const [tagDraft, setTagDraft] = useState("");
   const [tags, setTags] = useState<string[]>([]);
-  const [slots, setSlots] = useState<ReferenceSlot[]>([]);
+  const [references, setReferences] = useState<string[]>([]);
   const [permission, setPermission] = useState(false);
+  const [uploading, setUploading] = useState(false);
 
-  // Object URLs are revoked when the creator unmounts.
-  useEffect(
-    () => () => {
-      slots.forEach((slot) => URL.revokeObjectURL(slot.preview));
-    },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [],
-  );
+  const canSave = Boolean(name.trim()) && references.length > 0 && permission;
 
-  const uploading = slots.some((slot) => slot.status === "uploading");
-  const readyUrls = slots.filter((slot) => slot.status === "done" && slot.url).map((slot) => slot.url as string);
-  const canSave = Boolean(name.trim()) && !uploading;
-
-  const patchSlot = (id: string, patch: Partial<ReferenceSlot>) =>
-    setSlots((current) => current.map((slot) => (slot.id === id ? { ...slot, ...patch } : slot)));
-
-  /** One independent upload per file — a bad file never blocks the others. */
-  const startUpload = (file: File, slotId: string, label: string) => {
-    const preview = URL.createObjectURL(file);
-    setSlots((current) => {
-      const next: ReferenceSlot = { id: slotId, label, preview, url: null, status: "uploading" };
-      return current.some((slot) => slot.id === slotId)
-        ? current.map((slot) => (slot.id === slotId ? next : slot))
-        : [...current, next];
-    });
-
-    void uploadAvatarReference(file)
-      .then((url) => patchSlot(slotId, { url, status: "done", error: undefined }))
-      .catch((error: unknown) => {
-        const message = error instanceof Error ? error.message : "Upload failed";
-        patchSlot(slotId, { status: "error", error: message, url: null });
-        toast.error(message);
-      });
-  };
-
-  const addFiles = (files: FileList) => {
-    const room = MAX_REFERENCES - slots.length;
+  const handleFiles = async (files: FileList) => {
+    const room = MAX_REFERENCES - references.length;
     if (room <= 0) {
-      toast.error(`Up to ${MAX_REFERENCES} reference images.`);
+      toast.error(`Up to ${MAX_REFERENCES} images.`);
       return;
     }
-    Array.from(files)
-      .slice(0, room)
-      .forEach((file, index) => {
-        const position = slots.length + index;
-        startUpload(file, crypto.randomUUID(), SLOT_LABELS[position] ?? `Reference ${position + 1}`);
-      });
+    setUploading(true);
+    try {
+      const uploaded: string[] = [];
+      for (const file of Array.from(files).slice(0, room)) {
+        uploaded.push(await uploadRunInputFile(file));
+      }
+      setReferences((current) => [...current, ...uploaded]);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Upload failed");
+    } finally {
+      setUploading(false);
+    }
   };
-
-  const removeSlot = (id: string) =>
-    setSlots((current) => {
-      const target = current.find((slot) => slot.id === id);
-      if (target) URL.revokeObjectURL(target.preview);
-      return current.filter((slot) => slot.id !== id);
-    });
 
   const save = useMutation({
     mutationFn: async () => {
-      if (!name.trim()) throw new Error("Give this cast member a name.");
+      if (!canSave) throw new Error("Add a name, at least one image, and confirm permission.");
       await createUserAvatar({
         name: name.trim(),
-        reference_assets: readyUrls,
-        thumbnail_url: readyUrls[0] ?? null,
+        reference_assets: references,
+        thumbnail_url: references[0] ?? null,
         visual_description: notes.trim() || null,
         style_tags: tags,
       });
@@ -181,133 +138,25 @@ function AvatarCreator({ onDone, intent = "upload" }: { onDone: () => void; inte
     onError: (error) => toast.error(error instanceof Error ? error.message : "Could not save avatar"),
   });
 
-  const addTile = slots.length < MAX_REFERENCES ? (
-    <label className="cursor-pointer">
-      <input
-        type="file"
-        accept="image/jpeg,image/png,image/webp"
-        multiple
-        className="hidden"
-        onChange={(event) => {
-          const files = event.target.files;
-          event.target.value = "";
-          if (files?.length) addFiles(files);
-        }}
-      />
-      <span className="flex aspect-[3/4] w-full flex-col items-center justify-center gap-2 rounded-2xl border border-dashed border-cyan-300/30 bg-cyan-300/[0.04] text-[10px] uppercase tracking-[0.16em] text-cyan-200">
-        <Upload className="h-5 w-5" />
-        {slots.length === 0 ? "Add photos" : "+ Add more"}
-      </span>
-    </label>
-  ) : null;
-
   return (
     <div className={CARD}>
-      <p className="text-lg font-semibold">
-        {intent === "generate" ? "Describe your cast member" : "Turn your photos into a cast member"}
-      </p>
+      <p className="text-lg font-semibold">Create your Avatar</p>
       <p className="mt-1 text-sm text-slate-400">
-        Start with the images — 1–{MAX_REFERENCES} clear photos (JPG, PNG or WEBP, up to 15 MB each). We store
-        them as references only.
+        Upload 1–{MAX_REFERENCES} clear images of the person. We store them as references only.
       </p>
 
-      <div className="mt-5">
-        <div className="flex items-center justify-between gap-3">
-          <p className={LABEL}>Reference images ({readyUrls.length}/{MAX_REFERENCES} ready)</p>
-          {uploading ? (
-            <span className="inline-flex items-center gap-1.5 text-[11px] uppercase tracking-[0.16em] text-cyan-200">
-              <Loader2 className="h-3.5 w-3.5 animate-spin" /> Uploading
-            </span>
-          ) : null}
-        </div>
-
-        <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-          {slots.map((slot) => (
-            <div key={slot.id} className="space-y-1.5">
-              <div
-                className={cn(
-                  "relative aspect-[3/4] w-full overflow-hidden rounded-2xl border bg-black/40",
-                  slot.status === "error" ? "border-rose-400/50" : "border-white/10",
-                )}
-              >
-                <img
-                  src={slot.preview}
-                  alt={`${slot.label} reference`}
-                  className={cn(
-                    "h-full w-full object-cover transition",
-                    slot.status !== "done" && "opacity-50",
-                  )}
-                />
-                {slot.status === "uploading" ? (
-                  <span className="absolute inset-0 flex items-center justify-center bg-black/40">
-                    <Loader2 className="h-5 w-5 animate-spin text-cyan-200" />
-                  </span>
-                ) : null}
-                {slot.status === "done" ? (
-                  <span className="absolute left-2 top-2 rounded-full bg-black/70 p-1">
-                    <Check className="h-3 w-3 text-cyan-300" />
-                  </span>
-                ) : null}
-                <button
-                  type="button"
-                  onClick={() => removeSlot(slot.id)}
-                  aria-label={`Remove ${slot.label} reference`}
-                  className="absolute right-2 top-2 rounded-full bg-black/70 p-1"
-                >
-                  <X className="h-3 w-3 text-slate-200" />
-                </button>
-                <span className="absolute bottom-0 left-0 right-0 bg-black/70 px-2 py-1 text-[9px] uppercase tracking-[0.16em] text-slate-300">
-                  {slot.label}
-                </span>
-              </div>
-
-              <div className="flex items-center gap-2">
-                <label className="cursor-pointer text-[10px] uppercase tracking-[0.16em] text-slate-400 hover:text-cyan-200">
-                  <input
-                    type="file"
-                    accept="image/jpeg,image/png,image/webp"
-                    className="hidden"
-                    onChange={(event) => {
-                      const file = event.target.files?.[0];
-                      event.target.value = "";
-                      if (file) {
-                        URL.revokeObjectURL(slot.preview);
-                        startUpload(file, slot.id, slot.label);
-                      }
-                    }}
-                  />
-                  {slot.status === "error" ? "Retry" : "Replace"}
-                </label>
-                <button
-                  type="button"
-                  onClick={() => removeSlot(slot.id)}
-                  className="text-[10px] uppercase tracking-[0.16em] text-slate-500 hover:text-rose-300"
-                >
-                  Remove
-                </button>
-              </div>
-              {slot.status === "error" ? (
-                <p className="text-[11px] leading-snug text-rose-300">{slot.error}</p>
-              ) : null}
-            </div>
-          ))}
-          {addTile}
-        </div>
-      </div>
-
-      <div className="mt-6">
-        <p className={LABEL}>Avatar name</p>
-        <Input
-          value={name}
-          onChange={(event) => setName(event.target.value)}
-          placeholder="e.g. Mia — street cast"
-          className="mt-2 max-w-md border-white/10 bg-black/30 text-white"
-        />
-      </div>
-
-      <div className="mt-6 grid gap-4 md:grid-cols-2">
+      <div className="mt-5 grid gap-4 md:grid-cols-2">
         <div>
-          <p className={LABEL}>Style tags (optional)</p>
+          <p className={LABEL}>Avatar name</p>
+          <Input
+            value={name}
+            onChange={(event) => setName(event.target.value)}
+            placeholder="e.g. Mia — street cast"
+            className="mt-2 border-white/10 bg-black/30 text-white"
+          />
+        </div>
+        <div>
+          <p className={LABEL}>Style tags</p>
           <div className="mt-2 flex gap-2">
             <Input
               value={tagDraft}
@@ -349,15 +198,43 @@ function AvatarCreator({ onDone, intent = "upload" }: { onDone: () => void; inte
             </div>
           ) : null}
         </div>
-        <div>
-          <p className={LABEL}>Notes (optional)</p>
-          <Textarea
-            value={notes}
-            onChange={(event) => setNotes(event.target.value)}
-            rows={3}
-            placeholder="Wardrobe, hair styling, or look notes that matter for the shoot."
-            className="mt-2 border-white/10 bg-black/30 text-white"
-          />
+      </div>
+
+      <div className="mt-5">
+        <p className={LABEL}>Reference images ({references.length}/{MAX_REFERENCES})</p>
+        <div className="mt-2 flex flex-wrap items-center gap-3">
+          {references.map((url, index) => (
+            <div key={`${url}-${index}`} className="relative h-24 w-20 overflow-hidden rounded-xl border border-white/10 bg-black/40">
+              <img src={url} alt={`Reference ${index + 1}`} className="h-full w-full object-cover" />
+              <button
+                type="button"
+                onClick={() => setReferences((current) => current.filter((_, i) => i !== index))}
+                aria-label="Remove reference"
+                className="absolute right-1 top-1 rounded-full bg-black/70 p-1"
+              >
+                <X className="h-3 w-3 text-slate-200" />
+              </button>
+            </div>
+          ))}
+          {references.length < MAX_REFERENCES ? (
+            <label className="cursor-pointer">
+              <input
+                type="file"
+                accept="image/*"
+                multiple
+                className="hidden"
+                onChange={async (event) => {
+                  const files = event.target.files;
+                  event.target.value = "";
+                  if (files?.length) await handleFiles(files);
+                }}
+              />
+              <span className="inline-flex h-24 w-20 flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-white/15 bg-white/[0.02] text-[10px] uppercase tracking-[0.16em] text-slate-400">
+                {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+                Upload
+              </span>
+            </label>
+          ) : null}
         </div>
       </div>
 
@@ -373,6 +250,17 @@ function AvatarCreator({ onDone, intent = "upload" }: { onDone: () => void; inte
         </ul>
       </div>
 
+      <div className="mt-5">
+        <p className={LABEL}>Notes (optional)</p>
+        <Textarea
+          value={notes}
+          onChange={(event) => setNotes(event.target.value)}
+          rows={3}
+          placeholder="Wardrobe, hair styling, or look notes that matter for the shoot."
+          className="mt-2 border-white/10 bg-black/30 text-white"
+        />
+      </div>
+
       <label className="mt-5 flex items-start gap-3 text-sm text-slate-300">
         <Checkbox
           checked={permission}
@@ -386,7 +274,7 @@ function AvatarCreator({ onDone, intent = "upload" }: { onDone: () => void; inte
         <Button
           type="button"
           onClick={() => save.mutate()}
-          disabled={!canSave || save.isPending}
+          disabled={!canSave || save.isPending || uploading}
           className="rounded-full bg-cyan-300 px-5 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-950 hover:bg-cyan-200"
         >
           {save.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
@@ -409,22 +297,6 @@ export default function AvatarProfilesPage() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const [creating, setCreating] = useState(false);
-  const [searchParams] = useSearchParams();
-  const navigate = useNavigate();
-  const createIntent = searchParams.get("create") === "generate" ? "generate" : "upload";
-  // Preserve the originating Brand Workspace step (?from=/app/brand/onboarding...).
-  const fromParam = searchParams.get("from");
-  const backTo = fromParam && fromParam.startsWith("/") ? fromParam : null;
-
-  useEffect(() => {
-    if (searchParams.get("create")) setCreating(true);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  const goBack = () => {
-    if (backTo) navigate(backTo, { replace: true });
-    else navigate(-1);
-  };
 
   const myAvatars = useQuery({
     queryKey: ["my-avatars", user?.id],
@@ -459,28 +331,15 @@ export default function AvatarProfilesPage() {
     <div className="min-h-screen bg-slate-950 text-white">
       <Navbar />
       <main className="mx-auto w-full max-w-6xl px-5 pb-24 pt-28">
-        <button
-          type="button"
-          onClick={goBack}
-          className="mb-5 inline-flex items-center gap-1.5 rounded-full border border-white/12 bg-white/[0.03] px-3 py-1.5 text-[11px] uppercase tracking-[0.16em] text-slate-300 hover:text-white"
-        >
-          <ArrowLeft className="h-3.5 w-3.5" /> {backTo?.includes("/app/brand") ? "Back to brand setup" : "Back"}
-        </button>
         <h1 className="font-display text-3xl font-semibold tracking-tight">My Avatars</h1>
         <p className="mt-3 max-w-2xl text-sm text-slate-400">
-          Save a cast member once and reuse them across every campaign — in the Brand Workspace and
-          in the campaign runner.
+          Save a cast member once and reuse them across campaigns. Management only for now — avatars
+          aren't wired into generation yet.
         </p>
 
         <div className="mt-8 space-y-5">
           {creating ? (
-            <AvatarCreator
-              intent={createIntent}
-              onDone={() => {
-                setCreating(false);
-                if (backTo) goBack();
-              }}
-            />
+            <AvatarCreator onDone={() => setCreating(false)} />
           ) : (
             <Button
               type="button"

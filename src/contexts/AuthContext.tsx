@@ -7,7 +7,6 @@ interface Profile {
   user_id: string;
   email: string;
   name: string | null;
-  avatar_url: string | null;
   plan: string | null;
   subscription_status: string | null;
   credits_balance: number;
@@ -17,10 +16,7 @@ interface Profile {
   subscription_period_start: string | null;
   subscription_period_end: string | null;
   subscription_cycle_credits: number;
-  /** Post-auth onboarding plan-offer decision (server-owned, decided once). */
-  onboarding_plan_offer?: string | null;
 }
-
 
 export type AuthStatus =
   | "initializing_session"

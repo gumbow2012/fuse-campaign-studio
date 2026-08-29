@@ -6,13 +6,6 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-function maskEmail(email?: string | null) {
-  if (!email || !email.includes("@")) return "a new member";
-  const [local, domain] = email.split("@");
-  const head = local.slice(0, 2);
-  return `${head}***@${domain}`;
-}
-
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
@@ -31,16 +24,7 @@ serve(async (req) => {
     const user = userData.user;
     if (!user) throw new Error("User not authenticated");
 
-    const body = await req.json();
-    const { action, code } = body as { action?: string; code?: string };
-
-    const requireAdmin = async () => {
-      const { data: roles } = await supabaseClient
-        .from("user_roles").select("role").eq("user_id", user.id);
-      if (!(roles ?? []).some((r: any) => String(r.role) === "admin")) {
-        throw new Error("Admin access required");
-      }
-    };
+    const { action, code } = await req.json();
 
     if (action === "get-my-code") {
       // Get or create user's referral code
@@ -71,131 +55,12 @@ serve(async (req) => {
 
       const totalRewards = (rewards || []).reduce((sum: number, r: any) => sum + (r.credits_amount || 0), 0);
 
-      // Program config (public reward numbers)
-      const { data: config } = await supabaseClient
-        .from("referral_program_config").select("*").limit(1).maybeSingle();
-
-      // Recent activity
-      const { data: attributions } = await supabaseClient
-        .from("referral_attributions")
-        .select("id, referred_user_id, status, attributed_at, qualified_at, rewarded_at")
-        .eq("referrer_user_id", user.id)
-        .order("attributed_at", { ascending: false })
-        .limit(20);
-
-      const referredIds = (attributions ?? []).map((a: any) => a.referred_user_id);
-      let emailByUser: Record<string, string> = {};
-      if (referredIds.length) {
-        const { data: profiles } = await supabaseClient
-          .from("profiles").select("user_id, email").in("user_id", referredIds);
-        for (const p of profiles ?? []) emailByUser[p.user_id] = p.email;
-      }
-
-      const { data: myRewards } = await supabaseClient
-        .from("referral_rewards")
-        .select("attribution_id, credits_amount")
-        .eq("referrer_user_id", user.id);
-      const creditsByAttribution: Record<string, number> = {};
-      for (const r of myRewards ?? []) {
-        if (r.attribution_id) {
-          creditsByAttribution[r.attribution_id] =
-            (creditsByAttribution[r.attribution_id] || 0) + (r.credits_amount || 0);
-        }
-      }
-
-      const recent = (attributions ?? []).map((a: any) => ({
-        id: a.id,
-        maskedEmail: maskEmail(emailByUser[a.referred_user_id]),
-        status: a.status,
-        creditsEarned: creditsByAttribution[a.id] ?? 0,
-        at: a.rewarded_at ?? a.qualified_at ?? a.attributed_at,
-      }));
-
       return new Response(JSON.stringify({
         code: existing.code,
         totalSignups: totalSignups || 0,
         qualifiedReferrals: qualifiedCount || 0,
         totalRewardsEarned: totalRewards,
-        config: config
-          ? {
-              enabled: !!config.enabled,
-              signup_bonus_credits: config.signup_bonus_credits,
-              referrer_bonus_credits_on_paid: config.referrer_bonus_credits_on_paid,
-              paid_trigger: config.paid_trigger,
-            }
-          : null,
-        recent,
       }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
-    }
-
-    if (action === "admin-stats") {
-      await requireAdmin();
-
-      const { data: config } = await supabaseClient
-        .from("referral_program_config").select("*").limit(1).maybeSingle();
-
-      const countFor = async (status?: string) => {
-        let q = supabaseClient.from("referral_attributions").select("*", { count: "exact", head: true });
-        if (status) q = q.eq("status", status);
-        const { count } = await q;
-        return count || 0;
-      };
-
-      const [attributed, qualified, rewarded, total] = await Promise.all([
-        countFor("ATTRIBUTED"),
-        countFor("QUALIFIED"),
-        countFor("REWARDED"),
-        countFor(),
-      ]);
-
-      const { data: rewards } = await supabaseClient
-        .from("referral_rewards").select("credits_amount");
-      const creditsIssued = (rewards ?? []).reduce((s: number, r: any) => s + (r.credits_amount || 0), 0);
-
-      return new Response(JSON.stringify({
-        config,
-        counts: { attributed, qualified, rewarded, total },
-        creditsIssued,
-      }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
-    }
-
-    if (action === "admin-update-config") {
-      await requireAdmin();
-
-      const patch: Record<string, unknown> = {};
-      if (typeof body.enabled === "boolean") patch.enabled = body.enabled;
-      if (body.signup_bonus_credits !== undefined) {
-        const n = Number(body.signup_bonus_credits);
-        if (!Number.isInteger(n) || n < 0 || n > 100000) throw new Error("Invalid signup_bonus_credits");
-        patch.signup_bonus_credits = n;
-      }
-      if (body.referrer_bonus_credits_on_paid !== undefined) {
-        const n = Number(body.referrer_bonus_credits_on_paid);
-        if (!Number.isInteger(n) || n < 0 || n > 100000) throw new Error("Invalid referrer_bonus_credits_on_paid");
-        patch.referrer_bonus_credits_on_paid = n;
-      }
-      if (!Object.keys(patch).length) throw new Error("Nothing to update");
-      patch.updated_at = new Date().toISOString();
-
-      const { data: existingConfig } = await supabaseClient
-        .from("referral_program_config").select("id").limit(1).maybeSingle();
-
-      let updated;
-      if (existingConfig) {
-        const { data, error } = await supabaseClient
-          .from("referral_program_config").update(patch).eq("id", existingConfig.id).select().single();
-        if (error) throw new Error(error.message);
-        updated = data;
-      } else {
-        const { data, error } = await supabaseClient
-          .from("referral_program_config").insert(patch).select().single();
-        if (error) throw new Error(error.message);
-        updated = data;
-      }
-
-      return new Response(JSON.stringify({ success: true, config: updated }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
     }
 
     if (action === "apply-code") {

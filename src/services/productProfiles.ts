@@ -4,8 +4,6 @@
  */
 import { supabase } from "@/integrations/supabase/client";
 import { looseTable } from "@/services/looseTable";
-import { track } from "@/lib/analytics/track";
-import { ACTIVATION_EVENTS } from "@/lib/brandActivation";
 
 export type ProductProfileType = "product" | "garment";
 
@@ -106,15 +104,6 @@ export async function createProductProfile(input: ProductProfileInput): Promise<
     .select("*")
     .maybeSingle();
   if (error) throw error;
-  // Phase 7 activation analytics — fire-and-forget, safe props only.
-  try {
-    track(ACTIVATION_EVENTS.productAdded, {
-      active_brand_exists: !!input.brand_id,
-      product_type: input.type ?? null,
-    });
-  } catch {
-    /* analytics must never break a save */
-  }
   return data ? normalize(data) : null;
 }
 

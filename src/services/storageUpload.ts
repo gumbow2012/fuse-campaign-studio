@@ -51,35 +51,6 @@ export async function uploadToStorage(folder: string, file: File | Blob, filenam
   return { path, url: data.signedUrl };
 }
 
-/**
- * Cast master portraits: upload under `${userId}/cast-masters/...` so the
- * existing authenticated_upload_fuse_assets policy accepts the write, then
- * return a durable URL (public when the bucket is public, signed otherwise).
- */
-export async function uploadCastMaster(avatarId: string, file: File) {
-  const userId = await currentUserId();
-  const ext = file.name.match(/\.([a-z0-9]+)$/i)?.[1]?.toLowerCase() ?? "png";
-  const path = `${userId}/cast-masters/${avatarId}-${Date.now()}.${ext}`;
-
-  const { error } = await supabase.storage.from(BUCKET).upload(path, file, {
-    upsert: true,
-    contentType: file.type || "image/png",
-  });
-  if (error) throw new Error(error.message);
-
-  const publicUrl = supabase.storage.from(BUCKET).getPublicUrl(path).data.publicUrl;
-  const reachable = await fetch(publicUrl, { method: "HEAD" })
-    .then((response) => response.ok)
-    .catch(() => false);
-  if (reachable) return { path, url: publicUrl };
-
-  const { data, error: signError } = await supabase.storage
-    .from(BUCKET)
-    .createSignedUrl(path, 60 * 60 * 24 * 365);
-  if (signError || !data?.signedUrl) throw new Error(signError?.message ?? "Could not link that image.");
-  return { path, url: data.signedUrl };
-}
-
 /** Run uploads a few at a time so progress stays smooth and requests stay small. */
 export async function uploadWithConcurrency<T, R>(
   items: T[],

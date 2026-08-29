@@ -125,15 +125,6 @@ export async function getFalQueueResult(endpointId: string, requestId: string) {
  * (default 1K). nano-banana (NB2) has NO resolution field, so its payload must
  * never carry one.
  */
-const VIDEO_PROMPT_MAX_CHARS = 2500;
-/** Providers cap video prompts at 2500 chars (image models do not). */
-function clampVideoPrompt(prompt: string): string {
-  const p = String(prompt ?? "");
-  if (p.length <= VIDEO_PROMPT_MAX_CHARS) return p;
-  // Trim to the limit at a word boundary so we don't cut mid-word.
-  return p.slice(0, VIDEO_PROMPT_MAX_CHARS).replace(/\s+\S*$/, "").trim();
-}
-
 export const IMAGE_RESOLUTIONS = ["1K", "2K", "4K"] as const;
 export type ImageResolution = typeof IMAGE_RESOLUTIONS[number];
 
@@ -393,7 +384,7 @@ export function buildVideoModelInput(
   if (model.family === "kling") {
     // Preserved byte-for-byte from the original Kling payload.
     return {
-      prompt: clampVideoPrompt(args.prompt),
+      prompt: args.prompt,
       image_url: args.imageUrl,
       ...(args.endFrameUrl ? { tail_image_url: args.endFrameUrl } : {}),
       duration: normalizeVideoDuration(args.duration),
@@ -405,7 +396,7 @@ export function buildVideoModelInput(
   if (model.family === "kling3") {
     return {
       start_image_url: args.imageUrl,
-      prompt: clampVideoPrompt(args.prompt),
+      prompt: args.prompt,
       duration: String(clampSeedanceDuration(args.duration ?? 5, model)),
       generate_audio: args.generateAudio !== false,
       cfg_scale: 0.5,
@@ -424,7 +415,7 @@ export function buildVideoModelInput(
     : String(clampSeedanceDuration(args.duration, model));
 
   return {
-    prompt: clampVideoPrompt(args.prompt),
+    prompt: args.prompt,
     image_url: args.imageUrl,
     duration,
     resolution,
@@ -547,7 +538,7 @@ export function buildSeedanceReferenceInput(args: {
     : VERTICAL_VIDEO_ASPECT_RATIO;
 
   const input: Record<string, unknown> = {
-    prompt: clampVideoPrompt(args.prompt),
+    prompt: args.prompt,
     reference_image_urls: urls,
     image_urls: urls,
     duration,

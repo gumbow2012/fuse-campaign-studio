@@ -1,5 +1,7 @@
 import { useState, type ReactNode } from "react";
+import { ArrowRight, Loader2 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
@@ -11,48 +13,37 @@ import {
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
+import { CREDIT_PACKS, type CreditPackKey } from "@/lib/stripe-config";
 import { rememberPendingCheckout, trackEvent } from "@/lib/metaPixel";
-import { quoteCreditTopUp } from "@/lib/creditPricing";
-import { getMetaMatchParams } from "@/lib/metaMatch";
-import { getStoredUtm } from "@/lib/utmParams";
-import CreditTopUpModule from "@/components/mvp/membership/CreditTopUpModule";
-import { rememberPendingCreditTopUp } from "@/components/mvp/CreditTopUpSuccessWatcher";
 
 interface CreditPackDialogProps {
-  /** Optional when the dialog is controlled (e.g. opened from a popover that unmounts). */
-  trigger?: ReactNode;
-  open?: boolean;
-  onOpenChange?: (open: boolean) => void;
+  trigger: ReactNode;
 }
 
-export default function CreditPackDialog({ trigger, open, onOpenChange }: CreditPackDialogProps) {
+export default function CreditPackDialog({ trigger }: CreditPackDialogProps) {
   const navigate = useNavigate();
-  const { isAdmin, user, profile } = useAuth();
-  const [loading, setLoading] = useState<string | null>(null);
+  const { isAdmin, user } = useAuth();
+  const [loading, setLoading] = useState<CreditPackKey | null>(null);
 
-  const handleCreditCheckout = async (credits: number) => {
+  const handleCreditCheckout = async (packKey: CreditPackKey) => {
     if (!user) {
       navigate("/auth?mode=signup");
       return;
     }
     if (isAdmin) return;
 
-    // Display-only mirror of the server quote (pixel value + pending record).
-    const quote = quoteCreditTopUp(credits);
-    const contentName = `${credits.toLocaleString()} FUSE credits`;
-    const params = { value: quote.dollars, currency: "USD", content_name: contentName };
-    trackEvent("AddToCart", params);
-    trackEvent("InitiateCheckout", params);
+    const pack = CREDIT_PACKS[packKey];
+    const packParams = { value: pack.price, currency: "USD", content_name: `${pack.name} credit pack` };
+    trackEvent("AddToCart", packParams);
+    trackEvent("InitiateCheckout", packParams);
     // Proxy for card entry: Stripe Checkout is hosted on Stripe's domain.
-    trackEvent("AddPaymentInfo", params);
-    rememberPendingCheckout({ mode: "credits", value: quote.dollars, contentName });
-    rememberPendingCreditTopUp(credits, Number(profile?.credits_balance ?? 0));
+    trackEvent("AddPaymentInfo", packParams);
+    rememberPendingCheckout({ mode: "credits", value: pack.price, contentName: `${pack.name} credit pack` });
 
-    setLoading(String(credits));
+    setLoading(packKey);
     try {
-      const match = getMetaMatchParams();
       const { data, error } = await supabase.functions.invoke("create-credit-checkout", {
-        body: { credits, fbc: match.fbc, fbp: match.fbp, ...getStoredUtm() },
+        body: { packKey },
       });
       if (error) throw error;
       if (!data?.url) throw new Error("Stripe checkout URL not returned.");
@@ -69,23 +60,40 @@ export default function CreditPackDialog({ trigger, open, onOpenChange }: Credit
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      {trigger ? <DialogTrigger asChild>{trigger}</DialogTrigger> : null}
-      <DialogContent className="border-white/10 bg-slate-950 text-white sm:max-w-lg">
+    <Dialog>
+      <DialogTrigger asChild>{trigger}</DialogTrigger>
+      <DialogContent className="border-white/10 bg-slate-950 text-white sm:max-w-3xl">
         <DialogHeader>
           <DialogTitle className="font-display text-3xl tracking-[-0.04em]">Get credits</DialogTitle>
           <DialogDescription>
-            Quick buy one-time credit packs. Credits post automatically after payment clears. Promo codes can be
-            entered in Stripe Checkout.
+            Quick buy one-time credit packs. Credits post automatically after payment clears. Promo codes can be entered in Stripe Checkout.
           </DialogDescription>
         </DialogHeader>
 
-        <CreditTopUpModule
-          loading={loading}
-          isAdmin={isAdmin}
-          hidePlanNote
-          onCheckout={(credits) => void handleCreditCheckout(credits)}
-        />
+        <div className="grid gap-4 md:grid-cols-3">
+          {(Object.keys(CREDIT_PACKS) as CreditPackKey[]).map((packKey) => {
+            const pack = CREDIT_PACKS[packKey];
+            return (
+              <article key={packKey} className="rounded-[1.5rem] border border-white/10 bg-white/[0.04] p-5">
+                <p className="font-display text-xl font-semibold text-white">{pack.name}</p>
+                <p className="mt-3 text-4xl font-semibold text-white">
+                  ${pack.price}
+                  <span className="ml-1 text-sm font-normal text-slate-400">one-time</span>
+                </p>
+                <p className="mt-2 text-sm text-slate-300">{pack.credits.toLocaleString()} credits</p>
+                <Button
+                  onClick={() => void handleCreditCheckout(packKey)}
+                  disabled={isAdmin || !!loading}
+                  className="mt-6 w-full rounded-full bg-cyan-300 text-slate-950 hover:bg-cyan-200"
+                >
+                  {loading === packKey ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                  {isAdmin ? "Admin access" : loading === packKey ? "Loading..." : "Buy credits"}
+                  {!isAdmin && loading !== packKey ? <ArrowRight className="h-4 w-4" /> : null}
+                </Button>
+              </article>
+            );
+          })}
+        </div>
       </DialogContent>
     </Dialog>
   );

@@ -5,8 +5,7 @@ import {
   createAdminClient,
   errorMessage,
   json,
-  getUserRoles,
-  requireUser,
+  requireBuilderUser,
 } from "../_shared/supabase-admin.ts";
 import {
   clampSeedanceDuration,
@@ -24,9 +23,6 @@ import {
   VERTICAL_VIDEO_ASPECT_RATIO,
   videoFallbackUsdPerSecond,
 } from "../_shared/fal.ts";
-import {
-  toPublicGenerationFailure,
-} from "../_shared/generation-failure.ts";
 
 /**
  * Generation Studio: standalone prompt-to-image / prompt-to-video generations.
@@ -42,28 +38,6 @@ type AdminClient = ReturnType<typeof createAdminClient>;
 function creditsFromUsd(usd: number | null | undefined) {
   if (!usd || !Number.isFinite(usd) || usd <= 0) return null;
   return Math.max(1, Math.ceil(usd / USD_PER_CREDIT));
-}
-
-/** Race-safe: only the caller that flips credits_refunded false->true refunds. */
-async function refundStudioCreditsIfNeeded(admin: AdminClient, generationId: string) {
-  const { data } = await admin
-    .from("studio_generations")
-    .update({ credits_refunded: true })
-    .eq("id", generationId)
-    .eq("credits_refunded", false)
-    .gt("charged_credits", 0)
-    .select("user_id, charged_credits")
-    .maybeSingle();
-  if (!data) return;
-  await admin.rpc("apply_credit_transaction", {
-    p_user_id: data.user_id,
-    p_amount: data.charged_credits,
-    p_type: "refund",
-    p_description: `Image Studio refund (${generationId})`,
-    p_template_id: null,
-    p_project_id: null,
-    p_step_id: null,
-  });
 }
 
 async function estimateUsd(args: {
@@ -132,30 +106,15 @@ function combineFailureMessage(base: string, detail: string | null) {
   return `${base}\n\nProvider detail: ${trimmed}`.slice(0, 10000);
 }
 
-/**
- * P0 failure taxonomy: customers NEVER receive raw provider/moderation text.
- * Failed rows expose `publicFailure` (classified, polished copy) to everyone;
- * the raw provider detail travels separately as `providerFailure` and is only
- * assembled for privileged (admin/dev) callers.
- */
-function serializeGeneration(row: any, privileged = false) {
-  const failed = row.status === "failed";
-  const rawError = failed ? (row.error_log ?? null) : null;
-  const publicFailure = failed
-    ? toPublicGenerationFailure({ rawError, provider: row.provider_model ?? null })
-    : null;
-
+function serializeGeneration(row: any) {
   return {
     id: row.id,
     status: row.status as "queued" | "running" | "complete" | "failed",
     kind: row.kind ?? null,
     prompt: row.prompt ?? null,
     outputUrl: row.output_url ?? null,
-    previewUrl: row.preview_url ?? null,
-    posterUrl: row.poster_url ?? null,
     outputType: row.output_type ?? null,
-
-    publicFailure,
+    error: row.error_log ?? null,
     estimatedCredits: row.estimated_credits ?? null,
     estimatedCostUsd: row.estimated_cost_usd ? Number(row.estimated_cost_usd) : null,
     providerModel: row.provider_model ?? null,
@@ -164,18 +123,6 @@ function serializeGeneration(row: any, privileged = false) {
     favorited: row.favorited === true,
     createdAt: row.created_at ?? null,
     completedAt: row.completed_at ?? null,
-    ...(privileged
-      ? {
-          providerFailure: failed
-            ? {
-                rawError,
-                provider: row.provider_model ?? null,
-                requestId: row.provider_request_id ?? null,
-                endpoint: row.provider_model ?? null,
-              }
-            : null,
-        }
-      : {}),
   };
 }
 
@@ -184,8 +131,7 @@ function serializeGeneration(row: any, privileged = false) {
  * never error_log, never full prompt bodies or reference arrays.
  */
 const LIST_SELECT =
-  "id, status, kind, prompt, output_url, output_type, preview_url, poster_url, estimated_credits, estimated_cost_usd, provider_model, favorited, created_at, completed_at";
-
+  "id, status, kind, prompt, output_url, output_type, estimated_credits, estimated_cost_usd, provider_model, favorited, created_at, completed_at";
 
 function truncatePrompt(prompt: unknown, max = 160): string | null {
   const text = String(prompt ?? "").trim();
@@ -201,8 +147,7 @@ function serializeGenerationListItem(row: any) {
     kind: row.kind ?? null,
     promptPreview: truncatePrompt(row.prompt),
     outputUrl: row.output_url ?? null,
-    previewUrl: (row.preview_url ?? null) as string | null,
-    posterUrl: (row.poster_url ?? null) as string | null,
+    previewUrl: null as string | null,
     outputType: row.output_type ?? null,
     estimatedCredits: row.estimated_credits ?? null,
     estimatedCostUsd: row.estimated_cost_usd ? Number(row.estimated_cost_usd) : null,
@@ -212,66 +157,6 @@ function serializeGenerationListItem(row: any) {
     completedAt: row.completed_at ?? null,
   };
 }
-
-/**
- * GS-PERF6: small gallery preview for completed IMAGE generations.
- * The master `output_url` is never touched or re-encoded — this only writes a
- * separate 480px JPEG into fuse-assets and fills `preview_url`.
- * Fully best-effort: it must never throw, never block, never affect credits.
- */
-const PREVIEW_BUCKET = "fuse-assets";
-const PREVIEW_MAX_EDGE = 480;
-
-async function generatePreviewThumbnail(admin: AdminClient, row: any): Promise<boolean> {
-  try {
-    if (!row?.id) return false;
-    if (row.status !== "complete") return false;
-    if ((row.output_type ?? "image") !== "image") return false;
-    const source = String(row.output_url ?? "").trim();
-    if (!source) return false;
-    if (row.preview_url) return false;
-
-    const { default: Image } = await import(
-      "https://deno.land/x/imagescript@1.2.17/mod.ts"
-    );
-
-    const res = await fetch(source);
-    if (!res.ok) return false;
-    const bytes = new Uint8Array(await res.arrayBuffer());
-
-    const decoded = await Image.decode(bytes);
-    const scale = Math.min(1, PREVIEW_MAX_EDGE / Math.max(decoded.width, decoded.height));
-    const width = Math.max(1, Math.round(decoded.width * scale));
-    const height = Math.max(1, Math.round(decoded.height * scale));
-    const resized = scale < 1 ? decoded.resize(width, height) : decoded;
-    const jpeg = await resized.encodeJPEG(80);
-
-    const path = `studio/previews/${row.id}.jpg`;
-    const { error: uploadError } = await admin.storage
-      .from(PREVIEW_BUCKET)
-      .upload(path, jpeg, { contentType: "image/jpeg", upsert: true });
-    if (uploadError) {
-      console.error("preview upload failed:", uploadError.message);
-      return false;
-    }
-
-    const { data: pub } = admin.storage.from(PREVIEW_BUCKET).getPublicUrl(path);
-    const previewUrl = pub?.publicUrl;
-    if (!previewUrl) return false;
-
-    await admin
-      .from("studio_generations")
-      .update({ preview_url: previewUrl })
-      .eq("id", row.id)
-      .is("preview_url", null);
-
-    return true;
-  } catch (error) {
-    console.error("generatePreviewThumbnail failed:", errorMessage(error));
-    return false;
-  }
-}
-
 
 type StartInput = {
   kind?: string;
@@ -316,54 +201,7 @@ function requestedAspect(value: unknown) {
   return raw && raw.toLowerCase() !== "auto" ? raw : null;
 }
 
-/**
- * Charges the generation BEFORE the provider submit. Throws INSUFFICIENT_CREDITS
- * so the caller never submits an unpaid generation. Admin/dev are not charged.
- */
-async function chargeStudioCredits(
-  admin: AdminClient,
-  args: {
-    generationId: string;
-    userId: string;
-    privileged: boolean;
-    estimatedCostUsd: number | null;
-    kind: string;
-  },
-) {
-  const credits = creditsFromUsd(args.estimatedCostUsd) ?? 0;
-  if (args.privileged || credits <= 0) return;
-
-  const { error: creditError } = await admin.rpc("apply_credit_transaction", {
-    p_user_id: args.userId,
-    p_amount: -credits,
-    p_type: "run_template",
-    p_description: `Image Studio ${args.kind}`,
-    p_template_id: null,
-    p_project_id: null,
-    p_step_id: null,
-  });
-  if (creditError) {
-    await admin
-      .from("studio_generations")
-      .update({
-        status: "failed",
-        error_log: "INSUFFICIENT_CREDITS",
-        completed_at: new Date().toISOString(),
-      })
-      .eq("id", args.generationId);
-    throw new Error("INSUFFICIENT_CREDITS");
-  }
-
-  await admin
-    .from("studio_generations")
-    .update({ charged_credits: credits })
-    .eq("id", args.generationId);
-}
-
-async function startGeneration(
-  admin: AdminClient,
-  args: { input: StartInput; userId: string; privileged?: boolean },
-) {
+async function startGeneration(admin: AdminClient, args: { input: StartInput; userId: string }) {
   const input = args.input;
   const kind = input.kind === "video" ? "video" : "image";
   const prompt = String(input.prompt ?? "").trim();
@@ -412,14 +250,6 @@ async function startGeneration(
         fallbackFlatUsd: imageModel.fallbackFlatUsd ?? IMAGE_FALLBACK_USD,
       });
 
-      await chargeStudioCredits(admin, {
-        generationId: inserted.id,
-        userId: args.userId,
-        privileged: args.privileged === true,
-        estimatedCostUsd,
-        kind,
-      });
-
       const falInput = built.input;
 
       const requestId = await submitFalJob(endpointId, falInput, webhookUrl);
@@ -444,7 +274,7 @@ async function startGeneration(
         .select("*")
         .single();
 
-      return serializeGeneration(updated ?? inserted, args.privileged === true);
+      return serializeGeneration(updated ?? inserted);
     }
 
 
@@ -498,14 +328,6 @@ async function startGeneration(
       endpointId,
       seconds: duration,
       fallbackUsdPerSecond: videoFallbackUsdPerSecond(videoModel, generateAudio) ?? null,
-    });
-
-    await chargeStudioCredits(admin, {
-      generationId: inserted.id,
-      userId: args.userId,
-      privileged: args.privileged === true,
-      estimatedCostUsd,
-      kind,
     });
 
     let requestId: string;
@@ -573,7 +395,7 @@ async function startGeneration(
       .select("*")
       .single();
 
-    return serializeGeneration(updated ?? inserted, args.privileged === true);
+    return serializeGeneration(updated ?? inserted);
   } catch (error) {
     const message = errorMessage(error);
     await admin
@@ -584,7 +406,6 @@ async function startGeneration(
         completed_at: new Date().toISOString(),
       })
       .eq("id", inserted.id);
-    await refundStudioCreditsIfNeeded(admin, inserted.id);
     throw error;
   }
 }
@@ -626,7 +447,7 @@ function isStuck(row: any) {
 }
 
 /** Terminal-fail an in-flight row that never produced a provider result. */
-async function expireGeneration(admin: AdminClient, row: any, privileged = false) {
+async function expireGeneration(admin: AdminClient, row: any) {
   const { data: updated } = await admin
     .from("studio_generations")
     .update({
@@ -637,16 +458,15 @@ async function expireGeneration(admin: AdminClient, row: any, privileged = false
     .eq("id", row.id)
     .select("*")
     .maybeSingle();
-  await refundStudioCreditsIfNeeded(admin, row.id);
-  return serializeGeneration(updated ?? { ...row, status: "failed" }, privileged);
+  return serializeGeneration(updated ?? { ...row, status: "failed" });
 }
 
 /** Poll fal for a generation still in flight and persist any terminal result. */
-async function syncGeneration(admin: AdminClient, row: any, privileged = false) {
-  if (!isInFlight(row)) return serializeGeneration(row, privileged);
-  if (isStuck(row)) return await expireGeneration(admin, row, privileged);
+async function syncGeneration(admin: AdminClient, row: any) {
+  if (!isInFlight(row)) return serializeGeneration(row);
+  if (isStuck(row)) return await expireGeneration(admin, row);
   if (!row.provider_request_id || !row.provider_model) {
-    return serializeGeneration(row, privileged);
+    return serializeGeneration(row);
   }
 
   try {
@@ -655,7 +475,7 @@ async function syncGeneration(admin: AdminClient, row: any, privileged = false) 
       "queue status lookup",
     );
     const normalized = String(status ?? "").toUpperCase();
-    if (normalized !== "COMPLETED" && normalized !== "OK") return serializeGeneration(row, privileged);
+    if (normalized !== "COMPLETED" && normalized !== "OK") return serializeGeneration(row);
 
     const result = await withTimeout(
       getFalQueueResult(row.provider_model, row.provider_request_id),
@@ -676,21 +496,14 @@ async function syncGeneration(admin: AdminClient, row: any, privileged = false) 
       .select("*")
       .single();
 
-    // GS-PERF6: best-effort gallery thumbnail (never blocks or fails the row).
-    const completed = updated ?? { ...row, status: "complete", output_url: output.url, output_type: output.type };
-    if (!completed.preview_url) {
-      await generatePreviewThumbnail(admin, completed);
-    }
-
-    return serializeGeneration(updated ?? row, privileged);
-
+    return serializeGeneration(updated ?? row);
   } catch (error) {
     // A hung/rate-limited provider call must never fail the row or the invocation.
-    if (error instanceof ProviderTimeout) return serializeGeneration(row, privileged);
+    if (error instanceof ProviderTimeout) return serializeGeneration(row);
 
     const message = errorMessage(error);
     const isTransient = /queue status lookup failed|fetch|network|timed out/i.test(message);
-    if (isTransient) return serializeGeneration(row, privileged);
+    if (isTransient) return serializeGeneration(row);
 
     const detail = await providerFailureDetail(row).catch(() => null);
 
@@ -705,9 +518,7 @@ async function syncGeneration(admin: AdminClient, row: any, privileged = false) 
       .select("*")
       .single();
 
-    await refundStudioCreditsIfNeeded(admin, row.id);
-
-    return serializeGeneration(updated ?? row, privileged);
+    return serializeGeneration(updated ?? row);
   }
 }
 
@@ -760,7 +571,6 @@ Deno.serve(async (req) => {
             completed_at: new Date().toISOString(),
           })
           .eq("id", row.id);
-        await refundStudioCreditsIfNeeded(admin, row.id);
         return json({ ok: true });
       }
 
@@ -774,19 +584,7 @@ Deno.serve(async (req) => {
         })
         .eq("id", row.id);
 
-      // GS-PERF6: best-effort gallery thumbnail; failures are swallowed.
-      if (!row.preview_url) {
-        await generatePreviewThumbnail(admin, {
-          ...row,
-          status: "complete",
-          output_url: output.url,
-          output_type: output.type,
-          preview_url: null,
-        });
-      }
-
       return json({ ok: true });
-
     } catch (error) {
       console.error("generate-studio callback failed:", errorMessage(error));
       return json({ error: errorMessage(error) }, 500);
@@ -794,17 +592,13 @@ Deno.serve(async (req) => {
   }
 
   try {
-    // Open to ANY signed-in user; credits are the gate, not a role.
-    const user = await requireUser(req, admin);
-    const roles = await getUserRoles(user.id, admin);
-    // Raw provider failure detail is assembled ONLY for admin/dev callers.
-    const privileged = roles.includes("admin") || roles.includes("dev");
+    const access = await requireBuilderUser(req, admin);
+    const user = access.user;
     const body = await req.json().catch(() => ({})) as StartInput & {
       action?: string;
       generationId?: string;
       generationIds?: string[];
       limit?: number;
-      cursor?: { createdAt?: unknown; id?: unknown };
     };
     const action = body.action ?? (body.generationId ? "status" : "start");
 
@@ -818,7 +612,7 @@ Deno.serve(async (req) => {
         .maybeSingle();
       if (error) throw new Error(error.message);
       if (!row) return json({ error: "Generation not found" }, 404);
-      return json({ generation: await syncGeneration(admin, row, privileged) });
+      return json({ generation: await syncGeneration(admin, row) });
     }
 
     if (action === "list" || action === "queue") {
@@ -828,48 +622,15 @@ Deno.serve(async (req) => {
        * webhooks are the completion path; `reconcile` is the explicit fallback.
        */
       const limit = Math.min(200, Math.max(1, Number(body.limit ?? 20)));
-      /**
-       * GS-PERF2: stable keyset cursor. Ordering is (created_at DESC, id DESC);
-       * a cursor page keeps only rows strictly after it:
-       *   created_at < cursor.createdAt
-       *   OR (created_at = cursor.createdAt AND id < cursor.id)
-       * PostgREST: or(created_at.lt.<ts>,and(created_at.eq.<ts>,id.lt.<id>))
-       * (values URL-encoded — timestamps contain spaces/'+'). Fetch limit+1
-       * to detect the next page without a count query.
-       */
-      const cursorCreatedAt = typeof body.cursor?.createdAt === "string"
-        ? body.cursor.createdAt.trim()
-        : "";
-      const cursorId = typeof body.cursor?.id === "string" ? body.cursor.id.trim() : "";
-
-      let query = admin
+      const { data: rows, error } = await admin
         .from("studio_generations")
         .select(LIST_SELECT)
         .eq("user_id", user.id)
         .order("created_at", { ascending: false })
-        .order("id", { ascending: false })
-        .limit(limit + 1);
-
-      if (cursorCreatedAt && cursorId) {
-        query = query.or(
-          `created_at.lt.${cursorCreatedAt},and(created_at.eq.${cursorCreatedAt},id.lt.${cursorId})`,
-        );
-      }
-
-      const { data: rows, error } = await query;
+        .limit(limit);
       if (error) throw new Error(error.message);
 
-      const all = rows ?? [];
-      const page = all.slice(0, limit);
-      const last = page[page.length - 1] as { created_at?: string; id?: string } | undefined;
-      const nextCursor = all.length > limit && last?.created_at && last?.id
-        ? { createdAt: String(last.created_at), id: String(last.id) }
-        : null;
-
-      return json({
-        generations: page.map(serializeGenerationListItem),
-        nextCursor,
-      });
+      return json({ generations: (rows ?? []).map(serializeGenerationListItem) });
     }
 
     if (action === "detail") {
@@ -883,7 +644,7 @@ Deno.serve(async (req) => {
         .maybeSingle();
       if (error) throw new Error(error.message);
       if (!row) return json({ error: "Generation not found" }, 404);
-      return json({ generation: serializeGeneration(row, privileged) });
+      return json({ generation: serializeGeneration(row) });
     }
 
     if (action === "reconcile") {
@@ -910,54 +671,15 @@ Deno.serve(async (req) => {
       const CONCURRENCY = 3;
       for (let i = 0; i < inFlightRows.length; i += CONCURRENCY) {
         const chunk = inFlightRows.slice(i, i + CONCURRENCY);
-        const settled = await Promise.all(chunk.map((row) => syncGeneration(admin, row, privileged)));
+        const settled = await Promise.all(chunk.map((row) => syncGeneration(admin, row)));
         for (const entry of settled) reconciled.set(String(entry.id), entry);
       }
 
       const generations = (rows ?? []).map(
-        (row) => reconciled.get(row.id) ?? serializeGeneration(row, privileged),
+        (row) => reconciled.get(row.id) ?? serializeGeneration(row),
       );
       return json({ generations });
     }
-
-    if (action === "backfill_previews") {
-      /** GS-PERF6: admin/dev-only, idempotent thumbnail backfill. */
-      if (!privileged) throw new Error("Admin access required");
-
-      const { data: rows, error } = await admin
-        .from("studio_generations")
-        .select("id, status, output_url, output_type, preview_url")
-        .eq("status", "complete")
-        .eq("output_type", "image")
-        .is("preview_url", null)
-        .not("output_url", "is", null)
-        .order("created_at", { ascending: false })
-        .limit(25);
-      if (error) throw new Error(error.message);
-
-      const targets = rows ?? [];
-      let processed = 0;
-      const CONCURRENCY = 3;
-      for (let i = 0; i < targets.length; i += CONCURRENCY) {
-        const chunk = targets.slice(i, i + CONCURRENCY);
-        const results = await Promise.all(
-          chunk.map((row) => generatePreviewThumbnail(admin, row)),
-        );
-        processed += results.filter(Boolean).length;
-      }
-
-      const { count } = await admin
-        .from("studio_generations")
-        .select("id", { count: "exact", head: true })
-        .eq("status", "complete")
-        .eq("output_type", "image")
-        .is("preview_url", null)
-        .not("output_url", "is", null);
-
-      return json({ processed, remaining: count ?? 0 });
-    }
-
-
 
     if (action === "set_favorite") {
       const generationId = String(body.generationId ?? "").trim();
@@ -973,7 +695,7 @@ Deno.serve(async (req) => {
         .maybeSingle();
       if (error) throw new Error(error.message);
       if (!row) return json({ error: "Generation not found" }, 404);
-      return json({ generation: serializeGeneration(row, privileged) });
+      return json({ generation: serializeGeneration(row) });
     }
 
     if (action === "delete") {
@@ -1011,13 +733,10 @@ Deno.serve(async (req) => {
 
     if (action !== "start") throw new Error(`Unsupported action: ${action}`);
 
-    const generation = await startGeneration(admin, { input: body, userId: user.id, privileged });
+    const generation = await startGeneration(admin, { input: body, userId: user.id });
     return json({ generation });
   } catch (error) {
     const message = errorMessage(error);
-    if (/INSUFFICIENT_CREDITS|Insufficient credits/i.test(message)) {
-      return json({ error: "Not enough credits for this generation." }, 402);
-    }
     const status = /access required|authorization|Authentication|bearer/i.test(message) ? 401 : 400;
     return json({ error: message }, status);
   }

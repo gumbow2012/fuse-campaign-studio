@@ -35,40 +35,16 @@ Deno.serve(async (req) => {
       throw new Error("Display name must be between 2 and 80 characters.");
     }
 
-    // Optional avatar: a compact inline JPEG/PNG/WEBP data URL, or null to remove it.
-    const hasAvatarField = payload && Object.prototype.hasOwnProperty.call(payload, "avatar_data_url");
-    let avatarUrl: string | null | undefined;
-
-    if (hasAvatarField) {
-      const raw = payload.avatar_data_url;
-      if (raw === null || raw === "") {
-        avatarUrl = null;
-      } else if (typeof raw !== "string") {
-        throw new Error("Invalid profile photo payload.");
-      } else {
-        if (!/^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/.test(raw)) {
-          throw new Error("Profile photo must be a JPEG, PNG or WEBP image.");
-        }
-        const base64 = raw.split(",")[1] ?? "";
-        const bytes = Math.floor((base64.length * 3) / 4);
-        if (bytes > 160_000) {
-          throw new Error("Profile photo is too large. Please choose a smaller image.");
-        }
-        avatarUrl = raw;
-      }
-    }
-
     const { data: profile, error: profileError } = await admin
       .from("profiles")
       .upsert({
         user_id: user.id,
         email: (user.email ?? "").toLowerCase(),
         name,
-        ...(avatarUrl === undefined ? {} : { avatar_url: avatarUrl }),
       }, {
         onConflict: "user_id",
       })
-      .select("user_id, email, name, avatar_url")
+      .select("user_id, email, name")
       .single();
 
     if (profileError || !profile) {
@@ -115,7 +91,6 @@ Deno.serve(async (req) => {
       ok: true,
       profile: {
         name: profile.name ?? name,
-        avatar_url: profile.avatar_url ?? null,
       },
     });
   } catch (error) {

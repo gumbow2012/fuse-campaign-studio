@@ -8,12 +8,6 @@
 
 export const LOW_RESOLUTION_THRESHOLD = 768;
 
-/** Real image transport ceiling — matches direct-to-storage upload limits. */
-export const MAX_IMAGE_BYTES = 12 * 1024 * 1024;
-/** Real video transport ceiling. */
-export const MAX_VIDEO_BYTES = 60 * 1024 * 1024;
-
-
 export type UploadCheckState = "uploading" | "checking" | "ready" | "warning" | "error";
 
 export interface UploadCheckResult {
@@ -28,35 +22,15 @@ export interface UploadCheckResult {
   notChecked: string[];
 }
 
-/** Max time we wait for a local image decode before giving up. */
-export const DECODE_TIMEOUT_MS = 9000;
-
-export const DECODE_TIMEOUT_MESSAGE =
-  "We couldn't check this image. Try uploading it again.";
-
-type DecodeResult =
-  | { kind: "ok"; image: HTMLImageElement; url: string }
-  | { kind: "error" }
-  | { kind: "timeout" };
-
-function decodeImage(file: File): Promise<DecodeResult> {
-  return new Promise((resolve) => {
+function decodeImage(file: File) {
+  return new Promise<{ image: HTMLImageElement; url: string } | null>((resolve) => {
     const url = URL.createObjectURL(file);
-    let settled = false;
-    const finish = (result: DecodeResult) => {
-      if (settled) return;
-      settled = true;
-      window.clearTimeout(timer);
-      // Always release the object URL — success, error and timeout alike.
-      // On success the caller still needs the URL, so it revokes after use;
-      // here we revoke only when the caller will never see it.
-      if (result.kind !== "ok") URL.revokeObjectURL(url);
-      resolve(result);
-    };
-    const timer = window.setTimeout(() => finish({ kind: "timeout" }), DECODE_TIMEOUT_MS);
     const image = new Image();
-    image.onload = () => finish({ kind: "ok", image, url });
-    image.onerror = () => finish({ kind: "error" });
+    image.onload = () => resolve({ image, url });
+    image.onerror = () => {
+      URL.revokeObjectURL(url);
+      resolve(null);
+    };
     image.src = url;
   });
 }
@@ -95,27 +69,8 @@ export async function runUploadChecks(
     };
   }
 
-  // Real transport limit (direct-to-storage upload, no base64 inflation).
-  if (file.size > MAX_IMAGE_BYTES) {
-    return {
-      state: "error",
-      warnings: [],
-      error: "This image is larger than 12 MB — please use a smaller file.",
-      notChecked,
-    };
-  }
-
-
   const decoded = await decodeImage(file);
-  if (decoded.kind === "timeout") {
-    return {
-      state: "error",
-      warnings: [],
-      error: DECODE_TIMEOUT_MESSAGE,
-      notChecked,
-    };
-  }
-  if (decoded.kind === "error") {
+  if (!decoded) {
     return {
       state: "error",
       warnings: [],

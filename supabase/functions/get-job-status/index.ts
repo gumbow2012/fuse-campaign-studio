@@ -5,7 +5,6 @@ import {
   createAdminClient,
   errorMessage,
   getOptionalUser,
-  getUserRoles,
   hasValidRunnerCode,
   json,
   requireUser,
@@ -25,18 +24,7 @@ Deno.serve(async (req) => {
     const url = new URL(req.url);
     const jobId = url.searchParams.get("jobId");
     if (!jobId) throw new Error("jobId is required");
-
-    // TR2: only runner/admin/dev callers receive prompts, mapping and provider internals.
-    let isPrivileged = runnerAccess;
-    if (!isPrivileged && user) {
-      const roles = await getUserRoles(user.id, admin);
-      isPrivileged = roles.includes("admin") || roles.includes("dev");
-    }
-
-    const detail = await buildJobStatusResponse(admin, jobId, runnerAccess, user?.id ?? null, {
-      includeSensitive: isPrivileged,
-    });
-
+    const detail = await buildJobStatusResponse(admin, jobId, runnerAccess, user?.id ?? null);
     return json(detail);
   } catch (error) {
     return json({ error: errorMessage(error) }, 400);

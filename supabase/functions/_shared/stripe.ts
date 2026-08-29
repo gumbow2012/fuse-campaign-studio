@@ -55,7 +55,7 @@ export function resolveStripeBillingMode(
 
 export function getStripeSecretKey(mode: StripeBillingMode) {
   if (mode === "live") {
-    const liveKey = firstNonEmptyEnv(["STRIPE_SECRET_KEY_LIVE"]);
+    const liveKey = firstNonEmptyEnv(["STRIPE_SECRET_KEY_LIVE", "STRIPE_SECRET_KEY"]);
     if (liveKey) return liveKey;
     throw new Error("Stripe live-mode secret key is not configured.");
   }
@@ -73,7 +73,10 @@ export function getStripeSecretKey(mode: StripeBillingMode) {
 
 export function getStripeWebhookSecret(mode: StripeBillingMode) {
   if (mode === "live") {
-    const webhookSecret = firstNonEmptyEnv(["STRIPE_WEBHOOK_SECRET_LIVE"]);
+    const webhookSecret = firstNonEmptyEnv([
+      "STRIPE_WEBHOOK_SECRET_LIVE",
+      "STRIPE_WEBHOOK_SECRET",
+    ]);
     if (webhookSecret) return webhookSecret;
     throw new Error("Stripe live-mode webhook secret is not configured.");
   }

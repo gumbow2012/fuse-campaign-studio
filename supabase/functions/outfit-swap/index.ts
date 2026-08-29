@@ -19,20 +19,6 @@ import {
   submitFalJob,
   videoFallbackUsdPerSecond,
 } from "../_shared/fal.ts";
-import {
-  IDENTITY_AUTHORITY_BLOCK,
-  identityReferencePack,
-  readConsistencyProfile,
-} from "../_shared/identity-lock.ts";
-import {
-  type AssembledFrameEdit,
-  assembleFrameEdit,
-  type AssemblyFrameSubject,
-  type AssemblyGarment,
-  type AssemblySubjectModel,
-  buildReconstructionPromptV2,
-  requiresFusedAssembly,
-} from "../_shared/outfit-swap-assembly.ts";
 
 /**
  * Outfit Swap: per-frame nano-banana wardrobe edits + one Seedance
@@ -198,73 +184,6 @@ function buildReconstructionPrompt(args: { garments: GarmentReference[]; extra?:
   ].filter(Boolean).join(" ");
 }
 
-/**
- * PHASE 5 — resolves the Phase 4 model choices into identity reference packs.
- * Avatar/cast identities are read from `avatar_profiles` through the shared
- * identity-lock helpers; `upload` models use their loose project-scoped refs.
- */
-async function resolveSubjectModels(
-  admin: AdminClient,
-  userId: string,
-  assignment: Record<string, any> | null | undefined,
-): Promise<Record<string, AssemblySubjectModel>> {
-  const entries = Object.entries(assignment ?? {});
-  if (!entries.length) return {};
-
-  const avatarIds = Array.from(
-    new Set(
-      entries
-        .filter(([, model]) => {
-          const source = String(model?.modelSource ?? "").toLowerCase();
-          return source === "avatar" || source === "cast";
-        })
-        .map(([, model]) => String(model?.avatarId ?? "").trim())
-        .filter(Boolean),
-    ),
-  );
-
-  const avatars = new Map<string, any>();
-  if (avatarIds.length) {
-    const { data: rows } = await admin
-      .from("avatar_profiles")
-      .select("*")
-      .in("id", avatarIds);
-    for (const row of rows ?? []) avatars.set(String(row.id), row);
-  }
-
-  const resolved: Record<string, AssemblySubjectModel> = {};
-  for (const [subjectId, model] of entries) {
-    const source = String(model?.modelSource ?? "keep_original").toLowerCase();
-    if (source === "avatar" || source === "cast") {
-      const row = avatars.get(String(model?.avatarId ?? "").trim());
-      if (!row) {
-        // Unknown/inaccessible avatar → fall back to keeping the source person.
-        resolved[subjectId] = { modelSource: "keep_original" };
-        continue;
-      }
-      resolved[subjectId] = {
-        modelSource: source as "avatar" | "cast",
-        avatarId: String(row.id),
-        label: typeof row.name === "string" ? row.name : null,
-        identityRefs: identityReferencePack(row),
-        identityAngles: (readConsistencyProfile(row).approved ?? {}) as Record<string, string | null>,
-      };
-      continue;
-    }
-    if (source === "upload") {
-      const refs = Array.isArray(model?.uploadedRefUrls)
-        ? model.uploadedRefUrls.map((url: unknown) => String(url ?? "").trim()).filter(Boolean)
-        : [];
-      resolved[subjectId] = refs.length
-        ? { modelSource: "upload", label: "uploaded model reference", identityRefs: refs }
-        : { modelSource: "keep_original" };
-      continue;
-    }
-    resolved[subjectId] = { modelSource: "keep_original" };
-  }
-  return resolved;
-}
-
 async function startSwapFrame(admin: AdminClient, args: {
   userId: string;
   sourceFrameUrl: string;
@@ -276,10 +195,6 @@ async function startSwapFrame(admin: AdminClient, args: {
   resolution?: string;
   extraPrompt?: string;
   webhookBase: string;
-  /** PHASE 5 (optional) — Phase 1/3/4 context for this specific frame. */
-  frameSubjects?: AssemblyFrameSubject[];
-  castAssignment?: Record<string, any>;
-  modelAssignment?: Record<string, any>;
 }) {
   const sourceFrameUrl = String(args.sourceFrameUrl ?? "").trim();
   if (!sourceFrameUrl) throw new Error("A source frame is required");
@@ -288,59 +203,13 @@ async function startSwapFrame(admin: AdminClient, args: {
     .filter((garment) => String(garment?.url ?? "").trim());
   if (!garments.length) throw new Error("Add at least one clothing reference");
 
-  // ---- LEGACY PATH (unchanged): 1 subject, keep_original, no rear back-design.
   // REF order matters: the source frame is always image 1.
-  let imageUrls = cleanUrls([sourceFrameUrl, ...garments.map((garment) => garment.url)]);
-  let prompt = buildSwapPrompt({
+  const imageUrls = cleanUrls([sourceFrameUrl, ...garments.map((garment) => garment.url)]);
+  const prompt = buildSwapPrompt({
     garments,
     person: String(args.person ?? "Everyone"),
     extra: args.extraPrompt,
   });
-  let assembly: AssembledFrameEdit | null = null;
-
-  // ---- PHASE 5 FUSED PATH: source frame + identity refs + orientation-correct
-  // garment refs → ONE nano-banana edit. Never two sequential edits.
-  const resolvedModels = await resolveSubjectModels(admin, args.userId, args.modelAssignment);
-  const needsFused = requiresFusedAssembly({
-    frameSubjects: args.frameSubjects ?? [],
-    garments: garments as AssemblyGarment[],
-    castAssignment: args.castAssignment ?? {},
-    modelAssignment: resolvedModels,
-  });
-
-  if (needsFused) {
-    assembly = assembleFrameEdit({
-      sourceFrameUrl,
-      frameSubjects: args.frameSubjects ?? [],
-      garments: garments as AssemblyGarment[],
-      castAssignment: args.castAssignment ?? {},
-      modelAssignment: resolvedModels,
-      maxReferenceImages: MAX_REFERENCE_IMAGES,
-      extraPrompt: args.extraPrompt,
-      identityAuthorityBlock: IDENTITY_AUTHORITY_BLOCK,
-    });
-    imageUrls = assembly.imageUrls;
-    prompt = assembly.prompt;
-
-    // LIVE GENERATION VERIFICATION-PENDING: this assembled payload is logged so
-    // the fused contract can be inspected without triggering a paid provider run.
-    console.log(
-      "[outfit-swap][phase5][fused-assembly][live-verification-pending]",
-      JSON.stringify({
-        frame_index: Number(args.frameIndex ?? 0),
-        image_url_count: imageUrls.length,
-        references: assembly.references.map((ref) => ({
-          index: ref.index,
-          role: ref.role,
-          subject_id: ref.subjectId ?? null,
-          garment_id: ref.garmentId ?? null,
-        })),
-        plan: assembly.plan,
-        prompt_length: prompt.length,
-      }).slice(0, 10000),
-    );
-  }
-
 
   const { data: inserted, error: insertError } = await admin
     .from("studio_generations")
@@ -393,12 +262,6 @@ async function startSwapFrame(admin: AdminClient, args: {
           frame_time: Number(args.frameTime ?? 0),
           person: String(args.person ?? "Everyone"),
           garments,
-          // PHASE 5: the request architecture used for this frame. `fused` frames
-          // handle every visible subject in ONE edit — never a second pass.
-          assembly_mode: assembly ? assembly.mode : "legacy_single_subject",
-          ...(assembly
-            ? { assembly_plan: assembly.plan, assembly_verification_pending: true }
-            : {}),
         },
       })
       .eq("id", inserted.id)
@@ -430,10 +293,6 @@ async function startReconstruction(admin: AdminClient, args: {
   aspectRatio?: string;
   generateAudio?: boolean;
   extraPrompt?: string;
-  // PHASE 7 context (optional — omitted requests keep the legacy prompt).
-  frameSubjects?: AssemblyFrameSubject[];
-  castAssignment?: Record<string, any>;
-  modelAssignment?: Record<string, any>;
   webhookBase: string;
 }) {
   const referenceUrls = cleanUrls(args.frameUrls);
@@ -444,29 +303,10 @@ async function startReconstruction(admin: AdminClient, args: {
   );
   const endpointId = referenceToVideoEndpoint(videoModel.key);
   const duration = clampSeedanceDuration(args.duration ?? 5, videoModel);
-  const legacyPrompt = buildReconstructionPrompt({
+  const prompt = buildReconstructionPrompt({
     garments: Array.isArray(args.garments) ? args.garments : [],
     extra: args.extraPrompt,
   });
-  // PHASE 7: multi-subject / model-swap / back-design runs get the enriched
-  // reconstruction prompt built from the same structured facts as Phase 5.
-  // Simple single-subject clothing-only runs get `legacyPrompt` verbatim.
-  const resolvedVideoModels = await resolveSubjectModels(admin, args.userId, args.modelAssignment);
-  const reconstruction = buildReconstructionPromptV2({
-    legacyPrompt,
-    frameSubjects: args.frameSubjects ?? [],
-    garments: (Array.isArray(args.garments) ? args.garments : []) as AssemblyGarment[],
-    castAssignment: args.castAssignment ?? {},
-    modelAssignment: resolvedVideoModels,
-    extraPrompt: args.extraPrompt,
-  });
-  const prompt = reconstruction.prompt;
-  if (reconstruction.enriched) {
-    console.log(
-      "[outfit-swap][phase7][enriched-reconstruction]",
-      JSON.stringify(reconstruction.plan),
-    );
-  }
 
   const { data: inserted, error: insertError } = await admin
     .from("studio_generations")
@@ -523,8 +363,6 @@ async function startReconstruction(admin: AdminClient, args: {
           feature: "outfit-swap",
           stage: "reconstruction",
           video_model: videoModel.key,
-          reconstruction_mode: reconstruction.enriched ? "fused_multi_subject" : "legacy",
-          reconstruction_plan: reconstruction.enriched ? reconstruction.plan : null,
         },
       })
       .eq("id", inserted.id)
@@ -769,10 +607,6 @@ Deno.serve(async (req) => {
         aspectRatio: body.aspectRatio,
         resolution: body.resolution,
         extraPrompt: body.extraPrompt,
-        // PHASE 5 context (optional — omitted requests keep the legacy path).
-        frameSubjects: Array.isArray(body.frameSubjects) ? body.frameSubjects : [],
-        castAssignment: body.castAssignment ?? {},
-        modelAssignment: body.modelAssignment ?? {},
         webhookBase,
       });
       return json({ generation });
@@ -789,10 +623,6 @@ Deno.serve(async (req) => {
         aspectRatio: body.aspectRatio,
         generateAudio: body.generateAudio,
         extraPrompt: body.extraPrompt,
-        // PHASE 7 context (optional — omitted requests keep the legacy prompt).
-        frameSubjects: Array.isArray(body.frameSubjects) ? body.frameSubjects : [],
-        castAssignment: body.castAssignment ?? {},
-        modelAssignment: body.modelAssignment ?? {},
         webhookBase,
       });
       return json({ generation });

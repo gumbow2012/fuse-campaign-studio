@@ -15,10 +15,6 @@ type CreatorRow = {
   email: string | null;
   name: string | null;
   createdAt: string | null;
-  handle?: string | null;
-  /** 'creator' | 'verified' | 'featured' | 'partner'. Never carries a reason. */
-  verificationStatus?: string | null;
-  verifiedAt?: string | null;
 };
 
 type InviteRow = {
@@ -182,31 +178,6 @@ const AdminCreators = () => {
     }
   };
 
-  /** Admin-only verification control. Default stays 'creator'. */
-  const setVerification = async (row: CreatorRow, status: string) => {
-    setBusy(`verify-${row.userId}`);
-    try {
-      await callFunction("manage-creators", {
-        action: "set_verification",
-        userId: row.userId,
-        verificationStatus: status,
-      });
-      toast({
-        title: "Verification updated",
-        description: `${row.email ?? row.userId} → ${status}`,
-      });
-      await loadAll();
-    } catch (error) {
-      toast({
-        title: "Could not update verification",
-        description: error instanceof Error ? error.message : "Unknown error",
-        variant: "destructive",
-      });
-    } finally {
-      setBusy(null);
-    }
-  };
-
   const sendBack = async (row: QueueRow) => {
     setBusy(`send-back-${row.versionId}`);
     try {
@@ -305,19 +276,6 @@ const AdminCreators = () => {
                         {creator.name || "No name set"} · joined {formatDate(creator.createdAt)}
                       </p>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <select
-                        aria-label="Verification status"
-                        className="h-9 rounded-md border border-white/15 bg-background/60 px-2 text-xs text-foreground"
-                        value={creator.verificationStatus ?? "creator"}
-                        disabled={busy === `verify-${creator.userId}`}
-                        onChange={(event) => void setVerification(creator, event.target.value)}
-                      >
-                        <option value="creator">Creator (no badge)</option>
-                        <option value="verified">Verified</option>
-                        <option value="featured">Featured</option>
-                        <option value="partner">Partner</option>
-                      </select>
                     <Button
                       type="button"
                       variant="outline"
@@ -333,7 +291,6 @@ const AdminCreators = () => {
                       )}
                       Revoke
                     </Button>
-                    </div>
                   </div>
                 ))
               )}

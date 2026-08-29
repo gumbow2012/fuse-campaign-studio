@@ -1,11 +1,9 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import SiteShell from "@/components/mvp/SiteShell";
 import AccountHeader from "@/components/mvp/AccountHeader";
-import BrandActivationBanner from "@/components/brand/BrandActivationBanner";
 import CreditsOverviewCard from "@/components/mvp/membership/CreditsOverviewCard";
 import CreditUsageHistory from "@/components/mvp/membership/CreditUsageHistory";
-import AchievementsSection from "@/components/mvp/AchievementsSection";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -14,16 +12,12 @@ import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { ADMIN_VISUAL_BUDGET_TOTAL, getAdminVisualCreditsRemaining, getAdminVisualCreditsSpent } from "@/lib/adminBudget";
 import { updateAccountProfile } from "@/services/account";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { avatarInitials, fileToAvatarDataUrl } from "@/lib/avatarImage";
 
 export default function AccountPage() {
   const { isAdmin, profile, refreshProfile, user } = useAuth();
   const [name, setName] = useState("");
   const [password, setPassword] = useState("");
   const [savingName, setSavingName] = useState(false);
-  const [avatarDataUrl, setAvatarDataUrl] = useState<string | null | undefined>(undefined);
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [savingPassword, setSavingPassword] = useState(false);
   const [adminVisualSpent, setAdminVisualSpent] = useState(0);
   const trimmedName = name.trim();
@@ -32,28 +26,6 @@ export default function AccountPage() {
   useEffect(() => {
     setName(profile?.name ?? "");
   }, [profile?.name]);
-
-  useEffect(() => {
-    setAvatarDataUrl(undefined);
-  }, [profile?.avatar_url]);
-
-  const currentAvatar =
-    avatarDataUrl === undefined
-      ? profile?.avatar_url || (user?.user_metadata?.avatar_url as string | undefined) || ""
-      : avatarDataUrl ?? "";
-
-  const handlePickPhoto = async (file: File | undefined) => {
-    if (!file) return;
-    try {
-      setAvatarDataUrl(await fileToAvatarDataUrl(file));
-    } catch (error) {
-      toast({
-        title: "Could not use that photo",
-        description: error instanceof Error ? error.message : "Please try a different image.",
-        variant: "destructive",
-      });
-    }
-  };
 
   useEffect(() => {
     setAdminVisualSpent(getAdminVisualCreditsSpent());
@@ -66,13 +38,8 @@ export default function AccountPage() {
     setSavingName(true);
 
     try {
-      await updateAccountProfile({
-        name: trimmedName,
-        ...(avatarDataUrl === undefined ? {} : { avatarDataUrl }),
-      });
-      // Refresh the auth context so the header avatar updates without signing out.
+      await updateAccountProfile({ name: trimmedName });
       await refreshProfile();
-      setAvatarDataUrl(undefined);
       toast({ title: "Profile updated" });
     } catch (error) {
       toast({
@@ -121,8 +88,6 @@ export default function AccountPage() {
           </Button>
         </div>
 
-        <BrandActivationBanner surface="account" className="mt-8" />
-
         <div className="mt-8">
           <AccountHeader />
         </div>
@@ -141,60 +106,9 @@ export default function AccountPage() {
 
             <CreditUsageHistory />
 
-            <AchievementsSection />
-
 
             <section className="rounded-[2rem] border border-white/10 bg-slate-950/75 p-6 shadow-[0_24px_80px_rgba(0,0,0,0.35)] backdrop-blur-xl">
               <p className="text-[11px] uppercase tracking-[0.24em] text-muted-foreground">Profile</p>
-
-              <div className="mt-5 flex flex-wrap items-center gap-4">
-                <Avatar className="h-16 w-16 rounded-2xl border border-white/10">
-                  <AvatarImage src={currentAvatar} alt="Your profile photo" />
-                  <AvatarFallback className="rounded-2xl bg-cyan-200/10 font-sans text-base font-bold text-cyan-300">
-                    {avatarInitials(profile?.name || profile?.email || user?.email || "")}
-                  </AvatarFallback>
-                </Avatar>
-                <div className="space-y-2">
-                  <p className="font-sans text-sm text-white">Profile photo</p>
-                  <p className="font-sans text-xs text-muted-foreground">
-                    Square JPG or PNG. Shown in the header and on your creator profile.
-                  </p>
-                  <div className="flex flex-wrap gap-2">
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      onClick={() => fileInputRef.current?.click()}
-                      className="rounded-full border-white/15 bg-white/5 text-xs text-foreground hover:bg-white/10"
-                    >
-                      Choose photo
-                    </Button>
-                    {currentAvatar ? (
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => setAvatarDataUrl(null)}
-                        className="rounded-full text-xs text-muted-foreground hover:text-foreground"
-                      >
-                        Remove
-                      </Button>
-                    ) : null}
-                  </div>
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept="image/png,image/jpeg,image/webp"
-                    className="hidden"
-                    aria-label="Upload profile photo"
-                    onChange={(event) => {
-                      void handlePickPhoto(event.target.files?.[0]);
-                      event.target.value = "";
-                    }}
-                  />
-                </div>
-              </div>
-
               <div className="mt-5 grid gap-5 sm:grid-cols-2">
                 <div className="space-y-2">
                   <Label htmlFor="account-email" className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
@@ -222,11 +136,7 @@ export default function AccountPage() {
 
               <Button
                 onClick={handleSaveName}
-                disabled={
-                  savingName ||
-                  trimmedName.length < 2 ||
-                  (trimmedName === (profile?.name ?? "") && avatarDataUrl === undefined)
-                }
+                disabled={savingName || trimmedName.length < 2 || trimmedName === (profile?.name ?? "")}
                 className="mt-6 rounded-full bg-cyan-300 text-slate-950 hover:bg-cyan-200"
               >
                 {savingName ? "Saving..." : "Save profile"}

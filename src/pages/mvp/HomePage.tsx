@@ -1,28 +1,18 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowRight, Clapperboard, Gem, Layers3, Shirt, Sparkles, Upload, Wand2, X } from "lucide-react";
+import { ArrowRight, Clapperboard, Gem, Layers3, Shirt, Sparkles, Upload, Wand2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import SiteShell from "@/components/mvp/SiteShell";
 import PageMeta from "@/components/mvp/PageMeta";
 import { useAuth } from "@/contexts/AuthContext";
-import { supabase } from "@/integrations/supabase/client";
-import { useBrand } from "@/contexts/BrandContext";
-import { fetchTemplates, type ApiTemplate } from "@/services/fuseApi";
-import CreatorVerificationBadge from "@/components/CreatorVerificationBadge";
-import AddToCollectionButton from "@/components/collections/AddToCollectionButton";
-import { listFollowedCreatorIds } from "@/services/creatorFollows";
+import { fetchTemplates } from "@/services/fuseApi";
 import { listPublicCreatorProfiles, type CreatorProfile } from "@/services/creatorProfile";
-import { listProductProfiles, type ProductProfileType } from "@/services/productProfiles";
-import { readVisualStyle } from "@/services/brandProfiles";
-import { rankTemplatesForBrand } from "@/lib/brandRelevance";
 import { cn } from "@/lib/utils";
 import {
   allocateHomeMedia,
-  CURATED_PREVIEW_GIFS,
   FALLBACK_GIFS,
   outputLabel,
-  resolveMedia,
   type Entry,
   type TemplateMedia,
 } from "@/lib/homeMediaAllocator";
@@ -35,18 +25,6 @@ import { PerformanceBlock, PerformanceDisclaimer } from "@/components/TemplatePe
 
 
 /* --------------------------------- pieces --------------------------------- */
-
-/**
- * CONVERSION: deep-link straight into the campaign builder for one template.
- * `/app/templates?template=<id>` is the builder's supported deep link (the
- * `/app/templates/run` path is a query-dropping redirect in App.tsx).
- * Falls back to the plain gallery when no template id is known.
- */
-function builderHref(templateId?: string | null) {
-  const id = templateId ? String(templateId) : "";
-  return id ? `/app/templates?template=${encodeURIComponent(id)}` : "/app/templates";
-}
-
 
 function SectionLabel({ children }: { children: React.ReactNode }) {
   return (
@@ -159,25 +137,6 @@ function Badge({ tone, children }: { tone: "new" | "trending" | "creator"; child
   );
 }
 
-/** "by @handle" attribution — omitted when the author has no public profile. */
-function CreatorAttribution({ template }: { template: ApiTemplate }) {
-  const creator = template.creator;
-  if (!creator?.handle) return null;
-  return (
-    <p className="mt-1 flex items-center gap-1 text-[10px] text-slate-400">
-      <span>by</span>
-      <Link
-        to={`/creator/${creator.handle}`}
-        className="text-cyan-100 transition-colors hover:text-white"
-        onClick={(event) => event.stopPropagation()}
-      >
-        @{creator.handle}
-      </Link>
-      <CreatorVerificationBadge status={creator.verificationStatus} size={10} />
-    </p>
-  );
-}
-
 function TemplateCard({
   entry,
   badge,
@@ -185,7 +144,6 @@ function TemplateCard({
   eager,
   index = 0,
   performance,
-  runs,
 }: {
   entry: Entry;
   badge?: { tone: "new" | "trending" | "creator"; label: string };
@@ -193,18 +151,12 @@ function TemplateCard({
   eager?: boolean;
   index?: number;
   performance?: TemplatePerformanceRow;
-  /** Real run count from public_template_popularity — omitted when unavailable. */
-  runs?: number | null;
 }) {
   const outputs = outputLabel(entry.template);
   const vibe = entry.template.category ?? entry.template.tags?.[0] ?? null;
-  const templateId = String(entry.template.id ?? "");
-  const templateHref = builderHref(templateId);
-
 
   return (
     <article className="group relative w-[248px] shrink-0 overflow-hidden rounded-[1.25rem] border border-white/10 bg-slate-950/80 transition-colors hover:border-cyan-200/40 sm:w-[272px]">
-      <Link to={templateHref} className="absolute inset-0 z-10" aria-label={`Open ${entry.template.name}`} />
       <div className="relative aspect-[9/16] overflow-hidden bg-black">
         <AutoMedia
           media={entry.media}
@@ -218,9 +170,6 @@ function TemplateCard({
             <Badge tone={badge.tone}>{badge.label}</Badge>
           </div>
         )}
-        <div className="absolute right-3 top-3 z-20">
-          <AddToCollectionButton templateId={templateId} />
-        </div>
       </div>
       <div className="absolute inset-x-0 bottom-0 p-4">
         {performance && <PerformanceBlock row={performance} compact className="mb-3" />}
@@ -230,29 +179,18 @@ function TemplateCard({
         <p className="mt-1 text-[10px] uppercase tracking-[0.16em] text-slate-400">
           {[vibe, outputs].filter(Boolean).join(" · ")}
         </p>
-        {/* Real popularity only — nothing is rendered when the RPC has no row. */}
-        {typeof runs === "number" && runs > 0 && (
-          <p className="mt-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-cyan-100">
-            {runs.toLocaleString()} run{runs === 1 ? "" : "s"}
-          </p>
-        )}
-        {creator ? (
-          <p className="mt-1 text-[10px] text-slate-400">by {creator}</p>
-        ) : (
-          <CreatorAttribution template={entry.template} />
-        )}
+        {creator && <p className="mt-1 text-[10px] text-slate-400">by {creator}</p>}
         <Button
           asChild
           size="sm"
-          className="relative z-20 mt-3 h-9 w-full rounded-full bg-cyan-300 text-[12px] font-semibold uppercase tracking-[0.14em] text-slate-950 hover:bg-cyan-200"
+          className="mt-3 h-9 w-full rounded-full bg-cyan-300 text-[12px] font-semibold uppercase tracking-[0.14em] text-slate-950 hover:bg-cyan-200"
         >
-          <Link to={templateHref}>Make this yours →</Link>
+          <Link to="/app/templates">Use Template</Link>
         </Button>
       </div>
     </article>
   );
 }
-
 
 
 function MediaShelf({ children }: { children: React.ReactNode }) {
@@ -266,23 +204,18 @@ function MediaShelf({ children }: { children: React.ReactNode }) {
 function Shelf({
   label,
   heading,
-  description,
   entries,
   badge,
   id,
   perfMap,
-  runsMap,
   showDisclaimer,
 }: {
   label: string;
   heading: string;
-  description?: string;
   entries: Entry[];
   badge?: { tone: "new" | "trending" | "creator"; label: string };
   id?: string;
   perfMap?: TemplatePerformanceMap;
-  /** templateId → real run count. Missing ids simply render no count. */
-  runsMap?: Record<string, number>;
   showDisclaimer?: boolean;
 }) {
   if (!entries.length) return null;
@@ -292,9 +225,6 @@ function Shelf({
         <div>
           <SectionLabel>{label}</SectionLabel>
           <SectionHeading>{heading}</SectionHeading>
-          {description ? (
-            <p className="mt-3 max-w-xl text-sm leading-6 text-slate-400">{description}</p>
-          ) : null}
         </div>
         <Button asChild variant="ghost" className="rounded-full text-cyan-100 hover:text-white">
           <Link to="/app/templates">
@@ -312,7 +242,6 @@ function Shelf({
             index={index}
             eager={index < 2}
             performance={perfMap?.[String(entry.template.id ?? "")]}
-            runs={runsMap?.[String(entry.template.id ?? "")] ?? null}
           />
         ))}
       </MediaShelf>
@@ -322,43 +251,15 @@ function Shelf({
 }
 
 
-
-/** Shape returned by the public `get_marketplace_shelves()` RPC. */
-type MerchandisedShelf = {
-  id?: string;
-  slug?: string;
-  title?: string;
-  subtitle?: string | null;
-  sort_order?: number;
-  is_visible?: boolean;
-  is_algorithmic?: boolean;
-  templates?: { template_id?: string; name?: string; pinned?: boolean; sort_order?: number }[] | null;
-};
-
 /* ---------------------------------- page ---------------------------------- */
 
-
-/** Hero showcase is pinned to the curated gif so it never varies with preview_url. */
-function curatedHeroMedia(entry: Entry): TemplateMedia {
-  const gif = CURATED_PREVIEW_GIFS.find((item) => item.match.test(entry.template.name))?.src;
-  return gif ? { url: gif, type: "image" } : entry.media;
-}
-
 export default function HomePage() {
-  const { user, isCreator, isAdmin } = useAuth();
+  const { isAdmin, isCreator } = useAuth();
 
-  const { data: templates = [], isLoading: templatesLoading } = useQuery({
+  const { data: templates = [] } = useQuery({
     queryKey: ["mvp-templates"],
     queryFn: () => fetchTemplates(""),
     staleTime: 5 * 60 * 1000,
-  });
-
-  const { data: followedCreatorIds = [] } = useQuery({
-    queryKey: ["home-followed-creators"],
-    queryFn: listFollowedCreatorIds,
-    enabled: !!user,
-    staleTime: 60 * 1000,
-    retry: false,
   });
 
   const { data: creators = [] } = useQuery({
@@ -368,103 +269,12 @@ export default function HomePage() {
     retry: false,
   });
 
-  /**
-   * REAL popularity only. `public_template_popularity` is a public RPC over the
-   * last 90 days of runs; if it errors or has no row for a template, the count is
-   * simply absent — never estimated, never faked.
-   */
-  const { data: popularity = {} as Record<string, number> } = useQuery({
-    queryKey: ["public-template-popularity", 90],
-    queryFn: async () => {
-      const { data, error } = await supabase.rpc("public_template_popularity" as never, { days: 90 } as never);
-      if (error) return {} as Record<string, number>;
-      const map: Record<string, number> = {};
-      for (const row of (data ?? []) as { template_id?: string; runs?: number }[]) {
-        if (row?.template_id) map[String(row.template_id)] = Number(row.runs ?? 0);
-      }
-      return map;
-    },
-    staleTime: 10 * 60 * 1000,
-    retry: false,
-  });
-
-  /**
-   * MERCHANDISING — admin-curated shelves (`/admin/templates/merchandising`).
-   * `get_marketplace_shelves()` is public and returns visible shelves in
-   * sort_order with their templates in the exact admin order. Failures fall
-   * back to the existing popularity-driven homepage.
-   */
-  const { data: merchShelves = [] as MerchandisedShelf[] } = useQuery({
-    queryKey: ["home-marketplace-shelves"],
-    queryFn: async (): Promise<MerchandisedShelf[]> => {
-      const { data, error } = await supabase.rpc("get_marketplace_shelves" as never);
-      if (error) return [];
-      return ((data ?? []) as unknown as MerchandisedShelf[]).filter(Boolean);
-    },
-    staleTime: 5 * 60 * 1000,
-    retry: false,
-  });
-
   // Single dedup allocator — every section draws from here.
   const allocation = useMemo(() => allocateHomeMedia(templates), [templates]);
   const { hero: heroPair, trending, newToday, creatorDrops, categories, mediaWall } = allocation;
 
-  /**
-   * Curated editorial shelves, joined to the loaded template objects so cards
-   * render with today's media/vibe. Algorithmic shelves keep their auto
-   * behavior and are excluded here. Empty shelves are dropped.
-   */
-  const curatedShelves = useMemo(() => {
-    if (!templates.length || !merchShelves.length) return [];
-    const byId = new Map(templates.map((template) => [String(template.id ?? ""), template]));
-    return merchShelves
-      .filter((shelf) => shelf && shelf.is_algorithmic !== true && shelf.is_visible !== false)
-      .map((shelf) => {
-        const entries = (shelf.templates ?? [])
-          .map((row) => {
-            const template = byId.get(String(row?.template_id ?? ""));
-            if (!template) return null;
-            const media = resolveMedia(template);
-            return media ? ({ template, media } as Entry) : null;
-          })
-          .filter(Boolean as unknown as (value: Entry | null) => value is Entry);
-        return {
-          id: String(shelf.id ?? shelf.slug ?? ""),
-          slug: String(shelf.slug ?? ""),
-          title: String(shelf.title ?? shelf.slug ?? "Featured"),
-          subtitle: typeof shelf.subtitle === "string" && shelf.subtitle.trim() ? shelf.subtitle : undefined,
-          entries,
-        };
-      })
-      .filter((shelf) => shelf.entries.length > 0);
-  }, [merchShelves, templates]);
-
-  /** TRENDING — ordered by real run counts; catalog order is the tiebreaker. */
-  const trendingRanked = useMemo(() => {
-    const runsOf = (entry: Entry) => popularity[String(entry.template.id ?? "")] ?? 0;
-    return trending
-      .map((entry, index) => ({ entry, index }))
-      .sort((a, b) => runsOf(b.entry) - runsOf(a.entry) || a.index - b.index)
-      .map((row) => row.entry);
-  }, [trending, popularity]);
-  /**
-   * Hero primary CTA target: the first template of the top curated shelf when
-   * merchandising is configured, else the top-ranked real trending template,
-   * else the hero template. Works logged-out (the builder is public).
-   */
-  const startCampaignHref = useMemo(() => {
-    const top =
-      curatedShelves[0]?.entries[0]?.template.id ??
-      trendingRanked[0]?.template.id ??
-      heroPair[0]?.template.id ??
-      null;
-    return builderHref(top);
-  }, [curatedShelves, trendingRanked, heroPair]);
-
-
   const original = heroPair[0] ?? null;
   const yourVersion = heroPair[1] ?? null;
-
 
   /** Every entry already claimed by the allocator — perf shelves reuse these only. */
   const allocatedEntries = useMemo(
@@ -495,74 +305,6 @@ export default function HomePage() {
     perfMap[String(entry.template.id ?? "")];
 
   const heroPerf = original ? perfFor(original) : undefined;
-
-  /** Templates authored by creators the signed-in viewer follows. */
-  const followedEntries = useMemo<Entry[]>(() => {
-    if (!user || !followedCreatorIds.length) return [];
-    const followed = new Set(followedCreatorIds);
-    return templates
-      .filter((template) => template.creator?.userId && followed.has(template.creator.userId))
-      .map((template) => {
-        const media = resolveMedia(template);
-        return media ? { template, media } : null;
-      })
-      .filter(Boolean as unknown as (value: Entry | null) => value is Entry)
-      .slice(0, 12);
-  }, [templates, followedCreatorIds, user]);
-
-  /* ---------------------- brand personalization (additive) ---------------------- */
-
-  const { activeBrand, activeBrandId } = useBrand();
-
-  const { data: brandProducts = [] } = useQuery({
-    queryKey: ["home-brand-products", user?.id ?? "", activeBrandId ?? ""],
-    queryFn: () => listProductProfiles(user?.id ?? ""),
-    enabled: !!user && !!activeBrandId,
-    staleTime: 5 * 60 * 1000,
-    retry: false,
-  });
-
-  /** Real, saved signals only: this brand's product types + its visual-style tags. */
-  const brandSignals = useMemo(() => {
-    const productTypes = Array.from(
-      new Set(
-        brandProducts
-          .filter((product) => product.brand_id && product.brand_id === activeBrandId)
-          .map((product) => product.type),
-      ),
-    ) as ProductProfileType[];
-    const styleTags = readVisualStyle(activeBrand)?.tags ?? [];
-    return { productTypes, styleTags };
-  }, [brandProducts, activeBrandId, activeBrand]);
-
-  /** Empty when nothing genuinely matches — the shelf is then never rendered. */
-  const recommended = useMemo(() => {
-    if (!activeBrand) return [];
-    return rankTemplatesForBrand(templates, brandSignals, 6)
-      .map((row) => {
-        const media = resolveMedia(row.template);
-        return media ? { entry: { template: row.template, media } as Entry, reasons: row.reasons } : null;
-      })
-      .filter(Boolean as unknown as (value: { entry: Entry; reasons: string[] } | null) => value is {
-        entry: Entry;
-        reasons: string[];
-      });
-  }, [activeBrand, templates, brandSignals]);
-
-  const [brandNudgeDismissed, setBrandNudgeDismissed] = useState(
-    () => typeof window !== "undefined" && window.localStorage.getItem("fuse.brandNudge") === "off",
-  );
-  const dismissBrandNudge = () => {
-    setBrandNudgeDismissed(true);
-    try {
-      window.localStorage.setItem("fuse.brandNudge", "off");
-    } catch {
-      /* storage unavailable — dismissal stays session-only */
-    }
-  };
-  const showBrandNudge = !!user && !activeBrand && !brandNudgeDismissed;
-
-
 
   const topRoas = useMemo(
     () =>
@@ -624,15 +366,14 @@ export default function HomePage() {
           <div>
             <SectionLabel>Campaign template marketplace</SectionLabel>
             <h1 className="mt-4 font-display text-4xl font-bold uppercase leading-[1.03] tracking-[-0.02em] text-white sm:text-6xl">
-              Viral campaigns.
+              The campaign is
               <br />
               <span className="text-cyan-200">already built.</span>
             </h1>
             <p className="mt-5 max-w-xl text-lg leading-8 text-slate-300">
-              Pick creative that's already working. Add your brand. FUSE does the rest.
+              Pick creative that&rsquo;s already working. Add your brand. FUSE does the rest.
             </p>
 
-            {/* CONVERSION: primary CTA sends visitors into the template marketplace. */}
             <div className="mt-7 flex flex-wrap items-center gap-3">
               <Button
                 asChild
@@ -644,75 +385,58 @@ export default function HomePage() {
                   <ArrowRight className="h-4 w-4" />
                 </Link>
               </Button>
-
-
-              {!user ? (
+              <Button
+                asChild
+                size="lg"
+                variant="outline"
+                className="rounded-full border-white/15 bg-white/5 px-7 text-foreground hover:bg-white/10"
+              >
+                <Link to="/creators">Become a Creator</Link>
+              </Button>
+              {isCreator && (
+                <>
+                  <Button
+                    asChild
+                    size="lg"
+                    variant="ghost"
+                    className="rounded-full px-5 text-slate-300 hover:text-white"
+                  >
+                    <Link to="/app/lab/canvas">Create a Template</Link>
+                  </Button>
+                  <Button
+                    asChild
+                    size="lg"
+                    variant="ghost"
+                    className="rounded-full px-5 text-slate-300 hover:text-white"
+                  >
+                    <Link to="/app/creator">Creator Dashboard</Link>
+                  </Button>
+                </>
+              )}
+              {isAdmin && (
                 <Button
                   asChild
-                  size="lg"
-                  variant="outline"
-                  className="rounded-full border-white/15 bg-transparent px-7 text-slate-200 hover:bg-white/10"
-                >
-                  <Link to="/auth?mode=signup">Sign up free</Link>
-                </Button>
-              ) : null}
-
-
-              {isCreator ? (
-                <Button
-                  asChild
-                  size="lg"
-                  variant="outline"
-                  className="rounded-full border-white/15 bg-transparent px-7 text-slate-200 hover:bg-white/10"
-                >
-                  <Link to="/app/creator">Creator Dashboard</Link>
-                </Button>
-              ) : null}
-
-              {(isCreator || isAdmin) && (
-                <Button
-                  asChild
-                  size="lg"
+                  size="sm"
                   variant="ghost"
-                  className="rounded-full px-6 text-slate-300 hover:text-white"
+                  className="rounded-full px-4 text-xs text-slate-400 hover:text-white"
                 >
-                  <Link to="/app/lab/canvas">Create a Template</Link>
+                  <Link to="/admin">Admin</Link>
                 </Button>
               )}
             </div>
 
-
-            <p className="mt-5 text-[11px] font-semibold uppercase tracking-[0.24em] text-slate-400">
+            <p className="mt-6 text-[11px] font-semibold uppercase tracking-[0.24em] text-slate-400">
               No prompts · New templates daily · Performance tracked
             </p>
-
 
           </div>
 
           {/* Hero transformation — TEMPLATE → your brand → YOUR CAMPAIGN */}
           <div className="relative">
-            {templatesLoading ? (
-              /* Cold load: paint a skeleton once, never image A → image B. */
+            {original ? (
               <div>
                 <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3">
-                  <HeroTileSkeleton label="Template" />
-                  <div className="w-[92px] sm:w-[104px]">
-                    <div className="h-[104px] animate-pulse rounded-xl border border-cyan-300/20 bg-white/[0.04]" />
-                    <p className="mt-2 text-center text-[9px] font-semibold uppercase tracking-[0.18em] text-slate-500">
-                      →
-                    </p>
-                  </div>
-                  <HeroTileSkeleton label="Your campaign" highlight />
-                </div>
-                <div className="mx-auto mt-4 max-w-[420px] space-y-2">
-                  <div className="mx-auto h-4 w-40 animate-pulse rounded-full bg-white/[0.06]" />
-                  <div className="mx-auto h-9 w-44 animate-pulse rounded-full bg-white/[0.06]" />
-                </div>
-              </div>
-            ) : original ? (
-              <div>
-                <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3">
-                  <HeroTile label="Template" media={curatedHeroMedia(original)} eager />
+                  <HeroTile label="Template" media={original.media} eager />
                   <div className="w-[92px] sm:w-[104px]">
                     <div
                       className="relative overflow-hidden rounded-xl border border-cyan-300/25 bg-slate-950/80 px-3 py-4 text-center"
@@ -762,9 +486,8 @@ export default function HomePage() {
                     size="sm"
                     className="h-9 rounded-full bg-cyan-300 px-5 text-[12px] font-semibold uppercase tracking-[0.14em] text-slate-950 hover:bg-cyan-200"
                   >
-                    <Link to={builderHref(original.template.id)}>Make this yours →</Link>
+                    <Link to="/app/templates">Use this template</Link>
                   </Button>
-
                   {heroPerf && <PerformanceDisclaimer />}
                 </div>
               </div>
@@ -779,53 +502,25 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* 1.4 · CURATED SHELVES — exact order from /admin/templates/merchandising */}
-      {curatedShelves.map((shelf) => (
-        <Shelf
-          key={shelf.id}
-          id={`shelf-${shelf.slug}`}
-          label="Curated"
-          heading={shelf.title}
-          description={shelf.subtitle}
-          entries={shelf.entries}
-          perfMap={perfMap}
-          runsMap={popularity}
-        />
-      ))}
-
-      {/* 1.5 · TRENDING ABOVE THE FOLD — one click from landing into the builder */}
-
-      <Shelf
-        id="trending-now"
-        label="Trending now"
-        heading="What brands are using right now"
-        description="Ordered by real template runs over the last 90 days."
-        entries={trendingRanked}
-        perfMap={perfMap}
-        runsMap={popularity}
-        badge={{ tone: "trending", label: "Trending" }}
-      />
-
-      {/* 2 · NEW DROPS BAR — real recently activated templates only, hidden when none */}
-
+      {/* 2 · LIVE DROP */}
       {newToday.length > 0 && (
         <section className="border-b border-white/10 bg-white/[0.02]">
           <div className="container flex flex-wrap items-center justify-between gap-4 py-5">
             <div className="flex items-center gap-4">
               <span className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.24em] text-emerald-300">
                 <span className="h-2 w-2 animate-pulse rounded-full bg-emerald-300" />
-                New drops live
+                New drop live
               </span>
               <p className="font-display text-sm font-semibold uppercase tracking-[0.14em] text-white">
-                {newToday.length} new campaign{newToday.length === 1 ? "" : "s"}
+                Raw Street Vol. 01
                 <span className="ml-3 text-[11px] font-medium tracking-[0.18em] text-slate-400">
-                  just added to the marketplace
+                  {newToday.length} new campaign{newToday.length === 1 ? "" : "s"}
                 </span>
               </p>
             </div>
             <Button asChild variant="ghost" className="rounded-full text-cyan-100 hover:text-white">
               <a href="#new-today">
-                View drops
+                View drop
                 <ArrowRight className="h-4 w-4" />
               </a>
             </Button>
@@ -833,97 +528,12 @@ export default function HomePage() {
         </section>
       )}
 
-
-      {/* 2.5 · BRAND PERSONALIZATION — additive only, never a filter */}
-      {showBrandNudge && (
-        <section className="container pt-8">
-          <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-cyan-200/20 bg-cyan-300/[0.04] px-5 py-4">
-            <div className="flex items-center gap-3">
-              <Sparkles className="h-4 w-4 shrink-0 text-cyan-200" />
-              <Link
-                to="/app/brand"
-                className="text-sm text-slate-200 transition hover:text-white"
-              >
-                Build your brand to personalize your marketplace
-                <ArrowRight className="ml-2 inline h-3.5 w-3.5 text-cyan-200" />
-              </Link>
-            </div>
-            <button
-              type="button"
-              onClick={dismissBrandNudge}
-              aria-label="Dismiss brand personalization tip"
-              className="rounded-full p-1 text-slate-500 transition hover:text-white"
-            >
-              <X className="h-4 w-4" />
-            </button>
-          </div>
-        </section>
-      )}
-
-      {activeBrand && recommended.length > 0 && (
-        <section className="container border-t border-white/10 py-12">
-          <div className="flex flex-wrap items-end justify-between gap-4">
-            <div>
-              <SectionLabel>For your brand</SectionLabel>
-              <SectionHeading>Recommended for {activeBrand.name}</SectionHeading>
-              <p className="mt-3 max-w-xl text-sm leading-6 text-slate-400">
-                Matched to your saved products and brand style. The full catalog stays below.
-              </p>
-            </div>
-            <Button asChild variant="ghost" className="rounded-full text-cyan-100 hover:text-white">
-              <Link to="/app/brand">
-                Brand workspace
-                <ArrowRight className="h-4 w-4" />
-              </Link>
-            </Button>
-          </div>
-          <MediaShelf>
-            {recommended.map(({ entry, reasons }, index) => (
-              <div key={`recommended-${entry.template.id}-${index}`} className="shrink-0">
-                <TemplateCard
-                  entry={entry}
-                  index={index}
-                  eager={index < 2}
-                  performance={perfMap[String(entry.template.id ?? "")]}
-                />
-                {reasons.length > 0 && (
-                  <p className="mt-2 w-[248px] truncate font-display text-[10px] uppercase tracking-[0.18em] text-cyan-100/80 sm:w-[272px]">
-                    {reasons.join(" · ")}
-                  </p>
-                )}
-              </div>
-            ))}
-          </MediaShelf>
-        </section>
-      )}
-
-      {/* 3 · SHELVES — trending is rendered above the fold; NEW DROPS next */}
-
-
-      <Shelf
-        id="new-today"
-        label="New drops"
-        heading="Just added to the marketplace"
-        entries={newToday}
-        perfMap={perfMap}
-        runsMap={popularity}
-        badge={{ tone: "new", label: "New" }}
-      />
-
-      <Shelf
-        id="from-creators-you-follow"
-        label="Your creators"
-        heading="From creators you follow"
-        entries={followedEntries}
-        perfMap={perfMap}
-        runsMap={popularity}
-      />
+      {/* 3 · SHELVES */}
       <Shelf
         label="Top ROAS"
         heading="Highest returning campaigns"
         entries={topRoas}
         perfMap={perfMap}
-        runsMap={popularity}
         showDisclaimer
       />
       <Shelf
@@ -931,8 +541,22 @@ export default function HomePage() {
         heading="Proven on the most ad spend"
         entries={mostTested}
         perfMap={perfMap}
-        runsMap={popularity}
         showDisclaimer
+      />
+      <Shelf
+        label="Trending now"
+        heading="What brands are using right now"
+        entries={trending}
+        perfMap={perfMap}
+        badge={{ tone: "trending", label: "Trending" }}
+      />
+      <Shelf
+        id="new-today"
+        label="New today"
+        heading="Just added to the marketplace"
+        entries={newToday}
+        perfMap={perfMap}
+        badge={{ tone: "new", label: "New" }}
       />
 
       {creators.length > 0 && (
@@ -940,7 +564,6 @@ export default function HomePage() {
           label="Creator drops"
           heading="Built by FUSE creators"
           entries={creatorDrops}
-          runsMap={popularity}
         />
       )}
       {categories.map((shelf) => (
@@ -949,24 +572,22 @@ export default function HomePage() {
           label={shelf.title}
           heading={`${shelf.title} campaigns`}
           entries={shelf.entries}
-          runsMap={popularity}
         />
       ))}
 
       {/* 4 · THREE STEPS */}
       <section className="container border-t border-white/10 py-12">
         <SectionLabel>Three steps</SectionLabel>
-        <SectionHeading>From template to campaign.</SectionHeading>
         <div className="mt-6 grid gap-3 sm:grid-cols-3">
           {[
-            { n: "01", title: "Pick", copy: "Choose a campaign from the marketplace.", icon: Layers3 },
+            { n: "01", title: "Pick", copy: "Find a campaign you want.", icon: Layers3 },
             {
               n: "02",
-              title: "Add your brand",
-              copy: "Drop in your product, logo and optional cast.",
+              title: "Upload",
+              copy: "Add your product, logo and optional cast.",
               icon: Upload,
             },
-            { n: "03", title: "Generate", copy: "FUSE rebuilds the whole campaign for you.", icon: Wand2 },
+            { n: "03", title: "Generate", copy: "FUSE rebuilds it for your brand.", icon: Wand2 },
           ].map((step) => (
             <div
               key={step.n}
@@ -984,36 +605,6 @@ export default function HomePage() {
           ))}
         </div>
       </section>
-
-      {/* 4.5 · WHY FUSE — qualitative only, no fabricated stats */}
-      <section className="container border-t border-white/10 py-12">
-        <SectionLabel>Why FUSE</SectionLabel>
-        <SectionHeading>The creative is already done.</SectionHeading>
-        <div className="mt-6 grid gap-3 sm:grid-cols-3">
-          {[
-            {
-              title: "No prompts",
-              copy: "You never write a prompt. Every template already carries the direction, lighting and sequencing.",
-            },
-            {
-              title: "Creative already proven",
-              copy: "Templates come from campaigns creators actually shot — you start from a finished idea, not a blank page.",
-            },
-            {
-              title: "New drops constantly",
-              copy: "Creators keep publishing new campaigns to the marketplace, so the catalog keeps growing.",
-            },
-          ].map((item) => (
-            <div key={item.title} className="rounded-2xl border border-white/10 bg-white/[0.03] px-5 py-6">
-              <p className="font-display text-lg font-semibold uppercase tracking-[0.04em] text-white">
-                {item.title}
-              </p>
-              <p className="mt-2 text-sm leading-6 text-slate-300">{item.copy}</p>
-            </div>
-          ))}
-        </div>
-      </section>
-
 
       {/* 5 · CREATOR PROGRAM */}
       <section className="container border-t border-white/10 py-12">
@@ -1061,19 +652,8 @@ export default function HomePage() {
             )}
           </div>
 
-          {/* FEATURED CREATORS — real public creator_profiles rows only. */}
           {creators.length > 0 && (
-            <>
-            <div className="mt-10 flex flex-wrap items-end justify-between gap-3">
-              <SectionLabel>Featured creators</SectionLabel>
-              <Button asChild variant="ghost" className="rounded-full text-cyan-100 hover:text-white">
-                <Link to="/creators">
-                  All creators
-                  <ArrowRight className="h-4 w-4" />
-                </Link>
-              </Button>
-            </div>
-            <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="mt-10 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
               {creators.map((creator: CreatorProfile) => (
                 <Link
                   key={creator.id}
@@ -1101,7 +681,6 @@ export default function HomePage() {
                 </Link>
               ))}
             </div>
-            </>
           )}
         </div>
       </section>
@@ -1182,24 +761,6 @@ export default function HomePage() {
         </div>
       </section>
     </SiteShell>
-  );
-}
-
-function HeroTileSkeleton({ label, highlight }: { label: string; highlight?: boolean }) {
-  return (
-    <div>
-      <div
-        className={cn(
-          "overflow-hidden rounded-[1.25rem] border bg-black",
-          highlight ? "border-cyan-200/40" : "border-white/10",
-        )}
-      >
-        <div className="aspect-[9/16] animate-pulse bg-white/[0.05]" />
-      </div>
-      <p className="mt-2 text-center text-[9px] font-semibold uppercase tracking-[0.18em] text-slate-500">
-        {label}
-      </p>
-    </div>
   );
 }
 

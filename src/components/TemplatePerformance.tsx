@@ -52,52 +52,6 @@ export function PerformanceProvenance({ row }: { row: TemplatePerformanceRow }) 
 }
 
 /** Performance-first block. Renders nothing when the row carries no real metrics. */
-export function MetricRing({
-  value,
-  label,
-  tone = "neutral",
-  compact,
-}: {
-  value: string;
-  label: string;
-  tone?: "roas" | "revenue" | "neutral";
-  compact?: boolean;
-}) {
-  return (
-    <div className="flex flex-col items-center gap-1">
-      <div
-        className={cn(
-          "flex items-center justify-center rounded-full border-2 bg-black/50 text-center",
-          compact ? "h-16 w-16" : "h-20 w-20",
-          tone === "roas"
-            ? "border-lime-300/70 shadow-[0_0_18px_-6px_rgba(163,230,53,0.55)]"
-            : tone === "revenue"
-              ? "border-cyan-300/60 shadow-[0_0_18px_-6px_rgba(103,232,249,0.5)]"
-              : "border-white/20",
-        )}
-      >
-        <span
-          className={cn(
-            "font-display font-bold leading-none",
-            compact ? "text-sm" : "text-lg",
-            tone === "roas" ? "text-lime-300" : tone === "revenue" ? "text-cyan-200" : "text-white",
-          )}
-        >
-          {value}
-        </span>
-      </div>
-      <span
-        className={cn(
-          "font-semibold uppercase tracking-[0.16em] text-slate-400",
-          compact ? "text-[8px]" : "text-[9px]",
-        )}
-      >
-        {label}
-      </span>
-    </div>
-  );
-}
-
 export function PerformanceBlock({
   row,
   className,
@@ -110,17 +64,9 @@ export function PerformanceBlock({
   if (!row || !hasMetrics(row)) return null;
 
   const roas = formatRoas(row.roas);
-  const revenue = formatRevenue(row.revenue);
   const cvr = formatCvr(row.purchase_cvr_lpv);
   const aov = formatAov(row.aov);
   const spend = formatSpend(row.spend);
-
-  const rings: Array<{ value: string; label: string; tone?: "roas" | "revenue" | "neutral" }> = [];
-  if (roas) rings.push({ value: roas, label: "ROAS", tone: "roas" });
-  if (revenue) rings.push({ value: revenue, label: "Revenue", tone: "revenue" });
-  if (cvr) rings.push({ value: cvr, label: "CVR (LPV)" });
-  if (spend) rings.push({ value: spend, label: "Spend" });
-  if (aov) rings.push({ value: aov, label: "AOV" });
 
   return (
     <div
@@ -129,38 +75,52 @@ export function PerformanceBlock({
         className,
       )}
     >
-      <div className="flex items-center justify-between gap-3">
-        <span className="text-[9px] font-semibold uppercase tracking-[0.2em] text-slate-400">
-          Performance
-        </span>
+      <div className="flex items-end justify-between gap-3">
+        {roas ? (
+          <div className="flex items-baseline gap-1.5">
+            <span
+              className={cn(
+                "font-display font-bold leading-none text-lime-300",
+                compact ? "text-2xl" : "text-3xl",
+              )}
+            >
+              {roas}
+            </span>
+            <span className="text-[9px] font-semibold uppercase tracking-[0.2em] text-slate-400">
+              ROAS
+            </span>
+          </div>
+        ) : (
+          <span className="text-[9px] font-semibold uppercase tracking-[0.2em] text-slate-400">
+            Performance
+          </span>
+        )}
         <PerformanceProvenance row={row} />
       </div>
 
-      {rings.length ? (
-        <div className={cn("flex flex-wrap items-start", compact ? "mt-2 gap-2.5" : "mt-3 gap-4")}>
-          {rings.map((ring) => (
-            <MetricRing
-              key={ring.label}
-              value={ring.value}
-              label={ring.label}
-              tone={ring.tone}
-              compact={compact}
-            />
-          ))}
+      {(cvr || aov) && (
+        <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] uppercase tracking-[0.14em] text-slate-300">
+          {cvr && (
+            <span>
+              Purchase CVR (LPV) <span className="text-white">{cvr}</span>
+            </span>
+          )}
+          {aov && (
+            <span>
+              AOV <span className="text-white">{aov}</span>
+            </span>
+          )}
         </div>
-      ) : null}
+      )}
 
-      {spend && !compact ? (
-        <p className="mt-2 text-[10px] uppercase tracking-[0.14em] text-slate-500">
+      {spend && (
+        <p className="mt-1 text-[10px] uppercase tracking-[0.14em] text-slate-500">
           Tested on {spend} spend
         </p>
-      ) : null}
-
-      <PerformanceDisclaimer className={compact ? "mt-2 text-[9px] leading-4" : "mt-2"} />
+      )}
     </div>
   );
 }
-
 
 export function PerformanceDisclaimer({ className }: { className?: string }) {
   return (

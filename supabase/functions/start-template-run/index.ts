@@ -21,30 +21,6 @@ import {
   type CastRuntime,
 } from "../_shared/cast.ts";
 import { countTemplateDeliverables, getTemplateCreditCost } from "../_shared/template-pricing.ts";
-import {
-  assertRegenerationAccess,
-  resolveRegenerationSubgraph,
-} from "../_shared/regeneration.ts";
-import {
-  performOutputRegeneration,
-  RegenerationError,
-} from "../_shared/regeneration-run.ts";
-import { assertForkOwnership, resolveForkEntitlement } from "../_shared/template-fork.ts";
-import {
-  buildForkRunMarker,
-  compileForkEdges,
-  compileForkNodes,
-  findForkRunJob,
-  forkInputsFromSourceJob,
-  FORK_RUN_MARKER_KEY,
-  ForkRunError,
-  PERSONAL_FORK_REVIEW_STATUS,
-} from "../_shared/fork-run.ts";
-
-/** Private fork versions live in a high, non-colliding version_number band. */
-const FORK_VERSION_NUMBER_BASE = 1_000_000;
-
-
 
 declare const EdgeRuntime: {
   waitUntil(promise: Promise<unknown>): void;
@@ -181,403 +157,8 @@ function expandInputsForTemplate(args: {
   return finalInputs;
 }
 
-/**
- * TR7 — per-output regeneration execution. Lives here because this function
- * already owns the credit-charge + run-kick pattern. The read-only
- * `regenerate-estimate` function stays read-only.
- */
-async function handleRegenerateOutput(
-  req: Request,
-  admin: ReturnType<typeof createAdminClient>,
-  body: Record<string, unknown>,
-) {
-  const user = await requireUser(req, admin);
-  if (!user) throw new Error("Authentication required");
-
-  const jobId = typeof body.jobId === "string" ? body.jobId.trim() : "";
-  if (!jobId) throw new Error("jobId is required");
-
-  const hasOutputNumber = Number.isFinite(Number(body.outputNumber));
-  const nodeId = typeof body.nodeId === "string" && body.nodeId.trim() ? body.nodeId.trim() : null;
-  if (!hasOutputNumber && !nodeId) throw new Error("outputNumber or nodeId is required");
-
-  const idempotencyKey = typeof body.idempotencyKey === "string" && body.idempotencyKey.trim()
-    ? body.idempotencyKey.trim()
-    : null;
-
-  // Server-side resolve — any client-supplied cost is ignored entirely.
-  const { job, estimate } = await resolveRegenerationSubgraph(admin, jobId, {
-    nodeId,
-    outputNumber: hasOutputNumber ? Number(body.outputNumber) : null,
-  });
-
-  const roles = await getUserRoles(user.id, admin);
-  assertRegenerationAccess({ jobUserId: job.user_id, userId: user.id, roles });
-  const privileged = roles.some((role) => role === "admin" || role === "dev");
-
-  try {
-    const result = await performOutputRegeneration(admin, {
-      jobId: job.id,
-      estimate,
-      userId: user.id,
-      privileged,
-      idempotencyKey,
-      runGraphJob: (client, id) => runGraphJob(client as never, id),
-    });
-
-    await logAuditEvent({
-      eventType: "template.output.regenerated",
-      message: `Regenerated output ${result.outputNumber ?? estimate.targetNodeId} (rev ${result.revision}).`,
-      source: "template-runner",
-      jobId: job.id,
-      templateId: job.template_id,
-      versionId: job.version_id,
-      metadata: {
-        user_id: user.id,
-        privileged,
-        idempotent: !!result.idempotent,
-        credits: result.estimatedCredits,
-        to_run_node_ids: result.toRunNodeIds,
-      },
-    }, admin);
-
-    return json(result, 200);
-  } catch (error) {
-    if (error instanceof RegenerationError) {
-      return json({ error: error.code, detail: error.message }, error.code === "INSUFFICIENT_CREDITS" ? 402 : 400);
-    }
-    throw error;
-  }
-}
-
-/**
- * TR10 — run a Pro user's PRIVATE fork with full marketplace isolation.
- *
- * The fork is materialized into ONE reusable private template_versions row per
- * fork (is_active=false, review_status='personal_fork', fork_id=forkId). The
- * marketplace template, its active version, nodes and edges are never mutated.
- */
-async function handleRunFork(
-  req: Request,
-  admin: ReturnType<typeof createAdminClient>,
-  body: Record<string, unknown>,
-  requestId: string,
-) {
-  const user = await requireUser(req, admin);
-  if (!user) throw new ForkRunError("UNAUTHENTICATED", "Authentication required", 401);
-
-  const forkId = typeof body.forkId === "string" ? body.forkId.trim() : "";
-  if (!forkId) throw new ForkRunError("BAD_REQUEST", "forkId is required");
-  const idempotencyKey = typeof body.idempotencyKey === "string" ? body.idempotencyKey.trim() : "";
-  const suppliedInputs = { ...(body.inputs as Record<string, string> | undefined ?? {}) };
-
-  const roles = await getUserRoles(user.id, admin);
-
-  const { data: fork, error: forkError } = await admin
-    .from("template_user_forks")
-    .select("id, user_id, name, source_template_id, source_version_id, personal_graph, prompt_visibility, source_job_id")
-    .eq("id", forkId)
-    .maybeSingle();
-  if (forkError) throw new Error(forkError.message);
-  if (!fork) throw new ForkRunError("FORK_NOT_FOUND", "Workflow not found", 404);
-
-  // 1) Ownership + Pro entitlement re-check.
-  try {
-    assertForkOwnership({ forkUserId: String((fork as any).user_id), userId: user.id, roles });
-  } catch {
-    throw new ForkRunError("FORBIDDEN", "This workflow belongs to another account", 403);
-  }
-
-  const { data: profile, error: profileError } = await admin
-    .from("profiles")
-    .select("plan, subscription_status")
-    .eq("user_id", user.id)
-    .maybeSingle();
-  if (profileError) throw new Error(profileError.message);
-
-  const entitlement = resolveForkEntitlement({ plan: (profile as any)?.plan ?? null, roles });
-  if (!entitlement.allowed) {
-    throw new ForkRunError("PRO_REQUIRED", "Pro membership required to run personal workflows", 403);
-  }
-
-  const privileged = roles.some((role) => role === "admin" || role === "dev");
-  const sourceTemplateId = String((fork as any).source_template_id);
-  const sourceVersionId = String((fork as any).source_version_id);
-  const promptVisibility = (fork as any).prompt_visibility === true;
-
-  // 2) MATERIALIZE — pinned SOURCE version graph (read-only) + personal graph.
-  const [sourceNodesResult, sourceEdgesResult, templateResult] = await Promise.all([
-    admin.from("nodes").select("id, name, node_type, prompt_config, default_asset_id, model_id")
-      .eq("version_id", sourceVersionId),
-    admin.from("edges").select("source_node_id, target_node_id, mapping_logic")
-      .eq("version_id", sourceVersionId),
-    admin.from("fuse_templates").select("id, name").eq("id", sourceTemplateId).maybeSingle(),
-  ]);
-  if (sourceNodesResult.error) throw new Error(sourceNodesResult.error.message);
-  if (sourceEdgesResult.error) throw new Error(sourceEdgesResult.error.message);
-  if (templateResult.error) throw new Error(templateResult.error.message);
-
-  const templateName = String((templateResult.data as any)?.name ?? "Untitled Template");
-  const compiledNodes = await compileForkNodes({
-    forkId,
-    sourceNodes: (sourceNodesResult.data ?? []) as never,
-    personalGraph: (fork as any).personal_graph,
-    promptVisibility,
-  });
-  const compiledEdges = compileForkEdges((sourceEdgesResult.data ?? []) as never, compiledNodes);
-
-  // Reuse ONE isolated private version per fork.
-  const { data: existingVersion, error: existingVersionError } = await admin
-    .from("template_versions")
-    .select("id, version_number")
-    .eq("fork_id", forkId)
-    .maybeSingle();
-  if (existingVersionError) throw new Error(existingVersionError.message);
-
-  let forkVersionId = existingVersion?.id as string | undefined;
-  if (!forkVersionId) {
-    const { data: maxRow, error: maxError } = await admin
-      .from("template_versions")
-      .select("version_number")
-      .eq("template_id", sourceTemplateId)
-      .gte("version_number", FORK_VERSION_NUMBER_BASE)
-      .order("version_number", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    if (maxError) throw new Error(maxError.message);
-    const nextVersionNumber = Math.max(
-      FORK_VERSION_NUMBER_BASE,
-      Number((maxRow as any)?.version_number ?? 0) + 1,
-    );
-
-    forkVersionId = crypto.randomUUID();
-    const { error: createVersionError } = await admin
-      .from("template_versions")
-      .insert({
-        id: forkVersionId,
-        template_id: sourceTemplateId,
-        version_number: nextVersionNumber,
-        // ISOLATION: never active, never publishable.
-        is_active: false,
-        review_status: PERSONAL_FORK_REVIEW_STATUS,
-        fork_id: forkId,
-      });
-    if (createVersionError) throw new Error(createVersionError.message);
-  } else {
-    // Defensive: keep the isolation flags pinned on every run.
-    const { error: pinError } = await admin
-      .from("template_versions")
-      .update({ is_active: false, review_status: PERSONAL_FORK_REVIEW_STATUS, fork_id: forkId })
-      .eq("id", forkVersionId);
-    if (pinError) throw new Error(pinError.message);
-  }
-
-  // Replace the private version's graph (deterministic ids → upsert in place).
-  const { error: nodeUpsertError } = await admin
-    .from("nodes")
-    .upsert(
-      compiledNodes.map((node) => ({
-        id: node.id,
-        version_id: forkVersionId,
-        name: node.name,
-        node_type: node.node_type,
-        prompt_config: node.prompt_config,
-        default_asset_id: node.default_asset_id,
-        model_id: node.model_id,
-      })),
-      { onConflict: "id" },
-    );
-  if (nodeUpsertError) throw new Error(nodeUpsertError.message);
-
-  const { error: edgeDeleteError } = await admin.from("edges").delete().eq("version_id", forkVersionId);
-  if (edgeDeleteError) throw new Error(edgeDeleteError.message);
-  if (compiledEdges.length) {
-    const { error: edgeInsertError } = await admin.from("edges").insert(
-      compiledEdges.map((edge) => ({ ...edge, version_id: forkVersionId })),
-    );
-    if (edgeInsertError) throw new Error(edgeInsertError.message);
-  }
-
-  // 3) COST — recomputed from the COMPILED fork nodes (models may have changed).
-  const targetNodeIds = new Set(compiledEdges.map((edge) => edge.target_node_id));
-  const executionNodes = compiledNodes.filter((node) =>
-    node.node_type !== "user_input" && node.node_type !== "prompt" && targetNodeIds.has(node.id)
-  );
-  if (!executionNodes.length) {
-    throw new ForkRunError("EMPTY_GRAPH", "This workflow has no connected execution steps");
-  }
-  const deliverableCounts = countTemplateDeliverables(executionNodes);
-  const creditCost = privileged ? 0 : getTemplateCreditCost(templateName, deliverableCounts);
-
-  // Idempotency — a retry never charges or runs twice.
-  if (idempotencyKey) {
-    const { data: recentJobs, error: recentError } = await admin
-      .from("execution_jobs")
-      .select("id, input_payload")
-      .eq("user_id", user.id)
-      .eq("version_id", forkVersionId)
-      .order("created_at", { ascending: false })
-      .limit(25);
-    if (recentError) throw new Error(recentError.message);
-    const existingJob = findForkRunJob((recentJobs ?? []) as never, { forkId, idempotencyKey });
-    if (existingJob) {
-      return json({ jobId: existingJob.id, status: "queued", idempotent: true, credits: creditCost }, 200);
-    }
-  }
-
-  // FREEMIUM: no membership precondition. The credit charge below
-  // (apply_credit_transaction, refunded on failure) is the real gate.
-
-  // 4) CHARGE + RUN — same charge/job/run path as a normal run.
-  const inputNodes = compiledNodes.filter((node) => node.node_type === "user_input");
-
-  // TR10b — when the client sends no inputs, reuse the assets from the run this
-  // fork was created from. OWNER-SCOPED: the source job is only read when it
-  // belongs to the authenticated fork owner (.eq("user_id", user.id)).
-  let effectiveInputs = suppliedInputs;
-  if (!Object.keys(effectiveInputs).length) {
-    const sourceJobId = (fork as any).source_job_id
-      ? String((fork as any).source_job_id)
-      : "";
-    if (!sourceJobId) {
-      throw new ForkRunError(
-        "INPUTS_REQUIRED",
-        "Add your assets before running this workflow — there's no earlier run to reuse.",
-      );
-    }
-    const { data: sourceJob, error: sourceJobError } = await admin
-      .from("execution_jobs")
-      .select("id, input_payload")
-      .eq("id", sourceJobId)
-      .eq("user_id", user.id)
-      .maybeSingle();
-    if (sourceJobError) throw new Error(sourceJobError.message);
-    if (!sourceJob) {
-      throw new ForkRunError(
-        "INPUTS_REQUIRED",
-        "Add your assets before running this workflow — the original run is no longer available.",
-      );
-    }
-    effectiveInputs = forkInputsFromSourceJob((sourceJob as any).input_payload);
-    if (!Object.keys(effectiveInputs).length) {
-      throw new ForkRunError(
-        "INPUTS_REQUIRED",
-        "Add your assets before running this workflow.",
-      );
-    }
-  }
-
-  const remappedInputs: Record<string, string> = { ...effectiveInputs };
-  for (const node of inputNodes) {
-    const value = effectiveInputs[node.source_node_id] ?? effectiveInputs[node.id] ??
-      effectiveInputs[node.name];
-    if (value) remappedInputs[node.id] = value;
-  }
-
-  const finalInputs = expandInputsForTemplate({
-    templateName,
-    inputNodes,
-    suppliedInputs: remappedInputs,
-  });
-
-  const { data: job, error: jobError } = await admin
-    .from("execution_jobs")
-    .insert({
-      user_id: user.id,
-      template_id: sourceTemplateId,
-      version_id: forkVersionId,
-      status: "queued",
-      progress: 0,
-      input_payload: {
-        ...finalInputs,
-        [FORK_RUN_MARKER_KEY]: buildForkRunMarker({
-          forkId,
-          versionId: forkVersionId,
-          sourceTemplateId,
-          idempotencyKey: idempotencyKey || null,
-          credits: creditCost,
-        }),
-      },
-      result_payload: {},
-    })
-    .select("id")
-    .single();
-  if (jobError || !job) throw new Error(jobError?.message ?? "Failed to create job");
-
-  let chargedCredits = 0;
-  if (!privileged && creditCost > 0) {
-    const { error: creditError } = await admin.rpc("apply_credit_transaction", {
-      p_user_id: user.id,
-      p_amount: -creditCost,
-      p_type: "run_template",
-      p_description: `Run personal workflow: ${templateName} (${job.id})`,
-      p_template_id: sourceTemplateId,
-      p_project_id: null,
-      p_step_id: null,
-    });
-    if (creditError) {
-      await admin.from("execution_jobs").delete().eq("id", job.id);
-      throw new ForkRunError("INSUFFICIENT_CREDITS", creditError.message, 402);
-    }
-    chargedCredits = creditCost;
-  }
-
-  const { error: stepsError } = await admin
-    .from("execution_steps")
-    .insert(executionNodes.map((node) => ({
-      job_id: job.id,
-      node_id: node.id,
-      status: "pending",
-      input_payload: {},
-      output_payload: {},
-    })));
-  if (stepsError) {
-    if (chargedCredits > 0) {
-      await refundJobCreditsIfNeeded(admin, { jobId: job.id, reason: stepsError.message, requestId });
-    }
-    throw new Error(stepsError.message);
-  }
-
-  EdgeRuntime.waitUntil((async () => {
-    try {
-      await runGraphJob(admin, job.id);
-    } catch (error) {
-      const message = errorMessage(error);
-      await admin
-        .from("execution_jobs")
-        .update({ status: "failed", error_log: message, completed_at: new Date().toISOString() })
-        .eq("id", job.id);
-      if (chargedCredits > 0) {
-        await refundJobCreditsIfNeeded(admin, { jobId: job.id, reason: message, requestId });
-      }
-    }
-  })());
-
-  await logAuditEvent({
-    eventType: "template.fork_run.started",
-    message: `Personal workflow run queued for ${templateName}.`,
-    source: "template-runner",
-    requestId,
-    jobId: job.id,
-    templateId: sourceTemplateId,
-    versionId: forkVersionId,
-    metadata: {
-      user_id: user.id,
-      fork_id: forkId,
-      prompt_visibility: promptVisibility,
-      credit_cost: creditCost,
-      privileged,
-    },
-  }, admin);
-
-  return json({ jobId: job.id, status: "queued", credits: creditCost, forkRun: true }, 202);
-}
-
-
-
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: corsHeaders });
-
 
   const admin = createAdminClient();
   const requestId = crypto.randomUUID();
@@ -587,41 +168,13 @@ Deno.serve(async (req) => {
   let jobId: string | null = null;
   let chargedCredits = 0;
 
-  let rawBody: Record<string, unknown> = {};
-  try {
-    rawBody = (await req.json()) as Record<string, unknown>;
-  } catch {
-    rawBody = {};
-  }
-
-  if (String(rawBody.action ?? "") === "regenerate_output") {
-    try {
-      return await handleRegenerateOutput(req, admin, rawBody);
-    } catch (error) {
-      return json({ error: errorMessage(error) }, 400);
-    }
-  }
-
-  if (String(rawBody.action ?? "") === "run_fork") {
-    try {
-      return await handleRunFork(req, admin, rawBody, requestId);
-    } catch (error) {
-      if (error instanceof ForkRunError) {
-        return json({ error: error.message, code: error.code }, error.status);
-      }
-      return json({ error: errorMessage(error) }, 400);
-    }
-  }
-
-
   try {
     const runnerAccess = hasValidRunnerCode(req);
     const user = runnerAccess ? await getOptionalUser(req, admin) : await requireUser(req, admin);
     if (!user && !runnerAccess) throw new Error("Authentication required");
     userId = user?.id ?? null;
 
-    const body = rawBody as StartTemplateRunBody;
-
+    const body = await req.json() as StartTemplateRunBody;
 
     versionId = body.versionId ?? PAPARAZZI_VERSION_ID;
     const inputs = { ...(body.inputs ?? {}) };
@@ -689,8 +242,19 @@ Deno.serve(async (req) => {
 
     let creditCost = 0;
     if (user && !bypassCredits) {
-      // FREEMIUM: any signed-in user may run as long as they can afford it.
-      // The credit charge (and refund-on-failure) below is the only gate.
+      const { data: profile, error: profileError } = await admin
+        .from("profiles")
+        .select("subscription_status")
+        .eq("user_id", user.id)
+        .maybeSingle();
+      if (profileError) throw new Error(profileError.message);
+      if (!profile) throw new Error("Profile not found");
+
+      const subscriptionStatus = String(profile.subscription_status ?? "").toLowerCase();
+      if (!["active", "trialing"].includes(subscriptionStatus)) {
+        throw new Error("Active membership required before running templates.");
+      }
+
       creditCost = getTemplateCreditCost(templateName, deliverableCounts);
     }
 

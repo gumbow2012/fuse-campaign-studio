@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { ChevronDown, Compass } from "lucide-react";
-import { SALE_PLAN_LADDER } from "@/lib/planLadder";
+import { PLAN_LADDER } from "@/lib/planLadder";
 import PlanCalculator from "@/components/mvp/membership/PlanCalculator";
 
 /**
@@ -10,7 +10,7 @@ import PlanCalculator from "@/components/mvp/membership/PlanCalculator";
 const CADENCE = [
   { id: "occasional", label: "Occasionally", plan: "starter" },
   { id: "monthly", label: "1-2 a month", plan: "starter" },
-  { id: "weekly", label: "Weekly", plan: "pro" },
+  { id: "weekly", label: "Weekly", plan: "plus" },
   { id: "often", label: "Multiple per week", plan: "pro" },
 ] as const;
 
@@ -20,11 +20,11 @@ const WORKING = [
 ] as const;
 
 const CAST = [
-  { id: "yes", label: "Yes, I want FUSE Cast", plan: "pro" },
+  { id: "yes", label: "Yes, I want FUSE Cast", plan: "plus" },
   { id: "no", label: "Not right now", plan: null },
 ] as const;
 
-const ORDER = ["free", "starter", "pro", "studio", "team"];
+const ORDER = ["free", "starter", "plus", "pro", "studio", "team"];
 
 export default function FindYourPlan() {
   const [cadence, setCadence] = useState<string | null>(null);
@@ -44,7 +44,7 @@ export default function FindYourPlan() {
     return candidates.reduce((best, key) => (ORDER.indexOf(key) > ORDER.indexOf(best) ? key : best), candidates[0]);
   }, [cadence, working, cast]);
 
-  const recommended = SALE_PLAN_LADDER.find((entry) => entry.key === recommendedKey) ?? null;
+  const recommended = PLAN_LADDER.find((entry) => entry.key === recommendedKey) ?? null;
 
   const chip = (active: boolean) =>
     `rounded-full border px-3.5 py-1.5 text-xs font-medium transition-colors motion-reduce:transition-none ${

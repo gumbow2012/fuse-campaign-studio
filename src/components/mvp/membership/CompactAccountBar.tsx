@@ -60,11 +60,7 @@ export default function CompactAccountBar({ onManage }: { onManage?: () => void 
       ) : (
         <>
           <span className="hidden text-slate-600 sm:inline">·</span>
-          <span className="text-sm text-slate-400">
-            {credits > 0
-              ? `${animatedCredits.toLocaleString()} credits · one-time welcome grant`
-              : "0 credits · no monthly refill"}
-          </span>
+          <span className="text-sm text-slate-400">No active monthly credits</span>
         </>
       )}
 

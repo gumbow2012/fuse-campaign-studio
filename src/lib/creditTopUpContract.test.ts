@@ -10,12 +10,9 @@ describe("credit top-up surface", () => {
 
     expect(shellSource).toContain("shouldShowCreditTopUp");
     expect(shellSource).toContain("<CreditPackDialog");
-    expect(studioSource).toContain("showTopUp={!!user && !!profile && !isPrivilegedUser && hasActiveMembership && displayedCreditBalance <= 0}");
+    expect(studioSource).toContain("showTopUp={!!user && !!profile && !isPrivilegedUser && displayedCreditBalance <= 0}");
     expect(dialogSource).toContain('supabase.functions.invoke("create-credit-checkout"');
     expect(dialogSource).toContain("Quick buy one-time credit packs");
-    // The client submits ONLY the credits integer — never a price or pack key.
-    expect(dialogSource).toContain("body: { credits }");
-    expect(dialogSource).not.toMatch(/coming soon/i);
   });
 
   it("keeps membership as the single public billing nav surface", async () => {

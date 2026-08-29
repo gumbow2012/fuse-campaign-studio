@@ -150,30 +150,7 @@ Deno.serve(async (req) => {
     const edges: Record<string, unknown>[] = [];
     const positions: Record<string, { x: number; y: number }> = {};
 
-    // --- Persist each product image as a locked template asset ---
-    const { data: productAssets, error: productAssetsError } = await admin
-      .from("assets")
-      .insert(
-        products.map((product, index) => ({
-          supabase_storage_url: product.url,
-          asset_type: "image",
-          metadata: {
-            source: "outfit_swap_product_reference",
-            templateId: template.id,
-            versionId,
-            productIndex: index,
-            productType: product.type ?? "Product",
-          },
-        })),
-      )
-      .select("id");
-    if (productAssetsError) throw new Error(productAssetsError.message);
-    if (!productAssets || productAssets.length !== products.length) {
-      throw new Error("Failed to persist product references");
-    }
-    const productAssetIds = productAssets.map((asset: { id: string }) => String(asset.id));
-
-    // --- Product reference inputs (hidden locked references) ---
+    // --- Product reference inputs (replaceable examples) ---
     const productNodes = products.map((product, index) => {
       const id = crypto.randomUUID();
       const typeLabel = product.type ?? "Product";
@@ -185,8 +162,7 @@ Deno.serve(async (req) => {
         node_type: "user_input",
         model_id: null,
         prompt_config: {
-          editor_mode: "reference",
-          locked: true,
+          editor_mode: "upload",
           editor_slot_key: slotKey,
           editor_label: label,
           editor_expected: "image",
@@ -196,37 +172,13 @@ Deno.serve(async (req) => {
           outfit_swap_product_type: typeLabel,
           outfit_swap_apply_to: product.person ?? "Main Subject",
         },
-        default_asset_id: productAssetIds[index],
+        default_asset_id: null,
         name: label,
       });
       return { id, index, slotKey };
     });
 
-
-    // --- Persist each approved swapped frame as a locked template asset ---
-    const { data: frameAssets, error: frameAssetsError } = await admin
-      .from("assets")
-      .insert(
-        frames.map((frame, index) => ({
-          supabase_storage_url: frame.url,
-          asset_type: "image",
-          metadata: {
-            source: "outfit_swap_approved_frame",
-            templateId: template.id,
-            versionId,
-            frameIndex: index,
-            label: frame.label ?? null,
-          },
-        })),
-      )
-      .select("id");
-    if (frameAssetsError) throw new Error(frameAssetsError.message);
-    if (!frameAssets || frameAssets.length !== frames.length) {
-      throw new Error("Failed to persist approved swap frames");
-    }
-    const frameAssetIds = frameAssets.map((asset: { id: string }) => String(asset.id));
-
-    // --- One HIDDEN LOCKED reference per approved swapped frame ---
+    // --- One replaceable image input slot per approved swapped frame ---
     const frameNodes = frames.map((frame, index) => {
       const inputId = crypto.randomUUID();
       const imageId = crypto.randomUUID();
@@ -237,18 +189,17 @@ Deno.serve(async (req) => {
         node_type: "user_input",
         model_id: null,
         prompt_config: {
-          editor_mode: "reference",
-          editor_label: `Approved Swap Frame ${suffix}`,
+          editor_mode: "upload",
+          editor_slot_key: `input_image_${suffix}`,
+          editor_label: `Input Image ${suffix}`,
           editor_expected: "image",
           sample_url: frame.url,
           sort_order: index + 1,
-          locked: true,
-          outfit_swap_role: "approved_swap_reference",
+          outfit_swap_role: "source_frame",
         },
-        default_asset_id: frameAssetIds[index],
-        name: `Approved Swap Frame ${suffix}`,
+        default_asset_id: null,
+        name: `Input Image ${suffix}`,
       });
-
       nodes.push({
         id: imageId,
         version_id: versionId,

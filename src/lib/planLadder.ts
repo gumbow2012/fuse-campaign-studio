@@ -1,4 +1,4 @@
-import { Building2, Crown, Layers, Package, Rocket, Sparkles, Zap, type LucideIcon } from "lucide-react";
+import { Building2, Crown, Layers, Rocket, Sparkles, Zap, type LucideIcon } from "lucide-react";
 import { STRIPE_TIERS, type StripeTierKey } from "@/lib/stripe-config";
 
 /**
@@ -11,12 +11,8 @@ import { STRIPE_TIERS, type StripeTierKey } from "@/lib/stripe-config";
  * `checkout: "gated"` → no Stripe price exists yet; the CTA opens the graceful early-access
  *                       action (see GatedPlanDialog). NEVER map a gated plan to another price.
  *
- * PLUS is retired from new sales: it is NOT part of PLAN_LADDER and never renders as a
- * purchasable card. Its definition + price mapping stay intact (LEGACY_HIDDEN_PLANS) so
- * existing records keep resolving.
- *
  * STRIPE OBJECTS STILL TO BE CREATED (none of these exist today):
- *   - CAPSULE monthly ($60)
+ *   - PLUS monthly ($59)
  *   - TEAM monthly ($699)
  *   - ANNUAL prices for EVERY plan: Starter, Plus, Pro, Studio, Team
  *   (FREE needs no Stripe product.)
@@ -27,15 +23,6 @@ import { STRIPE_TIERS, type StripeTierKey } from "@/lib/stripe-config";
 
 export type PlanCheckoutMode = "live" | "gated" | "none";
 
-/** One-time welcome grant for a fresh free account. No monthly refill on Free. */
-export const WELCOME_CREDITS_ONCE = 250;
-
-/** One controlled accent per plan — dark FUSE system, not a rainbow page. */
-export type PlanAccentKey = "graphite" | "cyan" | "sky" | "violet" | "lime" | "magenta" | "royal";
-
-/** Intentional, non-duplicated recommendation badges. */
-export type PlanRecommendation = "MOST POPULAR" | "BEST VALUE" | "FOR TEAMS";
-
 export type PlanLadderEntry = {
   key: string;
   name: string;
@@ -43,10 +30,6 @@ export type PlanLadderEntry = {
   tagline: string;
   badge: string;
   icon: LucideIcon;
-  /** Controlled accent used for glow / badge / CTA / border / key metric. */
-  accent: PlanAccentKey;
-  /** Only Capsule / Pro / Team carry one. */
-  recommendation?: PlanRecommendation;
   description: string;
   /** Monthly USD price (designed). */
   price: number;
@@ -66,12 +49,6 @@ export type PlanLadderEntry = {
   ctaLabel: string;
   recommended?: boolean;
   featured?: boolean;
-  /**
-   * HIDDEN FROM SALE — definition kept intact (so historical records and future
-   * re-enablement work) but never rendered as a pricing card. Flip to false once a
-   * real purchasable Stripe price exists.
-   */
-  hiddenFromSale?: boolean;
   isFreeState?: boolean;
 };
 
@@ -79,34 +56,31 @@ export const PLAN_LADDER: PlanLadderEntry[] = [
   {
     key: "free",
     name: "Free",
-    tagline: "Try FUSE",
+    tagline: "Explore FUSE",
     badge: "Free",
     icon: Sparkles,
-    accent: "graphite",
     description: "Browse the marketplace, preview campaigns and follow the creators behind them.",
     price: 0,
     annualPrice: 0,
     monthlyCredits: 0,
-    creditsLabel: `${WELCOME_CREDITS_ONCE} welcome credits · one-time`,
-    goodFor: "Trying FUSE on free-eligible templates",
+    creditsLabel: "Browsing only",
+    goodFor: "Discovering what FUSE can make",
     benefits: [
-      "Try FUSE",
-      "Free-eligible templates",
-      "Brand Workspace",
-      `${WELCOME_CREDITS_ONCE} welcome credits (one-time)`,
+      "Browse the full template marketplace",
+      "Preview every campaign before you commit",
+      "Discover creators and their drops",
+      "Save favourites to your account",
     ],
     checkout: "none",
-    ctaLabel: "Start free",
+    ctaLabel: "Explore FUSE",
     isFreeState: true,
-    featured: true,
   },
   {
     key: "starter",
     name: STRIPE_TIERS.starter.name,
-    tagline: "First drops",
+    tagline: "For first drops",
     badge: "Entry",
     icon: Zap,
-    accent: "cyan",
     description: "Run real campaigns from the marketplace and launch your first drops.",
     price: STRIPE_TIERS.starter.price,
     annualPrice: 20,
@@ -114,12 +88,11 @@ export const PLAN_LADDER: PlanLadderEntry[] = [
     creditsLabel: `${STRIPE_TIERS.starter.monthlyCredits.toLocaleString()} credits/mo`,
     goodFor: "Your first campaigns",
     benefits: [
-      "Full campaign templates",
-      "Image Templates",
-      "Brand Workspace",
-      "Saved products + assets",
+      "Run any template in the marketplace",
+      "New campaigns added daily",
+      "Saved brand assets",
+      "Product + garment profiles",
       "Campaign history",
-      "Credit top-ups",
     ],
     checkout: "live",
     stripeTierKey: "starter",
@@ -127,49 +100,45 @@ export const PLAN_LADDER: PlanLadderEntry[] = [
     featured: true,
   },
   {
-    // Designed tier — no $60 Stripe price exists yet, so checkout MUST stay gated.
-    key: "capsule",
-    name: "Capsule",
-    tagline: "Weekly drops",
-    badge: "Coming soon",
-    icon: Package,
-    accent: "violet",
-    description: "Enough campaign volume to shoot an entire capsule collection in one month.",
-    price: 60,
-    annualPrice: 48,
+    key: "plus",
+    name: "Plus",
+    tagline: "For weekly content",
+    badge: "Growing",
+    icon: Layers,
+    description: "For brands posting every week, with FUSE Cast and your own avatars.",
+    price: 59,
+    annualPrice: 47,
     monthlyCredits: 7500,
     creditsLabel: "7,500 credits/mo",
-    goodFor: "Weekly drops, every week",
+    goodFor: "Weekly campaign content",
     benefits: [
       "Everything in Starter",
       "FUSE Cast",
-      "2.5x the monthly credits",
-      "Built for weekly creative testing",
+      "My Avatars",
+      "Higher concurrency",
+      "Larger saved-asset library",
     ],
     checkout: "gated",
-    ctaLabel: "Join the Capsule waitlist",
-    // No live $60 price → hidden from every pricing surface (see hiddenFromSale).
-    hiddenFromSale: true,
+    ctaLabel: "Choose Plus",
   },
   {
     key: "pro",
     name: STRIPE_TIERS.pro.name,
-    tagline: "Active brands",
-    badge: "Advanced",
+    tagline: "For active brands",
+    badge: "Most popular",
     icon: Rocket,
-    accent: "lime",
-    recommendation: "BEST VALUE",
-    description: "For brands running a real drop calendar with customizable workflows.",
+    description: "For brands running a real drop calendar with priority turnaround.",
     price: STRIPE_TIERS.pro.price,
     annualPrice: 119,
     monthlyCredits: STRIPE_TIERS.pro.monthlyCredits,
     creditsLabel: `${STRIPE_TIERS.pro.monthlyCredits.toLocaleString()} credits/mo`,
     goodFor: "A campaign every week, all month",
     benefits: [
-      "Everything in Starter",
-      "Workflow customization",
-      "Advanced generation controls",
-      "Campaign versions + revisions",
+      "Everything in Plus",
+      "Priority generation",
+      "Trending + early-access campaigns",
+      "Campaign versions and revisions",
+      "Creator Program eligible",
     ],
     checkout: "live",
     stripeTierKey: "pro",
@@ -183,7 +152,6 @@ export const PLAN_LADDER: PlanLadderEntry[] = [
     tagline: "High volume",
     badge: "Volume",
     icon: Crown,
-    accent: "magenta",
     description: "For multi-line brands and studios shipping campaigns constantly.",
     price: STRIPE_TIERS.studio.price,
     annualPrice: 319,
@@ -192,9 +160,10 @@ export const PLAN_LADDER: PlanLadderEntry[] = [
     goodFor: "Multiple campaigns every week",
     benefits: [
       "Everything in Pro",
-      "Very high monthly campaign capacity",
+      "Highest monthly campaign volume",
       "Full advanced toolset",
       "Largest saved-asset library",
+      "Priority generation",
     ],
     checkout: "live",
     stripeTierKey: "studio",
@@ -204,11 +173,9 @@ export const PLAN_LADDER: PlanLadderEntry[] = [
   {
     key: "team",
     name: "Team",
-    tagline: "Agencies + teams",
+    tagline: "For agencies + teams",
     badge: "Teams",
     icon: Building2,
-    accent: "royal",
-    recommendation: "FOR TEAMS",
     description: "A shared workspace for agencies running campaigns for several brands.",
     price: 699,
     annualPrice: 559,
@@ -216,23 +183,21 @@ export const PLAN_LADDER: PlanLadderEntry[] = [
     creditsLabel: "Shared team pool",
     goodFor: "Client campaigns, all month",
     benefits: [
-      "Shared team workspace",
+      "Everything in Studio",
       "Shared team credit pool",
       "3 seats included",
+      "Shared brand assets + templates",
       "Roles and permissions",
+      "Team analytics",
     ],
     checkout: "gated",
     ctaLabel: "Go Team",
   },
 ];
 
-/** Every plan that may be rendered/sold today. Capsule is hidden until it has a price. */
-export const SALE_PLAN_LADDER = PLAN_LADDER.filter((entry) => !entry.hiddenFromSale);
+export const FEATURED_PLANS = PLAN_LADDER.filter((entry) => entry.featured);
 
-export const FEATURED_PLANS = SALE_PLAN_LADDER.filter((entry) => entry.featured);
-
-/** Selector label — the exact percent lives on each card (it can vary by plan). */
-export const ANNUAL_SAVINGS_LABEL = "Best savings";
+export const ANNUAL_SAVINGS_LABEL = "SAVE 20%";
 
 /** Annual checkout is gated for every plan until annual Stripe prices exist. */
 export function isCheckoutLive(entry: PlanLadderEntry, cycle: "monthly" | "annual") {
@@ -241,44 +206,4 @@ export function isCheckoutLive(entry: PlanLadderEntry, cycle: "monthly" | "annua
 
 export function planPrice(entry: PlanLadderEntry, cycle: "monthly" | "annual") {
   return cycle === "annual" ? entry.annualPrice : entry.price;
-}
-
-/**
- * RETIRED FROM SALE — kept for safety only (0 active subscribers, but the plan key and
- * any price mapping must keep resolving for historical records). Never rendered as a
- * purchasable card and intentionally absent from PLAN_LADDER.
- */
-export const LEGACY_HIDDEN_PLANS: PlanLadderEntry[] = [
-  {
-    key: "plus",
-    name: "Plus",
-    tagline: "For weekly content",
-    badge: "Growing",
-    icon: Layers,
-    accent: "sky",
-    description: "For brands posting every week, with FUSE Cast and your own avatars.",
-    price: 59,
-    annualPrice: 47,
-    monthlyCredits: 7500,
-    creditsLabel: "7,500 credits/mo",
-    goodFor: "Weekly campaign content",
-    benefits: [
-      "Everything in Starter",
-      "More monthly credits",
-      "FUSE Cast",
-      "Higher campaign capacity",
-    ],
-    checkout: "gated",
-    ctaLabel: "Choose Plus",
-  },
-];
-
-/** Resolve any plan key, including retired ones. */
-export function findPlanEntry(planKey: string | null | undefined): PlanLadderEntry | null {
-  if (!planKey) return null;
-  return (
-    PLAN_LADDER.find((entry) => entry.key === planKey) ??
-    LEGACY_HIDDEN_PLANS.find((entry) => entry.key === planKey) ??
-    null
-  );
 }

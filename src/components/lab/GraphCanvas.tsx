@@ -48,20 +48,7 @@ export type GraphCanvasNodeData = {
   deliverable: boolean | null;
   promptValue?: string;
   portIds: string[];
-  /** Presentation-only persisted artifacts (private fork editor). */
-  media?: {
-    output: { url: string; type: "image" | "video" } | null;
-    references: Array<{
-      url: string;
-      type: "image" | "video";
-      role?: "start" | "end";
-      label?: string;
-    }>;
-    unavailable?: boolean;
-  } | null;
-  onOpenMedia?: (url: string, type: "image" | "video") => void;
   isReference?: boolean;
-
   uploadingReference?: boolean;
   onAddPort?: (nodeId: string, type: PortType) => void;
   onPromptCommit?: (nodeId: string, prompt: string) => void;
@@ -149,101 +136,7 @@ const PortDot = ({ type }: { type: PortType }) => (
 
 const handleBase = "!h-4 !w-4 !rounded-full !border-2 !border-background !opacity-100 transition-transform hover:!scale-125";
 
-type NodeMedia = NonNullable<GraphCanvasNodeData["media"]>;
-
-const MediaThumb = ({
-  url,
-  type,
-  caption,
-  onOpen,
-}: {
-  url: string;
-  type: "image" | "video";
-  caption: string;
-  onOpen?: (url: string, type: "image" | "video") => void;
-}) => (
-  <button
-    type="button"
-    className="nodrag group w-16 shrink-0 text-left"
-    onClick={(event) => {
-      event.stopPropagation();
-      onOpen?.(url, type);
-    }}
-  >
-    {type === "video" ? (
-      <video
-        src={url}
-        muted
-        loop
-        playsInline
-        preload="metadata"
-        className="h-16 w-16 rounded-lg border border-border/50 bg-background/70 object-cover"
-        onMouseEnter={(event) => void event.currentTarget.play().catch(() => undefined)}
-        onMouseLeave={(event) => event.currentTarget.pause()}
-      />
-    ) : (
-      <img
-        src={url}
-        alt={caption}
-        loading="lazy"
-        className="h-16 w-16 rounded-lg border border-border/50 bg-background/70 object-cover"
-      />
-    )}
-    <span className="mt-1 block truncate text-[9px] uppercase tracking-[0.1em] text-muted-foreground">
-      {caption}
-    </span>
-  </button>
-);
-
-/** Compact references/output strip. Media only — never prompt text. */
-const NodeMediaStrip = ({
-  media,
-  onOpen,
-}: {
-  media: NodeMedia;
-  onOpen?: (url: string, type: "image" | "video") => void;
-}) => {
-  if (media.unavailable && !media.output && !media.references.length) {
-    return (
-      <p className="mt-2 text-[10px] uppercase tracking-[0.12em] text-muted-foreground/70">
-        Reference unavailable
-      </p>
-    );
-  }
-  return (
-    <div className="mt-2 space-y-2">
-      {media.references.length ? (
-        <div>
-          <p className="text-[9px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-            References / Inputs
-          </p>
-          <div className="nowheel mt-1 flex gap-1.5 overflow-x-auto pb-1">
-            {media.references.slice(0, 6).map((ref, index) => (
-              <MediaThumb
-                key={`${ref.url}-${index}`}
-                url={ref.url}
-                type={ref.type}
-                caption={ref.role ? ref.role.toUpperCase() : ref.label ?? `Ref ${index + 1}`}
-                onOpen={onOpen}
-              />
-            ))}
-          </div>
-        </div>
-      ) : null}
-      {media.output ? (
-        <div>
-          <p className="text-[9px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Output</p>
-          <div className="mt-1 flex gap-1.5">
-            <MediaThumb url={media.output.url} type={media.output.type} caption="Result" onOpen={onOpen} />
-          </div>
-        </div>
-      ) : null}
-    </div>
-  );
-};
-
 const TemplateFlowNode = ({ id, data, selected }: NodeProps<GraphCanvasNode>) => {
-
   const Icon = KIND_ICON[data.kind];
   const inputPorts = inputPortsFor(data);
   const outputPort = outputPortFor(data);
@@ -406,10 +299,6 @@ const TemplateFlowNode = ({ id, data, selected }: NodeProps<GraphCanvasNode>) =>
         <p className="mt-2 text-[11px] text-muted-foreground">{data.detailLine}</p>
       ) : null}
 
-      {data.media ? <NodeMediaStrip media={data.media} onOpen={data.onOpenMedia} /> : null}
-
-
-
       <div className="mt-3 rounded-xl border border-border/50 bg-background/60 p-2.5">
         <div className="flex items-center justify-between gap-2">
           <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
@@ -549,7 +438,7 @@ const TemplateFlowNode = ({ id, data, selected }: NodeProps<GraphCanvasNode>) =>
 
 const nodeTypes = { templateNode: TemplateFlowNode };
 
-type DeletableEdgeData = { onDelete?: (edgeId: string) => void; refLabel?: string; edgeId?: string | null };
+type DeletableEdgeData = { onDelete?: (edgeId: string) => void; refLabel?: string };
 
 const DeletableEdge = ({
   id,
@@ -609,8 +498,7 @@ const DeletableEdge = ({
               aria-label="Remove connection"
               onClick={(event) => {
                 event.stopPropagation();
-                const realId = data?.edgeId ?? null;
-                if (realId) data?.onDelete?.(realId);
+                data?.onDelete?.(id);
               }}
               className="flex h-5 w-5 items-center justify-center rounded-full border border-destructive/60 bg-background/95 text-destructive shadow-lg transition hover:bg-destructive hover:text-destructive-foreground"
             >
@@ -634,7 +522,6 @@ type GraphCanvasProps = {
   onNodeMoved: (nodeId: string, position: { x: number; y: number }) => void;
   onConnectNodes: (sourceNodeId: string, targetNodeId: string, targetHandleId?: string | null) => void;
   onDeleteEdge: (edgeId: string) => void;
-  onDeleteNode?: (nodeId: string) => void;
   className?: string;
   focusNodeId?: string | null;
   onViewportApiReady?: (api: { getCenter: () => { x: number; y: number } }) => void;
@@ -648,7 +535,6 @@ const GraphCanvasInner = ({
   onNodeMoved,
   onConnectNodes,
   onDeleteEdge,
-  onDeleteNode,
   className,
   focusNodeId,
   onViewportApiReady,
@@ -785,16 +671,7 @@ const GraphCanvasInner = ({
         }}
         onEdgesDelete={(deleted) => {
           for (const edge of deleted) {
-            if (edge.id.startsWith("pending-")) continue;
-            const realId = (edge.data as { edgeId?: string | null } | undefined)?.edgeId ?? null;
-            if (realId) onDeleteEdge(realId);
-          }
-        }}
-        onNodesDelete={(deleted) => {
-          if (!onDeleteNode) return;
-          for (const node of deleted) {
-            if (node.deletable === false) continue;
-            onDeleteNode(node.id);
+            if (!edge.id.startsWith("pending-")) onDeleteEdge(edge.id);
           }
         }}
         elementsSelectable

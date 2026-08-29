@@ -63,16 +63,6 @@ export default function CreatorProgramPage() {
                 Request an invite
               </Link>
             </Button>
-            <Button
-              asChild
-              variant="ghost"
-              className="rounded-full px-5 text-slate-300 hover:text-white"
-            >
-              <Link to="/creators/browse">
-                Meet the creators
-                <ArrowRight className="ml-1 h-4 w-4" />
-              </Link>
-            </Button>
           </div>
         </header>
 
