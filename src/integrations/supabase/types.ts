@@ -74,6 +74,66 @@ export type Database = {
           },
         ]
       }
+      checkout_intents: {
+        Row: {
+          claim_nonce_hash: string
+          claimed_at: string | null
+          claimed_user_id: string | null
+          created_at: string | null
+          expires_at: string | null
+          fbclid: string | null
+          id: string
+          plan_key: string | null
+          return_to: string | null
+          status: string | null
+          stripe_session_id: string | null
+          template_id: string | null
+          template_name: string | null
+          utm_campaign: string | null
+          utm_content: string | null
+          utm_medium: string | null
+          utm_source: string | null
+        }
+        Insert: {
+          claim_nonce_hash: string
+          claimed_at?: string | null
+          claimed_user_id?: string | null
+          created_at?: string | null
+          expires_at?: string | null
+          fbclid?: string | null
+          id?: string
+          plan_key?: string | null
+          return_to?: string | null
+          status?: string | null
+          stripe_session_id?: string | null
+          template_id?: string | null
+          template_name?: string | null
+          utm_campaign?: string | null
+          utm_content?: string | null
+          utm_medium?: string | null
+          utm_source?: string | null
+        }
+        Update: {
+          claim_nonce_hash?: string
+          claimed_at?: string | null
+          claimed_user_id?: string | null
+          created_at?: string | null
+          expires_at?: string | null
+          fbclid?: string | null
+          id?: string
+          plan_key?: string | null
+          return_to?: string | null
+          status?: string | null
+          stripe_session_id?: string | null
+          template_id?: string | null
+          template_name?: string | null
+          utm_campaign?: string | null
+          utm_content?: string | null
+          utm_medium?: string | null
+          utm_source?: string | null
+        }
+        Relationships: []
+      }
       cinema_batch_config: {
         Row: {
           created_at: string
