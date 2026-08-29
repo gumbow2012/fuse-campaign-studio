@@ -771,18 +771,25 @@ export default function TemplateStudioPage() {
       template.name.toLowerCase() === normalizedRequest ||
       template.versionId?.toLowerCase() === normalizedRequest,
     );
-    if (import.meta.env.DEV) console.log("[dl-debug]", requestedTemplateParam, templates.length, match?.id, templates.slice(0,4).map(t=>t.name));
     return match?.id ?? null;
   }, [requestedTemplateParam, templates]);
 
+  /*
+   * The deep link wins until it has actually landed: an early catalog snapshot
+   * can reset the selection to the first campaign, so this keeps re-applying
+   * until the requested campaign is the selected one, then stops (the visitor
+   * stays free to pick another campaign afterwards).
+   */
+  const deepLinkLandedRef = useRef(false);
   useEffect(() => {
-    if (!requestedTemplateParam || !deepLinkTemplateId) return;
-    // Re-applies when the catalog refreshes with new ids, so a deep link never
-    // silently falls back to the first campaign.
-    if (appliedTemplateParamRef.current === `${requestedTemplateParam}:${deepLinkTemplateId}`) return;
-    appliedTemplateParamRef.current = `${requestedTemplateParam}:${deepLinkTemplateId}`;
+    if (!deepLinkTemplateId || deepLinkLandedRef.current) return;
+    if (selectedTemplateId === deepLinkTemplateId) {
+      deepLinkLandedRef.current = true;
+      appliedTemplateParamRef.current = requestedTemplateParam ?? "";
+      return;
+    }
     setSelectedTemplateId(deepLinkTemplateId);
-  }, [requestedTemplateParam, deepLinkTemplateId]);
+  }, [requestedTemplateParam, deepLinkTemplateId, selectedTemplateId]);
 
   /*
    * Deep link (?template=<name>) on mobile/tablet: the grid renders, the card is
@@ -2128,7 +2135,6 @@ export default function TemplateStudioPage() {
                 ? "Generate campaign →"
                 : `Generate campaign → ${creditsRequired} cr`;
 
-  if (import.meta.env.DEV) console.log("[dl-debug2]", { selectedTemplateId, isCompactLayout, inlineBuilderOpen, selectedRowIndex, gridColumns, hasActiveCampaignWorkspace, selectMode });
   const inlineBuilderNode =
     isCompactLayout && inlineBuilderOpen && selectedTemplate && !selectMode && !hasActiveCampaignWorkspace ? (
       <InlineCampaignBuilder
