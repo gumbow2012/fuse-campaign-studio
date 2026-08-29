@@ -2420,15 +2420,16 @@ export default function TemplateStudioPage() {
                           aria-expanded={outputSplitOpen}
                           className="rounded-full border border-white/10 px-3 py-1 text-[10px] uppercase tracking-[0.2em] text-muted-foreground transition-colors hover:border-white/25 hover:text-slate-200"
                         >
-                          {formatCount(selectedTemplateOutputCount, "output", "outputs")}
+                          {formatCampaignOutputsLong(selectedTemplate?.counts)}
                           <span aria-hidden className="ml-1">{outputSplitOpen ? "▴" : "▾"}</span>
                           {outputSplitOpen ? <span className="ml-2 normal-case tracking-normal text-slate-300">{outputSplit}</span> : null}
                         </button>
                       ) : (
                         <span className="rounded-full border border-white/10 px-3 py-1 text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
-                          {formatCount(selectedTemplateOutputCount, "output", "outputs")}
+                          {formatCampaignOutputsLong(selectedTemplate?.counts)}
                         </span>
                       )}
+
                       <span className="inline-flex items-center gap-1 rounded-full border border-white/10 px-3 py-1 text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
                         {isPrivilegedUser ? <span className="line-through decoration-cyan-200/90 decoration-2">{creditsRequired} cr</span> : `${creditsRequired} cr`}
                         <Tooltip>
