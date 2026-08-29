@@ -2623,86 +2623,79 @@ export default function TemplateStudioPage() {
               </div>
             ) : null}
 
-            <div className="mt-4 grid grid-cols-2 items-start gap-2.5 sm:mt-5 sm:grid-cols-3 sm:gap-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6">
+            {/* Immersive content feed: ONE dominant card per row on mobile, two
+                large editorial columns from sm up. The inline builder still
+                expands directly beneath the selected card's measured row. */}
+            <div className="mt-4 grid grid-cols-1 items-start gap-4 sm:mt-5 sm:grid-cols-2 sm:gap-5">
               {templateRows.map((row, rowIndex) => (
                 <Fragment key={`template-row-${rowIndex}`}>
-                  {row.map((template) => {
+                  {row.map((template, columnIndex) => {
                 const selected = template.id === selectedTemplateId;
                 const batchSelected = batchSelection.includes(template.id);
-
-
+                const isNewDrop = (() => {
+                  const created = template.created_at ? new Date(template.created_at).getTime() : NaN;
+                  if (Number.isNaN(created)) return false;
+                  return Date.now() - created < 21 * 24 * 60 * 60 * 1000;
+                })();
 
                 return (
-                  <div
+                  <CampaignFeedCard
                     key={template.id}
-                    role="button"
-                    tabIndex={0}
-                    aria-label={`Open ${template.name}`}
-                    aria-pressed={selectMode ? batchSelected : undefined}
-                    onClick={() =>
-                      selectMode ? toggleBatchSelection(template.id) : handleTemplateSelect(template.id)
-                    }
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter" || event.key === " ") {
-                        event.preventDefault();
-                        if (selectMode) toggleBatchSelection(template.id);
-                        else handleTemplateSelect(template.id);
+                    templateId={String(template.id)}
+                    displayName={campaignDisplayName(template.name)}
+                    fullName={template.name}
+                    outputsLabel={formatCampaignOutputs(template.counts)}
+                    previewUrl={template.preview_url}
+                    posterUrl={template.thumbnail_url ?? null}
+                    isVideo={isVideoPreview(template)}
+                    selected={selectMode ? batchSelected : selected}
+                    eager={rowIndex === 0 && columnIndex === 0}
+                    statusPill={isNewDrop ? "new" : null}
+                    onSelect={() => {
+                      if (selectMode) {
+                        toggleBatchSelection(template.id);
+                        return;
                       }
+                      track("campaign_select", { template_id: template.id });
+                      track("campaign_builder_open", { template_id: template.id });
+                      handleTemplateSelect(template.id);
                     }}
-                    className={cn(
-                      "group relative cursor-pointer overflow-hidden rounded-[0.9rem] bg-black text-left transition-shadow focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300",
-                      (selectMode ? batchSelected : selected)
-                        ? "ring-1 ring-cyan-300 shadow-[0_0_24px_-4px_rgba(34,211,238,0.55)]"
-                        : "ring-1 ring-white/10 hover:ring-white/25",
-                    )}
-                  >
-                    <TemplateVibeMedia
-                      template={template}
-                      className={cn(
-                        "w-full object-cover transition-transform duration-500 group-hover:scale-[1.03] motion-reduce:transition-none",
-                        feedTileAspect(String(template.id)),
-                      )}
-                    />
-                    <span className="pointer-events-none absolute inset-x-0 bottom-0 h-1/3 bg-gradient-to-t from-black/85 to-transparent" />
-                    <p className="pointer-events-none absolute bottom-2 left-2.5 right-8 line-clamp-2 font-display text-[10.5px] font-bold uppercase leading-[1.15] tracking-[0.1em] text-white drop-shadow-[0_1px_6px_rgba(0,0,0,0.9)] sm:text-[12px] sm:tracking-[0.12em]">
-                      {campaignDisplayName(template.name)}
-                    </p>
-
-                    {canFavorite && !selectMode ? (
-                      <FavoriteTemplateButton
-                        favorite={isFavorite(String(template.id))}
-                        onToggle={() => toggleFavorite(String(template.id))}
-                        className="absolute right-1.5 top-1.5"
-                      />
-                    ) : null}
-
-                    {selectMode ? (
-                      <span
-                        aria-hidden="true"
-                        className={cn(
-                          "absolute right-1.5 top-1.5 flex h-7 w-7 items-center justify-center rounded-full border backdrop-blur",
-                          batchSelected
-                            ? "border-cyan-300 bg-cyan-300 text-slate-950"
-                            : "border-white/25 bg-black/55 text-transparent",
-                        )}
-                      >
-                        <Check className="h-4 w-4" />
-                      </span>
-                    ) : (
-                      <button
-                        type="button"
-                        aria-label={`Details for ${template.name}`}
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          track("template_view", { template_id: template.id });
-                          setDetailTemplateId(template.id);
-                        }}
-                        className="absolute bottom-1.5 right-1.5 flex h-6 w-6 items-center justify-center rounded-full border border-white/20 bg-black/60 text-white/85 backdrop-blur transition-colors hover:bg-black/85"
-                      >
-                        <Info className="h-3.5 w-3.5" />
-                      </button>
-                    )}
-                  </div>
+                    onDetails={
+                      selectMode
+                        ? undefined
+                        : () => {
+                            track("template_view", { template_id: template.id });
+                            setDetailTemplateId(template.id);
+                          }
+                    }
+                    onImpression={() => {
+                      track("marketplace_card_impression", { template_id: template.id });
+                    }}
+                    overlay={
+                      <>
+                        {canFavorite && !selectMode ? (
+                          <FavoriteTemplateButton
+                            favorite={isFavorite(String(template.id))}
+                            onToggle={() => toggleFavorite(String(template.id))}
+                            className="absolute left-3 top-3"
+                          />
+                        ) : null}
+                        {selectMode ? (
+                          <span
+                            aria-hidden="true"
+                            className={cn(
+                              "absolute right-3 top-3 flex h-7 w-7 items-center justify-center rounded-full border backdrop-blur",
+                              batchSelected
+                                ? "border-cyan-300 bg-cyan-300 text-slate-950"
+                                : "border-white/25 bg-black/55 text-transparent",
+                            )}
+                          >
+                            <Check className="h-4 w-4" />
+                          </span>
+                        ) : null}
+                      </>
+                    }
+                  />
                 );
                   })}
                   {/* <lg: the builder expands directly beneath the selected
@@ -2713,6 +2706,7 @@ export default function TemplateStudioPage() {
                 </Fragment>
               ))}
             </div>
+
             {favoritesOnly && !visibleTemplates.length ? (
               <div className="mt-5 rounded-[1.5rem] border border-white/8 bg-black/20 p-4 text-sm text-slate-300">
                 No favorites yet — tap the heart on any campaign to save it here.
