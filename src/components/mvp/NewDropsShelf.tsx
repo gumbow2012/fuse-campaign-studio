@@ -4,6 +4,7 @@ import { ArrowRight } from "lucide-react";
 import { formatCampaignOutputs } from "@/lib/campaignOutputs";
 import type { Entry, TemplateMedia } from "@/lib/homeMediaAllocator";
 import { track } from "@/lib/analytics/track";
+import { campaignDisplayName } from "@/lib/campaignDisplayName";
 
 /**
  * NEW DROPS — video-first rail that flows straight out of the hero.
