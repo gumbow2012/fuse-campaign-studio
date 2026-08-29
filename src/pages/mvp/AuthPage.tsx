@@ -125,11 +125,15 @@ export default function AuthPage() {
             ) : null}
 
             <div className={CARD_SHELL}>
+              {/* Free is no longer a selectable membership — account creation is
+                  framed as access, never as "start your free plan". */}
               <h1 className="font-display text-[1.75rem] font-bold leading-none tracking-[-0.04em] text-white">
-                ACCESS FUSE
+                {mode === "signup" ? "Create your FUSE account" : "ACCESS FUSE"}
               </h1>
               <p className="mt-2 text-sm leading-6 text-slate-400">
-                Sign in or create your account to continue.
+                {mode === "signup"
+                  ? "Start building campaigns with FUSE."
+                  : "Sign in or create your account to continue."}
               </p>
 
               <UniversalAuthPanel
@@ -139,6 +143,8 @@ export default function AuthPage() {
                 initialMode={initialMode}
                 emailCtaLabel="Continue"
                 autoRequestEmail={autoRequestEmail}
+                onModeChange={setMode}
+
                 
                 onBeforeRedirect={() => writePendingAuthIntent(intent)}
                 onAuthenticated={({ userId, isNewAccount }) => {
