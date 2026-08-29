@@ -2720,18 +2720,19 @@ export default function TemplateStudioPage() {
               </div>
             ) : null}
 
-            {/* DENSE VISUAL WALL — imagery first, tight gutters, minimal chrome.
-                <lg: exactly 2 columns (the inline builder is injected after the
-                selected card's real row). lg+: auto-fill portrait columns
-                (~210px min) so the feed responds to the viewport width. */}
+            {/* <lg: exactly 2 columns (the inline builder is injected after the
+                selected card's real row) — untouched. lg+: tall 9:16 portrait
+                cards, auto-fill so a normal desktop shows 4–5 across and
+                ultrawide shows more. */}
             <div
-              className={cn("mt-3 grid items-start", isCompactLayout ? "grid-cols-2 gap-2.5" : "gap-2.5")}
+              className={cn("mt-3 grid items-start", isCompactLayout ? "grid-cols-2 gap-2.5" : "gap-3")}
               style={
                 isCompactLayout
                   ? undefined
-                  : { gridTemplateColumns: "repeat(auto-fill, minmax(190px, 1fr))" }
+                  : { gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))" }
               }
             >
+
 
               {templateRows.map((row, rowIndex) => (
                 <Fragment key={`template-row-${rowIndex}`}>
