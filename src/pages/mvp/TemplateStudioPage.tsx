@@ -2163,7 +2163,7 @@ export default function TemplateStudioPage() {
               </div>
             ) : null}
 
-            <div className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="mt-4 grid grid-cols-2 gap-3 sm:mt-5 sm:grid-cols-2 sm:gap-4 lg:grid-cols-3">
               {visibleTemplates.map((template) => {
                 const selected = template.id === selectedTemplateId;
                 const batchSelected = batchSelection.includes(template.id);
