@@ -34,6 +34,7 @@ import AdminFuseCast from "@/pages/AdminFuseCast";
 import AdminTemplateImport from "@/pages/AdminTemplateImport";
 import AdminTemplateFactory from "@/pages/AdminTemplateFactory";
 import AdminMerchandising from "@/pages/AdminMerchandising";
+import AdminAdLinks from "@/pages/AdminAdLinks";
 import AdminProductLaunchPrototype from "@/pages/AdminProductLaunchPrototype";
 
 
@@ -403,6 +404,16 @@ const App = () => (
                 </AdminRoute>
               }
             />
+
+            <Route
+              path="/admin/ad-links"
+              element={
+                <AdminRoute>
+                  <AdminAdLinks />
+                </AdminRoute>
+              }
+            />
+
 
             <Route
               path="/admin/experiments/product-launch"

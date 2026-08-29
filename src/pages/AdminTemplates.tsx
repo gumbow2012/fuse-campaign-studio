@@ -103,6 +103,12 @@ export default function AdminTemplates() {
               </Link>
             </Button>
             <Button asChild size="sm" variant="outline" className="rounded-full border-white/15 bg-white/5">
+              <Link to="/admin/ad-links">
+                <LayoutGrid className="mr-2 h-4 w-4" />
+                Meta Ad Links
+              </Link>
+            </Button>
+            <Button asChild size="sm" variant="outline" className="rounded-full border-white/15 bg-white/5">
 
               <Link to="/admin/templates/factory">
                 <Factory className="mr-2 h-4 w-4" />
