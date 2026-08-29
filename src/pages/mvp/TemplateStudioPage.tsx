@@ -126,18 +126,6 @@ const FEED_CHIPS: Array<{ key: FeedChip; label: string }> = [
   { key: "video", label: "Video" },
 ];
 
-/**
- * Deterministic tile height variant — stable per campaign, never random.
- * Used by the DESKTOP (lg+) dense marketplace grid only.
- */
-function feedTileAspect(templateId: string) {
-  let hash = 0;
-  for (let index = 0; index < templateId.length; index += 1) {
-    hash = (hash * 31 + templateId.charCodeAt(index)) % 9973;
-  }
-  const variants = ["aspect-[1/1]", "aspect-[4/5]", "aspect-[3/4]"];
-  return variants[hash % variants.length];
-}
 
 
 type RunnerStatus = "queued" | "running" | "video_pending" | "complete" | "failed";
@@ -2635,14 +2623,14 @@ export default function TemplateStudioPage() {
 
             {/* RESPONSIVE SEPARATION — <lg keeps the immersive single-dominant
                 feed (inline builder expands beneath the selected card's measured
-                row); lg+ restores the previous dense multi-column marketplace
-                grid beside the desktop runner. Same data + state either way. */}
+                row); lg+ restores the previous compact marketplace grid (3 per
+                row) beside the desktop runner. Same data + state either way. */}
             <div
               className={cn(
                 "mt-4 grid items-start sm:mt-5",
                 isCompactLayout
                   ? "grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-5"
-                  : "grid-cols-2 gap-2.5 sm:grid-cols-3 sm:gap-3 lg:grid-cols-4 xl:grid-cols-4 2xl:grid-cols-5",
+                  : "grid-cols-2 gap-3 sm:grid-cols-2 sm:gap-4 lg:grid-cols-3 lg:gap-4",
               )}
             >
 
@@ -2657,7 +2645,7 @@ export default function TemplateStudioPage() {
                   return Date.now() - created < 21 * 24 * 60 * 60 * 1000;
                 })();
 
-                /* DESKTOP (lg+) — previous dense marketplace card. */
+                /* DESKTOP (lg+) — previous compact marketplace card. */
                 if (!isCompactLayout) {
                   return (
                     <div
@@ -2683,23 +2671,36 @@ export default function TemplateStudioPage() {
                         }
                       }}
                       className={cn(
-                        "group relative cursor-pointer overflow-hidden rounded-[0.9rem] bg-black text-left transition-shadow focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300",
+                        "group relative cursor-pointer overflow-hidden rounded-[1.1rem] bg-black text-left transition-shadow focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300",
                         (selectMode ? batchSelected : selected)
-                          ? "ring-1 ring-cyan-300 shadow-[0_0_24px_-4px_rgba(34,211,238,0.55)]"
+                          ? "ring-1 ring-cyan-300 shadow-[0_0_28px_-4px_rgba(34,211,238,0.55)]"
                           : "ring-1 ring-white/10 hover:ring-white/25",
                       )}
                     >
                       <TemplateVibeMedia
                         template={template}
-                        className={cn(
-                          "w-full object-cover transition-transform duration-500 group-hover:scale-[1.03] motion-reduce:transition-none",
-                          feedTileAspect(String(template.id)),
-                        )}
+                        className="aspect-[4/5] w-full object-cover transition-transform duration-500 group-hover:scale-[1.03] motion-reduce:transition-none"
                       />
-                      <span className="pointer-events-none absolute inset-x-0 bottom-0 h-1/3 bg-gradient-to-t from-black/85 to-transparent" />
-                      <p className="pointer-events-none absolute bottom-2 left-2.5 right-8 line-clamp-2 font-display text-[11px] font-bold uppercase leading-[1.15] tracking-[0.1em] text-white drop-shadow-[0_1px_6px_rgba(0,0,0,0.9)] sm:text-[12px] sm:tracking-[0.12em]">
-                        {campaignDisplayName(template.name)}
-                      </p>
+                      <span className="pointer-events-none absolute inset-x-0 bottom-0 h-2/5 bg-gradient-to-t from-black via-black/70 to-transparent" />
+
+                      <div className="pointer-events-none absolute inset-x-0 bottom-0 p-3.5">
+                        {isNewDrop ? (
+                          <span className="mb-1.5 inline-flex rounded-full border border-cyan-300/40 bg-cyan-300/15 px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.18em] text-cyan-100">
+                            New
+                          </span>
+                        ) : null}
+                        <p className="line-clamp-2 font-display text-[15px] font-bold uppercase leading-[1.1] tracking-[0.08em] text-white drop-shadow-[0_1px_8px_rgba(0,0,0,0.95)]">
+                          {campaignDisplayName(template.name)}
+                        </p>
+                        <p className="mt-0.5 text-[11px] font-medium text-slate-200/90">
+                          {formatCampaignOutputs(template.counts)}
+                        </p>
+                        <span className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-cyan-300 px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-950">
+                          Run campaign
+                          <ArrowRight className="h-3 w-3" aria-hidden />
+                        </span>
+                      </div>
+
 
                       {canFavorite && !selectMode ? (
                         <FavoriteTemplateButton
@@ -2730,7 +2731,10 @@ export default function TemplateStudioPage() {
                             track("template_view", { template_id: template.id });
                             setDetailTemplateId(template.id);
                           }}
-                          className="absolute bottom-1.5 right-1.5 flex h-6 w-6 items-center justify-center rounded-full border border-white/20 bg-black/60 text-white/85 backdrop-blur transition-colors hover:bg-black/85"
+                          className={cn(
+                            "absolute right-1.5 flex h-6 w-6 items-center justify-center rounded-full border border-white/20 bg-black/60 text-white/85 backdrop-blur transition-colors hover:bg-black/85",
+                            canFavorite ? "top-10" : "top-1.5",
+                          )}
                         >
                           <Info className="h-3.5 w-3.5" />
                         </button>
