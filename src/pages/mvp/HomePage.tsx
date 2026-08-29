@@ -508,7 +508,7 @@ export default function HomePage() {
   const heroTiles = useMemo<Entry[]>(() => {
     const seen = new Set<string>();
     const rows: Entry[] = [];
-    for (const entry of [...newToday, ...trending, ...creatorDrops, ...mediaWall]) {
+    for (const entry of [...newToday, ...trending, ...creatorDrops, ...categories.flatMap((shelf) => shelf.entries)]) {
       const key = String(entry.template.id ?? entry.template.name ?? "").trim().toLowerCase();
       if (!key || seen.has(key)) continue;
       seen.add(key);
@@ -516,7 +516,7 @@ export default function HomePage() {
       if (rows.length >= 8) break;
     }
     return rows;
-  }, [newToday, trending, creatorDrops, mediaWall]);
+  }, [newToday, trending, creatorDrops, categories]);
 
   const allocatedEntries = useMemo(
     () => [
