@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import {
@@ -27,6 +27,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import CreditPackDialog from "@/components/mvp/CreditPackDialog";
 import TemplateDetailDialog, { readTemplateAspectRatio } from "@/components/mvp/TemplateDetailDialog";
 import TemplateInputCard from "@/components/templates/TemplateInputCard";
+import InlineCampaignBuilder from "@/components/templates/InlineCampaignBuilder";
 import CastSelector, { PRIMARY_CAST_SLOT, type CastSelection } from "@/components/templates/CastSelector";
 import { CampaignBuildGraph, type PublicGraph } from "@/components/templates/CampaignBuildGraph";
 import CampaignOutputsPanel from "@/components/templates/CampaignOutputsPanel";
@@ -506,6 +507,49 @@ export default function TemplateStudioPage() {
   /** Presentation only: brief ring emphasis so a template switch is obvious on desktop. */
   const [builderJustSwitched, setBuilderJustSwitched] = useState(false);
 
+  /*
+   * MOBILE / TABLET (<lg) inline builder placement.
+   * `gridColumns` mirrors the rendered grid (2 cols <640px, 3 cols at sm) so the
+   * inline builder can be injected right after the selected card's ACTUAL row.
+   * `isCompactLayout` is true below the lg breakpoint, where the desktop
+   * side-by-side builder is not rendered at all (one instance at a time).
+   */
+  const [gridColumns, setGridColumns] = useState(2);
+  /** <lg only: whether the inline builder is expanded (one open at a time). */
+  const [inlineBuilderOpen, setInlineBuilderOpen] = useState(false);
+  const [isCompactLayout, setIsCompactLayout] = useState(false);
+  const inlineBuilderRef = useRef<HTMLDivElement | null>(null);
+  /** Session cache of pending local inputs per campaign (no upload, no spend). */
+  const inputDraftsRef = useRef<
+    Record<
+      string,
+      {
+        files: Record<string, File | null>;
+        libraryAssets: Record<string, { url: string; name?: string | null } | null>;
+        textInputs: Record<string, string>;
+        castSelection: CastSelection;
+        anonUploads: Record<string, { status: "uploading" | "ready" | "error"; url?: string; error?: string }>;
+      }
+    >
+  >({});
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const compact = window.matchMedia("(max-width: 1023.98px)");
+    const threeCols = window.matchMedia("(min-width: 640px)");
+    const sync = () => {
+      setIsCompactLayout(compact.matches);
+      setGridColumns(threeCols.matches ? 3 : 2);
+    };
+    sync();
+    compact.addEventListener("change", sync);
+    threeCols.addEventListener("change", sync);
+    return () => {
+      compact.removeEventListener("change", sync);
+      threeCols.removeEventListener("change", sync);
+    };
+  }, []);
+
 
 
   const isPrivilegedUser = hasAppAccess;
@@ -717,21 +761,55 @@ export default function TemplateStudioPage() {
     setJobId(requestedRun);
   }, [searchParams, jobId]);
 
-  useEffect(() => {
-    const requestedTemplate = searchParams.get("template");
-    if (!requestedTemplate || !templates.length) return;
-    if (appliedTemplateParamRef.current === requestedTemplate) return;
-    const normalizedRequest = requestedTemplate.toLowerCase();
+  /** Resolves ?template=<id|name|version> against the live catalog. */
+  const requestedTemplateParam = searchParams.get("template");
+  const deepLinkTemplateId = useMemo(() => {
+    if (!requestedTemplateParam || !templates.length) return null;
+    const normalizedRequest = requestedTemplateParam.trim().toLowerCase();
     const match = templates.find((template) =>
       template.id.toLowerCase() === normalizedRequest ||
       template.name.toLowerCase() === normalizedRequest ||
       template.versionId?.toLowerCase() === normalizedRequest,
     );
-    if (match) {
-      appliedTemplateParamRef.current = requestedTemplate;
-      setSelectedTemplateId(match.id);
+    return match?.id ?? null;
+  }, [requestedTemplateParam, templates]);
+
+  /*
+   * The deep link wins until it has actually landed: an early catalog snapshot
+   * can reset the selection to the first campaign, so this keeps re-applying
+   * until the requested campaign is the selected one, then stops (the visitor
+   * stays free to pick another campaign afterwards).
+   */
+  const deepLinkLandedRef = useRef(false);
+  useEffect(() => {
+    if (!deepLinkTemplateId || deepLinkLandedRef.current) return;
+    if (selectedTemplateId === deepLinkTemplateId) {
+      deepLinkLandedRef.current = true;
+      appliedTemplateParamRef.current = requestedTemplateParam ?? "";
+      return;
     }
-  }, [searchParams, templates]);
+    setSelectedTemplateId(deepLinkTemplateId);
+  }, [requestedTemplateParam, deepLinkTemplateId, selectedTemplateId]);
+
+  /*
+   * Deep link (?template=<name>) on mobile/tablet: the grid renders, the card is
+   * selected, the inline builder mounts under its actual row — and only THEN do
+   * we make a small position adjustment, once columns/dimensions are known.
+   * UTM params in the URL are untouched.
+   */
+  const deepLinkRevealedRef = useRef(false);
+  useEffect(() => {
+    if (deepLinkRevealedRef.current) return;
+    if (!isCompactLayout || !deepLinkTemplateId) return;
+    if (deepLinkTemplateId !== selectedTemplateId) return;
+    deepLinkRevealedRef.current = true;
+    setInlineBuilderOpen(true);
+    const timer = window.setTimeout(() => revealInlineBuilder(), 120);
+    return () => window.clearTimeout(timer);
+  }, [isCompactLayout, deepLinkTemplateId, selectedTemplateId]);
+
+
+
 
 
   useEffect(() => {
@@ -1237,6 +1315,164 @@ export default function TemplateStudioPage() {
       (field) => field.type === "image" && resolveInputRole(field.label, field.requirement?.assetType) === "face",
     )?.key ?? null;
 
+  /*
+   * Single source of truth for an input slot's UI. Rendered by the desktop
+   * builder (compact = false) AND the mobile inline builder (compact = true).
+   * Handlers, upload path, autofill release and validation are identical.
+   */
+  const renderInputField = (field: InputField, compact = false) =>
+    field.type === "image" ? (
+      <div
+        key={field.key}
+        ref={compact ? undefined : (node) => {
+          slotRefs.current[field.key] = node;
+        }}
+        className={compact ? undefined : "scroll-mt-28"}
+      >
+        <TemplateInputCard
+          compact={compact}
+          label={field.label}
+          displayLabel={
+            castEnabled && field.key === castSlotFieldKey ? "Who's in the campaign?" : undefined
+          }
+          required={field.required}
+          highlighted={!compact && focusedInputKey === field.key}
+          file={files[field.key] ?? null}
+          requirement={field.requirement}
+          sourceNote={autofilledKeys[field.key] ? `From ${autofilledKeys[field.key]}` : null}
+          castPanel={
+            castEnabled && field.key === castSlotFieldKey ? (
+              <CastSelector
+                required={castRequired}
+                userId={user?.id ?? null}
+                selection={castSelection}
+                onSelectionChange={setCastSelection}
+              />
+            ) : undefined
+          }
+          onFileChange={(nextFile) => {
+            setFiles((current) => ({ ...current, [field.key]: nextFile }));
+            setLibraryAssets((current) => ({ ...current, [field.key]: null }));
+            releaseAutofill(field.key);
+            if (nextFile) advanceFromInput(field.key);
+            // P6a: logged-out uploads go to temporary storage so the
+            // asset survives an OAuth redirect. No generation starts.
+            if (!user) {
+              if (!nextFile) {
+                setAnonUploads((current) => {
+                  const next = { ...current };
+                  delete next[field.key];
+                  return next;
+                });
+                return;
+              }
+              setAnonUploads((current) => ({
+                ...current,
+                [field.key]: { status: "uploading" },
+              }));
+              void uploadAnonymousRunInput(nextFile)
+                .then((url) =>
+                  setAnonUploads((current) => ({
+                    ...current,
+                    [field.key]: { status: "ready", url },
+                  })),
+                )
+                .catch((error) => {
+                  const message = error instanceof Error ? error.message : "Upload failed.";
+                  setAnonUploads((current) => ({
+                    ...current,
+                    [field.key]: { status: "error", error: message },
+                  }));
+                  toast({ title: "Upload failed", description: message, variant: "destructive" });
+                });
+            }
+          }}
+          libraryAsset={libraryAssets[field.key] ?? null}
+          // P1: saved-library / brand pickers are account features.
+          // Logged-out visitors configure with local files only.
+          onLibrarySelect={
+            user
+              ? (asset) => {
+                  setFiles((current) => ({ ...current, [field.key]: null }));
+                  setLibraryAssets((current) => ({ ...current, [field.key]: asset }));
+                  releaseAutofill(field.key);
+                  advanceFromInput(field.key);
+                }
+              : undefined
+          }
+          onClear={() => {
+            setFiles((current) => ({ ...current, [field.key]: null }));
+            setLibraryAssets((current) => ({ ...current, [field.key]: null }));
+            setAnonUploads((current) => {
+              const next = { ...current };
+              delete next[field.key];
+              return next;
+            });
+            releaseAutofill(field.key);
+          }}
+        />
+        {!user && anonUploads[field.key] ? (
+          <p
+            className={cn(
+              "mt-2 text-[11px] leading-relaxed",
+              anonUploads[field.key]?.status === "error"
+                ? "text-rose-200"
+                : anonUploads[field.key]?.status === "ready"
+                  ? "text-emerald-200"
+                  : "text-cyan-100",
+            )}
+          >
+            {anonUploads[field.key]?.status === "uploading"
+              ? "Saving upload for this session..."
+              : anonUploads[field.key]?.status === "ready"
+                ? "Upload saved — it will still be here after you sign in."
+                : anonUploads[field.key]?.error}
+          </p>
+        ) : null}
+      </div>
+    ) : (
+      <div
+        key={field.key}
+        className={cn(
+          "rounded-[1.25rem] border border-white/10 bg-black/25",
+          compact ? "rounded-2xl p-2.5" : "p-3",
+        )}
+      >
+        <p className="mb-2 flex items-center gap-2 truncate text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-200">
+          <span className="truncate">{field.label}</span>
+          {autofilledKeys[field.key] ? (
+            <span className="shrink-0 rounded-full border border-white/10 bg-white/[0.04] px-2 py-0.5 font-display text-[9px] tracking-[0.18em] text-slate-400">
+              From {autofilledKeys[field.key]}
+            </span>
+          ) : null}
+        </p>
+
+        {field.type === "prompt" && !compact ? (
+          <Textarea
+            value={textInputs[field.key] ?? ""}
+            onChange={(event) => {
+              releaseAutofill(field.key);
+              setTextInputs((current) => ({ ...current, [field.key]: event.target.value }));
+            }}
+            rows={3}
+            placeholder={field.label}
+            className="min-h-[92px] rounded-[0.9rem] border-white/10 bg-white/[0.03] text-white"
+          />
+        ) : (
+          <Input
+            value={textInputs[field.key] ?? ""}
+            onChange={(event) => {
+              releaseAutofill(field.key);
+              setTextInputs((current) => ({ ...current, [field.key]: event.target.value }));
+            }}
+            placeholder={field.label}
+            className="h-11 rounded-[0.9rem] border-white/10 bg-white/[0.03] text-white"
+          />
+        )}
+      </div>
+    );
+
+
   // P0 — plan tier gate for the "Customize workflow" entry point.
   // Tier comes from profile.plan (billing-owned), matching the plan ladder keys
   // (free / starter / plus / pro / studio / team); admin/dev always qualify.
@@ -1290,25 +1526,66 @@ export default function TemplateStudioPage() {
     return () => window.clearTimeout(timer);
   }, [selectedTemplateId]);
 
+  /*
+   * Small, natural position adjustment for the inline (<lg) builder. Runs only
+   * after layout/columns exist, and only when the panel top is below the fold —
+   * never a jump to a global anchor, never centering.
+   */
+  const revealInlineBuilder = () => {
+    if (typeof window === "undefined") return;
+    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => {
+        const node = inlineBuilderRef.current;
+        if (!node) return;
+        const { top } = node.getBoundingClientRect();
+        const limit = window.innerHeight - 140;
+        if (top <= limit) return;
+        window.scrollBy({ top: top - limit, behavior: reduce ? "auto" : "smooth" });
+      });
+    });
+  };
+
   const handleTemplateSelect = (templateId: string, options?: { alwaysReveal?: boolean }) => {
+    /* Cache the outgoing campaign's pending local inputs for this session, then
+       restore anything previously configured for the incoming campaign.
+       Caching only touches local state — nothing is uploaded and nothing spends. */
+    if (selectedTemplateId && selectedTemplateId !== templateId) {
+      inputDraftsRef.current[selectedTemplateId] = {
+        files,
+        libraryAssets,
+        textInputs,
+        castSelection,
+        anonUploads,
+      };
+    }
+    const draft = inputDraftsRef.current[templateId];
 
     setSelectedTemplateId(templateId);
-    setFiles({});
-    setAnonUploads({});
-    setLibraryAssets({});
+    setFiles(draft?.files ?? {});
+    setAnonUploads(draft?.anonUploads ?? {});
+    setLibraryAssets(draft?.libraryAssets ?? {});
 
-    setTextInputs({});
+    setTextInputs(draft?.textInputs ?? {});
     setJobId(null);
     setOpenedHistoricalRun(null);
     setInputsExpanded(false);
     setResult(null);
-    setCastSelection({});
+    setCastSelection(draft?.castSelection ?? {});
     setAutofilledKeys({});
     autofillAppliedRef.current = "";
 
+    if (isCompactLayout) {
+      setInlineBuilderOpen(true);
+      // Inline expansion: no teleporting. Only nudge if the panel top would sit
+      // below the viewport, and only after layout exists.
+      revealInlineBuilder();
+      return;
+    }
+
     // Cards far from the builder (e.g. the "For you" row at the top of the page)
     // must always scroll the builder into view, otherwise a click looks inert.
-    if (options?.alwaysReveal || window.matchMedia("(max-width: 1279px)").matches) {
+    if (options?.alwaysReveal) {
       // Defer past the re-render/paint of the newly selected template, then only
       // scroll if the builder isn't already comfortably in view (desktop side-by-side).
       window.requestAnimationFrame(() => {
@@ -1323,6 +1600,7 @@ export default function TemplateStudioPage() {
     }
 
   };
+
 
 
   /*
@@ -1822,6 +2100,86 @@ export default function TemplateStudioPage() {
 
   const isRunning = result?.status === "queued" || result?.status === "running" || result?.status === "video_pending";
 
+  /* Rows matching the ACTUAL rendered column count (2 <640px, 3 at sm). */
+  const templateRows = useMemo(() => {
+    const columns = Math.max(1, gridColumns);
+    const rows: ApiTemplate[][] = [];
+    for (let index = 0; index < visibleTemplates.length; index += columns) {
+      rows.push(visibleTemplates.slice(index, index + columns));
+    }
+    return rows;
+  }, [gridColumns, visibleTemplates]);
+
+  const selectedRowIndex = templateRows.findIndex((row) =>
+    row.some((entry) => entry.id === selectedTemplateId),
+  );
+
+  /*
+   * MOBILE / TABLET inline builder. Only ONE instance exists at a time: below lg
+   * the desktop aside is not rendered, above lg this node is null. All state is
+   * the page's own, so switching breakpoints keeps files / cast / readiness.
+   */
+  const inlineGenerateLabel = !user
+    ? "Generate campaign →"
+    : !requiredInputsAreReady
+      ? `Add ${Math.max(1, totalInputCount - readyInputCount)} more asset${totalInputCount - readyInputCount === 1 ? "" : "s"}`
+      : checkingCredits
+        ? "Checking credits..."
+        : runPhase === "uploading"
+          ? "Uploading assets..."
+          : runPhase === "preparing"
+            ? "Preparing campaign..."
+            : submitting || isRunning
+              ? "Generating..."
+              : isPrivilegedUser
+                ? "Generate campaign →"
+                : `Generate campaign → ${creditsRequired} cr`;
+
+  const inlineBuilderNode =
+    isCompactLayout && inlineBuilderOpen && selectedTemplate && !selectMode && !hasActiveCampaignWorkspace ? (
+      <InlineCampaignBuilder
+        key={selectedTemplate.id}
+        ref={inlineBuilderRef}
+        templateName={selectedTemplate.name}
+        metaLine={`${formatCount(inputFields.length, "input", "inputs")} · ${formatCampaignOutputs(selectedTemplate.counts)} · ${creditsRequired} cr`}
+        readyCount={readyInputCount}
+        totalCount={totalInputCount}
+        creditsLabel={costDisplay}
+        topSlot={
+          castEnabled && !castSlotFieldKey ? (
+            <CastSelector
+              required={castRequired}
+              userId={user?.id ?? null}
+              selection={castSelection}
+              onSelectionChange={setCastSelection}
+            />
+          ) : undefined
+        }
+        generateDisabled={submitting || isRunning || (!!user && (!requiredInputsAreReady || blockedByCredits))}
+        generateLabel={inlineGenerateLabel}
+        onGenerate={() => void handleRun()}
+        onClose={() => setInlineBuilderOpen(false)}
+        footer={
+          blockedByCredits ? (
+            <p className="text-[11px] leading-relaxed text-amber-100">
+              You need {creditShortfall} more credit{creditShortfall === 1 ? "" : "s"} —{" "}
+              <Link to="/membership?tab=credits" className="underline underline-offset-4">
+                buy credits
+              </Link>
+            </p>
+          ) : !user ? (
+            <p className="text-[11px] leading-relaxed text-slate-400">
+              Your files stay on this device until you generate.
+            </p>
+          ) : null
+        }
+      >
+        {inputFields.map((field) => renderInputField(field, true))}
+      </InlineCampaignBuilder>
+    ) : null;
+
+
+
   return (
     <SiteShell>
       {/* Dynamic template detail meta — real name/description/preview only. */}
@@ -2175,7 +2533,9 @@ export default function TemplateStudioPage() {
             ) : null}
 
             <div className="mt-4 grid grid-cols-2 gap-3 sm:mt-5 sm:grid-cols-3 sm:gap-4 lg:grid-cols-3">
-              {visibleTemplates.map((template) => {
+              {templateRows.map((row, rowIndex) => (
+                <Fragment key={`template-row-${rowIndex}`}>
+                  {row.map((template) => {
                 const selected = template.id === selectedTemplateId;
                 const batchSelected = batchSelection.includes(template.id);
                 const credits = template.estimated_credits_per_run || 0;
@@ -2324,7 +2684,14 @@ export default function TemplateStudioPage() {
 
                   </div>
                 );
-              })}
+                  })}
+                  {/* <lg: the builder expands directly beneath the selected
+                      card's ACTUAL visual row (column count is measured).
+                      Only the first matching row renders it, so a catalog that
+                      lists a campaign twice still opens exactly one builder. */}
+                  {inlineBuilderNode && rowIndex === selectedRowIndex ? inlineBuilderNode : null}
+                </Fragment>
+              ))}
             </div>
             {favoritesOnly && !visibleTemplates.length ? (
               <div className="mt-5 rounded-[1.5rem] border border-white/8 bg-black/20 p-4 text-sm text-slate-300">
@@ -2345,7 +2712,9 @@ export default function TemplateStudioPage() {
           <aside
             className={cn(
               "space-y-6",
-              hasActiveCampaignWorkspace ? "order-2 xl:order-1" : "xl:sticky xl:top-24 xl:self-start",
+              // Below lg the builder lives inline in the grid, so the desktop
+              // column is not rendered at all — exactly one active instance.
+              hasActiveCampaignWorkspace ? "order-2 xl:order-1" : "hidden lg:block xl:sticky xl:top-24 xl:self-start",
             )}
           >
             {/* Post-run: the setup panel collapses into a compact summary. */}
@@ -2528,158 +2897,8 @@ export default function TemplateStudioPage() {
 
                   <div className="grid gap-3 md:grid-cols-2">
 
-                    {inputFields.map((field) => (
-                      field.type === "image" ? (
-                        <div
-                          key={field.key}
-                          ref={(node) => {
-                            slotRefs.current[field.key] = node;
-                          }}
-                          className="scroll-mt-28"
-                        >
-                          <TemplateInputCard
-                            label={field.label}
-                            displayLabel={
-                              castEnabled && field.key === castSlotFieldKey
-                                ? "Who's in the campaign?"
-                                : undefined
-                            }
-                            required={field.required}
-                            highlighted={focusedInputKey === field.key}
-                            file={files[field.key] ?? null}
-                            requirement={field.requirement}
-                            sourceNote={
-                              autofilledKeys[field.key] ? `From ${autofilledKeys[field.key]}` : null
-                            }
+                    {inputFields.map((field) => renderInputField(field))}
 
-                            castPanel={
-                              castEnabled && field.key === castSlotFieldKey ? (
-                                <CastSelector
-                                  required={castRequired}
-                                  userId={user?.id ?? null}
-                                  selection={castSelection}
-                                  onSelectionChange={setCastSelection}
-                                />
-                              ) : undefined
-                            }
-                            onFileChange={(nextFile) => {
-                              setFiles((current) => ({ ...current, [field.key]: nextFile }));
-                              setLibraryAssets((current) => ({ ...current, [field.key]: null }));
-                              releaseAutofill(field.key);
-                              if (nextFile) advanceFromInput(field.key);
-                              // P6a: logged-out uploads go to temporary storage so the
-                              // asset survives an OAuth redirect. No generation starts.
-                              if (!user) {
-                                if (!nextFile) {
-                                  setAnonUploads((current) => {
-                                    const next = { ...current };
-                                    delete next[field.key];
-                                    return next;
-                                  });
-                                  return;
-                                }
-                                setAnonUploads((current) => ({
-                                  ...current,
-                                  [field.key]: { status: "uploading" },
-                                }));
-                                void uploadAnonymousRunInput(nextFile)
-                                  .then((url) =>
-                                    setAnonUploads((current) => ({
-                                      ...current,
-                                      [field.key]: { status: "ready", url },
-                                    })),
-                                  )
-                                  .catch((error) => {
-                                    const message =
-                                      error instanceof Error ? error.message : "Upload failed.";
-                                    setAnonUploads((current) => ({
-                                      ...current,
-                                      [field.key]: { status: "error", error: message },
-                                    }));
-                                    toast({ title: "Upload failed", description: message, variant: "destructive" });
-                                  });
-                              }
-                            }}
-                            libraryAsset={libraryAssets[field.key] ?? null}
-                            // P1: saved-library / brand pickers are account features.
-                            // Logged-out visitors configure with local files only.
-                            onLibrarySelect={
-                              user
-                                ? (asset) => {
-                                    setFiles((current) => ({ ...current, [field.key]: null }));
-                                    setLibraryAssets((current) => ({ ...current, [field.key]: asset }));
-                                    releaseAutofill(field.key);
-                                    advanceFromInput(field.key);
-                                  }
-                                : undefined
-                            }
-                            onClear={() => {
-                              setFiles((current) => ({ ...current, [field.key]: null }));
-                              setLibraryAssets((current) => ({ ...current, [field.key]: null }));
-                              setAnonUploads((current) => {
-                                    const next = { ...current };
-                                    delete next[field.key];
-                                    return next;
-                                  });
-                              releaseAutofill(field.key);
-                            }}
-                          />
-                          {!user && anonUploads[field.key] ? (
-                            <p
-                              className={cn(
-                                "mt-2 text-[11px] leading-relaxed",
-                                anonUploads[field.key]?.status === "error"
-                                  ? "text-rose-200"
-                                  : anonUploads[field.key]?.status === "ready"
-                                    ? "text-emerald-200"
-                                    : "text-cyan-100",
-                              )}
-                            >
-                              {anonUploads[field.key]?.status === "uploading"
-                                ? "Saving upload for this session..."
-                                : anonUploads[field.key]?.status === "ready"
-                                  ? "Upload saved — it will still be here after you sign in."
-                                  : anonUploads[field.key]?.error}
-                            </p>
-                          ) : null}
-
-                        </div>
-                      ) : (
-                        <div key={field.key} className="rounded-[1.25rem] border border-white/10 bg-black/25 p-3">
-                          <p className="mb-2 flex items-center gap-2 truncate text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-200">
-                            <span className="truncate">{field.label}</span>
-                            {autofilledKeys[field.key] ? (
-                              <span className="shrink-0 rounded-full border border-white/10 bg-white/[0.04] px-2 py-0.5 font-display text-[9px] tracking-[0.18em] text-slate-400">
-                                From {autofilledKeys[field.key]}
-                              </span>
-                            ) : null}
-                          </p>
-
-                          {field.type === "prompt" ? (
-                            <Textarea
-                              value={textInputs[field.key] ?? ""}
-                              onChange={(event) => {
-                                releaseAutofill(field.key);
-                                setTextInputs((current) => ({ ...current, [field.key]: event.target.value }));
-                              }}
-                              rows={3}
-                              placeholder={field.label}
-                              className="min-h-[92px] rounded-[0.9rem] border-white/10 bg-white/[0.03] text-white"
-                            />
-                          ) : (
-                            <Input
-                              value={textInputs[field.key] ?? ""}
-                              onChange={(event) => {
-                                releaseAutofill(field.key);
-                                setTextInputs((current) => ({ ...current, [field.key]: event.target.value }));
-                              }}
-                              placeholder={field.label}
-                              className="h-11 rounded-[0.9rem] border-white/10 bg-white/[0.03] text-white"
-                            />
-                          )}
-                        </div>
-                      )
-                    ))}
 
                   </div>
 
