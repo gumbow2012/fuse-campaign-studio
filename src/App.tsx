@@ -10,6 +10,9 @@ import { PageTracking } from "@/hooks/usePageTracking";
 import { PageViewTracker } from "@/lib/analytics/usePageViews";
 import CreditTopUpSuccessWatcher from "@/components/mvp/CreditTopUpSuccessWatcher";
 import WelcomeActivationModal from "@/components/brand/WelcomeActivationModal";
+import { useEffect } from "react";
+import { captureUtmParams } from "@/lib/utmParams";
+
 
 
 import { useBrandActivationReminders } from "@/hooks/useBrandActivationReminders";
