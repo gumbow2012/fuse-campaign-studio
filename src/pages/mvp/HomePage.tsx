@@ -629,49 +629,32 @@ export default function HomePage() {
 
         <div className="container relative grid gap-10 py-12 md:py-16 lg:grid-cols-[1fr_0.9fr] lg:items-center">
           <div>
-            <SectionLabel>Campaign template marketplace</SectionLabel>
+            <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-cyan-100 sm:text-[13px]">
+              One-click campaign engine
+            </p>
             <h1 className="mt-4 font-display text-4xl font-bold uppercase leading-[1.03] tracking-[-0.02em] text-white sm:text-6xl">
               Viral campaigns.
               <br />
               <span className="text-cyan-200">already built.</span>
             </h1>
-            <p className="mt-5 max-w-xl text-lg leading-8 text-slate-300">
-              Pick one. Add your brand. Generate.
+            <p className="mt-5 max-w-[560px] font-sans text-[16px] leading-[1.5] text-slate-200 sm:text-[18px]">
+              Pick a campaign. Add your products. FUSE runs the entire workflow.
+            </p>
+            <p className="mt-2 max-w-[560px] font-sans text-[14px] leading-[1.5] text-slate-400 sm:text-[15px]">
+              Get the finished images and videos — no prompting required.
             </p>
 
-            {/* CONVERSION: primary CTA drops straight into the builder on the top
-                trending template — browsing is demoted to a secondary link. */}
             <div className="mt-7 flex flex-wrap items-center gap-3">
               <Button
                 asChild
                 size="lg"
-                className="rounded-full bg-cyan-300 px-8 font-semibold text-slate-950 hover:bg-cyan-200"
+                className="rounded-full bg-cyan-300 px-8 font-sans text-[16px] font-semibold tracking-[0.01em] text-slate-950 hover:bg-cyan-200"
               >
-                <Link to={startCampaignHref}>
-                  Start a campaign
+                <Link to="/app/templates">
+                  Explore campaigns
                   <ArrowRight className="h-4 w-4" />
                 </Link>
               </Button>
-
-              <Button
-                asChild
-                variant="ghost"
-                className="rounded-full px-4 text-sm text-slate-300 hover:text-white"
-              >
-                <Link to="/app/templates">Explore templates</Link>
-              </Button>
-
-              {!user ? (
-                <Button
-                  asChild
-                  size="lg"
-                  variant="outline"
-                  className="rounded-full border-white/15 bg-transparent px-7 text-slate-200 hover:bg-white/10"
-                >
-                  <Link to="/auth?mode=signup">Sign up free</Link>
-                </Button>
-              ) : null}
-
 
               {isCreator ? (
                 <Button
@@ -697,9 +680,10 @@ export default function HomePage() {
             </div>
 
 
-            <p className="mt-5 text-[11px] font-semibold uppercase tracking-[0.24em] text-slate-400">
-              No prompts · New templates daily · Performance tracked
+            <p className="mt-5 font-sans text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-300 sm:text-[12px]">
+              No prompts · No AI agent · Full campaign outputs
             </p>
+
 
 
           </div>
