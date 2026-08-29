@@ -2452,29 +2452,28 @@ export default function TemplateStudioPage() {
           )}
         >
           {!hasActiveCampaignWorkspace ? (
-          <section className="min-w-0 rounded-[2rem] border border-white/10 bg-white/[0.03] p-4 sm:p-5">
+          <section className="min-w-0">
             <div className="flex min-w-0 flex-wrap items-center gap-3">
               <h2 className="font-display text-base font-bold uppercase tracking-[0.16em] text-white sm:text-lg">
                 Campaigns
               </h2>
               {templatesQuery.isFetching ? <Loader2 className="h-4 w-4 animate-spin text-cyan-100" /> : null}
-              <label className="ml-auto flex min-w-0 flex-1 items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 sm:max-w-[260px] sm:flex-none">
+              <label className="ml-auto flex min-w-0 flex-1 items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 sm:max-w-[220px] sm:flex-none">
                 <Search className="h-3.5 w-3.5 shrink-0 text-slate-400" aria-hidden />
                 <input
                   value={feedSearch}
                   onChange={(event) => setFeedSearch(event.target.value)}
-                  placeholder="Search campaigns"
+                  placeholder="Search"
                   aria-label="Search campaigns"
                   className="w-full bg-transparent text-[12.5px] text-white placeholder:text-slate-500 focus:outline-none"
                 />
               </label>
             </div>
 
-            {isPublicTemplateBrowser ? (
-              <p className="mt-1.5 text-[11.5px] leading-4 text-slate-400">
-                No account needed — you only sign in when you generate.
-              </p>
-            ) : null}
+            <p className="mt-1 text-[11.5px] leading-4 text-slate-400">
+              Pick one. Add your products. Hit run.
+            </p>
+
 
             {/* Presentation-only chips — scrollable on mobile */}
             <div className="-mx-1 mt-3 flex min-w-0 max-w-full gap-2 overflow-x-auto px-1 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
