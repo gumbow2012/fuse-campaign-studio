@@ -644,7 +644,7 @@ export default function HomePage() {
           <div className="mx-auto max-w-[880px]">
             <h1
               className="mx-auto font-display font-bold uppercase text-white"
-              style={{ fontSize: "clamp(48px, 8.6vw, 96px)", lineHeight: 0.94, letterSpacing: "-0.02em" }}
+              style={{ fontSize: "clamp(34px, 8.6vw, 96px)", lineHeight: 0.94, letterSpacing: "-0.02em" }}
             >
               <span className="block">One-click campaign</span>
               <span className="block">Marketplace</span>
