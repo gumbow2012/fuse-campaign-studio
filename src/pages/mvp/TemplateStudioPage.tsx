@@ -2271,7 +2271,7 @@ export default function TemplateStudioPage() {
                         </div>
                       </div>
 
-                      <p className="text-[11px] text-slate-400 sm:hidden">
+                      <p className="text-xs text-slate-400 sm:hidden">
                         {formatCampaignOutputs(template.counts)}
                       </p>
 
