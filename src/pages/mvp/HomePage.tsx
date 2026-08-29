@@ -631,28 +631,31 @@ export default function HomePage() {
 
         <div className="container relative grid gap-7 py-9 md:gap-10 md:py-16 lg:grid-cols-[1fr_0.9fr] lg:items-center">
           <div>
-            <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-cyan-100 sm:text-[13px]">
-              One-click campaign marketplace
-            </p>
-            <h1 className="mt-3 font-display font-bold uppercase leading-[1.02] tracking-[-0.02em] text-white md:mt-4"
-              style={{ fontSize: "clamp(28px, 7.7vw, 60px)" }}>
-              Viral campaigns.
+            <h1
+              className="font-display font-bold uppercase text-white"
+              style={{ fontSize: "clamp(44px, 6.2vw, 86px)", lineHeight: 0.97, letterSpacing: "-0.02em" }}
+            >
+              One-click campaign
               <br />
-              <span className="text-cyan-200">already built.</span>
+              marketplace
             </h1>
-            <p className="mt-4 max-w-[560px] font-sans text-[16px] leading-[1.45] text-slate-200 sm:text-[18px] sm:leading-[1.5] md:mt-5">
-              Pick a campaign. Add your products.
-              <br />
-              FUSE runs every step.
+            <p className="mt-4 max-w-[560px] font-sans text-[17px] font-semibold leading-[1.35] text-white sm:text-[19px] md:text-[22px]">
+              Viral campaigns. Already built and ready to run.
+            </p>
+            <p className="mt-3 max-w-[560px] font-sans text-[16px] leading-[1.5] text-slate-200 sm:text-[17px]">
+              Pick a campaign. Upload your products. Hit run.
+            </p>
+            <p className="mt-2 max-w-[560px] font-sans text-[13px] leading-[1.5] text-slate-400 sm:text-[14px]">
+              FUSE runs the prebuilt workflow and returns the finished images + video clips.
             </p>
 
             <div className="mt-6 flex flex-wrap items-center gap-3 md:mt-7">
               <Button
                 asChild
                 size="lg"
-                className="h-[54px] rounded-full bg-cyan-300 px-8 font-sans text-[16px] font-semibold tracking-[0.01em] text-slate-950 hover:bg-cyan-200"
+                className="h-[54px] rounded-full bg-cyan-300 px-8 font-sans text-[16px] font-semibold uppercase tracking-[0.08em] text-slate-950 hover:bg-cyan-200"
               >
-                <Link to="/app/templates">
+                <Link to="/app/templates" onClick={() => track("hero_explore_campaigns_click")}>
                   Explore campaigns
                   <ArrowRight className="h-4 w-4" />
                 </Link>
@@ -661,9 +664,9 @@ export default function HomePage() {
               {isCreator ? (
                 <Button
                   asChild
-                  size="lg"
-                  variant="outline"
-                  className="rounded-full border-white/15 bg-transparent px-7 text-slate-200 hover:bg-white/10"
+                  variant="ghost"
+                  size="sm"
+                  className="rounded-full px-4 text-[12px] text-slate-400 hover:text-white"
                 >
                   <Link to="/app/creator">Creator Dashboard</Link>
                 </Button>
@@ -672,55 +675,69 @@ export default function HomePage() {
               {(isCreator || isAdmin) && (
                 <Button
                   asChild
-                  size="lg"
                   variant="ghost"
-                  className="rounded-full px-6 text-slate-300 hover:text-white"
+                  size="sm"
+                  className="rounded-full px-4 text-[12px] text-slate-400 hover:text-white"
                 >
                   <Link to="/app/lab/canvas">Create a Template</Link>
                 </Button>
               )}
             </div>
 
-            <p className="mt-5 max-w-[560px] font-sans text-[12px] font-extrabold uppercase leading-[1.5] tracking-[0.1em] text-white sm:text-[13px]">
+            <p className="mt-5 max-w-[600px] font-sans text-[12px] font-bold uppercase leading-[1.5] tracking-[0.08em] text-white sm:text-[14px]">
               No prompts <span className="text-cyan-300">·</span> No guessing{" "}
-              <span className="text-cyan-300">·</span> Proven to work{" "}
-              <span className="text-cyan-300">·</span> Made by top AI creators
+              <span className="text-cyan-300">·</span> Prebuilt expert workflows{" "}
+              <span className="text-cyan-300">·</span> Curated by leading AI creators
             </p>
           </div>
 
-          {/* Hero proof — ONE cohesive real example (pinned hero campaign + real counts) */}
+          {/* Prebuilt workflow explainer — needs no template data, renders instantly */}
           <div className="relative">
-            {templatesLoading ? (
-              /* Cold load: paint a skeleton once, never image A → image B. */
-              <div className="mx-auto max-w-[300px] sm:max-w-[340px]">
-                <HeroTileSkeleton highlight />
-                <div className="mt-4 space-y-2">
-                  <div className="mx-auto h-4 w-32 animate-pulse rounded-full bg-white/[0.06]" />
-                  <div className="mx-auto h-5 w-48 animate-pulse rounded-full bg-white/[0.06]" />
-                </div>
+            <div className="mx-auto max-w-[420px]">
+              <div className="lg:hidden">
+                <HeroWorkflowAnimation compact />
               </div>
-            ) : original ? (
-              <div className="mx-auto max-w-[300px] sm:max-w-[340px]">
-                <HeroTile media={original.media} highlight eager />
-                <div className="mt-4 text-center">
-                  <p className="font-display text-sm font-semibold uppercase tracking-[0.14em] text-white">
-                    {original.template.name}
-                  </p>
-                  <p className="mt-1 font-sans text-[18px] font-bold text-cyan-200 sm:text-[20px]">
-                    {formatCampaignOutputsLong(original.template.counts)}
-                  </p>
-                  {heroPerf && <PerformanceBlock row={heroPerf} compact className="mt-3 text-left" />}
-                  {heroPerf && <PerformanceDisclaimer />}
-                </div>
+              <div className="hidden lg:block">
+                <HeroWorkflowAnimation />
               </div>
-            ) : (
-              <div className="mx-auto max-w-[300px] overflow-hidden rounded-[1.5rem] border border-white/10 bg-black sm:max-w-[340px]">
-                <img src={FALLBACK_GIFS[0]} alt="" className="aspect-[9/16] w-full object-cover" />
+              <div className="mt-4">
+                <p className="font-display text-base font-semibold uppercase tracking-[0.12em] text-white sm:text-lg">
+                  Prebuilt expert workflows
+                </p>
+                <p className="mt-2 font-sans text-[14px] leading-[1.5] text-slate-400">
+                  The creative direction, references, image steps and video steps are already configured.
+                </p>
+                <p className="mt-2 font-sans text-[13px] font-semibold uppercase tracking-[0.1em] text-cyan-200">
+                  You just add the product.
+                </p>
+                <p className="mt-3 font-sans text-[12px] leading-[1.6] text-slate-300">
+                  <span className="text-cyan-300">✓</span> Creative direction ·{" "}
+                  <span className="text-cyan-300">✓</span> References ·{" "}
+                  <span className="text-cyan-300">✓</span> Image workflow ·{" "}
+                  <span className="text-cyan-300">✓</span> Video workflow ·{" "}
+                  <span className="text-cyan-300">✓</span> Shot sequencing
+                </p>
+                <p className="mt-1.5 font-sans text-[12px] font-semibold uppercase tracking-[0.1em] text-slate-400">
+                  You add: your products.
+                </p>
               </div>
-            )}
+            </div>
           </div>
         </div>
       </section>
+
+      {/* 1.1 · VALUE BAND */}
+      <section className="border-b border-white/10 bg-white/[0.02]">
+        <div className="container flex flex-wrap items-baseline gap-x-4 gap-y-1 py-5">
+          <p className="font-display text-xl font-bold uppercase tracking-[-0.01em] text-white sm:text-2xl">
+            A full campaign. One run.
+          </p>
+          <p className="font-sans text-[14px] text-slate-400">Images + video clips generated together.</p>
+        </div>
+      </section>
+
+      <PromoOfferBar />
+
 
 
       {/* 1.4 · CURATED SHELVES — exact order from /admin/templates/merchandising */}
