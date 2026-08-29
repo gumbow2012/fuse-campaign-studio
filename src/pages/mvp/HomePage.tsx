@@ -1179,50 +1179,39 @@ export default function HomePage() {
   );
 }
 
-function HeroTileSkeleton({ label, highlight }: { label: string; highlight?: boolean }) {
+function HeroTileSkeleton({ highlight }: { highlight?: boolean }) {
   return (
-    <div>
-      <div
-        className={cn(
-          "overflow-hidden rounded-[1.25rem] border bg-black",
-          highlight ? "border-cyan-200/40" : "border-white/10",
-        )}
-      >
-        <div className="aspect-[9/16] animate-pulse bg-white/[0.05]" />
-      </div>
-      <p className="mt-2 text-center text-[9px] font-semibold uppercase tracking-[0.18em] text-slate-500">
-        {label}
-      </p>
+    <div
+      className={cn(
+        "overflow-hidden rounded-[1.25rem] border bg-black",
+        highlight ? "border-cyan-200/40" : "border-white/10",
+      )}
+    >
+      <div className="aspect-[9/16] animate-pulse bg-white/[0.05]" />
     </div>
   );
 }
 
 function HeroTile({
-  label,
   media,
   highlight,
   eager,
 }: {
-  label: string;
   media: TemplateMedia;
   highlight?: boolean;
   eager?: boolean;
 }) {
   return (
-    <div>
-      <div
-        className={cn(
-          "overflow-hidden rounded-[1.25rem] border bg-black",
-          highlight ? "border-cyan-200/40" : "border-white/10",
-        )}
-      >
-        <div className="aspect-[9/16]">
-          <AutoMedia media={media} eager={eager} className="h-full w-full object-cover" />
-        </div>
+    <div
+      className={cn(
+        "overflow-hidden rounded-[1.25rem] border bg-black",
+        highlight ? "border-cyan-200/40" : "border-white/10",
+      )}
+    >
+      <div className="aspect-[9/16]">
+        <AutoMedia media={media} eager={eager} className="h-full w-full object-cover" />
       </div>
-      <p className="mt-2 text-center text-[9px] font-semibold uppercase tracking-[0.18em] text-slate-500">
-        {label}
-      </p>
     </div>
   );
 }
+
