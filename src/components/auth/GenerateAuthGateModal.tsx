@@ -137,6 +137,8 @@ export default function GenerateAuthGateModal({ open, onClose, templateId, retur
   }, [open, returnTo, templateId]);
 
   const redirectTo = useMemo(() => getAbsoluteSiteUrl("/auth"), []);
+  const { loading: checkoutLoading, startPlanCheckout } = useMembershipCheckout();
+
 
   if (!open) return null;
 
