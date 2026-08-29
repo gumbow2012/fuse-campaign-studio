@@ -405,39 +405,64 @@ export default function AdminMerchandising() {
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   );
 
-  const handleShelfDragEnd = (event: DragEndEvent) => {
+  const handleShelfDragEnd = async (event: DragEndEvent) => {
     const { active, over } = event;
     if (!over || active.id === over.id) return;
-    setShelves((current) => {
-      const from = current.findIndex((shelf) => shelf.id === active.id);
-      const to = current.findIndex((shelf) => shelf.id === over.id);
-      if (from < 0 || to < 0) return current;
-      return arrayMove(current, from, to);
-    });
+    const previous = shelves;
+    const from = previous.findIndex((shelf) => shelf.id === active.id);
+    const to = previous.findIndex((shelf) => shelf.id === over.id);
+    if (from < 0 || to < 0) return;
+    const next = arrayMove(previous, from, to);
+    setShelves(next);
+    try {
+      await saveShelfOrder(next.map((shelf, index) => ({ id: shelf.id, sortOrder: index })));
+      setBaseline(orderSignature(next, itemsByShelf));
+      toast.success("Order saved");
+    } catch (cause) {
+      setShelves(previous);
+      toast.error(cause instanceof Error ? cause.message : "Could not save order");
+    }
   };
 
-  const handleItemDragEnd = (shelfId: string) => (event: DragEndEvent) => {
-    const { active, over } = event;
-    if (!over || active.id === over.id) return;
-    setItemsByShelf((current) => {
-      const list = current[shelfId] ?? [];
-      const from = list.findIndex((item) => item.id === active.id);
-      const to = list.findIndex((item) => item.id === over.id);
-      if (from < 0 || to < 0) return current;
-      return { ...current, [shelfId]: arrayMove(list, from, to) };
-    });
-  };
-
-  const togglePin = (shelfId: string, itemId: string) => {
-    setItemsByShelf((current) => {
-      const list = current[shelfId] ?? [];
-      const next = list.map((item) =>
-        item.id === itemId ? { ...item, pinned: !item.pinned } : item,
+  const persistShelfItems = async (
+    shelfId: string,
+    next: MerchShelfItem[],
+    previous: MerchShelfItem[],
+  ) => {
+    try {
+      await saveItemOrder(
+        next.map((item, index) => ({ id: item.id, sortOrder: index, pinned: item.pinned })),
       );
-      next.sort((a, b) => (a.pinned === b.pinned ? 0 : a.pinned ? -1 : 1));
-      return { ...current, [shelfId]: next };
-    });
+      setBaseline(orderSignature(shelves, { ...itemsByShelf, [shelfId]: next }));
+      toast.success("Order saved");
+    } catch (cause) {
+      setItemsByShelf((current) => ({ ...current, [shelfId]: previous }));
+      toast.error(cause instanceof Error ? cause.message : "Could not save order");
+    }
   };
+
+  const handleItemDragEnd = (shelfId: string) => async (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    const list = itemsByShelf[shelfId] ?? [];
+    const from = list.findIndex((item) => item.id === active.id);
+    const to = list.findIndex((item) => item.id === over.id);
+    if (from < 0 || to < 0) return;
+    const next = arrayMove(list, from, to);
+    setItemsByShelf((current) => ({ ...current, [shelfId]: next }));
+    await persistShelfItems(shelfId, next, list);
+  };
+
+  const togglePin = async (shelfId: string, itemId: string) => {
+    const list = itemsByShelf[shelfId] ?? [];
+    const next = list.map((item) =>
+      item.id === itemId ? { ...item, pinned: !item.pinned } : item,
+    );
+    next.sort((a, b) => (a.pinned === b.pinned ? 0 : a.pinned ? -1 : 1));
+    setItemsByShelf((current) => ({ ...current, [shelfId]: next }));
+    await persistShelfItems(shelfId, next, list);
+  };
+
 
   const toggleVisibility = async (shelfId: string, next: boolean) => {
     setShelves((current) =>
