@@ -632,7 +632,7 @@ export default function HomePage() {
         <div className="container relative grid gap-7 py-9 md:gap-10 md:py-16 lg:grid-cols-[1fr_0.9fr] lg:items-center">
           <div>
             <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-cyan-100 sm:text-[13px]">
-              One-click campaign engine
+              One-click campaign marketplace
             </p>
             <h1 className="mt-3 font-display font-bold uppercase leading-[1.02] tracking-[-0.02em] text-white md:mt-4"
               style={{ fontSize: "clamp(28px, 7.7vw, 60px)" }}>
@@ -681,9 +681,10 @@ export default function HomePage() {
               )}
             </div>
 
-            <p className="mt-5 font-sans text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-200 sm:text-[12px]">
-              No prompts · No AI agent
-              <span className="hidden sm:inline"> · Images + video clips</span>
+            <p className="mt-5 max-w-[560px] font-sans text-[12px] font-extrabold uppercase leading-[1.5] tracking-[0.1em] text-white sm:text-[13px]">
+              No prompts <span className="text-cyan-300">·</span> No guessing{" "}
+              <span className="text-cyan-300">·</span> Proven to work{" "}
+              <span className="text-cyan-300">·</span> Made by top AI creators
             </p>
           </div>
 
