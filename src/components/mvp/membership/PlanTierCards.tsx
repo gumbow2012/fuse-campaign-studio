@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { ArrowRight, Check, ChevronDown, Sparkle } from "lucide-react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import GatedPlanDialog from "@/components/mvp/membership/GatedPlanDialog";
 import PlanComparisonMatrix from "@/components/mvp/membership/PlanComparisonMatrix";
@@ -353,7 +353,10 @@ export default function PlanTierCards({
   });
 
 
+  // Public new-customer ladder = STARTER · PRO · STUDIO. Free is no longer a
+  // selectable membership card (existing free accounts are untouched).
   const visible = (showAll ? SALE_PLAN_LADDER : SALE_PLAN_LADDER.filter((entry) => entry.featured))
+    .filter((entry) => !entry.isFreeState)
     .slice()
     .sort((a, b) => mobileRank(a) - mobileRank(b));
 
@@ -375,7 +378,7 @@ export default function PlanTierCards({
     <div className={`space-y-5 ${hero ? "max-w-6xl mx-auto" : ""}`}>
       <section
         className={`grid grid-cols-1 gap-4 ${
-          showAll ? "sm:grid-cols-2 xl:grid-cols-3" : "sm:grid-cols-2 xl:grid-cols-4 gap-5"
+          showAll ? "sm:grid-cols-2 xl:grid-cols-3" : "sm:grid-cols-2 xl:grid-cols-3 gap-5"
         }`}
       >
         {visible.map((entry) => (
@@ -398,6 +401,13 @@ export default function PlanTierCards({
           />
         ))}
       </section>
+
+      <p className="text-center text-[12.5px] text-slate-400 sm:text-left">
+        Not ready for a plan?{" "}
+        <Link to="/app/templates" className="font-semibold text-cyan-200 underline underline-offset-4 hover:text-cyan-100">
+          Try FUSE with {WELCOME_CREDITS_ONCE} welcome credits
+        </Link>
+      </p>
 
       <Button
         variant="outline"

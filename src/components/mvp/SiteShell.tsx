@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { Link, NavLink, useNavigate } from "react-router-dom";
+import { Link, NavLink, useLocation, useNavigate } from "react-router-dom";
 import { Clapperboard, ClipboardCheck, Film, Gem, Home, Layers3, Mail, Menu, Shirt, Sparkles, Star, UsersRound } from "lucide-react";
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
@@ -12,6 +12,7 @@ import NotificationCenter from "@/components/NotificationCenter";
 import { AccountPopover } from "@/components/AccountMenu";
 import FeatureNewBadge from "@/components/FeatureNewBadge";
 import SiteFooter from "@/components/mvp/SiteFooter";
+import PromoOfferBar from "@/components/mvp/PromoOfferBar";
 import type { FeatureKey } from "@/lib/featureRegistry";
 
 
@@ -75,6 +76,7 @@ type BillingCorrectionNotice = {
 
 export default function SiteShell({ children }: { children: ReactNode }) {
   const navigate = useNavigate();
+  const { pathname } = useLocation();
   const { user, profile, isAdmin, isCreator, hasAppAccess, signOut } = useAuth();
   const [menuOpen, setMenuOpen] = useState(false);
   const closeMenu = () => setMenuOpen(false);
@@ -135,11 +137,22 @@ export default function SiteShell({ children }: { children: ReactNode }) {
     navigate("/", { replace: true });
   };
 
+  /** Acquisition surfaces only — never over the app/admin chrome. */
+  const showPromoBar = ["/", "/app/templates", "/pricing", "/membership"].includes(pathname);
+
+
+
 
   return (
     <div className="min-h-screen text-foreground">
       <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_top_left,rgba(34,211,238,0.18),transparent_28%),radial-gradient(circle_at_80%_20%,rgba(255,255,255,0.08),transparent_18%)]" />
+      {showPromoBar ? (
+        <div className="relative z-40">
+          <PromoOfferBar />
+        </div>
+      ) : null}
       <header className="sticky top-0 z-40 border-b border-white/10 bg-background/75 backdrop-blur-xl">
+
         <div className="mx-auto flex w-full max-w-7xl items-center justify-between gap-2 px-3 py-3.5 sm:px-4 md:px-6 md:py-4 lg:px-8">
           <Link
             to="/"

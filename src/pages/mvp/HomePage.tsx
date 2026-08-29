@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowRight, Clapperboard, Gem, Layers3, Shirt, Sparkles, Upload, Wand2, X } from "lucide-react";
+import { ArrowRight, Clapperboard, Gem, Shirt, Sparkles, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import SiteShell from "@/components/mvp/SiteShell";
 import PageMeta from "@/components/mvp/PageMeta";
@@ -31,9 +31,8 @@ import {
   type TemplatePerformanceRow,
 } from "@/services/templatePerformance";
 import { PerformanceBlock, PerformanceDisclaimer } from "@/components/TemplatePerformance";
-import HeroWorkflowAnimation from "@/components/mvp/HeroWorkflowAnimation";
+import HeroCampaignTiles from "@/components/mvp/HeroCampaignTiles";
 import NewDropsShelf from "@/components/mvp/NewDropsShelf";
-import PromoOfferBar from "@/components/mvp/PromoOfferBar";
 
 import { track } from "@/lib/analytics/track";
 
@@ -505,6 +504,20 @@ export default function HomePage() {
 
 
   /** Every entry already claimed by the allocator — perf shelves reuse these only. */
+  /** Hero previews: newest drops first, then trending, then any live campaign. */
+  const heroTiles = useMemo<Entry[]>(() => {
+    const seen = new Set<string>();
+    const rows: Entry[] = [];
+    for (const entry of [...newToday, ...trending, ...creatorDrops, ...categories.flatMap((shelf) => shelf.entries)]) {
+      const key = String(entry.template.id ?? entry.template.name ?? "").trim().toLowerCase();
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
+      rows.push(entry);
+      if (rows.length >= 8) break;
+    }
+    return rows;
+  }, [newToday, trending, creatorDrops, categories]);
+
   const allocatedEntries = useMemo(
     () => [
       ...heroPair,
@@ -658,8 +671,8 @@ export default function HomePage() {
           }}
         />
 
-        <div className="container relative py-9 text-center md:py-14">
-          <div className="mx-auto max-w-[880px]">
+        <div className="container relative py-7 text-center md:py-11">
+          <div className="mx-auto max-w-[1180px]">
             <h1
               className="mx-auto font-display font-bold uppercase text-white"
               style={{ fontSize: "clamp(34px, 8.6vw, 96px)", lineHeight: 0.94, letterSpacing: "-0.02em" }}
@@ -667,34 +680,21 @@ export default function HomePage() {
               <span className="block">One-click campaign</span>
               <span className="block">Marketplace</span>
             </h1>
-            <p className="mx-auto mt-4 max-w-[620px] font-sans text-[18px] font-bold leading-[1.3] text-white sm:text-[20px] md:text-[23px]">
-              Viral campaigns. Already built and ready to run.
-            </p>
-            <p className="mx-auto mt-2.5 max-w-[620px] font-sans text-[16.5px] font-medium leading-[1.45] text-slate-100 sm:text-[18px] md:text-[19px]">
-              Pick one. Upload your products. Hit run.
+
+            <p className="mx-auto mt-4 font-sans text-[15px] font-extrabold uppercase leading-[1.3] tracking-[0.06em] text-white sm:text-[17px] lg:text-[19px]">
+              <span className="block">
+                No prompts <span className="text-cyan-300">·</span> No guessing
+              </span>
+              <span className="mt-1 block text-cyan-100">Prebuilt expert workflows</span>
             </p>
 
-            {/* Prebuilt workflow graph — no data needed, renders instantly */}
-            <div className="mx-auto mt-7 max-w-[560px] md:max-w-[680px]">
-              <div className="lg:hidden">
-                <HeroWorkflowAnimation compact />
-              </div>
-              <div className="hidden lg:block">
-                <HeroWorkflowAnimation />
-              </div>
-            </div>
+            {/* Four moving campaign previews — real approved media, tap to open */}
+            <HeroCampaignTiles
+              entries={heroTiles}
+              loading={templatesLoading}
+              className="mx-auto mt-6 max-w-[1120px]"
+            />
 
-            <p className="mx-auto mt-4 font-sans text-[14px] font-bold uppercase leading-[1.35] tracking-[0.05em] text-white sm:text-[16px] lg:text-[17px]">
-              No prompts <span className="text-cyan-300">·</span> No guessing
-              <span className="sm:hidden">
-                <br />
-              </span>
-              <span className="hidden sm:inline">
-                {" "}
-                <span className="text-cyan-300">·</span>{" "}
-              </span>
-              Prebuilt expert workflows
-            </p>
 
             <div className="mt-6 flex flex-col items-center gap-3 md:mt-7">
               <Button
@@ -741,15 +741,37 @@ export default function HomePage() {
 
       </section>
 
-
-
-
-      <PromoOfferBar />
-
-
-
-      {/* 1.4 · NEW DROPS — video-first shelf flowing out of the hero, hidden when empty */}
+      {/* 1.4 · NEW DROPS — media-first rail, hidden when empty */}
       <NewDropsShelf entries={newToday} fill={newDropsFill} />
+
+      {/* 1.6 · HOW IT WORKS — compact row, no giant cards */}
+      <section className="container pb-8">
+        <h2 className="font-display text-lg font-bold uppercase tracking-[0.06em] text-white sm:text-xl">
+          How it works
+        </h2>
+        <ol className="mt-3 grid gap-2.5 sm:grid-cols-3">
+          {[
+            { n: "01", title: "Pick", copy: "Choose a campaign" },
+            { n: "02", title: "Upload", copy: "Add your assets" },
+            { n: "03", title: "Run", copy: "Get your images + video clips" },
+          ].map((step) => (
+            <li
+              key={step.n}
+              className="flex items-center gap-3 rounded-xl border border-white/10 bg-white/[0.03] px-3.5 py-3"
+            >
+              <span className="font-display text-base font-bold text-cyan-200">{step.n}</span>
+              <span className="min-w-0">
+                <span className="block font-display text-[13px] font-bold uppercase tracking-[0.08em] text-white">
+                  {step.title}
+                </span>
+                <span className="block truncate text-[12.5px] text-slate-300">{step.copy}</span>
+              </span>
+            </li>
+          ))}
+        </ol>
+      </section>
+
+
 
 
       {/* 1.5 · TRENDING */}
@@ -889,66 +911,8 @@ export default function HomePage() {
         />
       ))}
 
-      {/* 4 · THREE STEPS */}
-      <section className="container border-t border-white/10 py-12">
-        <SectionLabel>Three steps</SectionLabel>
-        <SectionHeading>From template to campaign.</SectionHeading>
-        <div className="mt-6 grid gap-3 sm:grid-cols-3">
-          {[
-            { n: "01", title: "Pick", copy: "Choose a campaign from the marketplace.", icon: Layers3 },
-            {
-              n: "02",
-              title: "Add your brand",
-              copy: "Drop in your product, logo and optional cast.",
-              icon: Upload,
-            },
-            { n: "03", title: "Generate", copy: "FUSE rebuilds the whole campaign for you.", icon: Wand2 },
-          ].map((step) => (
-            <div
-              key={step.n}
-              className="rounded-2xl border border-white/10 bg-white/[0.03] px-5 py-6"
-            >
-              <div className="flex items-center justify-between">
-                <p className="font-display text-2xl font-bold text-cyan-200">{step.n}</p>
-                <step.icon className="h-4 w-4 text-slate-400" />
-              </div>
-              <p className="mt-4 font-display text-xl font-semibold uppercase tracking-[0.04em] text-white">
-                {step.title}
-              </p>
-              <p className="mt-2 text-sm leading-6 text-slate-300">{step.copy}</p>
-            </div>
-          ))}
-        </div>
-      </section>
 
-      {/* 4.5 · WHY FUSE — qualitative only, no fabricated stats */}
-      <section className="container border-t border-white/10 py-12">
-        <SectionLabel>Why FUSE</SectionLabel>
-        <SectionHeading>The creative is already done.</SectionHeading>
-        <div className="mt-6 grid gap-3 sm:grid-cols-3">
-          {[
-            {
-              title: "No prompts",
-              copy: "You never write a prompt. Every template already carries the direction, lighting and sequencing.",
-            },
-            {
-              title: "Creative already proven",
-              copy: "Templates come from campaigns creators actually shot — you start from a finished idea, not a blank page.",
-            },
-            {
-              title: "New drops constantly",
-              copy: "Creators keep publishing new campaigns to the marketplace, so the catalog keeps growing.",
-            },
-          ].map((item) => (
-            <div key={item.title} className="rounded-2xl border border-white/10 bg-white/[0.03] px-5 py-6">
-              <p className="font-display text-lg font-semibold uppercase tracking-[0.04em] text-white">
-                {item.title}
-              </p>
-              <p className="mt-2 text-sm leading-6 text-slate-300">{item.copy}</p>
-            </div>
-          ))}
-        </div>
-      </section>
+
 
 
       {/* 5 · CREATOR PROGRAM */}

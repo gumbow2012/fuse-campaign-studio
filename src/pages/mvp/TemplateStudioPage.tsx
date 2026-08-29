@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import {
@@ -12,6 +12,7 @@ import {
   Loader2,
   
   Network,
+  Search,
   Sparkles,
 } from "lucide-react";
 import SiteShell from "@/components/mvp/SiteShell";
@@ -103,6 +104,7 @@ import StreakChip from "@/components/StreakChip";
 import CampaignHistoryDrawer from "@/components/campaigns/CampaignHistoryDrawer";
 import { useCampaignHistory } from "@/hooks/useCampaignHistory";
 import { formatCampaignOutputs, formatCampaignOutputsLong } from "@/lib/campaignOutputs";
+import { campaignDisplayName } from "@/lib/campaignDisplayName";
 
 
 /**
@@ -111,6 +113,29 @@ import { formatCampaignOutputs, formatCampaignOutputsLong } from "@/lib/campaign
  * metadata and performance data stay intact — flip to `true` to reintroduce.
  */
 const SHOW_MARKETPLACE_FILTERS = false;
+
+/** Customer-facing feed chips (presentation filter only). */
+type FeedChip = "all" | "for_you" | "new" | "fashion" | "jewelry" | "product" | "video";
+const FEED_CHIPS: Array<{ key: FeedChip; label: string }> = [
+  { key: "for_you", label: "For you" },
+  { key: "new", label: "New" },
+  { key: "fashion", label: "Fashion" },
+  { key: "jewelry", label: "Jewelry" },
+  { key: "product", label: "Product" },
+  { key: "video", label: "Video" },
+];
+
+/** Deterministic tile height variant — stable per campaign, never random. */
+function feedTileAspect(templateId: string) {
+  let hash = 0;
+  for (let index = 0; index < templateId.length; index += 1) {
+    hash = (hash * 31 + templateId.charCodeAt(index)) % 9973;
+  }
+  // Controlled variance only — enough rhythm to read as a feed, small enough
+  // that the grid never leaves large holes.
+  const variants = ["aspect-[4/5]", "aspect-[7/9]", "aspect-[3/4]"];
+  return variants[hash % variants.length];
+}
 
 type RunnerStatus = "queued" | "running" | "video_pending" | "complete" | "failed";
 
@@ -726,8 +751,38 @@ export default function TemplateStudioPage() {
     if (!canFavorite && favoritesOnly) setFavoritesOnly(false);
   }, [canFavorite, favoritesOnly]);
 
+  /**
+   * Feed chips + search — PRESENTATION ONLY. They narrow what is rendered and
+   * never reorder the merchandised catalog or touch identifiers.
+   */
+  const [feedSearch, setFeedSearch] = useState("");
+  const [feedChip, setFeedChip] = useState<FeedChip>("all");
+
+  const matchesFeedChip = useCallback(
+    (template: ApiTemplate) => {
+      if (feedChip === "all") return true;
+      if (feedChip === "for_you") return canFavorite ? isFavorite(String(template.id)) : true;
+      if (feedChip === "video") return (template.output_type ?? "").toLowerCase() === "video";
+      if (feedChip === "new") {
+        const created = template.created_at ? Date.parse(template.created_at) : NaN;
+        if (Number.isNaN(created)) return true;
+        return Date.now() - created <= 30 * 24 * 60 * 60 * 1000;
+      }
+      const haystack = `${template.category ?? ""} ${template.tags?.join(" ") ?? ""}`.toLowerCase();
+      return haystack.includes(feedChip);
+    },
+    [feedChip, canFavorite, isFavorite],
+  );
+
   const visibleTemplates = useMemo(() => {
-    const base = favoritesOnly ? templates.filter((template) => isFavorite(String(template.id))) : templates;
+    const query = feedSearch.trim().toLowerCase();
+    let base = favoritesOnly ? templates.filter((template) => isFavorite(String(template.id))) : templates;
+    if (query) base = base.filter((template) => (template.name ?? "").toLowerCase().includes(query));
+    if (feedChip !== "all") {
+      const narrowed = base.filter(matchesFeedChip);
+      // Never strand the customer on an empty feed from a presentation chip.
+      if (narrowed.length) base = narrowed;
+    }
     if (!activeFilterCount && outputTypeFilter === "all") return base;
     return base.filter((template) => {
       if (outputTypeFilter !== "all") {
@@ -746,7 +801,18 @@ export default function TemplateStudioPage() {
       }
       return true;
     });
-  }, [activeFilterCount, favoritesOnly, isFavorite, outputTypeFilter, perfFilters, performanceMap, templates]);
+  }, [
+    activeFilterCount,
+    favoritesOnly,
+    feedChip,
+    feedSearch,
+    isFavorite,
+    matchesFeedChip,
+    outputTypeFilter,
+    perfFilters,
+    performanceMap,
+    templates,
+  ]);
 
 
 
@@ -2210,7 +2276,7 @@ export default function TemplateStudioPage() {
         )}
         aria-hidden={authGateOpen}
       >
-      <section className="container py-12 md:py-16">
+      <section className="mx-auto w-full max-w-[1800px] px-4 py-12 sm:px-6 md:py-16 lg:px-8">
         <PlanActivationNotice />
 
         {/* RETENTION P5 — light personalized greeting anchoring the logged-in home. */}
@@ -2235,11 +2301,11 @@ export default function TemplateStudioPage() {
             <h1 className="mt-2 font-display text-xl font-bold leading-tight text-white sm:mt-3 sm:text-4xl">
               {isPublicTemplateBrowser
                 ? "Build your campaign. No account needed yet."
-                : "Your template is ready. Upload your assets."}
+                : "Your campaign is ready. Upload your assets."}
             </h1>
             <p className="mt-1.5 max-w-2xl text-[13px] leading-5 text-slate-300 sm:mt-3 sm:text-sm sm:leading-6 md:text-base">
               {isPublicTemplateBrowser
-                ? "Pick a template, add your assets and set up the run — you only sign in when you generate."
+                ? "Pick a campaign, add your assets and set up the run — you only sign in when you generate."
                 : "The selected workflow is loaded. Add the required assets, confirm the run cost, and generate campaign videos."}
             </p>
 
@@ -2383,10 +2449,45 @@ export default function TemplateStudioPage() {
           )}
         >
           {!hasActiveCampaignWorkspace ? (
-          <section className="rounded-[2rem] border border-white/10 bg-white/[0.03] p-5">
-            <div className="flex items-center justify-between gap-3">
-              <p className="text-[11px] uppercase tracking-[0.24em] text-muted-foreground">Templates</p>
+          <section className="min-w-0 rounded-[2rem] border border-white/10 bg-white/[0.03] p-4 sm:p-5">
+            <div className="flex min-w-0 flex-wrap items-center gap-3">
+              <h2 className="font-display text-base font-bold uppercase tracking-[0.16em] text-white sm:text-lg">
+                Campaigns
+              </h2>
               {templatesQuery.isFetching ? <Loader2 className="h-4 w-4 animate-spin text-cyan-100" /> : null}
+              <label className="ml-auto flex min-w-0 flex-1 items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 sm:max-w-[260px] sm:flex-none">
+                <Search className="h-3.5 w-3.5 shrink-0 text-slate-400" aria-hidden />
+                <input
+                  value={feedSearch}
+                  onChange={(event) => setFeedSearch(event.target.value)}
+                  placeholder="Search campaigns"
+                  aria-label="Search campaigns"
+                  className="w-full bg-transparent text-[12.5px] text-white placeholder:text-slate-500 focus:outline-none"
+                />
+              </label>
+            </div>
+
+            {/* Presentation-only chips — scrollable on mobile */}
+            <div className="-mx-1 mt-3 flex min-w-0 max-w-full gap-2 overflow-x-auto px-1 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+              {FEED_CHIPS.map((chip) => {
+                const active = feedChip === chip.key;
+                return (
+                  <button
+                    key={chip.key}
+                    type="button"
+                    aria-pressed={active}
+                    onClick={() => setFeedChip(active ? "all" : chip.key)}
+                    className={cn(
+                      "shrink-0 rounded-full border px-3 py-1 text-[10.5px] font-bold uppercase tracking-[0.14em] transition-colors",
+                      active
+                        ? "border-cyan-300/60 bg-cyan-300/15 text-cyan-100"
+                        : "border-white/10 bg-white/[0.04] text-slate-300 hover:text-white",
+                    )}
+                  >
+                    {chip.label}
+                  </button>
+                );
+              })}
             </div>
 
             {/* Phase 5 — contextual activation moment above the grid. */}
@@ -2410,32 +2511,17 @@ export default function TemplateStudioPage() {
                 <button
                   type="button"
                   onClick={() => navigate(`${ONBOARDING_ROUTE}?step=1`)}
-                  className="mt-2 inline-flex text-xs font-semibold text-cyan-200 underline underline-offset-4 transition-colors hover:text-cyan-100 sm:hidden"
+                  className="mt-2 inline-flex text-xs font-semibold text-cyan-200 underline underline-offset-4 transition-colors hover:text-cyan-100"
                 >
                   Build your brand →
                 </button>
-                <div className="mt-3 hidden rounded-[1rem] border border-cyan-200/20 bg-cyan-300/[0.05] px-3.5 py-3 sm:block">
-                  <p className="font-display text-[10px] font-semibold uppercase tracking-[0.18em] text-cyan-100">
-                    See which campaigns are ready for your brand
-                  </p>
-                  <p className="mt-1 text-[11px] leading-relaxed text-slate-300">
-                    Build your brand once and FUSE can preload compatible inputs.
-                  </p>
-                  <button
-                    type="button"
-                    onClick={() => navigate(`${ONBOARDING_ROUTE}?step=1`)}
-                    className="mt-2 rounded-full border border-cyan-300/35 bg-cyan-300/10 px-3 py-1 font-display text-[10px] font-semibold uppercase tracking-[0.16em] text-cyan-100 transition hover:bg-cyan-300/20"
-                  >
-                    Build brand
-                  </button>
-                </div>
               </>
             )}
 
 
             {templatesQuery.isError ? (
               <div className="mt-5 rounded-[1.5rem] border border-rose-400/20 bg-rose-400/10 p-4 text-sm text-rose-100">
-                Could not load templates.
+                Could not load campaigns.
               </div>
             ) : null}
 
@@ -2532,20 +2618,16 @@ export default function TemplateStudioPage() {
 
             {!templatesQuery.isFetching && !templates.length ? (
               <div className="mt-5 rounded-[1.5rem] border border-white/8 bg-black/20 p-4 text-sm text-slate-300">
-                No active templates were returned.
+                No active campaigns were returned.
               </div>
             ) : null}
 
-            <div className="mt-4 grid grid-cols-2 gap-3 sm:mt-5 sm:grid-cols-3 sm:gap-4 lg:grid-cols-3">
+            <div className="mt-4 grid grid-cols-2 items-start gap-2.5 sm:mt-5 sm:grid-cols-3 sm:gap-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6">
               {templateRows.map((row, rowIndex) => (
                 <Fragment key={`template-row-${rowIndex}`}>
                   {row.map((template) => {
                 const selected = template.id === selectedTemplateId;
                 const batchSelected = batchSelection.includes(template.id);
-                const credits = template.estimated_credits_per_run || 0;
-                const inputCount = getTemplateInputCount(template);
-                const outputCount = getTemplateOutputCount(template);
-                const performance = performanceMap[String(template.id ?? "")];
 
 
 
@@ -2554,6 +2636,7 @@ export default function TemplateStudioPage() {
                     key={template.id}
                     role="button"
                     tabIndex={0}
+                    aria-label={`Open ${template.name}`}
                     aria-pressed={selectMode ? batchSelected : undefined}
                     onClick={() =>
                       selectMode ? toggleBatchSelection(template.id) : handleTemplateSelect(template.id)
@@ -2565,127 +2648,59 @@ export default function TemplateStudioPage() {
                         else handleTemplateSelect(template.id);
                       }
                     }}
-                    className={`group cursor-pointer overflow-hidden rounded-[1rem] border text-left transition-colors sm:rounded-[1.5rem] ${
-                      selectMode && batchSelected
-                        ? "border-cyan-300 bg-cyan-300/10 ring-2 ring-cyan-300/40"
-                        : selected && !selectMode
-                          ? "border-cyan-300 bg-cyan-300/10 ring-2 ring-cyan-300/40"
-                          : "border-white/8 bg-black/20 hover:border-white/20 hover:bg-white/[0.05]"
-                    }`}
+                    className={cn(
+                      "group relative cursor-pointer overflow-hidden rounded-[0.9rem] bg-black text-left transition-shadow focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300",
+                      (selectMode ? batchSelected : selected)
+                        ? "ring-1 ring-cyan-300 shadow-[0_0_24px_-4px_rgba(34,211,238,0.55)]"
+                        : "ring-1 ring-white/10 hover:ring-white/25",
+                    )}
                   >
-                    <div className="relative overflow-hidden bg-black/30">
-                      <TemplateVibeMedia
-                        template={template}
-                        className="aspect-[4/5] w-full object-cover transition-transform duration-500 group-hover:scale-[1.03] sm:aspect-[9/16]"
+                    <TemplateVibeMedia
+                      template={template}
+                      className={cn(
+                        "w-full object-cover transition-transform duration-500 group-hover:scale-[1.03] motion-reduce:transition-none",
+                        feedTileAspect(String(template.id)),
+                      )}
+                    />
+                    <span className="pointer-events-none absolute inset-x-0 bottom-0 h-1/3 bg-gradient-to-t from-black/85 to-transparent" />
+                    <p className="pointer-events-none absolute bottom-2 left-2.5 right-8 truncate font-display text-[11.5px] font-bold uppercase tracking-[0.12em] text-white drop-shadow-[0_1px_6px_rgba(0,0,0,0.9)] sm:text-[12.5px]">
+                      {campaignDisplayName(template.name)}
+                    </p>
+
+                    {canFavorite && !selectMode ? (
+                      <FavoriteTemplateButton
+                        favorite={isFavorite(String(template.id))}
+                        onToggle={() => toggleFavorite(String(template.id))}
+                        className="absolute right-1.5 top-1.5"
                       />
-                      <div className="pointer-events-none absolute inset-x-0 bottom-0 h-2/3 bg-gradient-to-t from-black/75 via-black/20 to-transparent" />
-                      <div className="absolute bottom-3 left-3 hidden rounded-full border border-white/15 bg-black/45 px-2.5 py-1 text-[9px] uppercase tracking-[0.18em] text-white/80 backdrop-blur sm:block">
-                        Vibe
-                      </div>
+                    ) : null}
 
-                      {canFavorite && !selectMode ? (
-                        <FavoriteTemplateButton
-                          favorite={isFavorite(String(template.id))}
-                          onToggle={() => toggleFavorite(String(template.id))}
-                          className="absolute bottom-3 right-3"
-                        />
-                      ) : null}
-
-                      {selectMode ? (
-                        <span
-                          aria-hidden="true"
-                          className={cn(
-                            "absolute right-3 top-3 flex h-7 w-7 items-center justify-center rounded-full border backdrop-blur",
-                            batchSelected
-                              ? "border-cyan-300 bg-cyan-300 text-slate-950"
-                              : "border-white/25 bg-black/55 text-transparent",
-                          )}
-                        >
-                          <Check className="h-4 w-4" />
-                        </span>
-                      ) : (
-                        <button
-                          type="button"
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            track("template_view", { template_id: template.id });
-                            setDetailTemplateId(template.id);
-                          }}
-                          className="absolute right-1.5 top-1.5 rounded-full border border-white/15 bg-black/55 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.14em] text-white/85 backdrop-blur transition-colors hover:bg-black/80 sm:right-3 sm:top-3 sm:px-3 sm:py-1 sm:tracking-[0.18em]"
-                        >
-                          Details
-                        </button>
-                      )}
-                    </div>
-
-
-                    <div className="space-y-2 p-2.5 sm:space-y-3 sm:p-4">
-                      {performance ? <div className="hidden sm:block"><PerformanceBlock row={performance} compact /></div> : null}
-                      {performance ? <div className="hidden sm:block"><PerformanceBadges row={performance} limit={3} /></div> : null}
-                      <div className="flex items-start justify-between gap-3">
-
-                        <div className="min-w-0">
-                          <p className="line-clamp-2 text-sm font-bold text-white sm:truncate sm:text-base sm:font-semibold">{template.name}</p>
-                          <p className="mt-1 hidden text-[10px] uppercase tracking-[0.2em] text-muted-foreground sm:block">
-                            {template.category || "Campaign drop template"}
-                          </p>
-                        </div>
-                        <div className="hidden shrink-0 rounded-full border border-white/10 px-3 py-1 text-[10px] uppercase tracking-[0.18em] text-slate-300 sm:block">
-                          {isPrivilegedUser ? <span className="line-through decoration-cyan-200/90 decoration-2">{credits} cr</span> : `${credits} cr`}
-                        </div>
-                      </div>
-
-                      <p className="text-xs text-slate-400 sm:hidden">
-                        {formatCampaignOutputs(template.counts)}
-                      </p>
-
-                      {template.description ? (
-                        <p className="hidden line-clamp-2 text-sm leading-6 text-slate-300 sm:block">
-                          {template.description}
-                        </p>
-                      ) : (
-                        <p className="hidden text-sm leading-6 text-slate-300 sm:block">
-                          Campaign drop template for ready-to-use vertical videos.
-                        </p>
-                      )}
-
-                      {activeBrand && templateFitMap[String(template.id)] ? (
-                        <div className="hidden sm:block">
-                          <TemplateFitBadge
-                            fit={templateFitMap[String(template.id)]}
-                            brandName={activeBrand.name}
-                          />
-                        </div>
-                      ) : null}
-
-                      <div className="hidden flex-wrap items-center justify-between gap-2 text-[10px] uppercase tracking-[0.18em] text-slate-400 sm:flex">
-                        <span>{formatCount(inputCount, "upload", "uploads")}</span>
-                        <span>{formatCampaignOutputs(template.counts)}</span>
-                      </div>
-
-
-                      {/* Single action: the whole card opens the campaign in the builder.
-                          This is a non-interactive affordance only — no second step. */}
+                    {selectMode ? (
                       <span
                         aria-hidden="true"
                         className={cn(
-                          "hidden items-center gap-1.5 font-display text-[10px] font-semibold uppercase tracking-[0.2em] sm:flex",
-                          selected && !selectMode
-                            ? "text-cyan-200"
-                            : "text-slate-500 group-hover:text-cyan-200",
+                          "absolute right-1.5 top-1.5 flex h-7 w-7 items-center justify-center rounded-full border backdrop-blur",
+                          batchSelected
+                            ? "border-cyan-300 bg-cyan-300 text-slate-950"
+                            : "border-white/25 bg-black/55 text-transparent",
                         )}
                       >
-                        {selectMode
-                          ? batchSelected
-                            ? "✓ Selected for batch"
-                            : "Tap to select"
-                          : selected
-                            ? "✓ Open in builder"
-                            : "Open in builder →"}
+                        <Check className="h-4 w-4" />
                       </span>
-
-                    </div>
-
+                    ) : (
+                      <button
+                        type="button"
+                        aria-label={`Details for ${template.name}`}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          track("template_view", { template_id: template.id });
+                          setDetailTemplateId(template.id);
+                        }}
+                        className="absolute bottom-1.5 right-1.5 flex h-6 w-6 items-center justify-center rounded-full border border-white/20 bg-black/60 text-white/85 backdrop-blur transition-colors hover:bg-black/85"
+                      >
+                        <Info className="h-3.5 w-3.5" />
+                      </button>
+                    )}
                   </div>
                 );
                   })}
@@ -2699,13 +2714,13 @@ export default function TemplateStudioPage() {
             </div>
             {favoritesOnly && !visibleTemplates.length ? (
               <div className="mt-5 rounded-[1.5rem] border border-white/8 bg-black/20 p-4 text-sm text-slate-300">
-                No favorites yet — tap the heart on any template to save it here.
+                No favorites yet — tap the heart on any campaign to save it here.
               </div>
             ) : null}
 
             {activeFilterCount && templates.length && !visibleTemplates.length ? (
               <div className="mt-5 rounded-[1.5rem] border border-white/8 bg-black/20 p-4 text-sm text-slate-300">
-                No templates match these performance filters yet.
+                No campaigns match these filters yet.
               </div>
             ) : null}
             {hasAnyPerformance ? <PerformanceDisclaimer className="mt-4" /> : null}

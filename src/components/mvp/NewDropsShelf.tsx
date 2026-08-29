@@ -4,6 +4,7 @@ import { ArrowRight } from "lucide-react";
 import { formatCampaignOutputs } from "@/lib/campaignOutputs";
 import type { Entry, TemplateMedia } from "@/lib/homeMediaAllocator";
 import { track } from "@/lib/analytics/track";
+import { campaignDisplayName } from "@/lib/campaignDisplayName";
 
 /**
  * NEW DROPS — video-first rail that flows straight out of the hero.
@@ -74,13 +75,12 @@ function DropCard({ entry, eager, isNew }: { entry: Entry; eager?: boolean; isNe
   );
 
   return (
-    <article className="group relative w-[72vw] max-w-[300px] shrink-0 snap-start overflow-hidden rounded-[1.1rem] border border-white/12 bg-slate-950/80 transition-colors hover:border-cyan-200/40 sm:w-[38vw] lg:w-[252px] xl:w-[262px]">
-      <Link
-        to={href}
-        className="absolute inset-0 z-10"
-        aria-label={`Run ${name}`}
-        onClick={() => track("homepage_campaign_card_click", { template_id: String(entry.template.id ?? "") })}
-      />
+    <Link
+      to={href}
+      aria-label={`Run ${name}`}
+      onClick={() => track("homepage_campaign_card_click", { template_id: String(entry.template.id ?? "") })}
+      className="group relative w-[78vw] max-w-[320px] shrink-0 snap-start overflow-hidden rounded-[1.1rem] border border-white/12 bg-black transition-colors hover:border-cyan-200/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300 sm:w-[40vw] lg:w-[calc((100%-4*0.875rem)/4.6)] lg:max-w-none"
+    >
       <div className="relative aspect-[4/5] overflow-hidden bg-black">
         <AutoMedia media={entry.media} eager={eager} />
         {isNew && (
@@ -88,24 +88,18 @@ function DropCard({ entry, eager, isNew }: { entry: Entry; eager?: boolean; isNe
             New
           </span>
         )}
+        <span className="pointer-events-none absolute inset-x-0 bottom-0 h-2/5 bg-gradient-to-t from-black/85 to-transparent" />
+        <div className="pointer-events-none absolute inset-x-3 bottom-2.5">
+          <p className="truncate font-display text-[13px] font-bold uppercase tracking-[0.1em] text-white drop-shadow-[0_1px_6px_rgba(0,0,0,0.9)]">
+            {campaignDisplayName(name)}
+          </p>
+          <p className="mt-0.5 truncate text-[11px] font-medium text-slate-200">{outputs}</p>
+        </div>
       </div>
-      <div className="p-3.5">
-        <p className="truncate font-display text-sm font-semibold uppercase tracking-[0.08em] text-white">
-          {name}
-        </p>
-        <p className="mt-1 text-[11.5px] font-medium text-slate-200">{outputs}</p>
-        <Link
-          to={href}
-          onClick={() => track("homepage_campaign_card_click", { template_id: String(entry.template.id ?? "") })}
-          className="relative z-20 mt-3 flex h-9 w-full items-center justify-center gap-1.5 rounded-full bg-cyan-300 text-[11.5px] font-bold uppercase tracking-[0.14em] text-slate-950 transition-colors hover:bg-cyan-200"
-        >
-          Run campaign
-          <ArrowRight className="h-3.5 w-3.5" />
-        </Link>
-      </div>
-    </article>
+    </Link>
   );
 }
+
 
 /** Video-first ordering inside a group; catalog order breaks ties. */
 function videoFirst(entries: Entry[]) {
@@ -147,25 +141,20 @@ export default function NewDropsShelf({
   if (!rail.length) return null;
 
   return (
-    <section id="new-today" className="container pb-10 pt-4 sm:pt-6">
-      <div className="flex items-end justify-between gap-3">
-        <div>
-          <p className="text-[10.5px] font-bold uppercase tracking-[0.28em] text-cyan-200">Just dropped</p>
-          <h2 className="mt-1.5 font-display text-xl font-semibold uppercase tracking-[0.04em] text-white sm:text-2xl">
-            New drops
-          </h2>
-          <p className="mt-1.5 text-[12.5px] font-medium text-slate-300">
-            The newest campaigns ready to run.
-          </p>
-        </div>
+    <section id="new-today" className="container pb-8 pt-4 sm:pt-6">
+      <div className="flex items-center justify-between gap-3">
+        <h2 className="font-display text-lg font-bold uppercase tracking-[0.06em] text-white sm:text-xl">
+          New drops
+        </h2>
         <Link
           to="/app/templates"
           className="flex shrink-0 items-center gap-1 text-[11.5px] font-bold uppercase tracking-[0.16em] text-cyan-200 transition-colors hover:text-white"
         >
-          View all
+          Browse all
           <ArrowRight className="h-3.5 w-3.5" />
         </Link>
       </div>
+
 
       <div className="-mx-4 mt-4 flex snap-x snap-mandatory gap-3.5 overflow-x-auto px-4 pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:-mx-6 sm:px-6">
         {rail.map(({ entry, isNew }, index) => (
