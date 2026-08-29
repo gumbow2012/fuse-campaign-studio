@@ -143,6 +143,7 @@ function PlanCard({
   compact,
   wide,
   className,
+  starterWelcomeEligible,
   onSelect,
 }: {
   entry: PlanLadderEntry;
@@ -153,6 +154,7 @@ function PlanCard({
   compact?: boolean;
   wide?: boolean;
   className?: string;
+  starterWelcomeEligible?: boolean;
   onSelect: () => void;
 }) {
   const Icon = entry.icon;
@@ -161,6 +163,11 @@ function PlanCard({
 
   // SOLE pricing source. No promo today → no slash, no % off, no savings line.
   const offer = getPlanOffer(entry, "monthly", null);
+
+  /** Display-only: 20% off the first month, first-time Starter subscribers. */
+  const showStarterWelcome =
+    entry.key === "starter" && !!starterWelcomeEligible && !isCurrent && offer.purchasable;
+
 
   const credits = offer.monthlyCredits ?? 0;
   const capacity = typicalCapacityLabel(credits);
