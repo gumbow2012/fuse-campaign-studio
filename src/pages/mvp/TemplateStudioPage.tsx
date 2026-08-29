@@ -99,6 +99,8 @@ import StreakChip from "@/components/StreakChip";
 
 import CampaignHistoryDrawer from "@/components/campaigns/CampaignHistoryDrawer";
 import { useCampaignHistory } from "@/hooks/useCampaignHistory";
+import { formatCampaignOutputs, formatCampaignOutputsLong } from "@/lib/campaignOutputs";
+
 
 /**
  * Temporary marketplace simplification: hides the output-type tabs, performance
