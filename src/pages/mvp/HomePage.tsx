@@ -31,6 +31,8 @@ import {
   type TemplatePerformanceRow,
 } from "@/services/templatePerformance";
 import { PerformanceBlock, PerformanceDisclaimer } from "@/components/TemplatePerformance";
+import { formatCampaignOutputsLong } from "@/lib/campaignOutputs";
+
 
 
 /* --------------------------------- pieces --------------------------------- */
