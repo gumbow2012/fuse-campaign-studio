@@ -2128,6 +2128,7 @@ export default function TemplateStudioPage() {
                 ? "Generate campaign →"
                 : `Generate campaign → ${creditsRequired} cr`;
 
+  if (import.meta.env.DEV) console.log("[dl-debug2]", { selectedTemplateId, isCompactLayout, inlineBuilderOpen, selectedRowIndex, gridColumns, hasActiveCampaignWorkspace, selectMode });
   const inlineBuilderNode =
     isCompactLayout && inlineBuilderOpen && selectedTemplate && !selectMode && !hasActiveCampaignWorkspace ? (
       <InlineCampaignBuilder
