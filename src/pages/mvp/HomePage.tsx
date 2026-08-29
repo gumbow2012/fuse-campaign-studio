@@ -653,8 +653,9 @@ export default function HomePage() {
               Viral campaigns. Already built and ready to run.
             </p>
             <p className="mt-3 max-w-[560px] font-sans text-[16px] leading-[1.5] text-slate-200 sm:text-[17px]">
-              Pick a campaign. Upload your products. Hit run.
+              Pick one. Upload your products. Hit run.
             </p>
+
             <p className="mt-2 max-w-[560px] font-sans text-[13px] leading-[1.5] text-slate-400 sm:text-[14px]">
               FUSE runs the prebuilt workflow and returns the finished images + video clips.
             </p>
