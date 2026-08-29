@@ -131,9 +131,9 @@ function feedTileAspect(templateId: string) {
   for (let index = 0; index < templateId.length; index += 1) {
     hash = (hash * 31 + templateId.charCodeAt(index)) % 9973;
   }
-  // Controlled variance only — enough rhythm to read as a feed, small enough
-  // that the grid never leaves large holes.
-  const variants = ["aspect-[4/5]", "aspect-[7/9]", "aspect-[3/4]"];
+  // SHORT / MEDIUM / TALL — stable per template so the feed reads as masonry
+  // and never reshuffles between renders.
+  const variants = ["aspect-[1/1]", "aspect-[4/5]", "aspect-[3/4]"];
   return variants[hash % variants.length];
 }
 
@@ -2292,37 +2292,29 @@ export default function TemplateStudioPage() {
           </div>
         ) : null}
 
-        <div className="flex flex-wrap items-end justify-between gap-6">
-
-          <div>
-            <p className="text-[11px] font-semibold uppercase tracking-[0.3em] text-cyan-100">
-              {isPublicTemplateBrowser ? "Campaign Builder" : "Post-Purchase Studio"}
-            </p>
-            <h1 className="mt-2 font-display text-xl font-bold leading-tight text-white sm:mt-3 sm:text-4xl">
-              {isPublicTemplateBrowser
-                ? "Build your campaign. No account needed yet."
-                : "Your campaign is ready. Upload your assets."}
-            </h1>
-            <p className="mt-1.5 max-w-2xl text-[13px] leading-5 text-slate-300 sm:mt-3 sm:text-sm sm:leading-6 md:text-base">
-              {isPublicTemplateBrowser
-                ? "Pick a campaign, add your assets and set up the run — you only sign in when you generate."
-                : "The selected workflow is loaded. Add the required assets, confirm the run cost, and generate campaign videos."}
-            </p>
-
-          </div>
-          {isPublicTemplateBrowser ? (
-            <div className="rounded-[1.5rem] border border-emerald-300/20 bg-emerald-300/[0.08] px-5 py-4 text-sm leading-6 text-emerald-50">
-              Set everything up free. Sign in only to generate.
+        {/* Guest marketplace leads with campaign media — the compact CAMPAIGNS
+            bar is the top of the page. Only the post-purchase studio keeps a heading. */}
+        {!isPublicTemplateBrowser ? (
+          <div className="flex flex-wrap items-end justify-between gap-6">
+            <div>
+              <p className="text-[11px] font-semibold uppercase tracking-[0.3em] text-cyan-100">
+                Post-Purchase Studio
+              </p>
+              <h1 className="mt-2 font-display text-xl font-bold leading-tight text-white sm:mt-3 sm:text-4xl">
+                Your campaign is ready. Upload your assets.
+              </h1>
+              <p className="mt-1.5 max-w-2xl text-[13px] leading-5 text-slate-300 sm:mt-3 sm:text-sm sm:leading-6 md:text-base">
+                The selected workflow is loaded. Add the required assets, confirm the run cost, and generate campaign videos.
+              </p>
             </div>
-          ) : (
             <CreditRemainingMeter
               label={isPrivilegedUser ? "Team Credits Remaining" : "Credits Remaining"}
               percent={creditsRemainingPercent}
               value={creditsRemainingValue}
               showTopUp={!!user && !!profile && !isPrivilegedUser && displayedCreditBalance <= 0}
             />
-          )}
-        </div>
+          </div>
+        ) : null}
 
         {/* Quiet history affordance — the builder stays dominant. */}
         {user ? (
@@ -2442,7 +2434,8 @@ export default function TemplateStudioPage() {
         <div
           data-studio-mode={studioMode}
           className={cn(
-            "mt-8 grid gap-6 motion-safe:transition-[grid-template-columns] motion-safe:duration-300",
+            "grid gap-6 motion-safe:transition-[grid-template-columns] motion-safe:duration-300",
+            isPublicTemplateBrowser ? "mt-3" : "mt-8",
             hasActiveCampaignWorkspace
               ? "xl:grid-cols-[minmax(280px,380px)_minmax(0,1fr)]"
               : "xl:grid-cols-[minmax(0,1fr)_440px] 2xl:grid-cols-[minmax(0,1fr)_480px]",
@@ -2466,6 +2459,12 @@ export default function TemplateStudioPage() {
                 />
               </label>
             </div>
+
+            {isPublicTemplateBrowser ? (
+              <p className="mt-1.5 text-[11.5px] leading-4 text-slate-400">
+                No account needed — you only sign in when you generate.
+              </p>
+            ) : null}
 
             {/* Presentation-only chips — scrollable on mobile */}
             <div className="-mx-1 mt-3 flex min-w-0 max-w-full gap-2 overflow-x-auto px-1 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
@@ -2663,7 +2662,7 @@ export default function TemplateStudioPage() {
                       )}
                     />
                     <span className="pointer-events-none absolute inset-x-0 bottom-0 h-1/3 bg-gradient-to-t from-black/85 to-transparent" />
-                    <p className="pointer-events-none absolute bottom-2 left-2.5 right-8 truncate font-display text-[11.5px] font-bold uppercase tracking-[0.12em] text-white drop-shadow-[0_1px_6px_rgba(0,0,0,0.9)] sm:text-[12.5px]">
+                    <p className="pointer-events-none absolute bottom-2 left-2.5 right-8 line-clamp-2 font-display text-[10.5px] font-bold uppercase leading-[1.15] tracking-[0.1em] text-white drop-shadow-[0_1px_6px_rgba(0,0,0,0.9)] sm:text-[12px] sm:tracking-[0.12em]">
                       {campaignDisplayName(template.name)}
                     </p>
 
