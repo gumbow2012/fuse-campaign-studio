@@ -2205,7 +2205,7 @@ export default function TemplateStudioPage() {
                       selectMode && batchSelected
                         ? "border-cyan-300 bg-cyan-300/10 ring-2 ring-cyan-300/40"
                         : selected && !selectMode
-                          ? "border-cyan-300/50 bg-cyan-300/10"
+                          ? "border-cyan-300 bg-cyan-300/10 ring-2 ring-cyan-300/40"
                           : "border-white/8 bg-black/20 hover:border-white/20 hover:bg-white/[0.05]"
                     }`}
                   >
