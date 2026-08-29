@@ -1221,6 +1221,25 @@ export function createStripeWebhookHandler(mode: StripeBillingMode) {
             // analytics must never affect billing
           }
 
+
+          // First-party ad attribution — best-effort; never blocks billing.
+          try {
+            await admin.from("sale_attribution").insert({
+              user_id: session.metadata?.user_id || session.client_reference_id || null,
+              stripe_session_id: session.id,
+              checkout_type: session.metadata?.checkout_type || "credit_topup",
+              amount_cents: typeof session.amount_total === "number" ? session.amount_total : null,
+              currency: (session.currency || "usd").toUpperCase(),
+              utm_source: session.metadata?.utm_source || null,
+              utm_medium: session.metadata?.utm_medium || null,
+              utm_campaign: session.metadata?.utm_campaign || null,
+              utm_content: session.metadata?.utm_content || null,
+              fbclid: session.metadata?.fbclid || null,
+            });
+          } catch (_attributionError) {
+            // attribution is best-effort; never blocks billing
+          }
+
           return json({ received: true, granted: grantResult.granted }, 200);
         }
 
@@ -1279,6 +1298,25 @@ export function createStripeWebhookHandler(mode: StripeBillingMode) {
           }
 
 
+
+          // First-party ad attribution — best-effort; never blocks billing.
+          try {
+            await admin.from("sale_attribution").insert({
+              user_id: session.metadata?.user_id || session.client_reference_id || null,
+              stripe_session_id: session.id,
+              checkout_type: session.metadata?.checkout_type || "credit_pack",
+              amount_cents: typeof session.amount_total === "number" ? session.amount_total : null,
+              currency: (session.currency || "usd").toUpperCase(),
+              utm_source: session.metadata?.utm_source || null,
+              utm_medium: session.metadata?.utm_medium || null,
+              utm_campaign: session.metadata?.utm_campaign || null,
+              utm_content: session.metadata?.utm_content || null,
+              fbclid: session.metadata?.fbclid || null,
+            });
+          } catch (_attributionError) {
+            // attribution is best-effort; never blocks billing
+          }
+
           return json({ received: true, granted: grantResult.granted }, 200);
         }
 
@@ -1333,6 +1371,25 @@ export function createStripeWebhookHandler(mode: StripeBillingMode) {
         } catch (_capiError) {
           // analytics must never affect billing
         }
+
+        // First-party ad attribution — best-effort; never blocks billing.
+        try {
+          await admin.from("sale_attribution").insert({
+            user_id: session.metadata?.user_id || session.client_reference_id || null,
+            stripe_session_id: session.id,
+            checkout_type: session.metadata?.checkout_type || "subscription",
+            amount_cents: typeof session.amount_total === "number" ? session.amount_total : null,
+            currency: (session.currency || "usd").toUpperCase(),
+            utm_source: session.metadata?.utm_source || null,
+            utm_medium: session.metadata?.utm_medium || null,
+            utm_campaign: session.metadata?.utm_campaign || null,
+            utm_content: session.metadata?.utm_content || null,
+            fbclid: session.metadata?.fbclid || null,
+          });
+        } catch (_attributionError) {
+          // attribution is best-effort; never blocks billing
+        }
+
         return json({ received: true }, 200);
       }
 
