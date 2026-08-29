@@ -575,7 +575,7 @@ export default function TemplateStudioPage() {
     return () => {
       compact.removeEventListener("change", sync);
 
-      threeCols.removeEventListener("change", sync);
+      twoCols.removeEventListener("change", sync);
     };
   }, []);
 
