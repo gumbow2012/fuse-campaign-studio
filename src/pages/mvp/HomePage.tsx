@@ -639,27 +639,49 @@ export default function HomePage() {
           }}
         />
 
-        <div className="container relative grid gap-7 py-9 md:gap-10 md:py-16 lg:grid-cols-[minmax(0,1fr)_minmax(0,0.9fr)] lg:items-center">
-          <div className="min-w-0">
+        <div className="container relative py-9 text-center md:py-14">
+          <div className="mx-auto max-w-[880px]">
             <h1
-              className="font-display font-bold uppercase text-white"
-              style={{ fontSize: "clamp(34px, 9.3vw, 62px)", lineHeight: 0.94, letterSpacing: "-0.02em" }}
+              className="mx-auto font-display font-bold uppercase text-white"
+              style={{ fontSize: "clamp(48px, 8.6vw, 96px)", lineHeight: 0.94, letterSpacing: "-0.02em" }}
             >
-              <span className="block sm:whitespace-nowrap">One-click campaign</span>
-              <span className="block">marketplace</span>
+              <span className="block">One-click campaign</span>
+              <span className="block">Marketplace</span>
             </h1>
-            <p className="mt-4 max-w-[560px] font-sans text-[18px] font-bold leading-[1.3] text-white sm:text-[20px] md:text-[23px]">
+            <p className="mx-auto mt-4 max-w-[620px] font-sans text-[18px] font-bold leading-[1.3] text-white sm:text-[20px] md:text-[23px]">
               Viral campaigns. Already built and ready to run.
             </p>
-            <p className="mt-3 max-w-[560px] font-sans text-[16.5px] font-medium leading-[1.45] text-slate-100 sm:text-[18px] md:text-[19px]">
+            <p className="mx-auto mt-2.5 max-w-[620px] font-sans text-[16.5px] font-medium leading-[1.45] text-slate-100 sm:text-[18px] md:text-[19px]">
               Pick one. Upload your products. Hit run.
             </p>
 
-            <div className="mt-6 flex flex-wrap items-center gap-3 md:mt-8">
+            {/* Prebuilt workflow graph — no data needed, renders instantly */}
+            <div className="mx-auto mt-7 max-w-[560px] md:max-w-[680px]">
+              <div className="lg:hidden">
+                <HeroWorkflowAnimation compact />
+              </div>
+              <div className="hidden lg:block">
+                <HeroWorkflowAnimation />
+              </div>
+            </div>
+
+            <p className="mx-auto mt-4 font-sans text-[14px] font-bold uppercase leading-[1.35] tracking-[0.05em] text-white sm:text-[16px] lg:text-[17px]">
+              No prompts <span className="text-cyan-300">·</span> No guessing
+              <span className="sm:hidden">
+                <br />
+              </span>
+              <span className="hidden sm:inline">
+                {" "}
+                <span className="text-cyan-300">·</span>{" "}
+              </span>
+              Prebuilt expert workflows
+            </p>
+
+            <div className="mt-6 flex flex-col items-center gap-3 md:mt-7">
               <Button
                 asChild
                 size="lg"
-                className="group relative h-[58px] overflow-hidden rounded-full border border-cyan-100/70 bg-gradient-to-b from-cyan-200 to-cyan-400 px-8 font-sans text-[17px] font-extrabold uppercase tracking-[0.06em] text-slate-950 shadow-[0_10px_30px_-12px_rgba(34,211,238,0.65)] transition-all duration-200 hover:-translate-y-[2px] hover:shadow-[0_16px_38px_-12px_rgba(34,211,238,0.8)] active:translate-y-[1px] active:scale-[0.985] motion-reduce:transition-none motion-reduce:hover:translate-y-0 sm:px-9 sm:text-[18px]"
+                className="group relative h-[58px] overflow-hidden rounded-full border border-cyan-100/70 bg-gradient-to-b from-cyan-200 to-cyan-400 px-8 font-sans text-[16.5px] font-extrabold uppercase tracking-[0.06em] text-slate-950 shadow-[0_10px_30px_-12px_rgba(34,211,238,0.65)] transition-all duration-200 hover:-translate-y-[2px] hover:shadow-[0_16px_38px_-12px_rgba(34,211,238,0.8)] active:translate-y-[1px] active:scale-[0.985] motion-reduce:transition-none motion-reduce:hover:translate-y-0 sm:px-9 sm:text-[18px]"
               >
                 <Link to="/app/templates" onClick={() => track("hero_explore_campaigns_click")}>
                   <span
@@ -671,66 +693,33 @@ export default function HomePage() {
                 </Link>
               </Button>
 
-              {isCreator ? (
-                <Button
-                  asChild
-                  variant="ghost"
-                  size="sm"
-                  className="rounded-full px-4 text-[12px] text-slate-300 hover:text-white"
-                >
-                  <Link to="/app/creator">Creator Dashboard</Link>
-                </Button>
-              ) : null}
+              <div className="flex flex-wrap items-center justify-center gap-2">
+                {isCreator ? (
+                  <Button
+                    asChild
+                    variant="ghost"
+                    size="sm"
+                    className="rounded-full px-4 text-[12px] text-slate-300 hover:text-white"
+                  >
+                    <Link to="/app/creator">Creator Dashboard</Link>
+                  </Button>
+                ) : null}
 
-              {(isCreator || isAdmin) && (
-                <Button
-                  asChild
-                  variant="ghost"
-                  size="sm"
-                  className="rounded-full px-4 text-[12px] text-slate-300 hover:text-white"
-                >
-                  <Link to="/app/lab/canvas">Create a Template</Link>
-                </Button>
-              )}
-            </div>
-
-          </div>
-
-
-          {/* Prebuilt workflow explainer — needs no template data, renders instantly */}
-          <div className="relative min-w-0">
-            <div className="mx-auto max-w-[420px]">
-              <p className="mb-3 font-sans text-[13.5px] font-bold uppercase leading-[1.35] tracking-[0.06em] text-white sm:text-[15px] lg:text-[16px] lg:tracking-[0.02em]">
-                No prompts <span className="text-cyan-300">·</span> No guessing
-                <span className="lg:hidden">
-                  <br />
-                </span>
-                <span className="hidden lg:inline">
-                  {" "}
-                  <span className="text-cyan-300">·</span>{" "}
-                </span>
-                Prebuilt expert workflows
-              </p>
-
-
-              <div className="lg:hidden">
-                <HeroWorkflowAnimation compact />
-              </div>
-              <div className="hidden lg:block">
-                <HeroWorkflowAnimation />
-              </div>
-
-              <div className="mt-3">
-                <p className="font-display text-[15px] font-bold uppercase leading-[1.25] tracking-[0.04em] text-white sm:text-[17px]">
-                  Every step is already engineered.
-                </p>
-                <p className="mt-1 font-display text-[15px] font-bold uppercase leading-[1.25] tracking-[0.04em] text-cyan-300 sm:text-[17px]">
-                  You just add your product.
-                </p>
+                {(isCreator || isAdmin) && (
+                  <Button
+                    asChild
+                    variant="ghost"
+                    size="sm"
+                    className="rounded-full px-4 text-[12px] text-slate-300 hover:text-white"
+                  >
+                    <Link to="/app/lab/canvas">Create a Template</Link>
+                  </Button>
+                )}
               </div>
             </div>
           </div>
         </div>
+
       </section>
 
 
