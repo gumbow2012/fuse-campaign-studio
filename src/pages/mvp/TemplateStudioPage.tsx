@@ -2201,12 +2201,13 @@ export default function TemplateStudioPage() {
                     <div className="relative overflow-hidden bg-black/30">
                       <TemplateVibeMedia
                         template={template}
-                        className="aspect-[9/16] w-full object-cover transition-transform duration-500 group-hover:scale-[1.03]"
+                        className="aspect-[4/5] w-full object-cover transition-transform duration-500 group-hover:scale-[1.03] sm:aspect-[9/16]"
                       />
                       <div className="pointer-events-none absolute inset-x-0 bottom-0 h-2/3 bg-gradient-to-t from-black/75 via-black/20 to-transparent" />
-                      <div className="absolute bottom-3 left-3 rounded-full border border-white/15 bg-black/45 px-2.5 py-1 text-[9px] uppercase tracking-[0.18em] text-white/80 backdrop-blur">
+                      <div className="absolute bottom-3 left-3 hidden rounded-full border border-white/15 bg-black/45 px-2.5 py-1 text-[9px] uppercase tracking-[0.18em] text-white/80 backdrop-blur sm:block">
                         Vibe
                       </div>
+
                       {canFavorite && !selectMode ? (
                         <FavoriteTemplateButton
                           favorite={isFavorite(String(template.id))}
