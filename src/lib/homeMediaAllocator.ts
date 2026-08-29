@@ -68,8 +68,9 @@ export function outputCount(template: ApiTemplate) {
 export function outputLabel(template: ApiTemplate) {
   const total = outputCount(template);
   if (total <= 0) return null;
-  return `${total} output${total === 1 ? "" : "s"}`;
+  return formatCampaignOutputs(template.counts);
 }
+
 
 function isRecent(template: ApiTemplate, days = 21) {
   if (!template.created_at) return false;
