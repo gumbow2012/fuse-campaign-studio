@@ -643,7 +643,7 @@ export default function HomePage() {
           <div className="min-w-0">
             <h1
               className="font-display font-bold uppercase text-white"
-              style={{ fontSize: "clamp(24px, 6.9vw, 72px)", lineHeight: 0.96, letterSpacing: "-0.05em" }}
+              style={{ fontSize: "clamp(24px, 6.9vw, 60px)", lineHeight: 0.96, letterSpacing: "-0.05em" }}
             >
               <span className="block whitespace-nowrap">One-click campaign</span>
               <span className="block">marketplace</span>
