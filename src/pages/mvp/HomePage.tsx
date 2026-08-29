@@ -643,9 +643,9 @@ export default function HomePage() {
           <div className="min-w-0">
             <h1
               className="font-display font-bold uppercase text-white"
-              style={{ fontSize: "clamp(34px, 8.8vw, 92px)", lineHeight: 0.94, letterSpacing: "-0.02em" }}
+              style={{ fontSize: "clamp(42px, 11.4vw, 92px)", lineHeight: 0.94, letterSpacing: "-0.02em" }}
             >
-              <span className="block whitespace-nowrap">One-click campaign</span>
+              <span className="block sm:whitespace-nowrap">One-click campaign</span>
               <span className="block">marketplace</span>
             </h1>
             <p className="mt-4 max-w-[560px] font-sans text-[18px] font-bold leading-[1.3] text-white sm:text-[20px] md:text-[23px]">
