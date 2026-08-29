@@ -694,19 +694,25 @@ export default function HomePage() {
               )}
             </div>
 
-            <p className="mt-4 max-w-[600px] font-sans text-[12px] font-bold uppercase leading-[1.5] tracking-[0.08em] text-white md:mt-5 sm:text-[14px]">
-              No prompts <span className="text-cyan-300">·</span> No guessing
-              <span className="hidden md:inline">
-                {" "}
-                <span className="text-cyan-300">·</span> Prebuilt expert workflows
-              </span>
-            </p>
-
           </div>
+
 
           {/* Prebuilt workflow explainer — needs no template data, renders instantly */}
           <div className="relative min-w-0">
             <div className="mx-auto max-w-[420px]">
+              <p className="mb-3 font-sans text-[13px] font-bold uppercase leading-[1.35] tracking-[0.08em] text-white lg:text-[12.5px] lg:tracking-[0.03em]">
+                No prompts <span className="text-cyan-300">·</span> No guessing
+                <span className="lg:hidden">
+                  <br />
+                </span>
+                <span className="hidden lg:inline">
+                  {" "}
+                  <span className="text-cyan-300">·</span>{" "}
+                </span>
+                Prebuilt expert workflows
+              </p>
+
+
               <div className="lg:hidden">
                 <HeroWorkflowAnimation compact />
               </div>
@@ -714,32 +720,12 @@ export default function HomePage() {
                 <HeroWorkflowAnimation />
               </div>
 
-              {/* Mobile: one line only — the graph carries the explanation */}
-              <div className="mt-3 lg:hidden">
-                <p className="font-display text-[13px] font-semibold uppercase tracking-[0.12em] text-white">
-                  Prebuilt workflow. <span className="text-cyan-200">You add the product.</span>
+              <div className="mt-3">
+                <p className="font-sans text-[13px] font-bold uppercase leading-[1.4] tracking-[0.1em] text-white sm:text-[14px]">
+                  The complex workflow is already built.
                 </p>
-                <p className="mt-1 font-sans text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">
-                  A full campaign. One run.
-                </p>
-              </div>
-
-              {/* Desktop: compact explainer */}
-              <div className="mt-4 hidden lg:block">
-                <p className="font-display text-lg font-semibold uppercase tracking-[0.12em] text-white">
-                  Prebuilt expert workflows
-                </p>
-                <p className="mt-2 font-sans text-[14px] leading-[1.5] text-slate-400">
-                  Creative direction, references, image steps and video steps are already configured.
-                </p>
-                <p className="mt-2 font-display text-base font-semibold uppercase tracking-[0.12em] text-cyan-200">
-                  You just add the product.
-                </p>
-                <p className="mt-3 font-sans text-[12px] leading-[1.6] text-slate-300">
-                  <span className="text-cyan-300">✓</span> Direction ·{" "}
-                  <span className="text-cyan-300">✓</span> References ·{" "}
-                  <span className="text-cyan-300">✓</span> Images ·{" "}
-                  <span className="text-cyan-300">✓</span> Video
+                <p className="mt-1 font-sans text-[13px] font-bold uppercase leading-[1.4] tracking-[0.1em] text-cyan-300 sm:text-[14px]">
+                  You just add your product.
                 </p>
               </div>
             </div>
@@ -747,17 +733,7 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* 1.1 · VALUE BAND — desktop only; mobile folds this under the graph */}
-      <section className="hidden border-b border-white/10 bg-white/[0.02] md:block">
-        <div className="container flex flex-wrap items-baseline gap-x-4 gap-y-1 py-5">
-          <p className="font-display text-xl font-bold uppercase tracking-[-0.01em] text-white sm:text-2xl">
-            A full campaign. One run.
-          </p>
-          <p className="font-sans text-[14px] text-slate-400">
-            Images + video clips generated together.
-          </p>
-        </div>
-      </section>
+
 
 
       <PromoOfferBar />
