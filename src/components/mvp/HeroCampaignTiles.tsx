@@ -82,9 +82,9 @@ function TileMedia({ entry, eager, reduced }: { entry: Entry; eager: boolean; re
 }
 
 const STRIP_CLASS =
-  "flex items-start justify-center gap-2.5 overflow-x-auto px-1 sm:gap-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden";
+  "flex items-start justify-center gap-2 overflow-x-auto px-1 sm:gap-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden";
 const SQUARE_CLASS =
-  "block h-[88px] w-[88px] shrink-0 overflow-hidden rounded-[0.7rem] bg-black sm:h-[104px] sm:w-[104px] lg:h-[128px] lg:w-[128px]";
+  "block h-[76px] w-[76px] shrink-0 overflow-hidden rounded-[0.7rem] bg-black sm:h-[104px] sm:w-[104px] lg:h-[128px] lg:w-[128px]";
 
 function TileSkeleton() {
   return <div className={cn(SQUARE_CLASS, "animate-pulse bg-white/[0.06]")} />;
@@ -178,7 +178,7 @@ export default function HeroCampaignTiles({
             >
               <TileMedia entry={entry} eager={index < 2} reduced={reduced} />
             </div>
-            <span className="mt-1.5 block max-w-[88px] text-center font-sans text-[9.5px] font-bold uppercase leading-[1.15] tracking-[0.12em] text-slate-400 group-hover:text-white sm:max-w-[104px] sm:text-[10px] lg:max-w-[128px] lg:text-[11px]">
+            <span className="mt-1.5 block max-w-[76px] text-center font-sans text-[9.5px] font-bold uppercase leading-[1.15] tracking-[0.12em] text-slate-400 group-hover:text-white sm:max-w-[104px] sm:text-[10px] lg:max-w-[128px] lg:text-[11px]">
               {label}
             </span>
           </Link>
