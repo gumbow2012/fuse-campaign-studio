@@ -372,7 +372,9 @@ export default function PlanTierCards({
             }
             loading={loading}
             isAdmin={isAdmin}
+            starterWelcomeEligible={starterWelcomeEligible}
             onSelect={() => handleSelect(entry)}
+
           />
         ))}
       </section>
