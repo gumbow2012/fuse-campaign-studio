@@ -171,6 +171,7 @@ export default function CampaignFeedCard({
       <button
         type="button"
         onClick={onSelect}
+        data-feed-card={templateId}
         aria-label={`Open ${fullName}`}
         aria-pressed={selected}
         className="block w-full text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300"
