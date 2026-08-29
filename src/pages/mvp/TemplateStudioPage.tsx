@@ -118,13 +118,15 @@ const SHOW_MARKETPLACE_FILTERS = false;
 /** Customer-facing feed chips (presentation filter only). */
 type FeedChip = "all" | "for_you" | "new" | "fashion" | "jewelry" | "product" | "video";
 const FEED_CHIPS: Array<{ key: FeedChip; label: string }> = [
-  { key: "for_you", label: "For you" },
+  { key: "all", label: "All" },
   { key: "new", label: "New" },
+  { key: "for_you", label: "For you" },
+  { key: "video", label: "Video" },
   { key: "fashion", label: "Fashion" },
   { key: "jewelry", label: "Jewelry" },
   { key: "product", label: "Product" },
-  { key: "video", label: "Video" },
 ];
+
 
 
 
