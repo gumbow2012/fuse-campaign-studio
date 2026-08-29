@@ -14,6 +14,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { rememberPendingCheckout, trackEvent } from "@/lib/metaPixel";
 import { quoteCreditTopUp } from "@/lib/creditPricing";
 import { getMetaMatchParams } from "@/lib/metaMatch";
+import { getStoredUtm } from "@/lib/utmParams";
 import CreditTopUpModule from "@/components/mvp/membership/CreditTopUpModule";
 import { rememberPendingCreditTopUp } from "@/components/mvp/CreditTopUpSuccessWatcher";
 
@@ -51,7 +52,7 @@ export default function CreditPackDialog({ trigger, open, onOpenChange }: Credit
     try {
       const match = getMetaMatchParams();
       const { data, error } = await supabase.functions.invoke("create-credit-checkout", {
-        body: { credits, fbc: match.fbc, fbp: match.fbp },
+        body: { credits, fbc: match.fbc, fbp: match.fbp, ...getStoredUtm() },
       });
       if (error) throw error;
       if (!data?.url) throw new Error("Stripe checkout URL not returned.");

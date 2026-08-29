@@ -7,6 +7,7 @@ import { rememberPendingCheckout, trackEvent } from "@/lib/metaPixel";
 import { rememberPendingCreditTopUp } from "@/components/mvp/CreditTopUpSuccessWatcher";
 import { track } from "@/lib/analytics/track";
 import { getMetaMatchParams } from "@/lib/metaMatch";
+import { getStoredUtm } from "@/lib/utmParams";
 
 type PlanCheckoutOptions = {
   email?: string;
@@ -50,6 +51,7 @@ export function useMembershipCheckout() {
           returnPath: options.returnPath,
           fbc: metaMatch.fbc,
           fbp: metaMatch.fbp,
+          ...getStoredUtm(),
         },
       });
       if (error) throw error;
@@ -79,7 +81,7 @@ export function useMembershipCheckout() {
     const packMatch = getMetaMatchParams();
     try {
       const { data, error } = await supabase.functions.invoke("create-credit-checkout", {
-        body: { packKey, fbc: packMatch.fbc, fbp: packMatch.fbp },
+        body: { packKey, fbc: packMatch.fbc, fbp: packMatch.fbp, ...getStoredUtm() },
       });
       if (error) throw error;
       if (!data?.url) throw new Error("Stripe checkout URL not returned.");
@@ -114,7 +116,7 @@ export function useMembershipCheckout() {
     const topUpMatch = getMetaMatchParams();
     try {
       const { data, error } = await supabase.functions.invoke("create-credit-checkout", {
-        body: { credits, fbc: topUpMatch.fbc, fbp: topUpMatch.fbp },
+        body: { credits, fbc: topUpMatch.fbc, fbp: topUpMatch.fbp, ...getStoredUtm() },
       });
       if (error) throw error;
       if (!data?.url) throw new Error("Stripe checkout URL not returned.");
