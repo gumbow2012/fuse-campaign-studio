@@ -2757,6 +2757,8 @@ export default function TemplateStudioPage() {
                     selected={selectMode ? batchSelected : selected}
                     eager={rowIndex === 0 && columnIndex < 2}
                     statusPill={isNewDrop ? "new" : null}
+                    /* <lg unchanged (4:5); lg+ true 9:16 portrait. */
+                    mediaAspectClassName="aspect-[4/5] lg:aspect-[9/16]"
                     onSelect={() => {
                       if (selectMode) {
                         toggleBatchSelection(template.id);
