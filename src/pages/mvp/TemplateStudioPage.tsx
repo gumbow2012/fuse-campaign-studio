@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import {
@@ -27,6 +27,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import CreditPackDialog from "@/components/mvp/CreditPackDialog";
 import TemplateDetailDialog, { readTemplateAspectRatio } from "@/components/mvp/TemplateDetailDialog";
 import TemplateInputCard from "@/components/templates/TemplateInputCard";
+import InlineCampaignBuilder from "@/components/templates/InlineCampaignBuilder";
 import CastSelector, { PRIMARY_CAST_SLOT, type CastSelection } from "@/components/templates/CastSelector";
 import { CampaignBuildGraph, type PublicGraph } from "@/components/templates/CampaignBuildGraph";
 import CampaignOutputsPanel from "@/components/templates/CampaignOutputsPanel";
@@ -514,6 +515,8 @@ export default function TemplateStudioPage() {
    * side-by-side builder is not rendered at all (one instance at a time).
    */
   const [gridColumns, setGridColumns] = useState(2);
+  /** <lg only: whether the inline builder is expanded (one open at a time). */
+  const [inlineBuilderOpen, setInlineBuilderOpen] = useState(false);
   const [isCompactLayout, setIsCompactLayout] = useState(false);
   const inlineBuilderRef = useRef<HTMLDivElement | null>(null);
   /** Session cache of pending local inputs per campaign (no upload, no spend). */
@@ -786,6 +789,7 @@ export default function TemplateStudioPage() {
     if (!isCompactLayout || !templates.length) return;
     if (!searchParams.get("template") || !selectedTemplateId) return;
     deepLinkRevealedRef.current = true;
+    setInlineBuilderOpen(true);
     const timer = window.setTimeout(() => revealInlineBuilder(), 120);
     return () => window.clearTimeout(timer);
   }, [isCompactLayout, searchParams, selectedTemplateId, templates.length]);
@@ -1557,6 +1561,7 @@ export default function TemplateStudioPage() {
     autofillAppliedRef.current = "";
 
     if (isCompactLayout) {
+      setInlineBuilderOpen(true);
       // Inline expansion: no teleporting. Only nudge if the panel top would sit
       // below the viewport, and only after layout exists.
       revealInlineBuilder();
@@ -2112,7 +2117,7 @@ export default function TemplateStudioPage() {
                 : `Generate campaign → ${creditsRequired} cr`;
 
   const inlineBuilderNode =
-    isCompactLayout && selectedTemplate && !selectMode && !hasActiveCampaignWorkspace ? (
+    isCompactLayout && inlineBuilderOpen && selectedTemplate && !selectMode && !hasActiveCampaignWorkspace ? (
       <InlineCampaignBuilder
         key={selectedTemplate.id}
         ref={inlineBuilderRef}
@@ -2134,7 +2139,7 @@ export default function TemplateStudioPage() {
         generateDisabled={submitting || isRunning || (!!user && (!requiredInputsAreReady || blockedByCredits))}
         generateLabel={inlineGenerateLabel}
         onGenerate={() => void handleRun()}
-        onClose={() => setSelectedTemplateId("")}
+        onClose={() => setInlineBuilderOpen(false)}
         footer={
           blockedByCredits ? (
             <p className="text-[11px] leading-relaxed text-amber-100">
