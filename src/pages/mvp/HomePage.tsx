@@ -698,7 +698,9 @@ export default function HomePage() {
           }}
         />
 
-        <div className="container relative py-7 text-center md:py-11">
+        {/* MOBILE / TABLET (<lg) — stacked hero: headline, copy, graph, tiles, CTA. */}
+        <div className="container relative py-7 text-center md:py-11 lg:hidden">
+
           <div className="mx-auto max-w-[1180px]">
             <h1
               className="mx-auto font-display font-bold uppercase text-white"
@@ -771,10 +773,94 @@ export default function HomePage() {
           </div>
         </div>
 
+        {/* DESKTOP (lg+) — restored 2-column hero: copy + CTA left, animated
+            workflow graph right. No mobile tile strip, no centered stack. */}
+        <div className="container relative hidden gap-10 py-16 lg:grid lg:grid-cols-[minmax(0,1fr)_minmax(0,0.9fr)] lg:items-center">
+          <div className="min-w-0">
+            <h1
+              className="font-display font-bold uppercase text-white"
+              style={{ fontSize: "clamp(40px, 3.6vw, 58px)", lineHeight: 0.96, letterSpacing: "-0.04em" }}
+            >
+              <span className="block whitespace-nowrap">One-click campaign</span>
+              <span className="block">Marketplace</span>
+            </h1>
+
+            <p className="mt-5 max-w-[560px] font-sans text-[19px] font-extrabold uppercase leading-[1.3] tracking-[0.06em] text-white">
+              <span className="block">
+                No prompts <span className="text-cyan-300">·</span> No guessing
+              </span>
+              <span className="mt-1 block text-cyan-100">Prebuilt expert workflows</span>
+            </p>
+
+            <div className="mt-8 flex flex-wrap items-center gap-3">
+              <Button
+                asChild
+                size="lg"
+                className="group relative h-[58px] overflow-hidden rounded-full border border-cyan-100/70 bg-gradient-to-b from-cyan-200 to-cyan-400 px-9 font-sans text-[18px] font-extrabold uppercase tracking-[0.06em] text-slate-950 shadow-[0_10px_30px_-12px_rgba(34,211,238,0.65)] transition-all duration-200 hover:-translate-y-[2px] hover:shadow-[0_16px_38px_-12px_rgba(34,211,238,0.8)] active:translate-y-[1px] active:scale-[0.985] motion-reduce:transition-none motion-reduce:hover:translate-y-0"
+              >
+                <Link to="/app/templates" onClick={() => track("hero_explore_campaigns_click")}>
+                  <span
+                    aria-hidden
+                    className="pointer-events-none absolute inset-y-0 -left-1/3 w-1/3 skew-x-[-18deg] bg-white/40 opacity-0 [animation:hero-cta-sheen_7s_ease-in-out_infinite] motion-reduce:animate-none"
+                  />
+                  <span className="relative">Explore campaigns</span>
+                  <ArrowRight className="relative h-[18px] w-[18px] transition-transform duration-200 group-hover:translate-x-[5px] motion-reduce:transition-none" />
+                </Link>
+              </Button>
+
+              {isCreator ? (
+                <Button
+                  asChild
+                  variant="ghost"
+                  size="sm"
+                  className="rounded-full px-4 text-[12px] text-slate-300 hover:text-white"
+                >
+                  <Link to="/app/creator">Creator Dashboard</Link>
+                </Button>
+              ) : null}
+
+              {(isCreator || isAdmin) && (
+                <Button
+                  asChild
+                  variant="ghost"
+                  size="sm"
+                  className="rounded-full px-4 text-[12px] text-slate-300 hover:text-white"
+                >
+                  <Link to="/app/lab/canvas">Create a Template</Link>
+                </Button>
+              )}
+            </div>
+          </div>
+
+          {/* Mechanism proof — the prebuilt workflow itself is the desktop visual */}
+          <div className="relative min-w-0">
+            <div className="mx-auto max-w-[520px]">
+              <HeroWorkflowAnimation />
+            </div>
+          </div>
+        </div>
+
       </section>
 
-      {/* 1.4 · NEW DROPS — media-first rail, hidden when empty */}
-      <NewDropsShelf entries={newToday} fill={newDropsFill} />
+
+
+      {/* 1.4 · NEW DROPS — <lg: media-first rail; lg+: previous desktop shelf. */}
+      <div className="lg:hidden">
+        <NewDropsShelf entries={newToday} fill={newDropsFill} />
+      </div>
+      <div className="hidden lg:block">
+        <Shelf
+          id="new-today"
+          label="New Drops"
+          heading="Just dropped"
+          description="The newest campaigns ready to run."
+          entries={newToday.length ? newToday : newDropsFill}
+          perfMap={perfMap}
+          runsMap={popularity}
+          badge={{ tone: "new", label: "New" }}
+        />
+      </div>
+
 
       {/* 1.6 · HOW IT WORKS — compact row, no giant cards */}
       <section className="container pb-8">
