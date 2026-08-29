@@ -740,8 +740,8 @@ export default function HomePage() {
       <Shelf
         id="trending-now"
         label="Trending now"
-        heading="What brands are using right now"
-        description="Ordered by real template runs over the last 90 days."
+        heading="Trending campaigns"
+        description="Most-run campaigns right now."
         entries={trendingRanked}
         perfMap={perfMap}
         runsMap={popularity}
