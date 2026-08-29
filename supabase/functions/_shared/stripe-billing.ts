@@ -697,6 +697,11 @@ export function createCheckoutHandler(mode: StripeBillingMode) {
           fbp: (typeof body.fbp === "string" ? body.fbp : "") || "",
           meta_client_ip: (req.headers.get("x-forwarded-for") || "").split(",")[0].trim(),
           meta_user_agent: req.headers.get("user-agent") || "",
+          utm_source: (typeof body.utm_source === "string" ? body.utm_source : "").slice(0, 200),
+          utm_medium: (typeof body.utm_medium === "string" ? body.utm_medium : "").slice(0, 200),
+          utm_campaign: (typeof body.utm_campaign === "string" ? body.utm_campaign : "").slice(0, 200),
+          utm_content: (typeof body.utm_content === "string" ? body.utm_content : "").slice(0, 200),
+          fbclid: (typeof body.fbclid === "string" ? body.fbclid : "").slice(0, 200),
         },
         subscription_data: {
           metadata: {
@@ -859,6 +864,11 @@ export function createCreditCheckoutHandler(mode: StripeBillingMode) {
             fbp: (typeof body.fbp === "string" ? body.fbp : "") || "",
             meta_client_ip: (req.headers.get("x-forwarded-for") || "").split(",")[0].trim(),
             meta_user_agent: req.headers.get("user-agent") || "",
+            utm_source: (typeof body.utm_source === "string" ? body.utm_source : "").slice(0, 200),
+            utm_medium: (typeof body.utm_medium === "string" ? body.utm_medium : "").slice(0, 200),
+            utm_campaign: (typeof body.utm_campaign === "string" ? body.utm_campaign : "").slice(0, 200),
+            utm_content: (typeof body.utm_content === "string" ? body.utm_content : "").slice(0, 200),
+            fbclid: (typeof body.fbclid === "string" ? body.fbclid : "").slice(0, 200),
           }
           : {
             checkout_type: "credit_pack",
@@ -871,6 +881,11 @@ export function createCreditCheckoutHandler(mode: StripeBillingMode) {
             fbp: (typeof body.fbp === "string" ? body.fbp : "") || "",
             meta_client_ip: (req.headers.get("x-forwarded-for") || "").split(",")[0].trim(),
             meta_user_agent: req.headers.get("user-agent") || "",
+            utm_source: (typeof body.utm_source === "string" ? body.utm_source : "").slice(0, 200),
+            utm_medium: (typeof body.utm_medium === "string" ? body.utm_medium : "").slice(0, 200),
+            utm_campaign: (typeof body.utm_campaign === "string" ? body.utm_campaign : "").slice(0, 200),
+            utm_content: (typeof body.utm_content === "string" ? body.utm_content : "").slice(0, 200),
+            fbclid: (typeof body.fbclid === "string" ? body.fbclid : "").slice(0, 200),
           },
         payment_intent_data: {
           metadata: purchaseType
