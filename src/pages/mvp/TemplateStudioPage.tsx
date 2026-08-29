@@ -2667,10 +2667,10 @@ export default function TemplateStudioPage() {
                 );
                   })}
                   {/* <lg: the builder expands directly beneath the selected
-                      card's ACTUAL visual row (column count is measured). */}
-                  {inlineBuilderNode && row.some((entry) => entry.id === selectedTemplateId)
-                    ? inlineBuilderNode
-                    : null}
+                      card's ACTUAL visual row (column count is measured).
+                      Only the first matching row renders it, so a catalog that
+                      lists a campaign twice still opens exactly one builder. */}
+                  {inlineBuilderNode && rowIndex === selectedRowIndex ? inlineBuilderNode : null}
                 </Fragment>
               ))}
             </div>
