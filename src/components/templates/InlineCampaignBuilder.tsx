@@ -103,8 +103,10 @@ const InlineCampaignBuilder = forwardRef<HTMLDivElement, InlineCampaignBuilderPr
 
         {/* Sticky generate bar — scoped to this open builder only. */}
         <div className="sticky bottom-0 z-20 border-t border-white/10 bg-slate-950/95 px-3 py-3 backdrop-blur-xl">
-          <div className="flex items-center justify-between gap-2">
-            <div className="min-w-0 shrink">
+          {/* Stacks on narrow phones so neither the readiness count nor the
+              action label is ever clipped. */}
+          <div className="flex flex-col gap-2 xs:flex-row xs:items-center xs:justify-between">
+            <div className="min-w-0 shrink-0">
               <p
                 className={cn(
                   "whitespace-nowrap font-display text-[10px] font-semibold uppercase tracking-[0.12em]",
@@ -122,7 +124,7 @@ const InlineCampaignBuilder = forwardRef<HTMLDivElement, InlineCampaignBuilderPr
               onClick={onGenerate}
               disabled={generateDisabled}
               className={cn(
-                "shrink-0 whitespace-nowrap rounded-full px-3.5 py-2.5 font-display text-[10px] font-semibold uppercase tracking-[0.12em] transition",
+                "w-full whitespace-nowrap rounded-full px-3.5 py-2.5 xs:w-auto font-display text-[10px] font-semibold uppercase tracking-[0.12em] transition",
 
                 generateDisabled
                   ? "border border-white/10 bg-white/[0.05] text-slate-500"
