@@ -564,11 +564,11 @@ export default function TemplateStudioPage() {
   const featuredIdsInOrder = useMemo<string[]>(() => {
     const shelves = (shelvesQuery.data ?? []) as Array<{
       slug?: string;
-      templates?: Array<{ id?: string | null }> | null;
+      templates?: Array<{ name?: string | null; template_id?: string | null }> | null;
     }>;
     const featured = shelves.find((shelf) => shelf?.slug === "featured");
     return (featured?.templates ?? [])
-      .map((template) => (template?.id ? String(template.id) : ""))
+      .map((template) => (template?.name ? String(template.name).toLowerCase() : ""))
       .filter(Boolean);
   }, [shelvesQuery.data]);
 
@@ -576,18 +576,21 @@ export default function TemplateStudioPage() {
     const active = (templatesQuery.data ?? EMPTY_TEMPLATES).filter((template) => template.is_active);
     if (!featuredIdsInOrder.length) return sortTemplatesForStudio(active);
 
-    const byId = new Map(active.map((template) => [String(template.id), template]));
+    const byName = new Map(active.map((template) => [String(template.name).toLowerCase(), template]));
     const featured: typeof active = [];
     const seen = new Set<string>();
-    for (const id of featuredIdsInOrder) {
-      const template = byId.get(id);
-      if (!template || seen.has(id)) continue;
-      seen.add(id);
+    for (const name of featuredIdsInOrder) {
+      const template = byName.get(name);
+      if (!template || seen.has(name)) continue;
+      seen.add(name);
       featured.push(template);
     }
-    const rest = sortTemplatesForStudio(active.filter((template) => !seen.has(String(template.id))));
+    const rest = sortTemplatesForStudio(
+      active.filter((template) => !seen.has(String(template.name).toLowerCase())),
+    );
     return [...featured, ...rest];
   }, [templatesQuery.data, featuredIdsInOrder]);
+
 
 
   const templateFitMap = useMemo<Record<string, TemplateFit>>(() => {
