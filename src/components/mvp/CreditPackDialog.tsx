@@ -48,8 +48,9 @@ export default function CreditPackDialog({ trigger, open, onOpenChange }: Credit
 
     setLoading(String(credits));
     try {
+      const match = getMetaMatchParams();
       const { data, error } = await supabase.functions.invoke("create-credit-checkout", {
-        body: { credits },
+        body: { credits, fbc: match.fbc, fbp: match.fbp },
       });
       if (error) throw error;
       if (!data?.url) throw new Error("Stripe checkout URL not returned.");
