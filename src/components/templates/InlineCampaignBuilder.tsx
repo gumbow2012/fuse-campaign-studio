@@ -77,7 +77,7 @@ const InlineCampaignBuilder = forwardRef<HTMLDivElement, InlineCampaignBuilderPr
             <p className="truncate font-display text-base font-bold tracking-[-0.02em] text-white">
               {templateName}
             </p>
-            <p className="mt-1 truncate text-[11px] uppercase tracking-[0.16em] text-slate-400">
+            <p className="mt-1 text-[10px] uppercase leading-4 tracking-[0.12em] text-slate-400">
               {metaLine}
             </p>
           </div>
@@ -91,7 +91,9 @@ const InlineCampaignBuilder = forwardRef<HTMLDivElement, InlineCampaignBuilderPr
           </button>
         </div>
 
-        <div className="px-4 pt-4" style={{ paddingBottom: INLINE_GENERATE_BAR_HEIGHT + 16 }}>
+        {/* The sticky bar below is a flow sibling, so only breathing room is
+            needed here — the last input is never hidden behind it. */}
+        <div className="px-4 pb-4 pt-4">
           <p className="font-display text-[11px] font-semibold uppercase tracking-[0.2em] text-white">
             Add your campaign assets
           </p>
@@ -100,25 +102,28 @@ const InlineCampaignBuilder = forwardRef<HTMLDivElement, InlineCampaignBuilderPr
         </div>
 
         {/* Sticky generate bar — scoped to this open builder only. */}
-        <div className="sticky bottom-0 z-20 border-t border-white/10 bg-slate-950/95 px-4 py-3 backdrop-blur-xl">
-          <div className="flex items-center justify-between gap-3">
-            <div className="min-w-0">
+        <div className="sticky bottom-0 z-20 border-t border-white/10 bg-slate-950/95 px-3 py-3 backdrop-blur-xl">
+          <div className="flex items-center justify-between gap-2">
+            <div className="min-w-0 shrink">
               <p
                 className={cn(
-                  "font-display text-[11px] font-semibold uppercase tracking-[0.18em]",
+                  "whitespace-nowrap font-display text-[10px] font-semibold uppercase tracking-[0.12em]",
                   readyCount >= totalCount ? "text-emerald-200" : "text-slate-400",
                 )}
               >
-                {readyCount} / {totalCount} ready
+                {readyCount}/{totalCount} ready
               </p>
-              <p className="mt-0.5 truncate text-[11px] text-slate-400">{creditsLabel}</p>
+              <p className="mt-0.5 truncate text-[10px] uppercase tracking-[0.1em] text-slate-400">
+                {creditsLabel}
+              </p>
             </div>
             <button
               type="button"
               onClick={onGenerate}
               disabled={generateDisabled}
               className={cn(
-                "shrink-0 rounded-full px-4 py-2.5 font-display text-[11px] font-semibold uppercase tracking-[0.14em] transition",
+                "shrink-0 whitespace-nowrap rounded-full px-3.5 py-2.5 font-display text-[10px] font-semibold uppercase tracking-[0.12em] transition",
+
                 generateDisabled
                   ? "border border-white/10 bg-white/[0.05] text-slate-500"
                   : "bg-cyan-300 text-slate-950 hover:bg-cyan-200",
