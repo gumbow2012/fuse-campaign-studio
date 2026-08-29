@@ -45,6 +45,10 @@ const SUBSCRIPTION_CREDIT_GRANT_EVENTS = new Set([
 
 const DEFAULT_ZERO_DOLLAR_PLAN_GRANT_ALLOWLIST = new Set(["starter"]);
 
+// Stripe coupon: "FIRSTTIME_26" — 20% off once, first-time Starter subscribers.
+const STARTER_WELCOME_COUPON_ID = "zD6itbsg";
+
+
 function allowedZeroDollarPlanGrants() {
   const raw = Deno.env.get("STRIPE_ZERO_DOLLAR_PLAN_GRANT_ALLOWLIST")?.trim();
   if (!raw) return DEFAULT_ZERO_DOLLAR_PLAN_GRANT_ALLOWLIST;
