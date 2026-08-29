@@ -16,6 +16,12 @@ import { planDifferentiators } from "@/lib/planFeatureModules";
 import { MEDIAN_CAMPAIGN_TOOLTIP, typicalCapacityLabel } from "@/lib/creditOutputs";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import type { STRIPE_TIERS } from "@/lib/stripe-config";
+import {
+  STARTER_WELCOME_BADGE,
+  isStarterWelcomeOfferEligible,
+  starterWelcomePrice,
+} from "@/lib/starterWelcomeOffer";
+
 
 export type BillingCycle = BillingPeriod;
 
