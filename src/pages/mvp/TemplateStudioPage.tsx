@@ -2743,7 +2743,7 @@ export default function TemplateStudioPage() {
                             track("template_view", { template_id: template.id });
                             setDetailTemplateId(template.id);
                           }}
-                          className="absolute bottom-1.5 right-1.5 flex h-6 w-6 items-center justify-center rounded-full border border-white/20 bg-black/60 text-white/85 backdrop-blur transition-colors hover:bg-black/85"
+                          className="absolute right-1.5 top-1.5 flex h-6 w-6 items-center justify-center rounded-full border border-white/20 bg-black/60 text-white/85 backdrop-blur transition-colors hover:bg-black/85 group-[.has-fav]:top-10"
                         >
                           <Info className="h-3.5 w-3.5" />
                         </button>
