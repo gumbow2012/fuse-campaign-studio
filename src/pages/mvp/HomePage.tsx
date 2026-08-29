@@ -32,6 +32,7 @@ import {
 } from "@/services/templatePerformance";
 import { PerformanceBlock, PerformanceDisclaimer } from "@/components/TemplatePerformance";
 import HeroCampaignTiles from "@/components/mvp/HeroCampaignTiles";
+import HeroWorkflowAnimation from "@/components/mvp/HeroWorkflowAnimation";
 import NewDropsShelf from "@/components/mvp/NewDropsShelf";
 
 import { track } from "@/lib/analytics/track";
@@ -688,15 +689,20 @@ export default function HomePage() {
               <span className="mt-1 block text-cyan-100">Prebuilt expert workflows</span>
             </p>
 
-            {/* Four moving campaign previews — real approved media, tap to open */}
+            {/* Mechanism proof — the prebuilt workflow itself is the hero visual */}
+            <div className="mx-auto mt-5 max-w-[760px] md:mt-7">
+              <HeroWorkflowAnimation />
+            </div>
+
+            {/* Small secondary proof strip — real campaign previews, labels below */}
             <HeroCampaignTiles
               entries={heroTiles}
               loading={templatesLoading}
-              className="mx-auto mt-6 max-w-[1120px]"
+              className="mx-auto mt-4 max-w-[640px]"
             />
 
 
-            <div className="mt-6 flex flex-col items-center gap-3 md:mt-7">
+            <div className="mt-4 flex flex-col items-center gap-3 md:mt-5">
               <Button
                 asChild
                 size="lg"
