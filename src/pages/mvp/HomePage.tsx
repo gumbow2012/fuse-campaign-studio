@@ -643,31 +643,31 @@ export default function HomePage() {
           <div className="min-w-0">
             <h1
               className="font-display font-bold uppercase text-white"
-              style={{ fontSize: "clamp(24px, 6.9vw, 60px)", lineHeight: 0.96, letterSpacing: "-0.05em" }}
+              style={{ fontSize: "clamp(34px, 9.3vw, 62px)", lineHeight: 0.94, letterSpacing: "-0.02em" }}
             >
-              <span className="block whitespace-nowrap">One-click campaign</span>
+              <span className="block sm:whitespace-nowrap">One-click campaign</span>
               <span className="block">marketplace</span>
             </h1>
-            <p className="mt-4 max-w-[560px] font-sans text-[17px] font-semibold leading-[1.35] text-white sm:text-[19px] md:text-[22px]">
+            <p className="mt-4 max-w-[560px] font-sans text-[18px] font-bold leading-[1.3] text-white sm:text-[20px] md:text-[23px]">
               Viral campaigns. Already built and ready to run.
             </p>
-            <p className="mt-3 max-w-[560px] font-sans text-[16px] leading-[1.5] text-slate-200 sm:text-[17px]">
+            <p className="mt-3 max-w-[560px] font-sans text-[16.5px] font-medium leading-[1.45] text-slate-100 sm:text-[18px] md:text-[19px]">
               Pick one. Upload your products. Hit run.
             </p>
 
-            <p className="mt-2 hidden max-w-[560px] font-sans text-[13px] leading-[1.5] text-slate-400 md:block sm:text-[14px]">
-              FUSE runs the prebuilt workflow and returns the finished images + video clips.
-            </p>
-
-            <div className="mt-5 flex flex-wrap items-center gap-3 md:mt-7">
+            <div className="mt-6 flex flex-wrap items-center gap-3 md:mt-8">
               <Button
                 asChild
                 size="lg"
-                className="h-[56px] rounded-full bg-cyan-300 px-7 font-sans text-[15px] font-semibold uppercase tracking-[0.08em] text-slate-950 hover:bg-cyan-200 sm:px-8 sm:text-[16px]"
+                className="group relative h-[58px] overflow-hidden rounded-full border border-cyan-100/70 bg-gradient-to-b from-cyan-200 to-cyan-400 px-8 font-sans text-[17px] font-extrabold uppercase tracking-[0.06em] text-slate-950 shadow-[0_10px_30px_-12px_rgba(34,211,238,0.65)] transition-all duration-200 hover:-translate-y-[2px] hover:shadow-[0_16px_38px_-12px_rgba(34,211,238,0.8)] active:translate-y-[1px] active:scale-[0.985] motion-reduce:transition-none motion-reduce:hover:translate-y-0 sm:px-9 sm:text-[18px]"
               >
                 <Link to="/app/templates" onClick={() => track("hero_explore_campaigns_click")}>
-                  Explore campaigns
-                  <ArrowRight className="h-4 w-4" />
+                  <span
+                    aria-hidden
+                    className="pointer-events-none absolute inset-y-0 -left-1/3 w-1/3 skew-x-[-18deg] bg-white/40 opacity-0 [animation:hero-cta-sheen_7s_ease-in-out_infinite] motion-reduce:animate-none"
+                  />
+                  <span className="relative">Explore campaigns</span>
+                  <ArrowRight className="relative h-[18px] w-[18px] transition-transform duration-200 group-hover:translate-x-[5px] motion-reduce:transition-none" />
                 </Link>
               </Button>
 
@@ -676,7 +676,7 @@ export default function HomePage() {
                   asChild
                   variant="ghost"
                   size="sm"
-                  className="rounded-full px-4 text-[12px] text-slate-400 hover:text-white"
+                  className="rounded-full px-4 text-[12px] text-slate-300 hover:text-white"
                 >
                   <Link to="/app/creator">Creator Dashboard</Link>
                 </Button>
@@ -687,7 +687,7 @@ export default function HomePage() {
                   asChild
                   variant="ghost"
                   size="sm"
-                  className="rounded-full px-4 text-[12px] text-slate-400 hover:text-white"
+                  className="rounded-full px-4 text-[12px] text-slate-300 hover:text-white"
                 >
                   <Link to="/app/lab/canvas">Create a Template</Link>
                 </Button>
@@ -700,7 +700,7 @@ export default function HomePage() {
           {/* Prebuilt workflow explainer — needs no template data, renders instantly */}
           <div className="relative min-w-0">
             <div className="mx-auto max-w-[420px]">
-              <p className="mb-3 font-sans text-[13px] font-bold uppercase leading-[1.35] tracking-[0.08em] text-white lg:text-[12.5px] lg:tracking-[0.03em]">
+              <p className="mb-3 font-sans text-[13.5px] font-bold uppercase leading-[1.35] tracking-[0.06em] text-white sm:text-[15px] lg:text-[16px] lg:tracking-[0.02em]">
                 No prompts <span className="text-cyan-300">·</span> No guessing
                 <span className="lg:hidden">
                   <br />
@@ -721,10 +721,10 @@ export default function HomePage() {
               </div>
 
               <div className="mt-3">
-                <p className="font-sans text-[13px] font-bold uppercase leading-[1.4] tracking-[0.1em] text-white sm:text-[14px]">
-                  The complex workflow is already built.
+                <p className="font-display text-[15px] font-bold uppercase leading-[1.25] tracking-[0.04em] text-white sm:text-[17px]">
+                  Every step is already engineered.
                 </p>
-                <p className="mt-1 font-sans text-[13px] font-bold uppercase leading-[1.4] tracking-[0.1em] text-cyan-300 sm:text-[14px]">
+                <p className="mt-1 font-display text-[15px] font-bold uppercase leading-[1.25] tracking-[0.04em] text-cyan-300 sm:text-[17px]">
                   You just add your product.
                 </p>
               </div>

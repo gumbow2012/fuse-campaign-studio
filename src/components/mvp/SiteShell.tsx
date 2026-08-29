@@ -140,16 +140,15 @@ export default function SiteShell({ children }: { children: ReactNode }) {
     <div className="min-h-screen text-foreground">
       <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_top_left,rgba(34,211,238,0.18),transparent_28%),radial-gradient(circle_at_80%_20%,rgba(255,255,255,0.08),transparent_18%)]" />
       <header className="sticky top-0 z-40 border-b border-white/10 bg-background/75 backdrop-blur-xl">
-        <div className="mx-auto flex w-full max-w-7xl items-center justify-between gap-2 px-3 py-3 sm:px-4 md:px-6 md:py-4 lg:items-start lg:px-8">
+        <div className="mx-auto flex w-full max-w-7xl items-center justify-between gap-2 px-3 py-3.5 sm:px-4 md:px-6 md:py-4 lg:px-8">
           <Link
             to="/"
             aria-label="FUSE home"
             className={cn("flex min-w-0 shrink items-center gap-2.5 rounded-xl md:gap-3", focusRing)}
           >
-            <img src={FUSE_ICON_SRC} alt="" className="h-8 w-8 shrink-0 rounded-xl object-contain sm:h-9 sm:w-9 md:h-10 md:w-10 lg:h-11 lg:w-11" />
-            <div className="min-w-0">
-              <img src={FUSE_WORDMARK_SRC} alt="FUSE" className="h-4 w-auto object-contain sm:h-5" />
-              
+            <img src={FUSE_ICON_SRC} alt="" className="h-9 w-9 shrink-0 rounded-xl object-contain sm:h-10 sm:w-10 md:h-11 md:w-11 lg:h-12 lg:w-12" />
+            <div className="flex min-w-0 items-center">
+              <img src={FUSE_WORDMARK_SRC} alt="FUSE" className="h-[18px] w-auto object-contain sm:h-6" />
             </div>
           </Link>
 
