@@ -19,6 +19,7 @@ import { rankTemplatesForBrand } from "@/lib/brandRelevance";
 import { cn } from "@/lib/utils";
 import {
   allocateHomeMedia,
+  CURATED_PREVIEW_GIFS,
   FALLBACK_GIFS,
   outputLabel,
   resolveMedia,
