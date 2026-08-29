@@ -184,5 +184,7 @@ export default function HeroCampaignTiles({
           </Link>
         );
       })}
+    </div>
   );
+
 }
