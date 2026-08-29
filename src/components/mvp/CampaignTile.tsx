@@ -161,44 +161,55 @@ export default function CampaignTile({
 
   return (
     <div ref={rootRef} className="group/tile min-w-0">
-      <button
-        type="button"
-        onClick={onSelect}
-        data-feed-card={templateId}
-        aria-label={`Open ${fullName}`}
-        aria-pressed={selected}
-        className={cn(
-          "relative block w-full overflow-hidden rounded-xl bg-black transition-[transform,box-shadow,filter] duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300 motion-reduce:transition-none",
-          "motion-safe:group-hover/tile:scale-[1.015] motion-safe:group-hover/tile:brightness-[1.06]",
-          selected
-            ? "ring-1 ring-cyan-300 shadow-[0_0_22px_-6px_rgba(34,211,238,0.65)]"
-            : "ring-1 ring-white/10 group-hover/tile:ring-cyan-300/50",
-        )}
-      >
-        {/* Stable aspect container — CLS-safe at every breakpoint. */}
-        <div className="relative aspect-[4/5] w-full">
-          <TileMedia
-            mediaKey={templateId}
-            url={previewUrl}
-            poster={posterUrl}
-            isVideo={isVideo}
-            alt={`${fullName} campaign preview`}
-            eager={eager}
-          />
+      <div className="relative">
+        <div
+          role="button"
+          tabIndex={0}
+          onClick={onSelect}
+          onKeyDown={(event) => {
+            if (event.key === "Enter" || event.key === " ") {
+              event.preventDefault();
+              onSelect();
+            }
+          }}
+          data-feed-card={templateId}
+          aria-label={`Open ${fullName}`}
+          aria-pressed={selected}
+          className={cn(
+            "relative block w-full cursor-pointer overflow-hidden rounded-xl bg-black transition-[transform,box-shadow,filter] duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300 motion-reduce:transition-none",
+            "motion-safe:group-hover/tile:scale-[1.015] motion-safe:group-hover/tile:brightness-[1.06]",
+            selected
+              ? "ring-1 ring-cyan-300 shadow-[0_0_22px_-6px_rgba(34,211,238,0.65)]"
+              : "ring-1 ring-white/10 group-hover/tile:ring-cyan-300/50",
+          )}
+        >
+          {/* Stable aspect container — CLS-safe at every breakpoint. */}
+          <div className="relative aspect-[4/5] w-full">
+            <TileMedia
+              mediaKey={templateId}
+              url={previewUrl}
+              poster={posterUrl}
+              isVideo={isVideo}
+              alt={`${fullName} campaign preview`}
+              eager={eager}
+            />
 
-          {statusPill ? (
-            <span className="pointer-events-none absolute left-1.5 top-1.5 rounded-full border border-cyan-300/40 bg-black/70 px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-[0.16em] text-cyan-100 backdrop-blur">
-              {statusPill === "new" ? "New" : "Trending"}
+            {statusPill ? (
+              <span className="pointer-events-none absolute left-1.5 top-1.5 rounded-full border border-cyan-300/40 bg-black/70 px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-[0.16em] text-cyan-100 backdrop-blur">
+                {statusPill === "new" ? "New" : "Trending"}
+              </span>
+            ) : null}
+
+            {/* Hover-only affordance — never a permanent button. */}
+            <span className="pointer-events-none absolute bottom-1.5 right-1.5 hidden items-center gap-1 rounded-full bg-cyan-300 px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.14em] text-slate-950 opacity-0 transition-opacity duration-150 group-hover/tile:opacity-100 lg:inline-flex">
+              Run
+              <ArrowRight className="h-2.5 w-2.5" aria-hidden />
             </span>
-          ) : null}
-
-          {/* Hover-only affordance — never a permanent button. */}
-          <span className="pointer-events-none absolute bottom-1.5 right-1.5 hidden items-center gap-1 rounded-full bg-cyan-300 px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.14em] text-slate-950 opacity-0 transition-opacity duration-150 group-hover/tile:opacity-100 lg:inline-flex">
-            Run
-            <ArrowRight className="h-2.5 w-2.5" aria-hidden />
-          </span>
+          </div>
         </div>
-      </button>
+        {overlay}
+      </div>
+
 
       <div className="mt-1.5 flex items-start gap-1">
         <div className="min-w-0 flex-1">
