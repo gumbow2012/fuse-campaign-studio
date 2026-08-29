@@ -1,4 +1,18 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { readStudioGalleryCache, writeStudioGalleryCache } from "@/lib/studioGalleryCache";
+import {
+  readPublicFailure,
+  type ProviderFailureDetail,
+  type PublicGenerationFailure,
+} from "@/lib/generationFailure";
+import {
+  galleryPerfMount,
+  galleryPerfInitialApi,
+  galleryPerfLoadMore,
+  galleryPerfMediaLoaded,
+  galleryPerfRender,
+  galleryPerfCardRender,
+} from "@/lib/galleryPerf";
 import {
   ArrowLeft,
   ArrowRight,
@@ -67,20 +81,28 @@ import {
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 
 import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
 import { uploadRunInputFile } from "@/services/runInputUpload";
 import { cn } from "@/lib/utils";
+import { useNearViewport } from "@/hooks/useNearViewport";
 import {
   FieldHelper,
   FusePanel,
   SectionTitle,
   SegmentedControl,
 } from "@/components/fuse/FuseUI";
+import {
+  CAMERA_MOVEMENT_PRESETS,
+  DEFAULT_CAMERA_MOVEMENT_ID,
+  getCameraMovementPreset,
+} from "@/lib/generationStudio/cameraMovementPresets";
 
 import {
   IMAGE_FLAT_USD as IMAGE_FALLBACK_USD,
   costPreview,
   creditsFromUsd,
 } from "@/lib/costEstimate";
+
 
 
 const MAX_REFERENCES = 15;
@@ -252,8 +274,13 @@ type Generation = {
   promptPreview?: string | null;
   outputUrl: string | null;
   previewUrl?: string | null;
+  posterUrl?: string | null;
+
   outputType: string | null;
-  error?: string | null;
+  /** Customer-safe failure contract — raw provider text is never sent. */
+  publicFailure?: PublicGenerationFailure | null;
+  /** Privileged (admin/dev) diagnostics only — absent for customers. */
+  providerFailure?: ProviderFailureDetail | null;
   estimatedCredits: number | null;
   estimatedCostUsd: number | null;
   providerModel: string | null;
@@ -329,7 +356,8 @@ function readShotPlan(payload: Record<string, unknown> | null | undefined): Shot
 /** Branded, human status wording for in-flight and finished work. */
 function statusLabel(status: Generation["status"], progress: number) {
   if (status === "complete") return "READY";
-  if (status === "failed") return "FAILED";
+  // Customer-facing wording — never an internal "FAILED" state.
+  if (status === "failed") return "NEEDS ATTENTION";
   if (status === "queued") return "ANALYZING REFERENCES";
   if (progress < 35) return "BUILDING SHOT PLAN";
   if (progress < 85) return "GENERATING";
@@ -338,6 +366,15 @@ function statusLabel(status: Generation["status"], progress: number) {
 
 
 
+
+/** Error carrying the edge function HTTP status (402 = out of credits). */
+class StudioRequestError extends Error {
+  status?: number;
+  constructor(message: string, status?: number) {
+    super(message);
+    this.status = status;
+  }
+}
 
 async function callStudio(body: Record<string, unknown>) {
   const { data, error } = await supabase.functions.invoke("generate-studio", { body });
@@ -358,7 +395,10 @@ async function callStudio(body: Record<string, unknown>) {
         message = "Generation timed out — please retry.";
       } else if (!parsed) message = `Generation request failed (${context.status}) — please retry.`;
     }
-    throw new Error(message || "Generation timed out — please retry.");
+    throw new StudioRequestError(
+      message || "Generation timed out — please retry.",
+      (error as { context?: Response }).context?.status,
+    );
   }
   if ((data as any)?.error) throw new Error(String((data as any).error));
   return data as any;
@@ -461,13 +501,17 @@ function GenerationCard({
   onExpand,
   onDelete,
   onToggleFavorite,
+  priority = false,
 }: {
   generation: Generation;
   onUseAsReference: (url: string) => void;
   onExpand: (generation: Generation) => void;
   onDelete: (generation: Generation) => void;
   onToggleFavorite: (generation: Generation) => void;
+  /** GS-PERF5: first-screen tiles load eagerly at high priority. */
+  priority?: boolean;
 }) {
+  galleryPerfCardRender(); // GS-PERF9 dev-only render counter
   const inFlight = generation.status === "queued" || generation.status === "running";
   const [progress, setProgress] = useState(generation.status === "running" ? 25 : 8);
 
@@ -480,12 +524,37 @@ function GenerationCard({
   const isImage = generation.outputType !== "video";
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const done = generation.status === "complete" && !!generation.outputUrl;
+  /* GS-PERF6: tiles load the small stored preview when it exists; the master
+     output_url stays the source for lightbox/download/reference/animate. */
+  const tileSrc = generation.previewUrl ?? generation.outputUrl;
+
+  /* GS-PERF5: media only mounts/downloads once the tile nears the viewport. */
+  const { ref: mediaHostRef, near } = useNearViewport<HTMLDivElement>(priority, "500px");
+  const [loaded, setLoaded] = useState(false);
+  /* GS-PERF9 dev-only: report successful media decode for first-paint metrics. */
+  const handleMediaLoaded = useCallback(() => {
+    setLoaded(true);
+    galleryPerfMediaLoaded();
+  }, []);
+  useEffect(() => {
+    setLoaded(false);
+  }, [tileSrc]);
+  /* GS-PERF7: shimmer skeleton stays until the media's first frame is ready
+     (image onLoad / video onLoadedData) so video tiles never show a black box. */
+  const showSkeleton = done && !loaded;
+
 
   return (
     <article className="group overflow-hidden rounded-2xl border border-white/10 bg-white/[0.03] backdrop-blur-xl transition-colors hover:border-cyan-200/30">
-      <div className="relative flex aspect-[3/4] items-center justify-center bg-black/50">
+      <div
+        ref={mediaHostRef}
+        className="relative flex aspect-[3/4] items-center justify-center bg-black/50"
+      >
         {done ? (
           <>
+            {showSkeleton ? (
+              <div className="pointer-events-none absolute inset-0 fuse-skeleton" aria-hidden="true" />
+            ) : null}
             <button
               type="button"
               onClick={() => onExpand(generation)}
@@ -493,19 +562,42 @@ function GenerationCard({
               className="block h-full w-full"
             >
               {isImage ? (
-                <img
-                  src={generation.outputUrl as string}
-                  alt={generation.prompt ?? generation.promptPreview ?? "Generated result"}
-                  className="h-full w-full object-cover"
-                />
+                near ? (
+                  <img
+                    src={tileSrc as string}
+
+
+                    alt={generation.prompt ?? generation.promptPreview ?? "Generated result"}
+                    loading={priority ? "eager" : "lazy"}
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                    {...({ fetchpriority: priority ? "high" : "low" } as any)}
+                    decoding="async"
+                    onLoad={handleMediaLoaded}
+                    onError={() => setLoaded(true)}
+                    className={cn(
+                      "h-full w-full object-cover transition-opacity duration-150",
+                      loaded ? "opacity-100" : "opacity-0",
+                    )}
+                  />
+                ) : null
               ) : (
+                /* GS-PERF7: poster frame without new infra. With a stored
+                   posterUrl we set it directly; otherwise preload="metadata"
+                   (only once near the viewport) plus a `#t=0.1` media fragment
+                   makes the browser fetch just enough to paint the first frame
+                   instead of a black rectangle. Offscreen cards keep
+                   preload="none" and no src. */
                 <video
                   ref={videoRef}
-                  src={generation.outputUrl as string}
+                  src={near ? `${generation.outputUrl as string}#t=0.1` : undefined}
+                  poster={generation.posterUrl ?? undefined}
                   muted
                   loop
                   playsInline
-                  preload="none"
+                  preload={near ? "metadata" : "none"}
+                  onLoadedData={handleMediaLoaded}
+                  onLoadedMetadata={() => setLoaded(true)}
+                  onError={() => setLoaded(true)}
                   onMouseEnter={() => {
                     void videoRef.current?.play()?.catch(() => {});
                   }}
@@ -515,10 +607,14 @@ function GenerationCard({
                     el.pause();
                     el.currentTime = 0;
                   }}
-                  className="h-full w-full bg-black/60 object-cover"
+                  className={cn(
+                    "h-full w-full bg-black/60 object-cover transition-opacity duration-200",
+                    loaded ? "opacity-100" : "opacity-0",
+                  )}
                 />
               )}
             </button>
+
             <div className="pointer-events-none absolute inset-x-0 top-0 flex justify-end gap-1.5 p-2 opacity-0 transition-opacity group-hover:pointer-events-auto group-hover:opacity-100 focus-within:pointer-events-auto focus-within:opacity-100">
               {isImage ? (
                 <button
@@ -569,9 +665,17 @@ function GenerationCard({
           </>
         ) : generation.status === "failed" ? (
           <>
-            <p className="max-h-full overflow-y-auto px-5 py-4 text-center text-xs text-red-300">
-              {generation.error ?? "Generation failed"}
-            </p>
+            <div className="flex max-h-full flex-col items-center justify-center gap-2 px-6 py-4 text-center">
+              <span className="flex h-7 w-7 items-center justify-center rounded-full border border-rose-300/30 bg-rose-400/10 text-[13px] font-semibold text-rose-200">
+                !
+              </span>
+              <p className="text-xs font-medium text-rose-100/90">
+                {readPublicFailure(generation.publicFailure).title}
+              </p>
+              <p className="text-[11px] leading-relaxed text-rose-100/60">
+                {readPublicFailure(generation.publicFailure).message}
+              </p>
+            </div>
             <button
               type="button"
               aria-label="Delete"
@@ -607,6 +711,12 @@ function GenerationCard({
   );
 
 }
+
+/**
+ * GS-PERF4: memoized so a realtime/reconcile update to one generation only
+ * re-renders its own card — unchanged rows keep the same object reference.
+ */
+const MemoizedGenerationCard = memo(GenerationCard);
 
 /**
  * One creative reference card in the stack. Drag handle uses dnd-kit; the arrow
@@ -751,6 +861,7 @@ function ReferenceCard({
 }
 
 export default function GenerationStudio() {
+  galleryPerfRender(); // GS-PERF9 dev-only render counter
 
   const [modelKey, setModelKey] = useState<StudioModelKey>("nano-banana-pro");
   const [modelOpen, setModelOpen] = useState(false);
@@ -767,6 +878,9 @@ export default function GenerationStudio() {
   const [quality, setQuality] = useState("2K");
   const [duration, setDuration] = useState(5);
   const [generateAudio, setGenerateAudio] = useState(true);
+  /** VIDEO only — optional camera movement instruction appended to the prompt. */
+  const [cameraMovementId, setCameraMovementId] = useState<string>(DEFAULT_CAMERA_MOVEMENT_ID);
+
   const [generations, setGenerations] = useState<Generation[]>([]);
   const [library, setLibrary] = useState<string[]>(() => readReferenceLibrary());
   const [selected, setSelected] = useState<string[]>([]);
@@ -787,6 +901,11 @@ export default function GenerationStudio() {
     [modelKey],
   );
   const isVideo = model.kind === "video";
+
+  /** Selected movement fragment (video only, empty for "None"). */
+  const cameraMovement = isVideo ? getCameraMovementPreset(cameraMovementId) : undefined;
+  const movementFragment = cameraMovement?.promptFragment?.trim() ?? "";
+
 
   /** Live dollar + credit estimate; updates with model, duration and quality. */
   const estimatedCostUsd = useMemo(() => {
@@ -823,52 +942,244 @@ export default function GenerationStudio() {
     });
   }, []);
 
-  const [galleryLimit, setGalleryLimit] = useState(24);
+  /**
+   * GS-PERF2: keyset cursor pagination. Page 1 (no cursor) MERGES into the
+   * loaded list in place — the 5s poll refreshes statuses without collapsing
+   * loaded pages. Load More appends the next page strictly after nextCursor.
+   */
+  const PAGE_SIZE = 24;
+  type ListCursor = { createdAt: string; id: string };
+  const nextCursorRef = useRef<ListCursor | null>(null);
+  /** GS-PERF8: page-1 cursor, kept current by every loadQueue — used for the SWR cache. */
+  const page1CursorRef = useRef<ListCursor | null>(null);
+  /** GS-PERF9 dev-only: only the first page-1 fetch gets timed. */
+  const initialApiTimedRef = useRef(false);
+  const pagedRef = useRef(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(false);
 
-  const loadQueue = useCallback(async (silent = true, limitOverride?: number) => {
-    const limit = limitOverride ?? galleryLimit;
+  const loadQueue = useCallback(async (silent = true) => {
+    // GS-PERF9 dev-only: time the FIRST page-1 fetch + payload size.
+    const timeInitial = !initialApiTimedRef.current;
+    if (timeInitial) initialApiTimedRef.current = true;
+    const t0 = timeInitial ? performance.now() : 0;
     try {
-      const data = await callStudio({ action: "queue", limit });
+      const data = await callStudio({ action: "queue", limit: PAGE_SIZE });
+      if (timeInitial) galleryPerfInitialApi(performance.now() - t0, data);
       const rows = (data?.generations ?? []) as Generation[];
-      setGenerations(rows);
-      setHasMore(rows.length >= limit);
+      const cursor = (data?.nextCursor as ListCursor | null) ?? null;
+      page1CursorRef.current = cursor;
+      setGenerations((prev) => {
+        if (!prev.length) return rows;
+        // In-place refresh: page-1 rows update by id and lead the list
+        // (newest first); already-paged older rows keep their positions.
+        const fresh = new Set(rows.map((row) => row.id));
+        return [...rows, ...prev.filter((entry) => !fresh.has(entry.id))];
+      });
+      // Only adopt page 1's cursor before the user has paged deeper —
+      // afterwards the cursor belongs to the oldest loaded row and stays valid.
+      if (!pagedRef.current) {
+        nextCursorRef.current = cursor;
+        setHasMore(Boolean(cursor));
+      }
     } catch (error) {
       if (!silent) toast.error(error instanceof Error ? error.message : "Could not load generations");
     }
-  }, [galleryLimit]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
+    galleryPerfMount(); // GS-PERF9 dev-only: reset session + start resource observer
     void loadQueue(false);
   }, [loadQueue]);
 
   const loadMore = useCallback(async () => {
-    const next = galleryLimit + 24;
+    const cursor = nextCursorRef.current;
+    if (!cursor) return;
+    pagedRef.current = true;
     setLoadingMore(true);
-    setGalleryLimit(next);
     try {
-      await loadQueue(false, next);
+      const t0 = performance.now(); // GS-PERF9 dev-only
+      const data = await callStudio({ action: "queue", limit: PAGE_SIZE, cursor });
+      galleryPerfLoadMore(performance.now() - t0);
+      const rows = (data?.generations ?? []) as Generation[];
+      setGenerations((prev) => {
+        const seen = new Set(prev.map((entry) => entry.id));
+        return [...prev, ...rows.filter((row) => !seen.has(row.id))];
+      });
+      nextCursorRef.current = (data?.nextCursor as ListCursor | null) ?? null;
+      setHasMore(Boolean(nextCursorRef.current));
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not load more");
     } finally {
       setLoadingMore(false);
     }
-  }, [galleryLimit, loadQueue]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const hasInFlight = generations.some((entry) => entry.status === "queued" || entry.status === "running");
-  useEffect(() => {
-    if (!hasInFlight) return;
-    const timer = setInterval(() => void loadQueue(), 5000);
-    return () => clearInterval(timer);
-  }, [hasInFlight, loadQueue]);
 
   /**
-   * Missed-webhook safety net (GS-PERF1): the gallery list is a pure DB read,
-   * so rows in flight > 2 minutes are reconciled explicitly, at most every 30s.
+   * GS-PERF3: Realtime is the primary completion path — one changed row updates
+   * one card. Replaces the old 5s full-gallery poll. Heavy fields stay out of
+   * gallery state (the lightbox still fetches them via action:"detail").
+   */
+  const { user, hasAppAccess } = useAuth();
+  /** Admin/dev — the only viewers of raw provider diagnostics. */
+  const isPrivilegedUser = hasAppAccess;
+
+  /**
+   * GS-PERF8: stale-while-revalidate first-page cache.
+   * Hydrate once from the cache (render stale rows instantly), then
+   * loadQueue's background refresh merges fresh page-1 rows in place.
+   */
+  const hydratedCacheRef = useRef(false);
+  useEffect(() => {
+    const userId = user?.id;
+    if (!userId || hydratedCacheRef.current) return;
+    hydratedCacheRef.current = true;
+    const cached = readStudioGalleryCache<Generation>(userId);
+    if (!cached || !cached.rows.length) return;
+    setGenerations((prev) => (prev.length ? prev : cached.rows));
+    if (!pagedRef.current) {
+      nextCursorRef.current = (cached.cursor as ListCursor | null) ?? null;
+      setHasMore(Boolean(cached.cursor));
+    }
+  }, [user?.id]);
+
+  /**
+   * GS-PERF8: keep the cache fresh — the list is newest-first after the
+   * GS-PERF2 in-place merge, so the first PAGE_SIZE rows ARE page 1.
+   * Realtime/reconcile mutations flow through generations, so the cache
+   * never goes stale-wrong. Only page 1 is cached (uses page1CursorRef,
+   * never the deeper pagination cursor).
+   */
+  useEffect(() => {
+    const userId = user?.id;
+    if (!userId || !generations.length) return;
+    writeStudioGalleryCache(userId, generations.slice(0, PAGE_SIZE), page1CursorRef.current);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [generations, user?.id]);
+
+  useEffect(() => {
+    const userId = user?.id;
+    if (!userId) return;
+
+    let channel: ReturnType<typeof supabase.channel> | null = null;
+    try {
+      channel = supabase
+        .channel(`studio_generations:${userId}`)
+        .on(
+          "postgres_changes",
+          {
+            event: "INSERT",
+            schema: "public",
+            table: "studio_generations",
+            filter: `user_id=eq.${userId}`,
+          },
+          (payload) => {
+            const row = payload.new as Record<string, unknown> | null;
+            if (!row?.id) return;
+            const rowId = String(row.id);
+            // Skip rows the optimistic submit already placed in state.
+            setGenerations((prev) => {
+              if (prev.some((entry) => entry.id === rowId)) return prev;
+              const inserted: Generation = {
+                id: rowId,
+                status: (row.status as Generation["status"]) ?? "queued",
+                outputUrl: (row.output_url as string | null) ?? null,
+                previewUrl: (row.preview_url as string | null) ?? null,
+                posterUrl: (row.poster_url as string | null) ?? null,
+
+                outputType: (row.output_type as string | null) ?? null,
+                providerModel: (row.provider_model as string | null) ?? null,
+                estimatedCredits: (row.estimated_credits as number | null) ?? null,
+                estimatedCostUsd: (row.estimated_cost_usd as number | null) ?? null,
+                favorited: typeof row.favorited === "boolean" ? row.favorited : false,
+                createdAt: (row.created_at as string | null) ?? null,
+                completedAt: (row.completed_at as string | null) ?? null,
+                promptPreview:
+                  typeof row.prompt === "string"
+                    ? row.prompt.slice(0, 160)
+                    : null,
+              } as Generation;
+              return [inserted, ...prev];
+            });
+          },
+        )
+        .on(
+          "postgres_changes",
+          {
+            event: "UPDATE",
+            schema: "public",
+            table: "studio_generations",
+            filter: `user_id=eq.${userId}`,
+          },
+          (payload) => {
+            const row = payload.new as Record<string, unknown> | null;
+            if (!row?.id) return;
+            const rowId = String(row.id);
+            setGenerations((prev) => {
+              if (!prev.some((entry) => entry.id === rowId)) return prev;
+              return prev.map((entry) =>
+                entry.id === rowId
+                  ? {
+                      ...entry,
+                      status: (row.status as Generation["status"]) ?? entry.status,
+                      outputUrl: (row.output_url as string | null) ?? entry.outputUrl,
+                      previewUrl: (row.preview_url as string | null) ?? entry.previewUrl ?? null,
+                      posterUrl: (row.poster_url as string | null) ?? entry.posterUrl ?? null,
+
+                      outputType: (row.output_type as string | null) ?? entry.outputType,
+                      providerModel: (row.provider_model as string | null) ?? entry.providerModel,
+                      estimatedCredits:
+                        (row.estimated_credits as number | null) ?? entry.estimatedCredits,
+                      estimatedCostUsd:
+                        (row.estimated_cost_usd as number | null) ?? entry.estimatedCostUsd,
+                      favorited:
+                        typeof row.favorited === "boolean" ? row.favorited : entry.favorited,
+                      completedAt: (row.completed_at as string | null) ?? entry.completedAt,
+                    }
+                  : entry,
+              );
+            });
+          },
+        )
+        .subscribe();
+    } catch {
+      // Degrade gracefully — the reconcile fallback below still resolves jobs.
+      channel = null;
+    }
+
+    return () => {
+      if (channel) {
+        try {
+          void supabase.removeChannel(channel);
+        } catch {
+          // ignore teardown errors
+        }
+      }
+    };
+  }, [user?.id]);
+
+  /**
+   * Missed-webhook safety net (GS-PERF1): rows in flight > 2 minutes are
+   * reconciled explicitly, at most every 30s. Paused while the tab is hidden.
    */
   const lastReconcileRef = useRef(0);
+  const [tabVisible, setTabVisible] = useState(() =>
+    typeof document === "undefined" ? true : !document.hidden,
+  );
   useEffect(() => {
-    if (!hasInFlight) return;
+    const onVisibility = () => setTabVisible(!document.hidden);
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => document.removeEventListener("visibilitychange", onVisibility);
+  }, []);
+
+  useEffect(() => {
+    if (!hasInFlight || !tabVisible) return;
     const timer = setInterval(() => {
+      if (document.hidden) return;
       const now = Date.now();
       if (now - lastReconcileRef.current < 30_000) return;
       const staleIds = generations
@@ -896,7 +1207,8 @@ export default function GenerationStudio() {
         .catch(() => null);
     }, 5000);
     return () => clearInterval(timer);
-  }, [hasInFlight, generations]);
+  }, [hasInFlight, tabVisible, generations]);
+
 
   const addReference = useCallback((url: string) => {
     setReferences((prev) => {
@@ -961,6 +1273,17 @@ export default function GenerationStudio() {
       toast.error(error instanceof Error ? error.message : "Could not update the favorite");
     }
   }, []);
+
+  /**
+   * GS-PERF4: stable card handlers — identities never change across renders,
+   * so MemoizedGenerationCard's shallow prop comparison holds.
+   */
+  const handleCardExpand = useCallback((entry: Generation) => setLightboxId(entry.id), []);
+  const handleCardDelete = useCallback((entry: Generation) => setConfirmSingle(entry), []);
+  const handleCardToggleFavorite = useCallback(
+    (entry: Generation) => void toggleFavorite(entry),
+    [toggleFavorite],
+  );
 
   /** Animate: add the image as a reference and switch the composer to Kling 3.0. */
   const animateImage = useCallback(
@@ -1077,11 +1400,13 @@ export default function GenerationStudio() {
 
   /**
    * Failed tiles are hidden from the gallery, so surface the reason once —
-   * compact headline, provider detail tucked behind an expander.
+   * polished customer copy only; raw provider detail is privileged-only.
    */
-  const [recentFailure, setRecentFailure] = useState<{ id: string; error: string | null } | null>(
-    null,
-  );
+  const [recentFailure, setRecentFailure] = useState<{
+    id: string;
+    failure: PublicGenerationFailure;
+    providerDetail: string | null;
+  } | null>(null);
   const seenStatusRef = useRef<Map<string, string>>(new Map());
 
   useEffect(() => {
@@ -1094,19 +1419,23 @@ export default function GenerationStudio() {
     }
     if (!latest) return;
     const failedId = latest.id;
-    // List rows carry no error_log (P13) — pull the reason via `detail` once.
-    if (latest.error) {
-      setRecentFailure({ id: failedId, error: latest.error });
+    const applyFailure = (generation: Generation | null | undefined) => {
+      setRecentFailure({
+        id: failedId,
+        failure: readPublicFailure(generation?.publicFailure),
+        providerDetail: generation?.providerFailure?.rawError ?? null,
+      });
+    };
+    // List rows carry no failure payload (P13) — pull it via `detail` once.
+    if (latest.publicFailure) {
+      applyFailure(latest);
     } else {
       void callStudio({ action: "detail", generationId: failedId })
-        .then((data) =>
-          setRecentFailure({ id: failedId, error: (data?.generation?.error as string) ?? null }),
-        )
-        .catch(() => setRecentFailure({ id: failedId, error: null }));
+        .then((data) => applyFailure(data?.generation as Generation | undefined))
+        .catch(() => applyFailure(null));
     }
-    toast.error("Generation failed", {
-      description: "See “Technical details” above the gallery for the provider reason.",
-    });
+    const failureCopy = readPublicFailure(latest.publicFailure);
+    toast.error(failureCopy.title, { description: failureCopy.message });
   }, [generations]);
 
   useEffect(() => {
@@ -1148,6 +1477,45 @@ export default function GenerationStudio() {
     [references.length, rememberReferences],
   );
 
+  /**
+   * Kling end-frame models take TWO ordered anchors: references[0] = first frame
+   * (startImageUrl) and references[1] = last frame (endImageUrl). The generation
+   * payload is unchanged — this only guarantees that ordering from the UI.
+   */
+  const supportsEndFrame = isVideo && Boolean(model.supportsEndFrame);
+  const firstFrame = references[0] ?? null;
+  const lastFrame = references[1] ?? null;
+
+  const setFrameSlot = useCallback(
+    async (slot: 0 | 1, file: File) => {
+      if (!file.type.startsWith("image/")) return;
+      setUploading(true);
+      try {
+        const url = await uploadRunInputFile(file);
+        setReferences((prev) => {
+          const next = [...prev];
+          if (slot === 1 && next.length === 0) {
+            next.push({ url, label: "Last frame" });
+          } else {
+            next[slot] = { url, label: slot === 0 ? "First frame" : "Last frame" };
+          }
+          return next.filter(Boolean).slice(0, MAX_REFERENCES);
+        });
+        rememberReferences([url]);
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : "Could not upload the image");
+      } finally {
+        setUploading(false);
+      }
+    },
+    [rememberReferences],
+  );
+
+  const clearFrameSlot = useCallback((slot: 0 | 1) => {
+    setReferences((prev) => prev.filter((_, index) => index !== slot));
+  }, []);
+
+
   /** Keyboard/accessibility fallback reorder — mutates the real references array. */
   const moveReference = (index: number, delta: number) => {
     setReferences((prev) => {
@@ -1179,11 +1547,13 @@ export default function GenerationStudio() {
 
 
   const handleGenerate = () => {
-    const text = prompt.trim();
-    if (!text) {
+    const base = prompt.trim();
+    if (!base) {
       toast.error("Describe the scene you imagine first");
       return;
     }
+    // Video only: append the optional camera movement instruction. Nothing else changes.
+    const text = movementFragment ? `${base}\n\n${movementFragment}` : base;
 
     const urls = references.map((entry) => entry.url);
     const payload: Record<string, unknown> = {
@@ -1191,6 +1561,7 @@ export default function GenerationStudio() {
       kind: model.kind,
       model: model.key,
       prompt: text,
+
       // Only send the secondary param the selected model truly accepts.
       ...(model.resolutions.length && quality
         ? { [model.paramField ?? "resolution"]: quality }
@@ -1215,6 +1586,17 @@ export default function GenerationStudio() {
           setGenerations((prev) => [generation, ...prev.filter((e) => e.id !== generation.id)]);
         }
       } catch (error) {
+        const status = error instanceof StudioRequestError ? error.status : undefined;
+        if (status === 402) {
+          toast.error("Not enough credits", {
+            description: "Top up your credits to run this generation.",
+            action: {
+              label: "Buy credits",
+              onClick: () => window.location.assign("/membership"),
+            },
+          });
+          return;
+        }
         toast.error(error instanceof Error ? error.message : "Could not start the generation");
       }
     })();
@@ -1518,8 +1900,76 @@ export default function GenerationStudio() {
               </Popover>
             </FusePanel>
 
+            {/* Frame anchors — models that support a tail/end image (Kling 3.0) */}
+            {supportsEndFrame ? (
+              <FusePanel>
+                <SectionTitle hint={lastFrame ? "start + end" : "start only"}>
+                  FRAME ANCHORS
+                </SectionTitle>
+                <div className="grid grid-cols-2 gap-3">
+                  {([0, 1] as const).map((slot) => {
+                    const entry = slot === 0 ? firstFrame : lastFrame;
+                    const disabled = slot === 1 && !firstFrame;
+                    return (
+                      <div key={slot} className="space-y-2">
+                        <p className="font-display text-[12px] font-semibold tracking-[0.08em] text-foreground/80">
+                          {slot === 0 ? "FIRST FRAME" : "LAST FRAME"}
+                          <span className="ml-1.5 text-[11px] font-normal tracking-normal text-muted-foreground">
+                            {slot === 0 ? "required" : "optional"}
+                          </span>
+                        </p>
+                        <label
+                          className={cn(
+                            "relative flex aspect-square w-full cursor-pointer items-center justify-center overflow-hidden rounded-xl border border-dashed border-white/20 bg-white/[0.02] transition-colors hover:border-[hsl(var(--electric-blue)/0.5)]",
+                            disabled && "pointer-events-none opacity-50",
+                          )}
+                        >
+                          {entry ? (
+                            <img
+                              src={entry.url}
+                              alt={slot === 0 ? "First frame reference" : "Last frame reference"}
+                              className="h-full w-full object-cover"
+                            />
+                          ) : uploading ? (
+                            <Loader2 size={16} className="animate-spin text-muted-foreground" />
+                          ) : (
+                            <Plus size={16} className="text-muted-foreground" />
+                          )}
+                          <input
+                            type="file"
+                            accept="image/*"
+                            className="hidden"
+                            disabled={disabled}
+                            onChange={(event) => {
+                              const file = event.target.files?.[0];
+                              event.target.value = "";
+                              if (file) void setFrameSlot(slot, file);
+                            }}
+                          />
+                        </label>
+                        {entry ? (
+                          <button
+                            type="button"
+                            onClick={() => clearFrameSlot(slot)}
+                            className="text-[12px] text-muted-foreground transition-colors hover:text-foreground"
+                          >
+                            Remove
+                          </button>
+                        ) : null}
+                      </div>
+                    );
+                  })}
+                </div>
+                <FieldHelper>
+                  Last frame is optional — leave it empty for a single-image animation.
+                </FieldHelper>
+              </FusePanel>
+            ) : null}
+
             {/* Reference stack */}
+            {supportsEndFrame ? null : (
             <FusePanel
+
               onDragOver={(event) => {
                 event.preventDefault();
                 setDragActive(true);
@@ -1618,6 +2068,8 @@ export default function GenerationStudio() {
                 </FieldHelper>
               )}
             </FusePanel>
+            )}
+
 
             {/* Creative direction */}
             <FusePanel>
@@ -1796,6 +2248,72 @@ export default function GenerationStudio() {
                   <FieldHelper>Clip length in seconds.</FieldHelper>
                 </div>
               ) : null}
+
+              {/* VIDEO only — optional camera movement instruction.
+                  Placeholder chips for now: per-preset preview clips are a
+                  separate (paid) generation batch to be added later. */}
+              {isVideo ? (
+                <div>
+                  <SectionTitle hint={cameraMovement && movementFragment ? cameraMovement.name.toUpperCase() : "OPTIONAL"}>
+                    CAMERA MOVEMENT
+                  </SectionTitle>
+                  <div className="flex flex-wrap gap-2">
+                    {CAMERA_MOVEMENT_PRESETS.map((preset) => {
+                      const active = preset.id === cameraMovementId;
+                      return (
+                        <button
+                          key={preset.id}
+                          type="button"
+                          title={preset.description}
+                          aria-pressed={active}
+                          onClick={() => setCameraMovementId(preset.id)}
+                          className={cn(
+                            "flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 font-display text-[12px] font-semibold tracking-[0.04em] transition-colors",
+                            active
+                              ? "border-[hsl(var(--electric-blue)/0.55)] bg-[hsl(var(--electric-blue)/0.15)] text-[hsl(var(--electric-cyan))]"
+                              : "border-white/12 bg-black/30 text-foreground/80 hover:bg-white/[0.06]",
+                          )}
+                        >
+                          {/* previewUrl hook: real clips drop in here later without a redesign. */}
+                          {preset.previewUrl ? (
+                            <video
+                              src={preset.previewUrl}
+                              muted
+                              loop
+                              playsInline
+                              preload="none"
+                              className="h-6 w-9 rounded object-cover"
+                            />
+                          ) : (
+                            <span className="grid h-6 w-9 place-items-center rounded bg-white/[0.06]">
+                              <Film size={12} className="opacity-70" />
+                            </span>
+                          )}
+                          {preset.name.toUpperCase()}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {movementFragment ? (
+                    <div className="mt-3 rounded-lg border border-white/10 bg-black/30 p-3">
+                      <p className="font-display text-[11px] font-semibold tracking-[0.08em] text-muted-foreground">
+                        APPENDED TO YOUR PROMPT
+                      </p>
+                      <p className="mt-1.5 text-[13px] leading-relaxed text-foreground/85">{movementFragment}</p>
+                      <button
+                        type="button"
+                        onClick={() => setCameraMovementId(DEFAULT_CAMERA_MOVEMENT_ID)}
+                        className="mt-2 font-display text-[12px] font-semibold tracking-[0.06em] text-[hsl(var(--electric-cyan))] hover:underline"
+                      >
+                        REMOVE MOVEMENT
+                      </button>
+                    </div>
+                  ) : (
+                    <FieldHelper>Optional — adds one camera instruction to your prompt.</FieldHelper>
+                  )}
+                </div>
+              ) : null}
+
             </FusePanel>
 
             {/* Generate */}
@@ -1903,24 +2421,36 @@ export default function GenerationStudio() {
 
               <TabsContent value="gallery" className="mt-4">
                 {recentFailure ? (
-                  <div className="mb-4 rounded-xl border border-red-400/30 bg-red-500/10 px-4 py-3">
+                  <div className="mb-4 rounded-xl border border-rose-300/25 bg-rose-400/[0.07] px-4 py-3">
                     <div className="flex items-center justify-between gap-3">
-                      <p className="text-xs font-medium text-red-200">Generation failed</p>
+                      <div className="flex items-center gap-2.5">
+                        <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-rose-300/30 bg-rose-400/10 text-[11px] font-semibold text-rose-200">
+                          !
+                        </span>
+                        <div>
+                          <p className="text-xs font-medium text-rose-100/90">
+                            {recentFailure.failure.title}
+                          </p>
+                          <p className="mt-0.5 text-[11px] text-rose-100/60">
+                            {recentFailure.failure.message}
+                          </p>
+                        </div>
+                      </div>
                       <button
                         type="button"
                         onClick={() => setRecentFailure(null)}
-                        className="text-[11px] text-red-200/70 hover:text-red-100"
+                        className="shrink-0 text-[11px] text-rose-100/60 hover:text-rose-50"
                       >
                         Dismiss
                       </button>
                     </div>
-                    {recentFailure.error ? (
+                    {isPrivilegedUser && recentFailure.providerDetail ? (
                       <details className="mt-2">
-                        <summary className="cursor-pointer text-[11px] text-red-200/70 hover:text-red-100">
-                          Technical details
+                        <summary className="cursor-pointer text-[11px] text-rose-100/60 hover:text-rose-50">
+                          View provider error (admin)
                         </summary>
-                        <pre className="mt-2 max-h-40 overflow-auto whitespace-pre-wrap break-words rounded-lg bg-black/40 p-3 text-[10px] leading-relaxed text-red-100/80">
-                          {recentFailure.error}
+                        <pre className="mt-2 max-h-40 overflow-auto whitespace-pre-wrap break-words rounded-lg bg-black/40 p-3 text-[10px] leading-relaxed text-rose-100/80">
+                          {recentFailure.providerDetail}
                         </pre>
                       </details>
                     ) : null}
@@ -1929,14 +2459,15 @@ export default function GenerationStudio() {
                 {visibleGenerations.length ? (
                   <>
                     <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-4">
-                      {visibleGenerations.map((generation) => (
-                        <GenerationCard
+                      {visibleGenerations.map((generation, index) => (
+                        <MemoizedGenerationCard
                           key={generation.id}
                           generation={generation}
+                          priority={index < 8}
                           onUseAsReference={useAsReference}
-                          onExpand={(entry) => setLightboxId(entry.id)}
-                          onDelete={(entry) => setConfirmSingle(entry)}
-                          onToggleFavorite={(entry) => void toggleFavorite(entry)}
+                          onExpand={handleCardExpand}
+                          onDelete={handleCardDelete}
+                          onToggleFavorite={handleCardToggleFavorite}
                         />
                       ))}
                     </div>

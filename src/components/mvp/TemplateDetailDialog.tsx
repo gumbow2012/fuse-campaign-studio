@@ -1,8 +1,17 @@
 import { useRef } from "react";
 import { ArrowRight, Film, Image as ImageIcon, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Link } from "react-router-dom";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
+import CreatorVerificationBadge from "@/components/CreatorVerificationBadge";
 import { useQuery } from "@tanstack/react-query";
+import { useBrand } from "@/contexts/BrandContext";
+import { useBrandFitAssets } from "@/hooks/useBrandFitAssets";
+import { deriveTemplateFit } from "@/lib/brandTemplateFit";
+import TemplateFitBadge from "@/components/brand/TemplateFitBadge";
+import TemplateRequirementNudge from "@/components/brand/TemplateRequirementNudge";
+import FavoriteTemplateButton from "@/components/templates/FavoriteTemplateButton";
+import { useTemplateFavorites } from "@/hooks/useTemplateFavorites";
 import { cn } from "@/lib/utils";
 import type { ApiTemplate } from "@/services/fuseApi";
 import { PerformanceDetailSection } from "@/components/TemplatePerformance";
@@ -26,7 +35,9 @@ function isVideoAsset(template: Pick<ApiTemplate, "preview_url" | "preview_asset
 /** Reads an aspect ratio only if the template already declares one — never guessed. */
 export function readTemplateAspectRatio(template: ApiTemplate | null | undefined) {
   if (!template) return null;
+
   const candidates = [...(template.tags ?? []), template.output_type ?? ""];
+
   for (const candidate of candidates) {
     const match = /(\d{1,2}\s*:\s*\d{1,2})/.exec(String(candidate));
     if (match) return match[1].replace(/\s+/g, "");
@@ -85,6 +96,9 @@ export default function TemplateDetailDialog({
   performance?: TemplatePerformanceRow | null;
 }) {
   const templateId = template?.id ? String(template.id) : "";
+  const { canFavorite, isFavorite, toggleFavorite } = useTemplateFavorites();
+  const { activeBrand } = useBrand();
+  const { assets: brandFitAssets } = useBrandFitAssets();
   const { data: performanceRows = [] } = useQuery<TemplatePerformanceRow[]>({
     queryKey: ["template-performance-rows", templateId],
     queryFn: () => loadTemplatePerformanceRows(templateId),
@@ -94,6 +108,8 @@ export default function TemplateDetailDialog({
   });
 
   if (!template) return null;
+
+  const brandFit = brandFitAssets ? deriveTemplateFit(template, brandFitAssets) : null;
 
   const quickFacts = [
     { label: "Inputs", value: `${facts.inputCount}` },
@@ -118,6 +134,18 @@ export default function TemplateDetailDialog({
               <DialogTitle className="mt-2 font-display text-2xl font-bold tracking-[-0.02em] text-white">
                 {template.name}
               </DialogTitle>
+              {template.creator?.handle ? (
+                <p className="mt-2 flex items-center gap-1.5 text-xs text-slate-400">
+                  <span>by</span>
+                  <Link
+                    to={`/creator/${template.creator.handle}`}
+                    className="text-cyan-100 transition-colors hover:text-white"
+                  >
+                    @{template.creator.handle}
+                  </Link>
+                  <CreatorVerificationBadge status={template.creator.verificationStatus} size={11} />
+                </p>
+              ) : null}
               <DialogDescription className="mt-2 text-sm leading-6 text-slate-300">
                 {template.description ||
                   "Campaign drop template for ready-to-use vertical campaign assets."}
@@ -135,6 +163,15 @@ export default function TemplateDetailDialog({
                 </div>
               ))}
             </div>
+
+            {/* Phase 5 — truthful brand compatibility for this template. */}
+            {brandFit && activeBrand ? (
+              brandFit.status === "ready" ? (
+                <TemplateFitBadge fit={brandFit} brandName={activeBrand.name} />
+              ) : (
+                <TemplateRequirementNudge fit={brandFit} />
+              )
+            ) : null}
 
             <PerformanceDetailSection row={performance} rows={performanceRows} />
 
@@ -161,16 +198,27 @@ export default function TemplateDetailDialog({
               </div>
             ) : null}
 
-            <Button
-              onClick={() => {
-                onUseTemplate();
-                onOpenChange(false);
-              }}
-              className="w-full rounded-full bg-cyan-300 text-[12px] font-semibold uppercase tracking-[0.16em] text-slate-950 hover:bg-cyan-200"
-            >
-              Use this template
-              <ArrowRight className="h-4 w-4" />
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button
+                onClick={() => {
+                  onUseTemplate();
+                  onOpenChange(false);
+                }}
+                className="flex-1 rounded-full bg-cyan-300 text-[12px] font-semibold uppercase tracking-[0.16em] text-slate-950 hover:bg-cyan-200"
+              >
+                Use this template
+                <ArrowRight className="h-4 w-4" />
+              </Button>
+              {canFavorite ? (
+                <FavoriteTemplateButton
+                  favorite={isFavorite(templateId)}
+                  onToggle={() => toggleFavorite(templateId)}
+                  label={isFavorite(templateId) ? "Saved" : "Save"}
+                  className="px-3 py-2"
+                />
+              ) : null}
+            </div>
+
           </div>
         </div>
       </DialogContent>

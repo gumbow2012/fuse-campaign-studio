@@ -9,6 +9,7 @@ import {
   requireBuilderUser,
 } from "../_shared/supabase-admin.ts";
 import { assertCanPublish, FORBIDDEN_PUBLISH_MESSAGE } from "../_shared/template-scope.ts";
+import { assertVersionActivatable } from "../_shared/fork-run.ts";
 
 type Body = {
   versionId?: string;
@@ -46,10 +47,12 @@ Deno.serve(async (req) => {
 
     const { data: version, error: versionError } = await admin
       .from("template_versions")
-      .select("id")
+      .select("id, review_status, fork_id")
       .eq("id", versionId)
       .single();
     if (versionError || !version) throw new Error(versionError?.message ?? "Template version not found");
+    // TR10 ISOLATION: personal fork versions are outside the review/publish pipeline.
+    assertVersionActivatable(version as never);
 
     const nextReviewedAt = reviewStatus === "Unreviewed" ? null : new Date().toISOString();
     const nextReviewedBy = reviewStatus === "Unreviewed" ? null : user.id;

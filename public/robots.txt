@@ -11,4 +11,12 @@ User-agent: facebookexternalhit
 Allow: /
 
 User-agent: *
-Allow: / frank
+Allow: /
+Disallow: /app
+Disallow: /admin
+Disallow: /auth
+Disallow: /account
+Disallow: /forgot-password
+Disallow: /reset-password
+
+Sitemap: https://app.fuse-us.com/sitemap.xml

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { CheckCircle2, Loader2, Plus, RefreshCw, Trophy, UserPlus, X } from "lucide-react";
+import { CheckCircle2, Loader2, Mail, Plus, RefreshCw, Send, Trophy, UserPlus, X } from "lucide-react";
 import SiteShell from "@/components/mvp/SiteShell";
 import PageMeta from "@/components/mvp/PageMeta";
 import { Button } from "@/components/ui/button";
@@ -28,6 +28,27 @@ function formatDate(value: string | null) {
   return new Date(value).toLocaleString([], { month: "short", day: "numeric", year: "numeric" });
 }
 
+type InviteRow = {
+  id: string;
+  email: string | null;
+  status: string | null;
+  created_at: string | null;
+  accepted_at: string | null;
+  email_status: string | null;
+  delivered_at: string | null;
+  bounced_at: string | null;
+  failure_reason: string | null;
+  last_sent_at: string | null;
+  sent_count: number | null;
+};
+
+function minutesSince(value: string | null) {
+  if (!value) return null;
+  const ms = Date.now() - new Date(value).getTime();
+  if (!Number.isFinite(ms) || ms < 0) return null;
+  return Math.floor(ms / 60000);
+}
+
 const panel = "rounded-3xl border border-white/10 bg-white/[0.04] p-5 shadow-sm backdrop-blur";
 const emptyState =
   "rounded-2xl border border-white/10 bg-background/40 px-4 py-6 text-sm text-muted-foreground";
@@ -40,6 +61,7 @@ const AdminCreatorProgram = () => {
   const [busy, setBusy] = useState<string | null>(null);
   const [applications, setApplications] = useState<CreatorApplicationRow[]>([]);
   const [challenges, setChallenges] = useState<CreatorChallengeRow[]>([]);
+  const [invites, setInvites] = useState<InviteRow[]>([]);
   const [filter, setFilter] = useState<StatusFilter>("pending");
 
   const [draftTitle, setDraftTitle] = useState("");
@@ -52,12 +74,21 @@ const AdminCreatorProgram = () => {
 
   const [edits, setEdits] = useState<Record<string, Partial<CreatorChallengeRow>>>({});
 
+  const loadInvites = useCallback(async () => {
+    const { data, error } = await supabase.functions.invoke("manage-creators", {
+      body: { action: "list" },
+    });
+    if (error) return;
+    setInvites(((data as { invites?: InviteRow[] } | null)?.invites ?? []) as InviteRow[]);
+  }, []);
+
   const loadAll = useCallback(async () => {
     setLoading(true);
     try {
       const [apps, list] = await Promise.all([loadCreatorApplications(), loadAllChallenges()]);
       setApplications(apps);
       setChallenges(list);
+      await loadInvites();
     } catch (error) {
       toast({
         title: "Could not load creator program data",
@@ -67,7 +98,47 @@ const AdminCreatorProgram = () => {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [loadInvites]);
+
+  const resendInvite = useCallback(
+    async (row: InviteRow) => {
+      const mins = minutesSince(row.last_sent_at);
+      if (mins !== null && mins < 10) {
+        const ok = window.confirm(`Already sent ${mins}m ago — resend anyway?`);
+        if (!ok) return;
+      }
+      setBusy(`resend-${row.id}`);
+      try {
+        const { data, error } = await supabase.functions.invoke("manage-creators", {
+          body: { action: "resend", inviteId: row.id },
+        });
+        if (error) throw new Error(error.message);
+        const result = data as { ok?: boolean; reason?: string | null } | null;
+        if (result?.ok) {
+          toast({
+            title: "Invite re-sent",
+            description: "The email provider accepted the send. Delivery is not confirmed yet.",
+          });
+        } else {
+          toast({
+            title: "Resend failed",
+            description: result?.reason ?? "The provider rejected the send.",
+            variant: "destructive",
+          });
+        }
+        await loadInvites();
+      } catch (error) {
+        toast({
+          title: "Resend failed",
+          description: error instanceof Error ? error.message : "Unknown error",
+          variant: "destructive",
+        });
+      } finally {
+        setBusy(null);
+      }
+    },
+    [loadInvites],
+  );
 
   useEffect(() => {
     void loadAll();
@@ -360,6 +431,89 @@ const AdminCreatorProgram = () => {
                   )}
                 </article>
               ))
+            )}
+          </div>
+        </section>
+
+        <section className={`mt-6 ${panel}`}>
+          <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.18em] text-foreground/70">
+            <Mail className="h-4 w-4 text-cyan-300" />
+            Invite delivery ({invites.length})
+          </div>
+
+          <div className="mt-4 overflow-x-auto">
+            {invites.length === 0 ? (
+              <p className={emptyState}>No creator invites yet.</p>
+            ) : (
+              <table className="w-full min-w-[820px] text-left text-xs">
+                <thead className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+                  <tr>
+                    <th className="py-2 pr-3">Email</th>
+                    <th className="py-2 pr-3">Status</th>
+                    <th className="py-2 pr-3">Sent</th>
+                    <th className="py-2 pr-3">Delivery</th>
+                    <th className="py-2 pr-3">Accepted</th>
+                    <th className="py-2" />
+                  </tr>
+                </thead>
+                <tbody>
+                  {invites.map((row) => {
+                    const emailStatus = (row.email_status ?? "pending").toLowerCase();
+                    const failed = emailStatus === "failed" || emailStatus === "bounced";
+                    return (
+                      <tr key={row.id} className="border-t border-white/10 align-top">
+                        <td className="py-3 pr-3 text-foreground">{row.email ?? "—"}</td>
+                        <td className="py-3 pr-3 capitalize text-muted-foreground">{row.status || "pending"}</td>
+                        <td className="py-3 pr-3 text-muted-foreground">
+                          {row.last_sent_at ? (
+                            <>
+                              {formatDate(row.last_sent_at)}
+                              <span className="ml-1 text-foreground/60">×{row.sent_count ?? 1}</span>
+                            </>
+                          ) : (
+                            "—"
+                          )}
+                        </td>
+                        <td className="py-3 pr-3">
+                          {emailStatus === "delivered" ? (
+                            <span className="text-emerald-300">Delivered ✓ {formatDate(row.delivered_at)}</span>
+                          ) : emailStatus === "provider_accepted" ? (
+                            <span className="text-cyan-300">Provider accepted ✓ (delivery unconfirmed)</span>
+                          ) : failed ? (
+                            <span className="text-rose-300">
+                              Delivery failed
+                              {row.failure_reason ? (
+                                <span className="block text-muted-foreground">{row.failure_reason}</span>
+                              ) : null}
+                            </span>
+                          ) : (
+                            <span className="text-muted-foreground">—</span>
+                          )}
+                        </td>
+                        <td className="py-3 pr-3 text-muted-foreground">
+                          {row.accepted_at ? `Joined ${formatDate(row.accepted_at)}` : "—"}
+                        </td>
+                        <td className="py-3">
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant={failed ? "default" : "outline"}
+                            onClick={() => void resendInvite(row)}
+                            disabled={busy === `resend-${row.id}`}
+                          >
+                            {busy === `resend-${row.id}` ? (
+                              <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
+                            ) : (
+                              <Send className="mr-2 h-3.5 w-3.5" />
+                            )}
+                            Resend invite
+                          </Button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
             )}
           </div>
         </section>

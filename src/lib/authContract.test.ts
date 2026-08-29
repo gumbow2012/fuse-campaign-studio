@@ -4,18 +4,19 @@ import { describe, expect, it } from "vitest";
 
 describe("auth page contract", () => {
   const authPageSource = () => readFile(
-    resolve(process.cwd(), "src/pages/mvp/AuthPage.tsx"),
+    resolve(process.cwd(), "src/components/auth/UniversalAuthPanel.tsx"),
     "utf8",
   );
 
-  it("keeps email-code auth while adding Google OAuth", async () => {
+  it("keeps email + password auth alongside Google OAuth", async () => {
     const source = await authPageSource();
 
-    expect(source).toContain("supabase.auth.signInWithOtp");
-    expect(source).toContain("supabase.auth.verifyOtp");
+    expect(source).toContain("supabase.auth.signUp");
+    expect(source).toContain("supabase.auth.signInWithPassword");
+    expect(source).toContain("supabase.auth.resetPasswordForEmail");
     expect(source).toContain("supabase.auth.signInWithOAuth");
     expect(source).toContain('provider: "google"');
-    expect(source).toContain('redirectTo: getAbsoluteSiteUrl("/auth")');
+    expect(source).toContain("redirectTo: oauthRedirectTo");
     expect(source).toContain("Continue with Google");
   });
 });

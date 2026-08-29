@@ -5,7 +5,7 @@ import SiteShell from "@/components/mvp/SiteShell";
 import PageMeta from "@/components/mvp/PageMeta";
 import CompactAccountBar from "@/components/mvp/membership/CompactAccountBar";
 import PlanTierCards from "@/components/mvp/membership/PlanTierCards";
-import CreditPackCards from "@/components/mvp/membership/CreditPackCards";
+import CreditTopUpModule from "@/components/mvp/membership/CreditTopUpModule";
 import PlanComparisonMatrix from "@/components/mvp/membership/PlanComparisonMatrix";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,14 +13,10 @@ import { toast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { useMembershipCheckout } from "@/hooks/useMembershipCheckout";
 import { supabase } from "@/integrations/supabase/client";
+import { track } from "@/lib/analytics/track";
 import { CREDIT_PACKS, STRIPE_TIERS } from "@/lib/stripe-config";
-import {
-  checkoutEventId,
-  clearPendingCheckout,
-  readPendingCheckout,
-  trackEvent,
-  trackEventOnce,
-} from "@/lib/metaPixel";
+import { clearPendingCheckout, readPendingCheckout, trackEvent } from "@/lib/metaPixel";
+
 
 
 
@@ -52,7 +48,7 @@ export default function BillingPage() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { isAdmin, user, profile, refreshSubscription } = useAuth();
-  const { loading, setLoading, startPlanCheckout, startCreditCheckout } = useMembershipCheckout();
+  const { loading, setLoading, startPlanCheckout, startCreditTopUp } = useMembershipCheckout();
   const [creditPackSmoke, setCreditPackSmoke] = useState<CreditPackSmokeResult | null>(null);
   const [checkoutEmail, setCheckoutEmail] = useState("");
   const [brandName, setBrandName] = useState("");
@@ -75,22 +71,11 @@ export default function BillingPage() {
 
     if (success) {
       const pending = readPendingCheckout();
-      const sessionId = searchParams.get("session_id");
-      const onceKey = `purchase.${sessionId ?? pending?.startedAt ?? searchParams.toString()}`;
-      trackEventOnce(
-        onceKey,
-        "Purchase",
-        { value: pending?.value, currency: "USD", content_type: "product" },
-        sessionId ? checkoutEventId("Purchase", sessionId) : undefined,
-      );
-      if (!pending || pending.mode === "subscription") {
-        trackEventOnce(
-          `subscribe.${sessionId ?? pending?.startedAt ?? searchParams.toString()}`,
-          "Subscribe",
-          { value: pending?.value, currency: "USD" },
-          sessionId ? checkoutEventId("Subscribe", sessionId) : undefined,
-        );
-      }
+      // Meta Purchase/Subscribe are reported server-side via CAPI (single source of truth).
+      track("paid", { mode: pending?.mode ?? "subscription" });
+
+      // P7 funnel — checkout returned successful (already guarded once per session).
+      track("checkout_completed", { mode: pending?.mode ?? "subscription" });
       clearPendingCheckout();
       setLoading("refresh");
       void refreshSubscription()
@@ -134,6 +119,9 @@ export default function BillingPage() {
     }
     if (isAdmin) return;
 
+    track("plan_selected", { plan_key: String(tierKey) });
+    track("checkout_start", { plan_key: String(tierKey), kind: "subscription" });
+
     await startPlanCheckout(tierKey, {
       email: user ? undefined : normalizedEmail,
       brandName: brandName.trim() || undefined,
@@ -168,14 +156,15 @@ export default function BillingPage() {
     }
   };
 
-  const handleCreditCheckout = async (packKey: keyof typeof CREDIT_PACKS) => {
+  const handleCreditCheckout = async (credits: number) => {
     if (!user) {
       navigate("/auth?mode=signup");
       return;
     }
     if (isAdmin) return;
 
-    await startCreditCheckout(packKey);
+    track("checkout_start", { kind: "credits", credits });
+    await startCreditTopUp(credits, { balanceBefore: Number(profile?.credits_balance ?? 0) });
   };
 
 
@@ -282,23 +271,44 @@ export default function BillingPage() {
           ) : null}
 
           {!user ? (
-            <div className="flex flex-col gap-3 rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3 sm:flex-row sm:items-center sm:gap-x-4">
-              <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-muted-foreground">Get started</span>
-              <div className="flex flex-1 flex-col gap-3 sm:flex-row sm:items-center">
-                <Input
-                  type="email"
-                  value={checkoutEmail}
-                  onChange={(event) => setCheckoutEmail(event.target.value)}
-                  required
-                  placeholder="you@brand.com"
-                  className="h-10 rounded-xl border-white/10 bg-white/[0.03] text-white sm:max-w-xs"
-                />
-                <Input
-                  value={brandName}
-                  onChange={(event) => setBrandName(event.target.value)}
-                  placeholder="Brand name (optional)"
-                  className="h-10 rounded-xl border-white/10 bg-white/[0.03] text-white sm:max-w-xs"
-                />
+            <div className="rounded-2xl border border-white/10 bg-white/[0.03] px-5 py-5 sm:px-6 sm:py-6">
+              <h2 className="font-display text-lg font-bold uppercase tracking-[0.16em] text-white sm:text-xl">
+                Start your membership
+              </h2>
+              <p className="mt-1.5 text-sm text-slate-400">Tell us where to send your FUSE access.</p>
+              <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-end">
+                <div className="flex-[1.6] space-y-2">
+                  <label
+                    htmlFor="checkout-email"
+                    className="block text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400"
+                  >
+                    Email address
+                  </label>
+                  <Input
+                    id="checkout-email"
+                    type="email"
+                    value={checkoutEmail}
+                    onChange={(event) => setCheckoutEmail(event.target.value)}
+                    required
+                    placeholder="you@brand.com"
+                    className="h-[56px] w-full rounded-xl border-white/10 bg-slate-950/60 px-4 text-base text-white placeholder:text-slate-500 focus-visible:border-cyan-300/60 focus-visible:ring-2 focus-visible:ring-cyan-300/40"
+                  />
+                </div>
+                <div className="flex-1 space-y-2">
+                  <label
+                    htmlFor="checkout-brand"
+                    className="block text-[10px] font-bold uppercase tracking-[0.2em] text-slate-500"
+                  >
+                    Brand name — optional
+                  </label>
+                  <Input
+                    id="checkout-brand"
+                    value={brandName}
+                    onChange={(event) => setBrandName(event.target.value)}
+                    placeholder="Brand name"
+                    className="h-[56px] w-full rounded-xl border-white/10 bg-slate-950/60 px-4 text-base text-white placeholder:text-slate-500 focus-visible:border-cyan-300/60 focus-visible:ring-2 focus-visible:ring-cyan-300/40"
+                  />
+                </div>
               </div>
             </div>
           ) : null}
@@ -403,10 +413,10 @@ export default function BillingPage() {
           </div>
 
           <div className="mt-6">
-            <CreditPackCards
+            <CreditTopUpModule
               loading={loading}
               isAdmin={isAdmin}
-              onCheckout={(packKey) => void handleCreditCheckout(packKey)}
+              onCheckout={(credits) => void handleCreditCheckout(credits)}
             />
           </div>
 

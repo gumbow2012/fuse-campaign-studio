@@ -15,6 +15,7 @@ export type MetaCapiPurchaseArgs = {
   value: number;
   currency?: string | null;
   eventId: string;
+  externalId?: string | null;
   eventSourceUrl?: string | null;
   fbp?: string | null;
   fbc?: string | null;
@@ -55,6 +56,7 @@ export async function sendMetaCapiPurchase(args: MetaCapiPurchaseArgs): Promise<
     const phoneDigits = typeof args.phone === "string" ? args.phone.replace(/[^0-9]/g, "") : "";
     if (phoneDigits) userData.ph = [await sha256Hex(phoneDigits)];
     // Not hashed, per Meta spec.
+    if (args.externalId) userData.external_id = args.externalId;
     if (args.fbc) userData.fbc = args.fbc;
     if (args.fbp) userData.fbp = args.fbp;
     if (args.clientIp) userData.client_ip_address = args.clientIp;

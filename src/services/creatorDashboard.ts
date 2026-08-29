@@ -248,3 +248,76 @@ export async function loadCreatorChallenges(): Promise<CreatorChallenge[]> {
     created_at: row.created_at ? String(row.created_at) : null,
   }));
 }
+
+/* ------------------------- SOCIAL (additive, public) ------------------------ */
+
+/** Earned-only public badge (never criteria, rewards or locked progress). */
+export type CreatorPublicAchievement = {
+  key: string;
+  title: string;
+  description: string | null;
+  icon: string | null;
+  tier: string | null;
+  unlockedAt: string | null;
+};
+
+export type CreatorSocialPublic = {
+  followerCount: number;
+  isFollowing: boolean;
+  /** 'creator' | 'verified' | 'featured' | 'partner'. Never includes a reason. */
+  verificationStatus: string;
+  verifiedAt: string | null;
+  publishedCount: number;
+  /** Only achievements the creator has actually earned. */
+  achievements: CreatorPublicAchievement[];
+};
+
+/**
+ * Public follower count + the viewer's follow state + PUBLIC verification
+ * fields + EARNED achievements, resolved server-side by `creator-portfolio`
+ * (service role). The viewer is resolved from the request's bearer token inside
+ * the function — `verification_reason` is never returned.
+ */
+export async function loadCreatorSocialPublic(input: {
+  handle?: string;
+  userId?: string;
+}): Promise<CreatorSocialPublic> {
+  const empty: CreatorSocialPublic = {
+    followerCount: 0,
+    isFollowing: false,
+    verificationStatus: "creator",
+    verifiedAt: null,
+    publishedCount: 0,
+    achievements: [],
+  };
+
+  const { data, error } = await supabase.functions.invoke("creator-portfolio", {
+    body: { mode: "public", handle: input.handle, user_id: input.userId },
+  });
+  if (error) return empty;
+
+  const payload = (data ?? {}) as Record<string, unknown>;
+  const achievements = Array.isArray(payload.achievements)
+    ? (payload.achievements as Array<Record<string, unknown>>)
+        .filter((row) => row && typeof row === "object")
+        .map((row) => ({
+          key: String(row.key ?? ""),
+          title: String(row.title ?? row.key ?? ""),
+          description: row.description ? String(row.description) : null,
+          icon: row.icon ? String(row.icon) : null,
+          tier: row.tier ? String(row.tier) : null,
+          unlockedAt: row.unlocked_at ? String(row.unlocked_at) : null,
+        }))
+        .filter((row) => row.key.length > 0)
+    : [];
+
+  return {
+    followerCount: Number(payload.followerCount ?? 0),
+    isFollowing: payload.isFollowing === true,
+    verificationStatus: String(payload.verification_status ?? "creator"),
+    verifiedAt: payload.verified_at ? String(payload.verified_at) : null,
+    publishedCount: Number(payload.publishedCount ?? 0),
+    achievements,
+  };
+}
+

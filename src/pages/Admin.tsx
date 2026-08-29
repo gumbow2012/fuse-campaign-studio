@@ -10,6 +10,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Plus, Trash2, BarChart3, Eye, Copy, Loader2, Download, Upload, Check, X, Pencil, Save, Play, Search } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Link } from "react-router-dom";
+import AdminCreditControl from "@/components/admin/AdminCreditControl";
+import AdminOverviewStrip from "@/components/admin/AdminOverviewStrip";
+import AdminReferrals from "@/components/admin/AdminReferrals";
 
 const EXAMPLE_INPUT_SCHEMA = JSON.stringify(
   [
@@ -101,25 +104,8 @@ const Admin = () => {
     }
   };
 
-  // Credit Adjustment
-  const [creditUserId, setCreditUserId] = useState("");
-  const [creditAmount, setCreditAmount] = useState("");
-  const [creditDesc, setCreditDesc] = useState("");
+  // Credit adjustments now live in AdminCreditControl (identity search + apply_credit_transaction only).
 
-  const adjustCredits = async () => {
-    try {
-      const { error } = await supabase.functions.invoke("admin-adjust-credits", {
-        body: { userId: creditUserId, amount: parseInt(creditAmount), description: creditDesc },
-      });
-      if (error) throw error;
-      toast({ title: "Credits adjusted" });
-      setCreditUserId("");
-      setCreditAmount("");
-      setCreditDesc("");
-    } catch (err: any) {
-      toast({ title: "Error", description: err.message, variant: "destructive" });
-    }
-  };
 
   // Revenue config
   const { data: platformConfig } = useQuery({
@@ -131,14 +117,6 @@ const Admin = () => {
     },
   });
 
-  const { data: referralConfig } = useQuery({
-    queryKey: ["referral-config"],
-    queryFn: async () => {
-      const { data, error } = await supabase.from("referral_program_config").select("*").limit(1).single();
-      if (error) throw error;
-      return data;
-    },
-  });
 
   // Recent projects
   const { data: recentProjects } = useQuery({
@@ -404,6 +382,10 @@ const Admin = () => {
       <div className="pt-24 pb-16 container mx-auto px-6">
         <h1 className="font-display text-3xl font-black text-foreground mb-1">Admin</h1>
         <p className="text-muted-foreground text-sm mb-8">Manage templates, credits, and projects.</p>
+
+        <AdminOverviewStrip />
+
+
 
         <Tabs defaultValue="templates">
           <TabsList className="bg-secondary border border-border/40 mb-6">
@@ -794,18 +776,9 @@ const Admin = () => {
           </TabsContent>
 
           <TabsContent value="credits">
-            <div className="rounded-xl border border-border/40 bg-card p-5 max-w-md">
-              <h3 className="text-sm font-bold text-foreground mb-4">Adjust User Credits</h3>
-              <div className="space-y-3">
-                <Input placeholder="User ID (UUID)" value={creditUserId} onChange={e => setCreditUserId(e.target.value)} className="bg-secondary border-border text-foreground" />
-                <Input placeholder="Amount (+/-)" type="number" value={creditAmount} onChange={e => setCreditAmount(e.target.value)} className="bg-secondary border-border text-foreground" />
-                <Input placeholder="Reason" value={creditDesc} onChange={e => setCreditDesc(e.target.value)} className="bg-secondary border-border text-foreground" />
-                <Button onClick={adjustCredits} disabled={!creditUserId || !creditAmount} className="gradient-primary text-primary-foreground font-bold border-0">
-                  Adjust Credits
-                </Button>
-              </div>
-            </div>
+            <AdminCreditControl />
           </TabsContent>
+
 
           <TabsContent value="projects">
             {/* Pending projects needing fulfillment */}
@@ -896,32 +869,9 @@ const Admin = () => {
           </TabsContent>
 
           <TabsContent value="referrals">
-            <div className="rounded-xl border border-border/40 bg-card p-5">
-              <h3 className="text-sm font-bold text-foreground mb-4">Referral Program Config</h3>
-              {referralConfig ? (
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                  <div>
-                    <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-muted-foreground mb-1">Status</p>
-                    <p className={`font-display text-lg font-black ${referralConfig.enabled ? "text-green-400" : "text-red-400"}`}>
-                      {referralConfig.enabled ? "Active" : "Disabled"}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-muted-foreground mb-1">Signup Bonus</p>
-                    <p className="font-display text-xl font-black text-foreground">{referralConfig.signup_bonus_credits} credits</p>
-                  </div>
-                  <div>
-                    <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-muted-foreground mb-1">Referrer Bonus</p>
-                    <p className="font-display text-xl font-black text-foreground">{referralConfig.referrer_bonus_credits_on_paid} credits</p>
-                  </div>
-                  <div>
-                    <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-muted-foreground mb-1">Trigger</p>
-                    <p className="text-xs font-bold text-foreground">{referralConfig.paid_trigger}</p>
-                  </div>
-                </div>
-              ) : <p className="text-sm text-muted-foreground">Loading...</p>}
-            </div>
+            <AdminReferrals />
           </TabsContent>
+
         </Tabs>
       </div>
     </div>

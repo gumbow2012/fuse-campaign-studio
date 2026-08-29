@@ -122,6 +122,42 @@ export async function listPublicCreatorProfiles(limit = 6) {
   return (data as CreatorProfile[] | null) ?? [];
 }
 
+export type PublicCreatorListing = CreatorProfile & {
+  verification_status?: string | null;
+};
+
+/**
+ * PUBLIC creators directory listing. Selects only public profile columns
+ * (+ verification_status where the column exists) — `verification_reason` is
+ * ADMIN-ONLY and is never selected here.
+ */
+export async function listPublicCreators(limit = 200): Promise<PublicCreatorListing[]> {
+  const withStatus = await supabase
+    .from("creator_profiles")
+    .select(`${PUBLIC_FIELDS},verification_status`)
+    .eq("is_public", true)
+    .order("created_at", { ascending: false })
+    .limit(limit);
+
+  const rows = withStatus.error
+    ? await supabase
+        .from("creator_profiles")
+        .select(PUBLIC_FIELDS)
+        .eq("is_public", true)
+        .order("created_at", { ascending: false })
+        .limit(limit)
+    : withStatus;
+
+  if (rows.error) throw new Error(rows.error.message);
+  const list = ((rows.data ?? []) as unknown as PublicCreatorListing[]).slice();
+
+  // Verified first, then newest (the SQL order already provides newest-first).
+  const badged = (value: unknown) =>
+    typeof value === "string" && value !== "creator" && value.length > 0;
+  return list.sort((a, b) => Number(badged(b.verification_status)) - Number(badged(a.verification_status)));
+}
+
+
 export async function getOwnCreatorProfile() {
   const {
     data: { session },

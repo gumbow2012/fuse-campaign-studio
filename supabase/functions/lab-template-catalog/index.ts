@@ -62,8 +62,36 @@ Deno.serve(async (req) => {
   try {
     const { data: templates, error: templateError } = await admin
       .from("fuse_templates")
-      .select("id, name, description, preview_url, preview_asset_type, created_at");
+      .select("id, name, description, preview_url, preview_asset_type, created_at, created_by");
     if (templateError) throw new Error(templateError.message);
+
+    /**
+     * SOCIAL (additive): public creator attribution for marketplace cards.
+     * `fuse_templates.created_by` -> `creator_profiles` public identity.
+     * `verification_reason` is admin-only and is never selected here.
+     */
+    const authorIds = Array.from(
+      new Set((templates ?? []).map((template: any) => template.created_by).filter(Boolean)),
+    ) as string[];
+    const creatorByUserId = new Map<string, any>();
+    if (authorIds.length) {
+      const { data: creatorProfiles } = await admin
+        .from("creator_profiles")
+        .select("user_id, handle, display_name, avatar_url, is_public, verification_status, verified_at")
+        .in("user_id", authorIds);
+      for (const profile of (creatorProfiles ?? []) as any[]) {
+        if (profile.is_public === false) continue;
+        const status = String(profile.verification_status ?? "creator");
+        creatorByUserId.set(String(profile.user_id), {
+          userId: String(profile.user_id),
+          handle: profile.handle ? String(profile.handle) : null,
+          displayName: profile.display_name ? String(profile.display_name) : null,
+          avatarUrl: profile.avatar_url ? String(profile.avatar_url) : null,
+          verificationStatus: ["verified", "featured", "partner"].includes(status) ? status : "creator",
+          verifiedAt: profile.verified_at ? String(profile.verified_at) : null,
+        });
+      }
+    }
 
     const { data: versions, error: versionError } = await admin
       .from("template_versions")
@@ -231,6 +259,8 @@ Deno.serve(async (req) => {
           reviewStatus: version.review_status ?? "Unreviewed",
           castConfig: readCastConfig(version.cast_config),
           createdAt: template?.created_at ?? null,
+          // null when created_by has no public creator profile (no fabrication).
+          creator: template?.created_by ? creatorByUserId.get(String(template.created_by)) ?? null : null,
           previewUrl: cover.url,
           previewAssetType: cover.type,
           estimatedCreditsPerRun: getTemplateCreditCost(template?.name, counts),

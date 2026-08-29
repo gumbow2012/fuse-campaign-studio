@@ -5,6 +5,7 @@ import { buildTemplateInputPlan } from "../_shared/template-inputs.ts";
 import { readEdgeOrder, sortEdgesByExecutionOrder } from "../_shared/edge-order.ts";
 import { getNodeAssetRequirement, getNodeEditorConfig } from "../_shared/template-editor.ts";
 import { readCastConfig } from "../_shared/cast-config.ts";
+import { resolveCustomizability } from "../_shared/template-fork.ts";
 
 function readNodeSortOrder(node: any, fallbackIndex = 999) {
   const raw = node?.prompt_config?.sort_order;
@@ -78,10 +79,19 @@ Deno.serve(async (req) => {
 
     const { data: version, error: versionError } = await admin
       .from("template_versions")
-      .select("id, template_id, version_number, is_active, review_status, cast_config, fuse_templates!inner(id, name, created_by)")
+      .select("id, template_id, version_number, is_active, review_status, cast_config, fuse_templates!inner(id, name, created_by, allow_customer_edit, allow_prompt_visibility)")
       .eq("id", versionId)
       .single();
     if (versionError || !version) throw new Error(versionError?.message ?? "Template version not found");
+
+    const createdBy = (version as any).fuse_templates.created_by as string | null;
+    const createdByRoles = createdBy ? await getUserRoles(createdBy, admin) : [];
+    const { customizable } = resolveCustomizability({
+      allowCustomerEdit: (version as any).fuse_templates.allow_customer_edit,
+      allowPromptVisibility: (version as any).fuse_templates.allow_prompt_visibility,
+      createdByRoles,
+    });
+
 
     const { data: nodes, error: nodeError } = await admin
       .from("nodes")
@@ -202,6 +212,9 @@ Deno.serve(async (req) => {
             isUserFacingInput,
             isReferenceInput,
             sampleUrl,
+            required: node.node_type === "user_input"
+              ? editorConfig.requirement?.required ?? null
+              : null,
           },
 
         };
@@ -263,6 +276,7 @@ Deno.serve(async (req) => {
         reviewStatus: version.review_status ?? "Unreviewed",
         isActive: version.is_active,
         castConfig: readCastConfig((version as any).cast_config),
+        canCustomize: customizable,
         userInputs,
         nodes: [],
         edges: [],
@@ -277,6 +291,7 @@ Deno.serve(async (req) => {
       reviewStatus: version.review_status ?? "Unreviewed",
       isActive: version.is_active,
       castConfig: readCastConfig((version as any).cast_config),
+      canCustomize: customizable,
       userInputs,
       nodes: numberedNodes,
       edges: (edges ?? []).map((edge: any) => ({

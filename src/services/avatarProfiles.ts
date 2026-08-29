@@ -5,6 +5,8 @@
  */
 import { supabase } from "@/integrations/supabase/client";
 import { looseTable } from "@/services/looseTable";
+import { track } from "@/lib/analytics/track";
+import { ACTIVATION_EVENTS } from "@/lib/brandActivation";
 
 export type AvatarSourceType = "FUSE" | "USER";
 
@@ -116,6 +118,12 @@ export async function createUserAvatar(input: AvatarProfileInput): Promise<Avata
     .select("*")
     .maybeSingle();
   if (error) throw error;
+  // Phase 7 activation analytics — fire-and-forget, safe props only.
+  try {
+    track(ACTIVATION_EVENTS.castAdded, { source: "user_avatar_created" });
+  } catch {
+    /* analytics must never break a save */
+  }
   return data ? normalize(data) : null;
 }
 
@@ -141,6 +149,50 @@ export async function deleteAvatar(id: string): Promise<void> {
 export async function toggleFavorite(id: string, favorited: boolean): Promise<void> {
   const { error } = await table().update({ favorited }).eq("id", id);
   if (error) throw error;
+}
+
+/** Identity reference uploads — separate semantics from campaign run inputs. */
+export const AVATAR_REFERENCE_MIME = ["image/jpeg", "image/png", "image/webp"] as const;
+export const MAX_AVATAR_REFERENCE_BYTES = 15 * 1024 * 1024;
+
+const AVATAR_BUCKET = "fuse-assets";
+
+function avatarExtension(file: File) {
+  if (file.type === "image/png") return "png";
+  if (file.type === "image/webp") return "webp";
+  return "jpg";
+}
+
+/**
+ * Uploads one identity reference image straight to Storage.
+ * Path starts with the user id to satisfy "authenticated_upload_fuse_assets".
+ */
+export async function uploadAvatarReference(file: File): Promise<string> {
+  if (!(AVATAR_REFERENCE_MIME as readonly string[]).includes(file.type)) {
+    throw new Error(`${file.name || "This file"} is not a JPG, PNG or WEBP image.`);
+  }
+  if (file.size > MAX_AVATAR_REFERENCE_BYTES) {
+    throw new Error(
+      `${file.name || "This image"} is ${(file.size / (1024 * 1024)).toFixed(1)} MB — the limit is 15 MB.`,
+    );
+  }
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) throw new Error("Please sign in to upload a reference image.");
+
+  const path = `${user.id}/avatar-references/${crypto.randomUUID()}.${avatarExtension(file)}`;
+  const { error } = await supabase.storage.from(AVATAR_BUCKET).upload(path, file, {
+    contentType: file.type,
+    upsert: false,
+    cacheControl: "3600",
+  });
+  if (error) throw new Error(error.message || "Upload failed — please try again.");
+
+  const url = supabase.storage.from(AVATAR_BUCKET).getPublicUrl(path).data.publicUrl;
+  if (!url) throw new Error("Upload succeeded but no public URL was returned.");
+  return url;
 }
 
 export const AVATAR_UPLOAD_TIPS = [

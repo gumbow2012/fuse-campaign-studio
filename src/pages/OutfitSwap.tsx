@@ -11,6 +11,7 @@ import {
   Plus,
   RefreshCw,
   Shirt,
+  ShieldCheck,
   Sparkles,
   Trash2,
   Upload,
@@ -26,6 +27,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
 import { Textarea } from "@/components/ui/textarea";
+import { Switch } from "@/components/ui/switch";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
   AlertDialog,
@@ -47,14 +49,45 @@ import {
 
 
 import {
+  analyzeOutfitSwapSource,
+  analyzeOutfitSwapQa,
+  applyFrameOverrides,
   callOutfitSwap,
   createTemplateFromOutfitSwap,
   persistTemplateLayout,
+  loadCastAssignment,
+  saveCastAssignment,
+  suggestCastAssignment,
+  loadModelAssignment,
+  saveModelAssignment,
+  loadQaReport,
+  saveQaReport,
+  loadFrameOverrides,
+  saveFrameOverrides,
+  structuralFrameQa,
+  primarySubjectId,
+  isBottomGarment,
+  isTopGarment,
+  KEEP_ORIGINAL_MODEL,
+  type OutfitSwapCastAssignment,
+  type OutfitSwapFrameOverride,
+  type OutfitSwapFrameOverrides,
+  type OutfitSwapFrameSubject,
+  type OutfitSwapGarment,
+  type OutfitSwapModelAssignment,
+  type OutfitSwapQaReport,
+  type OutfitSwapSubjectModel,
+  type OutfitSwapSourceAnalysis,
   type OutfitSwapTemplateResult,
   type SwapGeneration,
 } from "@/services/outfitSwap";
+import SubjectModelSelector from "@/components/outfitswap/SubjectModelSelector";
+import FrameQaPanel, { QaBadge } from "@/components/outfitswap/FrameQaPanel";
+
+import { useAuth } from "@/contexts/AuthContext";
 import { extractFrames, frameTimestamps, loadVideo, readMeta, type VideoMeta } from "@/lib/videoFrames";
 import { compressImageFile } from "@/lib/imageCompress";
+
 
 const GARMENT_TYPES = [
   "Shirt / Top",
@@ -82,7 +115,9 @@ const VIDEO_MODELS = [
 ];
 
 type Frame = { time: number; url: string };
-type Garment = { url: string; name: string; type: string; label: string; person: string };
+/** PHASE 2: structured refs; `url` still mirrors FRONT for generation. */
+type Garment = OutfitSwapGarment;
+type GarmentSlot = "front" | "back" | "detail" | "side";
 
 const SELECT_CLASS =
   "w-full rounded-lg border border-white/12 bg-black/40 px-2.5 py-1.5 text-xs text-foreground outline-none transition-colors hover:border-cyan-200/40 focus:border-cyan-200/60";
@@ -111,6 +146,151 @@ function SectionCard({
       </header>
       {children}
     </section>
+  );
+}
+
+/** One structured garment reference slot (upload / replace / clear). */
+function GarmentSlotUpload({
+  label,
+  url,
+  busy,
+  required,
+  onPick,
+  onClear,
+}: {
+  label: string;
+  url: string | null;
+  busy: boolean;
+  required?: boolean;
+  onPick: (file: File | undefined) => void;
+  onClear: () => void;
+}) {
+  return (
+    <div className="flex items-center gap-2 rounded-xl border border-white/10 bg-black/30 p-2">
+      {url ? (
+        <img src={url} alt={`${label} reference`} className="h-12 w-10 shrink-0 rounded-lg object-cover" />
+      ) : (
+        <div className="flex h-12 w-10 shrink-0 items-center justify-center rounded-lg border border-dashed border-white/15 text-foreground/40">
+          <Plus size={12} />
+        </div>
+      )}
+      <div className="min-w-0 flex-1">
+        <p className="text-[10px] uppercase tracking-[0.14em] text-cyan-200/70">
+          {label}
+          {required ? <span className="ml-1 text-red-300">required</span> : null}
+        </p>
+        <p className="truncate text-[11px] text-foreground/60">
+          {url ? "Stored" : required ? "Add the back image" : "Optional"}
+        </p>
+      </div>
+      {busy ? <Loader2 size={13} className="animate-spin text-cyan-200" /> : null}
+      <label className="cursor-pointer rounded-lg border border-white/15 bg-black/50 px-2 py-1 text-[10px] uppercase tracking-[0.12em] text-foreground/80 transition-colors hover:border-cyan-200/50">
+        {url ? "Replace" : "Upload"}
+        <input
+          type="file"
+          accept="image/*"
+          className="hidden"
+          onChange={(event) => {
+            const file = event.target.files?.[0];
+            event.target.value = "";
+            onPick(file);
+          }}
+        />
+      </label>
+      {url ? (
+        <button
+          type="button"
+          aria-label={`Remove ${label} reference`}
+          onClick={onClear}
+          className="rounded-lg border border-white/15 bg-black/50 p-1 text-foreground/70 transition-colors hover:border-red-400/60 hover:text-red-300"
+        >
+          <X size={11} />
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
+
+
+/** One detected subject track + its model choice and assigned wardrobe (mapping only). */
+function SubjectCastCard({
+  label,
+  description,
+  portraitUrl,
+  garments,
+  wardrobe,
+  onChange,
+  userId,
+  model,
+  onModelChange,
+}: {
+  label: string;
+  description: string;
+  portraitUrl: string | null;
+  garments: Garment[];
+  wardrobe: { topGarmentId: string | null; bottomGarmentId: string | null } | null;
+  onChange: (slot: "topGarmentId" | "bottomGarmentId", garmentId: string | null) => void;
+  userId?: string | null;
+  model: OutfitSwapSubjectModel | null;
+  onModelChange: (next: OutfitSwapSubjectModel) => void;
+}) {
+
+  const tops = garments.filter(isTopGarment);
+  const bottoms = garments.filter(isBottomGarment);
+  const name = (garment: Garment) => garment.label || garment.name || garment.type;
+
+  const renderSlot = (
+    slotLabel: string,
+    slot: "topGarmentId" | "bottomGarmentId",
+    pool: Garment[],
+    value: string | null,
+  ) => (
+    <div>
+      <label className="mb-1 block text-[10px] uppercase tracking-[0.14em] text-cyan-200/70">
+        {slotLabel}
+      </label>
+      <select
+        value={value ?? ""}
+        onChange={(event) => onChange(slot, event.target.value || null)}
+        className={SELECT_CLASS}
+      >
+        <option value="">Unassigned</option>
+        {/* The library is reusable — one garment can dress several subjects. */}
+        {(pool.length ? pool : garments).map((garment) => (
+          <option key={garment.id} value={garment.id}>
+            {name(garment)}
+          </option>
+        ))}
+      </select>
+    </div>
+  );
+
+  return (
+    <div className="rounded-2xl border border-white/10 bg-black/25 p-2.5">
+      <div className="flex gap-3">
+        <div className="h-24 w-16 shrink-0 overflow-hidden rounded-xl border border-white/10 bg-black/50">
+          {portraitUrl ? (
+            <img src={portraitUrl} alt={label} className="h-full w-full object-cover object-top" />
+          ) : null}
+        </div>
+        <div className="min-w-0 flex-1 space-y-2">
+          <div className="min-w-0">
+            <p className="text-[11px] font-semibold tracking-wide text-cyan-100">{label}</p>
+            {description ? (
+              <p className="truncate text-[10px] text-muted-foreground" title={description}>
+                {description}
+              </p>
+            ) : null}
+          </div>
+          {/* PHASE 4 — model choice per subject (stored only, generation unchanged). */}
+          <SubjectModelSelector userId={userId} model={model} onChange={onModelChange} compact />
+          {renderSlot("Top", "topGarmentId", tops, wardrobe?.topGarmentId ?? null)}
+          {renderSlot("Bottom", "bottomGarmentId", bottoms, wardrobe?.bottomGarmentId ?? null)}
+
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -218,7 +398,9 @@ function VideoProgress({
 
 
 export default function OutfitSwap() {
+  const { user } = useAuth();
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
+
   const [videoPreview, setVideoPreview] = useState<string | null>(null);
   const [meta, setMeta] = useState<VideoMeta | null>(null);
   const [uploadingVideo, setUploadingVideo] = useState(false);
@@ -227,6 +409,29 @@ export default function OutfitSwap() {
   const [extracting, setExtracting] = useState(false);
   const [extractProgress, setExtractProgress] = useState(0);
   const [selectedFrames, setSelectedFrames] = useState<Set<number>>(new Set());
+
+  // PHASE 1 source analysis (detection only — no generation, no provider spend).
+  const [analysisStage, setAnalysisStage] = useState<
+    "idle" | "frames" | "subjects" | "orientation" | "done" | "error"
+  >("idle");
+  const [analysis, setAnalysis] = useState<OutfitSwapSourceAnalysis | null>(null);
+  const [analysisError, setAnalysisError] = useState<string | null>(null);
+  const [analysisFingerprint, setAnalysisFingerprint] = useState<string | null>(null);
+  // PHASE 3 — subject track id → assigned garment ids. Mapping only: it is
+  // stored with the run and is NOT sent to the generation calls in this phase.
+  const [castAssignment, setCastAssignment] = useState<OutfitSwapCastAssignment>({});
+  const [suggestionDismissed, setSuggestionDismissed] = useState(false);
+  // PHASE 4 — subject track id → chosen model. Stored with the run only; the
+  // swap / video calls still run the clothing-only (keep original) contract.
+  const [modelAssignment, setModelAssignment] = useState<OutfitSwapModelAssignment>({});
+  // PHASE 6 — per-frame QA verdicts + tucked-away manual overrides. Analysis
+  // only: nothing here ever triggers a paid generation on its own.
+  const [qaReport, setQaReport] = useState<OutfitSwapQaReport>({});
+  const [frameOverrides, setFrameOverrides] = useState<OutfitSwapFrameOverrides>({});
+  const [qaRunning, setQaRunning] = useState(false);
+
+
+
 
   const [garments, setGarments] = useState<Garment[]>([]);
   const [uploadingGarment, setUploadingGarment] = useState(false);
@@ -258,6 +463,44 @@ export default function OutfitSwap() {
 
   /* ---------------------------- 1. Source video ---------------------------- */
 
+  /**
+   * Detection-only pass over the extracted source frames. Never generates and
+   * never touches the swap / reconstruction calls; results are cached server
+   * side by input fingerprint so returning here does not recompute.
+   */
+  const runSourceAnalysis = useCallback(async (uploaded: Frame[]) => {
+    if (!uploaded.length) return;
+    setAnalysisError(null);
+    setAnalysis(null);
+    setAnalysisStage("frames");
+    try {
+      setAnalysisStage("subjects");
+      const result = await analyzeOutfitSwapSource(
+        uploaded.map((frame, index) => ({
+          frameId: `frame-${index}`,
+          timestamp: frame.time,
+          imageUrl: frame.url,
+        })),
+      );
+      setAnalysisStage("orientation");
+      setAnalysis(result.analysis);
+      setAnalysisFingerprint(result.fingerprint);
+      setSuggestionDismissed(false);
+      setCastAssignment(loadCastAssignment(result.fingerprint) ?? {});
+      setModelAssignment(loadModelAssignment(result.fingerprint) ?? {});
+      // PHASE 6: restore QA verdicts + overrides so back-nav never recomputes.
+      setQaReport(loadQaReport(result.fingerprint));
+      setFrameOverrides(loadFrameOverrides(result.fingerprint));
+
+
+
+      setAnalysisStage("done");
+    } catch (error) {
+      setAnalysisError(error instanceof Error ? error.message : "Could not analyse that clip");
+      setAnalysisStage("error");
+    }
+  }, []);
+
   const handleVideoFile = useCallback(async (file: File) => {
     const objectUrl = URL.createObjectURL(file);
     setVideoPreview(objectUrl);
@@ -265,7 +508,11 @@ export default function OutfitSwap() {
     setSwaps({});
     setApproved(new Set());
     setSelectedFrames(new Set());
+    setAnalysis(null);
+    setAnalysisError(null);
+    setAnalysisStage("idle");
     // The video library is intentionally preserved across new source clips.
+
 
     try {
       const element = await loadVideo(objectUrl);
@@ -302,6 +549,8 @@ export default function OutfitSwap() {
         .filter((index) => index % Math.max(1, Math.ceil(uploaded.length / 4)) === 0);
       setSelectedFrames(new Set(spread));
       toast.success(`${uploaded.length} source frames extracted`);
+      void runSourceAnalysis(uploaded);
+
 
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Could not process that video");
@@ -309,7 +558,7 @@ export default function OutfitSwap() {
       setUploadingVideo(false);
       setExtracting(false);
     }
-  }, []);
+  }, [runSourceAnalysis]);
 
   /* -------------------------- 3. Garment references ------------------------- */
 
@@ -323,7 +572,18 @@ export default function OutfitSwap() {
         const compressed = await compressImageFile(file);
         const stored = await uploadToStorage(folder, compressed, compressed.name);
         uploaded.push({
+          id:
+            typeof crypto !== "undefined" && "randomUUID" in crypto
+              ? crypto.randomUUID()
+              : `garment-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+          // FRONT is the primary reference: `url` mirrors `frontUrl` so the
+          // existing generation call keeps working unchanged.
           url: stored.url,
+          frontUrl: stored.url,
+          hasBackDesign: false,
+          backUrl: null,
+          detailUrl: null,
+          sideUrl: null,
           name: file.name,
           type: GARMENT_TYPES[0],
           label: "",
@@ -338,6 +598,109 @@ export default function OutfitSwap() {
       setUploadingGarment(false);
     }
   }, []);
+
+  /**
+   * Uploads one extra structured reference for a garment. FRONT replaces the
+   * primary ref (keeping `url` in sync); BACK / DETAIL / SIDE are stored only —
+   * they are NOT sent to generation in this phase.
+   */
+  const [slotUploading, setSlotUploading] = useState<string | null>(null);
+  const [expandedRefs, setExpandedRefs] = useState<Set<number>>(new Set());
+  const uploadGarmentSlot = useCallback(
+    async (index: number, slot: GarmentSlot, file: File | undefined) => {
+      if (!file) return;
+      setSlotUploading(`${index}:${slot}`);
+      try {
+        const folder = await createOutfitSwapFolder();
+        const compressed = await compressImageFile(file);
+        const stored = await uploadToStorage(folder, compressed, compressed.name);
+        setGarments((prev) =>
+          prev.map((item, i) => {
+            if (i !== index) return item;
+            if (slot === "front") return { ...item, frontUrl: stored.url, url: stored.url };
+            if (slot === "back") return { ...item, backUrl: stored.url };
+            if (slot === "detail") return { ...item, detailUrl: stored.url };
+            return { ...item, sideUrl: stored.url };
+          }),
+        );
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : "Could not upload that reference");
+      } finally {
+        setSlotUploading(null);
+      }
+    },
+    [],
+  );
+
+  /* --------------------- 3b. Cast assignment (mapping only) ------------------ */
+
+  const subjectTracks = useMemo(
+    () => (analysis && analysis.subjectCount > 1 ? analysis.subjectTracks : []),
+    [analysis],
+  );
+
+  const suggestedAssignment = useMemo(
+    () => suggestCastAssignment(subjectTracks.map((track) => track.subjectId), garments),
+    [subjectTracks, garments],
+  );
+
+  const hasAssignment = useMemo(
+    () =>
+      subjectTracks.some((track) => {
+        const entry = castAssignment[track.subjectId];
+        return Boolean(entry?.topGarmentId || entry?.bottomGarmentId);
+      }),
+    [subjectTracks, castAssignment],
+  );
+
+  // Stored with the run so navigating back never recomputes the mapping.
+  useEffect(() => {
+    if (!analysisFingerprint) return;
+    saveCastAssignment(analysisFingerprint, castAssignment);
+  }, [analysisFingerprint, castAssignment]);
+
+  /* ------------------- 3c. Model / person choice (storage only) --------------- */
+
+  useEffect(() => {
+    if (!analysisFingerprint) return;
+    saveModelAssignment(analysisFingerprint, modelAssignment);
+  }, [analysisFingerprint, modelAssignment]);
+
+  const setSubjectModel = useCallback((subjectId: string, next: OutfitSwapSubjectModel) => {
+    setModelAssignment((prev) => ({ ...prev, [subjectId]: next }));
+  }, []);
+
+  /** The single-subject run still talks about exactly one person. */
+  const soloSubjectId = useMemo(() => primarySubjectId(analysis), [analysis]);
+  const soloModel = modelAssignment[soloSubjectId] ?? KEEP_ORIGINAL_MODEL;
+
+
+  const setSubjectGarment = useCallback(
+    (subjectId: string, slot: "topGarmentId" | "bottomGarmentId", garmentId: string | null) => {
+      setCastAssignment((prev) => ({
+        ...prev,
+        [subjectId]: {
+          topGarmentId: prev[subjectId]?.topGarmentId ?? null,
+          bottomGarmentId: prev[subjectId]?.bottomGarmentId ?? null,
+          [slot]: garmentId,
+        },
+      }));
+    },
+    [],
+  );
+
+  /** The source frame where this track first appears — used as its portrait. */
+  const subjectPortrait = useCallback(
+    (appearsStart: number) => {
+      if (!frames.length) return null;
+      let best = frames[0];
+      for (const frame of frames) {
+        if (Math.abs(frame.time - appearsStart) < Math.abs(best.time - appearsStart)) best = frame;
+      }
+      return best.url;
+    },
+    [frames],
+  );
 
   /* ------------------------------ 4. Frame swaps ---------------------------- */
 
@@ -420,6 +783,20 @@ export default function OutfitSwap() {
     async (frameIndex: number) => {
       const frame = frames[frameIndex];
       if (!frame) return;
+      // PHASE 5: send the per-frame subject tracks + assignments so the server
+      // can assemble ONE fused edit (source frame + identity + garment refs).
+      // Omitted/empty for the simple 1-subject clothing-only run, which keeps
+      // the previous request exactly as it was.
+      const frameAnalysis =
+        analysis?.frames.find((entry) => entry.frameId === `frame-${frameIndex}`) ?? null;
+      // PHASE 6: this frame's manual overrides (if any) are folded in here. With
+      // no overrides the payload is byte-for-byte the Phase 5 request.
+      const resolved = applyFrameOverrides({
+        frameSubjects: frameAnalysis?.subjects ?? [],
+        castAssignment,
+        modelAssignment,
+        overrides: frameOverrides[frameIndex],
+      });
       const data = await callOutfitSwap<{ generation: SwapGeneration }>({
         action: "swap_frame",
         sourceFrameUrl: frame.url,
@@ -431,6 +808,9 @@ export default function OutfitSwap() {
         aspectRatio: meta?.aspectRatio,
         extraPrompt,
         resolution: "2K",
+        frameSubjects: resolved.frameSubjects,
+        castAssignment: resolved.castAssignment,
+        modelAssignment: resolved.modelAssignment,
       });
       setSwaps((prev) => ({ ...prev, [frameIndex]: data.generation }));
       setApproved((prev) => {
@@ -438,13 +818,27 @@ export default function OutfitSwap() {
         next.delete(frameIndex);
         return next;
       });
+      // A fresh render invalidates the old verdict — QA re-evaluates it.
+      setQaReport((prev) => {
+        if (!prev[frameIndex]) return prev;
+        const next = { ...prev };
+        delete next[frameIndex];
+        return next;
+      });
     },
-    [frames, garments, meta, extraPrompt],
+    [frames, garments, meta, extraPrompt, analysis, castAssignment, modelAssignment, frameOverrides],
   );
+
+
 
   const runSelectedSwaps = useCallback(async () => {
     if (!garments.length) {
       toast.error("Add at least one clothing reference");
+      return;
+    }
+    // BACK is required once the user says the garment has a back design.
+    if (garments.some((garment) => garment.hasBackDesign && !garment.backUrl)) {
+      toast.error("Add the back image for every product marked with a back design");
       return;
     }
     const indices = [...selectedFrames].sort((a, b) => a - b);
@@ -498,6 +892,12 @@ export default function OutfitSwap() {
 
   /* ------------------------- Live dollar/credit preview --------------------- */
 
+  /**
+   * PHASE 5 cost contract: each selected frame is ONE image edit, no matter how
+   * many subjects, models or garment sides it conditions on. Subjects handled in
+   * a single fused frame edit must NOT multiply the frame count. Credit values
+   * are unchanged.
+   */
   const swapCostUsd = useMemo(
     () => IMAGE_FLAT_USD * resolutionMultiplier("2K") * Math.max(0, selectedFrames.size),
     [selectedFrames],
@@ -515,6 +915,20 @@ export default function OutfitSwap() {
     }
     setReconstructing(true);
     try {
+      // PHASE 7: union of the analysed subject tracks across frames. The server
+      // uses these facts only to enrich the prompt for multi-subject /
+      // model-swap / back-design runs; a simple run sends an empty list and
+      // keeps the legacy prompt.
+      const subjectUnion = (() => {
+        const seen = new Map<string, OutfitSwapFrameSubject>();
+        for (const frame of analysis?.frames ?? []) {
+          for (const subject of frame.subjects ?? []) {
+            if (!seen.has(subject.subjectId)) seen.set(subject.subjectId, subject);
+          }
+        }
+        return Array.from(seen.values());
+      })();
+
       const data = await callOutfitSwap<{ generation: SwapGeneration }>({
         action: "reconstruct",
         frameUrls: approvedUrls,
@@ -527,6 +941,9 @@ export default function OutfitSwap() {
         preserveAudio,
         generateAudio: preserveAudio,
         extraPrompt,
+        frameSubjects: subjectUnion,
+        castAssignment,
+        modelAssignment,
       });
       // Non-blocking: each click is its own record, so several can run at once.
       setVideos((prev) => [data.generation, ...prev]);
@@ -536,7 +953,20 @@ export default function OutfitSwap() {
     } finally {
       setReconstructing(false);
     }
-  }, [approvedUrls, garments, videoModel, resolution, preserveAudio, meta, extraPrompt, videoDuration]);
+  }, [
+    approvedUrls,
+    garments,
+    videoModel,
+    resolution,
+    preserveAudio,
+    meta,
+    extraPrompt,
+    videoDuration,
+    analysis,
+    castAssignment,
+    modelAssignment,
+  ]);
+
 
   /** Stops tracking and frees the UI, even if the provider job keeps running. */
   const cancelVideo = useCallback(async () => {
@@ -697,6 +1127,188 @@ export default function OutfitSwap() {
         .sort((a, b) => a - b),
     [swaps],
   );
+
+  /* ---------------------- 4b. PHASE 6 — QA + overrides ---------------------- */
+
+  const frameSubjectsFor = useCallback(
+    (frameIndex: number): OutfitSwapFrameSubject[] =>
+      analysis?.frames.find((entry) => entry.frameId === `frame-${frameIndex}`)?.subjects ?? [],
+    [analysis],
+  );
+
+  // Persist QA + overrides with the run so back-nav never recomputes them.
+  useEffect(() => {
+    if (!analysisFingerprint) return;
+    saveQaReport(analysisFingerprint, qaReport);
+  }, [analysisFingerprint, qaReport]);
+
+  useEffect(() => {
+    if (!analysisFingerprint) return;
+    saveFrameOverrides(analysisFingerprint, frameOverrides);
+  }, [analysisFingerprint, frameOverrides]);
+
+  /**
+   * STRUCTURAL pass — free, local, instant. Every finished rebuild gets a
+   * verdict from what we already know; a vision check can upgrade it later.
+   */
+  useEffect(() => {
+    const completed = swapEntries.filter(
+      (index) => swaps[index]?.status === "complete" && swaps[index]?.outputUrl,
+    );
+    if (!completed.length) return;
+    setQaReport((prev) => {
+      let changed = false;
+      const next = { ...prev };
+      for (const index of completed) {
+        if (next[index]) continue;
+        next[index] = structuralFrameQa({
+          frameIndex: index,
+          frameSubjects: frameSubjectsFor(index),
+          castAssignment,
+          hasOutput: true,
+        });
+        changed = true;
+      }
+      return changed ? next : prev;
+    });
+  }, [swapEntries, swaps, castAssignment, frameSubjectsFor]);
+
+  const qaCounts = useMemo(() => {
+    let passed = 0;
+    let check = 0;
+    let failed = 0;
+    for (const index of swapEntries) {
+      const status = qaReport[index]?.status;
+      if (status === "PASSED") passed += 1;
+      else if (status === "CHECK") check += 1;
+      else if (status === "FAILED") failed += 1;
+    }
+    return { passed, check, failed };
+  }, [swapEntries, qaReport]);
+
+  /**
+   * VISION QA — Gemini analysis of the already-rebuilt frames. No generation,
+   * no provider spend, results cached server side by input fingerprint.
+   */
+  const runVisionQa = useCallback(async () => {
+    const candidates = swapEntries.filter(
+      (index) => swaps[index]?.status === "complete" && swaps[index]?.outputUrl && frames[index],
+    );
+    if (!candidates.length) {
+      toast.error("Nothing to check yet");
+      return;
+    }
+    setQaRunning(true);
+    try {
+      const garmentName = (id: string | null | undefined) =>
+        garments.find((garment) => garment.id === id)?.name ||
+        garments.find((garment) => garment.id === id)?.type ||
+        "none";
+
+      const requests = candidates.map((index) => {
+        const subjects = frameSubjectsFor(index);
+        const overrides = frameOverrides[index];
+        const resolved = applyFrameOverrides({
+          frameSubjects: subjects,
+          castAssignment,
+          modelAssignment,
+          overrides,
+        });
+        return {
+          frameIndex: index,
+          sourceFrameUrl: frames[index].url,
+          rebuiltUrl: swaps[index].outputUrl as string,
+          expectedSubjectCount: subjects.length,
+          expectations: subjects.map((subject) => {
+            const wardrobe = resolved.castAssignment[subject.subjectId];
+            const model = resolved.modelAssignment[subject.subjectId];
+            return {
+              subjectId: subject.subjectId,
+              wardrobe: `top ${garmentName(wardrobe?.topGarmentId)}, bottom ${garmentName(
+                wardrobe?.bottomGarmentId,
+              )}`,
+              model: !model || model.modelSource === "keep_original" ? "original person" : "replaced model",
+            };
+          }),
+        };
+      });
+
+      // Batched: each frame costs two images, so send small chunks.
+      const chunks: (typeof requests)[] = [];
+      for (let i = 0; i < requests.length; i += 6) chunks.push(requests.slice(i, i + 6));
+
+      const results = [] as Awaited<ReturnType<typeof analyzeOutfitSwapQa>>["frames"];
+      for (const chunk of chunks) {
+        const result = await analyzeOutfitSwapQa(chunk);
+        results.push(...(result.frames ?? []).map((entry) => ({ ...entry, checkedAt: result.checkedAt })));
+      }
+
+      setQaReport((prev) => {
+        const next = { ...prev };
+        for (const entry of results) next[entry.frameIndex] = { ...entry, needsRegenerate: false };
+        return next;
+      });
+      const flagged = results.filter((entry) => entry.status !== "PASSED").length;
+      toast.success(
+        flagged
+          ? `QA done — ${flagged} frame${flagged === 1 ? "" : "s"} need a look`
+          : "QA done — all frames passed",
+      );
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not run the QA check");
+    } finally {
+      setQaRunning(false);
+    }
+  }, [
+    swapEntries,
+    swaps,
+    frames,
+    garments,
+    castAssignment,
+    modelAssignment,
+    frameOverrides,
+    frameSubjectsFor,
+  ]);
+
+  /** Bulk-approve everything that passed QA so only problem frames need eyes. */
+  const approveAllPassed = useCallback(() => {
+    const passed = swapEntries.filter(
+      (index) => swaps[index]?.status === "complete" && qaReport[index]?.status === "PASSED",
+    );
+    if (!passed.length) {
+      toast.error("No frames have passed QA yet");
+      return;
+    }
+    setApproved((prev) => {
+      const next = new Set(prev);
+      for (const index of passed) next.add(index);
+      return next;
+    });
+    toast.success(`${passed.length} frame${passed.length === 1 ? "" : "s"} approved`);
+  }, [swapEntries, swaps, qaReport]);
+
+  /**
+   * A manual override is STORED only — the frame is flagged for regeneration
+   * and the user triggers that render explicitly. No automatic spend.
+   */
+  const applyOverride = useCallback(
+    (frameIndex: number, subjectId: string, patch: OutfitSwapFrameOverride) => {
+      setFrameOverrides((prev) => ({
+        ...prev,
+        [frameIndex]: {
+          ...(prev[frameIndex] ?? {}),
+          [subjectId]: { ...(prev[frameIndex]?.[subjectId] ?? {}), ...patch },
+        },
+      }));
+      setQaReport((prev) =>
+        prev[frameIndex]
+          ? { ...prev, [frameIndex]: { ...prev[frameIndex], needsRegenerate: true } }
+          : prev,
+      );
+    },
+    [],
+  );
+
 
   /* ------------------- Serialize this run into a real template -------------- */
 
@@ -957,6 +1569,83 @@ export default function OutfitSwap() {
                         <X size={12} />
                       </button>
                     </div>
+
+                    {/* PHASE 2 — structured refs. FRONT is the primary ref used by
+                        generation; BACK/DETAIL/SIDE are captured + stored only. */}
+                    <div className="mt-2.5 space-y-2 border-t border-white/10 pt-2.5">
+                      <label className="flex cursor-pointer items-center justify-between gap-3">
+                        <span className="text-[10px] uppercase tracking-[0.14em] text-cyan-200/70">
+                          Has back design
+                        </span>
+                        <Switch
+                          checked={garment.hasBackDesign}
+                          onCheckedChange={(checked) =>
+                            setGarments((prev) =>
+                              prev.map((item, i) =>
+                                i === index ? { ...item, hasBackDesign: checked } : item,
+                              ),
+                            )
+                          }
+                        />
+                      </label>
+
+                      {garment.hasBackDesign ? (
+                        <GarmentSlotUpload
+                          label="Back"
+                          required
+                          url={garment.backUrl}
+                          busy={slotUploading === `${index}:back`}
+                          onPick={(file) => void uploadGarmentSlot(index, "back", file)}
+                          onClear={() =>
+                            setGarments((prev) =>
+                              prev.map((item, i) => (i === index ? { ...item, backUrl: null } : item)),
+                            )
+                          }
+                        />
+                      ) : null}
+
+                      {expandedRefs.has(index) ? (
+                        <div className="space-y-2">
+                          <GarmentSlotUpload
+                            label="Detail"
+                            url={garment.detailUrl ?? null}
+                            busy={slotUploading === `${index}:detail`}
+                            onPick={(file) => void uploadGarmentSlot(index, "detail", file)}
+                            onClear={() =>
+                              setGarments((prev) =>
+                                prev.map((item, i) => (i === index ? { ...item, detailUrl: null } : item)),
+                              )
+                            }
+                          />
+                          <GarmentSlotUpload
+                            label="Side"
+                            url={garment.sideUrl ?? null}
+                            busy={slotUploading === `${index}:side`}
+                            onPick={(file) => void uploadGarmentSlot(index, "side", file)}
+                            onClear={() =>
+                              setGarments((prev) =>
+                                prev.map((item, i) => (i === index ? { ...item, sideUrl: null } : item)),
+                              )
+                            }
+                          />
+                        </div>
+                      ) : null}
+
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setExpandedRefs((prev) => {
+                            const next = new Set(prev);
+                            if (next.has(index)) next.delete(index);
+                            else next.add(index);
+                            return next;
+                          })
+                        }
+                        className="text-[10px] uppercase tracking-[0.14em] text-foreground/50 transition-colors hover:text-cyan-200"
+                      >
+                        {expandedRefs.has(index) ? "Hide extra references" : "Add more references"}
+                      </button>
+                    </div>
                   </div>
                 ))}
                 <button
@@ -982,6 +1671,77 @@ export default function OutfitSwap() {
                 />
               </div>
             </SectionCard>
+
+            {/* PHASE 4 — single-subject runs get ONE simple model control.
+                "Keep original" (the default) is exactly today's behaviour. */}
+            {subjectTracks.length > 1 ? null : (
+              <div className="rounded-3xl border border-white/10 bg-white/[0.03] p-4 backdrop-blur-xl sm:p-5">
+                <div className="max-w-sm">
+                  <SubjectModelSelector
+                    userId={user?.id ?? null}
+                    model={soloModel}
+                    onChange={(next) => setSubjectModel(soloSubjectId, next)}
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* PHASE 3 — only appears when the clip really has multiple subjects.
+                One subject keeps the flow exactly as simple as before. */}
+            {subjectTracks.length > 1 ? (
+
+              <SectionCard
+                step={4}
+                title="Assign your cast"
+                hint="Assign wardrobe once per subject — the same product can go on more than one person."
+              >
+                {suggestedAssignment && !hasAssignment && !suggestionDismissed ? (
+                  <div className="mb-3 flex flex-wrap items-center gap-2 rounded-xl border border-cyan-200/25 bg-cyan-400/5 px-3 py-2 text-[11px] text-cyan-100">
+                    <span>Suggested assignment available — you can change anything after applying.</span>
+                    <Button
+                      size="sm"
+                      onClick={() => setCastAssignment(suggestedAssignment)}
+                      className="h-6 rounded-lg bg-cyan-400/20 px-2 text-[10px] uppercase tracking-[0.12em] text-cyan-100 hover:bg-cyan-400/30"
+                    >
+                      Use suggestion
+                    </Button>
+                    <button
+                      type="button"
+                      onClick={() => setSuggestionDismissed(true)}
+                      className="text-[10px] uppercase tracking-[0.12em] text-foreground/50 hover:text-foreground/80"
+                    >
+                      Dismiss
+                    </button>
+                  </div>
+                ) : null}
+
+                {garments.length ? (
+                  <div className="grid gap-2.5 sm:grid-cols-2">
+                    {subjectTracks.map((track, index) => (
+                      <SubjectCastCard
+                        key={track.subjectId}
+                        label={`Subject ${index + 1}`}
+                        description={track.description}
+                        portraitUrl={subjectPortrait(track.appearsStart)}
+                        garments={garments}
+                        wardrobe={castAssignment[track.subjectId] ?? null}
+                        onChange={(slot, garmentId) => setSubjectGarment(track.subjectId, slot, garmentId)}
+                        userId={user?.id ?? null}
+                        model={modelAssignment[track.subjectId] ?? KEEP_ORIGINAL_MODEL}
+                        onModelChange={(next) => setSubjectModel(track.subjectId, next)}
+
+                      />
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-[11px] text-muted-foreground">
+                    Add clothing references above to assign them to each subject.
+                  </p>
+                )}
+              </SectionCard>
+            ) : null}
+
+
 
             <SectionCard step={5} title="Video generation" hint="Your clip, rebuilt in the new wardrobe.">
               <div className="space-y-3">
@@ -1119,8 +1879,50 @@ export default function OutfitSwap() {
                   : "Frames appear here once a clip is processed."
               }
             >
+              {/* Detection-only status — no generation happens here. */}
+              {frames.length && analysisStage !== "idle" ? (
+                <div className="mb-3 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2 text-[11px]">
+                  {analysisStage === "done" && analysis ? (
+                    <div className="flex flex-wrap items-center gap-2 text-cyan-100">
+                      <span className="font-semibold tracking-wide">
+                        {analysis.subjectCount === 1
+                          ? "1 SUBJECT DETECTED ✓"
+                          : `✓ ${analysis.subjectCount} SUBJECTS`}
+                      </span>
+                      <span className="text-muted-foreground">·</span>
+                      <span className="text-muted-foreground">✓ {analysis.frameCount} FRAMES</span>
+                    </div>
+                  ) : analysisStage === "error" ? (
+                    <div className="flex flex-wrap items-center gap-2 text-muted-foreground">
+                      <span>{analysisError ?? "Clip analysis unavailable"}</span>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => void runSourceAnalysis(frames)}
+                        className="h-6 rounded-lg border-white/15 bg-transparent text-[10px]"
+                      >
+                        Retry
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2 text-muted-foreground">
+                      <Loader2 size={12} className="animate-spin text-cyan-200" />
+                      <span>
+                        Analyzing video…{" "}
+                        {analysisStage === "frames"
+                          ? "· detecting frames"
+                          : analysisStage === "subjects"
+                            ? "· detecting subjects"
+                            : "· tracking wardrobe orientation"}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              ) : null}
+
               {frames.length ? (
                 <>
+
                   <div className="flex gap-2 overflow-x-auto pb-2">
                     {frames.map((frame, index) => {
                       const isSelected = selectedFrames.has(index);
@@ -1185,6 +1987,9 @@ export default function OutfitSwap() {
                     {selectedFrames.size ? (
                       <span className="ml-1 font-medium text-cyan-100">
                         {costPreview(creditsFromUsd(swapCostUsd), swapCostUsd)}
+                        <span className="ml-1 text-muted-foreground">
+                          · 1 render per frame, all subjects included
+                        </span>
                       </span>
                     ) : null}
                   </p>
@@ -1198,7 +2003,41 @@ export default function OutfitSwap() {
 
             <SectionCard step={4} title="Review swaps" hint="Approve the frames that will drive the rebuild.">
               {swapEntries.length ? (
+                <div className="mb-3 flex flex-wrap items-center gap-2 rounded-2xl border border-white/10 bg-black/25 px-2.5 py-2">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={qaRunning}
+                    onClick={() => void runVisionQa()}
+                    className="rounded-lg border-white/15 bg-transparent text-[11px]"
+                  >
+                    {qaRunning ? (
+                      <Loader2 size={12} className="animate-spin" />
+                    ) : (
+                      <ShieldCheck size={12} />
+                    )}
+                    {qaRunning ? "Checking…" : "Run quality check"}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={!qaCounts.passed}
+                    onClick={approveAllPassed}
+                    className="rounded-lg border-emerald-300/40 bg-transparent text-[11px] text-emerald-200"
+                  >
+                    <Check size={12} /> Approve all passed
+                    {qaCounts.passed ? ` (${qaCounts.passed})` : ""}
+                  </Button>
+                  <span className="ml-auto flex items-center gap-2 text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
+                    <span className="text-emerald-200">{qaCounts.passed} passed</span>
+                    <span className="text-amber-200">{qaCounts.check} check</span>
+                    {qaCounts.failed ? <span className="text-red-300">{qaCounts.failed} failed</span> : null}
+                  </span>
+                </div>
+              ) : null}
+              {swapEntries.length ? (
                 <div className="grid gap-3 sm:grid-cols-2">
+
                   {swapEntries.map((index) => {
                     const swap = swaps[index];
                     const frame = frames[index];
@@ -1216,11 +2055,13 @@ export default function OutfitSwap() {
                             {frame ? `${frame.time.toFixed(2)}s` : `Frame ${index + 1}`}
                           </span>
                           <span className="flex items-center gap-2">
+                            <QaBadge qa={qaReport[index]} />
                             <span className="text-[10px] text-cyan-200/70">
                               {costPreview(swap.estimatedCredits, swap.estimatedCostUsd)}
                             </span>
                             <StatusPill generation={swap} />
                           </span>
+
                         </div>
                         <button
                           type="button"
@@ -1289,7 +2130,21 @@ export default function OutfitSwap() {
                             <Trash2 size={12} />
                           </Button>
                         </div>
+                        {swap.status === "complete" ? (
+                          <FrameQaPanel
+                            qa={qaReport[index]}
+                            frameSubjects={frameSubjectsFor(index)}
+                            garments={garments}
+                            castAssignment={castAssignment}
+                            modelAssignment={modelAssignment}
+                            overrides={frameOverrides[index]}
+                            userId={user?.id}
+                            onOverride={(subjectId, patch) => applyOverride(index, subjectId, patch)}
+                            onRegenerate={() => void swapFrame(index)}
+                          />
+                        ) : null}
                       </article>
+
                     );
                   })}
                 </div>

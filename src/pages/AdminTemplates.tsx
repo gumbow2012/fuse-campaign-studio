@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
-import { GitBranch, Loader2, Network, TestTube2 } from "lucide-react";
+import { Factory, GitBranch, LayoutGrid, Loader2, Network, TestTube2 } from "lucide-react";
 import SiteShell from "@/components/mvp/SiteShell";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -14,6 +14,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { supabase } from "@/integrations/supabase/client";
+import QuickPublishButton from "@/components/lab/QuickPublishButton";
 
 type WorkbenchVersion = {
   id: string;
@@ -72,7 +73,7 @@ function publishGateClass(version: WorkbenchVersion | null) {
 }
 
 export default function AdminTemplates() {
-  const { data: templates, isLoading } = useQuery({
+  const { data: templates, isLoading, refetch } = useQuery({
     queryKey: ["admin-template-workbench-catalog"],
     queryFn: async () => {
       const { data, error } = await supabase.functions.invoke("admin-template-workbench", {
@@ -95,6 +96,19 @@ export default function AdminTemplates() {
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
+            <Button asChild size="sm" variant="outline" className="rounded-full border-white/15 bg-white/5">
+              <Link to="/admin/templates/merchandising">
+                <LayoutGrid className="mr-2 h-4 w-4" />
+                Merchandising
+              </Link>
+            </Button>
+            <Button asChild size="sm" variant="outline" className="rounded-full border-white/15 bg-white/5">
+
+              <Link to="/admin/templates/factory">
+                <Factory className="mr-2 h-4 w-4" />
+                Template Factory
+              </Link>
+            </Button>
             <Button asChild size="sm" className="rounded-full bg-cyan-300 text-slate-950 hover:bg-cyan-200">
               <Link to="/app/lab/canvas">
                 <Network className="mr-2 h-4 w-4" />
@@ -102,6 +116,7 @@ export default function AdminTemplates() {
               </Link>
             </Button>
           </div>
+
         </div>
 
         <Card className="border-white/10 bg-white/[0.03]">
@@ -179,6 +194,17 @@ export default function AdminTemplates() {
                           </Link>
                         </Button>
                       </div>
+                      {liveVersion && !liveVersion.is_active ? (
+                        <div className="mt-2">
+                          <QuickPublishButton
+                            versionId={liveVersion.id}
+                            templateName={template.name}
+                            versionNumber={liveVersion.version_number}
+                            className="w-full"
+                            onPublished={() => { void refetch(); }}
+                          />
+                        </div>
+                      ) : null}
                     </div>
                   );
                 })}
@@ -230,7 +256,15 @@ export default function AdminTemplates() {
                           </Badge>
                         </TableCell>
                         <TableCell className="text-right">
-                          <div className="flex justify-end gap-1">
+                          <div className="flex items-center justify-end gap-1">
+                            {liveVersion && !liveVersion.is_active ? (
+                              <QuickPublishButton
+                                versionId={liveVersion.id}
+                                templateName={template.name}
+                                versionNumber={liveVersion.version_number}
+                                onPublished={() => { void refetch(); }}
+                              />
+                            ) : null}
                             <Button size="icon" variant="ghost" asChild title="Graph editor">
                               <Link to={`/app/lab/canvas${liveVersion ? `?versionId=${liveVersion.id}` : ""}`}>
                                 <GitBranch className="h-4 w-4" />

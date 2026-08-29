@@ -20,6 +20,11 @@ import {
   type CreditPackDefinition,
 } from "./stripe-credit-packs.ts";
 import {
+  creditTopUpPurchaseType,
+  quoteCreditTopUp,
+  resolveCreditTopUpPurchase,
+} from "./credit-pricing.ts";
+import {
   type StripeBillingMode,
   createStripeClient,
   findStripeCustomerId,
@@ -123,13 +128,29 @@ function extractSubscriptionPeriod(subscription: StripeObject) {
   };
 }
 
+/**
+ * Internal-path allowlist for the post-checkout landing page. An authenticated
+ * checkout must return into the APP — never to /auth (which would show the
+ * account-creation UI to a user who already has a session).
+ */
+export function sanitizeReturnPath(raw: unknown): string | null {
+  if (typeof raw !== "string") return null;
+  const value = raw.trim();
+  if (!value.startsWith("/")) return null;
+  if (value.startsWith("//") || value.startsWith("/\\")) return null;
+  if (value.startsWith("/auth")) return null;
+  if (value.length > 512) return null;
+  return value;
+}
+
 function billingReturnUrl(
   origin: string,
   mode: StripeBillingMode,
   outcome: "success" | "canceled",
-  intent?: { templateId?: string | null; templateName?: string | null },
+  intent?: { templateId?: string | null; templateName?: string | null; returnPath?: string | null },
 ) {
-  const url = new URL(outcome === "success" ? "/auth" : "/pricing", origin);
+  const successPath = intent?.returnPath ?? "/auth";
+  const url = new URL(outcome === "success" ? successPath : "/pricing", origin);
   url.searchParams.set(outcome, "true");
   if (outcome === "success") {
     url.searchParams.set("paid", "true");
@@ -150,6 +171,7 @@ function billingReturnUrl(
   }
   return url.toString();
 }
+
 
 function normalizeCheckoutEmail(value: unknown) {
   if (typeof value !== "string") return null;
@@ -394,6 +416,7 @@ async function applyCreditPackTopup(args: {
   billingMode: StripeBillingMode;
   pack: CreditPackDefinition;
   profile: { user_id: string; email: string };
+  ledgerDescription?: string;
 }) {
   const { admin, pack } = args;
 
@@ -447,7 +470,7 @@ async function applyCreditPackTopup(args: {
     p_user_id: args.profile.user_id,
     p_amount: pack.credits,
     p_type: "topup",
-    p_description: `Stripe credit pack: ${pack.name}`,
+    p_description: args.ledgerDescription ?? `Stripe credit pack: ${pack.name}`,
     p_template_id: null,
     p_project_id: null,
     p_step_id: null,
@@ -475,7 +498,92 @@ async function applyCreditPackTopup(args: {
   };
 }
 
+/**
+ * R3 — referral paid qualification + referrer reward.
+ * Best-effort and fully self-contained: any failure is logged and swallowed so
+ * billing/membership results are never affected. Amounts always come from
+ * referral_program_config (never hardcoded).
+ */
+async function maybeRewardReferrer(args: {
+  admin: ReturnType<typeof createAdminClient>;
+  userId: string;
+  amountPaidCents: number;
+  stripeEventId: string;
+}) {
+  const { admin, userId, amountPaidCents, stripeEventId } = args;
+  try {
+    if (!userId || amountPaidCents <= 0) return;
+
+    const { data: config } = await admin
+      .from("referral_program_config")
+      .select("enabled, referrer_bonus_credits_on_paid")
+      .limit(1)
+      .maybeSingle();
+
+    const rewardCredits = Number(config?.referrer_bonus_credits_on_paid ?? 0);
+    if (!config?.enabled || !Number.isFinite(rewardCredits) || rewardCredits <= 0) return;
+
+    const { data: attribution } = await admin
+      .from("referral_attributions")
+      .select("id, referrer_user_id, referred_user_id")
+      .eq("referred_user_id", userId)
+      .eq("status", "ATTRIBUTED")
+      .maybeSingle();
+    if (!attribution?.id || !attribution.referrer_user_id) return;
+
+    // Idempotency: UNIQUE(attribution_id, reward_type) makes the second event a no-op.
+    const { data: insertedRows, error: insertError } = await admin
+      .from("referral_rewards")
+      .upsert(
+        {
+          attribution_id: attribution.id,
+          referrer_user_id: attribution.referrer_user_id,
+          referred_user_id: attribution.referred_user_id,
+          reward_type: "referrer_qualified",
+          credits_amount: rewardCredits,
+          stripe_event_id: stripeEventId,
+        },
+        { onConflict: "attribution_id,reward_type", ignoreDuplicates: true },
+      )
+      .select("id");
+
+    if (insertError) throw new Error(insertError.message);
+    const created = Array.isArray(insertedRows) ? insertedRows[0] : insertedRows;
+    if (!created?.id) return; // already rewarded
+
+    const { error: creditError } = await admin.rpc("apply_credit_transaction", {
+      p_user_id: attribution.referrer_user_id,
+      p_amount: rewardCredits,
+      p_type: "adjustment",
+      p_description: "Referral reward — referred member qualified",
+      p_template_id: null,
+      p_project_id: null,
+      p_step_id: null,
+    });
+    if (creditError) throw new Error(creditError.message);
+
+    const nowIso = new Date().toISOString();
+    await admin
+      .from("referral_attributions")
+      .update({ status: "REWARDED", qualified_at: nowIso, rewarded_at: nowIso })
+      .eq("id", attribution.id);
+
+    await admin.from("user_notifications").insert({
+      user_id: attribution.referrer_user_id,
+      type: "referral",
+      title: "🎁 Referral qualified",
+      body: `You earned ${rewardCredits.toLocaleString()} FUSE credits.`,
+      action_label: "View referrals",
+      action_url: "/referrals",
+      metadata: { attribution_id: attribution.id, credits_amount: rewardCredits },
+    });
+  } catch (error) {
+    console.error("[referrals] paid qualification failed", errorMessage(error));
+  }
+}
+
 export function createCheckoutHandler(mode: StripeBillingMode) {
+
   return async (req: Request) => {
     if (req.method === "OPTIONS") {
       return new Response(null, { status: 204, headers: corsHeaders });
@@ -494,7 +602,10 @@ export function createCheckoutHandler(mode: StripeBillingMode) {
         brandName?: string;
         templateId?: string;
         templateName?: string;
+        returnPath?: string;
       };
+      const returnPath = sanitizeReturnPath(body.returnPath);
+
 
       const checkoutEmail = normalizeCheckoutEmail(body.email);
       if (typeof body.email === "string" && body.email.trim() && !checkoutEmail) {
@@ -582,6 +693,15 @@ export function createCheckoutHandler(mode: StripeBillingMode) {
           billing_mode: mode,
           template_id: templateId ?? "",
           template_name: templateName ?? "",
+          fbc: (typeof body.fbc === "string" ? body.fbc : "") || "",
+          fbp: (typeof body.fbp === "string" ? body.fbp : "") || "",
+          meta_client_ip: (req.headers.get("x-forwarded-for") || "").split(",")[0].trim(),
+          meta_user_agent: req.headers.get("user-agent") || "",
+          utm_source: (typeof body.utm_source === "string" ? body.utm_source : "").slice(0, 200),
+          utm_medium: (typeof body.utm_medium === "string" ? body.utm_medium : "").slice(0, 200),
+          utm_campaign: (typeof body.utm_campaign === "string" ? body.utm_campaign : "").slice(0, 200),
+          utm_content: (typeof body.utm_content === "string" ? body.utm_content : "").slice(0, 200),
+          fbclid: (typeof body.fbclid === "string" ? body.fbclid : "").slice(0, 200),
         },
         subscription_data: {
           metadata: {
@@ -594,8 +714,9 @@ export function createCheckoutHandler(mode: StripeBillingMode) {
             template_name: templateName ?? "",
           },
         },
-        success_url: billingReturnUrl(origin, mode, "success", { templateId, templateName }),
-        cancel_url: billingReturnUrl(origin, mode, "canceled", { templateId, templateName }),
+        success_url: billingReturnUrl(origin, mode, "success", { templateId, templateName, returnPath }),
+        cancel_url: billingReturnUrl(origin, mode, "canceled", { templateId, templateName, returnPath }),
+
       });
 
       await logAuditEvent({
@@ -656,9 +777,31 @@ export function createCreditCheckoutHandler(mode: StripeBillingMode) {
       userEmail = user.email ?? null;
       if (!user.email) throw new Error("User not authenticated");
 
-      const body = await req.json().catch(() => ({})) as { packKey?: string };
-      const pack = creditPackFromKey(typeof body.packKey === "string" ? body.packKey : null);
-      if (!pack) throw new Error("Unsupported credit pack");
+      const body = await req.json().catch(() => ({})) as { packKey?: string; credits?: number | string };
+
+      // New flow: the client submits ONLY a credits integer; the server is the
+      // sole price authority via quoteCreditTopUp. Legacy { packKey } flow is
+      // preserved unchanged for older clients.
+      const hasCredits = body.credits !== undefined && body.credits !== null && body.credits !== "";
+      let pack: CreditPackDefinition;
+      let purchaseType: "preset" | "custom" | null = null;
+      let pricingVersion: string | null = null;
+      if (hasCredits) {
+        const quote = quoteCreditTopUp(body.credits);
+        purchaseType = creditTopUpPurchaseType(quote.credits);
+        pricingVersion = quote.pricingVersion;
+        pack = {
+          key: purchaseType === "preset" ? `preset_${quote.credits}` : "custom",
+          name: `${quote.credits.toLocaleString("en-US")} FUSE Credits`,
+          credits: quote.credits,
+          amountCents: quote.amountCents,
+          currency: "usd",
+        } as CreditPackDefinition;
+      } else {
+        const legacyPack = creditPackFromKey(typeof body.packKey === "string" ? body.packKey : null);
+        if (!legacyPack) throw new Error("Unsupported credit pack");
+        pack = legacyPack;
+      }
 
       const stripe = createStripeClient(getStripeSecretKey(mode));
       const { data: profile } = await admin
@@ -667,9 +810,6 @@ export function createCreditCheckoutHandler(mode: StripeBillingMode) {
         .eq("user_id", user.id)
         .maybeSingle();
 
-      if (!hasActivePaidMembership(profile)) {
-        throw new Error("Credit packs are only available after an active membership is set up. Choose a membership first.");
-      }
 
       const customerId = await findStripeCustomerId({
         stripe,
@@ -693,31 +833,77 @@ export function createCreditCheckoutHandler(mode: StripeBillingMode) {
         allow_promotion_codes: true,
         line_items: [{
           quantity: 1,
-          price_data: {
-            currency: pack.currency,
-            unit_amount: pack.amountCents,
-            product_data: {
-              name: `${pack.name} Credit Pack`,
-              description: `${pack.credits} Fuse credits`,
+          price_data: purchaseType
+            ? {
+              currency: pack.currency,
+              unit_amount: pack.amountCents,
+              product_data: {
+                name: pack.name,
+                description: "One-time FUSE credit top-up",
+              },
+            }
+            : {
+              currency: pack.currency,
+              unit_amount: pack.amountCents,
+              product_data: {
+                name: `${pack.name} Credit Pack`,
+                description: `${pack.credits} Fuse credits`,
+              },
             },
-          },
         }],
-        metadata: {
-          checkout_type: "credit_pack",
-          user_id: user.id,
-          pack_key: pack.key,
-          credits: String(pack.credits),
-          amount_cents: String(pack.amountCents),
-          billing_mode: mode,
-        },
-        payment_intent_data: {
-          metadata: {
+        metadata: purchaseType
+          ? {
+            checkout_type: "credit_topup",
+            user_id: user.id,
+            credits: String(pack.credits),
+            amount_cents: String(pack.amountCents),
+            pricing_version: pricingVersion,
+            purchase_type: purchaseType,
+            billing_mode: mode,
+            fbc: (typeof body.fbc === "string" ? body.fbc : "") || "",
+            fbp: (typeof body.fbp === "string" ? body.fbp : "") || "",
+            meta_client_ip: (req.headers.get("x-forwarded-for") || "").split(",")[0].trim(),
+            meta_user_agent: req.headers.get("user-agent") || "",
+            utm_source: (typeof body.utm_source === "string" ? body.utm_source : "").slice(0, 200),
+            utm_medium: (typeof body.utm_medium === "string" ? body.utm_medium : "").slice(0, 200),
+            utm_campaign: (typeof body.utm_campaign === "string" ? body.utm_campaign : "").slice(0, 200),
+            utm_content: (typeof body.utm_content === "string" ? body.utm_content : "").slice(0, 200),
+            fbclid: (typeof body.fbclid === "string" ? body.fbclid : "").slice(0, 200),
+          }
+          : {
             checkout_type: "credit_pack",
             user_id: user.id,
             pack_key: pack.key,
             credits: String(pack.credits),
+            amount_cents: String(pack.amountCents),
             billing_mode: mode,
+            fbc: (typeof body.fbc === "string" ? body.fbc : "") || "",
+            fbp: (typeof body.fbp === "string" ? body.fbp : "") || "",
+            meta_client_ip: (req.headers.get("x-forwarded-for") || "").split(",")[0].trim(),
+            meta_user_agent: req.headers.get("user-agent") || "",
+            utm_source: (typeof body.utm_source === "string" ? body.utm_source : "").slice(0, 200),
+            utm_medium: (typeof body.utm_medium === "string" ? body.utm_medium : "").slice(0, 200),
+            utm_campaign: (typeof body.utm_campaign === "string" ? body.utm_campaign : "").slice(0, 200),
+            utm_content: (typeof body.utm_content === "string" ? body.utm_content : "").slice(0, 200),
+            fbclid: (typeof body.fbclid === "string" ? body.fbclid : "").slice(0, 200),
           },
+        payment_intent_data: {
+          metadata: purchaseType
+            ? {
+              checkout_type: "credit_topup",
+              user_id: user.id,
+              credits: String(pack.credits),
+              pricing_version: pricingVersion,
+              purchase_type: purchaseType,
+              billing_mode: mode,
+            }
+            : {
+              checkout_type: "credit_pack",
+              user_id: user.id,
+              pack_key: pack.key,
+              credits: String(pack.credits),
+              billing_mode: mode,
+            },
         },
         success_url: billingReturnUrl(origin, mode, "success"),
         cancel_url: billingReturnUrl(origin, mode, "canceled"),
@@ -958,6 +1144,105 @@ export function createStripeWebhookHandler(mode: StripeBillingMode) {
 
       if (event.type === "checkout.session.completed") {
         const session = object;
+        if (session.metadata?.checkout_type === "credit_topup") {
+          // Server-side re-verification: NEVER trust client-supplied price.
+          const resolved = resolveCreditTopUpPurchase(session);
+          if (!resolved.ok) {
+            await logAuditEvent({
+              eventType: "stripe.credit_topup.verification_failed",
+              message: `Credit top-up refused: ${resolved.reason}`,
+              severity: "error",
+              source: stripeSource("stripe-webhook", mode),
+              requestId,
+              errorCode: "credit_topup_verification_failed",
+              metadata: {
+                billing_mode: mode,
+                stripe_event_id: event.id,
+                stripe_checkout_session_id: session.id,
+                amount_total: session.amount_total ?? null,
+                currency: session.currency ?? null,
+                metadata_credits: session.metadata?.credits ?? null,
+              },
+            }, admin);
+            return json({ received: true, granted: false }, 200);
+          }
+
+          const customerId = typeof session.customer === "string" ? session.customer : null;
+          const profile = await resolveProfileForBillingEvent({
+            admin,
+            stripe,
+            eventType: event.type,
+            object: session,
+            stripeCustomerId: customerId,
+            customerEmail,
+          });
+          if (!profile) throw new Error("Profile not found for credit top-up purchase");
+
+          await upsertBillingState(admin, profile, {
+            stripe_customer_id: customerId ?? profile.stripe_customer_id,
+          });
+
+          const purchasePack: CreditPackDefinition = {
+            key: resolved.purchase.key,
+            name: "Credit Top-Up",
+            credits: resolved.purchase.credits,
+            amountCents: resolved.purchase.amountCents,
+            currency: "usd",
+          };
+
+          const grantResult = await applyCreditPackTopup({
+            admin,
+            stripeEventId: event.id,
+            stripeCustomerId: customerId,
+            stripeCheckoutSessionId: session.id,
+            stripePaymentIntentId: typeof session.payment_intent === "string" ? session.payment_intent : null,
+            billingMode: mode,
+            pack: purchasePack,
+            profile,
+            ledgerDescription: "Stripe credit top-up",
+          });
+
+          try {
+            if (mode === "live") {
+              await sendMetaCapiPurchase({
+                email: customerEmail,
+                value: resolved.purchase.amountCents / 100,
+                currency: "USD",
+                eventId: metaCheckoutEventId("Purchase", String(session.id)),
+                eventSourceUrl: "https://fuse-us.com",
+                externalId: session.metadata?.user_id || session.client_reference_id || undefined,
+                fbc: session.metadata?.fbc || undefined,
+                fbp: session.metadata?.fbp || undefined,
+                clientIp: session.metadata?.meta_client_ip || undefined,
+                userAgent: session.metadata?.meta_user_agent || undefined,
+              });
+            }
+          } catch (_capiError) {
+            // analytics must never affect billing
+          }
+
+
+          // First-party ad attribution — best-effort; never blocks billing.
+          try {
+            await admin.from("sale_attribution").insert({
+              user_id: session.metadata?.user_id || session.client_reference_id || null,
+              stripe_session_id: session.id,
+              checkout_type: session.metadata?.checkout_type || "credit_topup",
+              amount_cents: typeof session.amount_total === "number" ? session.amount_total : null,
+              currency: (session.currency || "usd").toUpperCase(),
+              utm_source: session.metadata?.utm_source || null,
+              utm_medium: session.metadata?.utm_medium || null,
+              utm_campaign: session.metadata?.utm_campaign || null,
+              utm_content: session.metadata?.utm_content || null,
+              fbclid: session.metadata?.fbclid || null,
+            });
+          } catch (_attributionError) {
+            // attribution is best-effort; never blocks billing
+          }
+
+          return json({ received: true, granted: grantResult.granted }, 200);
+        }
+
         if (session.metadata?.checkout_type === "credit_pack") {
           const pack = creditPackFromKey(
             typeof session.metadata?.pack_key === "string" ? session.metadata.pack_key : null,
@@ -1001,12 +1286,36 @@ export function createStripeWebhookHandler(mode: StripeBillingMode) {
                 currency: (session.currency ?? pack.currency ?? "usd").toUpperCase(),
                 eventId: metaCheckoutEventId("Purchase", String(session.id)),
                 eventSourceUrl: "https://fuse-us.com",
+                externalId: session.metadata?.user_id || session.client_reference_id || undefined,
+                fbc: session.metadata?.fbc || undefined,
+                fbp: session.metadata?.fbp || undefined,
+                clientIp: session.metadata?.meta_client_ip || undefined,
+                userAgent: session.metadata?.meta_user_agent || undefined,
               });
             }
           } catch (_capiError) {
             // analytics must never affect billing
           }
 
+
+
+          // First-party ad attribution — best-effort; never blocks billing.
+          try {
+            await admin.from("sale_attribution").insert({
+              user_id: session.metadata?.user_id || session.client_reference_id || null,
+              stripe_session_id: session.id,
+              checkout_type: session.metadata?.checkout_type || "credit_pack",
+              amount_cents: typeof session.amount_total === "number" ? session.amount_total : null,
+              currency: (session.currency || "usd").toUpperCase(),
+              utm_source: session.metadata?.utm_source || null,
+              utm_medium: session.metadata?.utm_medium || null,
+              utm_campaign: session.metadata?.utm_campaign || null,
+              utm_content: session.metadata?.utm_content || null,
+              fbclid: session.metadata?.fbclid || null,
+            });
+          } catch (_attributionError) {
+            // attribution is best-effort; never blocks billing
+          }
 
           return json({ received: true, granted: grantResult.granted }, 200);
         }
@@ -1062,6 +1371,25 @@ export function createStripeWebhookHandler(mode: StripeBillingMode) {
         } catch (_capiError) {
           // analytics must never affect billing
         }
+
+        // First-party ad attribution — best-effort; never blocks billing.
+        try {
+          await admin.from("sale_attribution").insert({
+            user_id: session.metadata?.user_id || session.client_reference_id || null,
+            stripe_session_id: session.id,
+            checkout_type: session.metadata?.checkout_type || "subscription",
+            amount_cents: typeof session.amount_total === "number" ? session.amount_total : null,
+            currency: (session.currency || "usd").toUpperCase(),
+            utm_source: session.metadata?.utm_source || null,
+            utm_medium: session.metadata?.utm_medium || null,
+            utm_campaign: session.metadata?.utm_campaign || null,
+            utm_content: session.metadata?.utm_content || null,
+            fbclid: session.metadata?.fbclid || null,
+          });
+        } catch (_attributionError) {
+          // attribution is best-effort; never blocks billing
+        }
+
         return json({ received: true }, 200);
       }
 
@@ -1225,9 +1553,18 @@ export function createStripeWebhookHandler(mode: StripeBillingMode) {
           profile,
         });
 
+        // Referral qualification (R3) — best-effort, never breaks billing.
+        await maybeRewardReferrer({
+          admin,
+          userId: profile.user_id,
+          amountPaidCents: integerCents(invoice.amount_paid) ?? 0,
+          stripeEventId: event.id,
+        });
+
         // Additive analytics only — never blocks or fails the webhook.
+
         try {
-          if (mode === "live") {
+          if (mode === "live" && invoice.billing_reason === "subscription_cycle") {
             const amountPaidCents = integerCents(invoice.amount_paid) ?? 0;
             const invoiceEventId = typeof invoice.id === "string" && invoice.id
               ? invoice.id
