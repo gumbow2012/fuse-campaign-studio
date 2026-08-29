@@ -134,7 +134,10 @@ export default function PaymentReturnPage() {
         </p>
         <div className="mt-6">
           <UniversalAuthPanel
-            mode="signin"
+            oauthRedirectTo={`${window.location.origin}/welcome?session_id=${encodeURIComponent(sessionId ?? "")}`}
+            initialMode="signin"
+            autoRequestEmail={existingEmail}
+            authSurface="payment_return"
             onAuthenticated={() => {
               void (async () => {
                 const result = await callClaim();
@@ -142,6 +145,7 @@ export default function PaymentReturnPage() {
               })();
             }}
           />
+
         </div>
       </div>
     );
