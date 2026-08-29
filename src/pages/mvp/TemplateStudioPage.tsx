@@ -105,6 +105,7 @@ import CampaignHistoryDrawer from "@/components/campaigns/CampaignHistoryDrawer"
 import { useCampaignHistory } from "@/hooks/useCampaignHistory";
 import { formatCampaignOutputs, formatCampaignOutputsLong } from "@/lib/campaignOutputs";
 import { campaignDisplayName } from "@/lib/campaignDisplayName";
+import CampaignFeedCard from "@/components/mvp/CampaignFeedCard";
 
 
 /**
@@ -124,18 +125,6 @@ const FEED_CHIPS: Array<{ key: FeedChip; label: string }> = [
   { key: "product", label: "Product" },
   { key: "video", label: "Video" },
 ];
-
-/** Deterministic tile height variant — stable per campaign, never random. */
-function feedTileAspect(templateId: string) {
-  let hash = 0;
-  for (let index = 0; index < templateId.length; index += 1) {
-    hash = (hash * 31 + templateId.charCodeAt(index)) % 9973;
-  }
-  // SHORT / MEDIUM / TALL — stable per template so the feed reads as masonry
-  // and never reshuffles between renders.
-  const variants = ["aspect-[1/1]", "aspect-[4/5]", "aspect-[3/4]"];
-  return variants[hash % variants.length];
-}
 
 type RunnerStatus = "queued" | "running" | "video_pending" | "complete" | "failed";
 
@@ -2646,7 +2635,6 @@ export default function TemplateStudioPage() {
                     fullName={template.name}
                     outputsLabel={formatCampaignOutputs(template.counts)}
                     previewUrl={template.preview_url}
-                    posterUrl={template.thumbnail_url ?? null}
                     isVideo={isVideoPreview(template)}
                     selected={selectMode ? batchSelected : selected}
                     eager={rowIndex === 0 && columnIndex === 0}
