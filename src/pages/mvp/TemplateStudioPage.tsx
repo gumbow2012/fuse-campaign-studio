@@ -1870,16 +1870,17 @@ export default function TemplateStudioPage() {
             <p className="text-[11px] font-semibold uppercase tracking-[0.3em] text-cyan-100">
               {isPublicTemplateBrowser ? "Campaign Builder" : "Post-Purchase Studio"}
             </p>
-            <h1 className="mt-3 font-display text-2xl font-bold leading-tight text-white sm:text-4xl">
+            <h1 className="mt-2 font-display text-xl font-bold leading-tight text-white sm:mt-3 sm:text-4xl">
               {isPublicTemplateBrowser
                 ? "Build your campaign. No account needed yet."
                 : "Your template is ready. Upload your assets."}
             </h1>
-            <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-300 md:text-base">
+            <p className="mt-1.5 max-w-2xl text-[13px] leading-5 text-slate-300 sm:mt-3 sm:text-sm sm:leading-6 md:text-base">
               {isPublicTemplateBrowser
                 ? "Pick a template, add your assets and set up the run — you only sign in when you generate."
                 : "The selected workflow is loaded. Add the required assets, confirm the run cost, and generate campaign videos."}
             </p>
+
           </div>
           {isPublicTemplateBrowser ? (
             <div className="rounded-[1.5rem] border border-emerald-300/20 bg-emerald-300/[0.08] px-5 py-4 text-sm leading-6 text-emerald-50">
@@ -2042,23 +2043,33 @@ export default function TemplateStudioPage() {
                 </p>
               </div>
             ) : (
-
-              <div className="mt-3 rounded-[1rem] border border-cyan-200/20 bg-cyan-300/[0.05] px-3.5 py-3">
-                <p className="font-display text-[10px] font-semibold uppercase tracking-[0.18em] text-cyan-100">
-                  See which campaigns are ready for your brand
-                </p>
-                <p className="mt-1 text-[11px] leading-relaxed text-slate-300">
-                  Build your brand once and FUSE can preload compatible inputs.
-                </p>
+              <>
+                {/* Mobile: compact inline link so templates stay above the fold. */}
                 <button
                   type="button"
                   onClick={() => navigate(`${ONBOARDING_ROUTE}?step=1`)}
-                  className="mt-2 rounded-full border border-cyan-300/35 bg-cyan-300/10 px-3 py-1 font-display text-[10px] font-semibold uppercase tracking-[0.16em] text-cyan-100 transition hover:bg-cyan-300/20"
+                  className="mt-2 inline-flex text-xs font-semibold text-cyan-200 underline underline-offset-4 transition-colors hover:text-cyan-100 sm:hidden"
                 >
-                  Build brand
+                  Build your brand →
                 </button>
-              </div>
+                <div className="mt-3 hidden rounded-[1rem] border border-cyan-200/20 bg-cyan-300/[0.05] px-3.5 py-3 sm:block">
+                  <p className="font-display text-[10px] font-semibold uppercase tracking-[0.18em] text-cyan-100">
+                    See which campaigns are ready for your brand
+                  </p>
+                  <p className="mt-1 text-[11px] leading-relaxed text-slate-300">
+                    Build your brand once and FUSE can preload compatible inputs.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => navigate(`${ONBOARDING_ROUTE}?step=1`)}
+                    className="mt-2 rounded-full border border-cyan-300/35 bg-cyan-300/10 px-3 py-1 font-display text-[10px] font-semibold uppercase tracking-[0.16em] text-cyan-100 transition hover:bg-cyan-300/20"
+                  >
+                    Build brand
+                  </button>
+                </div>
+              </>
             )}
+
 
             {templatesQuery.isError ? (
               <div className="mt-5 rounded-[1.5rem] border border-rose-400/20 bg-rose-400/10 p-4 text-sm text-rose-100">
@@ -2163,7 +2174,7 @@ export default function TemplateStudioPage() {
               </div>
             ) : null}
 
-            <div className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="mt-4 grid grid-cols-2 gap-3 sm:mt-5 sm:grid-cols-2 sm:gap-4 lg:grid-cols-3">
               {visibleTemplates.map((template) => {
                 const selected = template.id === selectedTemplateId;
                 const batchSelected = batchSelection.includes(template.id);
@@ -2190,7 +2201,7 @@ export default function TemplateStudioPage() {
                         else handleTemplateSelect(template.id);
                       }
                     }}
-                    className={`group cursor-pointer overflow-hidden rounded-[1.5rem] border text-left transition-colors ${
+                    className={`group cursor-pointer overflow-hidden rounded-[1rem] border text-left transition-colors sm:rounded-[1.5rem] ${
                       selectMode && batchSelected
                         ? "border-cyan-300 bg-cyan-300/10 ring-2 ring-cyan-300/40"
                         : selected && !selectMode
@@ -2201,12 +2212,13 @@ export default function TemplateStudioPage() {
                     <div className="relative overflow-hidden bg-black/30">
                       <TemplateVibeMedia
                         template={template}
-                        className="aspect-[9/16] w-full object-cover transition-transform duration-500 group-hover:scale-[1.03]"
+                        className="aspect-[4/5] w-full object-cover transition-transform duration-500 group-hover:scale-[1.03] sm:aspect-[9/16]"
                       />
                       <div className="pointer-events-none absolute inset-x-0 bottom-0 h-2/3 bg-gradient-to-t from-black/75 via-black/20 to-transparent" />
-                      <div className="absolute bottom-3 left-3 rounded-full border border-white/15 bg-black/45 px-2.5 py-1 text-[9px] uppercase tracking-[0.18em] text-white/80 backdrop-blur">
+                      <div className="absolute bottom-3 left-3 hidden rounded-full border border-white/15 bg-black/45 px-2.5 py-1 text-[9px] uppercase tracking-[0.18em] text-white/80 backdrop-blur sm:block">
                         Vibe
                       </div>
+
                       {canFavorite && !selectMode ? (
                         <FavoriteTemplateButton
                           favorite={isFavorite(String(template.id))}
@@ -2235,7 +2247,7 @@ export default function TemplateStudioPage() {
                             track("template_view", { template_id: template.id });
                             setDetailTemplateId(template.id);
                           }}
-                          className="absolute right-3 top-3 rounded-full border border-white/15 bg-black/55 px-3 py-1 text-[9px] font-semibold uppercase tracking-[0.18em] text-white/85 backdrop-blur transition-colors hover:bg-black/80"
+                          className="absolute right-1.5 top-1.5 rounded-full border border-white/15 bg-black/55 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.14em] text-white/85 backdrop-blur transition-colors hover:bg-black/80 sm:right-3 sm:top-3 sm:px-3 sm:py-1 sm:tracking-[0.18em]"
                         >
                           Details
                         </button>
@@ -2243,40 +2255,46 @@ export default function TemplateStudioPage() {
                     </div>
 
 
-                    <div className="space-y-3 p-4">
-                      {performance ? <PerformanceBlock row={performance} compact /> : null}
-                      {performance ? <PerformanceBadges row={performance} limit={3} /> : null}
+                    <div className="space-y-2 p-2.5 sm:space-y-3 sm:p-4">
+                      {performance ? <div className="hidden sm:block"><PerformanceBlock row={performance} compact /></div> : null}
+                      {performance ? <div className="hidden sm:block"><PerformanceBadges row={performance} limit={3} /></div> : null}
                       <div className="flex items-start justify-between gap-3">
 
                         <div className="min-w-0">
-                          <p className="truncate text-base font-semibold text-white">{template.name}</p>
-                          <p className="mt-1 text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
+                          <p className="line-clamp-2 text-sm font-bold text-white sm:truncate sm:text-base sm:font-semibold">{template.name}</p>
+                          <p className="mt-1 hidden text-[10px] uppercase tracking-[0.2em] text-muted-foreground sm:block">
                             {template.category || "Campaign drop template"}
                           </p>
                         </div>
-                        <div className="shrink-0 rounded-full border border-white/10 px-3 py-1 text-[10px] uppercase tracking-[0.18em] text-slate-300">
+                        <div className="hidden shrink-0 rounded-full border border-white/10 px-3 py-1 text-[10px] uppercase tracking-[0.18em] text-slate-300 sm:block">
                           {isPrivilegedUser ? <span className="line-through decoration-cyan-200/90 decoration-2">{credits} cr</span> : `${credits} cr`}
                         </div>
                       </div>
 
+                      <p className="text-[11px] text-slate-400 sm:hidden">
+                        {formatCampaignOutputs(template.counts)}
+                      </p>
+
                       {template.description ? (
-                        <p className="line-clamp-2 text-sm leading-6 text-slate-300">
+                        <p className="hidden line-clamp-2 text-sm leading-6 text-slate-300 sm:block">
                           {template.description}
                         </p>
                       ) : (
-                        <p className="text-sm leading-6 text-slate-300">
+                        <p className="hidden text-sm leading-6 text-slate-300 sm:block">
                           Campaign drop template for ready-to-use vertical videos.
                         </p>
                       )}
 
                       {activeBrand && templateFitMap[String(template.id)] ? (
-                        <TemplateFitBadge
-                          fit={templateFitMap[String(template.id)]}
-                          brandName={activeBrand.name}
-                        />
+                        <div className="hidden sm:block">
+                          <TemplateFitBadge
+                            fit={templateFitMap[String(template.id)]}
+                            brandName={activeBrand.name}
+                          />
+                        </div>
                       ) : null}
 
-                      <div className="flex flex-wrap items-center justify-between gap-2 text-[10px] uppercase tracking-[0.18em] text-slate-400">
+                      <div className="hidden flex-wrap items-center justify-between gap-2 text-[10px] uppercase tracking-[0.18em] text-slate-400 sm:flex">
                         <span>{formatCount(inputCount, "upload", "uploads")}</span>
                         <span>{formatCampaignOutputs(template.counts)}</span>
                       </div>
@@ -2287,7 +2305,7 @@ export default function TemplateStudioPage() {
                       <span
                         aria-hidden="true"
                         className={cn(
-                          "flex items-center gap-1.5 font-display text-[10px] font-semibold uppercase tracking-[0.2em]",
+                          "hidden items-center gap-1.5 font-display text-[10px] font-semibold uppercase tracking-[0.2em] sm:flex",
                           selected && !selectMode
                             ? "text-cyan-200"
                             : "text-slate-500 group-hover:text-cyan-200",
@@ -2303,6 +2321,7 @@ export default function TemplateStudioPage() {
                       </span>
 
                     </div>
+
                   </div>
                 );
               })}
