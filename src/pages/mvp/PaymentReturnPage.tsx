@@ -4,6 +4,7 @@ import { Loader2, Check } from "lucide-react";
 import { supabase, SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY } from "@/integrations/supabase/client";
 import UniversalAuthPanel from "@/components/auth/UniversalAuthPanel";
 import { markPlanActivating } from "@/lib/planActivation";
+import { track } from "@/lib/analytics/track";
 
 type ClaimResponse = {
   ok?: boolean;
@@ -96,6 +97,11 @@ export default function PaymentReturnPage() {
       return;
     }
 
+    if (result.ok) {
+      track("payment_completed", { template: result.template ?? null });
+      track("checkout_claim_completed", { template: result.template ?? null });
+    }
+
     if (!result.ok) {
       setStatus("error");
       setMessage(result.error ?? "We could not confirm this checkout yet.");
@@ -173,7 +179,7 @@ export default function PaymentReturnPage() {
           </div>
           <p className="mt-4 flex items-center gap-2 text-sm text-muted-foreground">
             <Loader2 className="h-4 w-4 animate-spin" />
-            {status === "activating" ? "Activating your plan…" : "Opening your campaign…"}
+            {status === "activating" ? "Activating your plan…" : "Opening your studio…"}
           </p>
         </>
       )}

@@ -257,7 +257,7 @@ function TemplateCard({
           className="relative z-20 mt-3 h-9 w-full rounded-full bg-cyan-300 text-[12px] font-semibold uppercase tracking-[0.14em] text-slate-950 hover:bg-cyan-200"
         >
           <Link to={templateHref} onClick={() => track("homepage_campaign_card_click", { template_id: templateId })}>
-            Make this yours →
+            Unlock this template →
           </Link>
         </Button>
       </div>
