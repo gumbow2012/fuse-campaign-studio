@@ -15,6 +15,7 @@ import { useTemplateFavorites } from "@/hooks/useTemplateFavorites";
 import { cn } from "@/lib/utils";
 import type { ApiTemplate } from "@/services/fuseApi";
 import { PerformanceDetailSection } from "@/components/TemplatePerformance";
+import { formatCampaignOutputsLong } from "@/lib/campaignOutputs";
 import {
   loadTemplatePerformanceRows,
   type TemplatePerformanceRow,
@@ -113,7 +114,7 @@ export default function TemplateDetailDialog({
 
   const quickFacts = [
     { label: "Inputs", value: `${facts.inputCount}` },
-    { label: "Outputs", value: `${facts.outputCount}` },
+    { label: "What you get", value: formatCampaignOutputsLong(template.counts) },
     ...(facts.aspectRatio ? [{ label: "Aspect ratio", value: facts.aspectRatio }] : []),
     { label: "Estimated cost", value: facts.costLabel },
   ];
@@ -191,7 +192,7 @@ export default function TemplateDetailDialog({
                       <ImageIcon className="h-4 w-4 shrink-0 text-cyan-100" />
                     )}
                     {facts.outputCount > 0
-                      ? `${facts.outputCount} campaign asset${facts.outputCount === 1 ? "" : "s"} in this style, built with your uploads.`
+                      ? `What you get: ${formatCampaignOutputsLong(template.counts)} in this style, built with your uploads.`
                       : "Campaign assets in this style, built with your uploads."}
                   </p>
                 </div>
