@@ -60,6 +60,7 @@ import CreditConfirmModal from "@/components/CreditConfirmModal";
 import { trackEvent } from "@/lib/metaPixel";
 import { track } from "@/lib/analytics/track";
 import GenerateAuthGateModal from "@/components/auth/GenerateAuthGateModal";
+import GeneratePaywallModal from "@/components/mvp/GeneratePaywallModal";
 import {
   clearPendingGenerationIntent,
   getPendingGenerationIntent,
@@ -478,6 +479,7 @@ export default function TemplateStudioPage() {
   const [workflowUpgradeDialogOpen, setWorkflowUpgradeDialogOpen] = useState(false);
   /** P2 — generate auth gate for logged-out visitors (never auto-opens). */
   const [authGateOpen, setAuthGateOpen] = useState(false);
+  const [paywallOpen, setPaywallOpen] = useState(false);
   const [result, setResult] = useState<RunnerResult | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [checkingCredits, setCheckingCredits] = useState(false);
@@ -1495,11 +1497,7 @@ export default function TemplateStudioPage() {
     }
     if (!isPrivilegedUser) {
       if (displayedCreditBalance < batchCredits) {
-        toast({
-          title: "Credits not available",
-          description: `These ${batchTemplates.length} runs cost ${batchCredits} credits and your balance is ${displayedCreditBalance}.`,
-          variant: "destructive",
-        });
+        setPaywallOpen(true);
         return;
       }
     }
@@ -1605,21 +1603,13 @@ export default function TemplateStudioPage() {
         const latestBalance = latestProfile?.credits_balance ?? 0;
         const latestHasActiveMembership = latestStatus === "active" || latestStatus === "trialing";
 
-        if (!latestHasActiveMembership) {
-          toast({
-            title: "Membership required",
-            description: "Your billing state is not active yet.",
-            variant: "destructive",
-          });
+        if (latestBalance < creditsRequired) {
+          setPaywallOpen(true);
           return;
         }
 
-        if (latestBalance < creditsRequired) {
-          toast({
-            title: "Credits not available",
-            description: `This run costs ${creditsRequired} credits and your current balance is ${latestBalance}.`,
-            variant: "destructive",
-          });
+        if (!latestHasActiveMembership && latestBalance <= 0) {
+          setPaywallOpen(true);
           return;
         }
       }
@@ -2987,6 +2977,14 @@ export default function TemplateStudioPage() {
       </div>
 
       {/* P2 — logged-out Generate click: blur the builder, gate on auth. */}
+      <GeneratePaywallModal
+        open={paywallOpen}
+        onOpenChange={setPaywallOpen}
+        templateName={selectedTemplate?.name ?? null}
+        creditsRequired={creditsRequired}
+        creditBalance={displayedCreditBalance}
+      />
+
       <GenerateAuthGateModal
         open={authGateOpen}
         templateId={selectedTemplate ? String(selectedTemplate.id) : null}
