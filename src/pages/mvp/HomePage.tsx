@@ -694,15 +694,8 @@ export default function HomePage() {
               )}
             </div>
 
-            <p className="mt-4 max-w-[600px] font-sans text-[12px] font-bold uppercase leading-[1.5] tracking-[0.08em] text-white md:mt-5 sm:text-[14px]">
-              No prompts <span className="text-cyan-300">·</span> No guessing
-              <span className="hidden md:inline">
-                {" "}
-                <span className="text-cyan-300">·</span> Prebuilt expert workflows
-              </span>
-            </p>
-
           </div>
+
 
           {/* Prebuilt workflow explainer — needs no template data, renders instantly */}
           <div className="relative min-w-0">
