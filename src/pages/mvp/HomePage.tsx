@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowRight, Clapperboard, Gem, Layers3, Shirt, Sparkles, Upload, Wand2, X } from "lucide-react";
+import { ArrowRight, Clapperboard, Gem, Shirt, Sparkles, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import SiteShell from "@/components/mvp/SiteShell";
 import PageMeta from "@/components/mvp/PageMeta";
