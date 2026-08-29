@@ -105,7 +105,7 @@ import CampaignHistoryDrawer from "@/components/campaigns/CampaignHistoryDrawer"
 import { useCampaignHistory } from "@/hooks/useCampaignHistory";
 import { formatCampaignOutputs, formatCampaignOutputsLong } from "@/lib/campaignOutputs";
 import { campaignDisplayName } from "@/lib/campaignDisplayName";
-import CampaignFeedCard from "@/components/mvp/CampaignFeedCard";
+import CampaignTile from "@/components/mvp/CampaignTile";
 
 
 /**
@@ -2288,7 +2288,7 @@ export default function TemplateStudioPage() {
         )}
         aria-hidden={authGateOpen}
       >
-      <section className="mx-auto w-full max-w-[1800px] px-4 py-12 sm:px-6 md:py-16 lg:px-8">
+      <section className="mx-auto w-full max-w-[1920px] px-3 py-8 sm:px-4 md:py-10 lg:px-5">
         <PlanActivationNotice />
 
         {/* RETENTION P5 — light personalized greeting anchoring the logged-in home. */}
