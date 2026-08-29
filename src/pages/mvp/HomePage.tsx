@@ -772,13 +772,8 @@ export default function HomePage() {
                   {heroPerf && (
                     <PerformanceBlock row={heroPerf} compact className="text-left" />
                   )}
-                  <Button
-                    asChild
-                    size="sm"
-                    className="h-9 rounded-full bg-cyan-300 px-5 text-[12px] font-semibold uppercase tracking-[0.14em] text-slate-950 hover:bg-cyan-200"
-                  >
-                    <Link to={builderHref(original.template.id)}>Make this yours →</Link>
-                  </Button>
+
+
 
                   {heroPerf && <PerformanceDisclaimer />}
                 </div>
