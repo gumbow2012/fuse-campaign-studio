@@ -2582,7 +2582,14 @@ export default function TemplateStudioPage() {
 
                   </div>
                 );
-              })}
+                  })}
+                  {/* <lg: the builder expands directly beneath the selected
+                      card's ACTUAL visual row (column count is measured). */}
+                  {inlineBuilderNode && row.some((entry) => entry.id === selectedTemplateId)
+                    ? inlineBuilderNode
+                    : null}
+                </Fragment>
+              ))}
             </div>
             {favoritesOnly && !visibleTemplates.length ? (
               <div className="mt-5 rounded-[1.5rem] border border-white/8 bg-black/20 p-4 text-sm text-slate-300">
