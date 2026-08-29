@@ -632,7 +632,7 @@ export default function HomePage() {
         <div className="container relative grid gap-7 py-9 md:gap-10 md:py-16 lg:grid-cols-[1fr_0.9fr] lg:items-center">
           <div>
             <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-cyan-100 sm:text-[13px]">
-              One-click campaign engine
+              One-click campaign marketplace
             </p>
             <h1 className="mt-3 font-display font-bold uppercase leading-[1.02] tracking-[-0.02em] text-white md:mt-4"
               style={{ fontSize: "clamp(28px, 7.7vw, 60px)" }}>
