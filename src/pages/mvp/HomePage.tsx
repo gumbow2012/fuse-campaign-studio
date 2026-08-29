@@ -681,9 +681,10 @@ export default function HomePage() {
               )}
             </div>
 
-            <p className="mt-5 font-sans text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-200 sm:text-[12px]">
-              No prompts · No AI agent
-              <span className="hidden sm:inline"> · Images + video clips</span>
+            <p className="mt-5 max-w-[560px] font-sans text-[12px] font-extrabold uppercase leading-[1.5] tracking-[0.1em] text-white sm:text-[13px]">
+              No prompts <span className="text-cyan-300">·</span> No guessing{" "}
+              <span className="text-cyan-300">·</span> Proven to work{" "}
+              <span className="text-cyan-300">·</span> Made by top AI creators
             </p>
           </div>
 
