@@ -340,7 +340,7 @@ type MerchandisedShelf = {
 export default function HomePage() {
   const { user, isCreator, isAdmin } = useAuth();
 
-  const { data: templates = [] } = useQuery({
+  const { data: templates = [], isLoading: templatesLoading } = useQuery({
     queryKey: ["mvp-templates"],
     queryFn: () => fetchTemplates(""),
     staleTime: 5 * 60 * 1000,
@@ -692,7 +692,25 @@ export default function HomePage() {
 
           {/* Hero transformation — TEMPLATE → your brand → YOUR CAMPAIGN */}
           <div className="relative">
-            {original ? (
+            {templatesLoading ? (
+              /* Cold load: paint a skeleton once, never image A → image B. */
+              <div>
+                <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3">
+                  <HeroTileSkeleton label="Template" />
+                  <div className="w-[92px] sm:w-[104px]">
+                    <div className="h-[104px] animate-pulse rounded-xl border border-cyan-300/20 bg-white/[0.04]" />
+                    <p className="mt-2 text-center text-[9px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+                      →
+                    </p>
+                  </div>
+                  <HeroTileSkeleton label="Your campaign" highlight />
+                </div>
+                <div className="mx-auto mt-4 max-w-[420px] space-y-2">
+                  <div className="mx-auto h-4 w-40 animate-pulse rounded-full bg-white/[0.06]" />
+                  <div className="mx-auto h-9 w-44 animate-pulse rounded-full bg-white/[0.06]" />
+                </div>
+              </div>
+            ) : original ? (
               <div>
                 <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3">
                   <HeroTile label="Template" media={original.media} eager />
@@ -1165,6 +1183,24 @@ export default function HomePage() {
         </div>
       </section>
     </SiteShell>
+  );
+}
+
+function HeroTileSkeleton({ label, highlight }: { label: string; highlight?: boolean }) {
+  return (
+    <div>
+      <div
+        className={cn(
+          "overflow-hidden rounded-[1.25rem] border bg-black",
+          highlight ? "border-cyan-200/40" : "border-white/10",
+        )}
+      >
+        <div className="aspect-[9/16] animate-pulse bg-white/[0.05]" />
+      </div>
+      <p className="mt-2 text-center text-[9px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+        {label}
+      </p>
+    </div>
   );
 }
 
