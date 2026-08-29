@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Loader2 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { clearPlanActivating, isPlanActivating } from "@/lib/planActivation";
+import { track } from "@/lib/analytics/track";
 
 /**
  * Shown when a plan was just purchased but the authoritative billing state
@@ -19,6 +20,9 @@ export default function PlanActivationNotice() {
       profile?.subscription_status === "active" ||
       profile?.subscription_status === "trialing";
     if (posted) {
+      track("paid_plan_activated", {
+        subscription_status: profile?.subscription_status ?? null,
+      });
       clearPlanActivating();
       setActivating(false);
       return;
