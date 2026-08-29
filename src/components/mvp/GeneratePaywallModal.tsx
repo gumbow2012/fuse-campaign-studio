@@ -13,6 +13,13 @@ import { useMembershipCheckout } from "@/hooks/useMembershipCheckout";
 import { quoteCreditTopUp } from "@/lib/creditPricing";
 import { QUICK_TOP_UP_AMOUNTS } from "@/lib/topUpLadder";
 import { STRIPE_TIERS } from "@/lib/stripe-config";
+import { useAuth } from "@/contexts/AuthContext";
+import {
+  STARTER_WELCOME_BADGE,
+  isStarterWelcomeOfferEligible,
+  starterWelcomePrice,
+} from "@/lib/starterWelcomeOffer";
+
 
 type Props = {
   open: boolean;
