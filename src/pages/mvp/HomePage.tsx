@@ -841,12 +841,58 @@ export default function HomePage() {
             </div>
           </div>
 
-          {/* Mechanism proof — the prebuilt workflow itself is the desktop visual */}
-          <div className="relative min-w-0">
-            <div className="mx-auto max-w-[520px]">
+          {/* STORY SEQUENCE — your products → prebuilt workflow → finished campaign */}
+          <div className="relative flex min-w-0 items-center gap-2 xl:gap-3">
+            {/* 1 · YOUR PRODUCTS input card */}
+            <div className="w-[132px] shrink-0 rounded-2xl border border-cyan-200/25 bg-[linear-gradient(180deg,rgba(34,211,238,0.08),rgba(255,255,255,0.02))] p-3 shadow-[0_0_28px_-14px_rgba(34,211,238,0.7)] xl:w-[148px]">
+              <p className="font-display text-[9.5px] font-bold uppercase tracking-[0.2em] text-cyan-100">
+                Your products
+              </p>
+              <ul className="mt-2.5 space-y-1.5">
+                {["Product", "Logo", "Cast"].map((label) => (
+                  <li
+                    key={label}
+                    className="rounded-lg border border-white/10 bg-black/30 px-2 py-1.5 font-display text-[9.5px] font-bold uppercase tracking-[0.16em] text-slate-300"
+                  >
+                    {label}
+                  </li>
+                ))}
+              </ul>
+              <p className="mt-2.5 rounded-lg border border-dashed border-cyan-200/35 px-2 py-1.5 text-center font-display text-[9.5px] font-bold uppercase tracking-[0.16em] text-cyan-100">
+                + Product
+              </p>
+            </div>
+
+            {/* connector */}
+            <span aria-hidden className="h-px w-4 shrink-0 bg-gradient-to-r from-cyan-300/10 to-cyan-300/70 xl:w-6" />
+
+            {/* 2 · the prebuilt workflow itself */}
+            <div className="min-w-0 flex-1">
               <HeroWorkflowAnimation />
             </div>
+
+            {/* connector */}
+            <span aria-hidden className="h-px w-4 shrink-0 bg-gradient-to-r from-cyan-300/70 to-cyan-300/20 xl:w-6" />
+
+            {/* 3 · finished campaign — one real live preview */}
+            <div className="w-[168px] shrink-0 xl:w-[188px]">
+              <div className="overflow-hidden rounded-2xl border border-cyan-200/30 bg-black/50 shadow-[0_0_36px_-16px_rgba(34,211,238,0.8)]">
+                {heroStoryPreview ? (
+                  <AutoMedia
+                    media={heroStoryPreview.media}
+                    className="aspect-[9/16] w-full object-cover"
+                    eager
+                  />
+                ) : (
+                  <div className="aspect-[9/16] w-full animate-pulse bg-white/[0.05]" />
+                )}
+              </div>
+              <p className="mt-2 text-center font-display text-[9px] font-bold uppercase tracking-[0.22em] text-slate-500">
+                Campaign
+              </p>
+            </div>
           </div>
+
         </div>
 
       </section>
