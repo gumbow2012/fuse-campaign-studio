@@ -5,21 +5,16 @@ import { track } from "@/lib/analytics/track";
 /**
  * Explanatory (NOT live) diagram of how a FUSE campaign runs.
  * Pure SVG + CSS. Honors prefers-reduced-motion by showing the final state.
- * Never exposes prompts, providers, models or internal ids.
+ * Never exposes prompts, providers, models or internal ids — abstract nodes only.
  */
 
 type Stage = 0 | 1 | 2 | 3;
 
-const STAGE_LABELS: Record<Stage, string> = {
-  0: "Products loaded",
-  1: "Building image steps",
-  2: "Creating video clips",
-  3: "Campaign ready ✓",
-};
-
-
 const CYAN = "#22d3ee";
 const MUTED = "rgba(148,163,184,0.45)";
+
+const IMAGE_YS = [34, 66, 98, 130];
+const VIDEO_YS = [52, 82, 112];
 
 function useReducedMotion() {
   const [reduced, setReduced] = useState(false);
@@ -45,8 +40,8 @@ export default function HeroWorkflowAnimation({ compact = false }: { compact?: b
       return;
     }
     let i = 0;
-    // ~6s loop: 1.2s per phase, then a short hold on the finished state.
-    const timings = [1200, 1500, 1500, 2200];
+    // ~6s loop: illuminate, image branches, video branches, then hold the finished state.
+    const timings = [1100, 1600, 1600, 2200];
     let timer: number;
     const advance = () => {
       timer = window.setTimeout(() => {
@@ -84,58 +79,12 @@ export default function HeroWorkflowAnimation({ compact = false }: { compact?: b
   const nodeStroke = (active: boolean) => (active ? CYAN : MUTED);
   const lineStroke = (active: boolean) => (active ? CYAN : "rgba(148,163,184,0.25)");
 
-  if (compact) {
-    const steps: Array<{ label: string; active: boolean }> = [
-      { label: "Your products", active: true },
-      { label: "FUSE", active: on(1) },
-      { label: "Images + video clips", active: on(3) },
-    ];
-    return (
-      <div
-        ref={wrapRef}
-        className="relative overflow-hidden rounded-[1.25rem] border border-white/10 bg-[#0B1120] px-4 py-4"
-      >
-        <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-slate-400">
-          How a FUSE campaign runs
-        </p>
-        <div className="mt-3 flex flex-col items-center gap-1.5">
-          {steps.map((s, i) => (
-            <div key={s.label} className="flex w-full flex-col items-center gap-1.5">
-              <div
-                className={cn(
-                  "w-full rounded-lg border px-3 py-2 text-center font-sans text-[12px] font-bold uppercase tracking-[0.12em] transition-colors duration-500",
-                  s.active
-                    ? "border-cyan-300/70 bg-cyan-300/10 text-cyan-100"
-                    : "border-white/10 bg-white/[0.03] text-slate-400",
-                )}
-              >
-                {s.label}
-              </div>
-              {i < steps.length - 1 ? (
-                <span
-                  className={cn(
-                    "text-[13px] leading-none transition-colors duration-500",
-                    steps[i + 1].active ? "text-cyan-300" : "text-slate-600",
-                  )}
-                  aria-hidden="true"
-                >
-                  ↓
-                </span>
-              ) : null}
-            </div>
-          ))}
-        </div>
-      </div>
-    );
-  }
-
-
   return (
     <div ref={wrapRef} className="relative">
       <div
         className={cn(
           "relative overflow-hidden rounded-[1.25rem] border border-white/10 bg-[#0B1120]",
-          compact ? "p-3" : "p-4 sm:p-5",
+          compact ? "px-3 py-3" : "p-4 sm:p-5",
         )}
       >
         {/* faint grid */}
@@ -148,15 +97,11 @@ export default function HeroWorkflowAnimation({ compact = false }: { compact?: b
           }}
         />
 
-        <p className="relative text-[10px] font-semibold uppercase tracking-[0.24em] text-slate-400">
-          How a FUSE campaign runs
-        </p>
-
         <svg
           viewBox="0 0 360 168"
-          className={cn("relative mt-3 w-full", compact ? "h-[132px]" : "h-[168px] sm:h-[188px]")}
+          className={cn("relative w-full", compact ? "h-[136px]" : "h-[168px] sm:h-[188px]")}
           role="img"
-          aria-label="Diagram: products become campaign images and video clips, then a final campaign."
+          aria-label="Diagram: products branch into campaign images and video clips, then a final campaign."
         >
           <defs>
             <filter id="fuse-glow" x="-60%" y="-60%" width="220%" height="220%">
@@ -168,54 +113,54 @@ export default function HeroWorkflowAnimation({ compact = false }: { compact?: b
             </filter>
           </defs>
 
-          {/* connectors: input -> images */}
-          {[46, 84, 122].map((y, idx) => (
+          {/* connectors: input -> image branches */}
+          {IMAGE_YS.map((y, idx) => (
             <path
               key={`c1-${y}`}
-              d={`M64 84 C 96 84, 96 ${y}, 128 ${y}`}
+              d={`M62 82 C 94 82, 94 ${y}, 126 ${y}`}
               fill="none"
-              strokeWidth={1.4}
+              strokeWidth={1.3}
               stroke={lineStroke(on(1))}
-              style={{
-                transition: "stroke 600ms ease",
-                transitionDelay: `${idx * 120}ms`,
-              }}
+              style={{ transition: "stroke 600ms ease", transitionDelay: `${idx * 110}ms` }}
             />
           ))}
 
-          {/* connectors: images -> videos */}
+          {/* connectors: image branches -> video branches (cross-linked) */}
           {[
-            [46, 60],
-            [84, 84],
-            [122, 108],
+            [IMAGE_YS[0], VIDEO_YS[0]],
+            [IMAGE_YS[1], VIDEO_YS[0]],
+            [IMAGE_YS[1], VIDEO_YS[1]],
+            [IMAGE_YS[2], VIDEO_YS[1]],
+            [IMAGE_YS[2], VIDEO_YS[2]],
+            [IMAGE_YS[3], VIDEO_YS[2]],
           ].map(([from, to], idx) => (
             <path
-              key={`c2-${from}`}
-              d={`M168 ${from} C 196 ${from}, 196 ${to}, 224 ${to}`}
+              key={`c2-${idx}`}
+              d={`M164 ${from} C 192 ${from}, 194 ${to}, 222 ${to}`}
               fill="none"
-              strokeWidth={1.4}
+              strokeWidth={1.2}
               stroke={lineStroke(on(2))}
-              style={{ transition: "stroke 600ms ease", transitionDelay: `${idx * 120}ms` }}
+              style={{ transition: "stroke 600ms ease", transitionDelay: `${idx * 90}ms` }}
             />
           ))}
 
-          {/* connectors: videos -> final */}
-          {[60, 84, 108].map((y) => (
+          {/* connectors: video branches -> final */}
+          {VIDEO_YS.map((y, idx) => (
             <path
               key={`c3-${y}`}
-              d={`M264 ${y} C 288 ${y}, 288 84, 312 84`}
+              d={`M260 ${y} C 286 ${y}, 286 82, 310 82`}
               fill="none"
-              strokeWidth={1.4}
+              strokeWidth={1.3}
               stroke={lineStroke(on(3))}
-              style={{ transition: "stroke 600ms ease" }}
+              style={{ transition: "stroke 600ms ease", transitionDelay: `${idx * 90}ms` }}
             />
           ))}
 
           {/* input node */}
-          <g filter={on(0) ? "url(#fuse-glow)" : undefined}>
+          <g filter="url(#fuse-glow)">
             <rect
-              x={28}
-              y={68}
+              x={26}
+              y={66}
               width={36}
               height={32}
               rx={7}
@@ -225,44 +170,44 @@ export default function HeroWorkflowAnimation({ compact = false }: { compact?: b
             />
           </g>
 
-          {/* image nodes */}
-          {[46, 84, 122].map((y, idx) => (
+          {/* image branch nodes */}
+          {IMAGE_YS.map((y, idx) => (
             <rect
               key={`img-${y}`}
-              x={130}
-              y={y - 15}
+              x={126}
+              y={y - 12}
               width={38}
-              height={30}
+              height={24}
               rx={6}
               fill={nodeFill(on(1))}
               stroke={nodeStroke(on(1))}
               strokeWidth={1.2}
               filter={on(1) ? "url(#fuse-glow)" : undefined}
-              style={{ transition: "fill 500ms ease, stroke 500ms ease", transitionDelay: `${idx * 140}ms` }}
+              style={{ transition: "fill 500ms ease, stroke 500ms ease", transitionDelay: `${idx * 130}ms` }}
             />
           ))}
 
-          {/* video nodes */}
-          {[60, 84, 108].map((y, idx) => (
+          {/* video branch nodes */}
+          {VIDEO_YS.map((y, idx) => (
             <rect
               key={`vid-${y}`}
-              x={226}
-              y={y - 13}
+              x={222}
+              y={y - 11}
               width={38}
-              height={26}
+              height={22}
               rx={6}
               fill={nodeFill(on(2))}
               stroke={nodeStroke(on(2))}
               strokeWidth={1.2}
               filter={on(2) ? "url(#fuse-glow)" : undefined}
-              style={{ transition: "fill 500ms ease, stroke 500ms ease", transitionDelay: `${idx * 140}ms` }}
+              style={{ transition: "fill 500ms ease, stroke 500ms ease", transitionDelay: `${idx * 130}ms` }}
             />
           ))}
 
           {/* final node */}
           <rect
             x={310}
-            y={64}
+            y={62}
             width={40}
             height={40}
             rx={9}
@@ -275,23 +220,26 @@ export default function HeroWorkflowAnimation({ compact = false }: { compact?: b
 
           {/* stage labels */}
           <g fontSize="6.6" fontWeight="600" letterSpacing="0.7" fill="rgba(203,213,225,0.75)">
-            <text x={4} y={148} textAnchor="start">PRODUCTS</text>
-            <text x={149} y={148} textAnchor="middle">IMAGE STEPS</text>
-            <text x={241} y={148} textAnchor="middle">VIDEO CLIPS</text>
-            <text x={356} y={148} textAnchor="end">CAMPAIGN READY ✓</text>
+            <text x={2} y={155} textAnchor="start">PRODUCTS</text>
+            <text x={145} y={155} textAnchor="middle">CAMPAIGN IMAGES</text>
+            <text x={241} y={155} textAnchor="middle">VIDEO CLIPS</text>
+            <text x={358} y={155} textAnchor="end">FINAL</text>
           </g>
 
+          {/* finished badge */}
+          <text
+            x={358}
+            y={22}
+            textAnchor="end"
+            fontSize="8"
+            fontWeight="700"
+            letterSpacing="0.9"
+            fill={CYAN}
+            style={{ transition: "opacity 500ms ease", opacity: on(3) ? 1 : 0 }}
+          >
+            CAMPAIGN READY ✓
+          </text>
         </svg>
-
-        <p
-          className={cn(
-            "relative mt-1 font-sans font-bold uppercase tracking-[0.16em]",
-            stage === 3 ? "text-cyan-200" : "text-slate-300",
-            compact ? "text-[11px]" : "text-[12px] sm:text-[13px]",
-          )}
-        >
-          {STAGE_LABELS[stage]}
-        </p>
       </div>
     </div>
   );
