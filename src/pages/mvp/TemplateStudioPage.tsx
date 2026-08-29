@@ -761,22 +761,27 @@ export default function TemplateStudioPage() {
     setJobId(requestedRun);
   }, [searchParams, jobId]);
 
-  useEffect(() => {
-    const requestedTemplate = searchParams.get("template");
-    if (!requestedTemplate || !templates.length) return;
-    if (appliedTemplateParamRef.current === requestedTemplate) return;
-    const normalizedRequest = requestedTemplate.toLowerCase();
+  /** Resolves ?template=<id|name|version> against the live catalog. */
+  const requestedTemplateParam = searchParams.get("template");
+  const deepLinkTemplateId = useMemo(() => {
+    if (!requestedTemplateParam || !templates.length) return null;
+    const normalizedRequest = requestedTemplateParam.trim().toLowerCase();
     const match = templates.find((template) =>
       template.id.toLowerCase() === normalizedRequest ||
       template.name.toLowerCase() === normalizedRequest ||
       template.versionId?.toLowerCase() === normalizedRequest,
     );
-    if (match) {
-      appliedTemplateParamRef.current = requestedTemplate;
-      deepLinkMatchedRef.current = match.id;
-      setSelectedTemplateId(match.id);
-    }
-  }, [searchParams, templates]);
+    return match?.id ?? null;
+  }, [requestedTemplateParam, templates]);
+
+  useEffect(() => {
+    if (!requestedTemplateParam || !deepLinkTemplateId) return;
+    // Re-applies when the catalog refreshes with new ids, so a deep link never
+    // silently falls back to the first campaign.
+    if (appliedTemplateParamRef.current === `${requestedTemplateParam}:${deepLinkTemplateId}`) return;
+    appliedTemplateParamRef.current = `${requestedTemplateParam}:${deepLinkTemplateId}`;
+    setSelectedTemplateId(deepLinkTemplateId);
+  }, [requestedTemplateParam, deepLinkTemplateId]);
 
   /*
    * Deep link (?template=<name>) on mobile/tablet: the grid renders, the card is
@@ -785,18 +790,16 @@ export default function TemplateStudioPage() {
    * UTM params in the URL are untouched.
    */
   const deepLinkRevealedRef = useRef(false);
-  /** Set only when ?template= actually resolved to a live campaign. */
-  const deepLinkMatchedRef = useRef<string | null>(null);
   useEffect(() => {
     if (deepLinkRevealedRef.current) return;
-    if (!isCompactLayout || !templates.length) return;
-    if (!deepLinkMatchedRef.current) return;
-    if (deepLinkMatchedRef.current !== selectedTemplateId) return;
+    if (!isCompactLayout || !deepLinkTemplateId) return;
+    if (deepLinkTemplateId !== selectedTemplateId) return;
     deepLinkRevealedRef.current = true;
     setInlineBuilderOpen(true);
     const timer = window.setTimeout(() => revealInlineBuilder(), 120);
     return () => window.clearTimeout(timer);
-  }, [isCompactLayout, searchParams, selectedTemplateId, templates.length]);
+  }, [isCompactLayout, deepLinkTemplateId, selectedTemplateId]);
+
 
 
 
