@@ -32,6 +32,9 @@ import {
 } from "@/services/templatePerformance";
 import { PerformanceBlock, PerformanceDisclaimer } from "@/components/TemplatePerformance";
 import { formatCampaignOutputsLong } from "@/lib/campaignOutputs";
+import HeroWorkflowAnimation from "@/components/mvp/HeroWorkflowAnimation";
+import PromoOfferBar from "@/components/mvp/PromoOfferBar";
+import { track } from "@/lib/analytics/track";
 
 
 
@@ -205,7 +208,12 @@ function TemplateCard({
 
   return (
     <article className="group relative w-[248px] shrink-0 overflow-hidden rounded-[1.25rem] border border-white/10 bg-slate-950/80 transition-colors hover:border-cyan-200/40 sm:w-[272px]">
-      <Link to={templateHref} className="absolute inset-0 z-10" aria-label={`Open ${entry.template.name}`} />
+      <Link
+        to={templateHref}
+        onClick={() => track("homepage_campaign_card_click", { template_id: templateId })}
+        className="absolute inset-0 z-10"
+        aria-label={`Open ${entry.template.name}`}
+      />
       <div className="relative aspect-[9/16] overflow-hidden bg-black">
         <AutoMedia
           media={entry.media}
@@ -247,7 +255,9 @@ function TemplateCard({
           size="sm"
           className="relative z-20 mt-3 h-9 w-full rounded-full bg-cyan-300 text-[12px] font-semibold uppercase tracking-[0.14em] text-slate-950 hover:bg-cyan-200"
         >
-          <Link to={templateHref}>Make this yours →</Link>
+          <Link to={templateHref} onClick={() => track("homepage_campaign_card_click", { template_id: templateId })}>
+            Make this yours →
+          </Link>
         </Button>
       </div>
     </article>
