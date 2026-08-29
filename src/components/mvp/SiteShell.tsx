@@ -135,6 +135,13 @@ export default function SiteShell({ children }: { children: ReactNode }) {
     navigate("/", { replace: true });
   };
 
+  /** Acquisition surfaces only — never over the app/admin chrome. */
+  const showPromoBar = ["/", "/app/templates", "/pricing", "/membership"].includes(
+    typeof window === "undefined" ? "" : window.location.pathname,
+  );
+
+
+
 
   return (
     <div className="min-h-screen text-foreground">
