@@ -126,18 +126,6 @@ const FEED_CHIPS: Array<{ key: FeedChip; label: string }> = [
   { key: "video", label: "Video" },
 ];
 
-/**
- * Deterministic tile height variant — stable per campaign, never random.
- * Used by the DESKTOP (lg+) dense marketplace grid only.
- */
-function feedTileAspect(templateId: string) {
-  let hash = 0;
-  for (let index = 0; index < templateId.length; index += 1) {
-    hash = (hash * 31 + templateId.charCodeAt(index)) % 9973;
-  }
-  const variants = ["aspect-[1/1]", "aspect-[4/5]", "aspect-[3/4]"];
-  return variants[hash % variants.length];
-}
 
 
 type RunnerStatus = "queued" | "running" | "video_pending" | "complete" | "failed";
