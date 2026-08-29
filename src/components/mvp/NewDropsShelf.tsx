@@ -6,9 +6,11 @@ import type { Entry, TemplateMedia } from "@/lib/homeMediaAllocator";
 import { track } from "@/lib/analytics/track";
 
 /**
- * NEW DROPS — video-first shelf that flows straight out of the hero.
- * Compact 4:5 cards: moving preview + name + output counts + RUN CAMPAIGN.
- * Only real preview media is used; nothing is fabricated. Hidden when empty.
+ * NEW DROPS — video-first rail that flows straight out of the hero.
+ * Genuine new drops come first and keep the NEW badge; the rest of the rail is
+ * filled with other eligible live campaigns (no badge) so the row reaches the
+ * right edge. Timestamps are never touched and nothing is marked "new" that
+ * isn't. Only real preview media is used; hidden when there is nothing to show.
  */
 
 /** Deep link into the builder by template NAME (the supported ad-link ref). */
@@ -64,7 +66,7 @@ function AutoMedia({ media, eager }: { media: TemplateMedia; eager?: boolean }) 
   );
 }
 
-function DropCard({ entry, eager }: { entry: Entry; eager?: boolean }) {
+function DropCard({ entry, eager, isNew }: { entry: Entry; eager?: boolean; isNew?: boolean }) {
   const name = String(entry.template.name ?? "");
   const href = runHref(name);
   const outputs = formatCampaignOutputs(
@@ -72,7 +74,7 @@ function DropCard({ entry, eager }: { entry: Entry; eager?: boolean }) {
   );
 
   return (
-    <article className="group relative w-[78vw] max-w-[320px] shrink-0 snap-start overflow-hidden rounded-[1.1rem] border border-white/12 bg-slate-950/80 transition-colors hover:border-cyan-200/40 sm:w-[260px]">
+    <article className="group relative w-[72vw] max-w-[300px] shrink-0 snap-start overflow-hidden rounded-[1.1rem] border border-white/12 bg-slate-950/80 transition-colors hover:border-cyan-200/40 sm:w-[38vw] lg:w-[252px] xl:w-[262px]">
       <Link
         to={href}
         className="absolute inset-0 z-10"
@@ -81,6 +83,11 @@ function DropCard({ entry, eager }: { entry: Entry; eager?: boolean }) {
       />
       <div className="relative aspect-[4/5] overflow-hidden bg-black">
         <AutoMedia media={entry.media} eager={eager} />
+        {isNew && (
+          <span className="absolute left-3 top-3 rounded-full bg-emerald-300/95 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-950">
+            New
+          </span>
+        )}
       </div>
       <div className="p-3.5">
         <p className="truncate font-display text-sm font-semibold uppercase tracking-[0.08em] text-white">
@@ -100,33 +107,60 @@ function DropCard({ entry, eager }: { entry: Entry; eager?: boolean }) {
   );
 }
 
-export default function NewDropsShelf({ entries }: { entries: Entry[] }) {
-  /** Video-first: real moving previews lead, catalog order is the tiebreaker. */
-  const ordered = useMemo(
-    () =>
-      entries
-        .map((entry, index) => ({ entry, index }))
-        .sort((a, b) => {
-          const aVideo = a.entry.media.type === "video" ? 0 : 1;
-          const bVideo = b.entry.media.type === "video" ? 0 : 1;
-          return aVideo - bVideo || a.index - b.index;
-        })
-        .map((row) => row.entry)
-        .slice(0, 8),
-    [entries],
-  );
+/** Video-first ordering inside a group; catalog order breaks ties. */
+function videoFirst(entries: Entry[]) {
+  return entries
+    .map((entry, index) => ({ entry, index }))
+    .sort((a, b) => {
+      const aVideo = a.entry.media.type === "video" ? 0 : 1;
+      const bVideo = b.entry.media.type === "video" ? 0 : 1;
+      return aVideo - bVideo || a.index - b.index;
+    })
+    .map((row) => row.entry);
+}
 
-  if (!ordered.length) return null;
+export default function NewDropsShelf({
+  entries,
+  fill = [],
+}: {
+  /** Genuine new drops — these keep the NEW badge. */
+  entries: Entry[];
+  /** Other eligible live campaigns used to fill the rail. Never badged. */
+  fill?: Entry[];
+}) {
+  const rail = useMemo(() => {
+    const seen = new Set<string>();
+    const rows: Array<{ entry: Entry; isNew: boolean }> = [];
+    const push = (list: Entry[], isNew: boolean) => {
+      for (const entry of videoFirst(list)) {
+        const key = String(entry.template.id ?? entry.template.name ?? "").trim().toLowerCase();
+        if (!key || seen.has(key)) continue;
+        seen.add(key);
+        rows.push({ entry, isNew });
+      }
+    };
+    push(entries, true);
+    push(fill, false);
+    return rows.slice(0, 14);
+  }, [entries, fill]);
+
+  if (!rail.length) return null;
 
   return (
     <section id="new-today" className="container pb-10 pt-4 sm:pt-6">
-      <div className="flex items-center justify-between gap-3">
-        <h2 className="font-display text-xl font-semibold uppercase tracking-[0.04em] text-white sm:text-2xl">
-          New drops
-        </h2>
+      <div className="flex items-end justify-between gap-3">
+        <div>
+          <p className="text-[10.5px] font-bold uppercase tracking-[0.28em] text-cyan-200">Just dropped</p>
+          <h2 className="mt-1.5 font-display text-xl font-semibold uppercase tracking-[0.04em] text-white sm:text-2xl">
+            New drops
+          </h2>
+          <p className="mt-1.5 text-[12.5px] font-medium text-slate-300">
+            The newest campaigns ready to run.
+          </p>
+        </div>
         <Link
           to="/app/templates"
-          className="flex items-center gap-1 text-[11.5px] font-bold uppercase tracking-[0.16em] text-cyan-200 transition-colors hover:text-white"
+          className="flex shrink-0 items-center gap-1 text-[11.5px] font-bold uppercase tracking-[0.16em] text-cyan-200 transition-colors hover:text-white"
         >
           View all
           <ArrowRight className="h-3.5 w-3.5" />
@@ -134,8 +168,13 @@ export default function NewDropsShelf({ entries }: { entries: Entry[] }) {
       </div>
 
       <div className="-mx-4 mt-4 flex snap-x snap-mandatory gap-3.5 overflow-x-auto px-4 pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:-mx-6 sm:px-6">
-        {ordered.map((entry, index) => (
-          <DropCard key={`drop-${entry.template.id}-${index}`} entry={entry} eager={index < 4} />
+        {rail.map(({ entry, isNew }, index) => (
+          <DropCard
+            key={`drop-${entry.template.id}-${index}`}
+            entry={entry}
+            isNew={isNew}
+            eager={index < 5}
+          />
         ))}
       </div>
     </section>
