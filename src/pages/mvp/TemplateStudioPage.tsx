@@ -1237,6 +1237,164 @@ export default function TemplateStudioPage() {
       (field) => field.type === "image" && resolveInputRole(field.label, field.requirement?.assetType) === "face",
     )?.key ?? null;
 
+  /*
+   * Single source of truth for an input slot's UI. Rendered by the desktop
+   * builder (compact = false) AND the mobile inline builder (compact = true).
+   * Handlers, upload path, autofill release and validation are identical.
+   */
+  const renderInputField = (field: InputField, compact = false) =>
+    field.type === "image" ? (
+      <div
+        key={field.key}
+        ref={compact ? undefined : (node) => {
+          slotRefs.current[field.key] = node;
+        }}
+        className={compact ? undefined : "scroll-mt-28"}
+      >
+        <TemplateInputCard
+          compact={compact}
+          label={field.label}
+          displayLabel={
+            castEnabled && field.key === castSlotFieldKey ? "Who's in the campaign?" : undefined
+          }
+          required={field.required}
+          highlighted={!compact && focusedInputKey === field.key}
+          file={files[field.key] ?? null}
+          requirement={field.requirement}
+          sourceNote={autofilledKeys[field.key] ? `From ${autofilledKeys[field.key]}` : null}
+          castPanel={
+            castEnabled && field.key === castSlotFieldKey ? (
+              <CastSelector
+                required={castRequired}
+                userId={user?.id ?? null}
+                selection={castSelection}
+                onSelectionChange={setCastSelection}
+              />
+            ) : undefined
+          }
+          onFileChange={(nextFile) => {
+            setFiles((current) => ({ ...current, [field.key]: nextFile }));
+            setLibraryAssets((current) => ({ ...current, [field.key]: null }));
+            releaseAutofill(field.key);
+            if (nextFile) advanceFromInput(field.key);
+            // P6a: logged-out uploads go to temporary storage so the
+            // asset survives an OAuth redirect. No generation starts.
+            if (!user) {
+              if (!nextFile) {
+                setAnonUploads((current) => {
+                  const next = { ...current };
+                  delete next[field.key];
+                  return next;
+                });
+                return;
+              }
+              setAnonUploads((current) => ({
+                ...current,
+                [field.key]: { status: "uploading" },
+              }));
+              void uploadAnonymousRunInput(nextFile)
+                .then((url) =>
+                  setAnonUploads((current) => ({
+                    ...current,
+                    [field.key]: { status: "ready", url },
+                  })),
+                )
+                .catch((error) => {
+                  const message = error instanceof Error ? error.message : "Upload failed.";
+                  setAnonUploads((current) => ({
+                    ...current,
+                    [field.key]: { status: "error", error: message },
+                  }));
+                  toast({ title: "Upload failed", description: message, variant: "destructive" });
+                });
+            }
+          }}
+          libraryAsset={libraryAssets[field.key] ?? null}
+          // P1: saved-library / brand pickers are account features.
+          // Logged-out visitors configure with local files only.
+          onLibrarySelect={
+            user
+              ? (asset) => {
+                  setFiles((current) => ({ ...current, [field.key]: null }));
+                  setLibraryAssets((current) => ({ ...current, [field.key]: asset }));
+                  releaseAutofill(field.key);
+                  advanceFromInput(field.key);
+                }
+              : undefined
+          }
+          onClear={() => {
+            setFiles((current) => ({ ...current, [field.key]: null }));
+            setLibraryAssets((current) => ({ ...current, [field.key]: null }));
+            setAnonUploads((current) => {
+              const next = { ...current };
+              delete next[field.key];
+              return next;
+            });
+            releaseAutofill(field.key);
+          }}
+        />
+        {!user && anonUploads[field.key] ? (
+          <p
+            className={cn(
+              "mt-2 text-[11px] leading-relaxed",
+              anonUploads[field.key]?.status === "error"
+                ? "text-rose-200"
+                : anonUploads[field.key]?.status === "ready"
+                  ? "text-emerald-200"
+                  : "text-cyan-100",
+            )}
+          >
+            {anonUploads[field.key]?.status === "uploading"
+              ? "Saving upload for this session..."
+              : anonUploads[field.key]?.status === "ready"
+                ? "Upload saved — it will still be here after you sign in."
+                : anonUploads[field.key]?.error}
+          </p>
+        ) : null}
+      </div>
+    ) : (
+      <div
+        key={field.key}
+        className={cn(
+          "rounded-[1.25rem] border border-white/10 bg-black/25",
+          compact ? "rounded-2xl p-2.5" : "p-3",
+        )}
+      >
+        <p className="mb-2 flex items-center gap-2 truncate text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-200">
+          <span className="truncate">{field.label}</span>
+          {autofilledKeys[field.key] ? (
+            <span className="shrink-0 rounded-full border border-white/10 bg-white/[0.04] px-2 py-0.5 font-display text-[9px] tracking-[0.18em] text-slate-400">
+              From {autofilledKeys[field.key]}
+            </span>
+          ) : null}
+        </p>
+
+        {field.type === "prompt" && !compact ? (
+          <Textarea
+            value={textInputs[field.key] ?? ""}
+            onChange={(event) => {
+              releaseAutofill(field.key);
+              setTextInputs((current) => ({ ...current, [field.key]: event.target.value }));
+            }}
+            rows={3}
+            placeholder={field.label}
+            className="min-h-[92px] rounded-[0.9rem] border-white/10 bg-white/[0.03] text-white"
+          />
+        ) : (
+          <Input
+            value={textInputs[field.key] ?? ""}
+            onChange={(event) => {
+              releaseAutofill(field.key);
+              setTextInputs((current) => ({ ...current, [field.key]: event.target.value }));
+            }}
+            placeholder={field.label}
+            className="h-11 rounded-[0.9rem] border-white/10 bg-white/[0.03] text-white"
+          />
+        )}
+      </div>
+    );
+
+
   // P0 — plan tier gate for the "Customize workflow" entry point.
   // Tier comes from profile.plan (billing-owned), matching the plan ladder keys
   // (free / starter / plus / pro / studio / team); admin/dev always qualify.
