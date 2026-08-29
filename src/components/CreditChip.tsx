@@ -79,7 +79,27 @@ export function CreditChip() {
       ? periodEnd.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })
       : null;
 
+  /**
+   * ACCOUNT-FIRST: a signed-in user with no paid plan and no credits sees an
+   * UPGRADE chip instead of a bare "0". Paid users and legacy free users with a
+   * real balance keep their balance display.
+   */
+  const planlessAndEmpty = !isActivePlan && balance <= 0;
+  if (planlessAndEmpty) {
+    return (
+      <Link
+        to="/pricing"
+        aria-label="Upgrade — buy credits to generate"
+        className="inline-flex h-9 items-center gap-1.5 rounded-full border border-cyan-300/40 bg-cyan-300/10 px-3 font-sans text-xs font-semibold uppercase tracking-[0.14em] text-cyan-100 backdrop-blur-sm transition-colors duration-200 hover:bg-cyan-300/20 motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/80 focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+      >
+        <span aria-hidden="true">✦</span>
+        Upgrade
+      </Link>
+    );
+  }
+
   return (
+
     <>
       {/* Rendered outside the popover so closing the popover cannot unmount it. */}
       <CreditPackDialog open={topUpOpen} onOpenChange={setTopUpOpen} />
