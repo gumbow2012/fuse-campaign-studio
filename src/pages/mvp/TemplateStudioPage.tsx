@@ -2637,11 +2637,11 @@ export default function TemplateStudioPage() {
                 selected card's real row). lg+: auto-fill portrait columns
                 (~210px min) so the feed responds to the viewport width. */}
             <div
-              className={cn("mt-3 grid items-start", isCompactLayout ? "grid-cols-2 gap-2.5" : "gap-3")}
+              className={cn("mt-3 grid items-start", isCompactLayout ? "grid-cols-2 gap-2.5" : "gap-2.5")}
               style={
                 isCompactLayout
                   ? undefined
-                  : { gridTemplateColumns: "repeat(auto-fill, minmax(210px, 1fr))" }
+                  : { gridTemplateColumns: "repeat(auto-fill, minmax(190px, 1fr))" }
               }
             >
 
