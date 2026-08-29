@@ -773,19 +773,27 @@ export default function HomePage() {
           </div>
         </div>
 
-        {/* DESKTOP (lg+) — restored 2-column hero: copy + CTA left, animated
-            workflow graph right. No mobile tile strip, no centered stack. */}
-        <div className="container relative hidden gap-10 py-16 lg:grid lg:grid-cols-[minmax(0,1fr)_minmax(0,0.9fr)] lg:items-center">
+        {/* DESKTOP (lg+) — wide left→right story hero: messaging left,
+            YOUR PRODUCTS → PREBUILT WORKFLOW → FINISHED CAMPAIGN right.
+            Mobile (<lg) keeps its own stacked hero above, untouched. */}
+        <div className="container relative hidden items-center gap-10 py-14 lg:grid lg:min-h-[700px] lg:grid-cols-[minmax(0,46fr)_minmax(0,54fr)] xl:gap-14">
           <div className="min-w-0">
             <h1
               className="font-display font-bold uppercase text-white"
-              style={{ fontSize: "clamp(40px, 3.6vw, 58px)", lineHeight: 0.96, letterSpacing: "-0.04em" }}
+              style={{ fontSize: "clamp(52px, 4.4vw, 82px)", lineHeight: 0.92, letterSpacing: "-0.045em" }}
             >
-              <span className="block whitespace-nowrap">One-click campaign</span>
-              <span className="block">Marketplace</span>
+              <span className="block">One-click campaign</span>
+              <span className="block text-cyan-100">Marketplace</span>
             </h1>
 
-            <p className="mt-5 max-w-[560px] font-sans text-[19px] font-extrabold uppercase leading-[1.3] tracking-[0.06em] text-white">
+            <p className="mt-5 max-w-[520px] font-sans text-[20px] font-bold leading-[1.35] text-white">
+              Viral campaigns. Already built and ready to run.
+            </p>
+            <p className="mt-2 max-w-[520px] font-sans text-[15.5px] leading-[1.5] text-slate-300">
+              Pick one. Upload your products. Hit run.
+            </p>
+
+            <p className="mt-6 max-w-[520px] font-sans text-[16px] font-extrabold uppercase leading-[1.3] tracking-[0.06em] text-white">
               <span className="block">
                 No prompts <span className="text-cyan-300">·</span> No guessing
               </span>
@@ -796,6 +804,7 @@ export default function HomePage() {
               <Button
                 asChild
                 size="lg"
+
                 className="group relative h-[58px] overflow-hidden rounded-full border border-cyan-100/70 bg-gradient-to-b from-cyan-200 to-cyan-400 px-9 font-sans text-[18px] font-extrabold uppercase tracking-[0.06em] text-slate-950 shadow-[0_10px_30px_-12px_rgba(34,211,238,0.65)] transition-all duration-200 hover:-translate-y-[2px] hover:shadow-[0_16px_38px_-12px_rgba(34,211,238,0.8)] active:translate-y-[1px] active:scale-[0.985] motion-reduce:transition-none motion-reduce:hover:translate-y-0"
               >
                 <Link to="/app/templates" onClick={() => track("hero_explore_campaigns_click")}>
