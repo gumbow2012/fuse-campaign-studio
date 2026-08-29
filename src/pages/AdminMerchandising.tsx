@@ -426,8 +426,8 @@ export default function AdminMerchandising() {
 
   const persistShelfItems = async (
     shelfId: string,
-    next: ItemState[],
-    previous: ItemState[],
+    next: MerchShelfItem[],
+    previous: MerchShelfItem[],
   ) => {
     try {
       await saveItemOrder(
