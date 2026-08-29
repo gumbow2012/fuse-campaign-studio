@@ -700,14 +700,18 @@ export default function HomePage() {
           {/* Prebuilt workflow explainer — needs no template data, renders instantly */}
           <div className="relative min-w-0">
             <div className="mx-auto max-w-[420px]">
-              <p className="mb-3 font-sans text-[13px] font-bold uppercase leading-[1.35] tracking-[0.08em] text-white sm:text-[14px]">
+              <p className="mb-3 font-sans text-[13px] font-bold uppercase leading-[1.35] tracking-[0.08em] text-white lg:text-[12.5px] lg:tracking-[0.03em]">
                 No prompts <span className="text-cyan-300">·</span> No guessing
                 <span className="lg:hidden">
                   <br />
                 </span>
-                <span className="hidden lg:inline"> </span>
-                <span className="text-cyan-300">·</span> Prebuilt expert workflows
+                <span className="hidden lg:inline">
+                  {" "}
+                  <span className="text-cyan-300">·</span>{" "}
+                </span>
+                Prebuilt expert workflows
               </p>
+
 
               <div className="lg:hidden">
                 <HeroWorkflowAnimation compact />
