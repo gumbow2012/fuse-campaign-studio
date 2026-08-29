@@ -34,6 +34,9 @@ export default function AuthPage() {
   const paidAccess = searchParams.get("paid") === "true";
   const [invited, setInvited] = useState(false);
   const initialMode: AuthMode = searchParams.get("mode") === "signup" ? "signup" : "signin";
+  /** Mirrors the panel's current mode so the headline matches the visible flow. */
+  const [mode, setMode] = useState<AuthMode>(initialMode);
+
 
 
   // ---- pending intent: captured on arrival, replayed after auth ----------
