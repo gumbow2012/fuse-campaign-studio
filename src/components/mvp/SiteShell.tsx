@@ -149,7 +149,7 @@ export default function SiteShell({ children }: { children: ReactNode }) {
             <img src={FUSE_ICON_SRC} alt="" className="h-8 w-8 shrink-0 rounded-xl object-contain sm:h-9 sm:w-9 md:h-10 md:w-10 lg:h-11 lg:w-11" />
             <div className="min-w-0">
               <img src={FUSE_WORDMARK_SRC} alt="FUSE" className="h-4 w-auto object-contain sm:h-5" />
-              <p className="hidden truncate text-[9px] uppercase tracking-[0.22em] text-muted-foreground sm:block sm:text-[10px] sm:tracking-[0.28em]">AI Campaign Engine for Streetwear</p>
+              
             </div>
           </Link>
 
