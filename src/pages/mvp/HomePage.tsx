@@ -697,9 +697,9 @@ export default function HomePage() {
 
             <p className="mt-5 max-w-[600px] font-sans text-[12px] font-bold uppercase leading-[1.5] tracking-[0.08em] text-white sm:text-[14px]">
               No prompts <span className="text-cyan-300">·</span> No guessing{" "}
-              <span className="text-cyan-300">·</span> Prebuilt expert workflows{" "}
-              <span className="text-cyan-300">·</span> Curated by leading AI creators
+              <span className="text-cyan-300">·</span> Prebuilt expert workflows
             </p>
+
           </div>
 
           {/* Prebuilt workflow explainer — needs no template data, renders instantly */}
