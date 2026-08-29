@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { cn } from "@/lib/utils";
-import { campaignDisplayName } from "@/lib/campaignDisplayName";
 import type { Entry } from "@/lib/homeMediaAllocator";
 import { track } from "@/lib/analytics/track";
 
@@ -82,7 +81,7 @@ function TileMedia({ entry, eager, reduced }: { entry: Entry; eager: boolean; re
 }
 
 const STRIP_CLASS =
-  "flex items-start justify-center gap-2 overflow-x-auto px-1 sm:gap-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden";
+  "flex items-center justify-center gap-2 overflow-x-auto px-1 sm:gap-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden";
 const SQUARE_CLASS =
   "block h-[76px] w-[76px] shrink-0 overflow-hidden rounded-[0.7rem] bg-black sm:h-[104px] sm:w-[104px] lg:h-[128px] lg:w-[128px]";
 
@@ -112,15 +111,7 @@ export default function HeroCampaignTiles({
       seenKeys.add(key);
       return true;
     });
-    return unique
-      .map((entry, index) => ({ entry, index }))
-      .sort((a, b) => {
-        const aVideo = a.entry.media.type === "video" ? 0 : 1;
-        const bVideo = b.entry.media.type === "video" ? 0 : 1;
-        return aVideo - bVideo || a.index - b.index;
-      })
-      .slice(0, 4)
-      .map((row) => row.entry);
+    return unique.slice(0, 4);
   }, [entries]);
 
   useEffect(() => {
@@ -159,7 +150,6 @@ export default function HeroCampaignTiles({
     >
       {tiles.map((entry, index) => {
         const templateId = String(entry.template.id ?? "");
-        const label = campaignDisplayName(entry.template.name);
         return (
           <Link
             key={`hero-tile-${templateId}-${index}`}
@@ -178,9 +168,6 @@ export default function HeroCampaignTiles({
             >
               <TileMedia entry={entry} eager={index < 2} reduced={reduced} />
             </div>
-            <span className="mt-1.5 block max-w-[76px] text-center font-sans text-[9.5px] font-bold uppercase leading-[1.15] tracking-[0.12em] text-slate-400 group-hover:text-white sm:max-w-[104px] sm:text-[10px] lg:max-w-[128px] lg:text-[11px]">
-              {label}
-            </span>
           </Link>
         );
       })}
