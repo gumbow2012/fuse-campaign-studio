@@ -624,15 +624,28 @@ export function createCheckoutHandler(mode: StripeBillingMode) {
       const templateName = typeof body.templateName === "string" && body.templateName.trim()
         ? body.templateName.trim()
         : null;
-      const checkoutIdentity = await resolveCheckoutIdentity({
-        req,
-        admin,
-        mode,
-        email: checkoutEmail,
-        brandName,
-      });
+      // ---- Guest (checkout-first) detection -------------------------------
+      // A visitor with no FUSE identity (or only an anonymous session) buys
+      // WITHOUT any account being pre-created. Stripe collects the email.
+      const callerUser = await getOptionalUser(req, admin);
+      const callerIsRealUser = Boolean(callerUser && !(callerUser as any).is_anonymous && callerUser.email);
+      const priorProfile = !callerIsRealUser && checkoutEmail
+        ? await findProfileByStripeContext(admin, null, checkoutEmail)
+        : null;
+      const guestMode = !callerIsRealUser && !priorProfile?.user_id;
+
+      const checkoutIdentity = guestMode
+        ? { id: null as string | null, email: null as string | null, createdFromCheckout: false }
+        : await resolveCheckoutIdentity({
+            req,
+            admin,
+            mode,
+            email: checkoutEmail,
+            brandName,
+          });
       userId = checkoutIdentity.id;
       userEmail = checkoutIdentity.email;
+
 
       const requestedPlanKey = typeof body.planKey === "string" ? body.planKey : null;
       const requestedPriceId = typeof body.priceId === "string" ? body.priceId : null;
