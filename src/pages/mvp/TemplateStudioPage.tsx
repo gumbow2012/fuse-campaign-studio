@@ -554,21 +554,19 @@ export default function TemplateStudioPage() {
   useEffect(() => {
     if (typeof window === "undefined") return;
     const compact = window.matchMedia("(max-width: 1023.98px)");
-    const twoCols = window.matchMedia("(min-width: 640px)");
     const sync = () => {
       setIsCompactLayout(compact.matches);
-      // Immersive feed: ONE dominant card per row below 640px, two from sm up.
-      setGridColumns(twoCols.matches ? 2 : 1);
+      // Dense feed: exactly TWO columns below lg, so the inline builder is
+      // inserted after the selected card's real visual row.
+      setGridColumns(2);
     };
     sync();
     compact.addEventListener("change", sync);
-    twoCols.addEventListener("change", sync);
     return () => {
       compact.removeEventListener("change", sync);
-
-      twoCols.removeEventListener("change", sync);
     };
   }, []);
+
 
   /** Feed view analytics — fires once per mount (no PII). */
   useEffect(() => {
