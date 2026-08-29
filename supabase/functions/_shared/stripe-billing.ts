@@ -801,9 +801,6 @@ export function createCreditCheckoutHandler(mode: StripeBillingMode) {
         .eq("user_id", user.id)
         .maybeSingle();
 
-      if (!hasActivePaidMembership(profile)) {
-        throw new Error("Credit packs are only available after an active membership is set up. Choose a membership first.");
-      }
 
       const customerId = await findStripeCustomerId({
         stripe,
