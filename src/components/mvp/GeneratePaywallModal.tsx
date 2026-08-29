@@ -13,6 +13,13 @@ import { useMembershipCheckout } from "@/hooks/useMembershipCheckout";
 import { quoteCreditTopUp } from "@/lib/creditPricing";
 import { QUICK_TOP_UP_AMOUNTS } from "@/lib/topUpLadder";
 import { STRIPE_TIERS } from "@/lib/stripe-config";
+import { useAuth } from "@/contexts/AuthContext";
+import {
+  STARTER_WELCOME_BADGE,
+  isStarterWelcomeOfferEligible,
+  starterWelcomePrice,
+} from "@/lib/starterWelcomeOffer";
+
 
 type Props = {
   open: boolean;
@@ -43,7 +50,18 @@ export default function GeneratePaywallModal({
   creditBalance,
 }: Props) {
   const { loading, startPlanCheckout, startCreditTopUp } = useMembershipCheckout();
+  const { profile } = useAuth();
+  const starterWelcomeEligible = isStarterWelcomeOfferEligible(
+    profile
+      ? {
+          plan: profile.plan,
+          subscriptionStatus: profile.subscription_status,
+          stripeSubscriptionId: profile.stripe_subscription_id,
+        }
+      : null,
+  );
   const [packDialogOpen, setPackDialogOpen] = useState(false);
+
 
   const shortfall = Math.max(0, creditsRequired - creditBalance);
   const topUpAmount = suggestedTopUp(Math.max(shortfall, 1));
@@ -90,9 +108,25 @@ export default function GeneratePaywallModal({
               className="w-full justify-center rounded-full border-white/15 bg-white/5 font-semibold text-white hover:bg-white/10"
             >
               <Sparkles className="h-4 w-4" aria-hidden />
-              Upgrade to {starter.name} — {usd(starter.price)}/mo
+              {starterWelcomeEligible ? (
+                <>
+                  Upgrade to {starter.name} —{" "}
+                  <span className="text-slate-400 line-through">{usd(starter.price)}</span>{" "}
+                  <span className="text-cyan-200">{usd(starterWelcomePrice(starter.price))}</span>/mo
+                </>
+              ) : (
+                <>
+                  Upgrade to {starter.name} — {usd(starter.price)}/mo
+                </>
+              )}
               <ArrowRight className="h-4 w-4" aria-hidden />
             </Button>
+            {starterWelcomeEligible ? (
+              <p className="text-center text-[10px] font-semibold uppercase tracking-[0.14em] text-cyan-200/90">
+                {STARTER_WELCOME_BADGE}
+              </p>
+            ) : null}
+
 
             <button
               type="button"

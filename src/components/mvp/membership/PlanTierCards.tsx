@@ -16,6 +16,12 @@ import { planDifferentiators } from "@/lib/planFeatureModules";
 import { MEDIAN_CAMPAIGN_TOOLTIP, typicalCapacityLabel } from "@/lib/creditOutputs";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import type { STRIPE_TIERS } from "@/lib/stripe-config";
+import {
+  STARTER_WELCOME_BADGE,
+  isStarterWelcomeOfferEligible,
+  starterWelcomePrice,
+} from "@/lib/starterWelcomeOffer";
+
 
 export type BillingCycle = BillingPeriod;
 
@@ -143,6 +149,7 @@ function PlanCard({
   compact,
   wide,
   className,
+  starterWelcomeEligible,
   onSelect,
 }: {
   entry: PlanLadderEntry;
@@ -153,6 +160,7 @@ function PlanCard({
   compact?: boolean;
   wide?: boolean;
   className?: string;
+  starterWelcomeEligible?: boolean;
   onSelect: () => void;
 }) {
   const Icon = entry.icon;
@@ -161,6 +169,11 @@ function PlanCard({
 
   // SOLE pricing source. No promo today → no slash, no % off, no savings line.
   const offer = getPlanOffer(entry, "monthly", null);
+
+  /** Display-only: 20% off the first month, first-time Starter subscribers. */
+  const showStarterWelcome =
+    entry.key === "starter" && !!starterWelcomeEligible && !isCurrent && offer.purchasable;
+
 
   const credits = offer.monthlyCredits ?? 0;
   const capacity = typicalCapacityLabel(credits);
@@ -234,18 +247,35 @@ function PlanCard({
             compact ? "text-3xl" : wide ? "text-5xl" : "text-4xl"
           }`}
         >
-          {formatMoney(offer.effectiveMonthly)}
+          {showStarterWelcome ? (
+            <>
+              <span className="mr-2 text-slate-500 line-through">{formatMoney(offer.effectiveMonthly)}</span>
+              <span className="text-cyan-200">{formatMoney(starterWelcomePrice(offer.effectiveMonthly))}</span>
+            </>
+          ) : (
+            formatMoney(offer.effectiveMonthly)
+          )}
           {entry.isFreeState ? null : <span className="ml-1 text-sm font-medium text-slate-400">/month</span>}
         </p>
+        {showStarterWelcome ? (
+          <p className="mt-2 inline-flex w-fit items-center rounded-full border border-cyan-300/25 bg-cyan-300/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-cyan-100">
+            {STARTER_WELCOME_BADGE}
+          </p>
+        ) : null}
         {entry.isFreeState ? (
           <p className="mt-1 text-xs text-slate-400">
             $0 · {WELCOME_CREDITS_ONCE} welcome credits · one-time
           </p>
         ) : offer.purchasable ? (
-          <p className="mt-1 text-xs text-slate-400">Billed monthly · cancel anytime</p>
+          <p className="mt-1 text-xs text-slate-400">
+            {showStarterWelcome
+              ? "First month 20% off · then billed monthly · cancel anytime"
+              : "Billed monthly · cancel anytime"}
+          </p>
         ) : (
           <p className="mt-1 text-xs text-slate-400">Early access — not open for checkout yet</p>
         )}
+
         {isCurrent ? (
           <p className="mt-3 inline-flex w-fit items-center rounded-full border border-cyan-300/20 bg-cyan-300/10 px-2.5 py-1 text-xs font-medium text-cyan-50">
             Your plan
@@ -316,6 +346,13 @@ export default function PlanTierCards({
   const hasActivePaidPlan =
     currentPlan !== "free" && (subscriptionStatus === "active" || subscriptionStatus === "trialing");
 
+  /** First-time subscribers see the 20%-off-first-month Starter treatment. */
+  const starterWelcomeEligible = isStarterWelcomeOfferEligible({
+    plan: currentPlan,
+    subscriptionStatus,
+  });
+
+
   const visible = (showAll ? SALE_PLAN_LADDER : SALE_PLAN_LADDER.filter((entry) => entry.featured))
     .slice()
     .sort((a, b) => mobileRank(a) - mobileRank(b));
@@ -355,7 +392,9 @@ export default function PlanTierCards({
             }
             loading={loading}
             isAdmin={isAdmin}
+            starterWelcomeEligible={starterWelcomeEligible}
             onSelect={() => handleSelect(entry)}
+
           />
         ))}
       </section>
