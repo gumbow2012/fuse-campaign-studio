@@ -74,7 +74,7 @@ function DropCard({ entry, eager, isNew }: { entry: Entry; eager?: boolean; isNe
   );
 
   return (
-    <article className="group relative w-[76vw] max-w-[320px] shrink-0 snap-start overflow-hidden rounded-[1.1rem] border border-white/12 bg-slate-950/80 transition-colors hover:border-cyan-200/40 sm:w-[38vw] lg:w-[262px] xl:w-[274px]">
+    <article className="group relative w-[72vw] max-w-[300px] shrink-0 snap-start overflow-hidden rounded-[1.1rem] border border-white/12 bg-slate-950/80 transition-colors hover:border-cyan-200/40 sm:w-[38vw] lg:w-[252px] xl:w-[262px]">
       <Link
         to={href}
         className="absolute inset-0 z-10"
