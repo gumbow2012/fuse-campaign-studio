@@ -2274,10 +2274,11 @@ export default function TemplateStudioPage() {
                         />
                       ) : null}
 
-                      <div className="flex items-center justify-between gap-2 text-[10px] uppercase tracking-[0.18em] text-slate-400">
+                      <div className="flex flex-wrap items-center justify-between gap-2 text-[10px] uppercase tracking-[0.18em] text-slate-400">
                         <span>{formatCount(inputCount, "upload", "uploads")}</span>
-                        <span>{formatCount(outputCount, "output", "outputs")}</span>
+                        <span>{formatCampaignOutputs(template.counts)}</span>
                       </div>
+
 
                       {/* Single action: the whole card opens the campaign in the builder.
                           This is a non-interactive affordance only — no second step. */}
