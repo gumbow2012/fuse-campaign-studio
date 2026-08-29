@@ -20,8 +20,11 @@ export function formatCampaignOutputs(counts?: OutputCounts): string {
 export function formatCampaignOutputsLong(counts?: OutputCounts): string {
   const img = Number(counts?.imageOutputs ?? 0);
   const vid = Number(counts?.videoOutputs ?? 0);
-  if (img > 0 && vid > 0) return `${img} images + ${vid} video clips`;
-  if (img > 0) return `${img} images`;
-  if (vid > 0) return `${vid} video clips`;
+  const images = `${img} ${img === 1 ? "image" : "images"}`;
+  const clips = `${vid} ${vid === 1 ? "video clip" : "video clips"}`;
+  if (img > 0 && vid > 0) return `${images} + ${clips}`;
+  if (img > 0) return images;
+  if (vid > 0) return clips;
   return "campaign assets";
 }
+
