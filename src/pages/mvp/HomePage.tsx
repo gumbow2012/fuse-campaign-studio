@@ -627,28 +627,27 @@ export default function HomePage() {
           }}
         />
 
-        <div className="container relative grid gap-10 py-12 md:py-16 lg:grid-cols-[1fr_0.9fr] lg:items-center">
+        <div className="container relative grid gap-7 py-9 md:gap-10 md:py-16 lg:grid-cols-[1fr_0.9fr] lg:items-center">
           <div>
             <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-cyan-100 sm:text-[13px]">
               One-click campaign engine
             </p>
-            <h1 className="mt-4 font-display text-4xl font-bold uppercase leading-[1.03] tracking-[-0.02em] text-white sm:text-6xl">
+            <h1 className="mt-3 font-display text-[44px] font-bold uppercase leading-[1.02] tracking-[-0.02em] text-white sm:text-6xl md:mt-4">
               Viral campaigns.
               <br />
               <span className="text-cyan-200">already built.</span>
             </h1>
-            <p className="mt-5 max-w-[560px] font-sans text-[16px] leading-[1.5] text-slate-200 sm:text-[18px]">
-              Pick a campaign. Add your products. FUSE runs the entire workflow.
-            </p>
-            <p className="mt-2 max-w-[560px] font-sans text-[14px] leading-[1.5] text-slate-400 sm:text-[15px]">
-              Get the finished images and videos — no prompting required.
+            <p className="mt-4 max-w-[560px] font-sans text-[16px] leading-[1.45] text-slate-200 sm:text-[18px] sm:leading-[1.5] md:mt-5">
+              Pick a campaign. Add your products.
+              <br />
+              FUSE runs every step.
             </p>
 
-            <div className="mt-7 flex flex-wrap items-center gap-3">
+            <div className="mt-6 flex flex-wrap items-center gap-3 md:mt-7">
               <Button
                 asChild
                 size="lg"
-                className="rounded-full bg-cyan-300 px-8 font-sans text-[16px] font-semibold tracking-[0.01em] text-slate-950 hover:bg-cyan-200"
+                className="h-[54px] rounded-full bg-cyan-300 px-8 font-sans text-[16px] font-semibold tracking-[0.01em] text-slate-950 hover:bg-cyan-200"
               >
                 <Link to="/app/templates">
                   Explore campaigns
@@ -679,99 +678,46 @@ export default function HomePage() {
               )}
             </div>
 
-
-            <p className="mt-5 font-sans text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-300 sm:text-[12px]">
-              No prompts · No AI agent · Full campaign outputs
+            <p className="mt-5 font-sans text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-200 sm:text-[12px]">
+              No prompts · No AI agent
+              <span className="hidden sm:inline"> · Images + video clips</span>
             </p>
-
-
-
           </div>
 
-          {/* Hero transformation — TEMPLATE → your brand → YOUR CAMPAIGN */}
+          {/* Hero proof — ONE cohesive real example (pinned hero campaign + real counts) */}
           <div className="relative">
             {templatesLoading ? (
               /* Cold load: paint a skeleton once, never image A → image B. */
-              <div>
-                <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3">
-                  <HeroTileSkeleton label="Template" />
-                  <div className="w-[92px] sm:w-[104px]">
-                    <div className="h-[104px] animate-pulse rounded-xl border border-cyan-300/20 bg-white/[0.04]" />
-                    <p className="mt-2 text-center text-[9px] font-semibold uppercase tracking-[0.18em] text-slate-500">
-                      →
-                    </p>
-                  </div>
-                  <HeroTileSkeleton label="Your campaign" highlight />
+              <div className="mx-auto max-w-[300px] sm:max-w-[340px]">
+                <HeroTileSkeleton highlight />
+                <div className="mt-4 space-y-2">
+                  <div className="mx-auto h-4 w-32 animate-pulse rounded-full bg-white/[0.06]" />
+                  <div className="mx-auto h-5 w-48 animate-pulse rounded-full bg-white/[0.06]" />
                 </div>
-                <div className="mx-auto mt-4 max-w-[420px] space-y-2">
-                  <div className="mx-auto h-4 w-40 animate-pulse rounded-full bg-white/[0.06]" />
-                </div>
-
               </div>
             ) : original ? (
-              <div>
-                <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3">
-                  <HeroTile label="Template" media={original.media} eager />
-                  <div className="w-[92px] sm:w-[104px]">
-                    <div
-                      className="relative overflow-hidden rounded-xl border border-cyan-300/25 bg-slate-950/80 px-3 py-4 text-center"
-                      style={{
-                        backgroundImage:
-                          "linear-gradient(rgba(148,163,184,0.10) 1px, transparent 1px), linear-gradient(90deg, rgba(148,163,184,0.10) 1px, transparent 1px)",
-                        backgroundSize: "14px 14px",
-                      }}
-                    >
-                      <p className="font-display text-[11px] font-semibold uppercase tracking-[0.2em] text-white">
-                        Your brand
-                      </p>
-                      <p className="mt-1 text-[8px] uppercase tracking-[0.16em] text-slate-400">
-                        garment + logo + cast
-                      </p>
-                      <p className="mt-3 text-[9px] font-semibold uppercase tracking-[0.2em] text-cyan-200">
-                        + Product
-                      </p>
-                    </div>
-                    <p className="mt-2 text-center text-[9px] font-semibold uppercase tracking-[0.18em] text-slate-500">
-                      →
-                    </p>
-                  </div>
-                  <HeroTile
-                    label="Your campaign"
-                    highlight
-                    media={yourVersion?.media ?? original.media}
-                  />
-                </div>
-
-                <div className="mx-auto mt-4 max-w-[420px] space-y-2 text-center">
-                  <div className="flex flex-wrap items-center justify-center gap-2">
-                    <p className="font-display text-sm font-semibold uppercase tracking-[0.1em] text-white">
-                      {original.template.name}
-                    </p>
-                    {outputLabel(original.template) && (
-                      <span className="text-[11px] uppercase tracking-[0.18em] text-slate-400">
-                        · {outputLabel(original.template)}
-                      </span>
-                    )}
-                  </div>
-                  {heroPerf && (
-                    <PerformanceBlock row={heroPerf} compact className="text-left" />
-                  )}
-
-
-
+              <div className="mx-auto max-w-[300px] sm:max-w-[340px]">
+                <HeroTile media={original.media} highlight eager />
+                <div className="mt-4 text-center">
+                  <p className="font-display text-sm font-semibold uppercase tracking-[0.14em] text-white">
+                    {original.template.name}
+                  </p>
+                  <p className="mt-1 font-sans text-[18px] font-bold text-cyan-200 sm:text-[20px]">
+                    {formatCampaignOutputsLong(original.template.counts)}
+                  </p>
+                  {heroPerf && <PerformanceBlock row={heroPerf} compact className="mt-3 text-left" />}
                   {heroPerf && <PerformanceDisclaimer />}
                 </div>
               </div>
             ) : (
-              <div className="overflow-hidden rounded-[1.5rem] border border-white/10 bg-black">
+              <div className="mx-auto max-w-[300px] overflow-hidden rounded-[1.5rem] border border-white/10 bg-black sm:max-w-[340px]">
                 <img src={FALLBACK_GIFS[0]} alt="" className="aspect-[9/16] w-full object-cover" />
               </div>
             )}
           </div>
-
-
         </div>
       </section>
+
 
       {/* 1.4 · CURATED SHELVES — exact order from /admin/templates/merchandising */}
       {curatedShelves.map((shelf) => (
