@@ -18,6 +18,8 @@ import { getAbsoluteSiteUrl } from "@/lib/site-url";
 import { writePendingAuthIntent } from "@/lib/pendingAuthIntent";
 import { getPendingGenerationIntent } from "@/lib/pendingGenerationIntent";
 import { track } from "@/lib/analytics/track";
+import { useMembershipCheckout } from "@/hooks/useMembershipCheckout";
+
 
 type Props = {
   open: boolean;
