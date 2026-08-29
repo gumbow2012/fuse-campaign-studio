@@ -568,6 +568,13 @@ export default function TemplateStudioPage() {
     };
   }, []);
 
+  /** Feed view analytics — fires once per mount (no PII). */
+  useEffect(() => {
+    track("marketplace_view", {});
+  }, []);
+
+
+
 
 
   const isPrivilegedUser = hasAppAccess;
