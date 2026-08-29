@@ -12,10 +12,11 @@ type Stage = 0 | 1 | 2 | 3;
 
 const STAGE_LABELS: Record<Stage, string> = {
   0: "Products loaded",
-  1: "Building campaign images",
+  1: "Building image steps",
   2: "Creating video clips",
   3: "Campaign ready ✓",
 };
+
 
 const CYAN = "#22d3ee";
 const MUTED = "rgba(148,163,184,0.45)";
