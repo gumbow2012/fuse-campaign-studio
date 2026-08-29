@@ -2626,10 +2626,6 @@ export default function TemplateStudioPage() {
                   {row.map((template) => {
                 const selected = template.id === selectedTemplateId;
                 const batchSelected = batchSelection.includes(template.id);
-                const credits = template.estimated_credits_per_run || 0;
-                const inputCount = getTemplateInputCount(template);
-                const outputCount = getTemplateOutputCount(template);
-                const performance = performanceMap[String(template.id ?? "")];
 
 
 
