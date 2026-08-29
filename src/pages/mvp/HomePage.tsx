@@ -712,7 +712,7 @@ export default function HomePage() {
             ) : original ? (
               <div>
                 <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3">
-                  <HeroTile label="Template" media={original.media} eager />
+                  <HeroTile label="Template" media={curatedHeroMedia(original)} eager />
                   <div className="w-[92px] sm:w-[104px]">
                     <div
                       className="relative overflow-hidden rounded-xl border border-cyan-300/25 bg-slate-950/80 px-3 py-4 text-center"
