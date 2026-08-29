@@ -1,5 +1,7 @@
 import type { ApiTemplate } from "@/services/fuseApi";
 import { sortTemplatesForStudio } from "@/lib/templateOrdering";
+import { formatCampaignOutputs } from "@/lib/campaignOutputs";
+
 
 /** Curated existing media only — nothing is generated for the homepage. */
 export const CURATED_PREVIEW_GIFS: Array<{ match: RegExp; src: string }> = [
@@ -68,8 +70,9 @@ export function outputCount(template: ApiTemplate) {
 export function outputLabel(template: ApiTemplate) {
   const total = outputCount(template);
   if (total <= 0) return null;
-  return `${total} output${total === 1 ? "" : "s"}`;
+  return formatCampaignOutputs(template.counts);
 }
+
 
 function isRecent(template: ApiTemplate, days = 21) {
   if (!template.created_at) return false;

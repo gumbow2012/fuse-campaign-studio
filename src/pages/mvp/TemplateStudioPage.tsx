@@ -99,6 +99,8 @@ import StreakChip from "@/components/StreakChip";
 
 import CampaignHistoryDrawer from "@/components/campaigns/CampaignHistoryDrawer";
 import { useCampaignHistory } from "@/hooks/useCampaignHistory";
+import { formatCampaignOutputs, formatCampaignOutputsLong } from "@/lib/campaignOutputs";
+
 
 /**
  * Temporary marketplace simplification: hides the output-type tabs, performance
@@ -2274,10 +2276,11 @@ export default function TemplateStudioPage() {
                         />
                       ) : null}
 
-                      <div className="flex items-center justify-between gap-2 text-[10px] uppercase tracking-[0.18em] text-slate-400">
+                      <div className="flex flex-wrap items-center justify-between gap-2 text-[10px] uppercase tracking-[0.18em] text-slate-400">
                         <span>{formatCount(inputCount, "upload", "uploads")}</span>
-                        <span>{formatCount(outputCount, "output", "outputs")}</span>
+                        <span>{formatCampaignOutputs(template.counts)}</span>
                       </div>
+
 
                       {/* Single action: the whole card opens the campaign in the builder.
                           This is a non-interactive affordance only — no second step. */}
@@ -2420,15 +2423,16 @@ export default function TemplateStudioPage() {
                           aria-expanded={outputSplitOpen}
                           className="rounded-full border border-white/10 px-3 py-1 text-[10px] uppercase tracking-[0.2em] text-muted-foreground transition-colors hover:border-white/25 hover:text-slate-200"
                         >
-                          {formatCount(selectedTemplateOutputCount, "output", "outputs")}
+                          {formatCampaignOutputsLong(selectedTemplate?.counts)}
                           <span aria-hidden className="ml-1">{outputSplitOpen ? "▴" : "▾"}</span>
                           {outputSplitOpen ? <span className="ml-2 normal-case tracking-normal text-slate-300">{outputSplit}</span> : null}
                         </button>
                       ) : (
                         <span className="rounded-full border border-white/10 px-3 py-1 text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
-                          {formatCount(selectedTemplateOutputCount, "output", "outputs")}
+                          {formatCampaignOutputsLong(selectedTemplate?.counts)}
                         </span>
                       )}
+
                       <span className="inline-flex items-center gap-1 rounded-full border border-white/10 px-3 py-1 text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
                         {isPrivilegedUser ? <span className="line-through decoration-cyan-200/90 decoration-2">{creditsRequired} cr</span> : `${creditsRequired} cr`}
                         <Tooltip>
