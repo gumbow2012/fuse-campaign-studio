@@ -13,6 +13,7 @@ import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { rememberPendingCheckout, trackEvent } from "@/lib/metaPixel";
 import { quoteCreditTopUp } from "@/lib/creditPricing";
+import { getMetaMatchParams } from "@/lib/metaMatch";
 import CreditTopUpModule from "@/components/mvp/membership/CreditTopUpModule";
 import { rememberPendingCreditTopUp } from "@/components/mvp/CreditTopUpSuccessWatcher";
 
