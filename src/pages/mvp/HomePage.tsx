@@ -502,6 +502,27 @@ export default function HomePage() {
   const original = pinnedHero.left ?? heroPair[0] ?? null;
   const yourVersion = pinnedHero.right ?? heroPair[1] ?? null;
 
+  /**
+   * Desktop hero story preview — one real, live campaign asset. Preference
+   * order only; falls back to the allocator so it is never empty-by-name.
+   */
+  const heroStoryPreview = useMemo<Entry | null>(() => {
+    const find = (needle: string): Entry | null => {
+      const template = templates.find((candidate) =>
+        String(candidate.name ?? "").trim().toLowerCase().includes(needle),
+      );
+      if (!template) return null;
+      const media = resolveMedia(template);
+      return media ? ({ template, media } as Entry) : null;
+    };
+    for (const needle of ["grillzzzz", "grillz", "broken planet", "spider man", "airport"]) {
+      const match = find(needle);
+      if (match) return match;
+    }
+    return pinnedHero.left ?? heroPair[0] ?? null;
+  }, [templates, pinnedHero.left, heroPair]);
+
+
 
 
   /** Every entry already claimed by the allocator — perf shelves reuse these only. */
