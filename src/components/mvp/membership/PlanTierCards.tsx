@@ -234,18 +234,35 @@ function PlanCard({
             compact ? "text-3xl" : wide ? "text-5xl" : "text-4xl"
           }`}
         >
-          {formatMoney(offer.effectiveMonthly)}
+          {showStarterWelcome ? (
+            <>
+              <span className="mr-2 text-slate-500 line-through">{formatMoney(offer.effectiveMonthly)}</span>
+              <span className="text-cyan-200">{formatMoney(starterWelcomePrice(offer.effectiveMonthly))}</span>
+            </>
+          ) : (
+            formatMoney(offer.effectiveMonthly)
+          )}
           {entry.isFreeState ? null : <span className="ml-1 text-sm font-medium text-slate-400">/month</span>}
         </p>
+        {showStarterWelcome ? (
+          <p className="mt-2 inline-flex w-fit items-center rounded-full border border-cyan-300/25 bg-cyan-300/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-cyan-100">
+            {STARTER_WELCOME_BADGE}
+          </p>
+        ) : null}
         {entry.isFreeState ? (
           <p className="mt-1 text-xs text-slate-400">
             $0 · {WELCOME_CREDITS_ONCE} welcome credits · one-time
           </p>
         ) : offer.purchasable ? (
-          <p className="mt-1 text-xs text-slate-400">Billed monthly · cancel anytime</p>
+          <p className="mt-1 text-xs text-slate-400">
+            {showStarterWelcome
+              ? "First month 20% off · then billed monthly · cancel anytime"
+              : "Billed monthly · cancel anytime"}
+          </p>
         ) : (
           <p className="mt-1 text-xs text-slate-400">Early access — not open for checkout yet</p>
         )}
+
         {isCurrent ? (
           <p className="mt-3 inline-flex w-fit items-center rounded-full border border-cyan-300/20 bg-cyan-300/10 px-2.5 py-1 text-xs font-medium text-cyan-50">
             Your plan
