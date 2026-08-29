@@ -2299,11 +2299,11 @@ export default function TemplateStudioPage() {
             <h1 className="mt-2 font-display text-xl font-bold leading-tight text-white sm:mt-3 sm:text-4xl">
               {isPublicTemplateBrowser
                 ? "Build your campaign. No account needed yet."
-                : "Your template is ready. Upload your assets."}
+                : "Your campaign is ready. Upload your assets."}
             </h1>
             <p className="mt-1.5 max-w-2xl text-[13px] leading-5 text-slate-300 sm:mt-3 sm:text-sm sm:leading-6 md:text-base">
               {isPublicTemplateBrowser
-                ? "Pick a template, add your assets and set up the run — you only sign in when you generate."
+                ? "Pick a campaign, add your assets and set up the run — you only sign in when you generate."
                 : "The selected workflow is loaded. Add the required assets, confirm the run cost, and generate campaign videos."}
             </p>
 
@@ -2519,7 +2519,7 @@ export default function TemplateStudioPage() {
 
             {templatesQuery.isError ? (
               <div className="mt-5 rounded-[1.5rem] border border-rose-400/20 bg-rose-400/10 p-4 text-sm text-rose-100">
-                Could not load templates.
+                Could not load campaigns.
               </div>
             ) : null}
 
@@ -2616,7 +2616,7 @@ export default function TemplateStudioPage() {
 
             {!templatesQuery.isFetching && !templates.length ? (
               <div className="mt-5 rounded-[1.5rem] border border-white/8 bg-black/20 p-4 text-sm text-slate-300">
-                No active templates were returned.
+                No active campaigns were returned.
               </div>
             ) : null}
 
@@ -2712,13 +2712,13 @@ export default function TemplateStudioPage() {
             </div>
             {favoritesOnly && !visibleTemplates.length ? (
               <div className="mt-5 rounded-[1.5rem] border border-white/8 bg-black/20 p-4 text-sm text-slate-300">
-                No favorites yet — tap the heart on any template to save it here.
+                No favorites yet — tap the heart on any campaign to save it here.
               </div>
             ) : null}
 
             {activeFilterCount && templates.length && !visibleTemplates.length ? (
               <div className="mt-5 rounded-[1.5rem] border border-white/8 bg-black/20 p-4 text-sm text-slate-300">
-                No templates match these performance filters yet.
+                No campaigns match these filters yet.
               </div>
             ) : null}
             {hasAnyPerformance ? <PerformanceDisclaimer className="mt-4" /> : null}
