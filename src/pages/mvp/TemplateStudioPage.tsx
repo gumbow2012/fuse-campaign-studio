@@ -63,6 +63,7 @@ import { trackEvent } from "@/lib/metaPixel";
 import { track } from "@/lib/analytics/track";
 import GenerateAuthGateModal from "@/components/auth/GenerateAuthGateModal";
 import GeneratePaywallModal from "@/components/mvp/GeneratePaywallModal";
+import TemplateUnlockModal from "@/components/mvp/TemplateUnlockModal";
 import PlanActivationNotice from "@/components/mvp/PlanActivationNotice";
 
 import {
@@ -503,6 +504,9 @@ export default function TemplateStudioPage() {
   /** P2 — generate auth gate for logged-out visitors (never auto-opens). */
   const [authGateOpen, setAuthGateOpen] = useState(false);
   const [paywallOpen, setPaywallOpen] = useState(false);
+  /** ACQUISITION — guest UNLOCK confirmation → checkout (no uploads before pay). */
+  const [unlockOpen, setUnlockOpen] = useState(false);
+
   const [result, setResult] = useState<RunnerResult | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [checkingCredits, setCheckingCredits] = useState(false);
@@ -868,13 +872,25 @@ export default function TemplateStudioPage() {
   const deepLinkRevealedRef = useRef(false);
   useEffect(() => {
     if (deepLinkRevealedRef.current) return;
+    if (!user) return; // guests get the UNLOCK confirmation instead of an uploader
     if (!isCompactLayout || !deepLinkTemplateId) return;
     if (deepLinkTemplateId !== selectedTemplateId) return;
     deepLinkRevealedRef.current = true;
     setInlineBuilderOpen(true);
     const timer = window.setTimeout(() => revealInlineBuilder(), 120);
     return () => window.clearTimeout(timer);
-  }, [isCompactLayout, deepLinkTemplateId, selectedTemplateId]);
+  }, [isCompactLayout, deepLinkTemplateId, selectedTemplateId, user]);
+
+  /* Guest arriving on a template deep link: acquisition confirmation, once. */
+  const deepLinkUnlockRef = useRef(false);
+  useEffect(() => {
+    if (deepLinkUnlockRef.current || user) return;
+    if (!deepLinkTemplateId || deepLinkTemplateId !== selectedTemplateId) return;
+    deepLinkUnlockRef.current = true;
+    track("template_unlock_click", { template_id: deepLinkTemplateId, surface: "deep_link" });
+    setUnlockOpen(true);
+  }, [deepLinkTemplateId, selectedTemplateId, user]);
+
 
 
 
@@ -1643,7 +1659,34 @@ export default function TemplateStudioPage() {
     setAutofilledKeys({});
     autofillAppliedRef.current = "";
 
+    /* UNLOCK branch — a logged-out visitor gets the acquisition confirmation,
+       never a pre-purchase uploader. Browsing itself stays open. */
+    if (!user) {
+      setInlineBuilderOpen(false);
+      track("template_unlock_click", { template_id: templateId, surface: "card" });
+      setUnlockOpen(true);
+      return;
+    }
+
+    track("studio_opened", { template_id: templateId });
+
+    /* Signed in but unfunded: the existing contextual Starter offer. The template
+       stays selected, so closing the offer lands straight in the builder. */
+    const incomingCost = templates.find((entry) => entry.id === templateId)?.estimated_credits_per_run ?? 0;
+    if (!isPrivilegedUser && !!profile && incomingCost > 0 && displayedCreditBalance < incomingCost) {
+      track("no_plan_generate_attempt", {
+        template_id: templateId,
+        credits_required: incomingCost,
+        credit_balance: displayedCreditBalance,
+        surface: "unlock",
+      });
+      setPaywallOpen(true);
+    }
+
+
+
     if (isCompactLayout) {
+
       setInlineBuilderOpen(true);
       // Inline expansion: no teleporting. Only nudge if the panel top would sit
       // below the viewport, and only after layout exists.
@@ -1802,6 +1845,20 @@ export default function TemplateStudioPage() {
     }
   }, [anonUploads, castSelection, files, selectedTemplateId, textInputs, user]);
 
+  /* Funnel step: first asset added to a campaign by a signed-in user. */
+  const firstAssetTrackedRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    if (!user || !selectedTemplateId) return;
+    if (firstAssetTrackedRef.current.has(selectedTemplateId)) return;
+    const hasAsset =
+      Object.values(files).some(Boolean) ||
+      Object.values(libraryAssets).some(Boolean) ||
+      Object.values(textInputs).some((value) => Boolean(value && String(value).trim()));
+    if (!hasAsset) return;
+    firstAssetTrackedRef.current.add(selectedTemplateId);
+    track("first_asset_added", { template_id: selectedTemplateId });
+  }, [files, libraryAssets, textInputs, selectedTemplateId, user]);
+
   const openGenerateAuthGate = () => {
     if (selectedTemplate) {
       setPendingGenerationIntent({
@@ -1918,6 +1975,10 @@ export default function TemplateStudioPage() {
 
   const handleRun = async () => {
     if (!selectedTemplate) return;
+    track("run_template_clicked", {
+      template_id: String(selectedTemplate.id),
+      credits_required: creditsRequired,
+    });
     if (!user) {
       openGenerateAuthGate();
       return;
@@ -2200,7 +2261,7 @@ export default function TemplateStudioPage() {
    * the page's own, so switching breakpoints keeps files / cast / readiness.
    */
   const inlineGenerateLabel = !user
-    ? "Generate campaign →"
+    ? "Run template →"
     : !requiredInputsAreReady
       ? `Add ${Math.max(1, totalInputCount - readyInputCount)} more asset${totalInputCount - readyInputCount === 1 ? "" : "s"}`
       : checkingCredits
@@ -2212,8 +2273,8 @@ export default function TemplateStudioPage() {
             : submitting || isRunning
               ? "Generating..."
               : isPrivilegedUser
-                ? "Generate campaign →"
-                : `Generate campaign → ${creditsRequired} cr`;
+                ? "Run template →"
+                : `Run template → ${creditsRequired} cr`;
 
   const inlineBuilderNode =
     isCompactLayout && inlineBuilderOpen && selectedTemplate && !selectMode && !hasActiveCampaignWorkspace ? (
@@ -2962,10 +3023,10 @@ export default function TemplateStudioPage() {
                               : submitting || isRunning
                                 ? "Generating..."
                                 : !user
-                                  ? "Generate campaign →"
+                                  ? "Run template →"
                                   : isPrivilegedUser
-                                    ? "Generate campaign"
-                                    : `Generate campaign · ${creditsRequired} cr`}
+                                    ? "Run template →"
+                                    : `Run template → ${creditsRequired} cr`}
 
                       </Button>
                     </div>
@@ -3253,7 +3314,28 @@ export default function TemplateStudioPage() {
       />
       </div>
 
+      {/* ACQUISITION — guest UNLOCK: confirmation → existing guest checkout. */}
+      <TemplateUnlockModal
+        open={unlockOpen && !user && !!selectedTemplate}
+        onOpenChange={setUnlockOpen}
+        templateId={selectedTemplate ? String(selectedTemplate.id) : null}
+        displayName={campaignDisplayName(selectedTemplate?.name ?? "")}
+        fullName={selectedTemplate?.name ?? ""}
+        previewUrl={selectedTemplate?.preview_url ?? null}
+        isVideo={selectedTemplate ? isVideoPreview(selectedTemplate) : false}
+        outputsLabel={formatCampaignOutputs(selectedTemplate?.counts)}
+        assetCount={inputFields.length}
+        assetLabels={inputFields.map((field) => field.label).filter(Boolean)}
+        creditsRequired={creditsRequired}
+        returnPath={
+          selectedTemplate
+            ? `/app/templates?template=${encodeURIComponent(String(selectedTemplate.name))}`
+            : "/app/templates"
+        }
+      />
+
       {/* P2 — logged-out Generate click: blur the builder, gate on auth. */}
+
       <GeneratePaywallModal
         open={paywallOpen}
         onOpenChange={setPaywallOpen}
