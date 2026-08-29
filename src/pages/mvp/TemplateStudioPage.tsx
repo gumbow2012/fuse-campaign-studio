@@ -112,6 +112,27 @@ import { formatCampaignOutputs, formatCampaignOutputsLong } from "@/lib/campaign
  */
 const SHOW_MARKETPLACE_FILTERS = false;
 
+/** Customer-facing feed chips (presentation filter only). */
+type FeedChip = "all" | "for_you" | "new" | "fashion" | "jewelry" | "product" | "video";
+const FEED_CHIPS: Array<{ key: FeedChip; label: string }> = [
+  { key: "for_you", label: "For you" },
+  { key: "new", label: "New" },
+  { key: "fashion", label: "Fashion" },
+  { key: "jewelry", label: "Jewelry" },
+  { key: "product", label: "Product" },
+  { key: "video", label: "Video" },
+];
+
+/** Deterministic tile height variant — stable per campaign, never random. */
+function feedTileAspect(templateId: string) {
+  let hash = 0;
+  for (let index = 0; index < templateId.length; index += 1) {
+    hash = (hash * 31 + templateId.charCodeAt(index)) % 9973;
+  }
+  const variants = ["aspect-[4/5]", "aspect-[3/4]", "aspect-[9/16]"];
+  return variants[hash % variants.length];
+}
+
 type RunnerStatus = "queued" | "running" | "video_pending" | "complete" | "failed";
 
 
@@ -726,8 +747,38 @@ export default function TemplateStudioPage() {
     if (!canFavorite && favoritesOnly) setFavoritesOnly(false);
   }, [canFavorite, favoritesOnly]);
 
+  /**
+   * Feed chips + search — PRESENTATION ONLY. They narrow what is rendered and
+   * never reorder the merchandised catalog or touch identifiers.
+   */
+  const [feedSearch, setFeedSearch] = useState("");
+  const [feedChip, setFeedChip] = useState<FeedChip>("all");
+
+  const matchesFeedChip = useCallback(
+    (template: ApiTemplate) => {
+      if (feedChip === "all") return true;
+      if (feedChip === "for_you") return canFavorite ? isFavorite(String(template.id)) : true;
+      if (feedChip === "video") return (template.output_type ?? "").toLowerCase() === "video";
+      if (feedChip === "new") {
+        const created = template.created_at ? Date.parse(template.created_at) : NaN;
+        if (Number.isNaN(created)) return true;
+        return Date.now() - created <= 30 * 24 * 60 * 60 * 1000;
+      }
+      const haystack = `${template.category ?? ""} ${template.tags?.join(" ") ?? ""}`.toLowerCase();
+      return haystack.includes(feedChip);
+    },
+    [feedChip, canFavorite, isFavorite],
+  );
+
   const visibleTemplates = useMemo(() => {
-    const base = favoritesOnly ? templates.filter((template) => isFavorite(String(template.id))) : templates;
+    const query = feedSearch.trim().toLowerCase();
+    let base = favoritesOnly ? templates.filter((template) => isFavorite(String(template.id))) : templates;
+    if (query) base = base.filter((template) => (template.name ?? "").toLowerCase().includes(query));
+    if (feedChip !== "all") {
+      const narrowed = base.filter(matchesFeedChip);
+      // Never strand the customer on an empty feed from a presentation chip.
+      if (narrowed.length) base = narrowed;
+    }
     if (!activeFilterCount && outputTypeFilter === "all") return base;
     return base.filter((template) => {
       if (outputTypeFilter !== "all") {
@@ -746,7 +797,18 @@ export default function TemplateStudioPage() {
       }
       return true;
     });
-  }, [activeFilterCount, favoritesOnly, isFavorite, outputTypeFilter, perfFilters, performanceMap, templates]);
+  }, [
+    activeFilterCount,
+    favoritesOnly,
+    feedChip,
+    feedSearch,
+    isFavorite,
+    matchesFeedChip,
+    outputTypeFilter,
+    perfFilters,
+    performanceMap,
+    templates,
+  ]);
 
 
 
@@ -2210,7 +2272,7 @@ export default function TemplateStudioPage() {
         )}
         aria-hidden={authGateOpen}
       >
-      <section className="container py-12 md:py-16">
+      <section className="mx-auto w-full max-w-[1800px] px-4 py-12 sm:px-6 md:py-16 lg:px-8">
         <PlanActivationNotice />
 
         {/* RETENTION P5 — light personalized greeting anchoring the logged-in home. */}
@@ -2384,9 +2446,44 @@ export default function TemplateStudioPage() {
         >
           {!hasActiveCampaignWorkspace ? (
           <section className="rounded-[2rem] border border-white/10 bg-white/[0.03] p-5">
-            <div className="flex items-center justify-between gap-3">
-              <p className="text-[11px] uppercase tracking-[0.24em] text-muted-foreground">Templates</p>
+            <div className="flex flex-wrap items-center gap-3">
+              <h2 className="font-display text-base font-bold uppercase tracking-[0.16em] text-white sm:text-lg">
+                Campaigns
+              </h2>
               {templatesQuery.isFetching ? <Loader2 className="h-4 w-4 animate-spin text-cyan-100" /> : null}
+              <label className="ml-auto flex min-w-[150px] flex-1 items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 sm:max-w-[260px] sm:flex-none">
+                <Search className="h-3.5 w-3.5 shrink-0 text-slate-400" aria-hidden />
+                <input
+                  value={feedSearch}
+                  onChange={(event) => setFeedSearch(event.target.value)}
+                  placeholder="Search campaigns"
+                  aria-label="Search campaigns"
+                  className="w-full bg-transparent text-[12.5px] text-white placeholder:text-slate-500 focus:outline-none"
+                />
+              </label>
+            </div>
+
+            {/* Presentation-only chips — scrollable on mobile */}
+            <div className="-mx-1 mt-3 flex gap-2 overflow-x-auto px-1 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+              {FEED_CHIPS.map((chip) => {
+                const active = feedChip === chip.key;
+                return (
+                  <button
+                    key={chip.key}
+                    type="button"
+                    aria-pressed={active}
+                    onClick={() => setFeedChip(active ? "all" : chip.key)}
+                    className={cn(
+                      "shrink-0 rounded-full border px-3 py-1 text-[10.5px] font-bold uppercase tracking-[0.14em] transition-colors",
+                      active
+                        ? "border-cyan-300/60 bg-cyan-300/15 text-cyan-100"
+                        : "border-white/10 bg-white/[0.04] text-slate-300 hover:text-white",
+                    )}
+                  >
+                    {chip.label}
+                  </button>
+                );
+              })}
             </div>
 
             {/* Phase 5 — contextual activation moment above the grid. */}
@@ -2410,7 +2507,7 @@ export default function TemplateStudioPage() {
                 <button
                   type="button"
                   onClick={() => navigate(`${ONBOARDING_ROUTE}?step=1`)}
-                  className="mt-2 inline-flex text-xs font-semibold text-cyan-200 underline underline-offset-4 transition-colors hover:text-cyan-100 sm:hidden"
+                  className="mt-2 inline-flex text-xs font-semibold text-cyan-200 underline underline-offset-4 transition-colors hover:text-cyan-100"
                 >
                   Build your brand →
                 </button>
