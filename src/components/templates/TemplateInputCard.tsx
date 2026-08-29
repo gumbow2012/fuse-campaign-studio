@@ -65,6 +65,11 @@ interface TemplateInputCardProps {
   castPanel?: ReactNode;
   /** Phase 10: subtle provenance note when the slot was autofilled ("From ACME"). */
   sourceNote?: string | null;
+  /**
+   * Mobile inline builder presentation: a ~68px tall row instead of the tall
+   * card. Identical state machine, identical source picker — layout only.
+   */
+  compact?: boolean;
 }
 
 
