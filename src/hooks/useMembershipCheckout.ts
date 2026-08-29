@@ -56,8 +56,17 @@ export function useMembershipCheckout() {
       });
       if (error) throw error;
       if (!data?.url) throw new Error("Stripe checkout URL not returned.");
+      if (typeof data.claimToken === "string" && data.claimToken) {
+        // Guest (checkout-first) fallback for browsers that drop the httpOnly cookie.
+        try {
+          sessionStorage.setItem("fuse.claimToken", data.claimToken);
+        } catch {
+          /* storage unavailable — the httpOnly cookie remains the primary path */
+        }
+      }
       options.onRedirect?.();
       window.location.assign(data.url);
+
     } catch (error) {
       toast({
         title: "Checkout failed",

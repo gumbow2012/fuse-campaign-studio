@@ -62,6 +62,8 @@ import { trackEvent } from "@/lib/metaPixel";
 import { track } from "@/lib/analytics/track";
 import GenerateAuthGateModal from "@/components/auth/GenerateAuthGateModal";
 import GeneratePaywallModal from "@/components/mvp/GeneratePaywallModal";
+import PlanActivationNotice from "@/components/mvp/PlanActivationNotice";
+
 import {
   clearPendingGenerationIntent,
   getPendingGenerationIntent,
@@ -2209,6 +2211,8 @@ export default function TemplateStudioPage() {
         aria-hidden={authGateOpen}
       >
       <section className="container py-12 md:py-16">
+        <PlanActivationNotice />
+
         {/* RETENTION P5 — light personalized greeting anchoring the logged-in home. */}
         {user && !hasActiveCampaignWorkspace ? (
           <div className="mb-8 flex flex-wrap items-center gap-3">

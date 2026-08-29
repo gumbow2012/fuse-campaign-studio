@@ -137,7 +137,13 @@ function extractSubscriptionPeriod(subscription: StripeObject) {
  * checkout must return into the APP — never to /auth (which would show the
  * account-creation UI to a user who already has a session).
  */
+export async function sha256Hex(value: string) {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
+  return Array.from(new Uint8Array(digest)).map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
 export function sanitizeReturnPath(raw: unknown): string | null {
+
   if (typeof raw !== "string") return null;
   const value = raw.trim();
   if (!value.startsWith("/")) return null;
@@ -624,15 +630,28 @@ export function createCheckoutHandler(mode: StripeBillingMode) {
       const templateName = typeof body.templateName === "string" && body.templateName.trim()
         ? body.templateName.trim()
         : null;
-      const checkoutIdentity = await resolveCheckoutIdentity({
-        req,
-        admin,
-        mode,
-        email: checkoutEmail,
-        brandName,
-      });
+      // ---- Guest (checkout-first) detection -------------------------------
+      // A visitor with no FUSE identity (or only an anonymous session) buys
+      // WITHOUT any account being pre-created. Stripe collects the email.
+      const callerUser = await getOptionalUser(req, admin);
+      const callerIsRealUser = Boolean(callerUser && !(callerUser as any).is_anonymous && callerUser.email);
+      const priorProfile = !callerIsRealUser && checkoutEmail
+        ? await findProfileByStripeContext(admin, null, checkoutEmail)
+        : null;
+      const guestMode = !callerIsRealUser && !priorProfile?.user_id;
+
+      const checkoutIdentity = guestMode
+        ? { id: null as string | null, email: null as string | null, createdFromCheckout: false }
+        : await resolveCheckoutIdentity({
+            req,
+            admin,
+            mode,
+            email: checkoutEmail,
+            brandName,
+          });
       userId = checkoutIdentity.id;
       userEmail = checkoutIdentity.email;
+
 
       const requestedPlanKey = typeof body.planKey === "string" ? body.planKey : null;
       const requestedPriceId = typeof body.priceId === "string" ? body.priceId : null;
@@ -663,19 +682,23 @@ export function createCheckoutHandler(mode: StripeBillingMode) {
       }, admin);
 
       const stripe = createStripeClient(getStripeSecretKey(mode));
-      const { data: profile } = await admin
-        .from("profiles")
-        .select("stripe_customer_id, stripe_subscription_id, plan, subscription_status")
-        .eq("user_id", checkoutIdentity.id)
-        .maybeSingle();
+      const { data: profile } = checkoutIdentity.id
+        ? await admin
+            .from("profiles")
+            .select("stripe_customer_id, stripe_subscription_id, plan, subscription_status")
+            .eq("user_id", checkoutIdentity.id)
+            .maybeSingle()
+        : { data: null as null };
 
-      const customerId = await findStripeCustomerId({
-        stripe,
-        storedCustomerId: profile?.stripe_customer_id ?? null,
-        email: checkoutIdentity.email,
-      });
+      const customerId = guestMode
+        ? null
+        : await findStripeCustomerId({
+            stripe,
+            storedCustomerId: profile?.stripe_customer_id ?? null,
+            email: checkoutIdentity.email,
+          });
 
-      if (customerId && customerId !== profile?.stripe_customer_id) {
+      if (!guestMode && customerId && customerId !== profile?.stripe_customer_id && checkoutIdentity.id) {
         await admin
           .from("profiles")
           .update({ stripe_customer_id: customerId })
@@ -689,10 +712,48 @@ export function createCheckoutHandler(mode: StripeBillingMode) {
       const applyStarterWelcomeCoupon = plan.key === "starter" && !hasPriorPaidSubscription;
 
       const origin = req.headers.get("origin") || "https://example.com";
+
+      const utm = {
+        utm_source: (typeof body.utm_source === "string" ? body.utm_source : "").slice(0, 200),
+        utm_medium: (typeof body.utm_medium === "string" ? body.utm_medium : "").slice(0, 200),
+        utm_campaign: (typeof body.utm_campaign === "string" ? body.utm_campaign : "").slice(0, 200),
+        utm_content: (typeof body.utm_content === "string" ? body.utm_content : "").slice(0, 200),
+        fbclid: (typeof body.fbclid === "string" ? body.fbclid : "").slice(0, 200),
+      };
+
+      // Guest path: create a server-owned intent + one-time claim nonce so the
+      // paid session can be claimed after return, without pre-creating a user.
+      let guestIntent: { id: string; nonce: string } | null = null;
+      if (guestMode) {
+        const nonceBytes = new Uint8Array(32);
+        crypto.getRandomValues(nonceBytes);
+        const nonce = Array.from(nonceBytes).map((b) => b.toString(16).padStart(2, "0")).join("");
+        const nonceHash = await sha256Hex(nonce);
+        const guestReturnTo = returnPath ??
+          (templateName ? `/app/templates?template=${encodeURIComponent(templateName)}` : "/app/templates");
+
+        const { data: intentRow, error: intentError } = await admin
+          .from("checkout_intents")
+          .insert({
+            template_id: templateId,
+            template_name: templateName,
+            plan_key: plan.key,
+            return_to: guestReturnTo,
+            claim_nonce_hash: nonceHash,
+            ...utm,
+          })
+          .select("id")
+          .single();
+        if (intentError || !intentRow?.id) {
+          throw new Error(intentError?.message ?? "Could not start guest checkout.");
+        }
+        guestIntent = { id: intentRow.id as string, nonce };
+      }
+
       const session = await stripe.checkout.sessions.create({
         customer: customerId ?? undefined,
-        customer_email: customerId ? undefined : checkoutIdentity.email,
-        client_reference_id: checkoutIdentity.id,
+        customer_email: guestMode || customerId ? undefined : checkoutIdentity.email ?? undefined,
+        ...(guestMode ? {} : { client_reference_id: checkoutIdentity.id ?? undefined }),
         line_items: [{ price: plan.priceId, quantity: 1 }],
         mode: "subscription",
         // Stripe rejects discounts + allow_promotion_codes together.
@@ -701,37 +762,45 @@ export function createCheckoutHandler(mode: StripeBillingMode) {
           : { allow_promotion_codes: true }),
 
         metadata: {
-          user_id: checkoutIdentity.id,
+          user_id: checkoutIdentity.id ?? "",
           plan_key: plan.key,
           price_id: plan.priceId,
           billing_mode: mode,
           template_id: templateId ?? "",
           template_name: templateName ?? "",
+          fuse_checkout_intent_id: guestIntent?.id ?? "",
           fbc: (typeof body.fbc === "string" ? body.fbc : "") || "",
           fbp: (typeof body.fbp === "string" ? body.fbp : "") || "",
           meta_client_ip: (req.headers.get("x-forwarded-for") || "").split(",")[0].trim(),
           meta_user_agent: req.headers.get("user-agent") || "",
-          utm_source: (typeof body.utm_source === "string" ? body.utm_source : "").slice(0, 200),
-          utm_medium: (typeof body.utm_medium === "string" ? body.utm_medium : "").slice(0, 200),
-          utm_campaign: (typeof body.utm_campaign === "string" ? body.utm_campaign : "").slice(0, 200),
-          utm_content: (typeof body.utm_content === "string" ? body.utm_content : "").slice(0, 200),
-          fbclid: (typeof body.fbclid === "string" ? body.fbclid : "").slice(0, 200),
+          ...utm,
         },
         subscription_data: {
           metadata: {
-            user_id: checkoutIdentity.id,
+            user_id: checkoutIdentity.id ?? "",
             plan_key: plan.key,
             price_id: plan.priceId,
             monthly_credits: String(plan.monthlyCredits),
             billing_mode: mode,
             template_id: templateId ?? "",
             template_name: templateName ?? "",
+            fuse_checkout_intent_id: guestIntent?.id ?? "",
           },
         },
-        success_url: billingReturnUrl(origin, mode, "success", { templateId, templateName, returnPath }),
+        success_url: guestIntent
+          ? `${origin}/welcome?session_id={CHECKOUT_SESSION_ID}`
+          : billingReturnUrl(origin, mode, "success", { templateId, templateName, returnPath }),
         cancel_url: billingReturnUrl(origin, mode, "canceled", { templateId, templateName, returnPath }),
 
       });
+
+      if (guestIntent) {
+        await admin
+          .from("checkout_intents")
+          .update({ stripe_session_id: session.id })
+          .eq("id", guestIntent.id);
+      }
+
 
       await logAuditEvent({
         eventType: "stripe.checkout.created",
@@ -752,7 +821,24 @@ export function createCheckoutHandler(mode: StripeBillingMode) {
         },
       }, admin);
 
+      if (guestIntent) {
+        // httpOnly claim cookie (primary) + body token fallback for cross-origin
+        // fetches where the cookie cannot be stored.
+        return new Response(
+          JSON.stringify({ url: session.url, claimToken: guestIntent.nonce, guest: true }),
+          {
+            status: 200,
+            headers: {
+              ...corsHeaders,
+              "Content-Type": "application/json",
+              "Set-Cookie": `fuse_claim=${guestIntent.nonce}; Path=/; Max-Age=7200; HttpOnly; Secure; SameSite=Lax`,
+            },
+          },
+        );
+      }
+
       return json({ url: session.url });
+
     } catch (error) {
       await logAuditEvent({
         eventType: "stripe.checkout.failed",
