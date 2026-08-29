@@ -815,7 +815,24 @@ export function createCheckoutHandler(mode: StripeBillingMode) {
         },
       }, admin);
 
+      if (guestIntent) {
+        // httpOnly claim cookie (primary) + body token fallback for cross-origin
+        // fetches where the cookie cannot be stored.
+        return new Response(
+          JSON.stringify({ url: session.url, claimToken: guestIntent.nonce, guest: true }),
+          {
+            status: 200,
+            headers: {
+              ...corsHeaders,
+              "Content-Type": "application/json",
+              "Set-Cookie": `fuse_claim=${guestIntent.nonce}; Path=/; Max-Age=7200; HttpOnly; Secure; SameSite=Lax`,
+            },
+          },
+        );
+      }
+
       return json({ url: session.url });
+
     } catch (error) {
       await logAuditEvent({
         eventType: "stripe.checkout.failed",
