@@ -653,8 +653,9 @@ export default function HomePage() {
               Viral campaigns. Already built and ready to run.
             </p>
             <p className="mt-3 max-w-[560px] font-sans text-[16px] leading-[1.5] text-slate-200 sm:text-[17px]">
-              Pick a campaign. Upload your products. Hit run.
+              Pick one. Upload your products. Hit run.
             </p>
+
             <p className="mt-2 max-w-[560px] font-sans text-[13px] leading-[1.5] text-slate-400 sm:text-[14px]">
               FUSE runs the prebuilt workflow and returns the finished images + video clips.
             </p>
@@ -696,9 +697,9 @@ export default function HomePage() {
 
             <p className="mt-5 max-w-[600px] font-sans text-[12px] font-bold uppercase leading-[1.5] tracking-[0.08em] text-white sm:text-[14px]">
               No prompts <span className="text-cyan-300">·</span> No guessing{" "}
-              <span className="text-cyan-300">·</span> Prebuilt expert workflows{" "}
-              <span className="text-cyan-300">·</span> Curated by leading AI creators
+              <span className="text-cyan-300">·</span> Prebuilt expert workflows
             </p>
+
           </div>
 
           {/* Prebuilt workflow explainer — needs no template data, renders instantly */}
@@ -712,23 +713,10 @@ export default function HomePage() {
               </div>
               <div className="mt-4">
                 <p className="font-display text-base font-semibold uppercase tracking-[0.12em] text-white sm:text-lg">
-                  Prebuilt expert workflows
+                  The complex workflow is already built.
                 </p>
-                <p className="mt-2 font-sans text-[14px] leading-[1.5] text-slate-400">
-                  The creative direction, references, image steps and video steps are already configured.
-                </p>
-                <p className="mt-2 font-sans text-[13px] font-semibold uppercase tracking-[0.1em] text-cyan-200">
+                <p className="mt-2 font-display text-base font-semibold uppercase tracking-[0.12em] text-cyan-200 sm:text-lg">
                   You just add the product.
-                </p>
-                <p className="mt-3 font-sans text-[12px] leading-[1.6] text-slate-300">
-                  <span className="text-cyan-300">✓</span> Creative direction ·{" "}
-                  <span className="text-cyan-300">✓</span> References ·{" "}
-                  <span className="text-cyan-300">✓</span> Image workflow ·{" "}
-                  <span className="text-cyan-300">✓</span> Video workflow ·{" "}
-                  <span className="text-cyan-300">✓</span> Shot sequencing
-                </p>
-                <p className="mt-1.5 font-sans text-[12px] font-semibold uppercase tracking-[0.1em] text-slate-400">
-                  You add: your products.
                 </p>
               </div>
             </div>
@@ -740,9 +728,12 @@ export default function HomePage() {
       <section className="border-b border-white/10 bg-white/[0.02]">
         <div className="container flex flex-wrap items-baseline gap-x-4 gap-y-1 py-5">
           <p className="font-display text-xl font-bold uppercase tracking-[-0.01em] text-white sm:text-2xl">
-            A full campaign. One run.
+            A full campaign. One click.
           </p>
-          <p className="font-sans text-[14px] text-slate-400">Images + video clips generated together.</p>
+          <p className="font-sans text-[14px] text-slate-400">
+            Images + video clips generated together from one prebuilt workflow.
+          </p>
+
         </div>
       </section>
 

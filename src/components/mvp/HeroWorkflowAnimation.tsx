@@ -12,10 +12,11 @@ type Stage = 0 | 1 | 2 | 3;
 
 const STAGE_LABELS: Record<Stage, string> = {
   0: "Products loaded",
-  1: "Building campaign images",
+  1: "Building image steps",
   2: "Creating video clips",
   3: "Campaign ready ✓",
 };
+
 
 const CYAN = "#22d3ee";
 const MUTED = "rgba(148,163,184,0.45)";
@@ -82,6 +83,52 @@ export default function HeroWorkflowAnimation({ compact = false }: { compact?: b
   const nodeFill = (active: boolean) => (active ? "rgba(34,211,238,0.16)" : "rgba(148,163,184,0.06)");
   const nodeStroke = (active: boolean) => (active ? CYAN : MUTED);
   const lineStroke = (active: boolean) => (active ? CYAN : "rgba(148,163,184,0.25)");
+
+  if (compact) {
+    const steps: Array<{ label: string; active: boolean }> = [
+      { label: "Your products", active: true },
+      { label: "FUSE", active: on(1) },
+      { label: "Images + video clips", active: on(3) },
+    ];
+    return (
+      <div
+        ref={wrapRef}
+        className="relative overflow-hidden rounded-[1.25rem] border border-white/10 bg-[#0B1120] px-4 py-4"
+      >
+        <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-slate-400">
+          How a FUSE campaign runs
+        </p>
+        <div className="mt-3 flex flex-col items-center gap-1.5">
+          {steps.map((s, i) => (
+            <div key={s.label} className="flex w-full flex-col items-center gap-1.5">
+              <div
+                className={cn(
+                  "w-full rounded-lg border px-3 py-2 text-center font-sans text-[12px] font-bold uppercase tracking-[0.12em] transition-colors duration-500",
+                  s.active
+                    ? "border-cyan-300/70 bg-cyan-300/10 text-cyan-100"
+                    : "border-white/10 bg-white/[0.03] text-slate-400",
+                )}
+              >
+                {s.label}
+              </div>
+              {i < steps.length - 1 ? (
+                <span
+                  className={cn(
+                    "text-[13px] leading-none transition-colors duration-500",
+                    steps[i + 1].active ? "text-cyan-300" : "text-slate-600",
+                  )}
+                  aria-hidden="true"
+                >
+                  ↓
+                </span>
+              ) : null}
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
 
   return (
     <div ref={wrapRef} className="relative">
@@ -229,10 +276,11 @@ export default function HeroWorkflowAnimation({ compact = false }: { compact?: b
           {/* stage labels */}
           <g fontSize="7.5" fontWeight="600" letterSpacing="1.1" fill="rgba(203,213,225,0.75)">
             <text x={4} y={148} textAnchor="start">PRODUCTS</text>
-            <text x={149} y={148} textAnchor="middle">CAMPAIGN IMAGES</text>
+            <text x={149} y={148} textAnchor="middle">IMAGE STEPS</text>
             <text x={245} y={148} textAnchor="middle">VIDEO CLIPS</text>
-            <text x={358} y={148} textAnchor="end">FINAL CAMPAIGN</text>
+            <text x={358} y={148} textAnchor="end">CAMPAIGN READY ✓</text>
           </g>
+
         </svg>
 
         <p
