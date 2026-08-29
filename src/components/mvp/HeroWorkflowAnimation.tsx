@@ -99,7 +99,7 @@ export default function HeroWorkflowAnimation({ compact = false }: { compact?: b
 
         <svg
           viewBox="0 0 360 168"
-          className={cn("relative w-full", compact ? "h-[136px]" : "h-[168px] sm:h-[188px]")}
+          className={cn("relative w-full", compact ? "h-[190px]" : "h-[168px] sm:h-[188px]")}
           role="img"
           aria-label="Diagram: products branch into campaign images and video clips, then a final campaign."
         >
