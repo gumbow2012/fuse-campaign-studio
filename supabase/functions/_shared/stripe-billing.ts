@@ -1473,7 +1473,7 @@ export function createStripeWebhookHandler(mode: StripeBillingMode) {
         // Additive analytics only — never blocks or fails the webhook.
 
         try {
-          if (mode === "live") {
+          if (mode === "live" && invoice.billing_reason === "subscription_cycle") {
             const amountPaidCents = integerCents(invoice.amount_paid) ?? 0;
             const invoiceEventId = typeof invoice.id === "string" && invoice.id
               ? invoice.id
