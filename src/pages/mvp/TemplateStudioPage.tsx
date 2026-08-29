@@ -61,7 +61,6 @@ import { getStaticInputs } from "@/services/templateInputMap";
 import CreditConfirmModal from "@/components/CreditConfirmModal";
 import { trackEvent } from "@/lib/metaPixel";
 import { track } from "@/lib/analytics/track";
-import GenerateAuthGateModal from "@/components/auth/GenerateAuthGateModal";
 import GeneratePaywallModal from "@/components/mvp/GeneratePaywallModal";
 import TemplateUnlockModal from "@/components/mvp/TemplateUnlockModal";
 import PlanActivationNotice from "@/components/mvp/PlanActivationNotice";
