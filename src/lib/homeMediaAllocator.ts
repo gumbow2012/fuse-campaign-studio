@@ -1,5 +1,7 @@
 import type { ApiTemplate } from "@/services/fuseApi";
 import { sortTemplatesForStudio } from "@/lib/templateOrdering";
+import { formatCampaignOutputs } from "@/lib/campaignOutputs";
+
 
 /** Curated existing media only — nothing is generated for the homepage. */
 export const CURATED_PREVIEW_GIFS: Array<{ match: RegExp; src: string }> = [
