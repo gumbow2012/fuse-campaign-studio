@@ -2042,23 +2042,33 @@ export default function TemplateStudioPage() {
                 </p>
               </div>
             ) : (
-
-              <div className="mt-3 rounded-[1rem] border border-cyan-200/20 bg-cyan-300/[0.05] px-3.5 py-3">
-                <p className="font-display text-[10px] font-semibold uppercase tracking-[0.18em] text-cyan-100">
-                  See which campaigns are ready for your brand
-                </p>
-                <p className="mt-1 text-[11px] leading-relaxed text-slate-300">
-                  Build your brand once and FUSE can preload compatible inputs.
-                </p>
+              <>
+                {/* Mobile: compact inline link so templates stay above the fold. */}
                 <button
                   type="button"
                   onClick={() => navigate(`${ONBOARDING_ROUTE}?step=1`)}
-                  className="mt-2 rounded-full border border-cyan-300/35 bg-cyan-300/10 px-3 py-1 font-display text-[10px] font-semibold uppercase tracking-[0.16em] text-cyan-100 transition hover:bg-cyan-300/20"
+                  className="mt-2 inline-flex text-xs font-semibold text-cyan-200 underline underline-offset-4 transition-colors hover:text-cyan-100 sm:hidden"
                 >
-                  Build brand
+                  Build your brand →
                 </button>
-              </div>
+                <div className="mt-3 hidden rounded-[1rem] border border-cyan-200/20 bg-cyan-300/[0.05] px-3.5 py-3 sm:block">
+                  <p className="font-display text-[10px] font-semibold uppercase tracking-[0.18em] text-cyan-100">
+                    See which campaigns are ready for your brand
+                  </p>
+                  <p className="mt-1 text-[11px] leading-relaxed text-slate-300">
+                    Build your brand once and FUSE can preload compatible inputs.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => navigate(`${ONBOARDING_ROUTE}?step=1`)}
+                    className="mt-2 rounded-full border border-cyan-300/35 bg-cyan-300/10 px-3 py-1 font-display text-[10px] font-semibold uppercase tracking-[0.16em] text-cyan-100 transition hover:bg-cyan-300/20"
+                  >
+                    Build brand
+                  </button>
+                </div>
+              </>
             )}
+
 
             {templatesQuery.isError ? (
               <div className="mt-5 rounded-[1.5rem] border border-rose-400/20 bg-rose-400/10 p-4 text-sm text-rose-100">
