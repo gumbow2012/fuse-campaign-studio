@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { Link, NavLink, useNavigate } from "react-router-dom";
+import { Link, NavLink, useLocation, useNavigate } from "react-router-dom";
 import { Clapperboard, ClipboardCheck, Film, Gem, Home, Layers3, Mail, Menu, Shirt, Sparkles, Star, UsersRound } from "lucide-react";
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
@@ -12,6 +12,7 @@ import NotificationCenter from "@/components/NotificationCenter";
 import { AccountPopover } from "@/components/AccountMenu";
 import FeatureNewBadge from "@/components/FeatureNewBadge";
 import SiteFooter from "@/components/mvp/SiteFooter";
+import PromoOfferBar from "@/components/mvp/PromoOfferBar";
 import type { FeatureKey } from "@/lib/featureRegistry";
 
 
@@ -75,6 +76,7 @@ type BillingCorrectionNotice = {
 
 export default function SiteShell({ children }: { children: ReactNode }) {
   const navigate = useNavigate();
+  const { pathname } = useLocation();
   const { user, profile, isAdmin, isCreator, hasAppAccess, signOut } = useAuth();
   const [menuOpen, setMenuOpen] = useState(false);
   const closeMenu = () => setMenuOpen(false);
@@ -136,9 +138,7 @@ export default function SiteShell({ children }: { children: ReactNode }) {
   };
 
   /** Acquisition surfaces only — never over the app/admin chrome. */
-  const showPromoBar = ["/", "/app/templates", "/pricing", "/membership"].includes(
-    typeof window === "undefined" ? "" : window.location.pathname,
-  );
+  const showPromoBar = ["/", "/app/templates", "/pricing", "/membership"].includes(pathname);
 
 
 
