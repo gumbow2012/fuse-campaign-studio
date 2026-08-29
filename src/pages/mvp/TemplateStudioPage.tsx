@@ -131,7 +131,9 @@ function feedTileAspect(templateId: string) {
   for (let index = 0; index < templateId.length; index += 1) {
     hash = (hash * 31 + templateId.charCodeAt(index)) % 9973;
   }
-  const variants = ["aspect-[4/5]", "aspect-[3/4]", "aspect-[9/16]"];
+  // Controlled variance only — enough rhythm to read as a feed, small enough
+  // that the grid never leaves large holes.
+  const variants = ["aspect-[4/5]", "aspect-[7/9]", "aspect-[3/4]"];
   return variants[hash % variants.length];
 }
 
