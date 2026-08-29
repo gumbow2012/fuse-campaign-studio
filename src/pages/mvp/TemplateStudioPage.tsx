@@ -2516,30 +2516,56 @@ export default function TemplateStudioPage() {
         >
           {!hasActiveCampaignWorkspace ? (
           <section className="min-w-0">
-            <div className="flex min-w-0 flex-wrap items-center gap-3">
-              <h2 className="font-display text-base font-bold uppercase tracking-[0.16em] text-white sm:text-lg">
+            {/* Header — mobile keeps the approved block. lg+ collapses to one
+                compact, subtle toolbar so campaigns enter the viewport fast. */}
+            <div className="flex min-w-0 flex-wrap items-center gap-3 lg:gap-2">
+              <h2 className="font-display text-base font-bold uppercase tracking-[0.16em] text-white sm:text-lg lg:text-[11px] lg:font-semibold lg:tracking-[0.22em] lg:text-slate-400">
                 Campaigns
               </h2>
               {templatesQuery.isFetching ? <Loader2 className="h-4 w-4 animate-spin text-cyan-100" /> : null}
-              <label className="ml-auto flex min-w-0 flex-1 items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 sm:max-w-[220px] sm:flex-none">
+
+              {/* lg+ only — filters tucked into the toolbar line. */}
+              <div className="hidden min-w-0 flex-wrap gap-1.5 lg:flex">
+                {FEED_CHIPS.map((chip) => {
+                  const active = feedChip === chip.key;
+                  return (
+                    <button
+                      key={`toolbar-${chip.key}`}
+                      type="button"
+                      aria-pressed={active}
+                      onClick={() => setFeedChip(active ? "all" : chip.key)}
+                      className={cn(
+                        "rounded-full border px-2.5 py-0.5 text-[9.5px] font-bold uppercase tracking-[0.14em] transition-colors",
+                        active
+                          ? "border-cyan-300/50 bg-cyan-300/12 text-cyan-100"
+                          : "border-white/8 bg-white/[0.03] text-slate-400 hover:text-white",
+                      )}
+                    >
+                      {chip.label}
+                    </button>
+                  );
+                })}
+              </div>
+
+              <label className="ml-auto flex min-w-0 flex-1 items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 sm:max-w-[220px] sm:flex-none lg:max-w-[180px] lg:py-1">
                 <Search className="h-3.5 w-3.5 shrink-0 text-slate-400" aria-hidden />
                 <input
                   value={feedSearch}
                   onChange={(event) => setFeedSearch(event.target.value)}
                   placeholder="Search"
                   aria-label="Search campaigns"
-                  className="w-full bg-transparent text-[12.5px] text-white placeholder:text-slate-500 focus:outline-none"
+                  className="w-full bg-transparent text-[12.5px] text-white placeholder:text-slate-500 focus:outline-none lg:text-[11.5px]"
                 />
               </label>
             </div>
 
-            <p className="mt-1 text-[11.5px] leading-4 text-slate-400">
+            <p className="mt-1 text-[11.5px] leading-4 text-slate-400 lg:hidden">
               Pick one. Add your products. Hit run.
             </p>
 
 
-            {/* Presentation-only chips — scrollable on mobile */}
-            <div className="-mx-1 mt-3 flex min-w-0 max-w-full gap-2 overflow-x-auto px-1 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            {/* Presentation-only chips — scrollable on mobile (<lg only) */}
+            <div className="-mx-1 mt-3 flex min-w-0 max-w-full gap-2 overflow-x-auto px-1 pb-1 lg:hidden [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
               {FEED_CHIPS.map((chip) => {
                 const active = feedChip === chip.key;
                 return (
@@ -2561,9 +2587,9 @@ export default function TemplateStudioPage() {
               })}
             </div>
 
-            {/* Phase 5 — contextual activation moment above the grid. */}
+            {/* Phase 5 — contextual activation moment above the grid (<lg). */}
             {activeBrand ? (
-              <div className="mt-2">
+              <div className="mt-2 lg:hidden">
                 <p className="font-display text-[11px] font-semibold uppercase tracking-[0.2em] text-cyan-100">
                   Recommended for {activeBrand.name}
                   {readyForBrandCount > 0 ? (
@@ -2582,12 +2608,13 @@ export default function TemplateStudioPage() {
                 <button
                   type="button"
                   onClick={() => navigate(`${ONBOARDING_ROUTE}?step=1`)}
-                  className="mt-2 inline-flex text-xs font-semibold text-cyan-200 underline underline-offset-4 transition-colors hover:text-cyan-100"
+                  className="mt-2 inline-flex text-xs font-semibold text-cyan-200 underline underline-offset-4 transition-colors hover:text-cyan-100 lg:hidden"
                 >
                   Build your brand →
                 </button>
               </>
             )}
+
 
 
             {templatesQuery.isError ? (
@@ -2693,18 +2720,19 @@ export default function TemplateStudioPage() {
               </div>
             ) : null}
 
-            {/* DENSE VISUAL WALL — imagery first, tight gutters, minimal chrome.
-                <lg: exactly 2 columns (the inline builder is injected after the
-                selected card's real row). lg+: auto-fill portrait columns
-                (~210px min) so the feed responds to the viewport width. */}
+            {/* <lg: exactly 2 columns (the inline builder is injected after the
+                selected card's real row) — untouched. lg+: tall 9:16 portrait
+                cards, auto-fill so a normal desktop shows 4–5 across and
+                ultrawide shows more. */}
             <div
-              className={cn("mt-3 grid items-start", isCompactLayout ? "grid-cols-2 gap-2.5" : "gap-2.5")}
+              className={cn("mt-3 grid items-start", isCompactLayout ? "grid-cols-2 gap-2.5" : "gap-3")}
               style={
                 isCompactLayout
                   ? undefined
-                  : { gridTemplateColumns: "repeat(auto-fill, minmax(190px, 1fr))" }
+                  : { gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))" }
               }
             >
+
 
               {templateRows.map((row, rowIndex) => (
                 <Fragment key={`template-row-${rowIndex}`}>
@@ -2729,6 +2757,8 @@ export default function TemplateStudioPage() {
                     selected={selectMode ? batchSelected : selected}
                     eager={rowIndex === 0 && columnIndex < 2}
                     statusPill={isNewDrop ? "new" : null}
+                    /* <lg unchanged (4:5); lg+ true 9:16 portrait. */
+                    mediaAspectClassName="aspect-[4/5] lg:aspect-[9/16]"
                     onSelect={() => {
                       if (selectMode) {
                         toggleBatchSelection(template.id);

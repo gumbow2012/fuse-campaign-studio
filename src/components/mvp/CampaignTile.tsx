@@ -121,6 +121,8 @@ export interface CampaignTileProps {
   onImpression?: () => void;
   /** Optional overlay controls (favorite / batch-select). */
   overlay?: ReactNode;
+  /** Media aspect classes (presentation only). Defaults to 4:5. */
+  mediaAspectClassName?: string;
 }
 
 export default function CampaignTile({
@@ -138,6 +140,7 @@ export default function CampaignTile({
   onDetails,
   onImpression,
   overlay,
+  mediaAspectClassName = "aspect-[4/5]",
 }: CampaignTileProps) {
   const rootRef = useRef<HTMLDivElement | null>(null);
   const impressionSent = useRef(false);
@@ -184,7 +187,7 @@ export default function CampaignTile({
           )}
         >
           {/* Stable aspect container — CLS-safe at every breakpoint. */}
-          <div className="relative aspect-[4/5] w-full">
+          <div className={cn("relative w-full", mediaAspectClassName)}>
             <TileMedia
               mediaKey={templateId}
               url={previewUrl}
