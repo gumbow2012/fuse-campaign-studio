@@ -74,13 +74,12 @@ function DropCard({ entry, eager, isNew }: { entry: Entry; eager?: boolean; isNe
   );
 
   return (
-    <article className="group relative w-[72vw] max-w-[300px] shrink-0 snap-start overflow-hidden rounded-[1.1rem] border border-white/12 bg-slate-950/80 transition-colors hover:border-cyan-200/40 sm:w-[38vw] lg:w-[252px] xl:w-[262px]">
-      <Link
-        to={href}
-        className="absolute inset-0 z-10"
-        aria-label={`Run ${name}`}
-        onClick={() => track("homepage_campaign_card_click", { template_id: String(entry.template.id ?? "") })}
-      />
+    <Link
+      to={href}
+      aria-label={`Run ${name}`}
+      onClick={() => track("homepage_campaign_card_click", { template_id: String(entry.template.id ?? "") })}
+      className="group relative w-[78vw] max-w-[320px] shrink-0 snap-start overflow-hidden rounded-[1.1rem] border border-white/12 bg-black transition-colors hover:border-cyan-200/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300 sm:w-[40vw] lg:w-[calc((100%-4*0.875rem)/4.6)] lg:max-w-none"
+    >
       <div className="relative aspect-[4/5] overflow-hidden bg-black">
         <AutoMedia media={entry.media} eager={eager} />
         {isNew && (
@@ -88,24 +87,18 @@ function DropCard({ entry, eager, isNew }: { entry: Entry; eager?: boolean; isNe
             New
           </span>
         )}
+        <span className="pointer-events-none absolute inset-x-0 bottom-0 h-2/5 bg-gradient-to-t from-black/85 to-transparent" />
+        <div className="pointer-events-none absolute inset-x-3 bottom-2.5">
+          <p className="truncate font-display text-[13px] font-bold uppercase tracking-[0.1em] text-white drop-shadow-[0_1px_6px_rgba(0,0,0,0.9)]">
+            {campaignDisplayName(name)}
+          </p>
+          <p className="mt-0.5 truncate text-[11px] font-medium text-slate-200">{outputs}</p>
+        </div>
       </div>
-      <div className="p-3.5">
-        <p className="truncate font-display text-sm font-semibold uppercase tracking-[0.08em] text-white">
-          {name}
-        </p>
-        <p className="mt-1 text-[11.5px] font-medium text-slate-200">{outputs}</p>
-        <Link
-          to={href}
-          onClick={() => track("homepage_campaign_card_click", { template_id: String(entry.template.id ?? "") })}
-          className="relative z-20 mt-3 flex h-9 w-full items-center justify-center gap-1.5 rounded-full bg-cyan-300 text-[11.5px] font-bold uppercase tracking-[0.14em] text-slate-950 transition-colors hover:bg-cyan-200"
-        >
-          Run campaign
-          <ArrowRight className="h-3.5 w-3.5" />
-        </Link>
-      </div>
-    </article>
+    </Link>
   );
 }
+
 
 /** Video-first ordering inside a group; catalog order breaks ties. */
 function videoFirst(entries: Entry[]) {
