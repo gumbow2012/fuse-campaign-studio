@@ -313,30 +313,38 @@ export default function SiteShell({ children }: { children: ReactNode }) {
           <div className="hidden flex-col gap-2 lg:flex lg:items-end">
             <div className="flex flex-wrap items-center justify-end gap-2">
               <nav className="flex w-auto flex-wrap items-center justify-end gap-1.5" aria-label="Primary">
-                <NavLink to="/" className={iconNavLinkClass} end aria-label="Home" title="Home">
-                  <Home className="h-4 w-4" aria-hidden="true" />
-                </NavLink>
+                {user ? (
+                  <NavLink to="/" className={iconNavLinkClass} end aria-label="Home" title="Home">
+                    <Home className="h-4 w-4" aria-hidden="true" />
+                  </NavLink>
+                ) : null}
                 <NavLink to="/app/templates" className={textNavLinkClass}>
                   Explore
                 </NavLink>
-                <a
-                  href="/#new-today"
-                  className={cn(
-                    "inline-flex items-center rounded-full border border-white/10 bg-white/[0.03] px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground transition-colors hover:border-white/20 hover:text-foreground motion-reduce:transition-none sm:text-xs",
-                    focusRing,
-                  )}
-                >
-                  New Drops
-                </a>
-                <NavLink to="/creators" className={textNavLinkClass}>
-                  Creators
-                </NavLink>
+                {user ? (
+                  <>
+                    <a
+                      href="/#new-today"
+                      className={cn(
+                        "inline-flex items-center rounded-full border border-white/10 bg-white/[0.03] px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground transition-colors hover:border-white/20 hover:text-foreground motion-reduce:transition-none sm:text-xs",
+                        focusRing,
+                      )}
+                    >
+                      New Drops
+                    </a>
+                    <NavLink to="/creators" className={textNavLinkClass}>
+                      Creators
+                    </NavLink>
+                  </>
+                ) : null}
                 <NavLink to="/pricing" className={textNavLinkClass}>
                   Pricing
                 </NavLink>
-                <NavLink to="/contact" className={iconNavLinkClass} aria-label="Contact" title="Contact">
-                  <Mail className="h-4 w-4" aria-hidden="true" />
-                </NavLink>
+                {user ? (
+                  <NavLink to="/contact" className={iconNavLinkClass} aria-label="Contact" title="Contact">
+                    <Mail className="h-4 w-4" aria-hidden="true" />
+                  </NavLink>
+                ) : null}
 
                 <div className="flex items-center gap-2">
                   {user ? (
@@ -351,28 +359,19 @@ export default function SiteShell({ children }: { children: ReactNode }) {
                     <>
                       <Button
                         asChild
-                        variant="outline"
-                        className={cn("h-10 rounded-full border-white/15 bg-white/5 px-4 text-sm text-foreground hover:bg-white/10", focusRing)}
+                        variant="ghost"
+                        className={cn("h-10 rounded-full px-4 text-sm text-foreground/80 hover:bg-white/10 hover:text-foreground", focusRing)}
                       >
                         <Link to="/auth?mode=signin">Sign in</Link>
                       </Button>
-                      <Button asChild className={cn("h-10 rounded-full bg-cyan-300 px-4 text-sm font-semibold text-slate-950 hover:bg-cyan-200", focusRing)}>
-                        <Link to="/auth?mode=signup">Sign up</Link>
-                      </Button>
-                      <Button
-                        asChild
-                        variant="outline"
-                        className={cn("h-10 rounded-full border-white/15 bg-white/5 px-4 text-sm text-foreground hover:bg-white/10", focusRing)}
-                      >
-                        <Link to="/app/templates">
-                          <Layers3 className="h-4 w-4" aria-hidden="true" />
-                          Try templates
-                        </Link>
+                      <Button asChild className={cn("h-10 rounded-full bg-cyan-300 px-5 text-sm font-semibold text-slate-950 hover:bg-cyan-200", focusRing)}>
+                        <Link to="/auth?mode=signup">Try FUSE</Link>
                       </Button>
                     </>
 
                   )}
                 </div>
+
               </nav>
             </div>
 
