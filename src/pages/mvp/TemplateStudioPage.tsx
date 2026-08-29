@@ -2632,17 +2632,17 @@ export default function TemplateStudioPage() {
               </div>
             ) : null}
 
-            {/* RESPONSIVE SEPARATION — <lg keeps the immersive single-dominant
-                feed (inline builder expands beneath the selected card's measured
-                row); lg+ restores the previous compact marketplace grid (3 per
-                row) beside the desktop runner. Same data + state either way. */}
+            {/* DENSE VISUAL WALL — imagery first, tight gutters, minimal chrome.
+                <lg: exactly 2 columns (the inline builder is injected after the
+                selected card's real row). lg+: auto-fill portrait columns
+                (~210px min) so the feed responds to the viewport width. */}
             <div
-              className={cn(
-                "mt-4 grid items-start sm:mt-5",
+              className={cn("mt-3 grid items-start", isCompactLayout ? "grid-cols-2 gap-2.5" : "gap-3")}
+              style={
                 isCompactLayout
-                  ? "grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-5"
-                  : "grid-cols-2 gap-3 sm:grid-cols-2 sm:gap-4 lg:grid-cols-3 lg:gap-4",
-              )}
+                  ? undefined
+                  : { gridTemplateColumns: "repeat(auto-fill, minmax(210px, 1fr))" }
+              }
             >
 
               {templateRows.map((row, rowIndex) => (
@@ -2656,107 +2656,8 @@ export default function TemplateStudioPage() {
                   return Date.now() - created < 21 * 24 * 60 * 60 * 1000;
                 })();
 
-                /* DESKTOP (lg+) — previous compact marketplace card. */
-                if (!isCompactLayout) {
-                  return (
-                    <div
-                      key={template.id}
-                      role="button"
-                      tabIndex={0}
-                      aria-label={`Open ${template.name}`}
-                      aria-pressed={selectMode ? batchSelected : undefined}
-                      onClick={() => {
-                        if (selectMode) {
-                          toggleBatchSelection(template.id);
-                          return;
-                        }
-                        track("campaign_select", { template_id: template.id });
-                        track("campaign_builder_open", { template_id: template.id });
-                        handleTemplateSelect(template.id);
-                      }}
-                      onKeyDown={(event) => {
-                        if (event.key === "Enter" || event.key === " ") {
-                          event.preventDefault();
-                          if (selectMode) toggleBatchSelection(template.id);
-                          else handleTemplateSelect(template.id);
-                        }
-                      }}
-                      className={cn(
-                        "group relative cursor-pointer overflow-hidden rounded-[1.1rem] bg-black text-left transition-shadow focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300",
-                        (selectMode ? batchSelected : selected)
-                          ? "ring-1 ring-cyan-300 shadow-[0_0_28px_-4px_rgba(34,211,238,0.55)]"
-                          : "ring-1 ring-white/10 hover:ring-white/25",
-                      )}
-                    >
-                      <TemplateVibeMedia
-                        template={template}
-                        className="aspect-[4/5] w-full object-cover transition-transform duration-500 group-hover:scale-[1.03] motion-reduce:transition-none"
-                      />
-                      <span className="pointer-events-none absolute inset-x-0 bottom-0 h-2/5 bg-gradient-to-t from-black via-black/70 to-transparent" />
-
-                      <div className="pointer-events-none absolute inset-x-0 bottom-0 p-3.5">
-                        {isNewDrop ? (
-                          <span className="mb-1.5 inline-flex rounded-full border border-cyan-300/40 bg-cyan-300/15 px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.18em] text-cyan-100">
-                            New
-                          </span>
-                        ) : null}
-                        <p className="line-clamp-2 font-display text-[15px] font-bold uppercase leading-[1.1] tracking-[0.08em] text-white drop-shadow-[0_1px_8px_rgba(0,0,0,0.95)]">
-                          {campaignDisplayName(template.name)}
-                        </p>
-                        <p className="mt-0.5 text-[11px] font-medium text-slate-200/90">
-                          {formatCampaignOutputs(template.counts)}
-                        </p>
-                        <span className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-cyan-300 px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-950">
-                          Run campaign
-                          <ArrowRight className="h-3 w-3" aria-hidden />
-                        </span>
-                      </div>
-
-
-                      {canFavorite && !selectMode ? (
-                        <FavoriteTemplateButton
-                          favorite={isFavorite(String(template.id))}
-                          onToggle={() => toggleFavorite(String(template.id))}
-                          className="absolute right-1.5 top-1.5"
-                        />
-                      ) : null}
-
-                      {selectMode ? (
-                        <span
-                          aria-hidden="true"
-                          className={cn(
-                            "absolute right-1.5 top-1.5 flex h-7 w-7 items-center justify-center rounded-full border backdrop-blur",
-                            batchSelected
-                              ? "border-cyan-300 bg-cyan-300 text-slate-950"
-                              : "border-white/25 bg-black/55 text-transparent",
-                          )}
-                        >
-                          <Check className="h-4 w-4" />
-                        </span>
-                      ) : (
-                        <button
-                          type="button"
-                          aria-label={`Details for ${template.name}`}
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            track("template_view", { template_id: template.id });
-                            setDetailTemplateId(template.id);
-                          }}
-                          className={cn(
-                            "absolute right-1.5 flex h-6 w-6 items-center justify-center rounded-full border border-white/20 bg-black/60 text-white/85 backdrop-blur transition-colors hover:bg-black/85",
-                            canFavorite ? "top-10" : "top-1.5",
-                          )}
-                        >
-                          <Info className="h-3.5 w-3.5" />
-                        </button>
-                      )}
-                    </div>
-                  );
-                }
-
                 return (
-
-                  <CampaignFeedCard
+                  <CampaignTile
                     key={template.id}
                     templateId={String(template.id)}
                     displayName={campaignDisplayName(template.name)}
@@ -2765,7 +2666,7 @@ export default function TemplateStudioPage() {
                     previewUrl={template.preview_url}
                     isVideo={isVideoPreview(template)}
                     selected={selectMode ? batchSelected : selected}
-                    eager={rowIndex === 0 && columnIndex === 0}
+                    eager={rowIndex === 0 && columnIndex < 2}
                     statusPill={isNewDrop ? "new" : null}
                     onSelect={() => {
                       if (selectMode) {
@@ -2793,26 +2694,27 @@ export default function TemplateStudioPage() {
                           <FavoriteTemplateButton
                             favorite={isFavorite(String(template.id))}
                             onToggle={() => toggleFavorite(String(template.id))}
-                            className="absolute left-3 top-3"
+                            className="absolute right-1.5 top-1.5"
                           />
                         ) : null}
                         {selectMode ? (
                           <span
                             aria-hidden="true"
                             className={cn(
-                              "absolute right-3 top-3 flex h-7 w-7 items-center justify-center rounded-full border backdrop-blur",
+                              "absolute right-1.5 top-1.5 flex h-6 w-6 items-center justify-center rounded-full border backdrop-blur",
                               batchSelected
                                 ? "border-cyan-300 bg-cyan-300 text-slate-950"
                                 : "border-white/25 bg-black/55 text-transparent",
                             )}
                           >
-                            <Check className="h-4 w-4" />
+                            <Check className="h-3.5 w-3.5" />
                           </span>
                         ) : null}
                       </>
                     }
                   />
                 );
+
                   })}
                   {/* <lg: the builder expands directly beneath the selected
                       card's ACTUAL visual row (column count is measured).
