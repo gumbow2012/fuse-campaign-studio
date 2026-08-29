@@ -13,7 +13,9 @@ export const STARTER_WELCOME_BADGE = "20% OFF FIRST MONTH — NEW CUSTOMERS";
 type MembershipLike = {
   plan?: string | null;
   subscriptionStatus?: string | null;
+  stripeSubscriptionId?: string | null;
 } | null | undefined;
+
 
 const PRIOR_PAID_STATUSES = new Set([
   "active",
