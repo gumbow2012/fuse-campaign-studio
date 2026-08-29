@@ -771,6 +771,7 @@ export default function TemplateStudioPage() {
       template.name.toLowerCase() === normalizedRequest ||
       template.versionId?.toLowerCase() === normalizedRequest,
     );
+    if (import.meta.env.DEV) console.log("[dl-debug]", requestedTemplateParam, templates.length, match?.id, templates.slice(0,4).map(t=>t.name));
     return match?.id ?? null;
   }, [requestedTemplateParam, templates]);
 
