@@ -242,7 +242,5 @@ export default function CampaignTile({
         ) : null}
       </div>
     </div>
-
-    </div>
   );
 }
