@@ -455,8 +455,22 @@ export default function HomePage() {
   }, [curatedShelves, trendingRanked, heroPair]);
 
 
-  const original = heroPair[0] ?? null;
-  const yourVersion = heroPair[1] ?? null;
+  /** Hero is pinned to two specific templates; fall back to the allocator. */
+  const pinnedHero = useMemo(() => {
+    const findByName = (name: string): Entry | null => {
+      const template = templates.find(
+        (candidate) => String(candidate.name ?? "").trim().toLowerCase() === name,
+      );
+      if (!template) return null;
+      const media = resolveMedia(template);
+      return media ? ({ template, media } as Entry) : null;
+    };
+    return { left: findByName("grillzzzz"), right: findByName("studio") };
+  }, [templates]);
+
+  const original = pinnedHero.left ?? heroPair[0] ?? null;
+  const yourVersion = pinnedHero.right ?? heroPair[1] ?? null;
+
 
 
   /** Every entry already claimed by the allocator — perf shelves reuse these only. */
