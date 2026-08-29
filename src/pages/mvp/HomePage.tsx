@@ -643,11 +643,10 @@ export default function HomePage() {
           <div className="min-w-0">
             <h1
               className="font-display font-bold uppercase text-white"
-              style={{ fontSize: "clamp(38px, 5.6vw, 72px)", lineHeight: 0.97, letterSpacing: "-0.02em" }}
+              style={{ fontSize: "clamp(24px, 6.9vw, 60px)", lineHeight: 0.96, letterSpacing: "-0.05em" }}
             >
-              One-click campaign
-              <br />
-              marketplace
+              <span className="block whitespace-nowrap">One-click campaign</span>
+              <span className="block">marketplace</span>
             </h1>
             <p className="mt-4 max-w-[560px] font-sans text-[17px] font-semibold leading-[1.35] text-white sm:text-[19px] md:text-[22px]">
               Viral campaigns. Already built and ready to run.
@@ -656,15 +655,15 @@ export default function HomePage() {
               Pick one. Upload your products. Hit run.
             </p>
 
-            <p className="mt-2 max-w-[560px] font-sans text-[13px] leading-[1.5] text-slate-400 sm:text-[14px]">
+            <p className="mt-2 hidden max-w-[560px] font-sans text-[13px] leading-[1.5] text-slate-400 md:block sm:text-[14px]">
               FUSE runs the prebuilt workflow and returns the finished images + video clips.
             </p>
 
-            <div className="mt-6 flex flex-wrap items-center gap-3 md:mt-7">
+            <div className="mt-5 flex flex-wrap items-center gap-3 md:mt-7">
               <Button
                 asChild
                 size="lg"
-                className="h-[54px] rounded-full bg-cyan-300 px-8 font-sans text-[16px] font-semibold uppercase tracking-[0.08em] text-slate-950 hover:bg-cyan-200"
+                className="h-[56px] rounded-full bg-cyan-300 px-7 font-sans text-[15px] font-semibold uppercase tracking-[0.08em] text-slate-950 hover:bg-cyan-200 sm:px-8 sm:text-[16px]"
               >
                 <Link to="/app/templates" onClick={() => track("hero_explore_campaigns_click")}>
                   Explore campaigns
@@ -695,9 +694,12 @@ export default function HomePage() {
               )}
             </div>
 
-            <p className="mt-5 max-w-[600px] font-sans text-[12px] font-bold uppercase leading-[1.5] tracking-[0.08em] text-white sm:text-[14px]">
-              No prompts <span className="text-cyan-300">·</span> No guessing{" "}
-              <span className="text-cyan-300">·</span> Prebuilt expert workflows
+            <p className="mt-4 max-w-[600px] font-sans text-[12px] font-bold uppercase leading-[1.5] tracking-[0.08em] text-white md:mt-5 sm:text-[14px]">
+              No prompts <span className="text-cyan-300">·</span> No guessing
+              <span className="hidden md:inline">
+                {" "}
+                <span className="text-cyan-300">·</span> Prebuilt expert workflows
+              </span>
             </p>
 
           </div>
@@ -711,12 +713,33 @@ export default function HomePage() {
               <div className="hidden lg:block">
                 <HeroWorkflowAnimation />
               </div>
-              <div className="mt-4">
-                <p className="font-display text-base font-semibold uppercase tracking-[0.12em] text-white sm:text-lg">
-                  The complex workflow is already built.
+
+              {/* Mobile: one line only — the graph carries the explanation */}
+              <div className="mt-3 lg:hidden">
+                <p className="font-display text-[13px] font-semibold uppercase tracking-[0.12em] text-white">
+                  Prebuilt workflow. <span className="text-cyan-200">You add the product.</span>
                 </p>
-                <p className="mt-2 font-display text-base font-semibold uppercase tracking-[0.12em] text-cyan-200 sm:text-lg">
+                <p className="mt-1 font-sans text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">
+                  A full campaign. One run.
+                </p>
+              </div>
+
+              {/* Desktop: compact explainer */}
+              <div className="mt-4 hidden lg:block">
+                <p className="font-display text-lg font-semibold uppercase tracking-[0.12em] text-white">
+                  Prebuilt expert workflows
+                </p>
+                <p className="mt-2 font-sans text-[14px] leading-[1.5] text-slate-400">
+                  Creative direction, references, image steps and video steps are already configured.
+                </p>
+                <p className="mt-2 font-display text-base font-semibold uppercase tracking-[0.12em] text-cyan-200">
                   You just add the product.
+                </p>
+                <p className="mt-3 font-sans text-[12px] leading-[1.6] text-slate-300">
+                  <span className="text-cyan-300">✓</span> Direction ·{" "}
+                  <span className="text-cyan-300">✓</span> References ·{" "}
+                  <span className="text-cyan-300">✓</span> Images ·{" "}
+                  <span className="text-cyan-300">✓</span> Video
                 </p>
               </div>
             </div>
@@ -724,24 +747,48 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* 1.1 · VALUE BAND */}
-      <section className="border-b border-white/10 bg-white/[0.02]">
+      {/* 1.1 · VALUE BAND — desktop only; mobile folds this under the graph */}
+      <section className="hidden border-b border-white/10 bg-white/[0.02] md:block">
         <div className="container flex flex-wrap items-baseline gap-x-4 gap-y-1 py-5">
           <p className="font-display text-xl font-bold uppercase tracking-[-0.01em] text-white sm:text-2xl">
-            A full campaign. One click.
+            A full campaign. One run.
           </p>
           <p className="font-sans text-[14px] text-slate-400">
-            Images + video clips generated together from one prebuilt workflow.
+            Images + video clips generated together.
           </p>
-
         </div>
       </section>
+
 
       <PromoOfferBar />
 
 
 
-      {/* 1.4 · CURATED SHELVES — exact order from /admin/templates/merchandising */}
+      {/* 1.4 · NEW DROPS — first shelf after the hero, hidden when empty */}
+      <Shelf
+        id="new-today"
+        label="New Drops"
+        heading="Just dropped"
+        description="The newest campaigns ready to run."
+        entries={newToday}
+        perfMap={perfMap}
+        runsMap={popularity}
+        badge={{ tone: "new", label: "New" }}
+      />
+
+      {/* 1.5 · TRENDING */}
+      <Shelf
+        id="trending-now"
+        label="Trending now"
+        heading="Trending campaigns"
+        description="Most-run campaigns right now."
+        entries={trendingRanked}
+        perfMap={perfMap}
+        runsMap={popularity}
+        badge={{ tone: "trending", label: "Trending" }}
+      />
+
+      {/* 1.6 · CURATED SHELVES — exact order from /admin/templates/merchandising */}
       {curatedShelves.map((shelf) => (
         <Shelf
           key={shelf.id}
@@ -755,45 +802,6 @@ export default function HomePage() {
         />
       ))}
 
-      {/* 1.5 · TRENDING ABOVE THE FOLD — one click from landing into the builder */}
-
-      <Shelf
-        id="trending-now"
-        label="Trending now"
-        heading="Trending campaigns"
-        description="Most-run campaigns right now."
-        entries={trendingRanked}
-        perfMap={perfMap}
-        runsMap={popularity}
-        badge={{ tone: "trending", label: "Trending" }}
-      />
-
-      {/* 2 · NEW DROPS BAR — real recently activated templates only, hidden when none */}
-
-      {newToday.length > 0 && (
-        <section className="border-b border-white/10 bg-white/[0.02]">
-          <div className="container flex flex-wrap items-center justify-between gap-4 py-5">
-            <div className="flex items-center gap-4">
-              <span className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.24em] text-emerald-300">
-                <span className="h-2 w-2 animate-pulse rounded-full bg-emerald-300" />
-                New drops live
-              </span>
-              <p className="font-display text-sm font-semibold uppercase tracking-[0.14em] text-white">
-                {newToday.length} new campaign{newToday.length === 1 ? "" : "s"}
-                <span className="ml-3 text-[11px] font-medium tracking-[0.18em] text-slate-400">
-                  just added to the marketplace
-                </span>
-              </p>
-            </div>
-            <Button asChild variant="ghost" className="rounded-full text-cyan-100 hover:text-white">
-              <a href="#new-today">
-                View drops
-                <ArrowRight className="h-4 w-4" />
-              </a>
-            </Button>
-          </div>
-        </section>
-      )}
 
 
       {/* 2.5 · BRAND PERSONALIZATION — additive only, never a filter */}
@@ -859,18 +867,8 @@ export default function HomePage() {
         </section>
       )}
 
-      {/* 3 · SHELVES — trending is rendered above the fold; NEW DROPS next */}
+      {/* 3 · SHELVES — New Drops and Trending render above, directly after the hero */}
 
-
-      <Shelf
-        id="new-today"
-        label="New drops"
-        heading="Just added to the marketplace"
-        entries={newToday}
-        perfMap={perfMap}
-        runsMap={popularity}
-        badge={{ tone: "new", label: "New" }}
-      />
 
       <Shelf
         id="from-creators-you-follow"
