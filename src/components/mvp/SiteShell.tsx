@@ -160,9 +160,11 @@ export default function SiteShell({ children }: { children: ReactNode }) {
               <NavLink to="/app/templates" className={textNavLinkClass}>
                 Explore
               </NavLink>
-              <NavLink to="/creators" className={textNavLinkClass}>
-                Creators
-              </NavLink>
+              {user ? (
+                <NavLink to="/creators" className={textNavLinkClass}>
+                  Creators
+                </NavLink>
+              ) : null}
               <NavLink to="/pricing" className={textNavLinkClass}>
                 Pricing
               </NavLink>
@@ -179,19 +181,20 @@ export default function SiteShell({ children }: { children: ReactNode }) {
                 <AccountPopover />
               </div>
             ) : (
-              <div className="flex items-center gap-1.5">
+              <div className="flex items-center gap-1">
                 <Button
                   asChild
-                  variant="outline"
-                  className={cn("h-9 rounded-full border-white/15 bg-white/5 px-3 text-sm text-foreground hover:bg-white/10", focusRing)}
+                  variant="ghost"
+                  className={cn("h-9 rounded-full px-2.5 text-sm text-foreground/80 hover:bg-white/10 hover:text-foreground", focusRing)}
                 >
                   <Link to="/auth?mode=signin">Sign in</Link>
                 </Button>
-                <Button asChild className={cn("h-9 rounded-full bg-cyan-300 px-3 text-sm text-slate-950 hover:bg-cyan-200", focusRing)}>
-                  <Link to="/auth?mode=signup">Sign up</Link>
+                <Button asChild className={cn("h-9 rounded-full bg-cyan-300 px-3 text-sm font-semibold text-slate-950 hover:bg-cyan-200", focusRing)}>
+                  <Link to="/auth?mode=signup">Try FUSE</Link>
                 </Button>
               </div>
             )}
+
 
             <Sheet open={menuOpen} onOpenChange={setMenuOpen}>
               <SheetTrigger asChild>
