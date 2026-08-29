@@ -741,15 +741,37 @@ export default function HomePage() {
 
       </section>
 
-
-
-
-      <PromoOfferBar />
-
-
-
-      {/* 1.4 · NEW DROPS — video-first shelf flowing out of the hero, hidden when empty */}
+      {/* 1.4 · NEW DROPS — media-first rail, hidden when empty */}
       <NewDropsShelf entries={newToday} fill={newDropsFill} />
+
+      {/* 1.6 · HOW IT WORKS — compact row, no giant cards */}
+      <section className="container pb-8">
+        <h2 className="font-display text-lg font-bold uppercase tracking-[0.06em] text-white sm:text-xl">
+          How it works
+        </h2>
+        <ol className="mt-3 grid gap-2.5 sm:grid-cols-3">
+          {[
+            { n: "01", title: "Pick", copy: "Choose a campaign" },
+            { n: "02", title: "Upload", copy: "Add your assets" },
+            { n: "03", title: "Run", copy: "Get your images + video clips" },
+          ].map((step) => (
+            <li
+              key={step.n}
+              className="flex items-center gap-3 rounded-xl border border-white/10 bg-white/[0.03] px-3.5 py-3"
+            >
+              <span className="font-display text-base font-bold text-cyan-200">{step.n}</span>
+              <span className="min-w-0">
+                <span className="block font-display text-[13px] font-bold uppercase tracking-[0.08em] text-white">
+                  {step.title}
+                </span>
+                <span className="block truncate text-[12.5px] text-slate-300">{step.copy}</span>
+              </span>
+            </li>
+          ))}
+        </ol>
+      </section>
+
+
 
 
       {/* 1.5 · TRENDING */}
