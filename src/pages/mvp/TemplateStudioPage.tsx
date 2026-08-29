@@ -563,16 +563,18 @@ export default function TemplateStudioPage() {
   useEffect(() => {
     if (typeof window === "undefined") return;
     const compact = window.matchMedia("(max-width: 1023.98px)");
-    const threeCols = window.matchMedia("(min-width: 640px)");
+    const twoCols = window.matchMedia("(min-width: 640px)");
     const sync = () => {
       setIsCompactLayout(compact.matches);
-      setGridColumns(threeCols.matches ? 3 : 2);
+      // Immersive feed: ONE dominant card per row below 640px, two from sm up.
+      setGridColumns(twoCols.matches ? 2 : 1);
     };
     sync();
     compact.addEventListener("change", sync);
-    threeCols.addEventListener("change", sync);
+    twoCols.addEventListener("change", sync);
     return () => {
       compact.removeEventListener("change", sync);
+
       threeCols.removeEventListener("change", sync);
     };
   }, []);
