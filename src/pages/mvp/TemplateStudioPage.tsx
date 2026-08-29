@@ -773,6 +773,7 @@ export default function TemplateStudioPage() {
     );
     if (match) {
       appliedTemplateParamRef.current = requestedTemplate;
+      deepLinkMatchedRef.current = match.id;
       setSelectedTemplateId(match.id);
     }
   }, [searchParams, templates]);
@@ -784,10 +785,13 @@ export default function TemplateStudioPage() {
    * UTM params in the URL are untouched.
    */
   const deepLinkRevealedRef = useRef(false);
+  /** Set only when ?template= actually resolved to a live campaign. */
+  const deepLinkMatchedRef = useRef<string | null>(null);
   useEffect(() => {
     if (deepLinkRevealedRef.current) return;
     if (!isCompactLayout || !templates.length) return;
-    if (!searchParams.get("template") || !selectedTemplateId) return;
+    if (!deepLinkMatchedRef.current) return;
+    if (deepLinkMatchedRef.current !== selectedTemplateId) return;
     deepLinkRevealedRef.current = true;
     setInlineBuilderOpen(true);
     const timer = window.setTimeout(() => revealInlineBuilder(), 120);
