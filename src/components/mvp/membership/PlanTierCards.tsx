@@ -333,6 +333,13 @@ export default function PlanTierCards({
   const hasActivePaidPlan =
     currentPlan !== "free" && (subscriptionStatus === "active" || subscriptionStatus === "trialing");
 
+  /** First-time subscribers see the 20%-off-first-month Starter treatment. */
+  const starterWelcomeEligible = isStarterWelcomeOfferEligible({
+    plan: currentPlan,
+    subscriptionStatus,
+  });
+
+
   const visible = (showAll ? SALE_PLAN_LADDER : SALE_PLAN_LADDER.filter((entry) => entry.featured))
     .slice()
     .sort((a, b) => mobileRank(a) - mobileRank(b));
