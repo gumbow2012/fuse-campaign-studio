@@ -50,7 +50,18 @@ export default function GeneratePaywallModal({
   creditBalance,
 }: Props) {
   const { loading, startPlanCheckout, startCreditTopUp } = useMembershipCheckout();
+  const { profile } = useAuth();
+  const starterWelcomeEligible = isStarterWelcomeOfferEligible(
+    profile
+      ? {
+          plan: profile.plan,
+          subscriptionStatus: profile.subscription_status,
+          stripeSubscriptionId: profile.stripe_subscription_id,
+        }
+      : null,
+  );
   const [packDialogOpen, setPackDialogOpen] = useState(false);
+
 
   const shortfall = Math.max(0, creditsRequired - creditBalance);
   const topUpAmount = suggestedTopUp(Math.max(shortfall, 1));
