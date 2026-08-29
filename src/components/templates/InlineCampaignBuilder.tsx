@@ -10,7 +10,8 @@
 import { forwardRef, useEffect, useState, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
 
-export const INLINE_GENERATE_BAR_HEIGHT = 76;
+
+
 
 interface InlineCampaignBuilderProps {
   templateName: string;
