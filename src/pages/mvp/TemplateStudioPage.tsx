@@ -2657,7 +2657,7 @@ export default function TemplateStudioPage() {
                   return Date.now() - created < 21 * 24 * 60 * 60 * 1000;
                 })();
 
-                /* DESKTOP (lg+) — previous dense marketplace card. */
+                /* DESKTOP (lg+) — previous compact marketplace card. */
                 if (!isCompactLayout) {
                   return (
                     <div
@@ -2683,23 +2683,36 @@ export default function TemplateStudioPage() {
                         }
                       }}
                       className={cn(
-                        "group relative cursor-pointer overflow-hidden rounded-[0.9rem] bg-black text-left transition-shadow focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300",
+                        "group relative cursor-pointer overflow-hidden rounded-[1.1rem] bg-black text-left transition-shadow focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300",
                         (selectMode ? batchSelected : selected)
-                          ? "ring-1 ring-cyan-300 shadow-[0_0_24px_-4px_rgba(34,211,238,0.55)]"
+                          ? "ring-1 ring-cyan-300 shadow-[0_0_28px_-4px_rgba(34,211,238,0.55)]"
                           : "ring-1 ring-white/10 hover:ring-white/25",
                       )}
                     >
                       <TemplateVibeMedia
                         template={template}
-                        className={cn(
-                          "w-full object-cover transition-transform duration-500 group-hover:scale-[1.03] motion-reduce:transition-none",
-                          feedTileAspect(String(template.id)),
-                        )}
+                        className="aspect-[4/5] w-full object-cover transition-transform duration-500 group-hover:scale-[1.03] motion-reduce:transition-none"
                       />
-                      <span className="pointer-events-none absolute inset-x-0 bottom-0 h-1/3 bg-gradient-to-t from-black/85 to-transparent" />
-                      <p className="pointer-events-none absolute bottom-2 left-2.5 right-8 line-clamp-2 font-display text-[11px] font-bold uppercase leading-[1.15] tracking-[0.1em] text-white drop-shadow-[0_1px_6px_rgba(0,0,0,0.9)] sm:text-[12px] sm:tracking-[0.12em]">
-                        {campaignDisplayName(template.name)}
-                      </p>
+                      <span className="pointer-events-none absolute inset-x-0 bottom-0 h-2/5 bg-gradient-to-t from-black via-black/70 to-transparent" />
+
+                      <div className="pointer-events-none absolute inset-x-0 bottom-0 p-3.5">
+                        {isNewDrop ? (
+                          <span className="mb-1.5 inline-flex rounded-full border border-cyan-300/40 bg-cyan-300/15 px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.18em] text-cyan-100">
+                            New
+                          </span>
+                        ) : null}
+                        <p className="line-clamp-2 font-display text-[15px] font-bold uppercase leading-[1.1] tracking-[0.08em] text-white drop-shadow-[0_1px_8px_rgba(0,0,0,0.95)]">
+                          {campaignDisplayName(template.name)}
+                        </p>
+                        <p className="mt-0.5 text-[11px] font-medium text-slate-200/90">
+                          {formatCampaignOutputs(template.counts)}
+                        </p>
+                        <span className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-cyan-300 px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-950">
+                          Run campaign
+                          <ArrowRight className="h-3 w-3" aria-hidden />
+                        </span>
+                      </div>
+
 
                       {canFavorite && !selectMode ? (
                         <FavoriteTemplateButton
