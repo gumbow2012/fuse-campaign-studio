@@ -1,0 +1,24 @@
+/**
+ * Single shared formatter for customer-facing campaign deliverable labels.
+ * Counts always come from the template object (counts.imageOutputs /
+ * counts.videoOutputs) — never queried or invented here.
+ */
+type OutputCounts = { imageOutputs?: number | null; videoOutputs?: number | null } | null | undefined;
+
+export function formatCampaignOutputs(counts?: OutputCounts): string {
+  const img = Number(counts?.imageOutputs ?? 0);
+  const vid = Number(counts?.videoOutputs ?? 0);
+  if (img > 0 && vid > 0) return `${img} images · ${vid} clips`;
+  if (img > 0) return `${img} images`;
+  if (vid > 0) return `${vid} video clips`;
+  return "campaign assets";
+}
+
+export function formatCampaignOutputsLong(counts?: OutputCounts): string {
+  const img = Number(counts?.imageOutputs ?? 0);
+  const vid = Number(counts?.videoOutputs ?? 0);
+  if (img > 0 && vid > 0) return `${img} images + ${vid} video clips`;
+  if (img > 0) return `${img} images`;
+  if (vid > 0) return `${vid} video clips`;
+  return "campaign assets";
+}
