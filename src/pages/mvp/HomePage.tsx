@@ -859,18 +859,8 @@ export default function HomePage() {
         </section>
       )}
 
-      {/* 3 · SHELVES — trending is rendered above the fold; NEW DROPS next */}
+      {/* 3 · SHELVES — New Drops and Trending render above, directly after the hero */}
 
-
-      <Shelf
-        id="new-today"
-        label="New drops"
-        heading="Just added to the marketplace"
-        entries={newToday}
-        perfMap={perfMap}
-        runsMap={popularity}
-        badge={{ tone: "new", label: "New" }}
-      />
 
       <Shelf
         id="from-creators-you-follow"
