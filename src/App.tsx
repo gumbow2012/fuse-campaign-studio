@@ -107,7 +107,9 @@ const App = () => (
         <Toaster />
         <Sonner />
         <BrowserRouter>
+          <UtmCapture />
           <PageTracking />
+
           <PageViewTracker />
           <CreditTopUpSuccessWatcher />
           <BrandActivationReminders />
