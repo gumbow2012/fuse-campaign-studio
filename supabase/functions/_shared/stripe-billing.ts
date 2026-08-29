@@ -693,6 +693,10 @@ export function createCheckoutHandler(mode: StripeBillingMode) {
           billing_mode: mode,
           template_id: templateId ?? "",
           template_name: templateName ?? "",
+          fbc: (typeof body.fbc === "string" ? body.fbc : "") || "",
+          fbp: (typeof body.fbp === "string" ? body.fbp : "") || "",
+          meta_client_ip: (req.headers.get("x-forwarded-for") || "").split(",")[0].trim(),
+          meta_user_agent: req.headers.get("user-agent") || "",
         },
         subscription_data: {
           metadata: {
@@ -851,6 +855,10 @@ export function createCreditCheckoutHandler(mode: StripeBillingMode) {
             pricing_version: pricingVersion,
             purchase_type: purchaseType,
             billing_mode: mode,
+            fbc: (typeof body.fbc === "string" ? body.fbc : "") || "",
+            fbp: (typeof body.fbp === "string" ? body.fbp : "") || "",
+            meta_client_ip: (req.headers.get("x-forwarded-for") || "").split(",")[0].trim(),
+            meta_user_agent: req.headers.get("user-agent") || "",
           }
           : {
             checkout_type: "credit_pack",
@@ -859,6 +867,10 @@ export function createCreditCheckoutHandler(mode: StripeBillingMode) {
             credits: String(pack.credits),
             amount_cents: String(pack.amountCents),
             billing_mode: mode,
+            fbc: (typeof body.fbc === "string" ? body.fbc : "") || "",
+            fbp: (typeof body.fbp === "string" ? body.fbp : "") || "",
+            meta_client_ip: (req.headers.get("x-forwarded-for") || "").split(",")[0].trim(),
+            meta_user_agent: req.headers.get("user-agent") || "",
           },
         payment_intent_data: {
           metadata: purchaseType
@@ -1183,6 +1195,11 @@ export function createStripeWebhookHandler(mode: StripeBillingMode) {
                 currency: "USD",
                 eventId: metaCheckoutEventId("Purchase", String(session.id)),
                 eventSourceUrl: "https://fuse-us.com",
+                externalId: session.metadata?.user_id || session.client_reference_id || undefined,
+                fbc: session.metadata?.fbc || undefined,
+                fbp: session.metadata?.fbp || undefined,
+                clientIp: session.metadata?.meta_client_ip || undefined,
+                userAgent: session.metadata?.meta_user_agent || undefined,
               });
             }
           } catch (_capiError) {
@@ -1235,6 +1252,11 @@ export function createStripeWebhookHandler(mode: StripeBillingMode) {
                 currency: (session.currency ?? pack.currency ?? "usd").toUpperCase(),
                 eventId: metaCheckoutEventId("Purchase", String(session.id)),
                 eventSourceUrl: "https://fuse-us.com",
+                externalId: session.metadata?.user_id || session.client_reference_id || undefined,
+                fbc: session.metadata?.fbc || undefined,
+                fbp: session.metadata?.fbp || undefined,
+                clientIp: session.metadata?.meta_client_ip || undefined,
+                userAgent: session.metadata?.meta_user_agent || undefined,
               });
             }
           } catch (_capiError) {
