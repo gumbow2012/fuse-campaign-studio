@@ -93,7 +93,9 @@ export default function TemplateInputCard({
   displayLabel,
   castPanel,
   sourceNote,
+  compact = false,
 }: TemplateInputCardProps) {
+
 
   const inputRef = useRef<HTMLInputElement>(null);
   /*
