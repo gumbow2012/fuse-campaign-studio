@@ -1490,24 +1490,44 @@ export default function TemplateStudioPage() {
   }, [selectedTemplateId]);
 
   const handleTemplateSelect = (templateId: string, options?: { alwaysReveal?: boolean }) => {
+    /* Cache the outgoing campaign's pending local inputs for this session, then
+       restore anything previously configured for the incoming campaign.
+       Caching only touches local state — nothing is uploaded and nothing spends. */
+    if (selectedTemplateId && selectedTemplateId !== templateId) {
+      inputDraftsRef.current[selectedTemplateId] = {
+        files,
+        libraryAssets,
+        textInputs,
+        castSelection,
+        anonUploads,
+      };
+    }
+    const draft = inputDraftsRef.current[templateId];
 
     setSelectedTemplateId(templateId);
-    setFiles({});
-    setAnonUploads({});
-    setLibraryAssets({});
+    setFiles(draft?.files ?? {});
+    setAnonUploads(draft?.anonUploads ?? {});
+    setLibraryAssets(draft?.libraryAssets ?? {});
 
-    setTextInputs({});
+    setTextInputs(draft?.textInputs ?? {});
     setJobId(null);
     setOpenedHistoricalRun(null);
     setInputsExpanded(false);
     setResult(null);
-    setCastSelection({});
+    setCastSelection(draft?.castSelection ?? {});
     setAutofilledKeys({});
     autofillAppliedRef.current = "";
 
+    if (isCompactLayout) {
+      // Inline expansion: no teleporting. Only nudge if the panel top would sit
+      // below the viewport, and only after layout exists.
+      revealInlineBuilder();
+      return;
+    }
+
     // Cards far from the builder (e.g. the "For you" row at the top of the page)
     // must always scroll the builder into view, otherwise a click looks inert.
-    if (options?.alwaysReveal || window.matchMedia("(max-width: 1279px)").matches) {
+    if (options?.alwaysReveal) {
       // Defer past the re-render/paint of the newly selected template, then only
       // scroll if the builder isn't already comfortably in view (desktop side-by-side).
       window.requestAnimationFrame(() => {
@@ -1522,6 +1542,7 @@ export default function TemplateStudioPage() {
     }
 
   };
+
 
 
   /*
