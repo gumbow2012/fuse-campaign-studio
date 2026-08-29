@@ -639,11 +639,11 @@ export default function HomePage() {
           }}
         />
 
-        <div className="container relative grid gap-7 py-9 md:gap-10 md:py-16 lg:grid-cols-[1fr_0.9fr] lg:items-center">
-          <div>
+        <div className="container relative grid gap-7 py-9 md:gap-10 md:py-16 lg:grid-cols-[minmax(0,1fr)_minmax(0,0.9fr)] lg:items-center">
+          <div className="min-w-0">
             <h1
               className="font-display font-bold uppercase text-white"
-              style={{ fontSize: "clamp(44px, 6.2vw, 86px)", lineHeight: 0.97, letterSpacing: "-0.02em" }}
+              style={{ fontSize: "clamp(38px, 6.6vw, 86px)", lineHeight: 0.97, letterSpacing: "-0.02em" }}
             >
               One-click campaign
               <br />
@@ -702,7 +702,7 @@ export default function HomePage() {
           </div>
 
           {/* Prebuilt workflow explainer — needs no template data, renders instantly */}
-          <div className="relative">
+          <div className="relative min-w-0">
             <div className="mx-auto max-w-[420px]">
               <div className="lg:hidden">
                 <HeroWorkflowAnimation compact />
