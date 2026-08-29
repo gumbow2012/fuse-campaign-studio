@@ -2243,40 +2243,46 @@ export default function TemplateStudioPage() {
                     </div>
 
 
-                    <div className="space-y-3 p-4">
-                      {performance ? <PerformanceBlock row={performance} compact /> : null}
-                      {performance ? <PerformanceBadges row={performance} limit={3} /> : null}
+                    <div className="space-y-2 p-2.5 sm:space-y-3 sm:p-4">
+                      {performance ? <div className="hidden sm:block"><PerformanceBlock row={performance} compact /></div> : null}
+                      {performance ? <div className="hidden sm:block"><PerformanceBadges row={performance} limit={3} /></div> : null}
                       <div className="flex items-start justify-between gap-3">
 
                         <div className="min-w-0">
-                          <p className="truncate text-base font-semibold text-white">{template.name}</p>
-                          <p className="mt-1 text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
+                          <p className="line-clamp-2 text-sm font-bold text-white sm:truncate sm:text-base sm:font-semibold">{template.name}</p>
+                          <p className="mt-1 hidden text-[10px] uppercase tracking-[0.2em] text-muted-foreground sm:block">
                             {template.category || "Campaign drop template"}
                           </p>
                         </div>
-                        <div className="shrink-0 rounded-full border border-white/10 px-3 py-1 text-[10px] uppercase tracking-[0.18em] text-slate-300">
+                        <div className="hidden shrink-0 rounded-full border border-white/10 px-3 py-1 text-[10px] uppercase tracking-[0.18em] text-slate-300 sm:block">
                           {isPrivilegedUser ? <span className="line-through decoration-cyan-200/90 decoration-2">{credits} cr</span> : `${credits} cr`}
                         </div>
                       </div>
 
+                      <p className="text-[11px] text-slate-400 sm:hidden">
+                        {formatCampaignOutputs(template.counts)}
+                      </p>
+
                       {template.description ? (
-                        <p className="line-clamp-2 text-sm leading-6 text-slate-300">
+                        <p className="hidden line-clamp-2 text-sm leading-6 text-slate-300 sm:block">
                           {template.description}
                         </p>
                       ) : (
-                        <p className="text-sm leading-6 text-slate-300">
+                        <p className="hidden text-sm leading-6 text-slate-300 sm:block">
                           Campaign drop template for ready-to-use vertical videos.
                         </p>
                       )}
 
                       {activeBrand && templateFitMap[String(template.id)] ? (
-                        <TemplateFitBadge
-                          fit={templateFitMap[String(template.id)]}
-                          brandName={activeBrand.name}
-                        />
+                        <div className="hidden sm:block">
+                          <TemplateFitBadge
+                            fit={templateFitMap[String(template.id)]}
+                            brandName={activeBrand.name}
+                          />
+                        </div>
                       ) : null}
 
-                      <div className="flex flex-wrap items-center justify-between gap-2 text-[10px] uppercase tracking-[0.18em] text-slate-400">
+                      <div className="hidden flex-wrap items-center justify-between gap-2 text-[10px] uppercase tracking-[0.18em] text-slate-400 sm:flex">
                         <span>{formatCount(inputCount, "upload", "uploads")}</span>
                         <span>{formatCampaignOutputs(template.counts)}</span>
                       </div>
@@ -2287,7 +2293,7 @@ export default function TemplateStudioPage() {
                       <span
                         aria-hidden="true"
                         className={cn(
-                          "flex items-center gap-1.5 font-display text-[10px] font-semibold uppercase tracking-[0.2em]",
+                          "hidden items-center gap-1.5 font-display text-[10px] font-semibold uppercase tracking-[0.2em] sm:flex",
                           selected && !selectMode
                             ? "text-cyan-200"
                             : "text-slate-500 group-hover:text-cyan-200",
@@ -2303,6 +2309,7 @@ export default function TemplateStudioPage() {
                       </span>
 
                     </div>
+
                   </div>
                 );
               })}
