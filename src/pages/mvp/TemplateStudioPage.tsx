@@ -2174,7 +2174,7 @@ export default function TemplateStudioPage() {
               </div>
             ) : null}
 
-            <div className="mt-4 grid grid-cols-2 gap-3 sm:mt-5 sm:grid-cols-2 sm:gap-4 lg:grid-cols-3">
+            <div className="mt-4 grid grid-cols-2 gap-3 sm:mt-5 sm:grid-cols-3 sm:gap-4 lg:grid-cols-3">
               {visibleTemplates.map((template) => {
                 const selected = template.id === selectedTemplateId;
                 const batchSelected = batchSelection.includes(template.id);
@@ -2205,7 +2205,7 @@ export default function TemplateStudioPage() {
                       selectMode && batchSelected
                         ? "border-cyan-300 bg-cyan-300/10 ring-2 ring-cyan-300/40"
                         : selected && !selectMode
-                          ? "border-cyan-300/50 bg-cyan-300/10"
+                          ? "border-cyan-300 bg-cyan-300/10 ring-2 ring-cyan-300/40"
                           : "border-white/8 bg-black/20 hover:border-white/20 hover:bg-white/[0.05]"
                     }`}
                   >
@@ -2271,7 +2271,7 @@ export default function TemplateStudioPage() {
                         </div>
                       </div>
 
-                      <p className="text-[11px] text-slate-400 sm:hidden">
+                      <p className="text-xs text-slate-400 sm:hidden">
                         {formatCampaignOutputs(template.counts)}
                       </p>
 
