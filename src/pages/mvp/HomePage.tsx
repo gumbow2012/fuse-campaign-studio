@@ -635,7 +635,7 @@ export default function HomePage() {
               One-click campaign engine
             </p>
             <h1 className="mt-3 font-display font-bold uppercase leading-[1.02] tracking-[-0.02em] text-white md:mt-4"
-              style={{ fontSize: "clamp(28px, 7.6vw, 60px)" }}>
+              style={{ fontSize: "clamp(28px, 8.2vw, 60px)" }}>
               Viral campaigns.
               <br />
               <span className="text-cyan-200">already built.</span>
