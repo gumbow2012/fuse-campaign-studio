@@ -98,7 +98,8 @@ export default function TemplateUnlockModal({
       <div
         role="dialog"
         aria-modal="true"
-        aria-label={`Access ${name}`}
+        aria-label="Unlock FUSE Studio"
+
         className="relative grid max-h-[100dvh] w-full max-w-full overflow-y-auto border border-white/10 bg-slate-950/95 shadow-[0_28px_90px_rgba(0,0,0,0.6)] sm:max-h-[92vh] sm:max-w-[1040px] sm:rounded-[1.75rem] md:max-h-[88vh] md:grid-cols-[1.05fr_1fr] md:grid-rows-1 md:overflow-hidden md:rounded-[2rem]"
       >
         {/* LEFT — the selected template's real preview, full-bleed. */}
@@ -134,8 +135,9 @@ export default function TemplateUnlockModal({
               {name}
             </p>
             <p className="mt-1.5 max-w-[22rem] font-display text-base font-semibold leading-snug tracking-[-0.02em] text-white md:text-lg">
-              One template. Your version.
+              Your first drop.
             </p>
+
           </div>
         </div>
 
@@ -151,11 +153,13 @@ export default function TemplateUnlockModal({
           </button>
 
           <h2 className="pr-8 font-display text-[1.5rem] font-bold uppercase leading-tight tracking-[-0.03em] text-white sm:text-[1.75rem]">
-            Access {name}
+            Unlock FUSE Studio
           </h2>
           <p className="mt-2.5 text-sm leading-6 text-slate-400">
-            Continue to payment to access this template and generate your version.
+            Start with {displayName || fullName} — then run every template, as many campaigns as you
+            want.
           </p>
+
 
           <p className="mt-4 text-sm text-white/85">
             This template uses{" "}
@@ -190,9 +194,14 @@ export default function TemplateUnlockModal({
               </span>{" "}
               <span className="text-xs uppercase tracking-[0.14em]">First month</span>
             </p>
+            <p className="mt-2 text-[11px] leading-5 text-slate-400">
+              {starter.monthlyCredits.toLocaleString()} credits/month — enough for{" "}
+              {displayName || fullName} plus dozens more clips across the whole library.
+            </p>
             <p className="mt-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-cyan-200/90">
               {STARTER_WELCOME_BADGE}
             </p>
+
           </div>
 
           <p className="mt-2 text-[11px] text-slate-500">
@@ -217,7 +226,7 @@ export default function TemplateUnlockModal({
             className="mt-5 w-full justify-center rounded-full bg-cyan-300 py-6 font-display text-[12px] font-semibold uppercase tracking-[0.16em] text-slate-950 hover:bg-cyan-200"
           >
             {busy ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : null}
-            Continue to payment
+            Start creating
             <ArrowRight className="h-4 w-4" aria-hidden />
           </Button>
 
