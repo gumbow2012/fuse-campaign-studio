@@ -2273,6 +2273,16 @@ export default function TemplateStudioPage() {
     };
   }, []);
 
+  /*
+   * While a restored generation is still unfinished, Brand Setup must not
+   * divert the customer away from their first run.
+   */
+  const [pendingIntentInProgress, setPendingIntentInProgress] = useState(false);
+  useEffect(() => {
+    const intent = getPendingGenerationIntent();
+    setPendingIntentInProgress(!!intent && !pendingGenerationConsumed(intent));
+  }, [autoRunIntent, finishRunPrompt, jobId, requiredInputsAreReady, user]);
+
 
   useEffect(() => {
     if (!user || !templates.length) return;
