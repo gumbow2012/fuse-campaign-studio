@@ -937,11 +937,11 @@ export default function HomePage() {
                     <div
                       key={`hero-stack-back-${entry.template.id ?? index}`}
                       aria-hidden
-                      className="absolute inset-0 overflow-hidden rounded-2xl border border-white/10 bg-black/60"
+                      className="absolute inset-0 overflow-hidden rounded-2xl border border-cyan-200/20 bg-[#0B1120]"
                       style={{
-                        transform: `translate(${(index + 1) * 12}px, ${(index + 1) * 10}px) scale(${1 - (index + 1) * 0.045})`,
+                        transform: `translate(${(index + 1) * 18}px, ${(index + 1) * 14}px) scale(${1 - (index + 1) * 0.04})`,
                         zIndex: 1 - index,
-                        opacity: 0.5 - index * 0.18,
+                        opacity: 0.75 - index * 0.25,
                       }}
                     />
                   ))}
