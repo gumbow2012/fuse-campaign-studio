@@ -885,57 +885,83 @@ export default function HomePage() {
             </div>
           </div>
 
-          {/* STORY SEQUENCE — your products → prebuilt workflow → finished campaign */}
-          <div className="relative flex min-w-0 items-center gap-2 xl:gap-3">
-            {/* 1 · YOUR PRODUCTS input card */}
-            <div className="w-[132px] shrink-0 rounded-2xl border border-cyan-200/25 bg-[linear-gradient(180deg,rgba(34,211,238,0.08),rgba(255,255,255,0.02))] p-3 shadow-[0_0_28px_-14px_rgba(34,211,238,0.7)] xl:w-[148px]">
-              <p className="font-display text-[9.5px] font-bold uppercase tracking-[0.2em] text-cyan-100">
+          {/* STORY SEQUENCE — one connected system: your products → prebuilt
+              workflow → finished campaigns. Explanatory only (no upload UI). */}
+          <div className="relative flex min-w-0 items-center gap-0">
+            {/* 1 · YOUR PRODUCTS input panel */}
+            <div className="w-[152px] shrink-0 rounded-2xl border border-cyan-200/30 bg-[linear-gradient(180deg,rgba(34,211,238,0.1),rgba(255,255,255,0.02))] p-4 shadow-[0_18px_46px_-24px_rgba(34,211,238,0.75)] xl:w-[172px]">
+              <p className="font-display text-[10.5px] font-bold uppercase tracking-[0.2em] text-cyan-100">
                 Your products
               </p>
-              <ul className="mt-2.5 space-y-1.5">
+              <ul className="mt-3 space-y-2">
                 {["Product", "Logo", "Cast"].map((label) => (
                   <li
                     key={label}
-                    className="rounded-lg border border-white/10 bg-black/30 px-2 py-1.5 font-display text-[9.5px] font-bold uppercase tracking-[0.16em] text-slate-300"
+                    className="rounded-lg border border-white/10 bg-black/35 px-2.5 py-2 font-display text-[10.5px] font-bold uppercase tracking-[0.16em] text-slate-200"
                   >
                     {label}
                   </li>
                 ))}
               </ul>
-              <p className="mt-2.5 rounded-lg border border-dashed border-cyan-200/35 px-2 py-1.5 text-center font-display text-[9.5px] font-bold uppercase tracking-[0.16em] text-cyan-100">
+              <p className="mt-3 rounded-lg border border-dashed border-cyan-200/40 px-2.5 py-2 text-center font-display text-[10.5px] font-bold uppercase tracking-[0.16em] text-cyan-100">
                 + Product
               </p>
             </div>
 
-            {/* connector */}
-            <span aria-hidden className="h-px w-4 shrink-0 bg-gradient-to-r from-cyan-300/10 to-cyan-300/70 xl:w-6" />
+            {/* animated connector · input → workflow */}
+            <span
+              aria-hidden
+              className="relative h-px w-6 shrink-0 overflow-hidden bg-gradient-to-r from-cyan-300/20 to-cyan-300/70 xl:w-8"
+            >
+              <span className="absolute inset-y-0 left-0 w-1/2 bg-cyan-100 [animation:hero-flow-pulse_6.5s_linear_infinite] motion-reduce:animate-none motion-reduce:opacity-0" />
+            </span>
 
-            {/* 2 · the prebuilt workflow itself */}
+            {/* 2 · the prebuilt workflow itself — the centrepiece */}
             <div className="min-w-0 flex-1">
-              <HeroWorkflowAnimation />
+              <HeroWorkflowAnimation grand />
             </div>
 
-            {/* connector */}
-            <span aria-hidden className="h-px w-4 shrink-0 bg-gradient-to-r from-cyan-300/70 to-cyan-300/20 xl:w-6" />
+            {/* animated connector · workflow → outputs */}
+            <span
+              aria-hidden
+              className="relative h-px w-6 shrink-0 overflow-hidden bg-gradient-to-r from-cyan-300/70 to-cyan-300/25 xl:w-8"
+            >
+              <span className="absolute inset-y-0 left-0 w-1/2 bg-cyan-100 [animation:hero-flow-pulse_6.5s_linear_infinite_1.6s] motion-reduce:animate-none motion-reduce:opacity-0" />
+            </span>
 
-            {/* 3 · finished campaign — one real live preview */}
-            <div className="w-[168px] shrink-0 xl:w-[188px]">
-              <div className="overflow-hidden rounded-2xl border border-cyan-200/30 bg-black/50 shadow-[0_0_36px_-16px_rgba(34,211,238,0.8)]">
-                {heroStoryPreview ? (
-                  <AutoMedia
-                    media={heroStoryPreview.media}
-                    className="aspect-[9/16] w-full object-cover"
-                    eager
-                  />
-                ) : (
-                  <div className="aspect-[9/16] w-full animate-pulse bg-white/[0.05]" />
-                )}
-              </div>
-              <p className="mt-2 text-center font-display text-[9px] font-bold uppercase tracking-[0.22em] text-slate-500">
-                Campaign
-              </p>
+            {/* 3 · finished campaigns — a small stack of real live previews */}
+            <div className="relative w-[190px] shrink-0 xl:w-[214px]">
+              {heroStoryPreviews.length ? (
+                <div className="relative">
+                  {heroStoryPreviews.slice(1, 3).map((entry, index) => (
+                    <div
+                      key={`hero-stack-back-${entry.template.id ?? index}`}
+                      aria-hidden
+                      className="absolute inset-0 overflow-hidden rounded-2xl border border-white/10 bg-black/60"
+                      style={{
+                        transform: `translate(${(index + 1) * 12}px, ${(index + 1) * 10}px) scale(${1 - (index + 1) * 0.045})`,
+                        zIndex: 1 - index,
+                        opacity: 0.5 - index * 0.18,
+                      }}
+                    />
+                  ))}
+                  <div
+                    key={heroStoryPreviews[heroStackIndex % heroStoryPreviews.length]?.template.id ?? heroStackIndex}
+                    className="relative z-10 overflow-hidden rounded-2xl border border-cyan-200/40 bg-black/50 shadow-[0_0_48px_-18px_rgba(34,211,238,0.85)] [animation:hero-stack-settle_6.5s_ease-out_infinite] motion-reduce:animate-none"
+                  >
+                    <AutoMedia
+                      media={heroStoryPreviews[heroStackIndex % heroStoryPreviews.length].media}
+                      className="aspect-[9/16] w-full object-cover"
+                      eager
+                    />
+                  </div>
+                </div>
+              ) : (
+                <div className="aspect-[9/16] w-full animate-pulse rounded-2xl bg-white/[0.05]" />
+              )}
             </div>
           </div>
+
 
         </div>
 
