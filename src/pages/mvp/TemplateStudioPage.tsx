@@ -1291,6 +1291,7 @@ export default function TemplateStudioPage() {
       return renderInputField(member.input, compact, member.label !== member.input.label ? member.label : undefined);
     }
     return (
+
       <CampaignAssetGroupCard
         key={group.id}
         group={group}
