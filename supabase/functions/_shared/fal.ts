@@ -549,8 +549,8 @@ export function buildSeedanceReferenceInput(args: {
   const input: Record<string, unknown> = {
     prompt: clampVideoPrompt(args.prompt),
     image_urls: urls,
-
     duration,
+
     resolution,
     aspect_ratio: aspectRatio,
     generate_audio: args.generateAudio !== false,
