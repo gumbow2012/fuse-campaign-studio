@@ -419,6 +419,15 @@ const App = () => (
               }
             />
 
+            <Route
+              path="/admin/messages"
+              element={
+                <AdminRoute>
+                  <AdminMessages />
+                </AdminRoute>
+              }
+            />
+
 
             <Route
               path="/admin/experiments/product-launch"
