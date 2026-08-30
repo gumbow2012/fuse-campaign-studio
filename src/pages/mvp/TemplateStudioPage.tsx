@@ -61,7 +61,6 @@ import { getStaticInputs } from "@/services/templateInputMap";
 import CreditConfirmModal from "@/components/CreditConfirmModal";
 import { trackEvent } from "@/lib/metaPixel";
 import { track } from "@/lib/analytics/track";
-import GenerateAuthGateModal from "@/components/auth/GenerateAuthGateModal";
 import GeneratePaywallModal from "@/components/mvp/GeneratePaywallModal";
 import TemplateUnlockModal from "@/components/mvp/TemplateUnlockModal";
 import PlanActivationNotice from "@/components/mvp/PlanActivationNotice";
@@ -3344,10 +3343,19 @@ export default function TemplateStudioPage() {
       />
       </div>
 
-      {/* ACQUISITION — guest UNLOCK: confirmation → existing guest checkout. */}
+      {/* ACQUISITION — payment-first ACCESS modal (guest unlock + generate gate). */}
       <TemplateUnlockModal
-        open={unlockOpen && !user && !!selectedTemplate}
-        onOpenChange={setUnlockOpen}
+        open={(unlockOpen || authGateOpen) && !user && !!selectedTemplate}
+        onOpenChange={(next) => {
+          setUnlockOpen(next);
+          if (!next && authGateOpen) {
+            setAuthGateOpen(false);
+            track("generate_auth_gate_dismissed", {
+              templateId: selectedTemplate ? String(selectedTemplate.id) : null,
+              has_inputs: gateHasInputs,
+            });
+          }
+        }}
         templateId={selectedTemplate ? String(selectedTemplate.id) : null}
         displayName={campaignDisplayName(selectedTemplate?.name ?? "")}
         fullName={selectedTemplate?.name ?? ""}
@@ -3364,8 +3372,6 @@ export default function TemplateStudioPage() {
         }
       />
 
-      {/* P2 — logged-out Generate click: blur the builder, gate on auth. */}
-
       <GeneratePaywallModal
         open={paywallOpen}
         onOpenChange={setPaywallOpen}
@@ -3374,18 +3380,6 @@ export default function TemplateStudioPage() {
         creditBalance={displayedCreditBalance}
       />
 
-      <GenerateAuthGateModal
-        open={authGateOpen}
-        templateId={selectedTemplate ? String(selectedTemplate.id) : null}
-        returnTo={gateReturnTo}
-        onClose={() => {
-          setAuthGateOpen(false);
-          track("generate_auth_gate_dismissed", {
-            templateId: selectedTemplate ? String(selectedTemplate.id) : null,
-            has_inputs: gateHasInputs,
-          });
-        }}
-      />
     </SiteShell>
 
 
