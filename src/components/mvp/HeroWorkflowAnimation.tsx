@@ -122,7 +122,7 @@ export default function HeroWorkflowAnimation({
           viewBox="0 0 360 168"
           className={cn(
             "relative w-full",
-            compact ? "h-[190px]" : grand ? "h-[200px] xl:h-[236px]" : "h-[168px] sm:h-[188px]",
+            compact ? "h-[190px]" : grand ? "h-auto" : "h-[168px] sm:h-[188px]",
           )}
           role="img"
           aria-label="Diagram: products branch into campaign images and video clips, then a final campaign."
