@@ -531,8 +531,20 @@ export default function HomePage() {
     return picked;
   }, [templates, pinnedHero.left, heroPair]);
 
-
-
+  /**
+   * Desktop hero: the front preview rotates once per workflow loop (~6.5s), so
+   * the stack settles just as the diagram reaches FINAL. Reduced motion holds.
+   */
+  const [heroStackIndex, setHeroStackIndex] = useState(0);
+  useEffect(() => {
+    if (heroStoryPreviews.length < 2) return;
+    if (typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return;
+    const timer = window.setInterval(
+      () => setHeroStackIndex((value) => (value + 1) % heroStoryPreviews.length),
+      6500,
+    );
+    return () => window.clearInterval(timer);
+  }, [heroStoryPreviews.length]);
 
 
   /** Every entry already claimed by the allocator — perf shelves reuse these only. */
