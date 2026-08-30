@@ -12,6 +12,8 @@ import PageMeta from "@/components/mvp/PageMeta";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import EmailComposerDialog, { type EmailComposerTarget } from "@/components/admin/EmailComposerDialog";
+
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
