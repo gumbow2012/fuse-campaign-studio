@@ -503,10 +503,19 @@ export default function HomePage() {
   const yourVersion = pinnedHero.right ?? heroPair[1] ?? null;
 
   /**
-   * Desktop hero story preview — one real, live campaign asset. Preference
-   * order only; falls back to the allocator so it is never empty-by-name.
+   * Desktop hero output stack — up to three real, live campaign assets.
+   * Preference order only; falls back to the allocator so it is never empty.
    */
-  const heroStoryPreview = useMemo<Entry | null>(() => {
+  const heroStoryPreviews = useMemo<Entry[]>(() => {
+    const picked: Entry[] = [];
+    const seen = new Set<string>();
+    const push = (entry: Entry | null) => {
+      if (!entry) return;
+      const key = String(entry.template.id ?? entry.template.name ?? "").trim().toLowerCase();
+      if (!key || seen.has(key) || picked.length >= 3) return;
+      seen.add(key);
+      picked.push(entry);
+    };
     const find = (needle: string): Entry | null => {
       const template = templates.find((candidate) =>
         String(candidate.name ?? "").trim().toLowerCase().includes(needle),
@@ -515,12 +524,13 @@ export default function HomePage() {
       const media = resolveMedia(template);
       return media ? ({ template, media } as Entry) : null;
     };
-    for (const needle of ["grillzzzz", "grillz", "broken planet", "spider man", "airport"]) {
-      const match = find(needle);
-      if (match) return match;
+    for (const needle of ["grillzzzz", "grillz", "airport", "spider", "broken planet"]) {
+      push(find(needle));
     }
-    return pinnedHero.left ?? heroPair[0] ?? null;
+    for (const entry of [pinnedHero.left, heroPair[0], heroPair[1]]) push(entry ?? null);
+    return picked;
   }, [templates, pinnedHero.left, heroPair]);
+
 
 
 
