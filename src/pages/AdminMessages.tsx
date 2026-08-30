@@ -5,13 +5,15 @@
 
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Check, Loader2, Mail } from "lucide-react";
+import { Check, Loader2, Mail, Send } from "lucide-react";
 import SiteShell from "@/components/mvp/SiteShell";
 import PageMeta from "@/components/mvp/PageMeta";
 import { Button } from "@/components/ui/button";
+import EmailComposerDialog, { type EmailComposerTarget } from "@/components/admin/EmailComposerDialog";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+
 
 export type ContactMessageRow = {
   id: string;
