@@ -448,7 +448,10 @@ export async function uploadFile(
   const data = await api<UploadApiPayload>("/api/upload", token, {
     method: "POST",
     formData: fd,
+    timeoutMs: 60_000,
+    timeoutMessage: "Upload timed out — please retry.",
   });
+
   return {
     imageUrl: data.imageUrl || data.url,
     key: data.key || data.assetKey || "",
