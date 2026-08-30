@@ -69,12 +69,13 @@ export default function BrandActivationBanner({
   const navigate = useNavigate();
   const { user } = useAuth();
   const { activeBrand } = useBrand();
-  const { readiness, activationState, nudge, completionPercent, loading } = useBrandActivation();
+  const { readiness, activationState, nudge, completionPercent, loading, brandSetupEnabled } =
+    useBrandActivation();
   const [dismissed, setDismissed] = useState(false);
   const shownFor = useRef<string | null>(null);
 
   const content = useMemo(() => {
-    if (loading || !user) return null;
+    if (loading || !user || !brandSetupEnabled) return null;
 
     if (!activeBrand) {
       return {
@@ -115,7 +116,7 @@ export default function BrandActivationBanner({
       deepLink: `${ONBOARDING_ROUTE}?brand=${encodeURIComponent(activeBrand.id)}&step=${missing.step}`,
       missingKey: missing.key,
     };
-  }, [loading, user, activeBrand, readiness, nudge?.deepLink]);
+  }, [loading, user, brandSetupEnabled, activeBrand, readiness, nudge?.deepLink]);
 
   /** Changes whenever readiness meaningfully advances, which re-shows the banner. */
   const signature = content

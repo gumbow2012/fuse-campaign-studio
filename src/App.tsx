@@ -17,6 +17,7 @@ import { captureUtmParams } from "@/lib/utmParams";
 
 import { useBrandActivationReminders } from "@/hooks/useBrandActivationReminders";
 import CustomerRoute from "@/components/CustomerRoute";
+import PaidRoute from "@/components/PaidRoute";
 import BrandProfilesPage from "@/pages/BrandProfilesPage";
 import BrandOnboardingPage from "@/pages/BrandOnboardingPage";
 import AvatarProfilesPage from "@/pages/AvatarProfilesPage";
@@ -180,7 +181,9 @@ const App = () => (
               path="/app/brand"
               element={
                 <CustomerRoute>
-                  <BrandProfilesPage />
+                  <PaidRoute>
+                    <BrandProfilesPage />
+                  </PaidRoute>
                 </CustomerRoute>
               }
             />
@@ -188,7 +191,9 @@ const App = () => (
               path="/app/brand/onboarding"
               element={
                 <CustomerRoute>
-                  <BrandOnboardingPage />
+                  <PaidRoute>
+                    <BrandOnboardingPage />
+                  </PaidRoute>
                 </CustomerRoute>
               }
             />

@@ -19,6 +19,7 @@ import {
   type BrandActivationState,
 } from "@/lib/brandActivation";
 import { readLocalActivationState } from "@/lib/brandActivationLocal";
+import { isPaidPlan } from "@/lib/planEntitlement";
 
 export interface UseBrandActivation {
   nudge: BrandActivationNudge;
