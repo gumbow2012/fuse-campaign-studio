@@ -871,7 +871,6 @@ export default function TemplateStudioPage() {
   const deepLinkRevealedRef = useRef(false);
   useEffect(() => {
     if (deepLinkRevealedRef.current) return;
-    if (!user) return; // guests get the UNLOCK confirmation instead of an uploader
     if (!isCompactLayout || !deepLinkTemplateId) return;
     if (deepLinkTemplateId !== selectedTemplateId) return;
     deepLinkRevealedRef.current = true;
@@ -880,15 +879,9 @@ export default function TemplateStudioPage() {
     return () => window.clearTimeout(timer);
   }, [isCompactLayout, deepLinkTemplateId, selectedTemplateId, user]);
 
-  /* Guest arriving on a template deep link: acquisition confirmation, once. */
-  const deepLinkUnlockRef = useRef(false);
-  useEffect(() => {
-    if (deepLinkUnlockRef.current || user) return;
-    if (!deepLinkTemplateId || deepLinkTemplateId !== selectedTemplateId) return;
-    deepLinkUnlockRef.current = true;
-    track("template_unlock_click", { template_id: deepLinkTemplateId, surface: "deep_link" });
-    setUnlockOpen(true);
-  }, [deepLinkTemplateId, selectedTemplateId, user]);
+  /* Deep links only SELECT + open the builder — never checkout. Purchase stays
+     behind the builder's explicit "Unlock access →" CTA. */
+
 
 
 
