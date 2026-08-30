@@ -2329,11 +2329,43 @@ export default function TemplateStudioPage() {
       setAutoRunIntent(null);
     };
 
-    if (!selectedTemplate.versionId || !requiredInputsAreReady) {
-      // Restored, but not runnable without more input — never auto-run blind.
+    if (!selectedTemplate.versionId) {
+      // Template genuinely not runnable — drop the intent as before.
       consume();
       return;
     }
+
+    if (!requiredInputsAreReady) {
+      /*
+       * Keep the intent ALIVE: the only blocker is user input, so this effect
+       * re-runs and generates automatically once the last required asset lands.
+       */
+      const signature = intentSignature(autoRunIntent);
+      if (finishPromptRef.current !== signature) {
+        finishPromptRef.current = signature;
+        const missing = inputFields.filter((field) => field.required && !isFieldFilled(field));
+        setFinishRunPrompt(missing.map((field) => field.label).filter(Boolean));
+        const firstMissing = missing[0];
+        const targetGroup = firstMissing
+          ? inputGroups.find((group) =>
+              group.members.some((member) => member.input.key === firstMissing.key),
+            )
+          : null;
+        if (targetGroup) {
+          setHighlightGroupId(targetGroup.id);
+          window.setTimeout(() => {
+            document
+              .getElementById(`campaign-input-group-${targetGroup.id}`)
+              ?.scrollIntoView({ behavior: "smooth", block: "center" });
+          }, 220);
+        }
+      }
+      return;
+    }
+
+    setFinishRunPrompt(null);
+    setHighlightGroupId(null);
+
 
     const required = isPrivilegedUser ? 0 : creditsRequired;
     const available = isPrivilegedUser ? required : displayedCreditBalance;
