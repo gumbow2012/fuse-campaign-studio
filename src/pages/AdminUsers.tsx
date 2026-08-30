@@ -336,13 +336,23 @@ export default function AdminUsers() {
                             Send alert
                           </Button>
                           {row.email ? (
-                            <Button asChild size="sm" variant="outline">
-                              <a href={`mailto:${row.email}`}>
-                                <Mail className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
-                                Email
-                              </a>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => {
+                                setComposerTarget({
+                                  to: row.email as string,
+                                  subject: "",
+                                  body: `Hi ${row.name || "there"},\n\n`,
+                                });
+                                setComposerOpen(true);
+                              }}
+                            >
+                              <Mail className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
+                              Email
                             </Button>
                           ) : null}
+
                         </div>
                       </div>
                     </div>
