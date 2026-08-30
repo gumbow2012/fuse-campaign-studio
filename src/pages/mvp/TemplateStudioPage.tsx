@@ -2635,9 +2635,39 @@ export default function TemplateStudioPage() {
           </div>
         ) : null}
 
-        {!hasActiveCampaignWorkspace ? (
+        {/* P6b — signed in, but the run still needs assets. Never a dead end. */}
+        {finishRunPrompt ? (
+          <div className="mt-6 rounded-[1.5rem] border border-cyan-300/30 bg-cyan-300/[0.08] p-5">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="font-display text-sm font-bold uppercase tracking-[0.18em] text-cyan-100">
+                  ✓ You're signed in
+                </p>
+                <p className="mt-2 text-sm leading-6 text-cyan-50/90">
+                  {finishRunPrompt.length
+                    ? `Add ${finishRunPrompt.join(", ")} and your campaign will generate automatically.`
+                    : "Add the remaining required assets and your campaign will generate automatically."}
+                </p>
+              </div>
+              <button
+                type="button"
+                aria-label="Dismiss"
+                onClick={() => {
+                  setFinishRunPrompt(null);
+                  setHighlightGroupId(null);
+                }}
+                className="rounded-full p-1.5 text-cyan-100/70 transition hover:bg-white/10 hover:text-white"
+              >
+                <X className="h-4 w-4" aria-hidden />
+              </button>
+            </div>
+          </div>
+        ) : null}
+
+        {!hasActiveCampaignWorkspace && !pendingIntentInProgress ? (
           <BrandActivationBanner surface="marketplace" className="mt-6" />
         ) : null}
+
 
         {isPrivilegedUser ? (
           <section className="mt-6 rounded-[1.75rem] border border-cyan-300/20 bg-cyan-300/[0.06] p-4">
