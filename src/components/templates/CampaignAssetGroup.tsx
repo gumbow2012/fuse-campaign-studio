@@ -172,10 +172,9 @@ export function CampaignAssetGroupModal({
               key={member.input.key}
               className="rounded-[1.1rem] border border-white/10 bg-black/25 p-3"
             >
-              <div className="mb-2 flex flex-wrap items-center gap-2">
-                <p className="font-display text-[10.5px] font-semibold uppercase tracking-[0.16em] text-slate-100">
-                  {member.label}
-                </p>
+              {renderMember(member.input.key)}
+              <p className="mt-2 flex flex-wrap items-center gap-2 text-[11px] leading-4 text-slate-400">
+                {member.helperText ? <span>{member.helperText}</span> : null}
                 <span
                   className={cn(
                     "rounded-full border px-2 py-0.5 font-display text-[9px] uppercase tracking-[0.16em]",
@@ -186,11 +185,7 @@ export function CampaignAssetGroupModal({
                 >
                   {member.required ? "Required" : "Optional"}
                 </span>
-              </div>
-              {member.helperText ? (
-                <p className="mb-2 text-[11px] leading-4 text-slate-400">{member.helperText}</p>
-              ) : null}
-              {renderMember(member.input.key)}
+              </p>
             </div>
           ))}
         </div>
