@@ -1485,10 +1485,27 @@ export default function TemplateStudioPage() {
     )?.key ?? null;
 
   /*
+   * Anonymous temp upload for one slot. Wrapped so a failure/timeout always
+   * lands the slot in a retryable "error" state — never an endless spinner.
+   */
+  const startAnonUpload = (key: string, file: File) => {
+    setAnonUploads((current) => ({ ...current, [key]: { status: "uploading" } }));
+    void uploadAnonymousRunInput(file)
+      .then((url) => setAnonUploads((current) => ({ ...current, [key]: { status: "ready", url } })))
+      .catch((error) => {
+        const message =
+          error instanceof Error && error.message ? error.message : "Upload failed — tap to retry.";
+        setAnonUploads((current) => ({ ...current, [key]: { status: "error", error: message } }));
+        toast({ title: "Upload failed", description: message, variant: "destructive" });
+      });
+  };
+
+  /*
    * Single source of truth for an input slot's UI. Rendered by the desktop
    * builder (compact = false) AND the mobile inline builder (compact = true).
    * Handlers, upload path, autofill release and validation are identical.
    */
+
   const renderInputField = (field: InputField, compact = false, displayLabelOverride?: string) =>
     field.type === "image" ? (
       <div
@@ -1537,25 +1554,8 @@ export default function TemplateStudioPage() {
                 });
                 return;
               }
-              setAnonUploads((current) => ({
-                ...current,
-                [field.key]: { status: "uploading" },
-              }));
-              void uploadAnonymousRunInput(nextFile)
-                .then((url) =>
-                  setAnonUploads((current) => ({
-                    ...current,
-                    [field.key]: { status: "ready", url },
-                  })),
-                )
-                .catch((error) => {
-                  const message = error instanceof Error ? error.message : "Upload failed.";
-                  setAnonUploads((current) => ({
-                    ...current,
-                    [field.key]: { status: "error", error: message },
-                  }));
-                  toast({ title: "Upload failed", description: message, variant: "destructive" });
-                });
+              startAnonUpload(field.key, nextFile);
+
             }
           }}
           libraryAsset={libraryAssets[field.key] ?? null}
@@ -1583,23 +1583,31 @@ export default function TemplateStudioPage() {
           }}
         />
         {!user && anonUploads[field.key] ? (
-          <p
-            className={cn(
-              "mt-2 text-[11px] leading-relaxed",
-              anonUploads[field.key]?.status === "error"
-                ? "text-rose-200"
-                : anonUploads[field.key]?.status === "ready"
-                  ? "text-emerald-200"
-                  : "text-cyan-100",
-            )}
-          >
-            {anonUploads[field.key]?.status === "uploading"
-              ? "Saving upload for this session..."
-              : anonUploads[field.key]?.status === "ready"
-                ? "Upload saved — it will still be here after you sign in."
-                : anonUploads[field.key]?.error}
-          </p>
+          anonUploads[field.key]?.status === "error" ? (
+            <button
+              type="button"
+              onClick={() => {
+                const pending = files[field.key];
+                if (pending) startAnonUpload(field.key, pending);
+              }}
+              className="mt-2 text-left text-[11px] font-semibold leading-relaxed text-rose-200 underline decoration-rose-300/50 underline-offset-2 hover:text-rose-100"
+            >
+              {anonUploads[field.key]?.error ?? "Upload failed"} — tap to retry
+            </button>
+          ) : (
+            <p
+              className={cn(
+                "mt-2 text-[11px] leading-relaxed",
+                anonUploads[field.key]?.status === "ready" ? "text-emerald-200" : "text-cyan-100",
+              )}
+            >
+              {anonUploads[field.key]?.status === "uploading"
+                ? "Saving upload for this session..."
+                : "Upload saved — it will still be here after you sign in."}
+            </p>
+          )
         ) : null}
+
       </div>
     ) : (
       <div

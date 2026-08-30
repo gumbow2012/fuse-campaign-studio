@@ -84,22 +84,52 @@ function headers(token: string, isFormData = false): Record<string, string> {
 async function api<T = unknown>(
   path: string,
   token: string,
-  opts: { method?: string; body?: unknown; formData?: FormData } = {},
+  opts: {
+    method?: string;
+    body?: unknown;
+    formData?: FormData;
+    /** Hard ceiling so a hung endpoint can never leave the UI spinning. */
+    timeoutMs?: number;
+    timeoutMessage?: string;
+  } = {},
 ): Promise<T> {
   const isForm = !!opts.formData;
-  const res = await fetch(`${WORKER_BASE}${path}`, {
-    method: opts.method || "GET",
-    headers: headers(token, isForm),
-    body: isForm
-      ? opts.formData
-      : opts.body
-        ? JSON.stringify(opts.body)
-        : undefined,
-  });
+  const controller = new AbortController();
+  const timeoutMs = opts.timeoutMs;
+  const timer = timeoutMs
+    ? setTimeout(() => controller.abort(), timeoutMs)
+    : undefined;
+
+  let res: Response;
+  try {
+    res = await fetch(`${WORKER_BASE}${path}`, {
+      method: opts.method || "GET",
+      headers: headers(token, isForm),
+      body: isForm
+        ? opts.formData
+        : opts.body
+          ? JSON.stringify(opts.body)
+          : undefined,
+      signal: controller.signal,
+    });
+  } catch (error) {
+    if (controller.signal.aborted) {
+      throw new Error(opts.timeoutMessage || "Request timed out — please retry.");
+    }
+    throw new Error(
+      error instanceof Error && error.message
+        ? `Network error — please retry. (${error.message})`
+        : "Network error — please retry.",
+    );
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+
   const data = (await res.json().catch(() => ({}))) as ApiErrorPayload;
   if (!res.ok) throw new Error(data.error || `API ${res.status}`);
   return data as T;
 }
+
 
 function normalizeInputType(value: string | null | undefined) {
   const normalized = (value || "image").toLowerCase();
@@ -418,7 +448,10 @@ export async function uploadFile(
   const data = await api<UploadApiPayload>("/api/upload", token, {
     method: "POST",
     formData: fd,
+    timeoutMs: 60_000,
+    timeoutMessage: "Upload timed out — please retry.",
   });
+
   return {
     imageUrl: data.imageUrl || data.url,
     key: data.key || data.assetKey || "",

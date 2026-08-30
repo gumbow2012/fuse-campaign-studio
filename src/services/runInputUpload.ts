@@ -29,6 +29,44 @@ function publicUrl(path: string) {
   return supabase.storage.from(BUCKET).getPublicUrl(path).data.publicUrl;
 }
 
+/** Timeouts so a hung upload/authorization can never leave a slot spinning. */
+const AUTHORIZE_TIMEOUT_MS = 30_000;
+const UPLOAD_TIMEOUT_MS = 90_000;
+
+function withTimeout<T>(promise: Promise<T>, ms: number, message: string) {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(message)), ms);
+    promise.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (error) => {
+        clearTimeout(timer);
+        reject(error);
+      },
+    );
+  });
+}
+
+async function fetchWithTimeout(url: string, init: RequestInit, ms: number) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), ms);
+  try {
+    return await fetch(url, { ...init, signal: controller.signal });
+  } catch (error) {
+    if (controller.signal.aborted) throw new Error("Upload timed out — please retry.");
+    throw new Error(
+      error instanceof Error && error.message
+        ? `Upload failed — please retry. (${error.message})`
+        : "Upload failed — please retry.",
+    );
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+
 /**
  * Authenticated customer flow — file BYTES go directly to Supabase Storage.
  * The path must start with the user id to satisfy the
@@ -44,12 +82,17 @@ export async function uploadRunInputFile(file: File) {
 
   const path = `${user.id}/run-inputs/${crypto.randomUUID()}.${extensionFor(file)}`;
 
-  const { error } = await supabase.storage.from(BUCKET).upload(path, file, {
-    contentType: file.type || undefined,
-    upsert: false,
-    cacheControl: "3600",
-  });
+  const { error } = await withTimeout(
+    supabase.storage.from(BUCKET).upload(path, file, {
+      contentType: file.type || undefined,
+      upsert: false,
+      cacheControl: "3600",
+    }),
+    UPLOAD_TIMEOUT_MS,
+    "Upload timed out — please retry.",
+  );
   if (error) throw new Error(error.message);
+
 
   return publicUrl(path);
 }
@@ -80,27 +123,36 @@ export async function uploadAnonymousRunInput(file: File) {
     throw new Error("This image is larger than 12 MB — please use a smaller file.");
   }
 
-  const response = await fetch(`${SUPABASE_URL}/functions/v1/upload-run-input`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", apikey: SUPABASE_PUBLISHABLE_KEY },
-    body: JSON.stringify({
-      action: "sign-anon",
-      anonSessionId: getAnonUploadSessionId(),
-      filename: file.name,
-      contentType: file.type,
-      size: file.size,
-    }),
-  });
+  const response = await fetchWithTimeout(
+    `${SUPABASE_URL}/functions/v1/upload-run-input`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json", apikey: SUPABASE_PUBLISHABLE_KEY },
+      body: JSON.stringify({
+        action: "sign-anon",
+        anonSessionId: getAnonUploadSessionId(),
+        filename: file.name,
+        contentType: file.type,
+        size: file.size,
+      }),
+    },
+    AUTHORIZE_TIMEOUT_MS,
+  );
   const data = await response.json().catch(() => null);
   if (!response.ok) throw new Error(data?.error ?? "Could not authorize upload.");
   if (!data?.path || !data?.token) throw new Error("Upload authorization did not return a signed URL.");
 
-  const { error } = await supabase.storage
-    .from(BUCKET)
-    .uploadToSignedUrl(String(data.path), String(data.token), file, {
-      contentType: file.type || undefined,
-    });
+  const { error } = await withTimeout(
+    supabase.storage
+      .from(BUCKET)
+      .uploadToSignedUrl(String(data.path), String(data.token), file, {
+        contentType: file.type || undefined,
+      }),
+    UPLOAD_TIMEOUT_MS,
+    "Upload timed out — please retry.",
+  );
   if (error) throw new Error(error.message);
+
 
   return String(data.publicUrl ?? publicUrl(String(data.path)));
 }
@@ -112,26 +164,35 @@ export async function uploadAnonymousRunInput(file: File) {
 export async function uploadRunInputFileWithRunnerCode(file: File, runnerCode: string) {
   assertWithinLimit(file);
 
-  const response = await fetch(`${SUPABASE_URL}/functions/v1/upload-run-input`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      apikey: SUPABASE_PUBLISHABLE_KEY,
-      "x-runner-code": runnerCode,
+  const response = await fetchWithTimeout(
+    `${SUPABASE_URL}/functions/v1/upload-run-input`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        apikey: SUPABASE_PUBLISHABLE_KEY,
+        "x-runner-code": runnerCode,
+      },
+      body: JSON.stringify({ action: "sign", filename: file.name }),
     },
-    body: JSON.stringify({ action: "sign", filename: file.name }),
-  });
+    AUTHORIZE_TIMEOUT_MS,
+  );
   const data = await response.json().catch(() => null);
 
   if (!response.ok) throw new Error(data?.error ?? "Could not authorize upload.");
   if (!data?.path || !data?.token) throw new Error("Upload authorization did not return a signed URL.");
 
-  const { error } = await supabase.storage
-    .from(BUCKET)
-    .uploadToSignedUrl(String(data.path), String(data.token), file, {
-      contentType: file.type || undefined,
-    });
+  const { error } = await withTimeout(
+    supabase.storage
+      .from(BUCKET)
+      .uploadToSignedUrl(String(data.path), String(data.token), file, {
+        contentType: file.type || undefined,
+      }),
+    UPLOAD_TIMEOUT_MS,
+    "Upload timed out — please retry.",
+  );
   if (error) throw new Error(error.message);
+
 
   return publicUrl(String(data.path));
 }
