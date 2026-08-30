@@ -107,6 +107,8 @@ export default function SiteShell({ children }: { children: ReactNode }) {
   }> = [
     ...(isAdmin ? [{ to: "/admin/messages", label: "Messages", icon: Inbox, badge: unreadMessages }] : []),
     ...(isAdmin ? [{ to: "/admin/users", label: "Accounts", icon: UsersRound }] : []),
+    ...(isAdmin ? [{ to: "/admin/leads", label: "Leads", icon: UserPlus }] : []),
+
     { to: "/admin/templates", label: "Admin Templates", icon: Layers3 },
     { to: "/app/lab/studio", label: "Image Studio", icon: Sparkles },
     { to: "/app/lab/cinema", label: "Cinema Studio", icon: Clapperboard, featureKey: "cinema_studio" },
