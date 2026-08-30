@@ -7,11 +7,12 @@ import {
   json,
   logAuditEvent,
 } from "../_shared/supabase-admin.ts";
+import { sendEmail } from "../_shared/sendEmail.ts";
 
 const ALERT_RECIPIENT = "kade@maddenmedia.ai";
 
 /**
- * Best-effort alert email. If no provider key is configured we skip silently —
+ * Best-effort alert email. If no provider token is configured we skip silently —
  * the submission itself must never fail because of alerting.
  */
 async function sendContactAlert(payload: {
@@ -20,13 +21,6 @@ async function sendContactAlert(payload: {
   company: string | null;
   message: string;
 }) {
-  const resendKey = Deno.env.get("RESEND_API_KEY");
-  if (!resendKey) {
-    console.log("submit-contact-message: no email provider configured, skipping alert");
-    return { sent: false, reason: "no_provider" as const };
-  }
-
-  const from = Deno.env.get("CONTACT_ALERT_FROM") ?? "FUSE <onboarding@resend.dev>";
   const lines = [
     `Name: ${payload.name}`,
     `Email: ${payload.email}`,
@@ -35,34 +29,25 @@ async function sendContactAlert(payload: {
     payload.message,
   ].join("\n");
 
-  try {
-    const response = await fetch("https://api.resend.com/emails", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${resendKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        from,
-        to: [ALERT_RECIPIENT],
-        reply_to: payload.email,
-        subject: `New FUSE contact: ${payload.name}`,
-        text: lines,
-      }),
-    });
+  const result = await sendEmail({
+    to: ALERT_RECIPIENT,
+    replyTo: payload.email,
+    subject: `New FUSE contact: ${payload.name}`,
+    text: lines,
+  });
 
-    if (!response.ok) {
-      const detail = await response.text().catch(() => "");
-      console.error("submit-contact-message: alert email failed", response.status, detail.slice(0, 500));
-      return { sent: false, reason: "provider_error" as const };
+  if (!result.sent) {
+    if (result.reason === "no_provider") {
+      console.log("submit-contact-message: no email provider configured, skipping alert");
+    } else {
+      console.error("submit-contact-message: alert email failed", result.status);
     }
-
-    return { sent: true, reason: null };
-  } catch (error) {
-    console.error("submit-contact-message: alert email threw", error);
-    return { sent: false, reason: "provider_error" as const };
+    return { sent: false, reason: result.reason };
   }
+
+  return { sent: true, reason: null };
 }
+
 
 Deno.serve(async (request) => {
   if (request.method === "OPTIONS") {
