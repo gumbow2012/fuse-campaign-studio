@@ -1848,7 +1848,33 @@ export default function TemplateStudioPage() {
     track("first_asset_added", { template_id: selectedTemplateId });
   }, [files, libraryAssets, textInputs, selectedTemplateId, user]);
 
+  /**
+   * The ONE explicit purchase entry point on this page ("Unlock access →").
+   * Guests get the payment-first split modal (selection + local setup preserved
+   * through checkout); signed-in unfunded users get the contextual offer.
+   */
+  const openUnlockCheckout = () => {
+    if (!selectedTemplate) return;
+    track("template_unlock_click", {
+      template_id: String(selectedTemplate.id),
+      surface: "builder",
+      credits_required: creditsRequired,
+    });
+    if (!user) {
+      openGenerateAuthGate();
+      return;
+    }
+    track("no_plan_generate_attempt", {
+      template_id: String(selectedTemplate.id),
+      credits_required: creditsRequired,
+      credit_balance: displayedCreditBalance,
+      surface: "builder_unlock",
+    });
+    setPaywallOpen(true);
+  };
+
   const openGenerateAuthGate = () => {
+
     if (selectedTemplate) {
       setPendingGenerationIntent({
         templateId: String(selectedTemplate.id),
