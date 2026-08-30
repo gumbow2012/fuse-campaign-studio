@@ -177,3 +177,6 @@ verify_jwt = false
 [functions.template-factory]
 verify_jwt = false
 
+
+[functions.admin-send-email]
+verify_jwt = true
