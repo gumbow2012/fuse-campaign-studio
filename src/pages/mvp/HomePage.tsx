@@ -829,21 +829,22 @@ export default function HomePage() {
               <span className="block text-cyan-100">Marketplace</span>
             </h1>
 
-            <p className="mt-5 max-w-[520px] font-sans text-[20px] font-bold leading-[1.35] text-white">
+            <p className="mt-4 max-w-[520px] font-sans text-[20px] font-bold leading-[1.3] text-white">
               Viral campaigns. Already built and ready to run.
             </p>
-            <p className="mt-2 max-w-[520px] font-sans text-[15.5px] leading-[1.5] text-slate-300">
+            <p className="mt-1.5 max-w-[520px] font-sans text-[15.5px] leading-[1.45] text-slate-300">
               Pick one. Upload your products. Hit run.
             </p>
 
-            <p className="mt-6 max-w-[520px] font-sans text-[16px] font-extrabold uppercase leading-[1.3] tracking-[0.06em] text-white">
+            <p className="mt-4 max-w-[520px] font-sans text-[16px] font-extrabold uppercase leading-[1.25] tracking-[0.06em] text-white">
               <span className="block">
                 No prompts <span className="text-cyan-300">·</span> No guessing
               </span>
-              <span className="mt-1 block text-cyan-100">Prebuilt expert workflows</span>
+              <span className="mt-0.5 block text-cyan-100">Prebuilt expert workflows</span>
             </p>
 
-            <div className="mt-8 flex flex-wrap items-center gap-3">
+            <div className="mt-6 flex flex-wrap items-center gap-3">
+
               <Button
                 asChild
                 size="lg"
