@@ -64,11 +64,12 @@ function markRanThisSession() {
 export function useBrandActivationReminders(): void {
   const { user } = useAuth();
   const { activeBrand } = useBrand();
-  const { readiness, activationState, completionPercent, loading } = useBrandActivation();
+  const { readiness, activationState, completionPercent, loading, brandSetupEnabled } =
+    useBrandActivation();
   const attempted = useRef(false);
 
   useEffect(() => {
-    if (loading || !user?.id || attempted.current || ranThisSession()) return;
+    if (loading || !brandSetupEnabled || !user?.id || attempted.current || ranThisSession()) return;
 
     // No brand at all → the only reminder is to build one.
     let reminderType: BrandActivationReminderType | null = null;
@@ -124,5 +125,5 @@ export function useBrandActivationReminders(): void {
     }).catch(() => {
       /* reminders are non-critical */
     });
-  }, [loading, user?.id, activeBrand, readiness, activationState, completionPercent]);
+  }, [loading, brandSetupEnabled, user?.id, activeBrand, readiness, activationState, completionPercent]);
 }

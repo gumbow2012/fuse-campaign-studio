@@ -19,6 +19,7 @@ import {
   type BrandActivationState,
 } from "@/lib/brandActivation";
 import { readLocalActivationState } from "@/lib/brandActivationLocal";
+import { isPaidPlan } from "@/lib/planEntitlement";
 
 export interface UseBrandActivation {
   nudge: BrandActivationNudge;
@@ -26,18 +27,22 @@ export interface UseBrandActivation {
   readiness: BrandReadiness | null;
   activationState: BrandActivationState;
   loading: boolean;
+  /** Brand Setup is a paid-plan feature — free accounts see no brand surfaces. */
+  brandSetupEnabled: boolean;
 }
 
 export function useBrandActivation(): UseBrandActivation {
-  const { user } = useAuth();
+  const { user, profile, isAdmin } = useAuth();
   const { activeBrand, loading: brandsLoading } = useBrand();
   const userId = user?.id ?? "";
+  const brandSetupEnabled = isAdmin || isPaidPlan(profile?.plan);
 
   const productsQuery = useQuery({
     queryKey: ["product-profiles", userId || "anon"],
     queryFn: () => listProductProfiles(userId),
-    enabled: !!userId,
+    enabled: !!userId && brandSetupEnabled,
   });
+
 
   const readiness = useMemo(() => {
     if (!activeBrand) return null;
@@ -60,14 +65,27 @@ export function useBrandActivation(): UseBrandActivation {
 
   const nudge = useMemo(
     () =>
-      resolveBrandActivationNudge({
-        brand: activeBrand,
-        readiness,
-        nudgeState: activationState,
-        signupAt: user?.created_at ?? null,
-      }),
-    [activeBrand, readiness, activationState, user?.created_at],
+      brandSetupEnabled
+        ? resolveBrandActivationNudge({
+            brand: activeBrand,
+            readiness,
+            nudgeState: activationState,
+            signupAt: user?.created_at ?? null,
+          })
+        : null,
+    [brandSetupEnabled, activeBrand, readiness, activationState, user?.created_at],
   );
+
+  if (!brandSetupEnabled) {
+    return {
+      nudge: null,
+      completionPercent: 0,
+      readiness: null,
+      activationState: {},
+      loading: false,
+      brandSetupEnabled: false,
+    };
+  }
 
   return {
     nudge,
@@ -75,5 +93,7 @@ export function useBrandActivation(): UseBrandActivation {
     readiness,
     activationState,
     loading: brandsLoading || (!!userId && productsQuery.isLoading),
+    brandSetupEnabled,
   };
 }
+
