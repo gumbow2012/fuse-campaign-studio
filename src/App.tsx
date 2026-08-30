@@ -438,6 +438,16 @@ const App = () => (
               }
             />
 
+            <Route
+              path="/admin/leads"
+              element={
+                <AdminRoute>
+                  <AdminLeads />
+                </AdminRoute>
+              }
+            />
+
+
 
 
             <Route
