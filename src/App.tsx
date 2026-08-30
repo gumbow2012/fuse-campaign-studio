@@ -36,6 +36,7 @@ import AdminTemplateFactory from "@/pages/AdminTemplateFactory";
 import AdminMerchandising from "@/pages/AdminMerchandising";
 import AdminAdLinks from "@/pages/AdminAdLinks";
 import AdminMessages from "@/pages/AdminMessages";
+import AdminUsers from "@/pages/AdminUsers";
 import AdminProductLaunchPrototype from "@/pages/AdminProductLaunchPrototype";
 
 
@@ -427,6 +428,16 @@ const App = () => (
                 </AdminRoute>
               }
             />
+
+            <Route
+              path="/admin/users"
+              element={
+                <AdminRoute>
+                  <AdminUsers />
+                </AdminRoute>
+              }
+            />
+
 
 
             <Route
