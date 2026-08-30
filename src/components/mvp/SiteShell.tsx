@@ -280,6 +280,11 @@ export default function SiteShell({ children }: { children: ReactNode }) {
                       {toolLinks.map((link) => (
                         <NavLink key={link.to} to={link.to} onClick={closeMenu} className={drawerNavLinkClass}>
                           {link.label}
+                          {link.badge ? (
+                            <span className="ml-2 rounded-full bg-cyan-400/20 px-1.5 py-[1px] text-[10px] font-bold text-cyan-200">
+                              {link.badge > 99 ? "99+" : link.badge}
+                            </span>
+                          ) : null}
                         </NavLink>
                       ))}
                     </nav>
