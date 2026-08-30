@@ -14,6 +14,8 @@ import {
   Network,
   Search,
   Sparkles,
+  X,
+
 } from "lucide-react";
 import SiteShell from "@/components/mvp/SiteShell";
 import PageMeta from "@/components/mvp/PageMeta";
@@ -1249,6 +1251,17 @@ export default function TemplateStudioPage() {
   const [openGroupId, setOpenGroupId] = useState<string | null>(null);
   const openGroup = inputGroups.find((group) => group.id === openGroupId) ?? null;
 
+  /*
+   * P6b leak fix (presentation only): after a restored post-signup intent the
+   * run may only be missing user input. We keep the intent alive and tell the
+   * customer exactly what to add — the auto-run effect fires the moment the
+   * last required input lands.
+   */
+  const [finishRunPrompt, setFinishRunPrompt] = useState<string[] | null>(null);
+  const [highlightGroupId, setHighlightGroupId] = useState<string | null>(null);
+  const finishPromptRef = useRef<string | null>(null);
+
+
   const groupFilledCount = (groupId: string) => {
     const group = inputGroups.find((item) => item.id === groupId);
     if (!group) return 0;
@@ -1286,13 +1299,14 @@ export default function TemplateStudioPage() {
   const renderInputGroup = (groupId: string, compact = false) => {
     const group = inputGroups.find((item) => item.id === groupId);
     if (!group) return null;
-    if (!group.multi) {
-      const member = group.members[0];
-      return renderInputField(member.input, compact, member.label !== member.input.label ? member.label : undefined);
-    }
-    return (
+    const inner = !group.multi ? (
+      renderInputField(
+        group.members[0].input,
+        compact,
+        group.members[0].label !== group.members[0].input.label ? group.members[0].label : undefined,
+      )
+    ) : (
       <CampaignAssetGroupCard
-        key={group.id}
         group={group}
         compact={compact}
         filledCount={groupFilledCount(group.id)}
@@ -1302,7 +1316,20 @@ export default function TemplateStudioPage() {
         onOpen={() => setOpenGroupId(group.id)}
       />
     );
+    return (
+      <div
+        id={`campaign-input-group-${group.id}`}
+        className={cn(
+          "rounded-[1.5rem] transition-shadow",
+          highlightGroupId === group.id &&
+            "ring-2 ring-cyan-300/70 ring-offset-2 ring-offset-slate-950 motion-safe:animate-pulse",
+        )}
+      >
+        {inner}
+      </div>
+    );
   };
+
 
   const groupModalNode = (
     <CampaignAssetGroupModal
@@ -2246,6 +2273,16 @@ export default function TemplateStudioPage() {
     };
   }, []);
 
+  /*
+   * While a restored generation is still unfinished, Brand Setup must not
+   * divert the customer away from their first run.
+   */
+  const [pendingIntentInProgress, setPendingIntentInProgress] = useState(false);
+  useEffect(() => {
+    const intent = getPendingGenerationIntent();
+    setPendingIntentInProgress(!!intent && !pendingGenerationConsumed(intent));
+  }, [autoRunIntent, finishRunPrompt, jobId, requiredInputsAreReady, user]);
+
 
   useEffect(() => {
     if (!user || !templates.length) return;
@@ -2304,11 +2341,43 @@ export default function TemplateStudioPage() {
       setAutoRunIntent(null);
     };
 
-    if (!selectedTemplate.versionId || !requiredInputsAreReady) {
-      // Restored, but not runnable without more input — never auto-run blind.
+    if (!selectedTemplate.versionId) {
+      // Template genuinely not runnable — drop the intent as before.
       consume();
       return;
     }
+
+    if (!requiredInputsAreReady) {
+      /*
+       * Keep the intent ALIVE: the only blocker is user input, so this effect
+       * re-runs and generates automatically once the last required asset lands.
+       */
+      const signature = intentSignature(autoRunIntent);
+      if (finishPromptRef.current !== signature) {
+        finishPromptRef.current = signature;
+        const missing = inputFields.filter((field) => field.required && !isFieldFilled(field));
+        setFinishRunPrompt(missing.map((field) => field.label).filter(Boolean));
+        const firstMissing = missing[0];
+        const targetGroup = firstMissing
+          ? inputGroups.find((group) =>
+              group.members.some((member) => member.input.key === firstMissing.key),
+            )
+          : null;
+        if (targetGroup) {
+          setHighlightGroupId(targetGroup.id);
+          window.setTimeout(() => {
+            document
+              .getElementById(`campaign-input-group-${targetGroup.id}`)
+              ?.scrollIntoView({ behavior: "smooth", block: "center" });
+          }, 220);
+        }
+      }
+      return;
+    }
+
+    setFinishRunPrompt(null);
+    setHighlightGroupId(null);
+
 
     const required = isPrivilegedUser ? 0 : creditsRequired;
     const available = isPrivilegedUser ? required : displayedCreditBalance;
@@ -2578,9 +2647,39 @@ export default function TemplateStudioPage() {
           </div>
         ) : null}
 
-        {!hasActiveCampaignWorkspace ? (
+        {/* P6b — signed in, but the run still needs assets. Never a dead end. */}
+        {finishRunPrompt ? (
+          <div className="mt-6 rounded-[1.5rem] border border-cyan-300/30 bg-cyan-300/[0.08] p-5">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="font-display text-sm font-bold uppercase tracking-[0.18em] text-cyan-100">
+                  ✓ You're signed in
+                </p>
+                <p className="mt-2 text-sm leading-6 text-cyan-50/90">
+                  {finishRunPrompt.length
+                    ? `Add ${finishRunPrompt.join(", ")} and your campaign will generate automatically.`
+                    : "Add the remaining required assets and your campaign will generate automatically."}
+                </p>
+              </div>
+              <button
+                type="button"
+                aria-label="Dismiss"
+                onClick={() => {
+                  setFinishRunPrompt(null);
+                  setHighlightGroupId(null);
+                }}
+                className="rounded-full p-1.5 text-cyan-100/70 transition hover:bg-white/10 hover:text-white"
+              >
+                <X className="h-4 w-4" aria-hidden />
+              </button>
+            </div>
+          </div>
+        ) : null}
+
+        {!hasActiveCampaignWorkspace && !pendingIntentInProgress ? (
           <BrandActivationBanner surface="marketplace" className="mt-6" />
         ) : null}
+
 
         {isPrivilegedUser ? (
           <section className="mt-6 rounded-[1.75rem] border border-cyan-300/20 bg-cyan-300/[0.06] p-4">
