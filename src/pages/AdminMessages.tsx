@@ -154,12 +154,28 @@ export default function AdminMessages() {
                   <p className="mt-3 whitespace-pre-wrap text-sm text-foreground/90">{row.message}</p>
 
                   <div className="mt-4 flex flex-wrap items-center gap-2">
+                    <Button
+                      size="sm"
+                      onClick={() => {
+                        setComposerTarget({
+                          to: row.email,
+                          subject: "Re: FUSE",
+                          body: `Hi ${row.name},\n\n`,
+                        });
+                        setComposerRowId(row.id);
+                        setComposerOpen(true);
+                      }}
+                    >
+                      <Send className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
+                      Reply via FUSE
+                    </Button>
                     <Button asChild size="sm" variant="outline">
                       <a href={mailtoLink(row)}>
                         <Mail className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
                         Reply
                       </a>
                     </Button>
+
                     {isNew ? (
                       <Button
                         size="sm"
