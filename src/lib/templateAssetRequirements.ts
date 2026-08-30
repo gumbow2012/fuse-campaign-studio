@@ -37,7 +37,19 @@ export interface TemplateAssetRequirement {
   badExamples?: string[];
   allowUpload: boolean;
   allowLibrary: boolean;
+  /**
+   * PRESENTATION-ONLY grouping metadata (optional, additive). Lets a template
+   * declare that several backend inputs describe ONE real-world product so the
+   * builder can show a single customer-facing card. Never affects execution.
+   */
+  groupId?: string;
+  groupLabel?: string;
+  groupType?: string;
+  customerSlotLabel?: string;
+  helperText?: string;
+  sequence?: number;
 }
+
 
 function text(value: unknown): string | undefined {
   return typeof value === "string" && value.trim() ? value.trim() : undefined;
