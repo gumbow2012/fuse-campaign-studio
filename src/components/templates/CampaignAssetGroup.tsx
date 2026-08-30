@@ -132,7 +132,7 @@ interface GroupModalProps {
   filledCount: number;
   totalCount: number;
   /** Renders the sub-slot's existing picker for a backend input key. */
-  renderMember: (key: string) => ReactNode;
+  renderMember: (key: string, displayLabel: string) => ReactNode;
 }
 
 export function CampaignAssetGroupModal({
@@ -172,7 +172,7 @@ export function CampaignAssetGroupModal({
               key={member.input.key}
               className="rounded-[1.1rem] border border-white/10 bg-black/25 p-3"
             >
-              {renderMember(member.input.key)}
+              {renderMember(member.input.key, member.label)}
               <p className="mt-2 flex flex-wrap items-center gap-2 text-[11px] leading-4 text-slate-400">
                 {member.helperText ? <span>{member.helperText}</span> : null}
                 <span
