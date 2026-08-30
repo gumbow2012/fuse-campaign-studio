@@ -123,27 +123,36 @@ export async function uploadAnonymousRunInput(file: File) {
     throw new Error("This image is larger than 12 MB — please use a smaller file.");
   }
 
-  const response = await fetch(`${SUPABASE_URL}/functions/v1/upload-run-input`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", apikey: SUPABASE_PUBLISHABLE_KEY },
-    body: JSON.stringify({
-      action: "sign-anon",
-      anonSessionId: getAnonUploadSessionId(),
-      filename: file.name,
-      contentType: file.type,
-      size: file.size,
-    }),
-  });
+  const response = await fetchWithTimeout(
+    `${SUPABASE_URL}/functions/v1/upload-run-input`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json", apikey: SUPABASE_PUBLISHABLE_KEY },
+      body: JSON.stringify({
+        action: "sign-anon",
+        anonSessionId: getAnonUploadSessionId(),
+        filename: file.name,
+        contentType: file.type,
+        size: file.size,
+      }),
+    },
+    AUTHORIZE_TIMEOUT_MS,
+  );
   const data = await response.json().catch(() => null);
   if (!response.ok) throw new Error(data?.error ?? "Could not authorize upload.");
   if (!data?.path || !data?.token) throw new Error("Upload authorization did not return a signed URL.");
 
-  const { error } = await supabase.storage
-    .from(BUCKET)
-    .uploadToSignedUrl(String(data.path), String(data.token), file, {
-      contentType: file.type || undefined,
-    });
+  const { error } = await withTimeout(
+    supabase.storage
+      .from(BUCKET)
+      .uploadToSignedUrl(String(data.path), String(data.token), file, {
+        contentType: file.type || undefined,
+      }),
+    UPLOAD_TIMEOUT_MS,
+    "Upload timed out — please retry.",
+  );
   if (error) throw new Error(error.message);
+
 
   return String(data.publicUrl ?? publicUrl(String(data.path)));
 }
