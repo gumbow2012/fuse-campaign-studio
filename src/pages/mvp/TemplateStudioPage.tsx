@@ -1554,25 +1554,8 @@ export default function TemplateStudioPage() {
                 });
                 return;
               }
-              setAnonUploads((current) => ({
-                ...current,
-                [field.key]: { status: "uploading" },
-              }));
-              void uploadAnonymousRunInput(nextFile)
-                .then((url) =>
-                  setAnonUploads((current) => ({
-                    ...current,
-                    [field.key]: { status: "ready", url },
-                  })),
-                )
-                .catch((error) => {
-                  const message = error instanceof Error ? error.message : "Upload failed.";
-                  setAnonUploads((current) => ({
-                    ...current,
-                    [field.key]: { status: "error", error: message },
-                  }));
-                  toast({ title: "Upload failed", description: message, variant: "destructive" });
-                });
+              startAnonUpload(field.key, nextFile);
+
             }
           }}
           libraryAsset={libraryAssets[field.key] ?? null}
