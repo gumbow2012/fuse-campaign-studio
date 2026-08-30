@@ -81,7 +81,31 @@ export default function SiteShell({ children }: { children: ReactNode }) {
   const { user, profile, isAdmin, isCreator, hasAppAccess, signOut } = useAuth();
   const [menuOpen, setMenuOpen] = useState(false);
   const closeMenu = () => setMenuOpen(false);
-  const toolLinks: Array<{ to: string; label: string; icon: typeof Layers3; featureKey?: FeatureKey }> = [
+  /** Unread contact-form messages — admin-only, one cached count query. */
+  const unreadMessagesQuery = useQuery({
+    queryKey: ["admin-contact-messages-unread"],
+    enabled: Boolean(user) && isAdmin,
+    staleTime: 60_000,
+    refetchInterval: 60_000,
+    queryFn: async () => {
+      const { count, error } = await supabase
+        .from("contact_messages")
+        .select("id", { count: "exact", head: true })
+        .eq("status", "new");
+      if (error) throw error;
+      return count ?? 0;
+    },
+  });
+  const unreadMessages = unreadMessagesQuery.data ?? 0;
+
+  const toolLinks: Array<{
+    to: string;
+    label: string;
+    icon: typeof Layers3;
+    featureKey?: FeatureKey;
+    badge?: number;
+  }> = [
+    ...(isAdmin ? [{ to: "/admin/messages", label: "Messages", icon: Inbox, badge: unreadMessages }] : []),
     { to: "/admin/templates", label: "Admin Templates", icon: Layers3 },
     { to: "/app/lab/studio", label: "Image Studio", icon: Sparkles },
     { to: "/app/lab/cinema", label: "Cinema Studio", icon: Clapperboard, featureKey: "cinema_studio" },
