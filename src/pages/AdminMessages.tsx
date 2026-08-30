@@ -5,13 +5,15 @@
 
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Check, Loader2, Mail } from "lucide-react";
+import { Check, Loader2, Mail, Send } from "lucide-react";
 import SiteShell from "@/components/mvp/SiteShell";
 import PageMeta from "@/components/mvp/PageMeta";
 import { Button } from "@/components/ui/button";
+import EmailComposerDialog, { type EmailComposerTarget } from "@/components/admin/EmailComposerDialog";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+
 
 export type ContactMessageRow = {
   id: string;
@@ -43,6 +45,10 @@ function mailtoLink(row: ContactMessageRow) {
 export default function AdminMessages() {
   const queryClient = useQueryClient();
   const [newOnly, setNewOnly] = useState(false);
+  const [composerOpen, setComposerOpen] = useState(false);
+  const [composerTarget, setComposerTarget] = useState<EmailComposerTarget | null>(null);
+  const [composerRowId, setComposerRowId] = useState<string | null>(null);
+
 
   const messagesQuery = useQuery({
     queryKey: ["admin-contact-messages"],
@@ -148,12 +154,28 @@ export default function AdminMessages() {
                   <p className="mt-3 whitespace-pre-wrap text-sm text-foreground/90">{row.message}</p>
 
                   <div className="mt-4 flex flex-wrap items-center gap-2">
+                    <Button
+                      size="sm"
+                      onClick={() => {
+                        setComposerTarget({
+                          to: row.email,
+                          subject: "Re: FUSE",
+                          body: `Hi ${row.name},\n\n`,
+                        });
+                        setComposerRowId(row.id);
+                        setComposerOpen(true);
+                      }}
+                    >
+                      <Send className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
+                      Reply via FUSE
+                    </Button>
                     <Button asChild size="sm" variant="outline">
                       <a href={mailtoLink(row)}>
                         <Mail className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
                         Reply
                       </a>
                     </Button>
+
                     {isNew ? (
                       <Button
                         size="sm"
@@ -175,6 +197,25 @@ export default function AdminMessages() {
           </ul>
         )}
       </div>
+
+      <EmailComposerDialog
+        open={composerOpen}
+        target={composerTarget}
+        onOpenChange={(next) => {
+          setComposerOpen(next);
+          if (!next) setComposerRowId(null);
+        }}
+        onSent={() => {
+          const rowId = composerRowId;
+          const row = rows.find((item) => item.id === rowId);
+          if (rowId && row?.status === "new") {
+            toast("Mark this message reviewed?", {
+              action: { label: "Mark reviewed", onClick: () => markReviewed.mutate(rowId) },
+            });
+          }
+        }}
+      />
     </SiteShell>
+
   );
 }

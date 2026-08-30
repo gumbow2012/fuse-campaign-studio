@@ -12,6 +12,8 @@ import PageMeta from "@/components/mvp/PageMeta";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import EmailComposerDialog, { type EmailComposerTarget } from "@/components/admin/EmailComposerDialog";
+
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -56,6 +58,9 @@ export default function AdminUsers() {
   const [grantReason, setGrantReason] = useState("");
   const [alertTitle, setAlertTitle] = useState("");
   const [alertMessage, setAlertMessage] = useState("");
+  const [composerOpen, setComposerOpen] = useState(false);
+  const [composerTarget, setComposerTarget] = useState<EmailComposerTarget | null>(null);
+
 
   const usersQuery = useQuery({
     queryKey: ["admin-users", search, filter, sort, direction, page],
@@ -336,13 +341,23 @@ export default function AdminUsers() {
                             Send alert
                           </Button>
                           {row.email ? (
-                            <Button asChild size="sm" variant="outline">
-                              <a href={`mailto:${row.email}`}>
-                                <Mail className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
-                                Email
-                              </a>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => {
+                                setComposerTarget({
+                                  to: row.email as string,
+                                  subject: "",
+                                  body: `Hi ${row.name || "there"},\n\n`,
+                                });
+                                setComposerOpen(true);
+                              }}
+                            >
+                              <Mail className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
+                              Email
                             </Button>
                           ) : null}
+
                         </div>
                       </div>
                     </div>
@@ -373,6 +388,9 @@ export default function AdminUsers() {
           </Button>
         </div>
       </div>
+
+      <EmailComposerDialog open={composerOpen} target={composerTarget} onOpenChange={setComposerOpen} />
+
     </SiteShell>
   );
 }
