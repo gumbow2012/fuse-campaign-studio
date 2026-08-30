@@ -29,6 +29,44 @@ function publicUrl(path: string) {
   return supabase.storage.from(BUCKET).getPublicUrl(path).data.publicUrl;
 }
 
+/** Timeouts so a hung upload/authorization can never leave a slot spinning. */
+const AUTHORIZE_TIMEOUT_MS = 30_000;
+const UPLOAD_TIMEOUT_MS = 90_000;
+
+function withTimeout<T>(promise: Promise<T>, ms: number, message: string) {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(message)), ms);
+    promise.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (error) => {
+        clearTimeout(timer);
+        reject(error);
+      },
+    );
+  });
+}
+
+async function fetchWithTimeout(url: string, init: RequestInit, ms: number) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), ms);
+  try {
+    return await fetch(url, { ...init, signal: controller.signal });
+  } catch (error) {
+    if (controller.signal.aborted) throw new Error("Upload timed out — please retry.");
+    throw new Error(
+      error instanceof Error && error.message
+        ? `Upload failed — please retry. (${error.message})`
+        : "Upload failed — please retry.",
+    );
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+
 /**
  * Authenticated customer flow — file BYTES go directly to Supabase Storage.
  * The path must start with the user id to satisfy the
