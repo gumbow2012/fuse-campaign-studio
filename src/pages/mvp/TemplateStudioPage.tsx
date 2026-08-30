@@ -1286,14 +1286,14 @@ export default function TemplateStudioPage() {
   const renderInputGroup = (groupId: string, compact = false) => {
     const group = inputGroups.find((item) => item.id === groupId);
     if (!group) return null;
-    if (!group.multi) {
-      const member = group.members[0];
-      return renderInputField(member.input, compact, member.label !== member.input.label ? member.label : undefined);
-    }
-    return (
-
+    const inner = !group.multi ? (
+      renderInputField(
+        group.members[0].input,
+        compact,
+        group.members[0].label !== group.members[0].input.label ? group.members[0].label : undefined,
+      )
+    ) : (
       <CampaignAssetGroupCard
-        key={group.id}
         group={group}
         compact={compact}
         filledCount={groupFilledCount(group.id)}
@@ -1303,7 +1303,20 @@ export default function TemplateStudioPage() {
         onOpen={() => setOpenGroupId(group.id)}
       />
     );
+    return (
+      <div
+        id={`campaign-input-group-${group.id}`}
+        className={cn(
+          "rounded-[1.5rem] transition-shadow",
+          highlightGroupId === group.id &&
+            "ring-2 ring-cyan-300/70 ring-offset-2 ring-offset-slate-950 motion-safe:animate-pulse",
+        )}
+      >
+        {inner}
+      </div>
+    );
   };
+
 
   const groupModalNode = (
     <CampaignAssetGroupModal
