@@ -37,7 +37,19 @@ export interface TemplateAssetRequirement {
   badExamples?: string[];
   allowUpload: boolean;
   allowLibrary: boolean;
+  /**
+   * PRESENTATION-ONLY grouping metadata (optional, additive). Lets a template
+   * declare that several backend inputs describe ONE real-world product so the
+   * builder can show a single customer-facing card. Never affects execution.
+   */
+  groupId?: string;
+  groupLabel?: string;
+  groupType?: string;
+  customerSlotLabel?: string;
+  helperText?: string;
+  sequence?: number;
 }
+
 
 function text(value: unknown): string | undefined {
   return typeof value === "string" && value.trim() ? value.trim() : undefined;
@@ -53,6 +65,11 @@ function bool(value: unknown): boolean | undefined {
 function count(value: unknown): number | undefined {
   const parsed = typeof value === "number" ? value : Number.parseInt(String(value ?? ""), 10);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined;
+}
+
+function integer(value: unknown): number | undefined {
+  const parsed = typeof value === "number" ? value : Number.parseInt(String(value ?? ""), 10);
+  return Number.isFinite(parsed) ? parsed : undefined;
 }
 
 function stringList(value: unknown): string[] | undefined {
@@ -98,6 +115,12 @@ export function readTemplateAssetRequirement(
     badExamples: stringList(pick("bad_examples", "badExamples")),
     allowUpload: bool(pick("allow_upload", "allowUpload")) ?? true,
     allowLibrary: bool(pick("allow_library", "allowLibrary")) ?? false,
+    groupId: text(pick("group_id", "groupId")),
+    groupLabel: text(pick("group_label", "groupLabel")),
+    groupType: text(pick("group_type", "groupType")),
+    customerSlotLabel: text(pick("customer_slot_label", "customerSlotLabel")),
+    helperText: text(pick("helper_text", "helperText")),
+    sequence: integer(pick("sequence", "sequence")),
   };
 }
 
