@@ -1485,10 +1485,27 @@ export default function TemplateStudioPage() {
     )?.key ?? null;
 
   /*
+   * Anonymous temp upload for one slot. Wrapped so a failure/timeout always
+   * lands the slot in a retryable "error" state — never an endless spinner.
+   */
+  const startAnonUpload = (key: string, file: File) => {
+    setAnonUploads((current) => ({ ...current, [key]: { status: "uploading" } }));
+    void uploadAnonymousRunInput(file)
+      .then((url) => setAnonUploads((current) => ({ ...current, [key]: { status: "ready", url } })))
+      .catch((error) => {
+        const message =
+          error instanceof Error && error.message ? error.message : "Upload failed — tap to retry.";
+        setAnonUploads((current) => ({ ...current, [key]: { status: "error", error: message } }));
+        toast({ title: "Upload failed", description: message, variant: "destructive" });
+      });
+  };
+
+  /*
    * Single source of truth for an input slot's UI. Rendered by the desktop
    * builder (compact = false) AND the mobile inline builder (compact = true).
    * Handlers, upload path, autofill release and validation are identical.
    */
+
   const renderInputField = (field: InputField, compact = false, displayLabelOverride?: string) =>
     field.type === "image" ? (
       <div
