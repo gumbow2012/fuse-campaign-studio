@@ -1,10 +1,39 @@
 import { SUPABASE_PUBLISHABLE_KEY, SUPABASE_URL, supabase } from "@/integrations/supabase/client";
+import { compressImageFile } from "@/lib/imageCompress";
 
 const BUCKET = "fuse-assets";
 
 /** Real transport limits — no base64 inflation now that bytes go straight to Storage. */
 export const MAX_IMAGE_UPLOAD_BYTES = 12 * 1024 * 1024;
 export const MAX_VIDEO_UPLOAD_BYTES = 60 * 1024 * 1024;
+
+/**
+ * fal.ai rejects any ingested image over 10 MB, so images are downscaled and
+ * re-encoded client-side to sit comfortably under that ceiling before upload.
+ */
+const PROVIDER_IMAGE_TARGET_BYTES = 9 * 1024 * 1024;
+const PROVIDER_MAX_LONG_EDGE = 2560;
+const PROVIDER_QUALITY_STEPS = [0.9, 0.82, 0.72, 0.6];
+
+async function conditionImageForProviders(file: File): Promise<File> {
+  if (!file.type.startsWith("image/")) return file;
+  if (file.size <= PROVIDER_IMAGE_TARGET_BYTES) return file;
+
+  let best = file;
+  let longEdge = PROVIDER_MAX_LONG_EDGE;
+  for (const quality of PROVIDER_QUALITY_STEPS) {
+    try {
+      const candidate = await compressImageFile(file, longEdge, quality);
+      if (candidate.size < best.size) best = candidate;
+      if (best.size <= PROVIDER_IMAGE_TARGET_BYTES) return best;
+    } catch {
+      return best; // unsupported/undecodable image — let the limit check decide
+    }
+    longEdge = Math.max(1280, Math.round(longEdge * 0.8));
+  }
+  return best;
+}
+
 
 function extensionFor(file: File) {
   const fromName = file.name.match(/\.([a-z0-9]+)$/i)?.[1]?.toLowerCase();
