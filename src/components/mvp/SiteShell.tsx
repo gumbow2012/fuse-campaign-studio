@@ -1,6 +1,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { Link, NavLink, useLocation, useNavigate } from "react-router-dom";
-import { Clapperboard, ClipboardCheck, Film, Gem, Home, Layers3, Mail, Menu, Shirt, Sparkles, Star, UsersRound } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { Clapperboard, ClipboardCheck, Film, Gem, Home, Inbox, Layers3, Mail, Menu, Shirt, Sparkles, Star, UsersRound } from "lucide-react";
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -80,7 +81,31 @@ export default function SiteShell({ children }: { children: ReactNode }) {
   const { user, profile, isAdmin, isCreator, hasAppAccess, signOut } = useAuth();
   const [menuOpen, setMenuOpen] = useState(false);
   const closeMenu = () => setMenuOpen(false);
-  const toolLinks: Array<{ to: string; label: string; icon: typeof Layers3; featureKey?: FeatureKey }> = [
+  /** Unread contact-form messages — admin-only, one cached count query. */
+  const unreadMessagesQuery = useQuery({
+    queryKey: ["admin-contact-messages-unread"],
+    enabled: Boolean(user) && isAdmin,
+    staleTime: 60_000,
+    refetchInterval: 60_000,
+    queryFn: async () => {
+      const { count, error } = await supabase
+        .from("contact_messages")
+        .select("id", { count: "exact", head: true })
+        .eq("status", "new");
+      if (error) throw error;
+      return count ?? 0;
+    },
+  });
+  const unreadMessages = unreadMessagesQuery.data ?? 0;
+
+  const toolLinks: Array<{
+    to: string;
+    label: string;
+    icon: typeof Layers3;
+    featureKey?: FeatureKey;
+    badge?: number;
+  }> = [
+    ...(isAdmin ? [{ to: "/admin/messages", label: "Messages", icon: Inbox, badge: unreadMessages }] : []),
     { to: "/admin/templates", label: "Admin Templates", icon: Layers3 },
     { to: "/app/lab/studio", label: "Image Studio", icon: Sparkles },
     { to: "/app/lab/cinema", label: "Cinema Studio", icon: Clapperboard, featureKey: "cinema_studio" },
@@ -255,6 +280,11 @@ export default function SiteShell({ children }: { children: ReactNode }) {
                       {toolLinks.map((link) => (
                         <NavLink key={link.to} to={link.to} onClick={closeMenu} className={drawerNavLinkClass}>
                           {link.label}
+                          {link.badge ? (
+                            <span className="ml-2 rounded-full bg-cyan-400/20 px-1.5 py-[1px] text-[10px] font-bold text-cyan-200">
+                              {link.badge > 99 ? "99+" : link.badge}
+                            </span>
+                          ) : null}
                         </NavLink>
                       ))}
                     </nav>
@@ -399,6 +429,11 @@ export default function SiteShell({ children }: { children: ReactNode }) {
                       <Icon className="h-3.5 w-3.5" aria-hidden="true" />
                       {link.label}
                       {link.featureKey ? <FeatureNewBadge featureKey={link.featureKey} /> : null}
+                      {link.badge ? (
+                        <span className="ml-1 rounded-full bg-cyan-400/20 px-1.5 py-[1px] text-[10px] font-bold text-cyan-200">
+                          {link.badge > 99 ? "99+" : link.badge}
+                        </span>
+                      ) : null}
                     </NavLink>
                   );
                 })}

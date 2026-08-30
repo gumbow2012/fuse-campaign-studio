@@ -8,6 +8,62 @@ import {
   logAuditEvent,
 } from "../_shared/supabase-admin.ts";
 
+const ALERT_RECIPIENT = "kade@maddenmedia.ai";
+
+/**
+ * Best-effort alert email. If no provider key is configured we skip silently —
+ * the submission itself must never fail because of alerting.
+ */
+async function sendContactAlert(payload: {
+  name: string;
+  email: string;
+  company: string | null;
+  message: string;
+}) {
+  const resendKey = Deno.env.get("RESEND_API_KEY");
+  if (!resendKey) {
+    console.log("submit-contact-message: no email provider configured, skipping alert");
+    return { sent: false, reason: "no_provider" as const };
+  }
+
+  const from = Deno.env.get("CONTACT_ALERT_FROM") ?? "FUSE <onboarding@resend.dev>";
+  const lines = [
+    `Name: ${payload.name}`,
+    `Email: ${payload.email}`,
+    `Company: ${payload.company ?? "—"}`,
+    "",
+    payload.message,
+  ].join("\n");
+
+  try {
+    const response = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${resendKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        from,
+        to: [ALERT_RECIPIENT],
+        reply_to: payload.email,
+        subject: `New FUSE contact: ${payload.name}`,
+        text: lines,
+      }),
+    });
+
+    if (!response.ok) {
+      const detail = await response.text().catch(() => "");
+      console.error("submit-contact-message: alert email failed", response.status, detail.slice(0, 500));
+      return { sent: false, reason: "provider_error" as const };
+    }
+
+    return { sent: true, reason: null };
+  } catch (error) {
+    console.error("submit-contact-message: alert email threw", error);
+    return { sent: false, reason: "provider_error" as const };
+  }
+}
+
 Deno.serve(async (request) => {
   if (request.method === "OPTIONS") {
     return new Response(null, { status: 204, headers: corsHeaders });
@@ -61,6 +117,8 @@ Deno.serve(async (request) => {
       throw new Error(error.message);
     }
 
+    const alert = await sendContactAlert({ name, email, company, message });
+
     await logAuditEvent({
       eventType: "contact.message.submitted",
       message: "Contact message stored successfully.",
@@ -71,6 +129,8 @@ Deno.serve(async (request) => {
         email,
         company,
         origin,
+        alert_email_sent: alert.sent,
+        alert_email_skip_reason: alert.reason,
       },
     }, admin);
 
