@@ -1,7 +1,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { Link, NavLink, useLocation, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { Clapperboard, ClipboardCheck, Film, Gem, Home, Inbox, Layers3, Mail, Menu, Shirt, Sparkles, Star, UsersRound } from "lucide-react";
+import { Clapperboard, ClipboardCheck, Film, Gem, Home, Inbox, Layers3, Mail, Menu, Shirt, Sparkles, Star, UserPlus, UsersRound } from "lucide-react";
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
