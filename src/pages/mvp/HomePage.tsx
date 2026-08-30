@@ -819,7 +819,7 @@ export default function HomePage() {
         {/* DESKTOP (lg+) — wide left→right story hero: messaging left,
             YOUR PRODUCTS → PREBUILT WORKFLOW → FINISHED CAMPAIGN right.
             Mobile (<lg) keeps its own stacked hero above, untouched. */}
-        <div className="container relative hidden items-center gap-10 py-14 lg:grid lg:min-h-[680px] lg:grid-cols-[minmax(0,46fr)_minmax(0,54fr)] xl:gap-14">
+        <div className="container relative hidden items-center gap-10 py-10 lg:grid lg:min-h-[560px] lg:grid-cols-[minmax(0,45fr)_minmax(0,55fr)] xl:gap-12">
           <div className="min-w-0">
             <h1
               className="font-display font-bold uppercase text-white"
