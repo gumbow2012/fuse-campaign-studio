@@ -503,10 +503,19 @@ export default function HomePage() {
   const yourVersion = pinnedHero.right ?? heroPair[1] ?? null;
 
   /**
-   * Desktop hero story preview — one real, live campaign asset. Preference
-   * order only; falls back to the allocator so it is never empty-by-name.
+   * Desktop hero output stack — up to three real, live campaign assets.
+   * Preference order only; falls back to the allocator so it is never empty.
    */
-  const heroStoryPreview = useMemo<Entry | null>(() => {
+  const heroStoryPreviews = useMemo<Entry[]>(() => {
+    const picked: Entry[] = [];
+    const seen = new Set<string>();
+    const push = (entry: Entry | null) => {
+      if (!entry) return;
+      const key = String(entry.template.id ?? entry.template.name ?? "").trim().toLowerCase();
+      if (!key || seen.has(key) || picked.length >= 3) return;
+      seen.add(key);
+      picked.push(entry);
+    };
     const find = (needle: string): Entry | null => {
       const template = templates.find((candidate) =>
         String(candidate.name ?? "").trim().toLowerCase().includes(needle),
@@ -515,14 +524,27 @@ export default function HomePage() {
       const media = resolveMedia(template);
       return media ? ({ template, media } as Entry) : null;
     };
-    for (const needle of ["grillzzzz", "grillz", "broken planet", "spider man", "airport"]) {
-      const match = find(needle);
-      if (match) return match;
+    for (const needle of ["grillzzzz", "grillz", "airport", "spider", "broken planet"]) {
+      push(find(needle));
     }
-    return pinnedHero.left ?? heroPair[0] ?? null;
+    for (const entry of [pinnedHero.left, heroPair[0], heroPair[1]]) push(entry ?? null);
+    return picked;
   }, [templates, pinnedHero.left, heroPair]);
 
-
+  /**
+   * Desktop hero: the front preview rotates once per workflow loop (~6.5s), so
+   * the stack settles just as the diagram reaches FINAL. Reduced motion holds.
+   */
+  const [heroStackIndex, setHeroStackIndex] = useState(0);
+  useEffect(() => {
+    if (heroStoryPreviews.length < 2) return;
+    if (typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return;
+    const timer = window.setInterval(
+      () => setHeroStackIndex((value) => (value + 1) % heroStoryPreviews.length),
+      6500,
+    );
+    return () => window.clearInterval(timer);
+  }, [heroStoryPreviews.length]);
 
 
   /** Every entry already claimed by the allocator — perf shelves reuse these only. */
@@ -797,7 +819,7 @@ export default function HomePage() {
         {/* DESKTOP (lg+) — wide left→right story hero: messaging left,
             YOUR PRODUCTS → PREBUILT WORKFLOW → FINISHED CAMPAIGN right.
             Mobile (<lg) keeps its own stacked hero above, untouched. */}
-        <div className="container relative hidden items-center gap-10 py-14 lg:grid lg:min-h-[680px] lg:grid-cols-[minmax(0,46fr)_minmax(0,54fr)] xl:gap-14">
+        <div className="container relative hidden items-center gap-10 py-10 lg:grid lg:min-h-[560px] lg:grid-cols-[minmax(0,45fr)_minmax(0,55fr)] xl:gap-12">
           <div className="min-w-0">
             <h1
               className="font-display font-bold uppercase text-white"
@@ -807,21 +829,22 @@ export default function HomePage() {
               <span className="block text-cyan-100">Marketplace</span>
             </h1>
 
-            <p className="mt-5 max-w-[520px] font-sans text-[20px] font-bold leading-[1.35] text-white">
+            <p className="mt-4 max-w-[520px] font-sans text-[20px] font-bold leading-[1.3] text-white">
               Viral campaigns. Already built and ready to run.
             </p>
-            <p className="mt-2 max-w-[520px] font-sans text-[15.5px] leading-[1.5] text-slate-300">
+            <p className="mt-1.5 max-w-[520px] font-sans text-[15.5px] leading-[1.45] text-slate-300">
               Pick one. Upload your products. Hit run.
             </p>
 
-            <p className="mt-6 max-w-[520px] font-sans text-[16px] font-extrabold uppercase leading-[1.3] tracking-[0.06em] text-white">
+            <p className="mt-4 max-w-[520px] font-sans text-[16px] font-extrabold uppercase leading-[1.25] tracking-[0.06em] text-white">
               <span className="block">
                 No prompts <span className="text-cyan-300">·</span> No guessing
               </span>
-              <span className="mt-1 block text-cyan-100">Prebuilt expert workflows</span>
+              <span className="mt-0.5 block text-cyan-100">Prebuilt expert workflows</span>
             </p>
 
-            <div className="mt-8 flex flex-wrap items-center gap-3">
+            <div className="mt-6 flex flex-wrap items-center gap-3">
+
               <Button
                 asChild
                 size="lg"
@@ -862,57 +885,83 @@ export default function HomePage() {
             </div>
           </div>
 
-          {/* STORY SEQUENCE — your products → prebuilt workflow → finished campaign */}
-          <div className="relative flex min-w-0 items-center gap-2 xl:gap-3">
-            {/* 1 · YOUR PRODUCTS input card */}
-            <div className="w-[132px] shrink-0 rounded-2xl border border-cyan-200/25 bg-[linear-gradient(180deg,rgba(34,211,238,0.08),rgba(255,255,255,0.02))] p-3 shadow-[0_0_28px_-14px_rgba(34,211,238,0.7)] xl:w-[148px]">
-              <p className="font-display text-[9.5px] font-bold uppercase tracking-[0.2em] text-cyan-100">
+          {/* STORY SEQUENCE — one connected system: your products → prebuilt
+              workflow → finished campaigns. Explanatory only (no upload UI). */}
+          <div className="relative flex min-w-0 items-center gap-0">
+            {/* 1 · YOUR PRODUCTS input panel */}
+            <div className="w-[152px] shrink-0 rounded-2xl border border-cyan-200/30 bg-[linear-gradient(180deg,rgba(34,211,238,0.1),rgba(255,255,255,0.02))] p-4 shadow-[0_18px_46px_-24px_rgba(34,211,238,0.75)] xl:w-[172px]">
+              <p className="font-display text-[10.5px] font-bold uppercase tracking-[0.2em] text-cyan-100">
                 Your products
               </p>
-              <ul className="mt-2.5 space-y-1.5">
+              <ul className="mt-3 space-y-2">
                 {["Product", "Logo", "Cast"].map((label) => (
                   <li
                     key={label}
-                    className="rounded-lg border border-white/10 bg-black/30 px-2 py-1.5 font-display text-[9.5px] font-bold uppercase tracking-[0.16em] text-slate-300"
+                    className="rounded-lg border border-white/10 bg-black/35 px-2.5 py-2 font-display text-[10.5px] font-bold uppercase tracking-[0.16em] text-slate-200"
                   >
                     {label}
                   </li>
                 ))}
               </ul>
-              <p className="mt-2.5 rounded-lg border border-dashed border-cyan-200/35 px-2 py-1.5 text-center font-display text-[9.5px] font-bold uppercase tracking-[0.16em] text-cyan-100">
+              <p className="mt-3 rounded-lg border border-dashed border-cyan-200/40 px-2.5 py-2 text-center font-display text-[10.5px] font-bold uppercase tracking-[0.16em] text-cyan-100">
                 + Product
               </p>
             </div>
 
-            {/* connector */}
-            <span aria-hidden className="h-px w-4 shrink-0 bg-gradient-to-r from-cyan-300/10 to-cyan-300/70 xl:w-6" />
+            {/* animated connector · input → workflow */}
+            <span
+              aria-hidden
+              className="relative h-px w-6 shrink-0 overflow-hidden bg-gradient-to-r from-cyan-300/20 to-cyan-300/70 xl:w-8"
+            >
+              <span className="absolute inset-y-0 left-0 w-1/2 bg-cyan-100 [animation:hero-flow-pulse_6.5s_linear_infinite] motion-reduce:animate-none motion-reduce:opacity-0" />
+            </span>
 
-            {/* 2 · the prebuilt workflow itself */}
+            {/* 2 · the prebuilt workflow itself — the centrepiece */}
             <div className="min-w-0 flex-1">
-              <HeroWorkflowAnimation />
+              <HeroWorkflowAnimation grand />
             </div>
 
-            {/* connector */}
-            <span aria-hidden className="h-px w-4 shrink-0 bg-gradient-to-r from-cyan-300/70 to-cyan-300/20 xl:w-6" />
+            {/* animated connector · workflow → outputs */}
+            <span
+              aria-hidden
+              className="relative h-px w-6 shrink-0 overflow-hidden bg-gradient-to-r from-cyan-300/70 to-cyan-300/25 xl:w-8"
+            >
+              <span className="absolute inset-y-0 left-0 w-1/2 bg-cyan-100 [animation:hero-flow-pulse_6.5s_linear_infinite_1.6s] motion-reduce:animate-none motion-reduce:opacity-0" />
+            </span>
 
-            {/* 3 · finished campaign — one real live preview */}
-            <div className="w-[168px] shrink-0 xl:w-[188px]">
-              <div className="overflow-hidden rounded-2xl border border-cyan-200/30 bg-black/50 shadow-[0_0_36px_-16px_rgba(34,211,238,0.8)]">
-                {heroStoryPreview ? (
-                  <AutoMedia
-                    media={heroStoryPreview.media}
-                    className="aspect-[9/16] w-full object-cover"
-                    eager
-                  />
-                ) : (
-                  <div className="aspect-[9/16] w-full animate-pulse bg-white/[0.05]" />
-                )}
-              </div>
-              <p className="mt-2 text-center font-display text-[9px] font-bold uppercase tracking-[0.22em] text-slate-500">
-                Campaign
-              </p>
+            {/* 3 · finished campaigns — a small stack of real live previews */}
+            <div className="relative w-[190px] shrink-0 xl:w-[214px]">
+              {heroStoryPreviews.length ? (
+                <div className="relative">
+                  {heroStoryPreviews.slice(1, 3).map((entry, index) => (
+                    <div
+                      key={`hero-stack-back-${entry.template.id ?? index}`}
+                      aria-hidden
+                      className="absolute inset-0 overflow-hidden rounded-2xl border border-cyan-200/20 bg-[#0B1120]"
+                      style={{
+                        transform: `translate(${(index + 1) * 18}px, ${(index + 1) * 14}px) scale(${1 - (index + 1) * 0.04})`,
+                        zIndex: 1 - index,
+                        opacity: 0.75 - index * 0.25,
+                      }}
+                    />
+                  ))}
+                  <div
+                    key={heroStoryPreviews[heroStackIndex % heroStoryPreviews.length]?.template.id ?? heroStackIndex}
+                    className="relative z-10 overflow-hidden rounded-2xl border border-cyan-200/40 bg-black/50 shadow-[0_0_48px_-18px_rgba(34,211,238,0.85)] [animation:hero-stack-settle_6.5s_ease-out_infinite] motion-reduce:animate-none"
+                  >
+                    <AutoMedia
+                      media={heroStoryPreviews[heroStackIndex % heroStoryPreviews.length].media}
+                      className="aspect-[9/16] w-full object-cover"
+                      eager
+                    />
+                  </div>
+                </div>
+              ) : (
+                <div className="aspect-[9/16] w-full animate-pulse rounded-2xl bg-white/[0.05]" />
+              )}
             </div>
           </div>
+
 
         </div>
 
