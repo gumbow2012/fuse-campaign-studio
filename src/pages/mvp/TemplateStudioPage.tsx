@@ -871,7 +871,6 @@ export default function TemplateStudioPage() {
   const deepLinkRevealedRef = useRef(false);
   useEffect(() => {
     if (deepLinkRevealedRef.current) return;
-    if (!user) return; // guests get the UNLOCK confirmation instead of an uploader
     if (!isCompactLayout || !deepLinkTemplateId) return;
     if (deepLinkTemplateId !== selectedTemplateId) return;
     deepLinkRevealedRef.current = true;
@@ -880,15 +879,9 @@ export default function TemplateStudioPage() {
     return () => window.clearTimeout(timer);
   }, [isCompactLayout, deepLinkTemplateId, selectedTemplateId, user]);
 
-  /* Guest arriving on a template deep link: acquisition confirmation, once. */
-  const deepLinkUnlockRef = useRef(false);
-  useEffect(() => {
-    if (deepLinkUnlockRef.current || user) return;
-    if (!deepLinkTemplateId || deepLinkTemplateId !== selectedTemplateId) return;
-    deepLinkUnlockRef.current = true;
-    track("template_unlock_click", { template_id: deepLinkTemplateId, surface: "deep_link" });
-    setUnlockOpen(true);
-  }, [deepLinkTemplateId, selectedTemplateId, user]);
+  /* Deep links only SELECT + open the builder — never checkout. Purchase stays
+     behind the builder's explicit "Unlock access →" CTA. */
+
 
 
 
@@ -1387,6 +1380,13 @@ export default function TemplateStudioPage() {
   const detailTemplate = templates.find((template) => template.id === detailTemplateId) ?? null;
   const creditShortfall = Math.max(0, creditsRequired - displayedCreditBalance);
   const blockedByCredits = !!user && !isPrivilegedUser && !!profile && creditShortfall > 0;
+  /**
+   * ENTITLEMENT — drives the builder CTA only. A locked visitor can still inspect
+   * requirements, counts, cost and description; they simply cannot generate.
+   * Purchase is never triggered by selection, only by the explicit CTA below.
+   */
+  const entitlementLocked = !isPrivilegedUser && (!user || blockedByCredits);
+
   // FT8 — cast metadata comes from the template version's cast_config.
   // Absent config (every legacy template) keeps the Cast step hidden.
   const castConfig = selectedTemplate?.castConfig ?? null;
@@ -1658,29 +1658,12 @@ export default function TemplateStudioPage() {
     setAutofilledKeys({});
     autofillAppliedRef.current = "";
 
-    /* UNLOCK branch — a logged-out visitor gets the acquisition confirmation,
-       never a pre-purchase uploader. Browsing itself stays open. */
-    if (!user) {
-      setInlineBuilderOpen(false);
-      track("template_unlock_click", { template_id: templateId, surface: "card" });
-      setUnlockOpen(true);
-      return;
-    }
-
+    /* SELECT = INSPECT ONLY. Clicking a campaign never starts checkout and never
+       opens an account screen — it highlights the card and opens its builder so
+       the visitor can read requirements, counts and cost before paying. Purchase
+       happens exclusively from the builder's explicit "Unlock access →" CTA. */
     track("studio_opened", { template_id: templateId });
 
-    /* Signed in but unfunded: the existing contextual Starter offer. The template
-       stays selected, so closing the offer lands straight in the builder. */
-    const incomingCost = templates.find((entry) => entry.id === templateId)?.estimated_credits_per_run ?? 0;
-    if (!isPrivilegedUser && !!profile && incomingCost > 0 && displayedCreditBalance < incomingCost) {
-      track("no_plan_generate_attempt", {
-        template_id: templateId,
-        credits_required: incomingCost,
-        credit_balance: displayedCreditBalance,
-        surface: "unlock",
-      });
-      setPaywallOpen(true);
-    }
 
 
 
@@ -1858,7 +1841,33 @@ export default function TemplateStudioPage() {
     track("first_asset_added", { template_id: selectedTemplateId });
   }, [files, libraryAssets, textInputs, selectedTemplateId, user]);
 
+  /**
+   * The ONE explicit purchase entry point on this page ("Unlock access →").
+   * Guests get the payment-first split modal (selection + local setup preserved
+   * through checkout); signed-in unfunded users get the contextual offer.
+   */
+  const openUnlockCheckout = () => {
+    if (!selectedTemplate) return;
+    track("template_unlock_click", {
+      template_id: String(selectedTemplate.id),
+      surface: "builder",
+      credits_required: creditsRequired,
+    });
+    if (!user) {
+      openGenerateAuthGate();
+      return;
+    }
+    track("no_plan_generate_attempt", {
+      template_id: String(selectedTemplate.id),
+      credits_required: creditsRequired,
+      credit_balance: displayedCreditBalance,
+      surface: "builder_unlock",
+    });
+    setPaywallOpen(true);
+  };
+
   const openGenerateAuthGate = () => {
+
     if (selectedTemplate) {
       setPendingGenerationIntent({
         templateId: String(selectedTemplate.id),
@@ -2259,10 +2268,13 @@ export default function TemplateStudioPage() {
    * the desktop aside is not rendered, above lg this node is null. All state is
    * the page's own, so switching breakpoints keeps files / cast / readiness.
    */
-  const inlineGenerateLabel = !user
-    ? "Run template →"
+  const missingAssetCount = Math.max(1, totalInputCount - readyInputCount);
+  const missingAssetLabel = `Add ${missingAssetCount} more asset${totalInputCount - readyInputCount === 1 ? "" : "s"}`;
+  /** Contextual builder CTA: unlock (locked) → add assets (incomplete) → run. */
+  const inlineGenerateLabel = entitlementLocked
+    ? "Unlock access →"
     : !requiredInputsAreReady
-      ? `Add ${Math.max(1, totalInputCount - readyInputCount)} more asset${totalInputCount - readyInputCount === 1 ? "" : "s"}`
+      ? missingAssetLabel
       : checkingCredits
         ? "Checking credits..."
         : runPhase === "uploading"
@@ -2274,6 +2286,7 @@ export default function TemplateStudioPage() {
               : isPrivilegedUser
                 ? "Run template →"
                 : `Run template → ${creditsRequired} cr`;
+
 
   const inlineBuilderNode =
     isCompactLayout && inlineBuilderOpen && selectedTemplate && !selectMode && !hasActiveCampaignWorkspace ? (
@@ -2295,9 +2308,12 @@ export default function TemplateStudioPage() {
             />
           ) : undefined
         }
-        generateDisabled={submitting || isRunning || (!!user && (!requiredInputsAreReady || blockedByCredits))}
+        generateDisabled={
+          submitting || isRunning || (!entitlementLocked && !requiredInputsAreReady)
+        }
         generateLabel={inlineGenerateLabel}
-        onGenerate={() => void handleRun()}
+        onGenerate={() => (entitlementLocked ? openUnlockCheckout() : void handleRun())}
+
         onClose={() => setInlineBuilderOpen(false)}
         footer={
           blockedByCredits ? (
@@ -3039,25 +3055,15 @@ export default function TemplateStudioPage() {
                         <p className="mt-1 text-sm text-slate-300">{costDisplay}</p>
                       </div>
                       <Button
-                        onClick={() => void handleRun()}
-                        disabled={submitting || isRunning || (!!user && (!requiredInputsAreReady || blockedByCredits))}
+                        onClick={() => (entitlementLocked ? openUnlockCheckout() : void handleRun())}
+                        disabled={
+                          submitting || isRunning || (!entitlementLocked && !requiredInputsAreReady)
+                        }
                         className="min-w-[200px] rounded-full bg-cyan-300 font-display text-[12px] font-semibold uppercase tracking-[0.14em] text-slate-950 hover:bg-cyan-200"
                       >
-                        {checkingCredits
-                          ? "Checking credits..."
-                          : runPhase === "uploading"
-                            ? "Uploading assets..."
-                            : runPhase === "preparing"
-                              ? "Preparing campaign..."
-                              : submitting || isRunning
-                                ? "Generating..."
-                                : !user
-                                  ? "Run template →"
-                                  : isPrivilegedUser
-                                    ? "Run template →"
-                                    : `Run template → ${creditsRequired} cr`}
-
+                        {inlineGenerateLabel}
                       </Button>
+
                     </div>
 
                     {!user ? (

@@ -203,11 +203,13 @@ export default function CampaignTile({
               </span>
             ) : null}
 
-            {/* Hover-only affordance — never a permanent button. */}
+            {/* Hover-only affordance — never a permanent button, and never a
+                purchase or generate promise: clicking a tile only selects it. */}
             <span className="pointer-events-none absolute bottom-1.5 right-1.5 hidden items-center gap-1 rounded-full bg-cyan-300 px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.14em] text-slate-950 opacity-0 transition-opacity duration-150 group-hover/tile:opacity-100 lg:inline-flex">
-              Run
+              View
               <ArrowRight className="h-2.5 w-2.5" aria-hidden />
             </span>
+
           </div>
         </div>
         {overlay}
