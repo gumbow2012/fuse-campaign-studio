@@ -117,6 +117,8 @@ Deno.serve(async (request) => {
       throw new Error(error.message);
     }
 
+    const alert = await sendContactAlert({ name, email, company, message });
+
     await logAuditEvent({
       eventType: "contact.message.submitted",
       message: "Contact message stored successfully.",
@@ -127,6 +129,8 @@ Deno.serve(async (request) => {
         email,
         company,
         origin,
+        alert_email_sent: alert.sent,
+        alert_email_skip_reason: alert.reason,
       },
     }, admin);
 
