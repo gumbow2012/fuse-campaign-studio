@@ -1583,23 +1583,31 @@ export default function TemplateStudioPage() {
           }}
         />
         {!user && anonUploads[field.key] ? (
-          <p
-            className={cn(
-              "mt-2 text-[11px] leading-relaxed",
-              anonUploads[field.key]?.status === "error"
-                ? "text-rose-200"
-                : anonUploads[field.key]?.status === "ready"
-                  ? "text-emerald-200"
-                  : "text-cyan-100",
-            )}
-          >
-            {anonUploads[field.key]?.status === "uploading"
-              ? "Saving upload for this session..."
-              : anonUploads[field.key]?.status === "ready"
-                ? "Upload saved — it will still be here after you sign in."
-                : anonUploads[field.key]?.error}
-          </p>
+          anonUploads[field.key]?.status === "error" ? (
+            <button
+              type="button"
+              onClick={() => {
+                const pending = files[field.key];
+                if (pending) startAnonUpload(field.key, pending);
+              }}
+              className="mt-2 text-left text-[11px] font-semibold leading-relaxed text-rose-200 underline decoration-rose-300/50 underline-offset-2 hover:text-rose-100"
+            >
+              {anonUploads[field.key]?.error ?? "Upload failed"} — tap to retry
+            </button>
+          ) : (
+            <p
+              className={cn(
+                "mt-2 text-[11px] leading-relaxed",
+                anonUploads[field.key]?.status === "ready" ? "text-emerald-200" : "text-cyan-100",
+              )}
+            >
+              {anonUploads[field.key]?.status === "uploading"
+                ? "Saving upload for this session..."
+                : "Upload saved — it will still be here after you sign in."}
+            </p>
+          )
         ) : null}
+
       </div>
     ) : (
       <div
