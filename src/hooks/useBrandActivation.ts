@@ -64,14 +64,27 @@ export function useBrandActivation(): UseBrandActivation {
 
   const nudge = useMemo(
     () =>
-      resolveBrandActivationNudge({
-        brand: activeBrand,
-        readiness,
-        nudgeState: activationState,
-        signupAt: user?.created_at ?? null,
-      }),
-    [activeBrand, readiness, activationState, user?.created_at],
+      brandSetupEnabled
+        ? resolveBrandActivationNudge({
+            brand: activeBrand,
+            readiness,
+            nudgeState: activationState,
+            signupAt: user?.created_at ?? null,
+          })
+        : null,
+    [brandSetupEnabled, activeBrand, readiness, activationState, user?.created_at],
   );
+
+  if (!brandSetupEnabled) {
+    return {
+      nudge: null,
+      completionPercent: 0,
+      readiness: null,
+      activationState: {},
+      loading: false,
+      brandSetupEnabled: false,
+    };
+  }
 
   return {
     nudge,
@@ -79,5 +92,7 @@ export function useBrandActivation(): UseBrandActivation {
     readiness,
     activationState,
     loading: brandsLoading || (!!userId && productsQuery.isLoading),
+    brandSetupEnabled,
   };
 }
+
