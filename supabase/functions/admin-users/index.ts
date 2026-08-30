@@ -51,6 +51,7 @@ serve(async (req) => {
     if (action === "list") {
       const search = String(body.search ?? "").trim().slice(0, 120);
       const filter = ["paid", "free"].includes(String(body.filter)) ? String(body.filter) : "all";
+      const planEquals = typeof body.planEquals === "string" ? body.planEquals.trim().slice(0, 40) : "";
       const sort = body.sort === "credits" ? "credits_balance" : "created_at";
       const ascending = body.direction === "asc";
       const limit = Math.min(Math.max(Number(body.limit ?? 100) || 100, 1), 200);
@@ -59,7 +60,7 @@ serve(async (req) => {
       let query = admin
         .from("profiles")
         .select(
-          "user_id, email, name, plan, subscription_status, credits_balance, created_at, updated_at",
+          "user_id, email, name, plan, subscription_status, credits_balance, created_at, updated_at, admin_note",
           { count: "exact" },
         )
         .order(sort, { ascending })
@@ -72,6 +73,7 @@ serve(async (req) => {
       if (filter === "paid") {
         query = query.in("plan", [...PAID_PLANS]).in("subscription_status", [...PAID_STATUSES]);
       }
+      if (planEquals) query = query.eq("plan", planEquals);
 
       const { data, error, count } = await query;
       if (error) return json({ error: error.message }, 500);
@@ -89,6 +91,7 @@ serve(async (req) => {
           credits_balance: Number(row.credits_balance ?? 0),
           created_at: row.created_at,
           last_activity_at: row.updated_at ?? null,
+          admin_note: row.admin_note ?? null,
           tier: isPaid ? "paid" : "free",
         };
       });
@@ -97,6 +100,19 @@ serve(async (req) => {
 
       return json({ rows, total: count ?? rows.length, limit, offset });
     }
+
+    if (action === "set_note") {
+      const userId = String(body.userId ?? "").trim();
+      const rawNote = typeof body.note === "string" ? body.note.slice(0, 4000) : "";
+      if (!userId) return json({ error: "userId required" }, 400);
+      const { error } = await admin
+        .from("profiles")
+        .update({ admin_note: rawNote.trim() ? rawNote : null })
+        .eq("user_id", userId);
+      if (error) return json({ error: error.message }, 500);
+      return json({ success: true });
+    }
+
 
     if (action === "notify") {
       const userId = String(body.userId ?? "").trim();

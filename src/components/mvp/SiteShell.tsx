@@ -1,7 +1,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { Link, NavLink, useLocation, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { Clapperboard, ClipboardCheck, Film, Gem, Home, Inbox, Layers3, Mail, Menu, Shirt, Sparkles, Star, UsersRound } from "lucide-react";
+import { Clapperboard, ClipboardCheck, Film, Gem, Home, Inbox, Layers3, Mail, Menu, Shirt, Sparkles, Star, UserPlus, UsersRound } from "lucide-react";
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -107,6 +107,8 @@ export default function SiteShell({ children }: { children: ReactNode }) {
   }> = [
     ...(isAdmin ? [{ to: "/admin/messages", label: "Messages", icon: Inbox, badge: unreadMessages }] : []),
     ...(isAdmin ? [{ to: "/admin/users", label: "Accounts", icon: UsersRound }] : []),
+    ...(isAdmin ? [{ to: "/admin/leads", label: "Leads", icon: UserPlus }] : []),
+
     { to: "/admin/templates", label: "Admin Templates", icon: Layers3 },
     { to: "/app/lab/studio", label: "Image Studio", icon: Sparkles },
     { to: "/app/lab/cinema", label: "Cinema Studio", icon: Clapperboard, featureKey: "cinema_studio" },

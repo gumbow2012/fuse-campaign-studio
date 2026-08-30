@@ -37,6 +37,8 @@ import AdminMerchandising from "@/pages/AdminMerchandising";
 import AdminAdLinks from "@/pages/AdminAdLinks";
 import AdminMessages from "@/pages/AdminMessages";
 import AdminUsers from "@/pages/AdminUsers";
+import AdminLeads from "@/pages/AdminLeads";
+
 import AdminProductLaunchPrototype from "@/pages/AdminProductLaunchPrototype";
 
 
@@ -437,6 +439,16 @@ const App = () => (
                 </AdminRoute>
               }
             />
+
+            <Route
+              path="/admin/leads"
+              element={
+                <AdminRoute>
+                  <AdminLeads />
+                </AdminRoute>
+              }
+            />
+
 
 
 
