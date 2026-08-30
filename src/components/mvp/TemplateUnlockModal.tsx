@@ -99,10 +99,10 @@ export default function TemplateUnlockModal({
         role="dialog"
         aria-modal="true"
         aria-label={`Access ${name}`}
-        className="relative grid h-full max-h-full w-full max-w-full grid-rows-[auto_1fr] overflow-y-auto border border-white/10 bg-slate-950/95 shadow-[0_28px_90px_rgba(0,0,0,0.6)] sm:h-auto sm:max-h-[92vh] sm:max-w-[1040px] sm:rounded-[1.75rem] md:max-h-[88vh] md:grid-cols-[1.05fr_1fr] md:grid-rows-1 md:overflow-hidden md:rounded-[2rem]"
+        className="relative grid max-h-[100dvh] w-full max-w-full overflow-y-auto border border-white/10 bg-slate-950/95 shadow-[0_28px_90px_rgba(0,0,0,0.6)] sm:max-h-[92vh] sm:max-w-[1040px] sm:rounded-[1.75rem] md:max-h-[88vh] md:grid-cols-[1.05fr_1fr] md:grid-rows-1 md:overflow-hidden md:rounded-[2rem]"
       >
         {/* LEFT — the selected template's real preview, full-bleed. */}
-        <div className="relative min-h-[190px] overflow-hidden bg-black sm:min-h-[220px] md:min-h-full">
+        <div className="relative h-[32vh] overflow-hidden bg-black sm:h-auto sm:min-h-[220px] md:min-h-full">
           {previewUrl ? (
             isVideo ? (
               <video
