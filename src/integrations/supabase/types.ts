@@ -938,6 +938,7 @@ export type Database = {
       }
       profiles: {
         Row: {
+          admin_note: string | null
           avatar_url: string | null
           created_at: string
           credits_balance: number
@@ -952,6 +953,7 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          admin_note?: string | null
           avatar_url?: string | null
           created_at?: string
           credits_balance?: number
@@ -966,6 +968,7 @@ export type Database = {
           user_id: string
         }
         Update: {
+          admin_note?: string | null
           avatar_url?: string | null
           created_at?: string
           credits_balance?: number
