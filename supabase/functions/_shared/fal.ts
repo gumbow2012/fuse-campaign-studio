@@ -420,7 +420,7 @@ export function buildVideoModelInput(
     return {
       start_image_url: args.imageUrl,
       prompt: clampVideoPrompt(args.prompt),
-      duration: String(clampSeedanceDuration(args.duration ?? 5, model)),
+      duration: snapKlingV3Duration(args.duration ?? 5),
       generate_audio: args.generateAudio !== false,
       cfg_scale: 0.5,
       ...(args.endFrameUrl ? { end_image_url: args.endFrameUrl } : {}),
