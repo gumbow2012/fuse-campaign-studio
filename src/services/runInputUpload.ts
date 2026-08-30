@@ -82,12 +82,17 @@ export async function uploadRunInputFile(file: File) {
 
   const path = `${user.id}/run-inputs/${crypto.randomUUID()}.${extensionFor(file)}`;
 
-  const { error } = await supabase.storage.from(BUCKET).upload(path, file, {
-    contentType: file.type || undefined,
-    upsert: false,
-    cacheControl: "3600",
-  });
+  const { error } = await withTimeout(
+    supabase.storage.from(BUCKET).upload(path, file, {
+      contentType: file.type || undefined,
+      upsert: false,
+      cacheControl: "3600",
+    }),
+    UPLOAD_TIMEOUT_MS,
+    "Upload timed out — please retry.",
+  );
   if (error) throw new Error(error.message);
+
 
   return publicUrl(path);
 }
