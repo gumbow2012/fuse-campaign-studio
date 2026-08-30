@@ -81,7 +81,12 @@ export default function AdminMessages() {
 
   return (
     <SiteShell>
-      <PageMeta title="Messages · FUSE Admin" description="Customer contact-form submissions." noIndex />
+      <PageMeta
+        title="Messages · FUSE Admin"
+        description="Customer contact-form submissions."
+        path="/admin/messages"
+        noindex
+      />
       <div className="mx-auto w-full max-w-4xl px-4 py-10 sm:px-6">
         <header className="mb-6 flex flex-wrap items-end justify-between gap-3">
           <div>
