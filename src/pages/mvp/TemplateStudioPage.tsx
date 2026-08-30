@@ -28,6 +28,11 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import CreditPackDialog from "@/components/mvp/CreditPackDialog";
 import TemplateDetailDialog, { readTemplateAspectRatio } from "@/components/mvp/TemplateDetailDialog";
 import TemplateInputCard from "@/components/templates/TemplateInputCard";
+import {
+  CampaignAssetGroupCard,
+  CampaignAssetGroupModal,
+} from "@/components/templates/CampaignAssetGroup";
+import { campaignInputGroups } from "@/lib/campaignInputGroups";
 import InlineCampaignBuilder from "@/components/templates/InlineCampaignBuilder";
 import CastSelector, { PRIMARY_CAST_SLOT, type CastSelection } from "@/components/templates/CastSelector";
 import { CampaignBuildGraph, type PublicGraph } from "@/components/templates/CampaignBuildGraph";
@@ -1232,6 +1237,87 @@ export default function TemplateStudioPage() {
   const totalInputCount = inputFields.length;
   const readinessPercent = totalInputCount ? Math.round((readyInputCount / totalInputCount) * 100) : 0;
 
+  /*
+   * PRESENTATION-ONLY grouping: customers see product-level cards ("Top
+   * garment") instead of individual backend reference slots. Grouping never
+   * changes the input keys, ordering or the generation payload — the run gate
+   * below still uses `requiredInputsAreReady` over the real inputs.
+   */
+  const inputGroupsSignature = inputFields.map((field) => field.key).join("|");
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const inputGroups = useMemo(() => campaignInputGroups(inputFields), [inputGroupsSignature]);
+  const [openGroupId, setOpenGroupId] = useState<string | null>(null);
+  const openGroup = inputGroups.find((group) => group.id === openGroupId) ?? null;
+
+  const groupFilledCount = (groupId: string) => {
+    const group = inputGroups.find((item) => item.id === groupId);
+    if (!group) return 0;
+    return group.members.filter((member) => isFieldFilled(member.input)).length;
+  };
+  /** READY only when every REQUIRED backend input under the group is satisfied. */
+  const groupIsReady = (groupId: string) => {
+    const group = inputGroups.find((item) => item.id === groupId);
+    if (!group) return false;
+    const requiredMembers = group.members.filter((member) => member.required);
+    const scope = requiredMembers.length ? requiredMembers : group.members;
+    return scope.every((member) => isFieldFilled(member.input));
+  };
+  const groupPreview = (groupId: string): File | string | null => {
+    const group = inputGroups.find((item) => item.id === groupId);
+    if (!group) return null;
+    for (const member of group.members) {
+      const key = member.input.key;
+      const file = files[key];
+      if (file) return file;
+      const library = libraryAssets[key]?.url;
+      if (library) return library;
+    }
+    return null;
+  };
+
+  /** Readiness is counted per real-world group, not per backend slot. */
+  const readyGroupCount = inputGroups.filter((group) => groupIsReady(group.id)).length;
+  const totalGroupCount = inputGroups.length;
+  const groupReadinessPercent = totalGroupCount
+    ? Math.round((readyGroupCount / totalGroupCount) * 100)
+    : 0;
+
+  /** One card per group; single-slot groups keep the existing simple input. */
+  const renderInputGroup = (groupId: string, compact = false) => {
+    const group = inputGroups.find((item) => item.id === groupId);
+    if (!group) return null;
+    if (!group.multi) {
+      const member = group.members[0];
+      return renderInputField(member.input, compact, member.label !== member.input.label ? member.label : undefined);
+    }
+    return (
+      <CampaignAssetGroupCard
+        key={group.id}
+        group={group}
+        compact={compact}
+        filledCount={groupFilledCount(group.id)}
+        totalCount={group.members.length}
+        ready={groupIsReady(group.id)}
+        preview={groupPreview(group.id)}
+        onOpen={() => setOpenGroupId(group.id)}
+      />
+    );
+  };
+
+  const groupModalNode = (
+    <CampaignAssetGroupModal
+      group={openGroup}
+      open={!!openGroup}
+      onClose={() => setOpenGroupId(null)}
+      filledCount={openGroup ? groupFilledCount(openGroup.id) : 0}
+      totalCount={openGroup?.members.length ?? 0}
+      renderMember={(key, displayLabel) => {
+        const field = inputFields.find((item) => item.key === key);
+        return field ? renderInputField(field, true, displayLabel) : null;
+      }}
+    />
+  );
+
   /** Auto-advance to the next unfilled slot after one is satisfied. */
   const advanceFromInput = (filledKey: string) => {
     const order = inputFields.map((field) => field.key);
@@ -1403,7 +1489,7 @@ export default function TemplateStudioPage() {
    * builder (compact = false) AND the mobile inline builder (compact = true).
    * Handlers, upload path, autofill release and validation are identical.
    */
-  const renderInputField = (field: InputField, compact = false) =>
+  const renderInputField = (field: InputField, compact = false, displayLabelOverride?: string) =>
     field.type === "image" ? (
       <div
         key={field.key}
@@ -1416,7 +1502,9 @@ export default function TemplateStudioPage() {
           compact={compact}
           label={field.label}
           displayLabel={
-            castEnabled && field.key === castSlotFieldKey ? "Who's in the campaign?" : undefined
+            castEnabled && field.key === castSlotFieldKey
+              ? "Who's in the campaign?"
+              : displayLabelOverride
           }
           required={field.required}
           highlighted={!compact && focusedInputKey === field.key}
@@ -2268,8 +2356,8 @@ export default function TemplateStudioPage() {
    * the desktop aside is not rendered, above lg this node is null. All state is
    * the page's own, so switching breakpoints keeps files / cast / readiness.
    */
-  const missingAssetCount = Math.max(1, totalInputCount - readyInputCount);
-  const missingAssetLabel = `Add ${missingAssetCount} more asset${totalInputCount - readyInputCount === 1 ? "" : "s"}`;
+  const missingAssetCount = Math.max(1, totalGroupCount - readyGroupCount);
+  const missingAssetLabel = `Add ${missingAssetCount} more asset${missingAssetCount === 1 ? "" : "s"}`;
   /** Contextual builder CTA: unlock (locked) → add assets (incomplete) → run. */
   const inlineGenerateLabel = entitlementLocked
     ? "Unlock access →"
@@ -2295,8 +2383,8 @@ export default function TemplateStudioPage() {
         ref={inlineBuilderRef}
         templateName={selectedTemplate.name}
         metaLine={`${formatCount(inputFields.length, "input", "inputs")} · ${formatCampaignOutputs(selectedTemplate.counts)} · ${creditsRequired} cr`}
-        readyCount={readyInputCount}
-        totalCount={totalInputCount}
+        readyCount={readyGroupCount}
+        totalCount={totalGroupCount}
         creditsLabel={costDisplay}
         topSlot={
           castEnabled && !castSlotFieldKey ? (
@@ -2330,7 +2418,9 @@ export default function TemplateStudioPage() {
           ) : null
         }
       >
-        {inputFields.map((field) => renderInputField(field, true))}
+        {inputGroups.map((group) => (
+          <div key={group.id}>{renderInputGroup(group.id, true)}</div>
+        ))}
       </InlineCampaignBuilder>
     ) : null;
 
@@ -2991,7 +3081,7 @@ export default function TemplateStudioPage() {
                         >
                           {requiredInputsAreReady
                             ? "✓ All assets ready"
-                            : `${readyInputCount} / ${totalInputCount} ready`}
+                            : `${readyGroupCount} / ${totalGroupCount} ready`}
                         </p>
                       </div>
                       <div className="mt-2 h-1 overflow-hidden rounded-full bg-white/10">
@@ -3000,7 +3090,7 @@ export default function TemplateStudioPage() {
                             "h-full rounded-full transition-[width] duration-300 motion-reduce:transition-none",
                             requiredInputsAreReady ? "bg-emerald-300" : "bg-cyan-300",
                           )}
-                          style={{ width: `${readinessPercent}%` }}
+                          style={{ width: `${groupReadinessPercent}%` }}
                         />
                       </div>
                       {Object.keys(autofilledKeys).length ? (
@@ -3035,7 +3125,9 @@ export default function TemplateStudioPage() {
 
                   <div className="grid gap-3 md:grid-cols-2">
 
-                    {inputFields.map((field) => renderInputField(field))}
+                    {inputGroups.map((group) => (
+                      <div key={group.id}>{renderInputGroup(group.id)}</div>
+                    ))}
 
 
                   </div>
@@ -3050,7 +3142,7 @@ export default function TemplateStudioPage() {
                             requiredInputsAreReady ? "text-emerald-200" : "text-slate-400",
                           )}
                         >
-                          {requiredInputsAreReady ? "✓ Ready" : `${readyInputCount} / ${totalInputCount} ready`}
+                          {requiredInputsAreReady ? "✓ Ready" : `${readyGroupCount} / ${totalGroupCount} ready`}
                         </p>
                         <p className="mt-1 text-sm text-slate-300">{costDisplay}</p>
                       </div>
