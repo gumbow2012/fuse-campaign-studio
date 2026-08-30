@@ -388,6 +388,9 @@ export default function AdminUsers() {
           </Button>
         </div>
       </div>
+
+      <EmailComposerDialog open={composerOpen} target={composerTarget} onOpenChange={setComposerOpen} />
+
     </SiteShell>
   );
 }
