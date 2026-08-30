@@ -73,14 +73,16 @@ async function fetchWithTimeout(url: string, init: RequestInit, ms: number) {
  * "authenticated_upload_fuse_assets" RLS policy on the public fuse-assets bucket.
  */
 export async function uploadRunInputFile(file: File) {
-  assertWithinLimit(file);
+  const prepared = await conditionImageForProviders(file);
+  assertWithinLimit(prepared);
 
   const {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) throw new Error("Please sign in to upload.");
 
-  const path = `${user.id}/run-inputs/${crypto.randomUUID()}.${extensionFor(file)}`;
+  const path = `${user.id}/run-inputs/${crypto.randomUUID()}.${extensionFor(prepared)}`;
+
 
   const { error } = await withTimeout(
     supabase.storage.from(BUCKET).upload(path, file, {
