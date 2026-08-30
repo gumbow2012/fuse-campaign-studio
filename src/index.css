@@ -267,3 +267,25 @@
 .react-flow__attribution {
   display: none;
 }
+
+/* Promo bar: slow specular chrome sweep */
+@keyframes promo-chrome-sweep {
+  0% {
+    transform: translateX(-140%);
+  }
+  100% {
+    transform: translateX(140%);
+  }
+}
+
+.promo-chrome-sweep {
+  animation: promo-chrome-sweep 8s linear infinite;
+  will-change: transform;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .promo-chrome-sweep {
+    animation: none;
+    opacity: 0;
+  }
+}
