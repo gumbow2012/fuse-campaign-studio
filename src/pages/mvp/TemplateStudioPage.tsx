@@ -2275,10 +2275,13 @@ export default function TemplateStudioPage() {
    * the desktop aside is not rendered, above lg this node is null. All state is
    * the page's own, so switching breakpoints keeps files / cast / readiness.
    */
-  const inlineGenerateLabel = !user
-    ? "Run template →"
+  const missingAssetCount = Math.max(1, totalInputCount - readyInputCount);
+  const missingAssetLabel = `Add ${missingAssetCount} more asset${totalInputCount - readyInputCount === 1 ? "" : "s"}`;
+  /** Contextual builder CTA: unlock (locked) → add assets (incomplete) → run. */
+  const inlineGenerateLabel = entitlementLocked
+    ? "Unlock access →"
     : !requiredInputsAreReady
-      ? `Add ${Math.max(1, totalInputCount - readyInputCount)} more asset${totalInputCount - readyInputCount === 1 ? "" : "s"}`
+      ? missingAssetLabel
       : checkingCredits
         ? "Checking credits..."
         : runPhase === "uploading"
@@ -2290,6 +2293,7 @@ export default function TemplateStudioPage() {
               : isPrivilegedUser
                 ? "Run template →"
                 : `Run template → ${creditsRequired} cr`;
+
 
   const inlineBuilderNode =
     isCompactLayout && inlineBuilderOpen && selectedTemplate && !selectMode && !hasActiveCampaignWorkspace ? (
