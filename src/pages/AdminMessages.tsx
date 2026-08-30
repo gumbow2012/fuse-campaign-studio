@@ -45,6 +45,10 @@ function mailtoLink(row: ContactMessageRow) {
 export default function AdminMessages() {
   const queryClient = useQueryClient();
   const [newOnly, setNewOnly] = useState(false);
+  const [composerOpen, setComposerOpen] = useState(false);
+  const [composerTarget, setComposerTarget] = useState<EmailComposerTarget | null>(null);
+  const [composerRowId, setComposerRowId] = useState<string | null>(null);
+
 
   const messagesQuery = useQuery({
     queryKey: ["admin-contact-messages"],
