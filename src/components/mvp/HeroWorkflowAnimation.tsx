@@ -28,9 +28,17 @@ function useReducedMotion() {
   return reduced;
 }
 
-export default function HeroWorkflowAnimation({ compact = false }: { compact?: boolean }) {
+export default function HeroWorkflowAnimation({
+  compact = false,
+  grand = false,
+}: {
+  compact?: boolean;
+  /** Desktop hero: larger, brighter, slightly more dimensional centrepiece. */
+  grand?: boolean;
+}) {
   const reduced = useReducedMotion();
   const [stage, setStage] = useState<Stage>(reduced ? 3 : 0);
+
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const seen = useRef(false);
 
