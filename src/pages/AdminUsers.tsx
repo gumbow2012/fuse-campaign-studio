@@ -56,6 +56,9 @@ export default function AdminUsers() {
   const [grantReason, setGrantReason] = useState("");
   const [alertTitle, setAlertTitle] = useState("");
   const [alertMessage, setAlertMessage] = useState("");
+  const [composerOpen, setComposerOpen] = useState(false);
+  const [composerTarget, setComposerTarget] = useState<EmailComposerTarget | null>(null);
+
 
   const usersQuery = useQuery({
     queryKey: ["admin-users", search, filter, sort, direction, page],
