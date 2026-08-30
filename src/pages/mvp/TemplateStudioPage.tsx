@@ -1658,29 +1658,12 @@ export default function TemplateStudioPage() {
     setAutofilledKeys({});
     autofillAppliedRef.current = "";
 
-    /* UNLOCK branch — a logged-out visitor gets the acquisition confirmation,
-       never a pre-purchase uploader. Browsing itself stays open. */
-    if (!user) {
-      setInlineBuilderOpen(false);
-      track("template_unlock_click", { template_id: templateId, surface: "card" });
-      setUnlockOpen(true);
-      return;
-    }
-
+    /* SELECT = INSPECT ONLY. Clicking a campaign never starts checkout and never
+       opens an account screen — it highlights the card and opens its builder so
+       the visitor can read requirements, counts and cost before paying. Purchase
+       happens exclusively from the builder's explicit "Unlock access →" CTA. */
     track("studio_opened", { template_id: templateId });
 
-    /* Signed in but unfunded: the existing contextual Starter offer. The template
-       stays selected, so closing the offer lands straight in the builder. */
-    const incomingCost = templates.find((entry) => entry.id === templateId)?.estimated_credits_per_run ?? 0;
-    if (!isPrivilegedUser && !!profile && incomingCost > 0 && displayedCreditBalance < incomingCost) {
-      track("no_plan_generate_attempt", {
-        template_id: templateId,
-        credits_required: incomingCost,
-        credit_balance: displayedCreditBalance,
-        surface: "unlock",
-      });
-      setPaywallOpen(true);
-    }
 
 
 
