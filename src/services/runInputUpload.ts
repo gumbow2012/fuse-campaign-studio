@@ -85,11 +85,12 @@ export async function uploadRunInputFile(file: File) {
 
 
   const { error } = await withTimeout(
-    supabase.storage.from(BUCKET).upload(path, file, {
-      contentType: file.type || undefined,
+    supabase.storage.from(BUCKET).upload(path, prepared, {
+      contentType: prepared.type || undefined,
       upsert: false,
       cacheControl: "3600",
     }),
+
     UPLOAD_TIMEOUT_MS,
     "Upload timed out — please retry.",
   );
