@@ -1249,6 +1249,17 @@ export default function TemplateStudioPage() {
   const [openGroupId, setOpenGroupId] = useState<string | null>(null);
   const openGroup = inputGroups.find((group) => group.id === openGroupId) ?? null;
 
+  /*
+   * P6b leak fix (presentation only): after a restored post-signup intent the
+   * run may only be missing user input. We keep the intent alive and tell the
+   * customer exactly what to add — the auto-run effect fires the moment the
+   * last required input lands.
+   */
+  const [finishRunPrompt, setFinishRunPrompt] = useState<string[] | null>(null);
+  const [highlightGroupId, setHighlightGroupId] = useState<string | null>(null);
+  const finishPromptRef = useRef<string | null>(null);
+
+
   const groupFilledCount = (groupId: string) => {
     const group = inputGroups.find((item) => item.id === groupId);
     if (!group) return 0;
