@@ -1387,6 +1387,13 @@ export default function TemplateStudioPage() {
   const detailTemplate = templates.find((template) => template.id === detailTemplateId) ?? null;
   const creditShortfall = Math.max(0, creditsRequired - displayedCreditBalance);
   const blockedByCredits = !!user && !isPrivilegedUser && !!profile && creditShortfall > 0;
+  /**
+   * ENTITLEMENT — drives the builder CTA only. A locked visitor can still inspect
+   * requirements, counts, cost and description; they simply cannot generate.
+   * Purchase is never triggered by selection, only by the explicit CTA below.
+   */
+  const entitlementLocked = !isPrivilegedUser && (!user || blockedByCredits);
+
   // FT8 — cast metadata comes from the template version's cast_config.
   // Absent config (every legacy template) keeps the Cast step hidden.
   const castConfig = selectedTemplate?.castConfig ?? null;
