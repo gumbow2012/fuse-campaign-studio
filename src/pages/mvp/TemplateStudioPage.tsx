@@ -2315,9 +2315,12 @@ export default function TemplateStudioPage() {
             />
           ) : undefined
         }
-        generateDisabled={submitting || isRunning || (!!user && (!requiredInputsAreReady || blockedByCredits))}
+        generateDisabled={
+          submitting || isRunning || (!entitlementLocked && !requiredInputsAreReady)
+        }
         generateLabel={inlineGenerateLabel}
-        onGenerate={() => void handleRun()}
+        onGenerate={() => (entitlementLocked ? openUnlockCheckout() : void handleRun())}
+
         onClose={() => setInlineBuilderOpen(false)}
         footer={
           blockedByCredits ? (
