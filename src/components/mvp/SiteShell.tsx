@@ -429,6 +429,11 @@ export default function SiteShell({ children }: { children: ReactNode }) {
                       <Icon className="h-3.5 w-3.5" aria-hidden="true" />
                       {link.label}
                       {link.featureKey ? <FeatureNewBadge featureKey={link.featureKey} /> : null}
+                      {link.badge ? (
+                        <span className="ml-1 rounded-full bg-cyan-400/20 px-1.5 py-[1px] text-[10px] font-bold text-cyan-200">
+                          {link.badge > 99 ? "99+" : link.badge}
+                        </span>
+                      ) : null}
                     </NavLink>
                   );
                 })}
