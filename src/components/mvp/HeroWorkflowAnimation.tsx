@@ -93,7 +93,7 @@ export default function HeroWorkflowAnimation({
         className={cn(
           "relative overflow-hidden rounded-[1.25rem] border bg-[#0B1120]",
           grand
-            ? "border-cyan-200/25 p-5 shadow-[0_28px_70px_-38px_rgba(34,211,238,0.65),inset_0_1px_0_rgba(255,255,255,0.06)]"
+            ? "border-cyan-200/25 p-4 shadow-[0_28px_70px_-38px_rgba(34,211,238,0.65),inset_0_1px_0_rgba(255,255,255,0.06)]"
             : "border-white/10",
           compact ? "px-3 py-3" : grand ? "" : "p-4 sm:p-5",
         )}
@@ -122,7 +122,7 @@ export default function HeroWorkflowAnimation({
           viewBox="0 0 360 168"
           className={cn(
             "relative w-full",
-            compact ? "h-[190px]" : grand ? "h-[280px] xl:h-[320px]" : "h-[168px] sm:h-[188px]",
+            compact ? "h-[190px]" : grand ? "h-[200px] xl:h-[236px]" : "h-[168px] sm:h-[188px]",
           )}
           role="img"
           aria-label="Diagram: products branch into campaign images and video clips, then a final campaign."
