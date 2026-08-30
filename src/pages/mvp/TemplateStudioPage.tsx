@@ -3062,25 +3062,15 @@ export default function TemplateStudioPage() {
                         <p className="mt-1 text-sm text-slate-300">{costDisplay}</p>
                       </div>
                       <Button
-                        onClick={() => void handleRun()}
-                        disabled={submitting || isRunning || (!!user && (!requiredInputsAreReady || blockedByCredits))}
+                        onClick={() => (entitlementLocked ? openUnlockCheckout() : void handleRun())}
+                        disabled={
+                          submitting || isRunning || (!entitlementLocked && !requiredInputsAreReady)
+                        }
                         className="min-w-[200px] rounded-full bg-cyan-300 font-display text-[12px] font-semibold uppercase tracking-[0.14em] text-slate-950 hover:bg-cyan-200"
                       >
-                        {checkingCredits
-                          ? "Checking credits..."
-                          : runPhase === "uploading"
-                            ? "Uploading assets..."
-                            : runPhase === "preparing"
-                              ? "Preparing campaign..."
-                              : submitting || isRunning
-                                ? "Generating..."
-                                : !user
-                                  ? "Run template →"
-                                  : isPrivilegedUser
-                                    ? "Run template →"
-                                    : `Run template → ${creditsRequired} cr`}
-
+                        {inlineGenerateLabel}
                       </Button>
+
                     </div>
 
                     {!user ? (
