@@ -3442,6 +3442,8 @@ export default function TemplateStudioPage() {
       </div>
 
       {/* ACQUISITION — payment-first ACCESS modal (guest unlock + generate gate). */}
+      {groupModalNode}
+
       <TemplateUnlockModal
         open={(unlockOpen || authGateOpen) && !user && !!selectedTemplate}
         onOpenChange={(next) => {
