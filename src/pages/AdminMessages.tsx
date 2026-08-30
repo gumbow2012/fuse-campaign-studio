@@ -197,6 +197,25 @@ export default function AdminMessages() {
           </ul>
         )}
       </div>
+
+      <EmailComposerDialog
+        open={composerOpen}
+        target={composerTarget}
+        onOpenChange={(next) => {
+          setComposerOpen(next);
+          if (!next) setComposerRowId(null);
+        }}
+        onSent={() => {
+          const rowId = composerRowId;
+          const row = rows.find((item) => item.id === rowId);
+          if (rowId && row?.status === "new") {
+            toast("Mark this message reviewed?", {
+              action: { label: "Mark reviewed", onClick: () => markReviewed.mutate(rowId) },
+            });
+          }
+        }}
+      />
     </SiteShell>
+
   );
 }
