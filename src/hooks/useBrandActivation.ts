@@ -26,18 +26,22 @@ export interface UseBrandActivation {
   readiness: BrandReadiness | null;
   activationState: BrandActivationState;
   loading: boolean;
+  /** Brand Setup is a paid-plan feature — free accounts see no brand surfaces. */
+  brandSetupEnabled: boolean;
 }
 
 export function useBrandActivation(): UseBrandActivation {
-  const { user } = useAuth();
+  const { user, profile, isAdmin } = useAuth();
   const { activeBrand, loading: brandsLoading } = useBrand();
   const userId = user?.id ?? "";
+  const brandSetupEnabled = isAdmin || isPaidPlan(profile?.plan);
 
   const productsQuery = useQuery({
     queryKey: ["product-profiles", userId || "anon"],
     queryFn: () => listProductProfiles(userId),
-    enabled: !!userId,
+    enabled: !!userId && brandSetupEnabled,
   });
+
 
   const readiness = useMemo(() => {
     if (!activeBrand) return null;
