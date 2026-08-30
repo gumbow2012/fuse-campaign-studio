@@ -35,6 +35,7 @@ import AdminTemplateImport from "@/pages/AdminTemplateImport";
 import AdminTemplateFactory from "@/pages/AdminTemplateFactory";
 import AdminMerchandising from "@/pages/AdminMerchandising";
 import AdminAdLinks from "@/pages/AdminAdLinks";
+import AdminMessages from "@/pages/AdminMessages";
 import AdminProductLaunchPrototype from "@/pages/AdminProductLaunchPrototype";
 
 
