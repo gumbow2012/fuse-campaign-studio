@@ -376,6 +376,20 @@ export function clampSeedanceDuration(value: unknown, model: VideoModelDefinitio
   return Math.min(range.max, Math.max(range.min, Math.round(next)));
 }
 
+/** Kling v3 only accepts the discrete duration enum 3 / 5 / 10 / 15 seconds. */
+const KLING_V3_DURATIONS = [3, 5, 10, 15];
+
+export function snapKlingV3Duration(value: unknown): string {
+  const raw = Number(value ?? 5);
+  const clamped = Number.isFinite(raw) ? Math.min(15, Math.max(3, raw)) : 5;
+  let best = KLING_V3_DURATIONS[0];
+  for (const option of KLING_V3_DURATIONS) {
+    if (Math.abs(option - clamped) < Math.abs(best - clamped)) best = option;
+  }
+  return String(best);
+}
+
+
 export function buildVideoModelInput(
   modelKey: unknown,
   args: {
@@ -406,7 +420,7 @@ export function buildVideoModelInput(
     return {
       start_image_url: args.imageUrl,
       prompt: clampVideoPrompt(args.prompt),
-      duration: String(clampSeedanceDuration(args.duration ?? 5, model)),
+      duration: snapKlingV3Duration(args.duration ?? 5),
       generate_audio: args.generateAudio !== false,
       cfg_scale: 0.5,
       ...(args.endFrameUrl ? { end_image_url: args.endFrameUrl } : {}),
@@ -548,9 +562,9 @@ export function buildSeedanceReferenceInput(args: {
 
   const input: Record<string, unknown> = {
     prompt: clampVideoPrompt(args.prompt),
-    reference_image_urls: urls,
     image_urls: urls,
     duration,
+
     resolution,
     aspect_ratio: aspectRatio,
     generate_audio: args.generateAudio !== false,
