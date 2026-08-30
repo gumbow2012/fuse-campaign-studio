@@ -395,6 +395,45 @@ export type Database = {
         }
         Relationships: []
       }
+      contact_messages: {
+        Row: {
+          company: string | null
+          created_at: string
+          email: string
+          id: string
+          message: string
+          metadata: Json
+          name: string
+          reviewed_at: string | null
+          source: string
+          status: string
+        }
+        Insert: {
+          company?: string | null
+          created_at?: string
+          email: string
+          id?: string
+          message: string
+          metadata?: Json
+          name: string
+          reviewed_at?: string | null
+          source?: string
+          status?: string
+        }
+        Update: {
+          company?: string | null
+          created_at?: string
+          email?: string
+          id?: string
+          message?: string
+          metadata?: Json
+          name?: string
+          reviewed_at?: string | null
+          source?: string
+          status?: string
+        }
+        Relationships: []
+      }
       contests: {
         Row: {
           cover_url: string | null
