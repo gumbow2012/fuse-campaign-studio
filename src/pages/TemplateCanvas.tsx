@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Clock3, Copy, EyeOff, Film, GitBranch, Image as ImageIcon, Loader2, Maximize2, Minus, ImageDown, Layers, Move, Play, Plus, RefreshCw, Save, Search, Trash2, Type, Upload, X } from "lucide-react";
+import { CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Clock3, Copy, EyeOff, Film, GitBranch, HelpCircle, Image as ImageIcon, Loader2, Maximize2, Minus, ImageDown, Layers, Move, Play, Plus, RefreshCw, Save, Search, Trash2, Type, Upload, X } from "lucide-react";
 import { Link, useSearchParams } from "react-router-dom";
 import SiteShell from "@/components/mvp/SiteShell";
 import TemplateGallery from "@/components/lab/TemplateGallery";
@@ -1729,6 +1729,8 @@ const TemplateCanvas = () => {
     }
   }, [buildAuthHeaders, detail, loadDetail, loadTemplates]);
 
+  const autoDraftStartedRef = useRef(false);
+
   const createTemplate = useCallback(async () => {
     const name = newTemplateName.trim();
     if (!name) {
@@ -1773,6 +1775,20 @@ const TemplateCanvas = () => {
   ]);
 
 
+
+  // Creator Studio "START BUILDING" entry: open the real builder on a fresh
+  // creator-owned draft (created_by = self, enforced server-side).
+  useEffect(() => {
+    if (autoDraftStartedRef.current) return;
+    if (!canUseBuilder || !session) return;
+    if (searchParams.get("newTemplate") !== "1") return;
+    autoDraftStartedRef.current = true;
+    const next = new URLSearchParams(searchParams);
+    next.delete("newTemplate");
+    setSearchParams(next, { replace: true });
+    setNewTemplateName(`Untitled template ${new Date().toLocaleDateString()}`);
+    window.setTimeout(() => void createTemplate(), 0);
+  }, [canUseBuilder, createTemplate, searchParams, session, setSearchParams]);
 
   const cloneCurrentVersion = useCallback(async (asNewTemplate: boolean) => {
     if (!detail) return;
