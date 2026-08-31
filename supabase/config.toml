@@ -184,3 +184,7 @@ verify_jwt = true
 [functions.resolve-creator-invite]
 verify_jwt = false
 
+[functions.admin-creator-economics]
+verify_jwt = true
+
+
