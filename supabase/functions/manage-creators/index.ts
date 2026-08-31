@@ -263,7 +263,58 @@ Deno.serve(async (req) => {
         .eq("id", inviteId!);
       if (acceptError) throw new Error(acceptError.message);
 
-      return json({ ok: true, inviteId, emailSent: false, grantedImmediately: true, userId: targetId });
+      // Existing account: still send the branded VIP email pointing at profile setup.
+      const existingBranded = buildCreatorInviteEmail("https://fuse-us.com/creator/setup", {
+        firstName: personalization.first_name ?? undefined,
+        instagramHandle: personalization.instagram_handle ?? undefined,
+        personalNote: personalization.personal_note ?? undefined,
+        existingUser: true,
+      });
+      const existingSend = await sendEmail({
+        to: email,
+        subject: existingBranded.subject,
+        html: existingBranded.html,
+        text: existingBranded.text,
+        fromName: "FUSE Creator Team",
+      });
+
+      if (!existingSend.sent) {
+        const reason = existingSend.reason === "no_provider"
+          ? "Email provider not configured"
+          : `Email provider rejected the send (${existingSend.status})`;
+        await admin
+          .from("creator_invites")
+          .update({ email_status: "failed", failure_reason: reason.slice(0, 500) })
+          .eq("id", inviteId!);
+        return json({
+          ok: true,
+          inviteId,
+          emailSent: false,
+          grantedImmediately: true,
+          emailStatus: "failed",
+          reason,
+          userId: targetId,
+        });
+      }
+
+      await admin
+        .from("creator_invites")
+        .update({
+          email_status: "provider_accepted",
+          last_sent_at: new Date().toISOString(),
+          sent_count: sentCount + 1,
+          failure_reason: null,
+        })
+        .eq("id", inviteId!);
+
+      return json({
+        ok: true,
+        inviteId,
+        emailSent: true,
+        grantedImmediately: true,
+        emailStatus: "provider_accepted",
+        userId: targetId,
+      });
     }
 
     if (action === "resend") {
