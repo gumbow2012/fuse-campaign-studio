@@ -73,6 +73,7 @@ import FaqPage from "@/pages/mvp/FaqPage";
 import TermsPage from "@/pages/mvp/TermsPage";
 import PrivacyPage from "@/pages/mvp/PrivacyPage";
 import CreatorProgramPage from "@/pages/mvp/CreatorProgramPage";
+import CreatorInviteRedirectPage from "@/pages/mvp/CreatorInviteRedirectPage";
 import CreatorApplyPage from "@/pages/mvp/CreatorApplyPage";
 import CreatorsDirectoryPage from "@/pages/mvp/CreatorsDirectoryPage";
 import ForgotPasswordPage from "@/pages/mvp/ForgotPasswordPage";
@@ -144,6 +145,7 @@ const App = () => (
             <Route path="/terms" element={<TermsPage />} />
             <Route path="/privacy" element={<PrivacyPage />} />
             <Route path="/creators" element={<CreatorProgramPage />} />
+            <Route path="/creator/invite/:token" element={<CreatorInviteRedirectPage />} />
             <Route path="/creators/browse" element={<CreatorsDirectoryPage />} />
             <Route path="/creators/apply" element={<CreatorApplyPage />} />
             <Route path="/auth" element={<AuthPage />} />
