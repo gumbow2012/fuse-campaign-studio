@@ -462,6 +462,51 @@ export default function CreatorDashboard() {
   const displayName =
     creatorProfile?.display_name || profile?.name || user?.email?.split("@")[0] || "creator";
 
+  const handle = creatorProfile?.handle ?? null;
+  const hasTemplates = templates.length > 0;
+  const hasSubmitted =
+    buckets.submitted.length + buckets.approved.length > 0 ||
+    (!reviewStatusTracked && publishedCount > 0);
+
+  const checklist = useMemo<ChecklistItem[]>(
+    () => [
+      { id: "account", label: "Account claimed", done: true },
+      { id: "profile", label: "Creator profile created", done: !!handle },
+      { id: "build", label: "Create your first template", done: hasTemplates },
+      { id: "publish", label: "Publish / submit a template", done: hasSubmitted },
+      { id: "share", label: "Share your creator link", done: linkShared },
+    ],
+    [handle, hasTemplates, hasSubmitted, linkShared],
+  );
+
+  const checklistComplete = checklist.every((item) => item.done);
+  const firstRun = !loading && !hasTemplates && publishedCount === 0;
+
+  const startFirstTemplate = useCallback(() => {
+    track("creator_first_template_started");
+    navigate(CREATE_TEMPLATE_PATH);
+  }, [navigate]);
+
+  const copyCreatorLink = useCallback(async () => {
+    if (!handle) return;
+    const url = `https://fuse-us.com/creator/${handle}`;
+    try {
+      await navigator.clipboard.writeText(url);
+    } catch {
+      /* clipboard may be unavailable — still mark the step done */
+    }
+    setCopied(true);
+    window.setTimeout(() => setCopied(false), 2000);
+    try {
+      window.localStorage.setItem(SHARE_FLAG_KEY, "1");
+    } catch {
+      /* ignore */
+    }
+    setLinkShared(true);
+    track("creator_profile_link_copied");
+  }, [handle]);
+
+
 
   const renderBucket = (bucket: ReviewBucket, label: string) => (
     <div className={panelClass}>
