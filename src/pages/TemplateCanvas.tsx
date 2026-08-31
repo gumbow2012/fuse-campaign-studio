@@ -1805,6 +1805,16 @@ const TemplateCanvas = () => {
 
 
 
+  // Creator Studio "START BUILDING" entry also launches the guided walkthrough.
+  const tutorialLaunchedRef = useRef(false);
+  useEffect(() => {
+    if (tutorialLaunchedRef.current) return;
+    if (!isCreatorOnly || !detail) return;
+    if (searchParams.get("tutorial") !== "1") return;
+    tutorialLaunchedRef.current = true;
+    tutorial.start();
+  }, [detail, isCreatorOnly, searchParams, tutorial]);
+
   // Creator Studio "START BUILDING" entry: open the real builder on a fresh
   // creator-owned draft (created_by = self, enforced server-side).
   useEffect(() => {
@@ -2646,7 +2656,40 @@ const TemplateCanvas = () => {
         }}
       />
       {isCreatorOnly ? (
-        <CreatorBuilderHelpPanel open={showCreatorHelp} onClose={() => setShowCreatorHelp(false)} />
+        <CreatorBuilderHelpPanel
+          open={showCreatorHelp}
+          onClose={() => setShowCreatorHelp(false)}
+          onReplayWalkthrough={() => {
+            setShowCreatorHelp(false);
+            tutorial.start();
+          }}
+        />
+      ) : null}
+      {isCreatorOnly && tutorial.active && tutorial.lesson ? (
+        <CreatorTutorialOverlay
+          lesson={tutorial.lesson}
+          index={tutorial.index}
+          total={tutorial.total}
+          completedIds={tutorial.completedIds}
+          milestoneId={tutorial.milestoneId}
+          onNext={tutorial.next}
+          onBack={tutorial.back}
+          onSkip={tutorial.skip}
+        />
+      ) : null}
+      {isCreatorOnly ? (
+        <CreditConfirmModal
+          open={showTestCostConfirm}
+          onOpenChange={setShowTestCostConfirm}
+          creditCost={estimatedTestCredits}
+          currentBalance={profile?.credits_balance ?? 0}
+          actionLabel="Run test"
+          onConfirm={() => {
+            setShowTestCostConfirm(false);
+            track("creator_test_started", { steps: graphSummary.nodes });
+            void handleRun();
+          }}
+        />
       ) : null}
       <div className="mx-auto flex w-full min-w-0 max-w-[2100px] flex-col gap-3 overflow-x-hidden px-3 py-3 sm:px-4">
         {isCreatorOnly ? (
