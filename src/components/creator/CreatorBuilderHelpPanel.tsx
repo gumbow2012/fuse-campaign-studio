@@ -1,12 +1,13 @@
 /**
  * Creator builder HELP panel (presentation only).
  * Always reachable from the creator-mode builder header so the education
- * survives onboarding. The walkthrough replay is a stub — the interactive
- * coachmark tutorial ships in the next build.
+ * survives onboarding. Replay walkthrough restarts the interactive coachmark
+ * tutorial over the real builder controls.
  */
 import { X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { CREATOR_HELP_TOPICS, CREATOR_NODE_HELP } from "@/lib/creatorBuilderCopy";
+import { CREATOR_PORT_LEGEND } from "@/lib/creatorTutorial";
 
 const NODE_ORDER = ["input", "reference", "prompt", "image", "video", "connection"] as const;
 
@@ -50,9 +51,22 @@ export default function CreatorBuilderHelpPanel({
         </Button>
         {!onReplayWalkthrough ? (
           <p className="mt-2 text-[11px] text-muted-foreground">
-            The guided walkthrough arrives in the next update.
+            Open a template draft to replay the guided walkthrough.
           </p>
         ) : null}
+
+        <section className="mt-6">
+          <h3 className="font-display text-sm font-bold uppercase tracking-[0.14em] text-foreground">
+            Port legend
+          </h3>
+          <ul className="mt-2 space-y-1.5">
+            {CREATOR_PORT_LEGEND.map((item) => (
+              <li key={item.label} className="text-xs text-muted-foreground">
+                <span className="font-semibold text-foreground">{item.label}</span> — {item.body}
+              </li>
+            ))}
+          </ul>
+        </section>
 
         <section className="mt-6">
           <h3 className="font-display text-sm font-bold uppercase tracking-[0.14em] text-foreground">

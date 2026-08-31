@@ -3624,7 +3624,7 @@ const TemplateCanvas = () => {
                   )}
                 </div>
               </div>
-              <div className="grid min-w-0 content-start gap-3">
+              <div className="grid min-w-0 content-start gap-3" data-tutorial="template-basics">
                 <div className="grid gap-3 md:grid-cols-2">
                   <div className="space-y-2">
                     <Label>Template Name</Label>
