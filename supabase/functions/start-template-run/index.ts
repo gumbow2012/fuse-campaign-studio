@@ -750,17 +750,22 @@ Deno.serve(async (req) => {
       suppliedInputs: { ...uploadedInputs, ...inputs },
     });
 
+    const basePayload = castRuntime ? { ...finalInputs, [CAST_RUNTIME_KEY]: castRuntime } : finalInputs;
     const { error: inputUpdateError } = await admin
       .from("execution_jobs")
       .update({
         // MODE A carries the cast runtime alongside inputs; 0 extra provider calls,
         // 0 extra credits, run-cost calculation unchanged.
-        input_payload: castRuntime ? { ...finalInputs, [CAST_RUNTIME_KEY]: castRuntime } : finalInputs,
+        // P5C stores the immutable economics snapshot used by finalize/refund.
+        input_payload: storedEconomics
+          ? { ...basePayload, [RUN_ECONOMICS_KEY]: storedEconomics }
+          : basePayload,
       })
       .eq("id", job.id);
     if (inputUpdateError) throw new Error(inputUpdateError.message);
 
     if (user && !bypassCredits && creditCost > 0) {
+      // ONE debit for base + marketplace surcharge.
       const { error: creditError } = await admin.rpc("apply_credit_transaction", {
         p_user_id: user.id,
         p_amount: -creditCost,
@@ -772,10 +777,17 @@ Deno.serve(async (req) => {
       });
       if (creditError) {
         await admin.from("execution_jobs").delete().eq("id", job.id);
-        throw new Error(creditError.message);
+        return json({
+          error: "INSUFFICIENT_CREDITS",
+          code: "INSUFFICIENT_CREDITS",
+          required: creditCost,
+          baseCredits: baseCreditCost,
+          surchargeCredits: creditCost - baseCreditCost,
+        }, 402);
       }
       chargedCredits = creditCost;
     }
+
 
     if (!executionNodes.length) throw new Error("Template version has no connected execution nodes");
 
