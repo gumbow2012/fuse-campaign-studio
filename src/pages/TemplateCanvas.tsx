@@ -1763,8 +1763,12 @@ const TemplateCanvas = () => {
 
   const autoDraftStartedRef = useRef(false);
 
-  const createTemplate = useCallback(async () => {
-    const name = newTemplateName.trim();
+  const createTemplate = useCallback(async (overrides?: { name?: string; description?: string }) => {
+    // `overrides` lets programmatic entry points (creator START BUILDING, gallery
+    // create) pass the name directly instead of relying on freshly-set state,
+    // which used to read a stale empty value and hard-fail with "name required".
+    const overrideName = overrides?.name?.trim();
+    const name = overrideName || newTemplateName.trim() || (overrides ? CREATOR_DEFAULT_TEMPLATE_NAME : "");
     if (!name) {
       toast({ title: "Template name required", variant: "destructive" });
       return;
@@ -1774,10 +1778,11 @@ const TemplateCanvas = () => {
       const data = await invokeWorkbench({
         action: "create_template",
         name,
-        description: newTemplateDescription,
+        description: overrides?.description ?? newTemplateDescription,
         previewFile: null,
         withStarterGraph: false,
       });
+
       const versionId = typeof data.versionId === "string" ? data.versionId : null;
       if (!versionId) throw new Error("Template created but the workbench did not return a version id");
 
