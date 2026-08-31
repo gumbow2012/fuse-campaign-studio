@@ -4,6 +4,7 @@ import { corsHeaders, createAdminClient, errorMessage, json } from "../_shared/s
 import { buildTemplateInputPlan } from "../_shared/template-inputs.ts";
 import { readCastConfig } from "../_shared/cast-config.ts";
 import { getTemplateCreditCost } from "../_shared/template-pricing.ts";
+import { resolveRunEconomics } from "../_shared/creatorSurcharge.ts";
 
 function parseOutputExposed(value: unknown) {
   if (typeof value === "boolean") return value;
@@ -263,6 +264,8 @@ Deno.serve(async (req) => {
           creator: template?.created_by ? creatorByUserId.get(String(template.created_by)) ?? null : null,
           previewUrl: cover.url,
           previewAssetType: cover.type,
+          baseCreditsPerRun: getTemplateCreditCost(template?.name, counts),
+          marketplaceSurchargeCredits: 0,
           estimatedCreditsPerRun: getTemplateCreditCost(template?.name, counts),
           counts: {
             inputs: inputPlan.slots.length,
@@ -278,6 +281,39 @@ Deno.serve(async (req) => {
         };
       })
       .sort((a, b) => a.templateName.localeCompare(b.templateName));
+
+    // P5C — customers must see the TOTAL (base + creator marketplace surcharge)
+    // before running. Surcharge math comes only from the shared server helper.
+    let viewerId: string | null = null;
+    try {
+      const authHeader = req.headers.get("Authorization");
+      if (authHeader) {
+        const { data } = await admin.auth.getUser(authHeader.replace("Bearer ", ""));
+        viewerId = data.user?.id ?? null;
+      }
+    } catch {
+      viewerId = null;
+    }
+
+    const uniqueTemplateIds = [...new Set(catalog.map((entry) => String(entry.templateId)))];
+    const { data: monetizedRows } = await admin
+      .from("fuse_templates")
+      .select("id")
+      .eq("monetization_enabled", true)
+      .in("id", uniqueTemplateIds);
+    const monetizedIds = (monetizedRows ?? []).map((row: any) => String(row.id));
+    const economicsByTemplate = new Map<string, number>();
+    for (const templateId of monetizedIds) {
+      const economics = await resolveRunEconomics(admin, templateId);
+      if (economics.monetized && economics.creatorId !== viewerId) {
+        economicsByTemplate.set(templateId, economics.surchargeCredits);
+      }
+    }
+    for (const entry of catalog) {
+      const surcharge = economicsByTemplate.get(String(entry.templateId)) ?? 0;
+      entry.marketplaceSurchargeCredits = surcharge;
+      entry.estimatedCreditsPerRun = entry.baseCreditsPerRun + surcharge;
+    }
 
     return json({ templates: catalog });
   } catch (error) {

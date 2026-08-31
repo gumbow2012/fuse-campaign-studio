@@ -22,6 +22,11 @@ import {
 } from "../_shared/cast.ts";
 import { countTemplateDeliverables, getTemplateCreditCost } from "../_shared/template-pricing.ts";
 import {
+  buildStoredRunEconomics,
+  resolveRunEconomics,
+  RUN_ECONOMICS_KEY,
+} from "../_shared/creatorSurcharge.ts";
+import {
   assertRegenerationAccess,
   resolveRegenerationSubgraph,
 } from "../_shared/regeneration.ts";
@@ -407,7 +412,15 @@ async function handleRunFork(
     throw new ForkRunError("EMPTY_GRAPH", "This workflow has no connected execution steps");
   }
   const deliverableCounts = countTemplateDeliverables(executionNodes);
-  const creditCost = privileged ? 0 : getTemplateCreditCost(templateName, deliverableCounts);
+  const baseCreditCost = privileged ? 0 : getTemplateCreditCost(templateName, deliverableCounts);
+
+  // P5C — additive creator marketplace surcharge (base pricing unchanged).
+  // Skipped for privileged runs and for creators running their own template.
+  const forkEconomics = privileged ? null : await resolveRunEconomics(admin, sourceTemplateId);
+  const storedEconomics = forkEconomics && forkEconomics.monetized && forkEconomics.creatorId !== user.id
+    ? buildStoredRunEconomics(forkEconomics, baseCreditCost)
+    : null;
+  const creditCost = baseCreditCost + (storedEconomics?.surcharge_credits ?? 0);
 
   // Idempotency — a retry never charges or runs twice.
   if (idempotencyKey) {
@@ -497,6 +510,7 @@ async function handleRunFork(
           idempotencyKey: idempotencyKey || null,
           credits: creditCost,
         }),
+        ...(storedEconomics ? { [RUN_ECONOMICS_KEY]: storedEconomics } : {}),
       },
       result_payload: {},
     })
@@ -688,11 +702,43 @@ Deno.serve(async (req) => {
     const templateName = getVersionTemplateName(version);
 
     let creditCost = 0;
+    let baseCreditCost = 0;
+    let storedEconomics: ReturnType<typeof buildStoredRunEconomics> = null;
     if (user && !bypassCredits) {
       // FREEMIUM: any signed-in user may run as long as they can afford it.
       // The credit charge (and refund-on-failure) below is the only gate.
-      creditCost = getTemplateCreditCost(templateName, deliverableCounts);
+      baseCreditCost = getTemplateCreditCost(templateName, deliverableCounts);
+      creditCost = baseCreditCost;
+
+      // P5C — creator marketplace surcharge. Base tier pricing is untouched;
+      // the surcharge is additive and only applies to monetized templates that
+      // the runner does not own.
+      const economics = await resolveRunEconomics(admin, version.template_id);
+      if (economics.monetized && economics.creatorId !== user.id) {
+        storedEconomics = buildStoredRunEconomics(economics, baseCreditCost);
+        creditCost = baseCreditCost + economics.surchargeCredits;
+      }
+
+      if (creditCost > 0) {
+        const { data: balanceRow } = await admin
+          .from("profiles")
+          .select("credits_balance")
+          .eq("user_id", user.id)
+          .maybeSingle();
+        const balance = Number((balanceRow as any)?.credits_balance ?? 0);
+        if (balance < creditCost) {
+          return json({
+            error: "INSUFFICIENT_CREDITS",
+            code: "INSUFFICIENT_CREDITS",
+            required: creditCost,
+            baseCredits: baseCreditCost,
+            surchargeCredits: creditCost - baseCreditCost,
+            balance,
+          }, 402);
+        }
+      }
     }
+
 
     const { data: job, error: jobError } = await admin
       .from("execution_jobs")
@@ -718,17 +764,22 @@ Deno.serve(async (req) => {
       suppliedInputs: { ...uploadedInputs, ...inputs },
     });
 
+    const basePayload = castRuntime ? { ...finalInputs, [CAST_RUNTIME_KEY]: castRuntime } : finalInputs;
     const { error: inputUpdateError } = await admin
       .from("execution_jobs")
       .update({
         // MODE A carries the cast runtime alongside inputs; 0 extra provider calls,
         // 0 extra credits, run-cost calculation unchanged.
-        input_payload: castRuntime ? { ...finalInputs, [CAST_RUNTIME_KEY]: castRuntime } : finalInputs,
+        // P5C stores the immutable economics snapshot used by finalize/refund.
+        input_payload: storedEconomics
+          ? { ...basePayload, [RUN_ECONOMICS_KEY]: storedEconomics }
+          : basePayload,
       })
       .eq("id", job.id);
     if (inputUpdateError) throw new Error(inputUpdateError.message);
 
     if (user && !bypassCredits && creditCost > 0) {
+      // ONE debit for base + marketplace surcharge.
       const { error: creditError } = await admin.rpc("apply_credit_transaction", {
         p_user_id: user.id,
         p_amount: -creditCost,
@@ -740,10 +791,17 @@ Deno.serve(async (req) => {
       });
       if (creditError) {
         await admin.from("execution_jobs").delete().eq("id", job.id);
-        throw new Error(creditError.message);
+        return json({
+          error: "INSUFFICIENT_CREDITS",
+          code: "INSUFFICIENT_CREDITS",
+          required: creditCost,
+          baseCredits: baseCreditCost,
+          surchargeCredits: creditCost - baseCreditCost,
+        }, 402);
       }
       chargedCredits = creditCost;
     }
+
 
     if (!executionNodes.length) throw new Error("Template version has no connected execution nodes");
 

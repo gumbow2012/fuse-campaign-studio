@@ -1457,7 +1457,11 @@ export default function TemplateStudioPage() {
   };
 
 
+  // P5C — `estimated_credits_per_run` is the authoritative TOTAL from the
+  // server (base tier + creator marketplace surcharge). Never recompute it here.
   const creditsRequired = selectedTemplate?.estimated_credits_per_run ?? 0;
+  const marketplaceSurcharge = Math.max(0, selectedTemplate?.marketplace_surcharge_credits ?? 0);
+  const baseRunCredits = selectedTemplate?.base_credits_per_run ?? Math.max(0, creditsRequired - marketplaceSurcharge);
   const selectedTemplateOutputCount = getTemplateOutputCount(selectedTemplate);
   const [outputSplitOpen, setOutputSplitOpen] = useState(false);
   const outputSplit = useMemo(() => {
@@ -2109,6 +2113,9 @@ export default function TemplateStudioPage() {
     track("run_template_clicked", {
       template_id: String(selectedTemplate.id),
       credits_required: creditsRequired,
+      base_credits: baseRunCredits,
+      marketplace_surcharge_credits: marketplaceSurcharge,
+      monetized: marketplaceSurcharge > 0,
     });
     if (!user) {
       openGenerateAuthGate();
@@ -3164,7 +3171,16 @@ export default function TemplateStudioPage() {
                               <Info className="h-3 w-3" />
                             </button>
                           </TooltipTrigger>
-                          <TooltipContent>Estimated run cost for this template.</TooltipContent>
+                          <TooltipContent>
+                            {marketplaceSurcharge > 0 ? (
+                              <span>
+                                {baseRunCredits} cr campaign + {marketplaceSurcharge} cr creator marketplace fee
+                                = {creditsRequired} cr total.
+                              </span>
+                            ) : (
+                              "Estimated run cost for this template."
+                            )}
+                          </TooltipContent>
                         </Tooltip>
                       </span>
                     </div>

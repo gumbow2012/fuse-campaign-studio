@@ -150,6 +150,8 @@ type CatalogTemplate = {
   description?: string | null;
   versionId?: unknown;
   estimatedCreditsPerRun?: unknown;
+  baseCreditsPerRun?: unknown;
+  marketplaceSurchargeCredits?: unknown;
   previewUrl?: string | null;
   previewAssetType?: "image" | "video" | null;
   reviewStatus?: string | null;
@@ -183,6 +185,10 @@ export interface ApiTemplate {
   category: string | null;
   output_type: string | null;
   estimated_credits_per_run: number;
+  /** P5C — base campaign tier cost, excluding any creator marketplace surcharge. */
+  base_credits_per_run?: number;
+  /** P5C — additive creator marketplace surcharge (0 for FUSE templates). */
+  marketplace_surcharge_credits?: number;
   is_active: boolean;
   input_schema: Array<{
     key: string;
@@ -276,6 +282,12 @@ export async function fetchTemplates(token: string): Promise<ApiTemplate[]> {
           Number(template?.counts?.videoOutputs ?? 0) > 0 ? "video" : "image",
         estimated_credits_per_run: Number(
           template?.estimatedCreditsPerRun ?? 0,
+        ),
+        base_credits_per_run: Number(
+          template?.baseCreditsPerRun ?? template?.estimatedCreditsPerRun ?? 0,
+        ),
+        marketplace_surcharge_credits: Number(
+          template?.marketplaceSurchargeCredits ?? 0,
         ),
         is_active: true,
         input_schema: Array.isArray(template.inputs)
