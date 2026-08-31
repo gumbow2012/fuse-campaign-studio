@@ -79,9 +79,22 @@ function newBrandedToken(): string {
   return `${crypto.randomUUID()}${crypto.randomUUID()}`.replace(/-/g, "");
 }
 
-function brandedUrl(token: string) {
-  return `${BRANDED_INVITE_BASE}/${token}`;
+/** Non-PII campaign attribution appended to invite links. */
+const INVITE_UTM = "utm_source=creator_invite&utm_medium=email&utm_campaign=vip_creator_access";
+
+function withInviteUtm(url: string) {
+  return `${url}${url.includes("?") ? "&" : "?"}${INVITE_UTM}`;
 }
+
+function brandedUrl(token: string) {
+  return withInviteUtm(`${BRANDED_INVITE_BASE}/${token}`);
+}
+
+/** Existing-account landing: profile setup, no token, no PII. */
+function existingUserSetupUrl() {
+  return withInviteUtm(INVITE_REDIRECT_TO);
+}
+
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: corsHeaders });
@@ -264,7 +277,7 @@ Deno.serve(async (req) => {
       if (acceptError) throw new Error(acceptError.message);
 
       // Existing account: still send the branded VIP email pointing at profile setup.
-      const existingBranded = buildCreatorInviteEmail("https://fuse-us.com/creator/setup", {
+      const existingBranded = buildCreatorInviteEmail(existingUserSetupUrl(), {
         firstName: personalization.first_name ?? undefined,
         instagramHandle: personalization.instagram_handle ?? undefined,
         personalNote: personalization.personal_note ?? undefined,
