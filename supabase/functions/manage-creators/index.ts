@@ -277,7 +277,7 @@ Deno.serve(async (req) => {
       if (acceptError) throw new Error(acceptError.message);
 
       // Existing account: still send the branded VIP email pointing at profile setup.
-      const existingBranded = buildCreatorInviteEmail("https://fuse-us.com/creator/setup", {
+      const existingBranded = buildCreatorInviteEmail(existingUserSetupUrl(), {
         firstName: personalization.first_name ?? undefined,
         instagramHandle: personalization.instagram_handle ?? undefined,
         personalNote: personalization.personal_note ?? undefined,
