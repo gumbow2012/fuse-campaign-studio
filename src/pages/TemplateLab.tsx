@@ -537,7 +537,7 @@ const TemplateLab = () => {
     return () => {
       cancelled = true;
     };
-  }, [bulkFiles, bulkRows, bulkSelection, error, job, jobId, phase, recentRuns, runnerMode, selectedVersionId]);
+  }, [bulkFiles, bulkRows, bulkSelection, error, job, jobId, phase, recentRuns, runnerMode, selectedVersionId, session?.user?.id]);
 
   useEffect(() => {
     bulkRowsRef.current = bulkRows;
