@@ -406,10 +406,16 @@ export default function CreatorDashboard() {
 
 
   useEffect(() => {
-    if (section === "analytics" && !analytics && !analyticsLoading && !analyticsError) {
+    if (
+      (section === "analytics" || section === "overview") &&
+      !analytics &&
+      !analyticsLoading &&
+      !analyticsError
+    ) {
       void loadAnalytics();
     }
   }, [section, analytics, analyticsLoading, analyticsError, loadAnalytics]);
+
 
 
   const load = useCallback(async () => {
