@@ -42,7 +42,10 @@ type Action =
   | "delete_node"
   | "add_edge"
   | "reorder_edge"
-  | "delete_edge";
+  | "delete_edge"
+  | "template_royalty"
+  | "set_template_royalty";
+
 
 
 type NodeType = "user_input" | "image_gen" | "video_gen" | "prompt";
