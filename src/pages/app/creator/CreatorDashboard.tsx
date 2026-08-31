@@ -8,9 +8,11 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import {
   BarChart3,
+  Check,
+  Copy,
   Gift,
   LayoutDashboard,
   Layers3,
@@ -26,6 +28,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/contexts/AuthContext";
 import { cn } from "@/lib/utils";
+import { track } from "@/lib/analytics/track";
 import { getCreatorLevel } from "@/lib/creatorLevels";
 import { getOwnCreatorProfile, type CreatorProfile } from "@/services/creatorProfile";
 import { CreatorPerformancePanel } from "@/components/CreatorPerformance";
@@ -58,22 +61,29 @@ type SectionId =
   | "approved"
   | "rejected"
   | "analytics"
+  | "earnings"
+  | "resources"
   | "challenges"
   | "rewards"
   | "profile";
 
-const SECTIONS: Array<{ id: SectionId; label: string }> = [
-  { id: "overview", label: "Overview" },
+const CREATE_TEMPLATE_PATH = "/app/lab/templates";
+
+const SECTIONS: Array<{ id: SectionId; label: string; to?: string }> = [
+  { id: "overview", label: "Creator Home" },
   { id: "templates", label: "My Templates" },
   { id: "drafts", label: "Drafts" },
   { id: "submitted", label: "Submitted" },
   { id: "approved", label: "Approved" },
   { id: "rejected", label: "Needs Changes" },
   { id: "analytics", label: "Analytics" },
+  { id: "earnings", label: "Earnings" },
+  { id: "profile", label: "Profile" },
+  { id: "resources", label: "Resources" },
   { id: "challenges", label: "Challenges" },
   { id: "rewards", label: "Levels & Rewards" },
-  { id: "profile", label: "Profile" },
 ];
+
 
 
 const panelClass =
