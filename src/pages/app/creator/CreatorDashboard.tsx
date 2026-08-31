@@ -353,10 +353,21 @@ export default function CreatorDashboard() {
   const [loading, setLoading] = useState(true);
   const [section, setSection] = useState<SectionId>("overview");
   const [onboardingBannerDismissed, setOnboardingBannerDismissed] = useState(true);
+  const [linkShared, setLinkShared] = useState(false);
+  const [checklistDismissed, setChecklistDismissed] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const navigate = useNavigate();
 
   useEffect(() => {
     setOnboardingBannerDismissed(window.localStorage.getItem(ONBOARDING_BANNER_KEY) === "1");
+    setLinkShared(window.localStorage.getItem(SHARE_FLAG_KEY) === "1");
+    setChecklistDismissed(window.localStorage.getItem(CHECKLIST_DISMISSED_KEY) === "1");
   }, []);
+
+  useEffect(() => {
+    track("creator_home_view");
+  }, []);
+
 
   const loadAnalytics = useCallback(async () => {
     setAnalyticsLoading(true);
