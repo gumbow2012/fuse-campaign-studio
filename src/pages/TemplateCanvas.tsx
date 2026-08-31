@@ -582,6 +582,8 @@ const TemplateCanvas = () => {
   const [showCreatorOverflow, setShowCreatorOverflow] = useState(false);
   const [showTestCostConfirm, setShowTestCostConfirm] = useState(false);
   const tutorial = useCreatorTutorial(isCreatorOnly);
+  const tutorialRef = useRef(tutorial);
+  tutorialRef.current = tutorial;
   const [searchParams, setSearchParams] = useSearchParams();
   const [templates, setTemplates] = useState<TemplateOption[]>([]);
   const [loadingTemplates, setLoadingTemplates] = useState(false);
@@ -1904,7 +1906,7 @@ const TemplateCanvas = () => {
     } finally {
       setMutating(null);
     }
-  }, [buildAuthHeaders, detail, refreshAfterMutation]);
+  }, [buildAuthHeaders, detail, refreshAfterMutation, tutorial]);
 
 
 
@@ -2140,7 +2142,7 @@ const TemplateCanvas = () => {
       deletingNodeIdsRef.current.delete(nodeId);
       setMutating(null);
     }
-  }, [detail, invokeWorkbench, refreshAfterMutation]);
+  }, [buildAuthHeaders, detail, invokeWorkbench, refreshAfterMutation, tutorial]);
 
   const deleteSelectedNode = useCallback(async () => {
     if (!selectedNode || !detail) return;
