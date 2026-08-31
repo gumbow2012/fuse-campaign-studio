@@ -119,9 +119,41 @@ Deno.serve(async (req) => {
         sentCount = Number((inserted as any)?.sent_count ?? 0);
       }
 
-      const { error: inviteError } = await admin.auth.admin.inviteUserByEmail(email);
+      const { data: linkData, error: inviteError } = await admin.auth.admin.generateLink({
+        type: "invite",
+        email,
+        options: { redirectTo: INVITE_REDIRECT_TO },
+      });
 
       if (!inviteError) {
+        const actionLink = (linkData as any)?.properties?.action_link as string | undefined;
+        if (!actionLink) {
+          await admin
+            .from("creator_invites")
+            .update({ email_status: "failed", failure_reason: "No invite link generated" })
+            .eq("id", inviteId!);
+          return json({ ok: false, inviteId, emailSent: false, emailStatus: "failed", reason: "Could not generate invite link" });
+        }
+
+        const branded = buildCreatorInviteEmail(actionLink);
+        const sendResult = await sendEmail({
+          to: email,
+          subject: branded.subject,
+          html: branded.html,
+          text: branded.text,
+        });
+
+        if (!sendResult.sent) {
+          const reason = sendResult.reason === "no_provider"
+            ? "Email provider not configured"
+            : `Email provider rejected the send (${sendResult.status})`;
+          await admin
+            .from("creator_invites")
+            .update({ email_status: "failed", failure_reason: reason.slice(0, 500) })
+            .eq("id", inviteId!);
+          return json({ ok: false, inviteId, emailSent: false, emailStatus: "failed", reason });
+        }
+
         // Honest status: the provider accepted the send. Delivery is NOT confirmed here.
         await admin
           .from("creator_invites")
@@ -134,6 +166,7 @@ Deno.serve(async (req) => {
           .eq("id", inviteId!);
         return json({ ok: true, inviteId, emailSent: true, grantedImmediately: false, emailStatus: "provider_accepted" });
       }
+
 
       const message = inviteError.message ?? "";
       const alreadyExists = /already|registered|exists/i.test(message);
