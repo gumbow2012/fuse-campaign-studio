@@ -29,6 +29,8 @@ type Body = {
   displayName?: string;
   personalNote?: string;
   creatorSpecialty?: string;
+  /** Internal commercial setting (bps). Never included in the invite email. */
+  creatorShareBps?: number | null;
 };
 
 type Personalization = {
@@ -38,6 +40,32 @@ type Personalization = {
   personal_note: string | null;
   creator_specialty: string | null;
 };
+
+/**
+ * Reads the invite's optional revenue-share override (bps), validated against the
+ * active platform_economics_config bounds. Returns undefined when not provided.
+ */
+async function readInviteShareBps(admin: any, body: Body): Promise<number | null | undefined> {
+  const raw = body.creatorShareBps;
+  if (raw === undefined) return undefined;
+  if (raw === null) return null;
+  const shareBps = Number(raw);
+  const { data, error } = await admin
+    .from("platform_economics_config")
+    .select("creator_share_min_bps, creator_share_max_bps")
+    .eq("is_active", true)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  if (!data) throw new Error("No active platform economics config found");
+  const min = Number((data as any).creator_share_min_bps);
+  const max = Number((data as any).creator_share_max_bps);
+  if (!Number.isInteger(shareBps) || shareBps < min || shareBps > max) {
+    throw new Error(`Revenue share must be between ${min / 100}% and ${max / 100}%`);
+  }
+  return shareBps;
+}
 
 const VERIFICATION_STATUSES = ["creator", "verified", "featured", "partner"] as const;
 
@@ -159,6 +187,8 @@ Deno.serve(async (req) => {
       if (!email || !email.includes("@")) throw new Error("A valid email is required");
 
       const personalization = readPersonalization(body);
+      const inviteShareBps = await readInviteShareBps(admin, body);
+      const sharePatch = inviteShareBps === undefined ? {} : { creator_share_bps: inviteShareBps };
 
       const { data: existingInvite } = await admin
         .from("creator_invites")
@@ -171,13 +201,13 @@ Deno.serve(async (req) => {
       if (inviteId) {
         const { error } = await admin
           .from("creator_invites")
-          .update({ status: "pending", invited_by: user.id, ...personalization })
+          .update({ status: "pending", invited_by: user.id, ...personalization, ...sharePatch })
           .eq("id", inviteId);
         if (error) throw new Error(error.message);
       } else {
         const { data: inserted, error } = await admin
           .from("creator_invites")
-          .insert({ email, invited_by: user.id, status: "pending", ...personalization })
+          .insert({ email, invited_by: user.id, status: "pending", ...personalization, ...sharePatch })
           .select("id, sent_count")
           .single();
         if (error) throw new Error(error.message);
