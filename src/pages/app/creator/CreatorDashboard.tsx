@@ -572,34 +572,52 @@ export default function CreatorDashboard() {
           </section>
         ) : null}
 
+        {!loading && !(checklistComplete && checklistDismissed) ? (
+          <ChecklistCard
+            items={checklist}
+            complete={checklistComplete}
+            onDismiss={() => {
+              try {
+                window.localStorage.setItem(CHECKLIST_DISMISSED_KEY, "1");
+              } catch {
+                /* ignore */
+              }
+              setChecklistDismissed(true);
+            }}
+          />
+        ) : null}
+
         <header>
           <p className="text-xs uppercase tracking-[0.28em] text-cyan-200/70">Creator Studio</p>
           <h1 className="mt-2 font-display text-3xl font-black text-foreground sm:text-4xl">
-            Welcome back, {displayName}
+            {firstRun ? "Creator Home" : `Welcome back, ${displayName}`}
           </h1>
         </header>
 
-        <div className="mt-8 grid gap-4 sm:grid-cols-3">
-          <StatTile
-            label="Templates Published"
-            value={loading ? "—" : String(publishedCount)}
-            hint="Templates you own in FUSE"
-          />
-          <StatTile
-            label="Creator Level"
-            value={loading ? "—" : level.current.name}
-            hint={
-              reviewStatusTracked
-                ? `${approvedCount} approved template${approvedCount === 1 ? "" : "s"}`
-                : "Review status not tracked yet"
-            }
-          />
-          <StatTile
-            label="Credits Earned"
-            value={loading ? "—" : creditsEarned.toLocaleString()}
-            hint="No creator rewards issued yet"
-          />
-        </div>
+        {!firstRun ? (
+          <div className="mt-8 grid gap-4 sm:grid-cols-3">
+            <StatTile
+              label="Templates Published"
+              value={loading ? "—" : String(publishedCount)}
+              hint="Templates you own in FUSE"
+            />
+            <StatTile
+              label="Creator Level"
+              value={loading ? "—" : level.current.name}
+              hint={
+                reviewStatusTracked
+                  ? `${approvedCount} approved template${approvedCount === 1 ? "" : "s"}`
+                  : "Review status not tracked yet"
+              }
+            />
+            <StatTile
+              label="Credits Earned"
+              value={loading ? "—" : creditsEarned.toLocaleString()}
+              hint="No creator rewards issued yet"
+            />
+          </div>
+        ) : null}
+
 
         <div className="mt-6 flex flex-wrap gap-3">
           <Button asChild className="rounded-full bg-cyan-300 px-5 text-slate-950 hover:bg-cyan-200">
