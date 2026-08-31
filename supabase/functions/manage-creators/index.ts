@@ -269,10 +269,11 @@ Deno.serve(async (req) => {
       if (updateError) throw new Error(updateError.message);
 
       return json({
-        ok: !sendError,
-        reason: sendError ? (sendError.message ?? "Could not send invite email") : null,
+        ok: !sendFailure,
+        reason: sendFailure ?? null,
         invite: updated,
       });
+
     }
 
     if (action === "revoke") {
