@@ -263,6 +263,8 @@ Deno.serve(async (req) => {
           creator: template?.created_by ? creatorByUserId.get(String(template.created_by)) ?? null : null,
           previewUrl: cover.url,
           previewAssetType: cover.type,
+          baseCreditsPerRun: getTemplateCreditCost(template?.name, counts),
+          marketplaceSurchargeCredits: 0,
           estimatedCreditsPerRun: getTemplateCreditCost(template?.name, counts),
           counts: {
             inputs: inputPlan.slots.length,
