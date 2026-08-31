@@ -155,6 +155,183 @@ function ComingLater({ title, note }: { title: string; note: string }) {
 }
 
 const ONBOARDING_BANNER_KEY = "fuse.creatorDashboard.onboardingBanner.dismissed";
+const SHARE_FLAG_KEY = "fuse.creatorDashboard.linkShared";
+const CHECKLIST_DISMISSED_KEY = "fuse.creatorDashboard.checklistDismissed";
+
+type ChecklistItem = { id: string; label: string; done: boolean };
+
+function ChecklistCard({
+  items,
+  complete,
+  onDismiss,
+}: {
+  items: ChecklistItem[];
+  complete: boolean;
+  onDismiss: () => void;
+}) {
+  const doneCount = items.filter((item) => item.done).length;
+
+  if (complete) {
+    return (
+      <div className="mb-6 flex items-center justify-between gap-3 rounded-xl border border-cyan-200/20 bg-cyan-200/[0.05] px-4 py-3">
+        <p className="text-sm text-foreground">Setup complete ✓</p>
+        <Button
+          type="button"
+          variant="outline"
+          size="icon"
+          aria-label="Dismiss setup checklist"
+          onClick={onDismiss}
+          className="h-8 w-8 rounded-full border-white/15 bg-white/5 text-foreground hover:bg-white/10"
+        >
+          <X className="h-3.5 w-3.5" />
+        </Button>
+      </div>
+    );
+  }
+
+  return (
+    <div className={cn(panelClass, "mb-6")}>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-[11px] uppercase tracking-[0.24em] text-muted-foreground">
+          Creator setup
+        </p>
+        <p className="font-display text-sm font-bold text-cyan-200">
+          {doneCount}/{items.length}
+        </p>
+      </div>
+      <ul className="mt-4 grid gap-2 sm:grid-cols-2">
+        {items.map((item) => (
+          <li key={item.id} className="flex items-center gap-2 text-sm">
+            <span
+              className={cn(
+                "flex h-5 w-5 shrink-0 items-center justify-center rounded-full border",
+                item.done
+                  ? "border-cyan-200/40 bg-cyan-300 text-slate-950"
+                  : "border-white/20 bg-white/5 text-transparent",
+              )}
+            >
+              <Check className="h-3 w-3" />
+            </span>
+            <span className={item.done ? "text-muted-foreground line-through" : "text-foreground"}>
+              {item.label}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function CreatorLinkCard({
+  handle,
+  copied,
+  onCopy,
+}: {
+  handle: string | null;
+  copied: boolean;
+  onCopy: () => void;
+}) {
+  return (
+    <div className={panelClass}>
+      <p className="text-[11px] uppercase tracking-[0.24em] text-muted-foreground">
+        Your creator link
+      </p>
+      {handle ? (
+        <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <p className="break-all font-display text-sm font-semibold text-foreground">
+            fuse-us.com/creator/{handle}
+          </p>
+          <Button
+            type="button"
+            onClick={onCopy}
+            className="rounded-full bg-cyan-300 px-5 text-slate-950 hover:bg-cyan-200"
+          >
+            {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+            {copied ? "Copied" : "Copy link"}
+          </Button>
+        </div>
+      ) : (
+        <div className="mt-3 space-y-3">
+          <EmptyNote>Pick a creator handle to get your shareable link.</EmptyNote>
+          <Button
+            asChild
+            variant="outline"
+            className="rounded-full border-white/15 bg-white/5 px-5 text-foreground hover:bg-white/10"
+          >
+            <Link to="/creator/settings/edit">Set up profile</Link>
+          </Button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+const FIRST_RUN_STEPS = [
+  { n: "01", title: "BUILD", note: "Turn a campaign into a reusable template" },
+  { n: "02", title: "PUBLISH", note: "Submit it — the FUSE team reviews, then it goes live" },
+  { n: "03", title: "SHARE", note: "Put your creator link in front of your audience" },
+];
+
+function FirstRunHome({
+  displayName,
+  doneSteps,
+  onStart,
+}: {
+  displayName: string;
+  doneSteps: number;
+  onStart: () => void;
+}) {
+  return (
+    <div className="space-y-6">
+      <div className={panelClass}>
+        <p className="text-[11px] uppercase tracking-[0.24em] text-cyan-200/80">
+          Welcome to FUSE Creator
+        </p>
+        <h2 className="mt-2 font-display text-2xl font-black uppercase tracking-tight text-foreground sm:text-3xl">
+          Welcome to FUSE Creator{displayName ? `, ${displayName}` : ""}.
+        </h2>
+        <div className="mt-5 flex flex-wrap items-center gap-3">
+          <p className="font-display text-sm font-bold uppercase tracking-[0.14em] text-foreground">
+            Your first goal: Publish your first template.
+          </p>
+          <Badge variant="outline" className="border-white/15 text-[11px] text-muted-foreground">
+            {doneSteps}/3
+          </Badge>
+        </div>
+        <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-white/10">
+          <div
+            className="h-full rounded-full bg-cyan-300 transition-all"
+            style={{ width: `${Math.round((doneSteps / 3) * 100)}%` }}
+          />
+        </div>
+
+        <div className="mt-6 grid gap-3 sm:grid-cols-3">
+          {FIRST_RUN_STEPS.map((step) => (
+            <div key={step.n} className="rounded-xl border border-white/10 bg-black/30 p-4">
+              <p className="font-display text-xs font-bold tracking-[0.2em] text-cyan-200/80">
+                {step.n}
+              </p>
+              <p className="mt-1 font-display text-sm font-bold tracking-[0.12em] text-foreground">
+                {step.title}
+              </p>
+              <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{step.note}</p>
+            </div>
+          ))}
+        </div>
+
+        <Button
+          type="button"
+          onClick={onStart}
+          className="mt-6 w-full rounded-full bg-cyan-300 px-6 py-6 font-display text-sm font-bold tracking-[0.12em] text-slate-950 hover:bg-cyan-200 sm:w-auto"
+        >
+          CREATE YOUR FIRST TEMPLATE →
+        </Button>
+        <p className="mt-3 text-xs text-muted-foreground">Pricing &amp; earnings unlock soon.</p>
+      </div>
+    </div>
+  );
+}
+
 
 export default function CreatorDashboard() {
   const { user, profile } = useAuth();
