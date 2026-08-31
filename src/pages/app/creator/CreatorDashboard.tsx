@@ -640,22 +640,40 @@ export default function CreatorDashboard() {
 
         <div className="mt-10 grid gap-6 lg:grid-cols-[220px_1fr]">
           <nav className="flex flex-wrap gap-1.5 lg:flex-col" aria-label="Creator Studio sections">
-            {SECTIONS.map((entry) => (
-              <button
-                key={entry.id}
-                type="button"
-                onClick={() => setSection(entry.id)}
-                className={cn(
-                  "rounded-xl px-3 py-2 text-left text-sm transition-colors",
-                  section === entry.id
-                    ? "border border-cyan-200/30 bg-white/10 text-foreground"
-                    : "border border-transparent text-muted-foreground hover:bg-white/5 hover:text-foreground",
-                )}
-              >
-                {entry.label}
-              </button>
-            ))}
+            <button
+              type="button"
+              onClick={startFirstTemplate}
+              className="rounded-xl border border-cyan-200/30 bg-cyan-200/10 px-3 py-2 text-left text-sm text-foreground transition-colors hover:bg-cyan-200/20"
+            >
+              Create Template
+            </button>
+            {SECTIONS.map((entry) =>
+              entry.id === "profile" ? (
+                <Link
+                  key={entry.id}
+                  to={handle ? `/creator/${handle}` : "/creator/settings/edit"}
+                  className="rounded-xl border border-transparent px-3 py-2 text-left text-sm text-muted-foreground transition-colors hover:bg-white/5 hover:text-foreground"
+                >
+                  {entry.label}
+                </Link>
+              ) : (
+                <button
+                  key={entry.id}
+                  type="button"
+                  onClick={() => setSection(entry.id)}
+                  className={cn(
+                    "rounded-xl px-3 py-2 text-left text-sm transition-colors",
+                    section === entry.id
+                      ? "border border-cyan-200/30 bg-white/10 text-foreground"
+                      : "border border-transparent text-muted-foreground hover:bg-white/5 hover:text-foreground",
+                  )}
+                >
+                  {entry.label}
+                </button>
+              ),
+            )}
           </nav>
+
 
           <div className="space-y-6">
             {loading ? (
