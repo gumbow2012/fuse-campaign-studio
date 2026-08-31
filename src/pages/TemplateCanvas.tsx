@@ -1975,6 +1975,8 @@ const TemplateCanvas = () => {
   }, [
     handleTemplateMetaCoverFile,
     invokeWorkbench,
+    isCreatorOnly,
+
     refreshAfterMutation,
     selectedTemplate,
     templateMetaCoverFile,
