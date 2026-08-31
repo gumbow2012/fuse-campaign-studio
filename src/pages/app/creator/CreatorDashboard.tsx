@@ -871,18 +871,30 @@ export default function CreatorDashboard() {
 
             {section === "templates" ? (
               <div className={panelClass}>
-                <h2 className="font-display text-lg font-bold text-foreground">My Templates</h2>
+                <h2 className="font-display text-lg font-bold text-foreground">Your template library</h2>
                 <div className="mt-4 space-y-2">
                   {templates.length ? (
                     templates.map((template) => (
                       <TemplateRow key={template.id} template={template} />
                     ))
                   ) : (
-                    <EmptyNote>No templates yet.</EmptyNote>
+                    <div className="space-y-3">
+                      <EmptyNote>
+                        Everything you build will live here. You haven't created anything yet.
+                      </EmptyNote>
+                      <Button
+                        type="button"
+                        onClick={startFirstTemplate}
+                        className="rounded-full bg-cyan-300 px-5 font-display text-xs font-bold tracking-[0.12em] text-slate-950 hover:bg-cyan-200"
+                      >
+                        CREATE YOUR FIRST TEMPLATE →
+                      </Button>
+                    </div>
                   )}
                 </div>
               </div>
             ) : null}
+
 
             {section === "drafts" ? renderBucket("draft", "Drafts") : null}
             {section === "submitted" ? renderBucket("submitted", "Submitted") : null}
