@@ -30,6 +30,8 @@ import { useAuth } from "@/contexts/AuthContext";
 import { cn } from "@/lib/utils";
 import { track } from "@/lib/analytics/track";
 import { getCreatorLevel } from "@/lib/creatorLevels";
+import { creatorTemplateStatusLabel } from "@/lib/creatorBuilderCopy";
+import CreatorBuilderIntro from "@/components/creator/CreatorBuilderIntro";
 import { getOwnCreatorProfile, type CreatorProfile } from "@/services/creatorProfile";
 import { CreatorPerformancePanel } from "@/components/CreatorPerformance";
 import {
@@ -68,6 +70,8 @@ type SectionId =
   | "profile";
 
 const CREATE_TEMPLATE_PATH = "/app/lab/templates";
+const BUILDER_NEW_DRAFT_PATH = "/app/lab/canvas?newTemplate=1";
+const BUILDER_PATH = "/app/lab/canvas";
 
 const SECTIONS: Array<{ id: SectionId; label: string; to?: string }> = [
   { id: "overview", label: "Creator Home" },
@@ -480,6 +484,15 @@ export default function CreatorDashboard() {
   const startFirstTemplate = useCallback(() => {
     track("creator_first_template_started");
     navigate(CREATE_TEMPLATE_PATH);
+  }, [navigate]);
+
+  const startBuilderTutorial = useCallback(() => {
+    track("creator_builder_tutorial_started");
+    navigate(BUILDER_NEW_DRAFT_PATH);
+  }, [navigate]);
+
+  const exploreBuilder = useCallback(() => {
+    navigate(BUILDER_PATH);
   }, [navigate]);
 
   const copyCreatorLink = useCallback(async () => {
