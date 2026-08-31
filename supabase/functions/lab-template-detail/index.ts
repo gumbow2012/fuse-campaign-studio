@@ -85,6 +85,14 @@ Deno.serve(async (req) => {
     if (versionError || !version) throw new Error(versionError?.message ?? "Template version not found");
 
     const createdBy = (version as any).fuse_templates.created_by as string | null;
+
+    // Access gate: only admins/devs, the template owner, or published (active) versions.
+    const isPublishedVersion = (version as any).is_active === true;
+    const ownsThisTemplate = createdBy === user.id;
+    if (!isAdminOrDev && !ownsThisTemplate && !isPublishedVersion) {
+      throw new Error("You do not have access to this template");
+    }
+
     const createdByRoles = createdBy ? await getUserRoles(createdBy, admin) : [];
     const { customizable } = resolveCustomizability({
       allowCustomerEdit: (version as any).fuse_templates.allow_customer_edit,
