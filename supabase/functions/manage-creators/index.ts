@@ -220,16 +220,43 @@ Deno.serve(async (req) => {
       if (!email.includes("@")) throw new Error("This invite has no valid email");
       const sentCount = Number((invite as any).sent_count ?? 0);
 
-      const { error: sendError } = await admin.auth.admin.inviteUserByEmail(email);
+      const { data: linkData, error: linkError } = await admin.auth.admin.generateLink({
+        type: "invite",
+        email,
+        options: { redirectTo: INVITE_REDIRECT_TO },
+      });
 
-      const patch = sendError
-        ? { email_status: "failed", failure_reason: (sendError.message ?? "Send failed").slice(0, 500) }
+      let sendFailure: string | null = linkError ? (linkError.message ?? "Send failed") : null;
+
+      if (!sendFailure) {
+        const actionLink = (linkData as any)?.properties?.action_link as string | undefined;
+        if (!actionLink) {
+          sendFailure = "Could not generate invite link";
+        } else {
+          const branded = buildCreatorInviteEmail(actionLink);
+          const sendResult = await sendEmail({
+            to: email,
+            subject: branded.subject,
+            html: branded.html,
+            text: branded.text,
+          });
+          if (!sendResult.sent) {
+            sendFailure = sendResult.reason === "no_provider"
+              ? "Email provider not configured"
+              : `Email provider rejected the send (${sendResult.status})`;
+          }
+        }
+      }
+
+      const patch = sendFailure
+        ? { email_status: "failed", failure_reason: sendFailure.slice(0, 500) }
         : {
             email_status: "provider_accepted",
             failure_reason: null,
             last_sent_at: new Date().toISOString(),
             sent_count: sentCount + 1,
           };
+
 
       const { data: updated, error: updateError } = await admin
         .from("creator_invites")
