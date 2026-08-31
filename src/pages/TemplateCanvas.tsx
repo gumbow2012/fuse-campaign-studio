@@ -25,6 +25,12 @@ import {
 } from "@/lib/templateBuilder";
 import CastConfigPanel from "@/components/lab/CastConfigPanel";
 import QuickPublishButton from "@/components/lab/QuickPublishButton";
+import CreatorBuilderHelpPanel from "@/components/creator/CreatorBuilderHelpPanel";
+import {
+  CREATOR_NODE_HELP,
+  CREATOR_PALETTE_LABELS,
+  type CreatorNodeHelpKey,
+} from "@/lib/creatorBuilderCopy";
 import { parseCastConfig, type CastConfig } from "@/lib/castConfig";
 
 
@@ -542,8 +548,12 @@ function defaultPosition(laneIndex: number, nodeIndex: number): Point {
 }
 
 const TemplateCanvas = () => {
-  const { session, hasAppAccess, user } = useAuth();
+  const { session, hasAppAccess, isCreator, canUseBuilder, user } = useAuth();
   const canPublishTemplates = hasAppAccess;
+  /** Presentation switch only — every action stays server-authorized. */
+  const isCreatorOnly = isCreator && !hasAppAccess;
+  const [showCreatorHelp, setShowCreatorHelp] = useState(false);
+  const [showCreatorOverflow, setShowCreatorOverflow] = useState(false);
   const [searchParams, setSearchParams] = useSearchParams();
   const [templates, setTemplates] = useState<TemplateOption[]>([]);
   const [loadingTemplates, setLoadingTemplates] = useState(false);
@@ -712,7 +722,7 @@ const TemplateCanvas = () => {
   }, [buildAuthHeaders]);
 
   const loadTemplates = useCallback(async () => {
-    if (!hasAppAccess) return;
+    if (!canUseBuilder) return;
     setLoadingTemplates(true);
     try {
       let data;
@@ -758,7 +768,7 @@ const TemplateCanvas = () => {
     } finally {
       setLoadingTemplates(false);
     }
-  }, [hasAppAccess, invokeWorkbench, loadCatalogFallback, searchParams]);
+  }, [canUseBuilder, invokeWorkbench, loadCatalogFallback, searchParams]);
 
   const loadDetail = useCallback(async (versionId: string) => {
     if (!versionId) {
@@ -2365,7 +2375,8 @@ const TemplateCanvas = () => {
         nodeNumber: node.nodeNumber ?? null,
         outputNumber: node.outputNumber ?? null,
         kind,
-        kindLabel: nodeKindLabel(node),
+        kindLabel: isCreatorOnly ? creatorKindLabel(node) : nodeKindLabel(node),
+        helpText: isCreatorOnly ? creatorNodeHelpText(node) : null,
         laneLabel: LANE_LABELS[laneForNode(node)],
         modelBadge,
         detailLine,
@@ -2389,7 +2400,7 @@ const TemplateCanvas = () => {
           : undefined,
       },
     };
-  }), [graphNodes, extraPorts, handleAddPort, nodeRuns, referenceUploadNodeId, runSingleNode, savePromptInline, uploadReferenceForNode]);
+  }), [graphNodes, extraPorts, handleAddPort, isCreatorOnly, nodeRuns, referenceUploadNodeId, runSingleNode, savePromptInline, uploadReferenceForNode]);
 
   const selectedNodeRun = selectedNodeId ? nodeRuns[selectedNodeId] ?? null : null;
 
