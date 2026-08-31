@@ -525,6 +525,11 @@ function fileToDataUrl(file: File) {
   });
 }
 
+/** Default name for a creator's auto-created first draft (renamed in Template Basics). */
+const CREATOR_DEFAULT_TEMPLATE_NAME = "My First Template";
+
+
+
 function createTemplateReferenceDraft(index: number, inputSlot?: TemplateInputSlotDraft): TemplateReferenceDraft {
   const slot = inputSlot ? inputSlotOption(inputSlot.slotKey) : TEMPLATE_INPUT_SLOT_OPTIONS[index % TEMPLATE_INPUT_SLOT_OPTIONS.length];
   return {
@@ -1763,8 +1768,12 @@ const TemplateCanvas = () => {
 
   const autoDraftStartedRef = useRef(false);
 
-  const createTemplate = useCallback(async () => {
-    const name = newTemplateName.trim();
+  const createTemplate = useCallback(async (overrides?: { name?: string; description?: string }) => {
+    // `overrides` lets programmatic entry points (creator START BUILDING, gallery
+    // create) pass the name directly instead of relying on freshly-set state,
+    // which used to read a stale empty value and hard-fail with "name required".
+    const overrideName = overrides?.name?.trim();
+    const name = overrideName || newTemplateName.trim() || (overrides ? CREATOR_DEFAULT_TEMPLATE_NAME : "");
     if (!name) {
       toast({ title: "Template name required", variant: "destructive" });
       return;
@@ -1774,10 +1783,11 @@ const TemplateCanvas = () => {
       const data = await invokeWorkbench({
         action: "create_template",
         name,
-        description: newTemplateDescription,
+        description: overrides?.description ?? newTemplateDescription,
         previewFile: null,
         withStarterGraph: false,
       });
+
       const versionId = typeof data.versionId === "string" ? data.versionId : null;
       if (!versionId) throw new Error("Template created but the workbench did not return a version id");
 
@@ -1828,9 +1838,13 @@ const TemplateCanvas = () => {
     const next = new URLSearchParams(searchParams);
     next.delete("newTemplate");
     setSearchParams(next, { replace: true });
-    setNewTemplateName(`Untitled template ${new Date().toLocaleDateString()}`);
-    window.setTimeout(() => void createTemplate(), 0);
-  }, [canUseBuilder, createTemplate, searchParams, session, setSearchParams]);
+    const draftName = isCreatorOnly
+      ? CREATOR_DEFAULT_TEMPLATE_NAME
+      : `Untitled template ${new Date().toLocaleDateString()}`;
+    setNewTemplateName(draftName);
+    void createTemplate({ name: draftName });
+  }, [canUseBuilder, createTemplate, isCreatorOnly, searchParams, session, setSearchParams]);
+
 
   const cloneCurrentVersion = useCallback(async (asNewTemplate: boolean) => {
     if (!detail) return;
@@ -1925,11 +1939,13 @@ const TemplateCanvas = () => {
 
   const saveTemplateMetadata = useCallback(async () => {
     if (!selectedTemplate) return;
-    const name = templateMetaName.trim();
+    // Creators never get hard-blocked on an unnamed draft — fall back to a default.
+    const name = templateMetaName.trim() || (isCreatorOnly ? CREATOR_DEFAULT_TEMPLATE_NAME : "");
     if (!name) {
       toast({ title: "Template name required", variant: "destructive" });
       return;
     }
+
 
     setMutating("save-template-meta");
     try {
@@ -1959,6 +1975,8 @@ const TemplateCanvas = () => {
   }, [
     handleTemplateMetaCoverFile,
     invokeWorkbench,
+    isCreatorOnly,
+
     refreshAfterMutation,
     selectedTemplate,
     templateMetaCoverFile,
@@ -2653,10 +2671,12 @@ const TemplateCanvas = () => {
           setShowGallery(false);
         }}
         onCreateTemplate={(name) => {
-          setNewTemplateName(name);
+          const draftName = name.trim() || CREATOR_DEFAULT_TEMPLATE_NAME;
+          setNewTemplateName(draftName);
           setShowGallery(false);
-          window.setTimeout(() => void createTemplate(), 0);
+          void createTemplate({ name: draftName });
         }}
+
       />
       {isCreatorOnly ? (
         <CreatorBuilderHelpPanel
