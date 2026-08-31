@@ -40,6 +40,7 @@ import {
   type CreatorPerformanceAggregate,
 } from "@/services/creatorPerformance";
 import {
+import CreatorRateBadge from "@/components/creator/CreatorRateBadge";
   loadCreatorAnalytics,
   loadCreatorChallenges,
   loadCreatorDashboard,
@@ -595,7 +596,9 @@ export default function CreatorDashboard() {
           />
         ) : null}
 
-        <header>
+        <CreatorRateBadge className="mt-6" />
+
+        <header className="mt-6">
           <p className="text-xs uppercase tracking-[0.28em] text-cyan-200/70">Creator Studio</p>
           <h1 className="mt-2 font-display text-3xl font-black text-foreground sm:text-4xl">
             {firstRun ? "Creator Home" : `Welcome back, ${displayName}`}
