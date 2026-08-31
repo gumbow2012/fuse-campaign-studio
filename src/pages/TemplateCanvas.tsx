@@ -3753,7 +3753,20 @@ const TemplateCanvas = () => {
                 ) : null}
               </div>
             </div>
+            {selectedTemplate ? (
+              <div className="mt-4">
+                <CreatorRoyaltyPanel
+                  templateId={selectedTemplate.templateId}
+                  outputCount={
+                    Number(selectedTemplate.counts?.imageOutputs ?? 0) +
+                    Number(selectedTemplate.counts?.videoOutputs ?? 0)
+                  }
+                  invoke={invokeWorkbench}
+                />
+              </div>
+            ) : null}
             {canPublishTemplates && detail ? (
+
               <div className="mt-4">
                 <CastConfigPanel
                   nodes={detail.nodes.map((node) => ({ id: node.id, name: node.name, nodeType: node.nodeType }))}
