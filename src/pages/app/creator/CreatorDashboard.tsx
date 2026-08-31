@@ -121,16 +121,11 @@ function TemplateRow({ template }: { template: CreatorTemplate }) {
         </p>
       </div>
       <div className="flex items-center gap-2">
-        {template.review_status ? (
-          <Badge variant="outline" className="border-white/15 text-[11px] text-muted-foreground">
-            {template.review_status}
-          </Badge>
-        ) : (
-          <Badge variant="outline" className="border-white/15 text-[11px] text-muted-foreground">
-            no review status
-          </Badge>
-        )}
+        <Badge variant="outline" className="border-white/15 text-[11px] text-muted-foreground">
+          {creatorTemplateStatusLabel({ reviewStatus: template.review_status })}
+        </Badge>
       </div>
+
 
     </div>
   );
