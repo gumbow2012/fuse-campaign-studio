@@ -427,6 +427,8 @@ const TemplateLab = () => {
   }, []);
 
   useEffect(() => {
+    if (authLoading) return;
+    const currentUserId = session?.user?.id ?? null;
     let active = true;
 
     const restoreBulkAuditState = async () => {
@@ -435,6 +437,7 @@ const TemplateLab = () => {
 
       try {
         const parsed = JSON.parse(raw) as {
+          userId?: string | null;
           runnerMode?: RunnerMode;
           selectedVersionId?: string;
           currentJobId?: string | null;
@@ -448,6 +451,12 @@ const TemplateLab = () => {
         };
 
         if (!active) return;
+        // Cross-account guard: cached runs/outputs belong to a different user
+        // (e.g. admin↔test-account switch in the same browser) — discard them.
+        if ((parsed.userId ?? null) !== currentUserId) {
+          window.localStorage.removeItem(BULK_AUDIT_STORAGE_KEY);
+          return;
+        }
         if (parsed.runnerMode) setRunnerMode(parsed.runnerMode);
         if (parsed.selectedVersionId) setSelectedVersionId(parsed.selectedVersionId);
         if (parsed.currentJobId) setJobId(parsed.currentJobId);
