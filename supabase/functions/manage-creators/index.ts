@@ -11,7 +11,7 @@ import {
 import { sendEmail } from "../_shared/sendEmail.ts";
 import { buildCreatorInviteEmail } from "../_shared/creatorInviteEmail.ts";
 
-const INVITE_REDIRECT_TO = "https://fuse-us.com/app/creator/welcome";
+const INVITE_REDIRECT_TO = "https://fuse-us.com/creator/setup";
 const BRANDED_INVITE_BASE = "https://fuse-us.com/creator/invite";
 
 

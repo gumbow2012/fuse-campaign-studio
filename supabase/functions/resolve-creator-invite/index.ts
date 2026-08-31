@@ -5,11 +5,13 @@ import { corsHeaders, createAdminClient, json } from "../_shared/supabase-admin.
 
 /**
  * PUBLIC resolver for branded creator invite URLs.
- * The raw Supabase action_link is NEVER readable from any public table — only here.
- * The token and the action link are never logged.
+ * The raw Supabase action_link is NEVER readable from any public table — only here,
+ * and only while the invite is still valid. The token and the action link are never logged.
+ * Email is never returned.
  */
 
 const TOKEN_RE = /^[A-Za-z0-9_-]{16,128}$/;
+const MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 
 function extractToken(req: Request, body: Record<string, unknown>): string {
   const url = new URL(req.url);
@@ -22,6 +24,12 @@ function extractToken(req: Request, body: Record<string, unknown>): string {
   return last === "resolve-creator-invite" ? "" : last.trim();
 }
 
+function text(value: unknown, max: number): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim().slice(0, max);
+  return trimmed.length ? trimmed : null;
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: corsHeaders });
 
@@ -31,36 +39,47 @@ Deno.serve(async (req) => {
       : {};
     const token = extractToken(req, body);
     if (!TOKEN_RE.test(token)) {
-      return json({ error: "Invite link is not valid", code: "not-found" }, 404);
+      return json({ status: "expired", invite: null, error: "Invite link is not valid", code: "not-found" }, 404);
     }
 
     const admin = createAdminClient();
     const { data, error } = await admin
       .from("creator_invites")
-      .select("status, action_link")
+      .select(
+        "status, action_link, created_at, last_sent_at, first_name, instagram_handle, display_name, personal_note",
+      )
       .eq("branded_token", token)
       .maybeSingle();
 
     if (error) {
       console.error("resolve-creator-invite: lookup failed");
-      return json({ error: "Could not resolve invite", code: "error" }, 500);
+      return json({ status: "expired", invite: null, error: "Could not resolve invite", code: "error" }, 500);
     }
 
     const invite = data as any;
-    if (!invite) return json({ error: "Invite link is not valid", code: "not-found" }, 404);
+    if (!invite) {
+      return json({ status: "expired", invite: null, error: "Invite link is not valid", code: "not-found" }, 404);
+    }
+
+    const context = {
+      firstName: text(invite.first_name, 80),
+      instagramHandle: text(invite.instagram_handle, 64)?.replace(/^@+/, "") ?? null,
+      displayName: text(invite.display_name, 80),
+      personalNote: text(invite.personal_note, 500),
+    };
 
     const status = String(invite.status ?? "");
-    if (status !== "pending" && status !== "accepted") {
-      return json({ error: "This invite is no longer active", code: "used" }, 410);
-    }
+    if (status === "revoked") return json({ status: "revoked", invite: context });
+    if (status === "accepted") return json({ status: "accepted", invite: context });
 
-    const redirect = typeof invite.action_link === "string" ? invite.action_link : "";
-    if (!redirect) {
-      return json({ error: "This invite link has expired", code: "expired" }, 410);
-    }
+    const actionLink = typeof invite.action_link === "string" ? invite.action_link : "";
+    const stamp = Date.parse(invite.last_sent_at ?? invite.created_at ?? "") || 0;
+    const stale = !stamp || Date.now() - stamp > MAX_AGE_MS;
+    if (!actionLink || stale) return json({ status: "expired", invite: context });
 
-    return json({ redirect });
+    // `redirect` kept for backward compatibility with earlier clients.
+    return json({ status: "valid", invite: context, actionLink, redirect: actionLink });
   } catch {
-    return json({ error: "Could not resolve invite", code: "error" }, 500);
+    return json({ status: "expired", invite: null, error: "Could not resolve invite", code: "error" }, 500);
   }
 });
