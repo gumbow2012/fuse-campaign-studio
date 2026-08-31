@@ -74,7 +74,7 @@ export async function resolveRunEconomics(
     .from("platform_economics_config")
     .select("*")
     .eq("is_active", true)
-    .order("created_at", { ascending: false })
+    .order("version", { ascending: false })
     .limit(1)
     .maybeSingle();
   if (configError || !configRow) return NOT_MONETIZED;
