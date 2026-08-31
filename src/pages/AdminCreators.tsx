@@ -10,6 +10,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { track } from "@/lib/analytics/track";
+import CreatorRevenueShareControl from "@/components/admin/CreatorRevenueShareControl";
+import { bpsToPercent, loadPlatformEconomicsConfig, percentToBps, type PlatformEconomicsConfig } from "@/lib/creatorEconomics";
 
 type CreatorRow = {
   userId: string;
@@ -64,6 +66,16 @@ const AdminCreators = () => {
   const [inviteNote, setInviteNote] = useState("");
   const [inviteSpecialty, setInviteSpecialty] = useState("");
   const [notes, setNotes] = useState<Record<string, string>>({});
+  const [economics, setEconomics] = useState<PlatformEconomicsConfig | null>(null);
+  const [inviteShareMode, setInviteShareMode] = useState<"default" | "custom">("default");
+  const [inviteSharePercent, setInviteSharePercent] = useState<number | null>(null);
+
+  useEffect(() => {
+    void loadPlatformEconomicsConfig().then((config) => {
+      setEconomics(config);
+      if (config) setInviteSharePercent(bpsToPercent(config.defaultCreatorShareBps));
+    });
+  }, []);
 
   const callFunction = useCallback(
     async (name: string, body: Record<string, unknown>) => {
@@ -147,6 +159,10 @@ const AdminCreators = () => {
         displayName: inviteDisplayName.trim() || undefined,
         personalNote: inviteNote.trim() || undefined,
         creatorSpecialty: inviteSpecialty.trim() || undefined,
+        creatorShareBps:
+          inviteShareMode === "custom" && inviteSharePercent !== null
+            ? percentToBps(inviteSharePercent)
+            : null,
       });
       track("creator_invite_sent", {
         granted_immediately: Boolean(data.grantedImmediately),
@@ -166,6 +182,8 @@ const AdminCreators = () => {
       setInviteDisplayName("");
       setInviteNote("");
       setInviteSpecialty("");
+      setInviteShareMode("default");
+      if (economics) setInviteSharePercent(bpsToPercent(economics.defaultCreatorShareBps));
       await loadAll();
     } catch (error) {
       toast({
@@ -377,6 +395,56 @@ const AdminCreators = () => {
             </div>
           </div>
 
+          <details className="mt-4 rounded-2xl border border-white/10 bg-background/40 px-4 py-3">
+            <summary className="cursor-pointer text-[11px] font-semibold uppercase tracking-[0.18em] text-foreground/70">
+              Advanced · Revenue share
+            </summary>
+            <div className="mt-3 space-y-2 text-sm">
+              <label className="flex items-center gap-2 text-foreground/90">
+                <input
+                  type="radio"
+                  name="invite-share-mode"
+                  checked={inviteShareMode === "default"}
+                  onChange={() => setInviteShareMode("default")}
+                />
+                Platform default{economics ? ` — ${bpsToPercent(economics.defaultCreatorShareBps)}%` : ""}
+              </label>
+              <label className="flex items-center gap-2 text-foreground/90">
+                <input
+                  type="radio"
+                  name="invite-share-mode"
+                  checked={inviteShareMode === "custom"}
+                  onChange={() => setInviteShareMode("custom")}
+                />
+                Custom rate
+              </label>
+              {inviteShareMode === "custom" && economics ? (
+                <div>
+                  <Label htmlFor="invite-share" className="text-xs text-foreground/70">
+                    Creator keeps (%)
+                  </Label>
+                  <Input
+                    id="invite-share"
+                    type="number"
+                    min={bpsToPercent(economics.creatorShareMinBps)}
+                    max={bpsToPercent(economics.creatorShareMaxBps)}
+                    step={1}
+                    value={inviteSharePercent ?? ""}
+                    onChange={(event) => {
+                      const next = Number(event.target.value);
+                      setInviteSharePercent(Number.isFinite(next) ? next : null);
+                    }}
+                    className="mt-1 h-10 w-28"
+                  />
+                  <p className="mt-1 text-[11px] text-muted-foreground">
+                    Allowed {bpsToPercent(economics.creatorShareMinBps)}–{bpsToPercent(economics.creatorShareMaxBps)}%.
+                    Internal only — never shown in the invite email.
+                  </p>
+                </div>
+              ) : null}
+            </div>
+          </details>
+
           <div className="mt-4 space-y-1 rounded-2xl border border-white/10 bg-background/40 px-4 py-3 text-[11px] uppercase tracking-[0.14em] text-muted-foreground">
             <p className="truncate">To: {invitePreviewTo}</p>
             <p className="truncate normal-case tracking-normal">Subject: {invitePreviewSubject}</p>
@@ -406,8 +474,9 @@ const AdminCreators = () => {
                 creators.map((creator) => (
                   <div
                     key={creator.userId}
-                    className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-white/10 bg-background/40 px-4 py-3"
+                    className="rounded-2xl border border-white/10 bg-background/40 px-4 py-3"
                   >
+                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <div className="min-w-0">
                       <p className="truncate text-sm font-medium text-foreground">{creator.email ?? creator.userId}</p>
                       <p className="truncate text-xs text-muted-foreground">
@@ -443,6 +512,12 @@ const AdminCreators = () => {
                       Revoke
                     </Button>
                     </div>
+                   </div>
+                    <CreatorRevenueShareControl
+                      userId={creator.userId}
+                      label={creator.email ?? creator.name ?? "Creator"}
+                      callFunction={callFunction}
+                    />
                   </div>
                 ))
               )}
