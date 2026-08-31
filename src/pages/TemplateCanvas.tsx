@@ -27,6 +27,7 @@ import CastConfigPanel from "@/components/lab/CastConfigPanel";
 import QuickPublishButton from "@/components/lab/QuickPublishButton";
 import CreatorBuilderHelpPanel from "@/components/creator/CreatorBuilderHelpPanel";
 import CreatorTutorialOverlay from "@/components/creator/CreatorTutorialOverlay";
+import CreatorCustomerPreviewModal from "@/components/creator/CreatorCustomerPreviewModal";
 import CreditConfirmModal from "@/components/CreditConfirmModal";
 import { useCreatorTutorial } from "@/hooks/useCreatorTutorial";
 import { track } from "@/lib/analytics/track";
@@ -581,6 +582,7 @@ const TemplateCanvas = () => {
   const [showCreatorHelp, setShowCreatorHelp] = useState(false);
   const [showCreatorOverflow, setShowCreatorOverflow] = useState(false);
   const [showTestCostConfirm, setShowTestCostConfirm] = useState(false);
+  const [showCustomerPreview, setShowCustomerPreview] = useState(false);
   const tutorial = useCreatorTutorial(isCreatorOnly);
   const tutorialRef = useRef(tutorial);
   tutorialRef.current = tutorial;
@@ -838,6 +840,7 @@ const TemplateCanvas = () => {
     if (data.status === "complete") {
       tutorialRef.current?.signal("test_completed");
       track("creator_test_completed", { status: "complete" });
+      track("creator_outputs_reviewed", { status: "complete" });
     }
     if (data.status === "complete" && runVersionId) void loadTemplates();
     setError(data.error ?? null);
@@ -2677,6 +2680,18 @@ const TemplateCanvas = () => {
           onSkip={tutorial.skip}
         />
       ) : null}
+      {isCreatorOnly && detail ? (
+        <CreatorCustomerPreviewModal
+          open={showCustomerPreview}
+          onClose={() => setShowCustomerPreview(false)}
+          templateName={detail.templateName}
+          coverUrl={selectedTemplate?.previewUrl ?? null}
+          inputs={runInputs.map((input) => ({ key: input.id, label: input.name, type: input.expected }))}
+          imageCount={(detail.nodes ?? []).filter((node) => node.nodeType === "image_gen").length}
+          videoCount={(detail.nodes ?? []).filter((node) => node.nodeType === "video_gen").length}
+          runCredits={estimatedTestCredits}
+        />
+      ) : null}
       {isCreatorOnly ? (
         <CreditConfirmModal
           open={showTestCostConfirm}
@@ -2739,6 +2754,20 @@ const TemplateCanvas = () => {
             </Button>
             {isCreatorOnly ? (
               <>
+                <Button
+                  data-tutorial="customer-preview"
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="rounded-full"
+                  disabled={!detail}
+                  onClick={() => {
+                    track("creator_customer_previewed", { template_id: detail?.templateId ?? null });
+                    setShowCustomerPreview(true);
+                  }}
+                >
+                  Preview as customer
+                </Button>
                 <Button
                   type="button"
                   variant="ghost"
@@ -2861,7 +2890,10 @@ const TemplateCanvas = () => {
               <p className="px-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">New video model</p>
               <select
                 value={paletteVideoModel}
-                onChange={(event) => setPaletteVideoModel(event.target.value as VideoModelKey)}
+                onChange={(event) => {
+                  setPaletteVideoModel(event.target.value as VideoModelKey);
+                  track("creator_video_model_selected", { model: event.target.value, surface: "palette" });
+                }}
                 className="h-9 w-full truncate rounded-xl border border-border bg-background px-2 text-[11px]"
                 aria-label="Video model for new video steps"
               >
