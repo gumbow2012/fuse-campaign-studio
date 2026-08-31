@@ -30,7 +30,13 @@ type Props = {
   onAmountChange?: (amount: number) => void;
   /** Hides the "view plans" note in tight surfaces (e.g. the quick-buy dialog). */
   hidePlanNote?: boolean;
+  /**
+   * Shows the smallest entry tier ($10 / 200 credits) as a clearly gated
+   * "coming soon" chip. It never maps to a checkout price — display only.
+   */
+  showEntryTierPreview?: boolean;
 };
+
 
 const usd = (dollars: number) =>
   dollars.toLocaleString("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 2 });
