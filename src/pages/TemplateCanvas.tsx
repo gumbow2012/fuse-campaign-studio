@@ -525,6 +525,11 @@ function fileToDataUrl(file: File) {
   });
 }
 
+/** Default name for a creator's auto-created first draft (renamed in Template Basics). */
+const CREATOR_DEFAULT_TEMPLATE_NAME = "My First Template";
+
+
+
 function createTemplateReferenceDraft(index: number, inputSlot?: TemplateInputSlotDraft): TemplateReferenceDraft {
   const slot = inputSlot ? inputSlotOption(inputSlot.slotKey) : TEMPLATE_INPUT_SLOT_OPTIONS[index % TEMPLATE_INPUT_SLOT_OPTIONS.length];
   return {
