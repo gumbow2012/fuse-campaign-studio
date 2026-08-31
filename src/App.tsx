@@ -73,6 +73,7 @@ import FaqPage from "@/pages/mvp/FaqPage";
 import TermsPage from "@/pages/mvp/TermsPage";
 import PrivacyPage from "@/pages/mvp/PrivacyPage";
 import CreatorProgramPage from "@/pages/mvp/CreatorProgramPage";
+import ProtectedRoute from "@/components/ProtectedRoute";
 import CreatorProfileSetupPage from "@/pages/mvp/CreatorProfileSetupPage";
 import CreatorInviteRedirectPage from "@/pages/mvp/CreatorInviteRedirectPage";
 import CreatorApplyPage from "@/pages/mvp/CreatorApplyPage";
