@@ -4,6 +4,7 @@ import { corsHeaders, createAdminClient, errorMessage, json } from "../_shared/s
 import { buildTemplateInputPlan } from "../_shared/template-inputs.ts";
 import { readCastConfig } from "../_shared/cast-config.ts";
 import { getTemplateCreditCost } from "../_shared/template-pricing.ts";
+import { resolveRunEconomics } from "../_shared/creatorSurcharge.ts";
 
 function parseOutputExposed(value: unknown) {
   if (typeof value === "boolean") return value;
@@ -295,8 +296,14 @@ Deno.serve(async (req) => {
     }
 
     const uniqueTemplateIds = [...new Set(catalog.map((entry) => String(entry.templateId)))];
+    const { data: monetizedRows } = await admin
+      .from("fuse_templates")
+      .select("id")
+      .eq("monetization_enabled", true)
+      .in("id", uniqueTemplateIds);
+    const monetizedIds = (monetizedRows ?? []).map((row: any) => String(row.id));
     const economicsByTemplate = new Map<string, number>();
-    for (const templateId of uniqueTemplateIds) {
+    for (const templateId of monetizedIds) {
       const economics = await resolveRunEconomics(admin, templateId);
       if (economics.monetized && economics.creatorId !== viewerId) {
         economicsByTemplate.set(templateId, economics.surchargeCredits);
