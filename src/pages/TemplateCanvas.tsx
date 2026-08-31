@@ -24,6 +24,8 @@ import {
   resolveTemplateBranchInputIndex,
 } from "@/lib/templateBuilder";
 import CastConfigPanel from "@/components/lab/CastConfigPanel";
+import CreatorRoyaltyPanel from "@/components/creator/CreatorRoyaltyPanel";
+
 import QuickPublishButton from "@/components/lab/QuickPublishButton";
 import CreatorBuilderHelpPanel from "@/components/creator/CreatorBuilderHelpPanel";
 import CreatorTutorialOverlay from "@/components/creator/CreatorTutorialOverlay";
