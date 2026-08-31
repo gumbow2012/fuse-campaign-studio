@@ -2121,7 +2121,7 @@ const TemplateCanvas = () => {
     } finally {
       setMutating(null);
     }
-  }, [buildAuthHeaders, detail, invokeWorkbench, refreshAfterMutation]);
+  }, [buildAuthHeaders, detail, invokeWorkbench, refreshAfterMutation, tutorial]);
 
   const deletingNodeIdsRef = useRef<Set<string>>(new Set());
 
@@ -2142,7 +2142,7 @@ const TemplateCanvas = () => {
       deletingNodeIdsRef.current.delete(nodeId);
       setMutating(null);
     }
-  }, [buildAuthHeaders, detail, invokeWorkbench, refreshAfterMutation, tutorial]);
+  }, [detail, invokeWorkbench, refreshAfterMutation]);
 
   const deleteSelectedNode = useCallback(async () => {
     if (!selectedNode || !detail) return;
