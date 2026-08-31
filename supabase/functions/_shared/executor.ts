@@ -1106,6 +1106,9 @@ export async function finalizeJobIfTerminal(admin: AdminClient, jobId: string) {
       error_log: null,
     })
     .eq("id", jobId);
+
+  // P5C — one immutable creator earning per successful monetized customer run.
+  await createCreatorEarningForJob(admin, { jobId });
 }
 
 export async function runGraphJob(admin: AdminClient, jobId: string) {
