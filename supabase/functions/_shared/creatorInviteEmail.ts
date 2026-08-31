@@ -32,6 +32,12 @@ const BODY_COPY =
 const CLAIM_LINE =
   "Your Creator account has already been invited. Claim your access below and we'll walk you through building your first template step by step.";
 
+const EXISTING_USER_CLAIM_LINE =
+  "Your FUSE account now has VIP Creator Access. Set up your creator profile below and start building.";
+
+const CTA_LABEL = "ACCEPT VIP CREATOR ACCESS &rarr;";
+const EXISTING_USER_CTA_LABEL = "SET UP YOUR CREATOR PROFILE &rarr;";
+
 const SETUP_LINE =
   "No complicated setup. Once you're in, FUSE will show you exactly how to turn your first campaign into a reusable template.";
 
@@ -39,6 +45,7 @@ export type CreatorInviteEmailOptions = {
   firstName?: string;
   instagramHandle?: string;
   personalNote?: string;
+  existingUser?: boolean;
 };
 
 function clean(value: string | undefined, max: number): string {
@@ -53,6 +60,9 @@ export function buildCreatorInviteEmail(
   const firstName = clean(opts?.firstName, 80);
   const handle = clean(opts?.instagramHandle, 64).replace(/^@+/, "");
   const note = clean(opts?.personalNote, 500);
+  const existingUser = opts?.existingUser === true;
+  const claimLine = existingUser ? EXISTING_USER_CLAIM_LINE : CLAIM_LINE;
+  const ctaLabel = existingUser ? EXISTING_USER_CTA_LABEL : CTA_LABEL;
 
   const subject = firstName
     ? `${firstName}, you're invited to FUSE Creator Access`
@@ -120,12 +130,12 @@ export function buildCreatorInviteEmail(
         </tr></table>
       </td></tr>
       <tr><td style="padding:24px 32px 0 32px;">
-        <p style="margin:0;font-family:${FONT};font-size:15px;line-height:1.7;color:#c7c7c7;">${escapeHtml(CLAIM_LINE)}</p>
+        <p style="margin:0;font-family:${FONT};font-size:15px;line-height:1.7;color:#c7c7c7;">${escapeHtml(claimLine)}</p>
       </td></tr>
       <tr><td style="padding:26px 32px 0 32px;">
         <table role="presentation" cellpadding="0" cellspacing="0" border="0">
           <tr><td align="center" bgcolor="#67e8f9" style="border-radius:999px;">
-            <a href="${link}" style="display:inline-block;padding:15px 30px;font-family:${FONT};font-size:15px;font-weight:bold;color:#0a0a0a;text-decoration:none;border-radius:999px;letter-spacing:0.5px;">ACCEPT VIP CREATOR ACCESS &rarr;</a>
+            <a href="${link}" style="display:inline-block;padding:15px 30px;font-family:${FONT};font-size:15px;font-weight:bold;color:#0a0a0a;text-decoration:none;border-radius:999px;letter-spacing:0.5px;">${ctaLabel}</a>
           </td></tr>
         </table>
       </td></tr>
@@ -153,9 +163,9 @@ export function buildCreatorInviteEmail(
     "WITH CREATOR ACCESS YOU CAN:",
     ...CAN_DO.map((item) => `- ${item}`),
     "",
-    CLAIM_LINE,
+    claimLine,
     "",
-    `Accept VIP Creator Access: ${brandedUrl}`,
+    `${existingUser ? "Set up your creator profile" : "Accept VIP Creator Access"}: ${brandedUrl}`,
     "",
     SETUP_LINE,
     "",
