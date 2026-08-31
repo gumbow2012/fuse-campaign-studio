@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Clock3, Copy, EyeOff, Film, GitBranch, Image as ImageIcon, Loader2, Maximize2, Minus, ImageDown, Layers, Move, Play, Plus, RefreshCw, Save, Search, Trash2, Type, Upload, X } from "lucide-react";
+import { CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Clock3, Copy, EyeOff, Film, GitBranch, HelpCircle, Image as ImageIcon, Loader2, Maximize2, Minus, ImageDown, Layers, Move, Play, Plus, RefreshCw, Save, Search, Trash2, Type, Upload, X } from "lucide-react";
 import { Link, useSearchParams } from "react-router-dom";
 import SiteShell from "@/components/mvp/SiteShell";
 import TemplateGallery from "@/components/lab/TemplateGallery";
@@ -25,6 +25,12 @@ import {
 } from "@/lib/templateBuilder";
 import CastConfigPanel from "@/components/lab/CastConfigPanel";
 import QuickPublishButton from "@/components/lab/QuickPublishButton";
+import CreatorBuilderHelpPanel from "@/components/creator/CreatorBuilderHelpPanel";
+import {
+  CREATOR_NODE_HELP,
+  CREATOR_PALETTE_LABELS,
+  type CreatorNodeHelpKey,
+} from "@/lib/creatorBuilderCopy";
 import { parseCastConfig, type CastConfig } from "@/lib/castConfig";
 
 
@@ -464,6 +470,28 @@ function nodeKindLabel(node: TemplateDetailNode) {
   return node.nodeType.replace("_", " ");
 }
 
+/** Creator-mode helpers: friendly node names + plain-language help. */
+function creatorNodeHelpKey(node: TemplateDetailNode): CreatorNodeHelpKey {
+  if (node.nodeType === "prompt") return "prompt";
+  if (node.nodeType === "video_gen") return "video";
+  if (node.nodeType === "image_gen") return "image";
+  if (node.editor?.mode === "reference") return "reference";
+  return "input";
+}
+
+function creatorKindLabel(node: TemplateDetailNode) {
+  const key = creatorNodeHelpKey(node);
+  if (key === "input") return "Customer input";
+  if (key === "reference") return "Reference asset";
+  if (key === "prompt") return "Prompt";
+  if (key === "image") return "Image step";
+  return "Video step";
+}
+
+function creatorNodeHelpText(node: TemplateDetailNode) {
+  return CREATOR_NODE_HELP[creatorNodeHelpKey(node)].body;
+}
+
 function sourcePreview(node: TemplateDetailNode) {
   if (!node.incoming.length) return "No upstream source";
   return compactText(
@@ -542,8 +570,12 @@ function defaultPosition(laneIndex: number, nodeIndex: number): Point {
 }
 
 const TemplateCanvas = () => {
-  const { session, hasAppAccess, user } = useAuth();
+  const { session, hasAppAccess, isCreator, canUseBuilder, user } = useAuth();
   const canPublishTemplates = hasAppAccess;
+  /** Presentation switch only — every action stays server-authorized. */
+  const isCreatorOnly = isCreator && !hasAppAccess;
+  const [showCreatorHelp, setShowCreatorHelp] = useState(false);
+  const [showCreatorOverflow, setShowCreatorOverflow] = useState(false);
   const [searchParams, setSearchParams] = useSearchParams();
   const [templates, setTemplates] = useState<TemplateOption[]>([]);
   const [loadingTemplates, setLoadingTemplates] = useState(false);
@@ -712,7 +744,7 @@ const TemplateCanvas = () => {
   }, [buildAuthHeaders]);
 
   const loadTemplates = useCallback(async () => {
-    if (!hasAppAccess) return;
+    if (!canUseBuilder) return;
     setLoadingTemplates(true);
     try {
       let data;
@@ -758,7 +790,7 @@ const TemplateCanvas = () => {
     } finally {
       setLoadingTemplates(false);
     }
-  }, [hasAppAccess, invokeWorkbench, loadCatalogFallback, searchParams]);
+  }, [canUseBuilder, invokeWorkbench, loadCatalogFallback, searchParams]);
 
   const loadDetail = useCallback(async (versionId: string) => {
     if (!versionId) {
@@ -1697,6 +1729,8 @@ const TemplateCanvas = () => {
     }
   }, [buildAuthHeaders, detail, loadDetail, loadTemplates]);
 
+  const autoDraftStartedRef = useRef(false);
+
   const createTemplate = useCallback(async () => {
     const name = newTemplateName.trim();
     if (!name) {
@@ -1741,6 +1775,20 @@ const TemplateCanvas = () => {
   ]);
 
 
+
+  // Creator Studio "START BUILDING" entry: open the real builder on a fresh
+  // creator-owned draft (created_by = self, enforced server-side).
+  useEffect(() => {
+    if (autoDraftStartedRef.current) return;
+    if (!canUseBuilder || !session) return;
+    if (searchParams.get("newTemplate") !== "1") return;
+    autoDraftStartedRef.current = true;
+    const next = new URLSearchParams(searchParams);
+    next.delete("newTemplate");
+    setSearchParams(next, { replace: true });
+    setNewTemplateName(`Untitled template ${new Date().toLocaleDateString()}`);
+    window.setTimeout(() => void createTemplate(), 0);
+  }, [canUseBuilder, createTemplate, searchParams, session, setSearchParams]);
 
   const cloneCurrentVersion = useCallback(async (asNewTemplate: boolean) => {
     if (!detail) return;
@@ -2365,7 +2413,8 @@ const TemplateCanvas = () => {
         nodeNumber: node.nodeNumber ?? null,
         outputNumber: node.outputNumber ?? null,
         kind,
-        kindLabel: nodeKindLabel(node),
+        kindLabel: isCreatorOnly ? creatorKindLabel(node) : nodeKindLabel(node),
+        helpText: isCreatorOnly ? creatorNodeHelpText(node) : null,
         laneLabel: LANE_LABELS[laneForNode(node)],
         modelBadge,
         detailLine,
@@ -2389,7 +2438,7 @@ const TemplateCanvas = () => {
           : undefined,
       },
     };
-  }), [graphNodes, extraPorts, handleAddPort, nodeRuns, referenceUploadNodeId, runSingleNode, savePromptInline, uploadReferenceForNode]);
+  }), [graphNodes, extraPorts, handleAddPort, isCreatorOnly, nodeRuns, referenceUploadNodeId, runSingleNode, savePromptInline, uploadReferenceForNode]);
 
   const selectedNodeRun = selectedNodeId ? nodeRuns[selectedNodeId] ?? null : null;
 
@@ -2548,11 +2597,28 @@ const TemplateCanvas = () => {
           window.setTimeout(() => void createTemplate(), 0);
         }}
       />
+      {isCreatorOnly ? (
+        <CreatorBuilderHelpPanel open={showCreatorHelp} onClose={() => setShowCreatorHelp(false)} />
+      ) : null}
       <div className="mx-auto flex w-full min-w-0 max-w-[2100px] flex-col gap-3 overflow-x-hidden px-3 py-3 sm:px-4">
+        {isCreatorOnly ? (
+          <p className="rounded-2xl border border-amber-300/25 bg-amber-300/[0.08] px-4 py-3 text-xs text-amber-100 xl:hidden">
+            Building workflows works best on desktop — continue there for the full visual builder.
+          </p>
+        ) : null}
         <div className="flex min-w-0 flex-wrap items-center justify-between gap-3 rounded-2xl border border-border/50 bg-card/70 px-4 py-2.5 shadow-sm">
           <div className="flex min-w-0 items-center gap-3">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">Canvas</p>
-            <h1 className="truncate text-lg font-bold">{detail?.templateName ?? "Loading..."}</h1>
+            <div className="min-w-0">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">
+                {isCreatorOnly ? "Template Builder" : "Canvas"}
+              </p>
+              <h1 className="truncate text-lg font-bold">{detail?.templateName ?? "Loading..."}</h1>
+              {isCreatorOnly ? (
+                <p className="truncate text-[11px] text-muted-foreground">
+                  Build the workflow customers will run.
+                </p>
+              ) : null}
+            </div>
             {loadingDetail ? <Loader2 className="h-4 w-4 animate-spin text-primary" /> : null}
             <span className="hidden items-center gap-2 md:flex">
               {[
@@ -2570,7 +2636,7 @@ const TemplateCanvas = () => {
           <div className="flex flex-wrap items-center gap-2">
             <Button type="button" variant="outline" size="sm" className="rounded-full" onClick={() => setShowGallery(true)}>
               <Layers className="mr-1.5 h-3.5 w-3.5" />
-              Templates
+              {isCreatorOnly ? "My templates" : "Templates"}
             </Button>
             <Button type="button" variant="ghost" size="sm" className="rounded-full" disabled={!detail} onClick={resetLayout}>
               <GitBranch className="mr-1.5 h-3.5 w-3.5" />
@@ -2580,6 +2646,32 @@ const TemplateCanvas = () => {
               <Save className="mr-1.5 h-3.5 w-3.5" />
               Save
             </Button>
+            {isCreatorOnly ? (
+              <>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="rounded-full"
+                  onClick={() => setShowCreatorHelp(true)}
+                >
+                  <HelpCircle className="mr-1.5 h-3.5 w-3.5" />
+                  Help
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="rounded-full"
+                  aria-label="More builder controls"
+                  onClick={() => setShowCreatorOverflow((current) => !current)}
+                >
+                  •••
+                </Button>
+              </>
+            ) : null}
+            {isCreatorOnly && !showCreatorOverflow ? null : (
+            <>
             <Button
               type="button"
               variant={showInternalNodes ? "default" : "ghost"}
@@ -2599,6 +2691,8 @@ const TemplateCanvas = () => {
             >
               {showSettingsPanel ? "Hide settings" : "Settings"}
             </Button>
+            </>
+            )}
             <Button
               type="button"
               size="sm"
@@ -2607,7 +2701,7 @@ const TemplateCanvas = () => {
               onClick={() => { setShowSettingsPanel(true); setShowRunnerPanel(true); void handleRun(); }}
             >
               {startingRun ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="mr-1.5 h-3.5 w-3.5" />}
-              Test run
+              {isCreatorOnly ? "Test" : "Test run"}
             </Button>
           </div>
         </div>
@@ -2635,6 +2729,11 @@ const TemplateCanvas = () => {
                 { key: "video", label: "Video", icon: Film, onClick: () => void addNode("video_gen", paletteVideoModel), disabled: !detail || !!mutating, hint: `${resolveVideoModelOption(paletteVideoModel).label} step` },
                 { key: "prompt", label: "Prompt", icon: Type, onClick: () => void addNode("prompt"), disabled: !detail || !!mutating, hint: "Reusable prompt text block" },
               ]
+                .map((item) =>
+                  isCreatorOnly && CREATOR_PALETTE_LABELS[item.key]
+                    ? { ...item, ...CREATOR_PALETTE_LABELS[item.key] }
+                    : item,
+                )
                 .filter((item) => item.label.toLowerCase().includes(paletteSearch.trim().toLowerCase()))
                 .map((item) => (
                   <button
@@ -3319,7 +3418,7 @@ const TemplateCanvas = () => {
                       Open Output Audit
                     </Link>
                   </Button>
-                  {detail && !detail.isActive ? (
+                  {hasAppAccess && detail && !detail.isActive ? (
                     <QuickPublishButton
                       versionId={detail.versionId}
                       templateName={detail.templateName}
@@ -3607,7 +3706,7 @@ const TemplateCanvas = () => {
                   Publish Version Live
                 </Button>
               ) : null}
-              {detail && !detail.isActive ? (
+              {hasAppAccess && detail && !detail.isActive ? (
                 <QuickPublishButton
                   versionId={detail.versionId}
                   templateName={detail.templateName}
@@ -3622,7 +3721,7 @@ const TemplateCanvas = () => {
               {!canPublishTemplates && detail ? (
                 detail.reviewStatus === "Submitted" ? (
                   <p className="rounded-xl border border-amber-300/25 bg-amber-300/[0.08] px-3 py-2 text-xs font-medium text-amber-100">
-                    Submitted — pending review by the FUSE team.
+                    Template submitted ✓ — We'll notify you when it's approved.
                   </p>
                 ) : (
                   <Button type="button" size="sm" onClick={() => void submitForReview()} disabled={!!mutating}>
@@ -3631,7 +3730,7 @@ const TemplateCanvas = () => {
                     ) : (
                       <CheckCircle2 className="mr-2 h-4 w-4" />
                     )}
-                    Submit for Review
+                    Submit for review →
                   </Button>
                 )
               ) : null}

@@ -36,6 +36,8 @@ export type GraphCanvasNodeData = {
   outputNumber?: number | null;
   kind: "input" | "image" | "video" | "prompt" | "other";
   kindLabel: string;
+  /** Creator-mode plain-language explanation shown behind the node "?" badge. */
+  helpText?: string | null;
   laneLabel: string;
   modelBadge: string | null;
   detailLine: string | null;
@@ -310,6 +312,15 @@ const TemplateFlowNode = ({ id, data, selected }: NodeProps<GraphCanvasNode>) =>
             <Icon className="h-3 w-3" />
             {data.kindLabel}
           </span>
+          {data.helpText ? (
+            <span
+              title={data.helpText}
+              aria-label={data.helpText}
+              className="flex h-4 w-4 cursor-help items-center justify-center rounded-full border border-border/70 bg-background/70 text-[9px] font-bold text-muted-foreground"
+            >
+              ?
+            </span>
+          ) : null}
         </div>
         <div className="flex items-center gap-1.5">
           {data.outputNumber ? (

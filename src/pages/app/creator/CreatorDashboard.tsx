@@ -30,6 +30,8 @@ import { useAuth } from "@/contexts/AuthContext";
 import { cn } from "@/lib/utils";
 import { track } from "@/lib/analytics/track";
 import { getCreatorLevel } from "@/lib/creatorLevels";
+import { creatorTemplateStatusLabel } from "@/lib/creatorBuilderCopy";
+import CreatorBuilderIntro from "@/components/creator/CreatorBuilderIntro";
 import { getOwnCreatorProfile, type CreatorProfile } from "@/services/creatorProfile";
 import { CreatorPerformancePanel } from "@/components/CreatorPerformance";
 import {
@@ -68,6 +70,8 @@ type SectionId =
   | "profile";
 
 const CREATE_TEMPLATE_PATH = "/app/lab/templates";
+const BUILDER_NEW_DRAFT_PATH = "/app/lab/canvas?newTemplate=1";
+const BUILDER_PATH = "/app/lab/canvas";
 
 const SECTIONS: Array<{ id: SectionId; label: string; to?: string }> = [
   { id: "overview", label: "Creator Home" },
@@ -121,16 +125,11 @@ function TemplateRow({ template }: { template: CreatorTemplate }) {
         </p>
       </div>
       <div className="flex items-center gap-2">
-        {template.review_status ? (
-          <Badge variant="outline" className="border-white/15 text-[11px] text-muted-foreground">
-            {template.review_status}
-          </Badge>
-        ) : (
-          <Badge variant="outline" className="border-white/15 text-[11px] text-muted-foreground">
-            no review status
-          </Badge>
-        )}
+        <Badge variant="outline" className="border-white/15 text-[11px] text-muted-foreground">
+          {creatorTemplateStatusLabel({ reviewStatus: template.review_status })}
+        </Badge>
       </div>
+
 
     </div>
   );
@@ -487,6 +486,15 @@ export default function CreatorDashboard() {
     navigate(CREATE_TEMPLATE_PATH);
   }, [navigate]);
 
+  const startBuilderTutorial = useCallback(() => {
+    track("creator_builder_tutorial_started");
+    navigate(BUILDER_NEW_DRAFT_PATH);
+  }, [navigate]);
+
+  const exploreBuilder = useCallback(() => {
+    navigate(BUILDER_PATH);
+  }, [navigate]);
+
   const copyCreatorLink = useCallback(async () => {
     if (!handle) return;
     const url = `https://fuse-us.com/creator/${handle}`;
@@ -703,13 +711,20 @@ export default function CreatorDashboard() {
 
             {section === "overview" && !loading ? (
               firstRun ? (
-                <FirstRunHome
-                  displayName={displayName}
-                  doneSteps={
-                    [hasTemplates, hasSubmitted, linkShared].filter(Boolean).length
-                  }
-                  onStart={startFirstTemplate}
-                />
+                <div className="space-y-6">
+                  <CreatorBuilderIntro
+                    onStartBuilding={startBuilderTutorial}
+                    onExplore={exploreBuilder}
+                  />
+                  <FirstRunHome
+                    displayName={displayName}
+                    doneSteps={
+                      [hasTemplates, hasSubmitted, linkShared].filter(Boolean).length
+                    }
+                    onStart={startFirstTemplate}
+                  />
+                </div>
+
               ) : (
                 <div className="space-y-6">
                   <div className="grid gap-4 sm:grid-cols-3">
@@ -871,18 +886,30 @@ export default function CreatorDashboard() {
 
             {section === "templates" ? (
               <div className={panelClass}>
-                <h2 className="font-display text-lg font-bold text-foreground">My Templates</h2>
+                <h2 className="font-display text-lg font-bold text-foreground">Your template library</h2>
                 <div className="mt-4 space-y-2">
                   {templates.length ? (
                     templates.map((template) => (
                       <TemplateRow key={template.id} template={template} />
                     ))
                   ) : (
-                    <EmptyNote>No templates yet.</EmptyNote>
+                    <div className="space-y-3">
+                      <EmptyNote>
+                        Everything you build will live here. You haven't created anything yet.
+                      </EmptyNote>
+                      <Button
+                        type="button"
+                        onClick={startFirstTemplate}
+                        className="rounded-full bg-cyan-300 px-5 font-display text-xs font-bold tracking-[0.12em] text-slate-950 hover:bg-cyan-200"
+                      >
+                        CREATE YOUR FIRST TEMPLATE →
+                      </Button>
+                    </div>
                   )}
                 </div>
               </div>
             ) : null}
+
 
             {section === "drafts" ? renderBucket("draft", "Drafts") : null}
             {section === "submitted" ? renderBucket("submitted", "Submitted") : null}
