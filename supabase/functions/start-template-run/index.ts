@@ -510,6 +510,7 @@ async function handleRunFork(
           idempotencyKey: idempotencyKey || null,
           credits: creditCost,
         }),
+        ...(storedEconomics ? { [RUN_ECONOMICS_KEY]: storedEconomics } : {}),
       },
       result_payload: {},
     })
