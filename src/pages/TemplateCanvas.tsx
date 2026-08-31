@@ -2667,10 +2667,12 @@ const TemplateCanvas = () => {
           setShowGallery(false);
         }}
         onCreateTemplate={(name) => {
-          setNewTemplateName(name);
+          const draftName = name.trim() || CREATOR_DEFAULT_TEMPLATE_NAME;
+          setNewTemplateName(draftName);
           setShowGallery(false);
-          window.setTimeout(() => void createTemplate(), 0);
+          void createTemplate({ name: draftName });
         }}
+
       />
       {isCreatorOnly ? (
         <CreatorBuilderHelpPanel
