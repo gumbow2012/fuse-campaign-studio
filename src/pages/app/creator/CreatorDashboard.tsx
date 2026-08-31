@@ -711,13 +711,20 @@ export default function CreatorDashboard() {
 
             {section === "overview" && !loading ? (
               firstRun ? (
-                <FirstRunHome
-                  displayName={displayName}
-                  doneSteps={
-                    [hasTemplates, hasSubmitted, linkShared].filter(Boolean).length
-                  }
-                  onStart={startFirstTemplate}
-                />
+                <div className="space-y-6">
+                  <CreatorBuilderIntro
+                    onStartBuilding={startBuilderTutorial}
+                    onExplore={exploreBuilder}
+                  />
+                  <FirstRunHome
+                    displayName={displayName}
+                    doneSteps={
+                      [hasTemplates, hasSubmitted, linkShared].filter(Boolean).length
+                    }
+                    onStart={startFirstTemplate}
+                  />
+                </div>
+
               ) : (
                 <div className="space-y-6">
                   <div className="grid gap-4 sm:grid-cols-3">
