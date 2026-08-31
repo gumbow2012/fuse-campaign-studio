@@ -39,9 +39,10 @@ import {
   loadCreatorPerformance,
   type CreatorPerformanceAggregate,
 } from "@/services/creatorPerformance";
-import {
 import CreatorRateBadge from "@/components/creator/CreatorRateBadge";
+import {
   loadCreatorAnalytics,
+
   loadCreatorChallenges,
   loadCreatorDashboard,
   loadCreatorRewards,
