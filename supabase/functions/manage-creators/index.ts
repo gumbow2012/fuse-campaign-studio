@@ -12,6 +12,7 @@ import { sendEmail } from "../_shared/sendEmail.ts";
 import { buildCreatorInviteEmail } from "../_shared/creatorInviteEmail.ts";
 
 const INVITE_REDIRECT_TO = "https://fuse-us.com/app/creator/welcome";
+const BRANDED_INVITE_BASE = "https://fuse-us.com/creator/invite";
 
 
 type Action = "list" | "invite" | "resend" | "revoke" | "review_queue" | "set_verification";
@@ -23,6 +24,19 @@ type Body = {
   inviteId?: string;
   verificationStatus?: string;
   verificationReason?: string | null;
+  firstName?: string;
+  instagramHandle?: string;
+  displayName?: string;
+  personalNote?: string;
+  creatorSpecialty?: string;
+};
+
+type Personalization = {
+  first_name: string | null;
+  instagram_handle: string | null;
+  display_name: string | null;
+  personal_note: string | null;
+  creator_specialty: string | null;
 };
 
 const VERIFICATION_STATUSES = ["creator", "verified", "featured", "partner"] as const;
@@ -30,6 +44,43 @@ const VERIFICATION_STATUSES = ["creator", "verified", "featured", "partner"] as 
 
 function cleanEmail(value: unknown) {
   return typeof value === "string" ? value.trim().toLowerCase() : "";
+}
+
+function cleanText(value: unknown, max: number): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.replace(/\s+/g, " ").trim().slice(0, max);
+  return trimmed ? trimmed : null;
+}
+
+function cleanNote(value: unknown, max: number): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim().slice(0, max);
+  return trimmed ? trimmed : null;
+}
+
+function cleanHandle(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const bare = value.replace(/\s+/g, "").replace(/^@+/, "").slice(0, 64);
+  return bare ? bare : null;
+}
+
+function readPersonalization(body: Body): Personalization {
+  return {
+    first_name: cleanText(body.firstName, 80),
+    instagram_handle: cleanHandle(body.instagramHandle),
+    display_name: cleanText(body.displayName, 80),
+    personal_note: cleanNote(body.personalNote, 500),
+    creator_specialty: cleanText(body.creatorSpecialty, 80),
+  };
+}
+
+/** URL-safe random token, never logged. */
+function newBrandedToken(): string {
+  return `${crypto.randomUUID()}${crypto.randomUUID()}`.replace(/-/g, "");
+}
+
+function brandedUrl(token: string) {
+  return `${BRANDED_INVITE_BASE}/${token}`;
 }
 
 Deno.serve(async (req) => {
@@ -82,7 +133,7 @@ Deno.serve(async (req) => {
       const { data: invites, error: inviteError } = await admin
         .from("creator_invites")
         .select(
-          "id, email, status, invited_by, created_at, accepted_at, email_status, provider_message_id, delivered_at, bounced_at, failure_reason, last_sent_at, sent_count",
+          "id, email, status, invited_by, created_at, accepted_at, email_status, provider_message_id, delivered_at, bounced_at, failure_reason, last_sent_at, sent_count, first_name, instagram_handle, display_name, creator_specialty",
         )
         .order("created_at", { ascending: false });
       if (inviteError) throw new Error(inviteError.message);
@@ -93,6 +144,8 @@ Deno.serve(async (req) => {
     if (action === "invite") {
       const email = cleanEmail(body.email);
       if (!email || !email.includes("@")) throw new Error("A valid email is required");
+
+      const personalization = readPersonalization(body);
 
       const { data: existingInvite } = await admin
         .from("creator_invites")
@@ -105,13 +158,13 @@ Deno.serve(async (req) => {
       if (inviteId) {
         const { error } = await admin
           .from("creator_invites")
-          .update({ status: "pending", invited_by: user.id })
+          .update({ status: "pending", invited_by: user.id, ...personalization })
           .eq("id", inviteId);
         if (error) throw new Error(error.message);
       } else {
         const { data: inserted, error } = await admin
           .from("creator_invites")
-          .insert({ email, invited_by: user.id, status: "pending" })
+          .insert({ email, invited_by: user.id, status: "pending", ...personalization })
           .select("id, sent_count")
           .single();
         if (error) throw new Error(error.message);
@@ -135,12 +188,23 @@ Deno.serve(async (req) => {
           return json({ ok: false, inviteId, emailSent: false, emailStatus: "failed", reason: "Could not generate invite link" });
         }
 
-        const branded = buildCreatorInviteEmail(actionLink);
+        const brandedToken = newBrandedToken();
+        await admin
+          .from("creator_invites")
+          .update({ action_link: actionLink, branded_token: brandedToken })
+          .eq("id", inviteId!);
+
+        const branded = buildCreatorInviteEmail(brandedUrl(brandedToken), {
+          firstName: personalization.first_name ?? undefined,
+          instagramHandle: personalization.instagram_handle ?? undefined,
+          personalNote: personalization.personal_note ?? undefined,
+        });
         const sendResult = await sendEmail({
           to: email,
           subject: branded.subject,
           html: branded.html,
           text: branded.text,
+          fromName: "FUSE Creator Team",
         });
 
         if (!sendResult.sent) {
@@ -210,7 +274,7 @@ Deno.serve(async (req) => {
 
       const { data: invite, error: loadError } = await admin
         .from("creator_invites")
-        .select("id, email, sent_count")
+        .select("id, email, sent_count, first_name, instagram_handle, display_name, personal_note, creator_specialty")
         .eq("id", inviteId)
         .maybeSingle();
       if (loadError) throw new Error(loadError.message);
@@ -233,12 +297,23 @@ Deno.serve(async (req) => {
         if (!actionLink) {
           sendFailure = "Could not generate invite link";
         } else {
-          const branded = buildCreatorInviteEmail(actionLink);
+          const brandedToken = newBrandedToken();
+          await admin
+            .from("creator_invites")
+            .update({ action_link: actionLink, branded_token: brandedToken })
+            .eq("id", inviteId);
+
+          const branded = buildCreatorInviteEmail(brandedUrl(brandedToken), {
+            firstName: (invite as any).first_name ?? undefined,
+            instagramHandle: (invite as any).instagram_handle ?? undefined,
+            personalNote: (invite as any).personal_note ?? undefined,
+          });
           const sendResult = await sendEmail({
             to: email,
             subject: branded.subject,
             html: branded.html,
             text: branded.text,
+            fromName: "FUSE Creator Team",
           });
           if (!sendResult.sent) {
             sendFailure = sendResult.reason === "no_provider"
