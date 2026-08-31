@@ -488,7 +488,7 @@ const TemplateLab = () => {
     return () => {
       active = false;
     };
-  }, []);
+  }, [authLoading, session?.user?.id]);
 
   useEffect(() => {
     window.localStorage.setItem(ACCESS_CODE_STORAGE_KEY, accessCode);
