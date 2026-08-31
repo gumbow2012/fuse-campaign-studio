@@ -8,6 +8,11 @@ import {
   json,
   requireAdminUser,
 } from "../_shared/supabase-admin.ts";
+import { sendEmail } from "../_shared/sendEmail.ts";
+import { buildCreatorInviteEmail } from "../_shared/creatorInviteEmail.ts";
+
+const INVITE_REDIRECT_TO = "https://fuse-us.com/app/lab/templates";
+
 
 type Action = "list" | "invite" | "resend" | "revoke" | "review_queue" | "set_verification";
 
