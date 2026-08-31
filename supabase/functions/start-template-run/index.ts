@@ -22,6 +22,11 @@ import {
 } from "../_shared/cast.ts";
 import { countTemplateDeliverables, getTemplateCreditCost } from "../_shared/template-pricing.ts";
 import {
+  buildStoredRunEconomics,
+  resolveRunEconomics,
+  RUN_ECONOMICS_KEY,
+} from "../_shared/creatorSurcharge.ts";
+import {
   assertRegenerationAccess,
   resolveRegenerationSubgraph,
 } from "../_shared/regeneration.ts";
