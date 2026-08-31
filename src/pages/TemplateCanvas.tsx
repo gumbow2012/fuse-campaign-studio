@@ -833,6 +833,10 @@ const TemplateCanvas = () => {
     setJobId(nextJobId);
     setJob(data);
     setPhase(data.status === "complete" ? "complete" : data.status === "failed" ? "error" : "running");
+    if (data.status === "complete") {
+      tutorialRef.current?.signal("test_completed");
+      track("creator_test_completed", { status: "complete" });
+    }
     if (data.status === "complete" && runVersionId) void loadTemplates();
     setError(data.error ?? null);
     return data as JobStatus;
@@ -1234,6 +1238,23 @@ const TemplateCanvas = () => {
       references: allNodes.filter((node) => node.nodeType === "user_input" && node.editor?.mode === "reference").length,
     };
   }, [detail?.edges.length, detail?.nodes]);
+
+  /** Real per-run credit estimate for the creator test-run confirmation. */
+  const estimatedTestCredits = useMemo(() => {
+    const allNodes = detail?.nodes ?? [];
+    return allNodes.reduce((total, node) => {
+      if (node.nodeType === "image_gen") return total + 1;
+      if (node.nodeType === "video_gen") {
+        return total + estimateVideoCredits({
+          videoModel: resolveVideoModelOption(node.editor?.videoModel).key,
+          duration: Number(node.editor?.duration) || 5,
+          resolution: String(node.editor?.resolution ?? "720p"),
+          generateAudio: Boolean(node.editor?.generateAudio),
+        });
+      }
+      return total;
+    }, 0);
+  }, [detail?.nodes]);
 
   const graphValidation = useMemo(() => {
     const allNodes = detail?.nodes ?? [];
@@ -1872,9 +1893,10 @@ const TemplateCanvas = () => {
       }
       if (!response.ok) throw new Error(data.error ?? `Request failed (${response.status})`);
       await refreshAfterMutation(detail.versionId);
+      tutorial.signal("submitted");
       toast({
-        title: "Submitted for review",
-        description: "An admin will review this template before it goes live.",
+        title: "Template submitted ✓",
+        description: "We'll notify you when it's approved.",
       });
     } catch (submitError) {
       const message = submitError instanceof Error ? submitError.message : "Could not submit for review";
@@ -2070,6 +2092,17 @@ const TemplateCanvas = () => {
       }
 
       await refreshAfterMutation(detail.versionId);
+      tutorial.signal(
+        kind === "upload"
+          ? "input_added"
+          : kind === "reference"
+            ? "reference_added"
+            : kind === "prompt"
+              ? "prompt_added"
+              : kind === "image_gen"
+                ? "image_added"
+                : "video_added",
+      );
       if (createdNodeId) {
         setSelectedNodeId(createdNodeId);
         setFocusNodeId(createdNodeId);
@@ -2293,14 +2326,21 @@ const TemplateCanvas = () => {
         targetParam,
       });
       await refreshAfterMutation(detail.versionId);
-      toast({ title: "Steps connected", description: `Mapped to ${targetParam}.` });
+      tutorial.signal("connection_made");
+      toast({ title: "Steps connected", description: "Nice — that step now receives the customer's asset automatically." });
     } catch (edgeError) {
       const message = edgeError instanceof Error ? edgeError.message : "Could not connect steps";
-      toast({ title: "Connect failed", description: message, variant: "destructive" });
+      toast({
+        title: "Connect failed",
+        description: isCreatorOnly
+          ? `${message} — this input may expect a different type. Try connecting an image output to an image input.`
+          : message,
+        variant: "destructive",
+      });
     } finally {
       setMutating(null);
     }
-  }, [detail, invokeWorkbench, refreshAfterMutation]);
+  }, [detail, invokeWorkbench, isCreatorOnly, refreshAfterMutation, tutorial]);
 
   const handleCanvasNodeMoved = useCallback((nodeId: string, position: Point) => {
     setPositions((current) => {
