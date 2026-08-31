@@ -470,6 +470,28 @@ function nodeKindLabel(node: TemplateDetailNode) {
   return node.nodeType.replace("_", " ");
 }
 
+/** Creator-mode helpers: friendly node names + plain-language help. */
+function creatorNodeHelpKey(node: TemplateDetailNode): CreatorNodeHelpKey {
+  if (node.nodeType === "prompt") return "prompt";
+  if (node.nodeType === "video_gen") return "video";
+  if (node.nodeType === "image_gen") return "image";
+  if (node.editor?.mode === "reference") return "reference";
+  return "input";
+}
+
+function creatorKindLabel(node: TemplateDetailNode) {
+  const key = creatorNodeHelpKey(node);
+  if (key === "input") return "Customer input";
+  if (key === "reference") return "Reference asset";
+  if (key === "prompt") return "Prompt";
+  if (key === "image") return "Image step";
+  return "Video step";
+}
+
+function creatorNodeHelpText(node: TemplateDetailNode) {
+  return CREATOR_NODE_HELP[creatorNodeHelpKey(node)].body;
+}
+
 function sourcePreview(node: TemplateDetailNode) {
   if (!node.incoming.length) return "No upstream source";
   return compactText(
