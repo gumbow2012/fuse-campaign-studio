@@ -13,6 +13,8 @@ export type SendEmailInput = {
   text?: string;
   html?: string;
   replyTo?: string;
+  /** Optional sender display name override (address is unchanged). */
+  fromName?: string;
 };
 
 export type SendEmailResult =
@@ -44,7 +46,7 @@ export async function sendEmail(input: SendEmailInput): Promise<SendEmailResult>
   const from = parseFromAddress(Deno.env.get("EMAIL_FROM") ?? DEFAULT_FROM);
 
   const body = {
-    from: { address: from.address, name: from.name || "FUSE" },
+    from: { address: from.address, name: input.fromName?.trim() || from.name || "FUSE" },
     to: [{ email_address: { address: input.to } }],
     reply_to: [{ address: input.replyTo?.trim() || DEFAULT_REPLY_TO }],
     subject: input.subject,
