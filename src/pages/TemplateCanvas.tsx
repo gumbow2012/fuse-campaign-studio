@@ -1939,11 +1939,13 @@ const TemplateCanvas = () => {
 
   const saveTemplateMetadata = useCallback(async () => {
     if (!selectedTemplate) return;
-    const name = templateMetaName.trim();
+    // Creators never get hard-blocked on an unnamed draft — fall back to a default.
+    const name = templateMetaName.trim() || (isCreatorOnly ? CREATOR_DEFAULT_TEMPLATE_NAME : "");
     if (!name) {
       toast({ title: "Template name required", variant: "destructive" });
       return;
     }
+
 
     setMutating("save-template-meta");
     try {
