@@ -665,28 +665,173 @@ export default function CreatorDashboard() {
               </div>
             ) : null}
 
-            {section === "overview" ? (
-              <div className={panelClass}>
-                <div className="flex items-center gap-2">
-                  <LayoutDashboard className="h-4 w-4 text-cyan-200" />
-                  <h2 className="font-display text-lg font-bold text-foreground">Overview</h2>
+            {section === "overview" && !loading ? (
+              firstRun ? (
+                <FirstRunHome
+                  displayName={displayName}
+                  doneSteps={
+                    [hasTemplates, hasSubmitted, linkShared].filter(Boolean).length
+                  }
+                  onStart={startFirstTemplate}
+                />
+              ) : (
+                <div className="space-y-6">
+                  <div className="grid gap-4 sm:grid-cols-3">
+                    <StatTile
+                      label="Published templates"
+                      value={String(publishedCount)}
+                      hint="Templates you own in FUSE"
+                    />
+                    <StatTile
+                      label="Runs"
+                      value={analytics ? String(analytics.totalRuns) : "—"}
+                      hint={
+                        analytics
+                          ? `${analytics.runsLast30d} in last 30 days`
+                          : analyticsLoading
+                            ? "Loading real runs…"
+                            : "Run data unavailable"
+                      }
+                    />
+                    <StatTile
+                      label="Earnings"
+                      value="—"
+                      hint="Coming soon with creator monetization"
+                    />
+                  </div>
+
+                  <CreatorLinkCard handle={handle} copied={copied} onCopy={() => void copyCreatorLink()} />
+
+                  <div className={panelClass}>
+                    <div className="flex items-center gap-2">
+                      <LayoutDashboard className="h-4 w-4 text-cyan-200" />
+                      <h2 className="font-display text-lg font-bold text-foreground">
+                        Your top templates
+                      </h2>
+                    </div>
+                    <div className="mt-4 space-y-2">
+                      {analytics && analytics.perTemplate.length ? (
+                        analytics.perTemplate.slice(0, 5).map((row) => (
+                          <div
+                            key={row.template_id}
+                            className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-white/10 bg-black/30 px-4 py-3"
+                          >
+                            <p className="min-w-0 truncate font-display text-sm font-semibold text-foreground">
+                              {row.name ?? "Untitled template"}
+                            </p>
+                            <Badge
+                              variant="outline"
+                              className="border-white/15 text-[11px] text-muted-foreground"
+                            >
+                              {row.runs} run{row.runs === 1 ? "" : "s"}
+                            </Badge>
+                          </div>
+                        ))
+                      ) : templates.length ? (
+                        templates
+                          .slice(0, 5)
+                          .map((template) => <TemplateRow key={template.id} template={template} />)
+                      ) : (
+                        <EmptyNote>
+                          Nothing here yet — build a template and it'll show up.
+                        </EmptyNote>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className={panelClass}>
+                    <h2 className="font-display text-lg font-bold text-foreground">
+                      Recent activity
+                    </h2>
+                    <div className="mt-4 space-y-2">
+                      {analytics &&
+                      analytics.perTemplate.some((row) => row.lastRunAt) ? (
+                        analytics.perTemplate
+                          .filter((row) => row.lastRunAt)
+                          .sort((a, b) => (a.lastRunAt! < b.lastRunAt! ? 1 : -1))
+                          .slice(0, 5)
+                          .map((row) => (
+                            <div
+                              key={`activity-${row.template_id}`}
+                              className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-white/10 bg-black/30 px-4 py-3"
+                            >
+                              <p className="min-w-0 truncate text-sm text-foreground">
+                                {row.name ?? "Untitled template"}
+                              </p>
+                              <span className="text-xs text-muted-foreground">
+                                last run {new Date(row.lastRunAt!).toLocaleDateString()}
+                              </span>
+                            </div>
+                          ))
+                      ) : (
+                        <EmptyNote>
+                          No runs yet. Share your creator link — runs appear here as soon as
+                          customers use your templates.
+                        </EmptyNote>
+                      )}
+                    </div>
+                  </div>
                 </div>
-                <div className="mt-4 space-y-2">
-                  {templates.length ? (
-                    templates
-                      .slice(0, 5)
-                      .map((template) => <TemplateRow key={template.id} template={template} />)
-                  ) : (
-                    <EmptyNote>
-                      You don't own any templates yet. Build your first one in the template builder.
-                    </EmptyNote>
-                  )}
+              )
+            ) : null}
+
+            {section === "earnings" ? (
+              <ComingLater
+                title="Earnings"
+                note="Earnings arrive with the FUSE Creator monetization launch. You'll be able to set what you earn per run and track it here."
+              />
+            ) : null}
+
+            {section === "resources" ? (
+              <div className="grid gap-3 sm:grid-cols-3">
+                <div className={panelClass}>
+                  <h3 className="font-display text-sm font-bold text-foreground">
+                    How templates work
+                  </h3>
+                  <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+                    A template is a reusable campaign: you build the workflow once, customers add
+                    their own product and run it.
+                  </p>
                 </div>
-                <p className="mt-4 text-xs text-muted-foreground">
-                  Template usage counts aren't tracked in production yet, so no usage metric is shown.
-                </p>
+                <div className={panelClass}>
+                  <h3 className="font-display text-sm font-bold text-foreground">
+                    Building templates
+                  </h3>
+                  <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+                    Start in the builder, decide what customers upload, preview the customer
+                    experience, then submit for review.
+                  </p>
+                  <Button
+                    asChild
+                    variant="outline"
+                    size="sm"
+                    className="mt-3 rounded-full border-white/15 bg-white/5 text-foreground hover:bg-white/10"
+                  >
+                    <Link to={CREATE_TEMPLATE_PATH}>Open builder</Link>
+                  </Button>
+                </div>
+                <div className={panelClass}>
+                  <h3 className="font-display text-sm font-bold text-foreground">
+                    Sharing your profile
+                  </h3>
+                  <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+                    Published templates live on your creator page. Share that link with your
+                    audience so people can run your work.
+                  </p>
+                  {handle ? (
+                    <Button
+                      asChild
+                      variant="outline"
+                      size="sm"
+                      className="mt-3 rounded-full border-white/15 bg-white/5 text-foreground hover:bg-white/10"
+                    >
+                      <Link to={`/creator/${handle}`}>View your page</Link>
+                    </Button>
+                  ) : null}
+                </div>
               </div>
             ) : null}
+
 
             {section === "templates" ? (
               <div className={panelClass}>
