@@ -114,8 +114,25 @@ export default function CreditTopUpModule({
               </button>
             );
           })}
+          {showEntryTierPreview ? (
+            <button
+              type="button"
+              disabled
+              aria-disabled="true"
+              title="The $10 starter top-up isn't available yet."
+              className="cursor-not-allowed rounded-full border border-dashed border-white/15 bg-white/[0.02] px-3.5 py-1.5 text-xs font-semibold text-slate-500"
+            >
+              $10 · 200 cr — coming soon
+            </button>
+          ) : null}
         </div>
+        {showEntryTierPreview ? (
+          <p className="mt-2 text-[11px] text-slate-500">
+            The $10 / 200-credit tier isn't available yet. Pick any amount above to buy now.
+          </p>
+        ) : null}
       </div>
+
 
       {/* Custom amount */}
       <div className="mt-5">
