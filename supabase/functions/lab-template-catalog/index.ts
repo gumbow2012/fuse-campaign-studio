@@ -281,6 +281,33 @@ Deno.serve(async (req) => {
       })
       .sort((a, b) => a.templateName.localeCompare(b.templateName));
 
+    // P5C — customers must see the TOTAL (base + creator marketplace surcharge)
+    // before running. Surcharge math comes only from the shared server helper.
+    let viewerId: string | null = null;
+    try {
+      const authHeader = req.headers.get("Authorization");
+      if (authHeader) {
+        const { data } = await admin.auth.getUser(authHeader.replace("Bearer ", ""));
+        viewerId = data.user?.id ?? null;
+      }
+    } catch {
+      viewerId = null;
+    }
+
+    const uniqueTemplateIds = [...new Set(catalog.map((entry) => String(entry.templateId)))];
+    const economicsByTemplate = new Map<string, number>();
+    for (const templateId of uniqueTemplateIds) {
+      const economics = await resolveRunEconomics(admin, templateId);
+      if (economics.monetized && economics.creatorId !== viewerId) {
+        economicsByTemplate.set(templateId, economics.surchargeCredits);
+      }
+    }
+    for (const entry of catalog) {
+      const surcharge = economicsByTemplate.get(String(entry.templateId)) ?? 0;
+      entry.marketplaceSurchargeCredits = surcharge;
+      entry.estimatedCreditsPerRun = entry.baseCreditsPerRun + surcharge;
+    }
+
     return json({ templates: catalog });
   } catch (error) {
     return json({ error: errorMessage(error) }, 400);
