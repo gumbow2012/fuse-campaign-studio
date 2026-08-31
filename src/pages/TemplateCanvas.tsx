@@ -26,6 +26,11 @@ import {
 import CastConfigPanel from "@/components/lab/CastConfigPanel";
 import QuickPublishButton from "@/components/lab/QuickPublishButton";
 import CreatorBuilderHelpPanel from "@/components/creator/CreatorBuilderHelpPanel";
+import CreatorTutorialOverlay from "@/components/creator/CreatorTutorialOverlay";
+import CreatorCustomerPreviewModal from "@/components/creator/CreatorCustomerPreviewModal";
+import CreditConfirmModal from "@/components/CreditConfirmModal";
+import { useCreatorTutorial } from "@/hooks/useCreatorTutorial";
+import { track } from "@/lib/analytics/track";
 import {
   CREATOR_NODE_HELP,
   CREATOR_PALETTE_LABELS,
@@ -570,12 +575,17 @@ function defaultPosition(laneIndex: number, nodeIndex: number): Point {
 }
 
 const TemplateCanvas = () => {
-  const { session, hasAppAccess, isCreator, canUseBuilder, user } = useAuth();
+  const { session, hasAppAccess, isCreator, canUseBuilder, user, profile } = useAuth();
   const canPublishTemplates = hasAppAccess;
   /** Presentation switch only — every action stays server-authorized. */
   const isCreatorOnly = isCreator && !hasAppAccess;
   const [showCreatorHelp, setShowCreatorHelp] = useState(false);
   const [showCreatorOverflow, setShowCreatorOverflow] = useState(false);
+  const [showTestCostConfirm, setShowTestCostConfirm] = useState(false);
+  const [showCustomerPreview, setShowCustomerPreview] = useState(false);
+  const tutorial = useCreatorTutorial(isCreatorOnly);
+  const tutorialRef = useRef(tutorial);
+  tutorialRef.current = tutorial;
   const [searchParams, setSearchParams] = useSearchParams();
   const [templates, setTemplates] = useState<TemplateOption[]>([]);
   const [loadingTemplates, setLoadingTemplates] = useState(false);
@@ -827,6 +837,11 @@ const TemplateCanvas = () => {
     setJobId(nextJobId);
     setJob(data);
     setPhase(data.status === "complete" ? "complete" : data.status === "failed" ? "error" : "running");
+    if (data.status === "complete") {
+      tutorialRef.current?.signal("test_completed");
+      track("creator_test_completed", { status: "complete" });
+      track("creator_outputs_reviewed", { status: "complete" });
+    }
     if (data.status === "complete" && runVersionId) void loadTemplates();
     setError(data.error ?? null);
     return data as JobStatus;
@@ -1228,6 +1243,23 @@ const TemplateCanvas = () => {
       references: allNodes.filter((node) => node.nodeType === "user_input" && node.editor?.mode === "reference").length,
     };
   }, [detail?.edges.length, detail?.nodes]);
+
+  /** Real per-run credit estimate for the creator test-run confirmation. */
+  const estimatedTestCredits = useMemo(() => {
+    const allNodes = detail?.nodes ?? [];
+    return allNodes.reduce((total, node) => {
+      if (node.nodeType === "image_gen") return total + 1;
+      if (node.nodeType === "video_gen") {
+        return total + estimateVideoCredits({
+          videoModel: resolveVideoModelOption(node.editor?.videoModel).key,
+          duration: Number(node.editor?.duration) || 5,
+          resolution: String(node.editor?.resolution ?? "720p"),
+          generateAudio: Boolean(node.editor?.generateAudio),
+        });
+      }
+      return total;
+    }, 0);
+  }, [detail?.nodes]);
 
   const graphValidation = useMemo(() => {
     const allNodes = detail?.nodes ?? [];
@@ -1776,6 +1808,16 @@ const TemplateCanvas = () => {
 
 
 
+  // Creator Studio "START BUILDING" entry also launches the guided walkthrough.
+  const tutorialLaunchedRef = useRef(false);
+  useEffect(() => {
+    if (tutorialLaunchedRef.current) return;
+    if (!isCreatorOnly || !detail) return;
+    if (searchParams.get("tutorial") !== "1") return;
+    tutorialLaunchedRef.current = true;
+    tutorial.start();
+  }, [detail, isCreatorOnly, searchParams, tutorial]);
+
   // Creator Studio "START BUILDING" entry: open the real builder on a fresh
   // creator-owned draft (created_by = self, enforced server-side).
   useEffect(() => {
@@ -1866,9 +1908,10 @@ const TemplateCanvas = () => {
       }
       if (!response.ok) throw new Error(data.error ?? `Request failed (${response.status})`);
       await refreshAfterMutation(detail.versionId);
+      tutorial.signal("submitted");
       toast({
-        title: "Submitted for review",
-        description: "An admin will review this template before it goes live.",
+        title: "Template submitted ✓",
+        description: "We'll notify you when it's approved.",
       });
     } catch (submitError) {
       const message = submitError instanceof Error ? submitError.message : "Could not submit for review";
@@ -1876,7 +1919,7 @@ const TemplateCanvas = () => {
     } finally {
       setMutating(null);
     }
-  }, [buildAuthHeaders, detail, refreshAfterMutation]);
+  }, [buildAuthHeaders, detail, refreshAfterMutation, tutorial]);
 
 
 
@@ -2064,6 +2107,17 @@ const TemplateCanvas = () => {
       }
 
       await refreshAfterMutation(detail.versionId);
+      tutorial.signal(
+        kind === "upload"
+          ? "input_added"
+          : kind === "reference"
+            ? "reference_added"
+            : kind === "prompt"
+              ? "prompt_added"
+              : kind === "image_gen"
+                ? "image_added"
+                : "video_added",
+      );
       if (createdNodeId) {
         setSelectedNodeId(createdNodeId);
         setFocusNodeId(createdNodeId);
@@ -2080,7 +2134,7 @@ const TemplateCanvas = () => {
     } finally {
       setMutating(null);
     }
-  }, [buildAuthHeaders, detail, invokeWorkbench, refreshAfterMutation]);
+  }, [buildAuthHeaders, detail, invokeWorkbench, refreshAfterMutation, tutorial]);
 
   const deletingNodeIdsRef = useRef<Set<string>>(new Set());
 
@@ -2287,14 +2341,21 @@ const TemplateCanvas = () => {
         targetParam,
       });
       await refreshAfterMutation(detail.versionId);
-      toast({ title: "Steps connected", description: `Mapped to ${targetParam}.` });
+      tutorial.signal("connection_made");
+      toast({ title: "Steps connected", description: "Nice — that step now receives the customer's asset automatically." });
     } catch (edgeError) {
       const message = edgeError instanceof Error ? edgeError.message : "Could not connect steps";
-      toast({ title: "Connect failed", description: message, variant: "destructive" });
+      toast({
+        title: "Connect failed",
+        description: isCreatorOnly
+          ? `${message} — this input may expect a different type. Try connecting an image output to an image input.`
+          : message,
+        variant: "destructive",
+      });
     } finally {
       setMutating(null);
     }
-  }, [detail, invokeWorkbench, refreshAfterMutation]);
+  }, [detail, invokeWorkbench, isCreatorOnly, refreshAfterMutation, tutorial]);
 
   const handleCanvasNodeMoved = useCallback((nodeId: string, position: Point) => {
     setPositions((current) => {
@@ -2598,7 +2659,52 @@ const TemplateCanvas = () => {
         }}
       />
       {isCreatorOnly ? (
-        <CreatorBuilderHelpPanel open={showCreatorHelp} onClose={() => setShowCreatorHelp(false)} />
+        <CreatorBuilderHelpPanel
+          open={showCreatorHelp}
+          onClose={() => setShowCreatorHelp(false)}
+          onReplayWalkthrough={() => {
+            setShowCreatorHelp(false);
+            tutorial.start();
+          }}
+        />
+      ) : null}
+      {isCreatorOnly && tutorial.active && tutorial.lesson ? (
+        <CreatorTutorialOverlay
+          lesson={tutorial.lesson}
+          index={tutorial.index}
+          total={tutorial.total}
+          completedIds={tutorial.completedIds}
+          milestoneId={tutorial.milestoneId}
+          onNext={tutorial.next}
+          onBack={tutorial.back}
+          onSkip={tutorial.skip}
+        />
+      ) : null}
+      {isCreatorOnly && detail ? (
+        <CreatorCustomerPreviewModal
+          open={showCustomerPreview}
+          onClose={() => setShowCustomerPreview(false)}
+          templateName={detail.templateName}
+          coverUrl={selectedTemplate?.previewUrl ?? null}
+          inputs={runInputs.map((input) => ({ key: input.id, label: input.name, type: input.expected }))}
+          imageCount={(detail.nodes ?? []).filter((node) => node.nodeType === "image_gen").length}
+          videoCount={(detail.nodes ?? []).filter((node) => node.nodeType === "video_gen").length}
+          runCredits={estimatedTestCredits}
+        />
+      ) : null}
+      {isCreatorOnly ? (
+        <CreditConfirmModal
+          open={showTestCostConfirm}
+          onOpenChange={setShowTestCostConfirm}
+          creditCost={estimatedTestCredits}
+          currentBalance={profile?.credits_balance ?? 0}
+          actionLabel="Run test"
+          onConfirm={() => {
+            setShowTestCostConfirm(false);
+            track("creator_test_started", { steps: graphSummary.nodes });
+            void handleRun();
+          }}
+        />
       ) : null}
       <div className="mx-auto flex w-full min-w-0 max-w-[2100px] flex-col gap-3 overflow-x-hidden px-3 py-3 sm:px-4">
         {isCreatorOnly ? (
@@ -2634,20 +2740,34 @@ const TemplateCanvas = () => {
             </span>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <Button type="button" variant="outline" size="sm" className="rounded-full" onClick={() => setShowGallery(true)}>
+            <Button data-tutorial="templates" type="button" variant="outline" size="sm" className="rounded-full" onClick={() => setShowGallery(true)}>
               <Layers className="mr-1.5 h-3.5 w-3.5" />
               {isCreatorOnly ? "My templates" : "Templates"}
             </Button>
-            <Button type="button" variant="ghost" size="sm" className="rounded-full" disabled={!detail} onClick={resetLayout}>
+            <Button data-tutorial="auto-layout" type="button" variant="ghost" size="sm" className="rounded-full" disabled={!detail} onClick={resetLayout}>
               <GitBranch className="mr-1.5 h-3.5 w-3.5" />
               Auto-layout
             </Button>
-            <Button type="button" variant="ghost" size="sm" className="rounded-full" disabled={!detail} onClick={saveLayout}>
+            <Button data-tutorial="save" type="button" variant="ghost" size="sm" className="rounded-full" disabled={!detail} onClick={() => { tutorial.signal("saved"); void saveLayout(); }}>
               <Save className="mr-1.5 h-3.5 w-3.5" />
               Save
             </Button>
             {isCreatorOnly ? (
               <>
+                <Button
+                  data-tutorial="customer-preview"
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="rounded-full"
+                  disabled={!detail}
+                  onClick={() => {
+                    track("creator_customer_previewed", { template_id: detail?.templateId ?? null });
+                    setShowCustomerPreview(true);
+                  }}
+                >
+                  Preview as customer
+                </Button>
                 <Button
                   type="button"
                   variant="ghost"
@@ -2683,6 +2803,7 @@ const TemplateCanvas = () => {
               {showInternalNodes ? "Hide guides" : "Show guides"}
             </Button>
             <Button
+              data-tutorial="settings"
               type="button"
               variant={showSettingsPanel ? "default" : "ghost"}
               size="sm"
@@ -2694,11 +2815,21 @@ const TemplateCanvas = () => {
             </>
             )}
             <Button
+              data-tutorial="test"
               type="button"
               size="sm"
               className="rounded-full"
               disabled={!detail || startingRun}
-              onClick={() => { setShowSettingsPanel(true); setShowRunnerPanel(true); void handleRun(); }}
+              onClick={() => {
+                setShowSettingsPanel(true);
+                setShowRunnerPanel(true);
+                if (isCreatorOnly) {
+                  // Credit safety: creators always confirm the estimate first.
+                  setShowTestCostConfirm(true);
+                  return;
+                }
+                void handleRun();
+              }}
             >
               {startingRun ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="mr-1.5 h-3.5 w-3.5" />}
               {isCreatorOnly ? "Test" : "Test run"}
@@ -2738,6 +2869,7 @@ const TemplateCanvas = () => {
                 .map((item) => (
                   <button
                     key={item.key}
+                    data-tutorial={`palette-${item.key}`}
                     type="button"
                     title={item.hint}
                     disabled={item.disabled}
@@ -2758,7 +2890,10 @@ const TemplateCanvas = () => {
               <p className="px-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">New video model</p>
               <select
                 value={paletteVideoModel}
-                onChange={(event) => setPaletteVideoModel(event.target.value as VideoModelKey)}
+                onChange={(event) => {
+                  setPaletteVideoModel(event.target.value as VideoModelKey);
+                  track("creator_video_model_selected", { model: event.target.value, surface: "palette" });
+                }}
                 className="h-9 w-full truncate rounded-xl border border-border bg-background px-2 text-[11px]"
                 aria-label="Video model for new video steps"
               >
@@ -2769,7 +2904,7 @@ const TemplateCanvas = () => {
             </div>
           </aside>
 
-          <section className="min-w-0">
+          <section className="min-w-0" data-tutorial="canvas">
             <GraphCanvas
               nodes={flowNodes}
               edges={flowEdges}
@@ -3442,7 +3577,7 @@ const TemplateCanvas = () => {
                         Submitted — pending review
                       </span>
                     ) : (
-                      <Button type="button" size="sm" onClick={() => void submitForReview()} disabled={!!mutating}>
+                      <Button data-tutorial="submit-for-review" type="button" size="sm" onClick={() => void submitForReview()} disabled={!!mutating}>
                         {mutating === "submit-for-review" ? (
                           <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                         ) : (
@@ -3521,7 +3656,7 @@ const TemplateCanvas = () => {
                   )}
                 </div>
               </div>
-              <div className="grid min-w-0 content-start gap-3">
+              <div className="grid min-w-0 content-start gap-3" data-tutorial="template-basics">
                 <div className="grid gap-3 md:grid-cols-2">
                   <div className="space-y-2">
                     <Label>Template Name</Label>
