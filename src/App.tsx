@@ -73,6 +73,7 @@ import FaqPage from "@/pages/mvp/FaqPage";
 import TermsPage from "@/pages/mvp/TermsPage";
 import PrivacyPage from "@/pages/mvp/PrivacyPage";
 import CreatorProgramPage from "@/pages/mvp/CreatorProgramPage";
+import CreatorProfileSetupPage from "@/pages/mvp/CreatorProfileSetupPage";
 import CreatorInviteRedirectPage from "@/pages/mvp/CreatorInviteRedirectPage";
 import CreatorApplyPage from "@/pages/mvp/CreatorApplyPage";
 import CreatorsDirectoryPage from "@/pages/mvp/CreatorsDirectoryPage";
@@ -497,6 +498,14 @@ const App = () => (
               }
             />
             <Route path="/creator/settings/edit" element={<EditCreatorProfile />} />
+            <Route
+              path="/creator/setup"
+              element={
+                <ProtectedRoute>
+                  <CreatorProfileSetupPage />
+                </ProtectedRoute>
+              }
+            />
             <Route path="/creator/:handle" element={<CreatorProfile />} />
 
             <Route path="*" element={<NotFoundPage />} />
