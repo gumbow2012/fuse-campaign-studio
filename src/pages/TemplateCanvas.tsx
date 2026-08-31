@@ -24,6 +24,8 @@ import {
   resolveTemplateBranchInputIndex,
 } from "@/lib/templateBuilder";
 import CastConfigPanel from "@/components/lab/CastConfigPanel";
+import CreatorRoyaltyPanel from "@/components/creator/CreatorRoyaltyPanel";
+
 import QuickPublishButton from "@/components/lab/QuickPublishButton";
 import CreatorBuilderHelpPanel from "@/components/creator/CreatorBuilderHelpPanel";
 import CreatorTutorialOverlay from "@/components/creator/CreatorTutorialOverlay";
@@ -3753,7 +3755,20 @@ const TemplateCanvas = () => {
                 ) : null}
               </div>
             </div>
+            {selectedTemplate ? (
+              <div className="mt-4">
+                <CreatorRoyaltyPanel
+                  templateId={selectedTemplate.templateId}
+                  outputCount={
+                    Number(selectedTemplate.counts?.imageOutputs ?? 0) +
+                    Number(selectedTemplate.counts?.videoOutputs ?? 0)
+                  }
+                  invoke={invokeWorkbench}
+                />
+              </div>
+            ) : null}
             {canPublishTemplates && detail ? (
+
               <div className="mt-4">
                 <CastConfigPanel
                   nodes={detail.nodes.map((node) => ({ id: node.id, name: node.name, nodeType: node.nodeType }))}

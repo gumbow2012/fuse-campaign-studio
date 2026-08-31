@@ -42,7 +42,10 @@ type Action =
   | "delete_node"
   | "add_edge"
   | "reorder_edge"
-  | "delete_edge";
+  | "delete_edge"
+  | "template_royalty"
+  | "set_template_royalty";
+
 
 
 type NodeType = "user_input" | "image_gen" | "video_gen" | "prompt";
@@ -1574,6 +1577,91 @@ Deno.serve(async (req) => {
       }
       return json({ edgeId, deleted: true });
     }
+
+    // ---- P5B: creator royalty pricing (STORE ONLY — never changes run charging) ----
+    if (action === "template_royalty" || action === "set_template_royalty") {
+      const templateId = cleanText(body.templateId);
+      if (!templateId) throw new Error("templateId is required");
+      await assertTemplateAccess(admin, access, templateId);
+
+      const { data: economicsConfig, error: economicsConfigError } = await admin
+        .from("platform_economics_config")
+        .select("*")
+        .eq("is_active", true)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (economicsConfigError) throw new Error(economicsConfigError.message);
+      if (!economicsConfig) throw new Error("No active platform economics config found");
+      const config = economicsConfig as Record<string, any>;
+
+      if (action === "set_template_royalty") {
+        const rawRoyalty = (body as Record<string, unknown>).royaltyCents;
+        let royaltyCents: number | null = null;
+        if (rawRoyalty !== null && rawRoyalty !== undefined && rawRoyalty !== "") {
+          royaltyCents = Math.round(Number(rawRoyalty));
+          if (!Number.isFinite(royaltyCents)) throw new Error("royaltyCents must be a number or null");
+          const min = Number(config.creator_royalty_min_cents);
+          const max = access.canPublish
+            ? Number(config.admin_exception_max_cents)
+            : Number(config.creator_royalty_max_cents);
+          if (royaltyCents < min || royaltyCents > max) {
+            throw new Error(
+              `Royalty must be between $${(min / 100).toFixed(2)} and $${(max / 100).toFixed(2)}`,
+            );
+          }
+        }
+
+        const { error: royaltyError } = await admin
+          .from("fuse_templates")
+          .update({ creator_royalty_cents: royaltyCents })
+          .eq("id", templateId);
+        if (royaltyError) throw new Error(royaltyError.message);
+
+        await logAuditEvent({
+          eventType: "template_royalty_updated",
+          message: royaltyCents === null
+            ? `Template ${templateId} set to not monetized`
+            : `Template ${templateId} royalty set to ${royaltyCents} cents`,
+          source: "admin-template-workbench",
+          templateId,
+          metadata: { userId: user.id, royaltyCents },
+        }, admin);
+
+        const { data: shareAfterSave } = await admin.rpc("effective_creator_share_bps", {
+          p_user: user.id,
+          p_template: templateId,
+        });
+        return json({
+          templateId,
+          royaltyCents,
+          effectiveShareBps: Number(shareAfterSave ?? config.default_creator_share_bps),
+          config,
+        });
+      }
+
+      const { data: templateRow, error: templateRowError } = await admin
+        .from("fuse_templates")
+        .select("id, creator_royalty_cents, created_by")
+        .eq("id", templateId)
+        .maybeSingle();
+      if (templateRowError) throw new Error(templateRowError.message);
+      if (!templateRow) throw new Error("Template not found");
+
+      const ownerId = (templateRow as any).created_by ?? user.id;
+      const { data: shareBps } = await admin.rpc("effective_creator_share_bps", {
+        p_user: ownerId,
+        p_template: templateId,
+      });
+
+      return json({
+        templateId,
+        royaltyCents: (templateRow as any).creator_royalty_cents ?? null,
+        effectiveShareBps: Number(shareBps ?? config.default_creator_share_bps),
+        config,
+      });
+    }
+
 
     return json({ error: `Unsupported action: ${action}` }, 400);
   } catch (error) {
