@@ -412,7 +412,15 @@ async function handleRunFork(
     throw new ForkRunError("EMPTY_GRAPH", "This workflow has no connected execution steps");
   }
   const deliverableCounts = countTemplateDeliverables(executionNodes);
-  const creditCost = privileged ? 0 : getTemplateCreditCost(templateName, deliverableCounts);
+  const baseCreditCost = privileged ? 0 : getTemplateCreditCost(templateName, deliverableCounts);
+
+  // P5C — additive creator marketplace surcharge (base pricing unchanged).
+  // Skipped for privileged runs and for creators running their own template.
+  const forkEconomics = privileged ? null : await resolveRunEconomics(admin, sourceTemplateId);
+  const storedEconomics = forkEconomics && forkEconomics.monetized && forkEconomics.creatorId !== user.id
+    ? buildStoredRunEconomics(forkEconomics, baseCreditCost)
+    : null;
+  const creditCost = baseCreditCost + (storedEconomics?.surcharge_credits ?? 0);
 
   // Idempotency — a retry never charges or runs twice.
   if (idempotencyKey) {
