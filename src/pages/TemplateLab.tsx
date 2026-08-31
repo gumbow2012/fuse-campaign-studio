@@ -517,6 +517,7 @@ const TemplateLab = () => {
       window.localStorage.setItem(
         BULK_AUDIT_STORAGE_KEY,
         JSON.stringify({
+          userId: session?.user?.id ?? null,
           runnerMode,
           selectedVersionId,
           currentJobId: jobId,
