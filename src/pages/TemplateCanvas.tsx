@@ -1833,9 +1833,13 @@ const TemplateCanvas = () => {
     const next = new URLSearchParams(searchParams);
     next.delete("newTemplate");
     setSearchParams(next, { replace: true });
-    setNewTemplateName(`Untitled template ${new Date().toLocaleDateString()}`);
-    window.setTimeout(() => void createTemplate(), 0);
-  }, [canUseBuilder, createTemplate, searchParams, session, setSearchParams]);
+    const draftName = isCreatorOnly
+      ? CREATOR_DEFAULT_TEMPLATE_NAME
+      : `Untitled template ${new Date().toLocaleDateString()}`;
+    setNewTemplateName(draftName);
+    void createTemplate({ name: draftName });
+  }, [canUseBuilder, createTemplate, isCreatorOnly, searchParams, session, setSearchParams]);
+
 
   const cloneCurrentVersion = useCallback(async (asNewTemplate: boolean) => {
     if (!detail) return;
