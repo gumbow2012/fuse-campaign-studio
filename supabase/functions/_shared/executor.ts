@@ -265,7 +265,150 @@ export async function refundJobCreditsIfNeeded(
     },
   }, admin);
 
+  await reverseCreatorEarningForJob(admin, {
+    jobId: args.jobId,
+    reason: args.reason,
+    requestId: args.requestId ?? null,
+  });
+
   return { refunded: true, amount: refundAmount, ledgerId: refundRow?.ledger_id ?? null };
+}
+
+/**
+ * P5C — create the ONE immutable creator earning for a successful customer run.
+ * Idempotent via the UNIQUE constraint on `creator_earnings.campaign_run_id`.
+ * Never throws: earnings must never break a completed run.
+ */
+export async function createCreatorEarningForJob(
+  admin: AdminClient,
+  args: { jobId: string; requestId?: string | null },
+) {
+  try {
+    const { data: job } = await admin
+      .from("execution_jobs")
+      .select("id, user_id, template_id, status, input_payload")
+      .eq("id", args.jobId)
+      .maybeSingle();
+    if (!job || job.status !== "complete" || !job.user_id) return { created: false };
+
+    const economics = readStoredRunEconomics((job as any).input_payload);
+    if (!economics) return { created: false };
+    if (economics.creator_id === job.user_id) return { created: false };
+    if (economics.creator_earning_cents <= 0) return { created: false };
+
+    const availableAt = new Date(Date.now() + economics.payout_hold_days * 86_400_000).toISOString();
+
+    const { error } = await admin.from("creator_earnings").insert({
+      campaign_run_id: job.id,
+      creator_id: economics.creator_id,
+      customer_id: job.user_id,
+      template_id: job.template_id,
+      base_run_credits: economics.base_run_credits,
+      marketplace_surcharge_credits: economics.surcharge_credits,
+      total_customer_credits: economics.total_customer_credits,
+      creator_share_bps: economics.creator_share_bps,
+      fuse_share_bps: economics.fuse_share_bps,
+      creator_royalty_target_cents: economics.royalty_cents,
+      creator_earning_cents: economics.creator_earning_cents,
+      fuse_marketplace_revenue_cents: economics.fuse_marketplace_revenue_cents,
+      economics_version: economics.economics_version,
+      status: "pending",
+      available_at: availableAt,
+    });
+    if (error) {
+      // Duplicate = already recorded for this run; anything else is logged only.
+      if (!/duplicate key|unique/i.test(error.message)) {
+        console.error(`[creator-earnings] insert failed for job ${args.jobId}: ${error.message}`);
+      }
+      return { created: false };
+    }
+
+    await logAuditEvent({
+      eventType: "creator.earning.created",
+      message: `Recorded creator earning of ${economics.creator_earning_cents} cents.`,
+      source: "template-runner",
+      requestId: args.requestId ?? null,
+      jobId: job.id,
+      templateId: job.template_id,
+      metadata: { ...economics },
+    }, admin);
+
+    return { created: true };
+  } catch (error) {
+    console.error(`[creator-earnings] unexpected failure: ${error instanceof Error ? error.message : error}`);
+    return { created: false };
+  }
+}
+
+/**
+ * P5C — reverse a pending/available earning when the customer is refunded.
+ * PAID earnings are never mutated; they are logged for manual reconciliation.
+ */
+export async function reverseCreatorEarningForJob(
+  admin: AdminClient,
+  args: { jobId: string; reason: string; requestId?: string | null },
+) {
+  try {
+    const { data: earning } = await admin
+      .from("creator_earnings")
+      .select("id, status, creator_id, creator_earning_cents")
+      .eq("campaign_run_id", args.jobId)
+      .maybeSingle();
+    if (!earning) return { reversed: false };
+
+    const status = String((earning as any).status ?? "");
+    if (status === "reversed") return { reversed: false };
+
+    if (status === "paid") {
+      await logAuditEvent({
+        eventType: "creator.earning.reversal_blocked",
+        message: "Customer run refunded after the creator earning was already paid out.",
+        source: "template-runner",
+        requestId: args.requestId ?? null,
+        jobId: args.jobId,
+        metadata: {
+          earning_id: (earning as any).id,
+          creator_id: (earning as any).creator_id,
+          creator_earning_cents: (earning as any).creator_earning_cents,
+          refund_reason: args.reason,
+        },
+      }, admin);
+      return { reversed: false, blocked: true };
+    }
+
+    const { error } = await admin
+      .from("creator_earnings")
+      .update({
+        status: "reversed",
+        reversed_at: new Date().toISOString(),
+        reversal_reason: args.reason.slice(0, 500),
+      })
+      .eq("id", (earning as any).id)
+      .neq("status", "paid");
+    if (error) {
+      console.error(`[creator-earnings] reversal failed for job ${args.jobId}: ${error.message}`);
+      return { reversed: false };
+    }
+
+    await logAuditEvent({
+      eventType: "creator.earning.reversed",
+      message: "Reversed creator earning after customer refund.",
+      source: "template-runner",
+      requestId: args.requestId ?? null,
+      jobId: args.jobId,
+      metadata: {
+        earning_id: (earning as any).id,
+        creator_id: (earning as any).creator_id,
+        creator_earning_cents: (earning as any).creator_earning_cents,
+        refund_reason: args.reason,
+      },
+    }, admin);
+
+    return { reversed: true };
+  } catch (error) {
+    console.error(`[creator-earnings] unexpected reversal failure: ${error instanceof Error ? error.message : error}`);
+    return { reversed: false };
+  }
 }
 
 export function parseOutputExposed(value: unknown) {
