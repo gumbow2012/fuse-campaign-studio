@@ -52,6 +52,8 @@ export default function CreditTopUpModule({
   onCheckout,
   onAmountChange,
   hidePlanNote = false,
+  showEntryTierPreview = false,
+
 }: Props) {
   const { profile } = useAuth();
   const [credits, setCredits] = useState<number>(DEFAULT_TOP_UP_AMOUNT);
