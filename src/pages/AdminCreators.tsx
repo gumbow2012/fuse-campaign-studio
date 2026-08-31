@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
+import { track } from "@/lib/analytics/track";
 
 type CreatorRow = {
   userId: string;
@@ -57,6 +58,11 @@ const AdminCreators = () => {
   const [invites, setInvites] = useState<InviteRow[]>([]);
   const [queue, setQueue] = useState<QueueRow[]>([]);
   const [inviteEmail, setInviteEmail] = useState("");
+  const [inviteFirstName, setInviteFirstName] = useState("");
+  const [inviteInstagram, setInviteInstagram] = useState("");
+  const [inviteDisplayName, setInviteDisplayName] = useState("");
+  const [inviteNote, setInviteNote] = useState("");
+  const [inviteSpecialty, setInviteSpecialty] = useState("");
   const [notes, setNotes] = useState<Record<string, string>>({});
 
   const callFunction = useCallback(
@@ -115,6 +121,16 @@ const AdminCreators = () => {
 
   const pendingInvites = useMemo(() => invites.filter((invite) => invite.status === "pending"), [invites]);
 
+  const normalizedHandle = inviteInstagram.replace(/\s+/g, "").replace(/^@+/, "");
+  const invitePreviewTo = useMemo(() => {
+    const parts = [inviteFirstName.trim() || inviteEmail.trim() || "—"];
+    if (normalizedHandle) parts.push(`@${normalizedHandle}`);
+    return parts.join(" · ");
+  }, [inviteFirstName, inviteEmail, normalizedHandle]);
+  const invitePreviewSubject = inviteFirstName.trim()
+    ? `${inviteFirstName.trim()}, you're invited to FUSE Creator Access`
+    : "You're invited to FUSE Creator Access";
+
   const sendInvite = async () => {
     const email = inviteEmail.trim().toLowerCase();
     if (!email.includes("@")) {
@@ -123,7 +139,21 @@ const AdminCreators = () => {
     }
     setBusy("invite");
     try {
-      const data = await callFunction("manage-creators", { action: "invite", email });
+      const data = await callFunction("manage-creators", {
+        action: "invite",
+        email,
+        firstName: inviteFirstName.trim() || undefined,
+        instagramHandle: normalizedHandle || undefined,
+        displayName: inviteDisplayName.trim() || undefined,
+        personalNote: inviteNote.trim() || undefined,
+        creatorSpecialty: inviteSpecialty.trim() || undefined,
+      });
+      track("creator_invite_sent", {
+        granted_immediately: Boolean(data.grantedImmediately),
+        has_first_name: Boolean(inviteFirstName.trim()),
+        has_instagram: Boolean(normalizedHandle),
+        has_personal_note: Boolean(inviteNote.trim()),
+      });
       toast({
         title: data.grantedImmediately ? "Creator access granted" : "Invite sent",
         description: data.grantedImmediately
@@ -131,6 +161,11 @@ const AdminCreators = () => {
           : `${email} will get an email to finish setting up their creator account.`,
       });
       setInviteEmail("");
+      setInviteFirstName("");
+      setInviteInstagram("");
+      setInviteDisplayName("");
+      setInviteNote("");
+      setInviteSpecialty("");
       await loadAll();
     } catch (error) {
       toast({
