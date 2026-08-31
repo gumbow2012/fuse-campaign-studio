@@ -8,9 +8,11 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import {
   BarChart3,
+  Check,
+  Copy,
   Gift,
   LayoutDashboard,
   Layers3,
@@ -26,6 +28,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/contexts/AuthContext";
 import { cn } from "@/lib/utils";
+import { track } from "@/lib/analytics/track";
 import { getCreatorLevel } from "@/lib/creatorLevels";
 import { getOwnCreatorProfile, type CreatorProfile } from "@/services/creatorProfile";
 import { CreatorPerformancePanel } from "@/components/CreatorPerformance";
@@ -58,22 +61,29 @@ type SectionId =
   | "approved"
   | "rejected"
   | "analytics"
+  | "earnings"
+  | "resources"
   | "challenges"
   | "rewards"
   | "profile";
 
-const SECTIONS: Array<{ id: SectionId; label: string }> = [
-  { id: "overview", label: "Overview" },
+const CREATE_TEMPLATE_PATH = "/app/lab/templates";
+
+const SECTIONS: Array<{ id: SectionId; label: string; to?: string }> = [
+  { id: "overview", label: "Creator Home" },
   { id: "templates", label: "My Templates" },
   { id: "drafts", label: "Drafts" },
   { id: "submitted", label: "Submitted" },
   { id: "approved", label: "Approved" },
   { id: "rejected", label: "Needs Changes" },
   { id: "analytics", label: "Analytics" },
+  { id: "earnings", label: "Earnings" },
+  { id: "profile", label: "Profile" },
+  { id: "resources", label: "Resources" },
   { id: "challenges", label: "Challenges" },
   { id: "rewards", label: "Levels & Rewards" },
-  { id: "profile", label: "Profile" },
 ];
+
 
 
 const panelClass =
@@ -145,6 +155,183 @@ function ComingLater({ title, note }: { title: string; note: string }) {
 }
 
 const ONBOARDING_BANNER_KEY = "fuse.creatorDashboard.onboardingBanner.dismissed";
+const SHARE_FLAG_KEY = "fuse.creatorDashboard.linkShared";
+const CHECKLIST_DISMISSED_KEY = "fuse.creatorDashboard.checklistDismissed";
+
+type ChecklistItem = { id: string; label: string; done: boolean };
+
+function ChecklistCard({
+  items,
+  complete,
+  onDismiss,
+}: {
+  items: ChecklistItem[];
+  complete: boolean;
+  onDismiss: () => void;
+}) {
+  const doneCount = items.filter((item) => item.done).length;
+
+  if (complete) {
+    return (
+      <div className="mb-6 flex items-center justify-between gap-3 rounded-xl border border-cyan-200/20 bg-cyan-200/[0.05] px-4 py-3">
+        <p className="text-sm text-foreground">Setup complete ✓</p>
+        <Button
+          type="button"
+          variant="outline"
+          size="icon"
+          aria-label="Dismiss setup checklist"
+          onClick={onDismiss}
+          className="h-8 w-8 rounded-full border-white/15 bg-white/5 text-foreground hover:bg-white/10"
+        >
+          <X className="h-3.5 w-3.5" />
+        </Button>
+      </div>
+    );
+  }
+
+  return (
+    <div className={cn(panelClass, "mb-6")}>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-[11px] uppercase tracking-[0.24em] text-muted-foreground">
+          Creator setup
+        </p>
+        <p className="font-display text-sm font-bold text-cyan-200">
+          {doneCount}/{items.length}
+        </p>
+      </div>
+      <ul className="mt-4 grid gap-2 sm:grid-cols-2">
+        {items.map((item) => (
+          <li key={item.id} className="flex items-center gap-2 text-sm">
+            <span
+              className={cn(
+                "flex h-5 w-5 shrink-0 items-center justify-center rounded-full border",
+                item.done
+                  ? "border-cyan-200/40 bg-cyan-300 text-slate-950"
+                  : "border-white/20 bg-white/5 text-transparent",
+              )}
+            >
+              <Check className="h-3 w-3" />
+            </span>
+            <span className={item.done ? "text-muted-foreground line-through" : "text-foreground"}>
+              {item.label}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function CreatorLinkCard({
+  handle,
+  copied,
+  onCopy,
+}: {
+  handle: string | null;
+  copied: boolean;
+  onCopy: () => void;
+}) {
+  return (
+    <div className={panelClass}>
+      <p className="text-[11px] uppercase tracking-[0.24em] text-muted-foreground">
+        Your creator link
+      </p>
+      {handle ? (
+        <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <p className="break-all font-display text-sm font-semibold text-foreground">
+            fuse-us.com/creator/{handle}
+          </p>
+          <Button
+            type="button"
+            onClick={onCopy}
+            className="rounded-full bg-cyan-300 px-5 text-slate-950 hover:bg-cyan-200"
+          >
+            {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+            {copied ? "Copied" : "Copy link"}
+          </Button>
+        </div>
+      ) : (
+        <div className="mt-3 space-y-3">
+          <EmptyNote>Pick a creator handle to get your shareable link.</EmptyNote>
+          <Button
+            asChild
+            variant="outline"
+            className="rounded-full border-white/15 bg-white/5 px-5 text-foreground hover:bg-white/10"
+          >
+            <Link to="/creator/settings/edit">Set up profile</Link>
+          </Button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+const FIRST_RUN_STEPS = [
+  { n: "01", title: "BUILD", note: "Turn a campaign into a reusable template" },
+  { n: "02", title: "PUBLISH", note: "Submit it — the FUSE team reviews, then it goes live" },
+  { n: "03", title: "SHARE", note: "Put your creator link in front of your audience" },
+];
+
+function FirstRunHome({
+  displayName,
+  doneSteps,
+  onStart,
+}: {
+  displayName: string;
+  doneSteps: number;
+  onStart: () => void;
+}) {
+  return (
+    <div className="space-y-6">
+      <div className={panelClass}>
+        <p className="text-[11px] uppercase tracking-[0.24em] text-cyan-200/80">
+          Welcome to FUSE Creator
+        </p>
+        <h2 className="mt-2 font-display text-2xl font-black uppercase tracking-tight text-foreground sm:text-3xl">
+          Welcome to FUSE Creator{displayName ? `, ${displayName}` : ""}.
+        </h2>
+        <div className="mt-5 flex flex-wrap items-center gap-3">
+          <p className="font-display text-sm font-bold uppercase tracking-[0.14em] text-foreground">
+            Your first goal: Publish your first template.
+          </p>
+          <Badge variant="outline" className="border-white/15 text-[11px] text-muted-foreground">
+            {doneSteps}/3
+          </Badge>
+        </div>
+        <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-white/10">
+          <div
+            className="h-full rounded-full bg-cyan-300 transition-all"
+            style={{ width: `${Math.round((doneSteps / 3) * 100)}%` }}
+          />
+        </div>
+
+        <div className="mt-6 grid gap-3 sm:grid-cols-3">
+          {FIRST_RUN_STEPS.map((step) => (
+            <div key={step.n} className="rounded-xl border border-white/10 bg-black/30 p-4">
+              <p className="font-display text-xs font-bold tracking-[0.2em] text-cyan-200/80">
+                {step.n}
+              </p>
+              <p className="mt-1 font-display text-sm font-bold tracking-[0.12em] text-foreground">
+                {step.title}
+              </p>
+              <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{step.note}</p>
+            </div>
+          ))}
+        </div>
+
+        <Button
+          type="button"
+          onClick={onStart}
+          className="mt-6 w-full rounded-full bg-cyan-300 px-6 py-6 font-display text-sm font-bold tracking-[0.12em] text-slate-950 hover:bg-cyan-200 sm:w-auto"
+        >
+          CREATE YOUR FIRST TEMPLATE →
+        </Button>
+        <p className="mt-3 text-xs text-muted-foreground">Pricing &amp; earnings unlock soon.</p>
+      </div>
+    </div>
+  );
+}
+
 
 export default function CreatorDashboard() {
   const { user, profile } = useAuth();
@@ -166,10 +353,21 @@ export default function CreatorDashboard() {
   const [loading, setLoading] = useState(true);
   const [section, setSection] = useState<SectionId>("overview");
   const [onboardingBannerDismissed, setOnboardingBannerDismissed] = useState(true);
+  const [linkShared, setLinkShared] = useState(false);
+  const [checklistDismissed, setChecklistDismissed] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const navigate = useNavigate();
 
   useEffect(() => {
     setOnboardingBannerDismissed(window.localStorage.getItem(ONBOARDING_BANNER_KEY) === "1");
+    setLinkShared(window.localStorage.getItem(SHARE_FLAG_KEY) === "1");
+    setChecklistDismissed(window.localStorage.getItem(CHECKLIST_DISMISSED_KEY) === "1");
   }, []);
+
+  useEffect(() => {
+    track("creator_home_view");
+  }, []);
+
 
   const loadAnalytics = useCallback(async () => {
     setAnalyticsLoading(true);
@@ -208,10 +406,16 @@ export default function CreatorDashboard() {
 
 
   useEffect(() => {
-    if (section === "analytics" && !analytics && !analyticsLoading && !analyticsError) {
+    if (
+      (section === "analytics" || section === "overview") &&
+      !analytics &&
+      !analyticsLoading &&
+      !analyticsError
+    ) {
       void loadAnalytics();
     }
   }, [section, analytics, analyticsLoading, analyticsError, loadAnalytics]);
+
 
 
   const load = useCallback(async () => {
@@ -257,6 +461,51 @@ export default function CreatorDashboard() {
 
   const displayName =
     creatorProfile?.display_name || profile?.name || user?.email?.split("@")[0] || "creator";
+
+  const handle = creatorProfile?.handle ?? null;
+  const hasTemplates = templates.length > 0;
+  const hasSubmitted =
+    buckets.submitted.length + buckets.approved.length > 0 ||
+    (!reviewStatusTracked && publishedCount > 0);
+
+  const checklist = useMemo<ChecklistItem[]>(
+    () => [
+      { id: "account", label: "Account claimed", done: true },
+      { id: "profile", label: "Creator profile created", done: !!handle },
+      { id: "build", label: "Create your first template", done: hasTemplates },
+      { id: "publish", label: "Publish / submit a template", done: hasSubmitted },
+      { id: "share", label: "Share your creator link", done: linkShared },
+    ],
+    [handle, hasTemplates, hasSubmitted, linkShared],
+  );
+
+  const checklistComplete = checklist.every((item) => item.done);
+  const firstRun = !loading && !hasTemplates && publishedCount === 0;
+
+  const startFirstTemplate = useCallback(() => {
+    track("creator_first_template_started");
+    navigate(CREATE_TEMPLATE_PATH);
+  }, [navigate]);
+
+  const copyCreatorLink = useCallback(async () => {
+    if (!handle) return;
+    const url = `https://fuse-us.com/creator/${handle}`;
+    try {
+      await navigator.clipboard.writeText(url);
+    } catch {
+      /* clipboard may be unavailable — still mark the step done */
+    }
+    setCopied(true);
+    window.setTimeout(() => setCopied(false), 2000);
+    try {
+      window.localStorage.setItem(SHARE_FLAG_KEY, "1");
+    } catch {
+      /* ignore */
+    }
+    setLinkShared(true);
+    track("creator_profile_link_copied");
+  }, [handle]);
+
 
 
   const renderBucket = (bucket: ReviewBucket, label: string) => (
@@ -323,34 +572,52 @@ export default function CreatorDashboard() {
           </section>
         ) : null}
 
+        {!loading && !(checklistComplete && checklistDismissed) ? (
+          <ChecklistCard
+            items={checklist}
+            complete={checklistComplete}
+            onDismiss={() => {
+              try {
+                window.localStorage.setItem(CHECKLIST_DISMISSED_KEY, "1");
+              } catch {
+                /* ignore */
+              }
+              setChecklistDismissed(true);
+            }}
+          />
+        ) : null}
+
         <header>
           <p className="text-xs uppercase tracking-[0.28em] text-cyan-200/70">Creator Studio</p>
           <h1 className="mt-2 font-display text-3xl font-black text-foreground sm:text-4xl">
-            Welcome back, {displayName}
+            {firstRun ? "Creator Home" : `Welcome back, ${displayName}`}
           </h1>
         </header>
 
-        <div className="mt-8 grid gap-4 sm:grid-cols-3">
-          <StatTile
-            label="Templates Published"
-            value={loading ? "—" : String(publishedCount)}
-            hint="Templates you own in FUSE"
-          />
-          <StatTile
-            label="Creator Level"
-            value={loading ? "—" : level.current.name}
-            hint={
-              reviewStatusTracked
-                ? `${approvedCount} approved template${approvedCount === 1 ? "" : "s"}`
-                : "Review status not tracked yet"
-            }
-          />
-          <StatTile
-            label="Credits Earned"
-            value={loading ? "—" : creditsEarned.toLocaleString()}
-            hint="No creator rewards issued yet"
-          />
-        </div>
+        {!firstRun ? (
+          <div className="mt-8 grid gap-4 sm:grid-cols-3">
+            <StatTile
+              label="Templates Published"
+              value={loading ? "—" : String(publishedCount)}
+              hint="Templates you own in FUSE"
+            />
+            <StatTile
+              label="Creator Level"
+              value={loading ? "—" : level.current.name}
+              hint={
+                reviewStatusTracked
+                  ? `${approvedCount} approved template${approvedCount === 1 ? "" : "s"}`
+                  : "Review status not tracked yet"
+              }
+            />
+            <StatTile
+              label="Credits Earned"
+              value={loading ? "—" : creditsEarned.toLocaleString()}
+              hint="No creator rewards issued yet"
+            />
+          </div>
+        ) : null}
+
 
         <div className="mt-6 flex flex-wrap gap-3">
           <Button asChild className="rounded-full bg-cyan-300 px-5 text-slate-950 hover:bg-cyan-200">
@@ -391,22 +658,40 @@ export default function CreatorDashboard() {
 
         <div className="mt-10 grid gap-6 lg:grid-cols-[220px_1fr]">
           <nav className="flex flex-wrap gap-1.5 lg:flex-col" aria-label="Creator Studio sections">
-            {SECTIONS.map((entry) => (
-              <button
-                key={entry.id}
-                type="button"
-                onClick={() => setSection(entry.id)}
-                className={cn(
-                  "rounded-xl px-3 py-2 text-left text-sm transition-colors",
-                  section === entry.id
-                    ? "border border-cyan-200/30 bg-white/10 text-foreground"
-                    : "border border-transparent text-muted-foreground hover:bg-white/5 hover:text-foreground",
-                )}
-              >
-                {entry.label}
-              </button>
-            ))}
+            <button
+              type="button"
+              onClick={startFirstTemplate}
+              className="rounded-xl border border-cyan-200/30 bg-cyan-200/10 px-3 py-2 text-left text-sm text-foreground transition-colors hover:bg-cyan-200/20"
+            >
+              Create Template
+            </button>
+            {SECTIONS.map((entry) =>
+              entry.id === "profile" ? (
+                <Link
+                  key={entry.id}
+                  to={handle ? `/creator/${handle}` : "/creator/settings/edit"}
+                  className="rounded-xl border border-transparent px-3 py-2 text-left text-sm text-muted-foreground transition-colors hover:bg-white/5 hover:text-foreground"
+                >
+                  {entry.label}
+                </Link>
+              ) : (
+                <button
+                  key={entry.id}
+                  type="button"
+                  onClick={() => setSection(entry.id)}
+                  className={cn(
+                    "rounded-xl px-3 py-2 text-left text-sm transition-colors",
+                    section === entry.id
+                      ? "border border-cyan-200/30 bg-white/10 text-foreground"
+                      : "border border-transparent text-muted-foreground hover:bg-white/5 hover:text-foreground",
+                  )}
+                >
+                  {entry.label}
+                </button>
+              ),
+            )}
           </nav>
+
 
           <div className="space-y-6">
             {loading ? (
@@ -416,28 +701,173 @@ export default function CreatorDashboard() {
               </div>
             ) : null}
 
-            {section === "overview" ? (
-              <div className={panelClass}>
-                <div className="flex items-center gap-2">
-                  <LayoutDashboard className="h-4 w-4 text-cyan-200" />
-                  <h2 className="font-display text-lg font-bold text-foreground">Overview</h2>
+            {section === "overview" && !loading ? (
+              firstRun ? (
+                <FirstRunHome
+                  displayName={displayName}
+                  doneSteps={
+                    [hasTemplates, hasSubmitted, linkShared].filter(Boolean).length
+                  }
+                  onStart={startFirstTemplate}
+                />
+              ) : (
+                <div className="space-y-6">
+                  <div className="grid gap-4 sm:grid-cols-3">
+                    <StatTile
+                      label="Published templates"
+                      value={String(publishedCount)}
+                      hint="Templates you own in FUSE"
+                    />
+                    <StatTile
+                      label="Runs"
+                      value={analytics ? String(analytics.totalRuns) : "—"}
+                      hint={
+                        analytics
+                          ? `${analytics.runsLast30d} in last 30 days`
+                          : analyticsLoading
+                            ? "Loading real runs…"
+                            : "Run data unavailable"
+                      }
+                    />
+                    <StatTile
+                      label="Earnings"
+                      value="—"
+                      hint="Coming soon with creator monetization"
+                    />
+                  </div>
+
+                  <CreatorLinkCard handle={handle} copied={copied} onCopy={() => void copyCreatorLink()} />
+
+                  <div className={panelClass}>
+                    <div className="flex items-center gap-2">
+                      <LayoutDashboard className="h-4 w-4 text-cyan-200" />
+                      <h2 className="font-display text-lg font-bold text-foreground">
+                        Your top templates
+                      </h2>
+                    </div>
+                    <div className="mt-4 space-y-2">
+                      {analytics && analytics.perTemplate.length ? (
+                        analytics.perTemplate.slice(0, 5).map((row) => (
+                          <div
+                            key={row.template_id}
+                            className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-white/10 bg-black/30 px-4 py-3"
+                          >
+                            <p className="min-w-0 truncate font-display text-sm font-semibold text-foreground">
+                              {row.name ?? "Untitled template"}
+                            </p>
+                            <Badge
+                              variant="outline"
+                              className="border-white/15 text-[11px] text-muted-foreground"
+                            >
+                              {row.runs} run{row.runs === 1 ? "" : "s"}
+                            </Badge>
+                          </div>
+                        ))
+                      ) : templates.length ? (
+                        templates
+                          .slice(0, 5)
+                          .map((template) => <TemplateRow key={template.id} template={template} />)
+                      ) : (
+                        <EmptyNote>
+                          Nothing here yet — build a template and it'll show up.
+                        </EmptyNote>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className={panelClass}>
+                    <h2 className="font-display text-lg font-bold text-foreground">
+                      Recent activity
+                    </h2>
+                    <div className="mt-4 space-y-2">
+                      {analytics &&
+                      analytics.perTemplate.some((row) => row.lastRunAt) ? (
+                        analytics.perTemplate
+                          .filter((row) => row.lastRunAt)
+                          .sort((a, b) => (a.lastRunAt! < b.lastRunAt! ? 1 : -1))
+                          .slice(0, 5)
+                          .map((row) => (
+                            <div
+                              key={`activity-${row.template_id}`}
+                              className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-white/10 bg-black/30 px-4 py-3"
+                            >
+                              <p className="min-w-0 truncate text-sm text-foreground">
+                                {row.name ?? "Untitled template"}
+                              </p>
+                              <span className="text-xs text-muted-foreground">
+                                last run {new Date(row.lastRunAt!).toLocaleDateString()}
+                              </span>
+                            </div>
+                          ))
+                      ) : (
+                        <EmptyNote>
+                          No runs yet. Share your creator link — runs appear here as soon as
+                          customers use your templates.
+                        </EmptyNote>
+                      )}
+                    </div>
+                  </div>
                 </div>
-                <div className="mt-4 space-y-2">
-                  {templates.length ? (
-                    templates
-                      .slice(0, 5)
-                      .map((template) => <TemplateRow key={template.id} template={template} />)
-                  ) : (
-                    <EmptyNote>
-                      You don't own any templates yet. Build your first one in the template builder.
-                    </EmptyNote>
-                  )}
+              )
+            ) : null}
+
+            {section === "earnings" ? (
+              <ComingLater
+                title="Earnings"
+                note="Earnings arrive with the FUSE Creator monetization launch. You'll be able to set what you earn per run and track it here."
+              />
+            ) : null}
+
+            {section === "resources" ? (
+              <div className="grid gap-3 sm:grid-cols-3">
+                <div className={panelClass}>
+                  <h3 className="font-display text-sm font-bold text-foreground">
+                    How templates work
+                  </h3>
+                  <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+                    A template is a reusable campaign: you build the workflow once, customers add
+                    their own product and run it.
+                  </p>
                 </div>
-                <p className="mt-4 text-xs text-muted-foreground">
-                  Template usage counts aren't tracked in production yet, so no usage metric is shown.
-                </p>
+                <div className={panelClass}>
+                  <h3 className="font-display text-sm font-bold text-foreground">
+                    Building templates
+                  </h3>
+                  <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+                    Start in the builder, decide what customers upload, preview the customer
+                    experience, then submit for review.
+                  </p>
+                  <Button
+                    asChild
+                    variant="outline"
+                    size="sm"
+                    className="mt-3 rounded-full border-white/15 bg-white/5 text-foreground hover:bg-white/10"
+                  >
+                    <Link to={CREATE_TEMPLATE_PATH}>Open builder</Link>
+                  </Button>
+                </div>
+                <div className={panelClass}>
+                  <h3 className="font-display text-sm font-bold text-foreground">
+                    Sharing your profile
+                  </h3>
+                  <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+                    Published templates live on your creator page. Share that link with your
+                    audience so people can run your work.
+                  </p>
+                  {handle ? (
+                    <Button
+                      asChild
+                      variant="outline"
+                      size="sm"
+                      className="mt-3 rounded-full border-white/15 bg-white/5 text-foreground hover:bg-white/10"
+                    >
+                      <Link to={`/creator/${handle}`}>View your page</Link>
+                    </Button>
+                  ) : null}
+                </div>
               </div>
             ) : null}
+
 
             {section === "templates" ? (
               <div className={panelClass}>
