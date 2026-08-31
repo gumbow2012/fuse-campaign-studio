@@ -16,6 +16,7 @@ import { captureUtmParams } from "@/lib/utmParams";
 
 
 import { useBrandActivationReminders } from "@/hooks/useBrandActivationReminders";
+import ErrorBoundary from "@/components/ErrorBoundary";
 import CustomerRoute from "@/components/CustomerRoute";
 import PaidRoute from "@/components/PaidRoute";
 import BrandProfilesPage from "@/pages/BrandProfilesPage";
@@ -127,6 +128,7 @@ const App = () => (
           <WelcomeActivationModal />
           
 
+          <ErrorBoundary>
           <Routes>
             <Route path="/" element={<HomePage />} />
             <Route path="/about" element={<AboutPage />} />
@@ -511,6 +513,7 @@ const App = () => (
 
             <Route path="*" element={<NotFoundPage />} />
           </Routes>
+          </ErrorBoundary>
         </BrowserRouter>
       </TooltipProvider>
       </StreakProvider>

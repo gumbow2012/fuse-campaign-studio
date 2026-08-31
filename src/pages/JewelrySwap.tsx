@@ -6459,7 +6459,7 @@ export default function JewelrySwap() {
                           </span>
                           <span className="flex items-center gap-2">
                             <span className="text-[10px] text-cyan-200/70">
-                              {costPreview(swap.estimatedCredits, swap.estimatedCostUsd)}
+                              {swap ? costPreview(swap.estimatedCredits, swap.estimatedCostUsd) : "Processing…"}
                             </span>
                             <StatusPill generation={active ?? swap} />
                             {/* Remove is hover-only — it isn't part of the normal flow. */}
@@ -6762,7 +6762,7 @@ export default function JewelrySwap() {
                               <Button
                                 size="sm"
                                 variant="outline"
-                                disabled={swap.status !== "complete"}
+                                disabled={swap?.status !== "complete"}
                                 onClick={() => {
                                   setRegenMenu(null);
                                   void tryAlternateModel(index);
