@@ -70,7 +70,7 @@ type SectionId =
   | "profile";
 
 const CREATE_TEMPLATE_PATH = "/app/lab/templates";
-const BUILDER_NEW_DRAFT_PATH = "/app/lab/canvas?newTemplate=1";
+const BUILDER_NEW_DRAFT_PATH = "/app/lab/canvas?newTemplate=1&tutorial=1";
 const BUILDER_PATH = "/app/lab/canvas";
 
 const SECTIONS: Array<{ id: SectionId; label: string; to?: string }> = [
