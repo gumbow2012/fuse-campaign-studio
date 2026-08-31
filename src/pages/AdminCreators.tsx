@@ -259,12 +259,25 @@ const AdminCreators = () => {
         <section className="mt-8 rounded-3xl border border-white/10 bg-white/[0.04] p-5 shadow-sm backdrop-blur">
           <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.18em] text-foreground/70">
             <UserPlus className="h-4 w-4 text-cyan-300" />
-            Invite a creator
+            Send a VIP creator invite
           </div>
-          <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-end">
-            <div className="flex-1">
+          <div className="mt-4 grid gap-4 sm:grid-cols-2">
+            <div>
+              <Label htmlFor="invite-first-name" className="text-foreground/80">
+                First name
+              </Label>
+              <Input
+                id="invite-first-name"
+                value={inviteFirstName}
+                onChange={(event) => setInviteFirstName(event.target.value)}
+                placeholder="Justin"
+                maxLength={80}
+                className="mt-2 h-11"
+              />
+            </div>
+            <div>
               <Label htmlFor="invite-email" className="text-foreground/80">
-                Email
+                Email <span className="text-cyan-300">*</span>
               </Label>
               <Input
                 id="invite-email"
@@ -275,12 +288,73 @@ const AdminCreators = () => {
                 className="mt-2 h-11"
               />
             </div>
+            <div>
+              <Label htmlFor="invite-instagram" className="text-foreground/80">
+                Instagram
+              </Label>
+              <Input
+                id="invite-instagram"
+                value={inviteInstagram}
+                onChange={(event) => setInviteInstagram(event.target.value)}
+                placeholder="@justincreates"
+                maxLength={64}
+                className="mt-2 h-11"
+              />
+            </div>
+            <div>
+              <Label htmlFor="invite-display-name" className="text-foreground/80">
+                Display name
+              </Label>
+              <Input
+                id="invite-display-name"
+                value={inviteDisplayName}
+                onChange={(event) => setInviteDisplayName(event.target.value)}
+                placeholder="Justin Creates"
+                maxLength={80}
+                className="mt-2 h-11"
+              />
+            </div>
+            <div className="sm:col-span-2">
+              <Label htmlFor="invite-specialty" className="text-foreground/80">
+                Creator specialty <span className="text-muted-foreground">(optional)</span>
+              </Label>
+              <Input
+                id="invite-specialty"
+                value={inviteSpecialty}
+                onChange={(event) => setInviteSpecialty(event.target.value)}
+                placeholder="Streetwear campaign edits"
+                maxLength={80}
+                className="mt-2 h-11"
+              />
+            </div>
+            <div className="sm:col-span-2">
+              <Label htmlFor="invite-note" className="text-foreground/80">
+                Personal note
+              </Label>
+              <Textarea
+                id="invite-note"
+                value={inviteNote}
+                onChange={(event) => setInviteNote(event.target.value.slice(0, 500))}
+                placeholder="Been watching your drops — we want you building on FUSE."
+                className="mt-2 min-h-[88px]"
+              />
+              <p className="mt-1 text-right text-[11px] text-muted-foreground">{inviteNote.length}/500</p>
+            </div>
+          </div>
+
+          <div className="mt-4 space-y-1 rounded-2xl border border-white/10 bg-background/40 px-4 py-3 text-[11px] uppercase tracking-[0.14em] text-muted-foreground">
+            <p className="truncate">To: {invitePreviewTo}</p>
+            <p className="truncate normal-case tracking-normal">Subject: {invitePreviewSubject}</p>
+          </div>
+
+          <div className="mt-4 flex justify-end">
             <Button type="button" onClick={() => void sendInvite()} disabled={busy === "invite"} className="h-11">
               {busy === "invite" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Mail className="mr-2 h-4 w-4" />}
-              Send invite
+              Send VIP creator invite →
             </Button>
           </div>
         </section>
+
 
         <div className="mt-6 grid gap-6 lg:grid-cols-2">
           <section className="rounded-3xl border border-white/10 bg-white/[0.04] p-5 shadow-sm backdrop-blur">
