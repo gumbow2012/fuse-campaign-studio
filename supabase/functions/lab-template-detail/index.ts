@@ -256,6 +256,20 @@ Deno.serve(async (req) => {
       };
     });
 
+    // Stage A asset isolation: private reference/default media is returned as
+    // short-lived signed URLs (falls back to the stored URL on any failure).
+    const signedNodes = await Promise.all(
+      numberedNodes.map(async (node: any) => ({
+        ...node,
+        defaultAssetUrl: await signFuseAssetUrl(admin, node.defaultAssetUrl ?? null),
+        editor: {
+          ...node.editor,
+          sampleUrl: await signFuseAssetUrl(admin, node.editor?.sampleUrl ?? null),
+        },
+      })),
+    );
+
+
     const userInputs = inputPlan.slots.map((slot) => {
       const slotNode = slot.nodeIds.map((nodeId: string) => nodeMap.get(nodeId)).find(Boolean) ?? null;
       // FT2: additive metadata only — absent metadata keeps the legacy shape.
