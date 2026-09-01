@@ -1,6 +1,13 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 
-import { corsHeaders, createAdminClient, errorMessage, json } from "../_shared/supabase-admin.ts";
+import {
+  corsHeaders,
+  createAdminClient,
+  errorMessage,
+  getOptionalUser,
+  getUserRoles,
+  json,
+} from "../_shared/supabase-admin.ts";
 import { resolveDisplayUrl } from "../_shared/asset-access.ts";
 import { buildTemplateInputPlan } from "../_shared/template-inputs.ts";
 import { readCastConfig } from "../_shared/cast-config.ts";
@@ -62,6 +69,13 @@ Deno.serve(async (req) => {
   const admin = createAdminClient();
 
   try {
+    // SECURITY: server-side visibility. Role authority is user_roles only.
+    const user = await getOptionalUser(req, admin);
+    const roles = user ? await getUserRoles(user.id, admin) : [];
+    const isPrivileged = roles.includes("admin") || roles.includes("dev");
+    const isCreator = roles.includes("creator");
+    const userId = user?.id ?? null;
+
     const { data: templates, error: templateError } = await admin
       .from("fuse_templates")
       .select("id, name, description, preview_url, preview_asset_type, created_at, created_by");
@@ -224,7 +238,17 @@ Deno.serve(async (req) => {
       return { url: null, type: null };
     };
 
-    const catalog = (versions ?? [])
+    // SECURITY: only published (active version Approved) templates are public.
+    // Admin/dev see everything; creators additionally see their OWN drafts.
+    const visibleVersions = (versions ?? []).filter((version: any) => {
+      if (isPrivileged) return true;
+      const template = templateMap.get(version.template_id) as any;
+      if (String(version.review_status ?? "") === "Approved") return true;
+      return Boolean(isCreator && userId && template?.created_by === userId);
+    });
+
+    const catalog = visibleVersions
+
       .map((version: any) => {
         const template = templateMap.get(version.template_id);
         const versionNodes = (nodes ?? []).filter((node: any) => node.version_id === version.id);
