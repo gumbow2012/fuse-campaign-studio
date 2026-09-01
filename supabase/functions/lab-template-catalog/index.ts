@@ -1,6 +1,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 
 import { corsHeaders, createAdminClient, errorMessage, json } from "../_shared/supabase-admin.ts";
+import { resolveDisplayUrl } from "../_shared/asset-access.ts";
 import { buildTemplateInputPlan } from "../_shared/template-inputs.ts";
 import { readCastConfig } from "../_shared/cast-config.ts";
 import { getTemplateCreditCost } from "../_shared/template-pricing.ts";
