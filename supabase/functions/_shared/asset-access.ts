@@ -123,3 +123,45 @@ export const resolveExecutionUrls = (
   Promise.all((refs ?? []).map((ref) => resolveExecutionUrl(admin, ref, ttl)));
 
 export { FUSE_BUCKET };
+
+/**
+ * Deep response signer: walks a browser-bound payload and replaces every
+ * fuse-assets reference with a short-lived signed URL. Anything else (external
+ * provider URLs, fuse-public URLs, data URLs, plain text) is left untouched.
+ * Never throws — on failure the original value survives.
+ */
+export async function signDeepDisplayUrls<T>(
+  admin: any,
+  value: T,
+  ttlSeconds = 3600,
+  cache = new Map<string, string>(),
+  depth = 0,
+): Promise<T> {
+  if (depth > 8 || value == null) return value;
+
+  if (typeof value === "string") {
+    if (!extractFuseAssetPath(value)) return value;
+    const cached = cache.get(value);
+    if (cached) return cached as unknown as T;
+    const signed = (await resolveDisplayUrl(admin, value, ttlSeconds)) as string;
+    if (signed && signed !== value) cache.set(value, signed);
+    return signed as unknown as T;
+  }
+
+  if (Array.isArray(value)) {
+    return (await Promise.all(
+      value.map((entry) => signDeepDisplayUrls(admin, entry, ttlSeconds, cache, depth + 1)),
+    )) as unknown as T;
+  }
+
+  if (typeof value === "object") {
+    const source = value as Record<string, unknown>;
+    const out: Record<string, unknown> = {};
+    for (const [key, entry] of Object.entries(source)) {
+      out[key] = await signDeepDisplayUrls(admin, entry, ttlSeconds, cache, depth + 1);
+    }
+    return out as unknown as T;
+  }
+
+  return value;
+}
