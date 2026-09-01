@@ -2602,7 +2602,11 @@ export default function TemplateStudioPage() {
 
         onClose={() => setInlineBuilderOpen(false)}
         footer={
-          blockedByCredits ? (
+          freeModeActive ? (
+            <p className="text-[11px] leading-relaxed text-emerald-100">
+              Your first video is free — no card required.
+            </p>
+          ) : blockedByCredits ? (
             <p className="text-[11px] leading-relaxed text-amber-100">
               You need {creditShortfall} more credit{creditShortfall === 1 ? "" : "s"} —{" "}
               <Link to="/membership?tab=credits" className="underline underline-offset-4">
@@ -3411,6 +3415,10 @@ export default function TemplateStudioPage() {
                       <p className="mt-3 text-sm leading-6 text-cyan-100">
                         Checking your credit balance.
                       </p>
+                    ) : freeModeActive ? (
+                      <p className="mt-3 text-sm leading-6 text-emerald-100">
+                        Your first video is free — no card required.
+                      </p>
                     ) : blockedByCredits ? (
                       <p className="mt-3 text-sm leading-6 text-amber-100">
                         Not enough credits — buy credits or{" "}
@@ -3420,7 +3428,7 @@ export default function TemplateStudioPage() {
                       </p>
                     ) : null}
 
-                    {blockedByCredits ? (
+                    {blockedByCredits && !freeModeActive ? (
                       <div className="mt-3 flex flex-wrap items-center gap-3 text-sm leading-6 text-rose-100">
                         <span>
                           You need {creditShortfall} more credit{creditShortfall === 1 ? "" : "s"}
