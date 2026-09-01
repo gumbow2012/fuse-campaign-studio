@@ -3881,7 +3881,7 @@ async function startAnimateFrame(admin: AdminClient, args: {
 
 
     const falInput = buildVideoModelInput(ANIMATE_MODEL_KEY, {
-      imageUrl: providerImageUrl,
+      imageUrl: conditioned.url,
       prompt,
       duration: requestedDuration,
       generateAudio: false,
@@ -3889,7 +3889,13 @@ async function startAnimateFrame(admin: AdminClient, args: {
 
 
     const webhookUrl = `${args.webhookBase}${encodeURIComponent(inserted.id)}`;
-    const requestId = await submitFalJob(endpointId, falInput, webhookUrl);
+    // Provider payload only: swap the canonical fuse-assets URL for a signed
+    // one. The persisted payload below keeps the canonical value.
+    const providerFalInput: Record<string, unknown> = { ...falInput };
+    for (const key of ["image_url", "start_image_url", "init_image"]) {
+      if (typeof providerFalInput[key] === "string") providerFalInput[key] = providerImageUrl;
+    }
+    const requestId = await submitFalJob(endpointId, providerFalInput, webhookUrl);
 
     const { data: updated } = await admin
       .from("studio_generations")
