@@ -315,7 +315,14 @@ Deno.serve(async (req) => {
       entry.estimatedCreditsPerRun = entry.baseCreditsPerRun + surcharge;
     }
 
+    // Asset access hardening: fuse-assets covers are delivered as short-lived
+    // signed URLs. External/fuse-public URLs pass through unchanged.
+    await Promise.all(catalog.map(async (entry) => {
+      entry.previewUrl = await resolveDisplayUrl(admin, entry.previewUrl ?? null);
+    }));
+
     return json({ templates: catalog });
+
   } catch (error) {
     return json({ error: errorMessage(error) }, 400);
   }
