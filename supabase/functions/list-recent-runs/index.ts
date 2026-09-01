@@ -9,6 +9,8 @@ import {
   json,
 } from "../_shared/supabase-admin.ts";
 import { toPublicGenerationFailure } from "../_shared/generation-failure.ts";
+import { signFuseAssetUrl } from "../_shared/signed-media.ts";
+
 import {
   collectDeliverableOutputs,
   loadOutputExposureByNodeId,
