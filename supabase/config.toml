@@ -190,4 +190,7 @@ verify_jwt = true
 [functions.tmp-migrate-covers]
 verify_jwt = false
 
+[functions.tmp-purge-cache]
+verify_jwt = false
+
 
