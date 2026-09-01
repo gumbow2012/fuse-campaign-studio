@@ -62,6 +62,13 @@ Deno.serve(async (req) => {
   const admin = createAdminClient();
 
   try {
+    // SECURITY: server-side visibility. Role authority is user_roles only.
+    const user = await getOptionalUser(req, admin);
+    const roles = user ? await getUserRoles(user.id, admin) : [];
+    const isPrivileged = roles.includes("admin") || roles.includes("dev");
+    const isCreator = roles.includes("creator");
+    const userId = user?.id ?? null;
+
     const { data: templates, error: templateError } = await admin
       .from("fuse_templates")
       .select("id, name, description, preview_url, preview_asset_type, created_at, created_by");
