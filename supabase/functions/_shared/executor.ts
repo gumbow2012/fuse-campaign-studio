@@ -780,6 +780,8 @@ async function failJob(
     console.error("regen refund failed:", error instanceof Error ? error.message : String(error));
   }
 
+  // F2 — a failed free first video is NOT consumed: reserved -> available.
+  await restoreFreeVideoEntitlementForJob(admin, jobId);
 }
 
 async function completeBlankPromptStep(
