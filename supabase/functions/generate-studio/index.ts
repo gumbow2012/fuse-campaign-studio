@@ -1,4 +1,5 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
+import { resolveDisplayUrls, resolveExecutionUrls } from "../_shared/asset-access.ts";
 
 import {
   corsHeaders,
@@ -178,6 +179,27 @@ function serializeGeneration(row: any, privileged = false) {
       : {}),
   };
 }
+
+/**
+ * Asset access hardening: fuse-assets media is delivered to the browser as
+ * short-lived signed URLs. Provider (fal) URLs pass through unchanged, and
+ * stored DB values stay canonical (signing happens at response time only).
+ */
+async function signGenerationMedia<T extends Record<string, any>>(
+  admin: any,
+  item: T,
+): Promise<T> {
+  if (!item) return item;
+  const [outputUrl, previewUrl, posterUrl] = await resolveDisplayUrls(admin, [
+    item.outputUrl ?? null,
+    item.previewUrl ?? null,
+    item.posterUrl ?? null,
+  ]);
+  return { ...item, outputUrl, previewUrl, posterUrl };
+}
+
+const signGenerationMediaList = <T extends Record<string, any>>(admin: any, items: T[]) =>
+  Promise.all((items ?? []).map((item) => signGenerationMedia(admin, item)));
 
 /**
  * GS-PERF1: gallery list reads select ONLY these columns — never input_payload,
@@ -818,7 +840,9 @@ Deno.serve(async (req) => {
         .maybeSingle();
       if (error) throw new Error(error.message);
       if (!row) return json({ error: "Generation not found" }, 404);
-      return json({ generation: await syncGeneration(admin, row, privileged) });
+      return json({
+        generation: await signGenerationMedia(admin, await syncGeneration(admin, row, privileged)),
+      });
     }
 
     if (action === "list" || action === "queue") {
@@ -867,7 +891,7 @@ Deno.serve(async (req) => {
         : null;
 
       return json({
-        generations: page.map(serializeGenerationListItem),
+        generations: await signGenerationMediaList(admin, page.map(serializeGenerationListItem)),
         nextCursor,
       });
     }
@@ -883,7 +907,7 @@ Deno.serve(async (req) => {
         .maybeSingle();
       if (error) throw new Error(error.message);
       if (!row) return json({ error: "Generation not found" }, 404);
-      return json({ generation: serializeGeneration(row, privileged) });
+      return json({ generation: await signGenerationMedia(admin, serializeGeneration(row, privileged)) });
     }
 
     if (action === "reconcile") {
@@ -914,8 +938,9 @@ Deno.serve(async (req) => {
         for (const entry of settled) reconciled.set(String(entry.id), entry);
       }
 
-      const generations = (rows ?? []).map(
-        (row) => reconciled.get(row.id) ?? serializeGeneration(row, privileged),
+      const generations = await signGenerationMediaList(
+        admin,
+        (rows ?? []).map((row) => reconciled.get(row.id) ?? serializeGeneration(row, privileged)),
       );
       return json({ generations });
     }
@@ -973,7 +998,7 @@ Deno.serve(async (req) => {
         .maybeSingle();
       if (error) throw new Error(error.message);
       if (!row) return json({ error: "Generation not found" }, 404);
-      return json({ generation: serializeGeneration(row, privileged) });
+      return json({ generation: await signGenerationMedia(admin, serializeGeneration(row, privileged)) });
     }
 
     if (action === "delete") {
@@ -1012,7 +1037,7 @@ Deno.serve(async (req) => {
     if (action !== "start") throw new Error(`Unsupported action: ${action}`);
 
     const generation = await startGeneration(admin, { input: body, userId: user.id, privileged });
-    return json({ generation });
+    return json({ generation: await signGenerationMedia(admin, generation) });
   } catch (error) {
     const message = errorMessage(error);
     if (/INSUFFICIENT_CREDITS|Insufficient credits/i.test(message)) {
