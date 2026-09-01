@@ -71,6 +71,8 @@ import { track } from "@/lib/analytics/track";
 import GeneratePaywallModal from "@/components/mvp/GeneratePaywallModal";
 import TemplateUnlockModal from "@/components/mvp/TemplateUnlockModal";
 import PlanActivationNotice from "@/components/mvp/PlanActivationNotice";
+import KeepCreatingPanel from "@/components/mvp/KeepCreatingPanel";
+import { fetchMyFreeVideoEntitlement, startFreeVideoRun } from "@/services/freeVideoRun";
 
 import {
   clearPendingGenerationIntent,
@@ -1491,7 +1493,7 @@ export default function TemplateStudioPage() {
     : profileIsResolving
       ? "Checking"
       : `${formatCredits(displayedCreditBalance)} cr`;
-  const costDisplay = isPrivilegedUser ? "Bypassed for team access" : `${creditsRequired} credits`;
+  const costDisplayBase = isPrivilegedUser ? "Bypassed for team access" : `${creditsRequired} credits`;
   const isPublicTemplateBrowser = !user;
   const selectedTemplateCheckoutPath = selectedTemplate ? buildTemplateCheckoutPath(selectedTemplate) : "/pricing";
   const detailTemplate = templates.find((template) => template.id === detailTemplateId) ?? null;
@@ -1503,6 +1505,37 @@ export default function TemplateStudioPage() {
    * Purchase is never triggered by selection, only by the explicit CTA below.
    */
   const entitlementLocked = !isPrivilegedUser && (!user || blockedByCredits);
+
+  /* ------------------------------------------------------------------
+   * F5/F6 — FREE FIRST VIDEO. Additive: everything below is inert unless the
+   * template is free-enabled and the viewer is free-eligible.
+   * ------------------------------------------------------------------ */
+  const freeEntitlementQuery = useQuery({
+    queryKey: ["free-video-entitlement", user?.id ?? "anon"],
+    queryFn: fetchMyFreeVideoEntitlement,
+    enabled: !!user,
+    staleTime: 60 * 1000,
+    retry: false,
+  });
+  const freeEntitlement = freeEntitlementQuery.data ?? null;
+  const templateOffersFreeVideo = selectedTemplate?.free_preview_enabled === true;
+  const hasActivePaidPlan =
+    profile?.subscription_status === "active" || profile?.subscription_status === "trialing";
+  /** Logged out, or signed in with no plan, no credits and an unused free video. */
+  const freeVideoEligible =
+    templateOffersFreeVideo &&
+    !isPrivilegedUser &&
+    (!user ||
+      (!hasActivePaidPlan && displayedCreditBalance <= 0 && freeEntitlement?.status !== "consumed"));
+  /** FREE MODE builder: this user holds an available entitlement for THIS template. */
+  const freeModeActive =
+    !!user &&
+    templateOffersFreeVideo &&
+    freeEntitlement?.status === "available" &&
+    (!freeEntitlement.selectedTemplateId ||
+      freeEntitlement.selectedTemplateId === String(selectedTemplate?.templateId ?? ""));
+  const [freeRunJobId, setFreeRunJobId] = useState<string | null>(null);
+  const costDisplay = freeModeActive ? "FREE GENERATION · First video $0" : costDisplayBase;
 
   // FT8 — cast metadata comes from the template version's cast_config.
   // Absent config (every legacy template) keeps the Cast step hidden.
@@ -2108,6 +2141,72 @@ export default function TemplateStudioPage() {
     }
   };
 
+  /** F5 — FREE FIRST VIDEO run. Server waives credits and runs one video only. */
+  const handleFreeRun = async () => {
+    if (!selectedTemplate?.templateId) return;
+    if (!requiredInputsAreReady) {
+      toast({
+        title: "Missing inputs",
+        description: "Add your product assets before generating.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setSubmitting(true);
+    setJobId(null);
+    setFreeRunJobId(null);
+    setOpenedHistoricalRun(null);
+    setInputsExpanded(false);
+    setResult(null);
+
+    try {
+      setRunPhase("uploading");
+      const uploadedImageInputs = Object.fromEntries(
+        await Promise.all(
+          inputFields
+            .filter((field) => field.type === "image" && (files[field.key] || libraryAssets[field.key]?.url))
+            .map(async (field) => {
+              const file = files[field.key];
+              if (!file) return [field.key, libraryAssets[field.key]!.url];
+              const url = await uploadRunInputFile(file);
+              return [field.key, url];
+            }),
+        ),
+      );
+
+      setRunPhase("preparing");
+      const textOnlyInputs = Object.fromEntries(
+        inputFields
+          .filter((field) => field.type !== "image")
+          .map((field) => [field.key, textInputs[field.key]?.trim() ?? ""])
+          .filter(([, value]) => value.length > 0),
+      );
+
+      track("free_video_run_started", { template_id: String(selectedTemplate.id) });
+      const { jobId: freeJobId } = await startFreeVideoRun({
+        templateId: String(selectedTemplate.templateId),
+        inputs: { ...textOnlyInputs, ...uploadedImageInputs },
+      });
+
+      setJobId(freeJobId);
+      setFreeRunJobId(freeJobId);
+      setResult({ status: "queued", progress: 0, outputs: [] });
+      void refetchRecentRuns();
+      void freeEntitlementQuery.refetch();
+      toast({ title: "Your free video is generating", description: "This takes a few minutes." });
+    } catch (error) {
+      toast({
+        title: "Free generation failed",
+        description: error instanceof Error ? error.message : "Could not start your free video.",
+        variant: "destructive",
+      });
+    } finally {
+      setRunPhase("idle");
+      setSubmitting(false);
+    }
+  };
+
   const handleRun = async () => {
     if (!selectedTemplate) return;
     track("run_template_clicked", {
@@ -2152,6 +2251,11 @@ export default function TemplateStudioPage() {
         const latestStatus = latestProfile?.subscription_status;
         const latestBalance = latestProfile?.credits_balance ?? 0;
         const latestHasActiveMembership = latestStatus === "active" || latestStatus === "trialing";
+
+        if (latestBalance < creditsRequired && freeVideoEligible) {
+          setUnlockOpen(true);
+          return;
+        }
 
         if (latestBalance < creditsRequired) {
           track("no_plan_generate_attempt", {
@@ -2443,7 +2547,13 @@ export default function TemplateStudioPage() {
   const missingAssetCount = Math.max(1, totalGroupCount - readyGroupCount);
   const missingAssetLabel = `Add ${missingAssetCount} more asset${missingAssetCount === 1 ? "" : "s"}`;
   /** Contextual builder CTA: unlock (locked) → add assets (incomplete) → run. */
-  const inlineGenerateLabel = entitlementLocked
+  const inlineGenerateLabel = freeModeActive
+    ? submitting || isRunning
+      ? "Generating your free video..."
+      : !requiredInputsAreReady
+        ? missingAssetLabel
+        : "Generate my free video →"
+    : entitlementLocked
     ? "Unlock access →"
     : !requiredInputsAreReady
       ? missingAssetLabel
@@ -2481,14 +2591,22 @@ export default function TemplateStudioPage() {
           ) : undefined
         }
         generateDisabled={
-          submitting || isRunning || (!entitlementLocked && !requiredInputsAreReady)
+          submitting ||
+          isRunning ||
+          ((freeModeActive || !entitlementLocked) && !requiredInputsAreReady)
         }
         generateLabel={inlineGenerateLabel}
-        onGenerate={() => (entitlementLocked ? openUnlockCheckout() : void handleRun())}
+        onGenerate={() =>
+          freeModeActive ? void handleFreeRun() : entitlementLocked ? openUnlockCheckout() : void handleRun()
+        }
 
         onClose={() => setInlineBuilderOpen(false)}
         footer={
-          blockedByCredits ? (
+          freeModeActive ? (
+            <p className="text-[11px] leading-relaxed text-emerald-100">
+              Your first video is free — no card required.
+            </p>
+          ) : blockedByCredits ? (
             <p className="text-[11px] leading-relaxed text-amber-100">
               You need {creditShortfall} more credit{creditShortfall === 1 ? "" : "s"} —{" "}
               <Link to="/membership?tab=credits" className="underline underline-offset-4">
@@ -3270,9 +3388,17 @@ export default function TemplateStudioPage() {
                         <p className="mt-1 text-sm text-slate-300">{costDisplay}</p>
                       </div>
                       <Button
-                        onClick={() => (entitlementLocked ? openUnlockCheckout() : void handleRun())}
+                        onClick={() =>
+                          freeModeActive
+                            ? void handleFreeRun()
+                            : entitlementLocked
+                              ? openUnlockCheckout()
+                              : void handleRun()
+                        }
                         disabled={
-                          submitting || isRunning || (!entitlementLocked && !requiredInputsAreReady)
+                          submitting ||
+                          isRunning ||
+                          ((freeModeActive || !entitlementLocked) && !requiredInputsAreReady)
                         }
                         className="min-w-[200px] rounded-full bg-cyan-300 font-display text-[12px] font-semibold uppercase tracking-[0.14em] text-slate-950 hover:bg-cyan-200"
                       >
@@ -3289,6 +3415,10 @@ export default function TemplateStudioPage() {
                       <p className="mt-3 text-sm leading-6 text-cyan-100">
                         Checking your credit balance.
                       </p>
+                    ) : freeModeActive ? (
+                      <p className="mt-3 text-sm leading-6 text-emerald-100">
+                        Your first video is free — no card required.
+                      </p>
                     ) : blockedByCredits ? (
                       <p className="mt-3 text-sm leading-6 text-amber-100">
                         Not enough credits — buy credits or{" "}
@@ -3298,7 +3428,7 @@ export default function TemplateStudioPage() {
                       </p>
                     ) : null}
 
-                    {blockedByCredits ? (
+                    {blockedByCredits && !freeModeActive ? (
                       <div className="mt-3 flex flex-wrap items-center gap-3 text-sm leading-6 text-rose-100">
                         <span>
                           You need {creditShortfall} more credit{creditShortfall === 1 ? "" : "s"}
@@ -3431,6 +3561,10 @@ export default function TemplateStudioPage() {
                     onRegenerate={(outputNumber) => void regeneration.requestRegenerate(outputNumber)}
                     revisionsByOutput={regeneration.revisionsByOutput}
                   />
+
+                  {freeRunJobId && activeRunId === freeRunJobId ? (
+                    <KeepCreatingPanel templateId={selectedTemplate ? String(selectedTemplate.id) : null} />
+                  ) : null}
 
                   <BuildBrandAfterRunCard runId={activeRunId} />
 
@@ -3568,7 +3702,7 @@ export default function TemplateStudioPage() {
       {groupModalNode}
 
       <TemplateUnlockModal
-        open={(unlockOpen || authGateOpen) && !user && !!selectedTemplate}
+        open={(unlockOpen || authGateOpen) && (!user || freeVideoEligible) && !!selectedTemplate}
         onOpenChange={(next) => {
           setUnlockOpen(next);
           if (!next && authGateOpen) {
@@ -3588,6 +3722,7 @@ export default function TemplateStudioPage() {
         assetCount={inputFields.length}
         assetLabels={inputFields.map((field) => field.label).filter(Boolean)}
         creditsRequired={creditsRequired}
+        freeVideoOffer={freeVideoEligible}
         returnPath={
           selectedTemplate
             ? `/app/templates?template=${encodeURIComponent(String(selectedTemplate.name))}`

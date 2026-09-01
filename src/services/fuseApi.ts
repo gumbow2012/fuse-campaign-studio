@@ -158,6 +158,8 @@ type CatalogTemplate = {
   createdAt?: string | null;
   castConfig?: unknown;
   creator?: unknown;
+  freePreviewEnabled?: unknown;
+  activationVideoNodeId?: unknown;
 };
 
 type CatalogTemplateInput = {
@@ -222,6 +224,8 @@ export interface ApiTemplate {
    * never fabricate one. Never carries `verification_reason`.
    */
   creator?: TemplateCreatorAttribution | null;
+  /** F5/F6 — this campaign offers the FREE FIRST VIDEO offer. Display flag only. */
+  free_preview_enabled?: boolean;
 }
 
 
@@ -305,6 +309,7 @@ export async function fetchTemplates(token: string): Promise<ApiTemplate[]> {
         asset_requirements: null,
         review_status: template.reviewStatus ?? null,
         creator: parseTemplateCreator(template.creator),
+        free_preview_enabled: template.freePreviewEnabled === true,
       }));
     }
   } catch {

@@ -78,7 +78,7 @@ Deno.serve(async (req) => {
 
     const { data: templates, error: templateError } = await admin
       .from("fuse_templates")
-      .select("id, name, description, preview_url, preview_asset_type, created_at, created_by");
+      .select("id, name, description, preview_url, preview_asset_type, created_at, created_by, free_preview_enabled, activation_video_node_id");
     if (templateError) throw new Error(templateError.message);
 
     /**
@@ -283,6 +283,9 @@ Deno.serve(async (req) => {
           versionId: version.id,
           versionNumber: version.version_number,
           reviewStatus: version.review_status ?? "Unreviewed",
+          // F5/F6 — whether this campaign offers the FREE FIRST VIDEO. Display flag only.
+          freePreviewEnabled: template?.free_preview_enabled === true,
+          activationVideoNodeId: template?.activation_video_node_id ?? null,
           castConfig: readCastConfig(version.cast_config),
           createdAt: template?.created_at ?? null,
           // null when created_by has no public creator profile (no fabrication).

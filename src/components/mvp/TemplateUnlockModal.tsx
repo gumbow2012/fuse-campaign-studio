@@ -1,7 +1,9 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { ArrowRight, Loader2, Sparkles, X } from "lucide-react";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { startFreeVideoSignup } from "@/services/freeVideoIntent";
 import { useMembershipCheckout } from "@/hooks/useMembershipCheckout";
 import { STRIPE_TIERS } from "@/lib/stripe-config";
 import { track } from "@/lib/analytics/track";
@@ -37,6 +39,11 @@ type Props = {
   creditsRequired: number;
   /** Deep link back to this exact template after payment. */
   returnPath: string;
+  /**
+   * F6 — the selected campaign offers the FREE FIRST VIDEO and this viewer is
+   * free-eligible. Renders the free variant instead of the Starter paywall.
+   */
+  freeVideoOffer?: boolean;
 };
 
 const usd = (dollars: number) =>
@@ -57,11 +64,34 @@ export default function TemplateUnlockModal({
   outputsLabel,
   creditsRequired,
   returnPath,
+  freeVideoOffer,
 }: Props) {
   const { loading, startPlanCheckout } = useMembershipCheckout();
   const starter = STRIPE_TIERS.starter;
   const busy = Boolean(loading);
   const name = (displayName || fullName || "this template").toUpperCase();
+
+  /* F6 — FREE FIRST VIDEO signup (intent first, then account creation). */
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [freeSubmitting, setFreeSubmitting] = useState(false);
+  const [freeError, setFreeError] = useState<string | null>(null);
+  const [checkEmail, setCheckEmail] = useState(false);
+
+  const submitFreeSignup = async () => {
+    if (!templateId) return;
+    setFreeError(null);
+    setFreeSubmitting(true);
+    try {
+      track("free_video_signup_started", { template_id: templateId });
+      await startFreeVideoSignup({ templateId, email: email.trim(), password });
+      setCheckEmail(true);
+    } catch (error) {
+      setFreeError(error instanceof Error ? error.message : "Could not create your account.");
+    } finally {
+      setFreeSubmitting(false);
+    }
+  };
 
   useEffect(() => {
     if (!open) return;
@@ -152,7 +182,76 @@ export default function TemplateUnlockModal({
             <X className="h-4 w-4" />
           </button>
 
+          {freeVideoOffer ? (
+            /* F6 — FREE FIRST VIDEO variant. No plan / credit language here. */
+            <div>
+              <h2 className="pr-8 font-display text-[1.5rem] font-bold uppercase leading-tight tracking-[-0.03em] text-white sm:text-[1.75rem]">
+                Create your first video free
+              </h2>
+              <p className="mt-2.5 text-sm leading-6 text-slate-400">
+                Start with {displayName || fullName} — create your account and generate your first
+                campaign video free.
+              </p>
+
+              <ul className="mt-4 space-y-1.5 text-sm text-white/85">
+                <li>✓ No prompts</li>
+                <li>✓ Use your own products</li>
+                <li>✓ No card required</li>
+              </ul>
+
+              {checkEmail ? (
+                <div className="mt-5 rounded-2xl border border-cyan-200/30 bg-cyan-400/[0.06] p-4">
+                  <p className="font-display text-[12px] font-bold uppercase tracking-[0.18em] text-cyan-100">
+                    Check your email — confirm to unlock your free video
+                  </p>
+                  <p className="mt-2 text-[12px] leading-5 text-slate-400">
+                    We sent a confirmation link to {email.trim()}.
+                  </p>
+                </div>
+              ) : (
+                <form
+                  className="mt-5 space-y-3"
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    void submitFreeSignup();
+                  }}
+                >
+                  <Input
+                    type="email"
+                    required
+                    autoComplete="email"
+                    placeholder="you@brand.com"
+                    value={email}
+                    onChange={(event) => setEmail(event.target.value)}
+                    className="rounded-xl border-white/10 bg-white/[0.04] text-white placeholder:text-slate-500"
+                  />
+                  <Input
+                    type="password"
+                    required
+                    minLength={8}
+                    autoComplete="new-password"
+                    placeholder="Create a password"
+                    value={password}
+                    onChange={(event) => setPassword(event.target.value)}
+                    className="rounded-xl border-white/10 bg-white/[0.04] text-white placeholder:text-slate-500"
+                  />
+                  {freeError ? <p className="text-[12px] text-rose-200">{freeError}</p> : null}
+                  <Button
+                    type="submit"
+                    disabled={freeSubmitting}
+                    className="w-full justify-center rounded-full bg-cyan-300 py-6 font-display text-[12px] font-semibold uppercase tracking-[0.16em] text-slate-950 hover:bg-cyan-200"
+                  >
+                    {freeSubmitting ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : null}
+                    Create account &amp; generate free
+                    <ArrowRight className="h-4 w-4" aria-hidden />
+                  </Button>
+                </form>
+              )}
+            </div>
+          ) : (
+            <>
           <h2 className="pr-8 font-display text-[1.5rem] font-bold uppercase leading-tight tracking-[-0.03em] text-white sm:text-[1.75rem]">
+
             Unlock FUSE Studio
           </h2>
           <p className="mt-2.5 text-sm leading-6 text-slate-400">
@@ -245,6 +344,10 @@ export default function TemplateUnlockModal({
             </Link>
             .
           </p>
+            </>
+          )}
+
+
 
           <p className="mt-3 text-center text-[11px] text-slate-500">
             Already have an account?{" "}
