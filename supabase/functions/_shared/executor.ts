@@ -1,4 +1,5 @@
 import { createAdminClient, logAuditEvent } from "./supabase-admin.ts";
+import { resolveExecutionUrl, resolveExecutionUrls } from "./asset-access.ts";
 import {
   getFalPricing,
   getFalQueueResult,
