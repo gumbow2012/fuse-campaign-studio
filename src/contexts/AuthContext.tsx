@@ -214,29 +214,25 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   useEffect(() => {
     let isMounted = true;
-    let initialResolved = false;
 
+    // SINGLE resolution path: onAuthStateChange fires INITIAL_SESSION on
+    // subscribe, so we never resolve access from getSession() as well.
+    // Concurrent resolveAccess calls deadlock the gotrue navigator lock.
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (_event, newSession) => {
+      (_event, newSession) => {
         if (!isMounted) return;
 
         setSession(newSession);
         setUser(newSession?.user ?? null);
 
         if (newSession?.user) {
-          // SECURITY (UI accuracy): on any account change, drop privileged state
-          // synchronously so the previous user's admin/creator UI can never flash.
-          const changedUser = resolvedUserIdRef.current !== newSession.user.id;
-          if (changedUser) {
-            clearAccessState();
-            resolvedUserIdRef.current = newSession.user.id;
+          const userId = newSession.user.id;
+          if (resolvedUserIdRef.current === userId) {
+            // Token refresh / focus event for the same user: nothing to resolve.
+            return;
           }
-          // Background refresh: never blank protected routes on token refresh/focus.
-          // If the initial load never released, this also rescues the loading state.
-          setTimeout(() => {
-            if (!isMounted) return;
-            void resolveAccess(newSession.user.id, { background: initialResolved && !changedUser });
-          }, 0);
+          resolvedUserIdRef.current = userId;
+          void resolveAccess(userId);
           return;
         }
 
@@ -246,31 +242,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       }
     );
 
-    void supabase.auth.getSession().then(async ({ data: { session: existingSession } }) => {
-      if (!isMounted) return;
-
-      setSession(existingSession);
-      setUser(existingSession?.user ?? null);
-
-      if (existingSession?.user) {
-        if (resolvedUserIdRef.current !== existingSession.user.id) {
-          clearAccessState();
-          resolvedUserIdRef.current = existingSession.user.id;
-        }
-        await resolveAccess(existingSession.user.id);
-      } else {
-        resolvedUserIdRef.current = null;
-        clearAccessState();
-        setAuthStatus("unauthorized");
-      }
-      initialResolved = true;
-    });
-
     return () => {
       isMounted = false;
       subscription.unsubscribe();
     };
   }, [clearAccessState, resolveAccess]);
+
 
 
 
