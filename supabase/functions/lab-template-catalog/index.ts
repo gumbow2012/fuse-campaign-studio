@@ -231,7 +231,17 @@ Deno.serve(async (req) => {
       return { url: null, type: null };
     };
 
-    const catalog = (versions ?? [])
+    // SECURITY: only published (active version Approved) templates are public.
+    // Admin/dev see everything; creators additionally see their OWN drafts.
+    const visibleVersions = (versions ?? []).filter((version: any) => {
+      if (isPrivileged) return true;
+      const template = templateMap.get(version.template_id) as any;
+      if (String(version.review_status ?? "") === "Approved") return true;
+      return Boolean(isCreator && userId && template?.created_by === userId);
+    });
+
+    const catalog = visibleVersions
+
       .map((version: any) => {
         const template = templateMap.get(version.template_id);
         const versionNodes = (nodes ?? []).filter((node: any) => node.version_id === version.id);
