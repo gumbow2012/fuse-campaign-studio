@@ -19,6 +19,11 @@ import {
 } from "./fal.ts";
 import { refundRegenCreditsIfNeeded } from "./regeneration-run.ts";
 import { readStoredRunEconomics } from "./creatorSurcharge.ts";
+import {
+  consumeFreeVideoEntitlementForJob,
+  isFreeFirstVideoPayload,
+  restoreFreeVideoEntitlementForJob,
+} from "./free-video.ts";
 import { sortEdgesByExecutionOrder, targetParamOrder } from "./edge-order.ts";
 
 import { isPromptNode, resolveNodePrompt } from "./prompt-nodes.ts";
@@ -292,6 +297,9 @@ export async function createCreatorEarningForJob(
       .eq("id", args.jobId)
       .maybeSingle();
     if (!job || job.status !== "complete" || !job.user_id) return { created: false };
+
+    // F2G — promotional free first video runs never generate a creator royalty.
+    if (isFreeFirstVideoPayload((job as any).input_payload)) return { created: false };
 
     const economics = readStoredRunEconomics((job as any).input_payload);
     if (!economics) return { created: false };
@@ -772,6 +780,8 @@ async function failJob(
     console.error("regen refund failed:", error instanceof Error ? error.message : String(error));
   }
 
+  // F2 — a failed free first video is NOT consumed: reserved -> available.
+  await restoreFreeVideoEntitlementForJob(admin, jobId);
 }
 
 async function completeBlankPromptStep(
@@ -1111,6 +1121,9 @@ export async function finalizeJobIfTerminal(admin: AdminClient, jobId: string) {
 
   // P5C — one immutable creator earning per successful monetized customer run.
   await createCreatorEarningForJob(admin, { jobId });
+
+  // F2 — a completed free first video burns the entitlement (reserved -> consumed).
+  await consumeFreeVideoEntitlementForJob(admin, jobId);
 }
 
 export async function runGraphJob(admin: AdminClient, jobId: string) {
