@@ -298,6 +298,9 @@ export async function createCreatorEarningForJob(
       .maybeSingle();
     if (!job || job.status !== "complete" || !job.user_id) return { created: false };
 
+    // F2G — promotional free first video runs never generate a creator royalty.
+    if (isFreeFirstVideoPayload((job as any).input_payload)) return { created: false };
+
     const economics = readStoredRunEconomics((job as any).input_payload);
     if (!economics) return { created: false };
     if (economics.creator_id === job.user_id) return { created: false };
