@@ -200,15 +200,17 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
   }, [session, refreshProfile]);
 
+  const resolvedUserIdRef = useRef<string | null>(null);
+
   const signOut = useCallback(async () => {
     await supabase.auth.signOut();
     setUser(null);
     setSession(null);
+    resolvedUserIdRef.current = null;
     clearAccessState();
     setAuthStatus("unauthorized");
   }, [clearAccessState]);
 
-  const resolvedUserIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     let isMounted = true;
