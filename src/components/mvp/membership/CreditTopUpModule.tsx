@@ -30,11 +30,6 @@ type Props = {
   onAmountChange?: (amount: number) => void;
   /** Hides the "view plans" note in tight surfaces (e.g. the quick-buy dialog). */
   hidePlanNote?: boolean;
-  /**
-   * Shows the smallest entry tier ($10 / 200 credits) as a clearly gated
-   * "coming soon" chip. It never maps to a checkout price — display only.
-   */
-  showEntryTierPreview?: boolean;
 };
 
 
@@ -52,7 +47,6 @@ export default function CreditTopUpModule({
   onCheckout,
   onAmountChange,
   hidePlanNote = false,
-  showEntryTierPreview = false,
 
 }: Props) {
   const { profile } = useAuth();

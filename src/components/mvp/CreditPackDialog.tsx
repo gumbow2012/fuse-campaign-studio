@@ -23,15 +23,12 @@ interface CreditPackDialogProps {
   trigger?: ReactNode;
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
-  /** Shows the gated $10 / 200-credit entry tier as "coming soon" (display only). */
-  showEntryTierPreview?: boolean;
 }
 
 export default function CreditPackDialog({
   trigger,
   open,
   onOpenChange,
-  showEntryTierPreview = false,
 }: CreditPackDialogProps) {
   const navigate = useNavigate();
   const { isAdmin, user, profile } = useAuth();
@@ -91,7 +88,6 @@ export default function CreditPackDialog({
           loading={loading}
           isAdmin={isAdmin}
           hidePlanNote
-          showEntryTierPreview={showEntryTierPreview}
           onCheckout={(credits) => void handleCreditCheckout(credits)}
         />
       </DialogContent>
