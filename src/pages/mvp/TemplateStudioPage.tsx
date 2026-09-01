@@ -71,6 +71,8 @@ import { track } from "@/lib/analytics/track";
 import GeneratePaywallModal from "@/components/mvp/GeneratePaywallModal";
 import TemplateUnlockModal from "@/components/mvp/TemplateUnlockModal";
 import PlanActivationNotice from "@/components/mvp/PlanActivationNotice";
+import KeepCreatingPanel from "@/components/mvp/KeepCreatingPanel";
+import { fetchMyFreeVideoEntitlement, startFreeVideoRun } from "@/services/freeVideoRun";
 
 import {
   clearPendingGenerationIntent,
@@ -1491,7 +1493,7 @@ export default function TemplateStudioPage() {
     : profileIsResolving
       ? "Checking"
       : `${formatCredits(displayedCreditBalance)} cr`;
-  const costDisplay = isPrivilegedUser ? "Bypassed for team access" : `${creditsRequired} credits`;
+  const costDisplayBase = isPrivilegedUser ? "Bypassed for team access" : `${creditsRequired} credits`;
   const isPublicTemplateBrowser = !user;
   const selectedTemplateCheckoutPath = selectedTemplate ? buildTemplateCheckoutPath(selectedTemplate) : "/pricing";
   const detailTemplate = templates.find((template) => template.id === detailTemplateId) ?? null;
@@ -1503,6 +1505,36 @@ export default function TemplateStudioPage() {
    * Purchase is never triggered by selection, only by the explicit CTA below.
    */
   const entitlementLocked = !isPrivilegedUser && (!user || blockedByCredits);
+
+  /* ------------------------------------------------------------------
+   * F5/F6 — FREE FIRST VIDEO. Additive: everything below is inert unless the
+   * template is free-enabled and the viewer is free-eligible.
+   * ------------------------------------------------------------------ */
+  const freeEntitlementQuery = useQuery({
+    queryKey: ["free-video-entitlement", user?.id ?? "anon"],
+    queryFn: fetchMyFreeVideoEntitlement,
+    enabled: !!user,
+    staleTime: 60 * 1000,
+    retry: false,
+  });
+  const freeEntitlement = freeEntitlementQuery.data ?? null;
+  const templateOffersFreeVideo = selectedTemplate?.free_preview_enabled === true;
+  const hasActivePaidPlan =
+    profile?.subscription_status === "active" || profile?.subscription_status === "trialing";
+  /** Logged out, or signed in with no plan, no credits and an unused free video. */
+  const freeVideoEligible =
+    templateOffersFreeVideo &&
+    !isPrivilegedUser &&
+    (!user ||
+      (!hasActivePaidPlan && displayedCreditBalance <= 0 && freeEntitlement?.status !== "consumed"));
+  /** FREE MODE builder: this user holds an available entitlement for THIS template. */
+  const freeModeActive =
+    !!user &&
+    templateOffersFreeVideo &&
+    freeEntitlement?.status === "available" &&
+    (!freeEntitlement.selectedTemplateId ||
+      freeEntitlement.selectedTemplateId === String(selectedTemplate?.templateId ?? ""));
+  const [freeRunJobId, setFreeRunJobId] = useState<string | null>(null);
 
   // FT8 — cast metadata comes from the template version's cast_config.
   // Absent config (every legacy template) keeps the Cast step hidden.
