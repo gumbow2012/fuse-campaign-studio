@@ -399,7 +399,7 @@ Deno.serve(async (req) => {
       },
     }, admin).catch(() => null);
 
-    return json({
+    return json(await signDeepDisplayUrls(admin, {
       templateId: template.id,
       templateName: template.name,
       versionId,

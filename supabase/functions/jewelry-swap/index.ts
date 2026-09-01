@@ -1,4 +1,5 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
+import { signDeepDisplayUrls } from "../_shared/asset-access.ts";
 
 import {
   corsHeaders,
@@ -4300,7 +4301,7 @@ Deno.serve(async (req) => {
         connectedAssets: body.connectedAssets ?? null,
         webhookBase,
       });
-      return json({ generation });
+      return json(await signDeepDisplayUrls(admin, { generation }));
     }
 
     // CANONICAL MASTER (§22): explicit user action only — one paid Nano run per
@@ -4324,7 +4325,7 @@ Deno.serve(async (req) => {
         setSize: body.setSize,
         webhookBase,
       });
-      return json({ generation });
+      return json(await signDeepDisplayUrls(admin, { generation }));
     }
 
     // MATCHED PAIR (§29): explicit user action only — one paid Nano run that
@@ -4347,7 +4348,7 @@ Deno.serve(async (req) => {
         materialAuthority: body.materialAuthority ?? null,
         webhookBase,
       });
-      return json({ generation });
+      return json(await signDeepDisplayUrls(admin, { generation }));
     }
 
 
@@ -4367,7 +4368,7 @@ Deno.serve(async (req) => {
         masterProductLock: body.masterProductLock ?? null,
         materialAuthority: body.materialAuthority ?? null,
       });
-      return json({ preview });
+      return json(await signDeepDisplayUrls(admin, { preview }));
     }
 
     if (action === "reconstruct") {
@@ -4388,7 +4389,7 @@ Deno.serve(async (req) => {
         inputFingerprint: body.promptInputFingerprint ?? null,
         webhookBase,
       });
-      return json({ generation });
+      return json(await signDeepDisplayUrls(admin, { generation }));
     }
 
     if (action === "animate_frame") {
@@ -4408,7 +4409,7 @@ Deno.serve(async (req) => {
         pieceTypes: body.pieceTypes ?? [],
         webhookBase,
       });
-      return json({ generation });
+      return json(await signDeepDisplayUrls(admin, { generation }));
     }
 
     // Recent Jewelry Swap video generations for the caller — powers the Library
@@ -4439,7 +4440,7 @@ Deno.serve(async (req) => {
             : Promise.resolve(serialize(row)),
         ),
       );
-      return json({ generations });
+      return json(await signDeepDisplayUrls(admin, { generations }));
     }
 
     // Read-only asset library: the caller's completed generations + their own
@@ -4490,7 +4491,7 @@ Deno.serve(async (req) => {
         .sort((a, b) => String(b.createdAt ?? "").localeCompare(String(a.createdAt ?? "")))
         .slice(0, limit);
 
-      return json({ assets });
+      return json(await signDeepDisplayUrls(admin, { assets }));
     }
 
 
@@ -4509,7 +4510,7 @@ Deno.serve(async (req) => {
       if (error) throw new Error(error.message);
 
       const generations = await Promise.all((rows ?? []).map((row) => syncRow(admin, row)));
-      return json({ generations });
+      return json(await signDeepDisplayUrls(admin, { generations }));
     }
 
     if (action === "cancel") {
