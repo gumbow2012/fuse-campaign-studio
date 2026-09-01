@@ -1,7 +1,9 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { ArrowRight, Loader2, Sparkles, X } from "lucide-react";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { startFreeVideoSignup } from "@/services/freeVideoIntent";
 import { useMembershipCheckout } from "@/hooks/useMembershipCheckout";
 import { STRIPE_TIERS } from "@/lib/stripe-config";
 import { track } from "@/lib/analytics/track";
@@ -37,6 +39,11 @@ type Props = {
   creditsRequired: number;
   /** Deep link back to this exact template after payment. */
   returnPath: string;
+  /**
+   * F6 — the selected campaign offers the FREE FIRST VIDEO and this viewer is
+   * free-eligible. Renders the free variant instead of the Starter paywall.
+   */
+  freeVideoOffer?: boolean;
 };
 
 const usd = (dollars: number) =>
@@ -57,11 +64,34 @@ export default function TemplateUnlockModal({
   outputsLabel,
   creditsRequired,
   returnPath,
+  freeVideoOffer,
 }: Props) {
   const { loading, startPlanCheckout } = useMembershipCheckout();
   const starter = STRIPE_TIERS.starter;
   const busy = Boolean(loading);
   const name = (displayName || fullName || "this template").toUpperCase();
+
+  /* F6 — FREE FIRST VIDEO signup (intent first, then account creation). */
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [freeSubmitting, setFreeSubmitting] = useState(false);
+  const [freeError, setFreeError] = useState<string | null>(null);
+  const [checkEmail, setCheckEmail] = useState(false);
+
+  const submitFreeSignup = async () => {
+    if (!templateId) return;
+    setFreeError(null);
+    setFreeSubmitting(true);
+    try {
+      track("free_video_signup_started", { template_id: templateId });
+      await startFreeVideoSignup({ templateId, email: email.trim(), password });
+      setCheckEmail(true);
+    } catch (error) {
+      setFreeError(error instanceof Error ? error.message : "Could not create your account.");
+    } finally {
+      setFreeSubmitting(false);
+    }
+  };
 
   useEffect(() => {
     if (!open) return;
