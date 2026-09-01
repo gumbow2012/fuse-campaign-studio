@@ -325,10 +325,17 @@ async function startRun(admin: AdminClient, args: { versionId: string; nodeId: s
       fallbackUsdPerSecond: videoFallbackUsdPerSecond(videoModel, generateAudio) ?? null,
     });
 
+    // Provider boundary: sign fuse-assets inputs (6h TTL); external unchanged.
+    const providerInitImageUrl = (await resolveExecutionUrl(admin, initImageUrl)) as string;
+    const providerEndFrameUrl = endFrameUrl
+      ? ((await resolveExecutionUrl(admin, endFrameUrl)) as string)
+      : endFrameUrl;
+
     const requestId = await submitVideoJob({
       prompt,
-      initImageUrl,
-      endFrameUrl,
+      initImageUrl: providerInitImageUrl,
+      endFrameUrl: providerEndFrameUrl,
+
       modelKey: videoModel.key,
       duration,
       aspectRatio,
