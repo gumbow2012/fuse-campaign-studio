@@ -209,7 +209,7 @@ export default function GeneratePaywallModal({
         </DialogContent>
       </Dialog>
 
-      <CreditPackDialog open={packDialogOpen} onOpenChange={setPackDialogOpen} showEntryTierPreview />
+      <CreditPackDialog open={packDialogOpen} onOpenChange={setPackDialogOpen} />
     </>
   );
 }

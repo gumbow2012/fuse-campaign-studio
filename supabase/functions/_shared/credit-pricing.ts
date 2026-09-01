@@ -3,12 +3,13 @@
 // integer cents. Never accept amountCents/price/costPerCredit from a client.
 
 export const CREDIT_PRICING_VERSION = "v1";
-export const CREDIT_TOPUP_MIN = 500;
+export const CREDIT_TOPUP_MIN = 200;
 export const CREDIT_TOPUP_MAX = 50_000;
 export const CREDIT_TOPUP_STEP = 100;
 
 // Piecewise-linear price anchors: [credits, amountCents]. Monotonic by design.
 const PRICE_ANCHORS: ReadonlyArray<readonly [number, number]> = [
+  [200, 1_000], // $10
   [500, 2_500], // $25
   [1_000, 4_500], // $45
   [1_500, 6_500], // $65

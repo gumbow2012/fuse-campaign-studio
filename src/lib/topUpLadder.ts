@@ -10,7 +10,7 @@ import { STRIPE_TIERS } from "@/lib/stripe-config";
 import { quoteCreditTopUp } from "@/lib/creditPricing";
 
 /** Quick-pick chips shown in the top-up module. */
-export const QUICK_TOP_UP_AMOUNTS = [500, 1000, 1500, 2000, 4000, 6000, 10000, 20000] as const;
+export const QUICK_TOP_UP_AMOUNTS = [200, 500, 1000, 1500, 2000, 4000, 6000, 10000, 20000] as const;
 
 export const DEFAULT_TOP_UP_AMOUNT = 1500;
 
