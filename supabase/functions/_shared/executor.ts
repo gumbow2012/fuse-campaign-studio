@@ -1465,8 +1465,10 @@ export async function runGraphJob(admin: AdminClient, jobId: string) {
               step,
               node,
               prompt,
-              imageUrls: resolvedImageInputs,
+              // Provider boundary signing (6h TTL); external URLs unchanged.
+              imageUrls: (await resolveExecutionUrls(admin, resolvedImageInputs)) as string[],
             });
+
             step.provider_request_id = multiRefRequestId;
             await refreshJobProgress(admin, job.id);
             continue;
