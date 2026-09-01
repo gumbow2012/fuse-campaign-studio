@@ -411,7 +411,7 @@ Deno.serve(async (req) => {
       nodeCount: nodes.length,
       edgeCount: edges.length,
       positions,
-    });
+    }));
   } catch (error) {
     const message = errorMessage(error);
     const forbidden = message === "Builder access required";
