@@ -2252,6 +2252,11 @@ export default function TemplateStudioPage() {
         const latestBalance = latestProfile?.credits_balance ?? 0;
         const latestHasActiveMembership = latestStatus === "active" || latestStatus === "trialing";
 
+        if (latestBalance < creditsRequired && freeVideoEligible) {
+          setUnlockOpen(true);
+          return;
+        }
+
         if (latestBalance < creditsRequired) {
           track("no_plan_generate_attempt", {
             template_id: String(selectedTemplate.id),
@@ -2542,7 +2547,13 @@ export default function TemplateStudioPage() {
   const missingAssetCount = Math.max(1, totalGroupCount - readyGroupCount);
   const missingAssetLabel = `Add ${missingAssetCount} more asset${missingAssetCount === 1 ? "" : "s"}`;
   /** Contextual builder CTA: unlock (locked) → add assets (incomplete) → run. */
-  const inlineGenerateLabel = entitlementLocked
+  const inlineGenerateLabel = freeModeActive
+    ? submitting || isRunning
+      ? "Generating your free video..."
+      : !requiredInputsAreReady
+        ? missingAssetLabel
+        : "Generate my free video →"
+    : entitlementLocked
     ? "Unlock access →"
     : !requiredInputsAreReady
       ? missingAssetLabel
@@ -2580,10 +2591,14 @@ export default function TemplateStudioPage() {
           ) : undefined
         }
         generateDisabled={
-          submitting || isRunning || (!entitlementLocked && !requiredInputsAreReady)
+          submitting ||
+          isRunning ||
+          ((freeModeActive || !entitlementLocked) && !requiredInputsAreReady)
         }
         generateLabel={inlineGenerateLabel}
-        onGenerate={() => (entitlementLocked ? openUnlockCheckout() : void handleRun())}
+        onGenerate={() =>
+          freeModeActive ? void handleFreeRun() : entitlementLocked ? openUnlockCheckout() : void handleRun()
+        }
 
         onClose={() => setInlineBuilderOpen(false)}
         footer={
@@ -3369,9 +3384,17 @@ export default function TemplateStudioPage() {
                         <p className="mt-1 text-sm text-slate-300">{costDisplay}</p>
                       </div>
                       <Button
-                        onClick={() => (entitlementLocked ? openUnlockCheckout() : void handleRun())}
+                        onClick={() =>
+                          freeModeActive
+                            ? void handleFreeRun()
+                            : entitlementLocked
+                              ? openUnlockCheckout()
+                              : void handleRun()
+                        }
                         disabled={
-                          submitting || isRunning || (!entitlementLocked && !requiredInputsAreReady)
+                          submitting ||
+                          isRunning ||
+                          ((freeModeActive || !entitlementLocked) && !requiredInputsAreReady)
                         }
                         className="min-w-[200px] rounded-full bg-cyan-300 font-display text-[12px] font-semibold uppercase tracking-[0.14em] text-slate-950 hover:bg-cyan-200"
                       >
@@ -3531,6 +3554,10 @@ export default function TemplateStudioPage() {
                     revisionsByOutput={regeneration.revisionsByOutput}
                   />
 
+                  {freeRunJobId && activeRunId === freeRunJobId ? (
+                    <KeepCreatingPanel templateId={selectedTemplate ? String(selectedTemplate.id) : null} />
+                  ) : null}
+
                   <BuildBrandAfterRunCard runId={activeRunId} />
 
                   {activeRunId ? (
@@ -3667,7 +3694,7 @@ export default function TemplateStudioPage() {
       {groupModalNode}
 
       <TemplateUnlockModal
-        open={(unlockOpen || authGateOpen) && !user && !!selectedTemplate}
+        open={(unlockOpen || authGateOpen) && (!user || freeVideoEligible) && !!selectedTemplate}
         onOpenChange={(next) => {
           setUnlockOpen(next);
           if (!next && authGateOpen) {
@@ -3687,6 +3714,7 @@ export default function TemplateStudioPage() {
         assetCount={inputFields.length}
         assetLabels={inputFields.map((field) => field.label).filter(Boolean)}
         creditsRequired={creditsRequired}
+        freeVideoOffer={freeVideoEligible}
         returnPath={
           selectedTemplate
             ? `/app/templates?template=${encodeURIComponent(String(selectedTemplate.name))}`
