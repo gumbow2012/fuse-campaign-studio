@@ -8,6 +8,8 @@ import { sortEdgesByExecutionOrder } from "./edge-order.ts";
 import { buildTemplateInputPlan } from "./template-inputs.ts";
 import { getNodeEditorConfig } from "./template-editor.ts";
 import { toPublicGenerationFailure } from "./generation-failure.ts";
+import { signFuseAssetUrl } from "./signed-media.ts";
+
 
 type AdminClient = ReturnType<typeof createAdminClient>;
 
@@ -463,7 +465,24 @@ export async function buildJobStatusResponse(
       };
     });
 
+  // Stage A asset isolation: private fuse-assets media is delivered as
+  // short-lived signed URLs. Stored DB values stay canonical; signing failures
+  // fall back to the original URL.
+  const signedPublicOutputs = await Promise.all(
+    publicOutputs.map(async (output: any) => ({
+      ...output,
+      url: await signFuseAssetUrl(admin, output.url ?? null),
+    })),
+  );
+  const signedUserInputs = await Promise.all(
+    userInputs.map(async (input: any) => ({
+      ...input,
+      value: await signFuseAssetUrl(admin, input.value ?? null),
+    })),
+  );
+
   const base = {
+
     jobId: job.id,
     startedAt: job.started_at ?? null,
     completedAt: job.completed_at ?? null,
@@ -488,15 +507,40 @@ export async function buildJobStatusResponse(
       reviewStatus: job.template_versions?.review_status ?? "Unreviewed",
       inputs: templateInputs,
     },
-    userInputs,
+    userInputs: signedUserInputs,
     outputTotals: totals,
     publicGraph,
   };
 
   // Sensitive fields are never assembled into the non-privileged payload.
   if (!includeSensitive) {
-    return { ...base, outputs: publicOutputs };
+    return { ...base, outputs: signedPublicOutputs };
   }
+
+  const signedNumberedOutputs = await Promise.all(
+    numberedOutputs.map(async (output: any) => ({
+      ...output,
+      url: await signFuseAssetUrl(admin, output.url ?? null),
+    })),
+  );
+  const signedTemplateRefs = await Promise.all(
+    templateRefs.map(async (ref: any) => ({
+      ...ref,
+      assetUrl: await signFuseAssetUrl(admin, ref.assetUrl ?? null),
+    })),
+  );
+  const signedSteps = await Promise.all(
+    sensitiveSteps().map(async (step: any) => ({
+      ...step,
+      outputUrl: await signFuseAssetUrl(admin, step.outputUrl ?? null),
+      sourceInputs: await Promise.all(
+        (step.sourceInputs ?? []).map(async (source: any) => ({
+          ...source,
+          sourceUrl: await signFuseAssetUrl(admin, source.sourceUrl ?? null),
+        })),
+      ),
+    })),
+  );
 
   return {
     ...base,
@@ -504,10 +548,11 @@ export async function buildJobStatusResponse(
     // the customer-facing publicFailure contract.
     error: resolvedJobError,
     providerFailure,
-    template: { ...base.template, hiddenRefs: templateRefs },
+    template: { ...base.template, hiddenRefs: signedTemplateRefs },
     inputPayload: jobInputs,
-    outputs: numberedOutputs,
-    steps: sensitiveSteps(),
+    outputs: signedNumberedOutputs,
+    steps: signedSteps,
   };
+
 }
 

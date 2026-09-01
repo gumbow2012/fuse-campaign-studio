@@ -6,6 +6,7 @@ import { readEdgeOrder, sortEdgesByExecutionOrder } from "../_shared/edge-order.
 import { getNodeAssetRequirement, getNodeEditorConfig } from "../_shared/template-editor.ts";
 import { readCastConfig } from "../_shared/cast-config.ts";
 import { resolveCustomizability } from "../_shared/template-fork.ts";
+import { signFuseAssetUrl } from "../_shared/signed-media.ts";
 
 function readNodeSortOrder(node: any, fallbackIndex = 999) {
   const raw = node?.prompt_config?.sort_order;
@@ -256,6 +257,20 @@ Deno.serve(async (req) => {
       };
     });
 
+    // Stage A asset isolation: private reference/default media is returned as
+    // short-lived signed URLs (falls back to the stored URL on any failure).
+    const signedNodes = await Promise.all(
+      numberedNodes.map(async (node: any) => ({
+        ...node,
+        defaultAssetUrl: await signFuseAssetUrl(admin, node.defaultAssetUrl ?? null),
+        editor: {
+          ...node.editor,
+          sampleUrl: await signFuseAssetUrl(admin, node.editor?.sampleUrl ?? null),
+        },
+      })),
+    );
+
+
     const userInputs = inputPlan.slots.map((slot) => {
       const slotNode = slot.nodeIds.map((nodeId: string) => nodeMap.get(nodeId)).find(Boolean) ?? null;
       // FT2: additive metadata only — absent metadata keeps the legacy shape.
@@ -301,7 +316,7 @@ Deno.serve(async (req) => {
       castConfig: readCastConfig((version as any).cast_config),
       canCustomize: customizable,
       userInputs,
-      nodes: numberedNodes,
+      nodes: signedNodes,
       edges: (edges ?? []).map((edge: any) => ({
         id: edge.id,
         sourceNodeId: edge.source_node_id,
