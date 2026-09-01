@@ -344,6 +344,10 @@ export default function TemplateUnlockModal({
             </Link>
             .
           </p>
+            </>
+          )}
+
+
 
           <p className="mt-3 text-center text-[11px] text-slate-500">
             Already have an account?{" "}
