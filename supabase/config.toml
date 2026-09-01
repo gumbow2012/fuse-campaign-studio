@@ -116,6 +116,9 @@ verify_jwt = true
 [functions.run-template]
 verify_jwt = false
 
+[functions.free-video-intent]
+verify_jwt = false
+
 [functions.start-free-video-run]
 verify_jwt = true
 
