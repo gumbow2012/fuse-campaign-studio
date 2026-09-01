@@ -208,6 +208,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     setAuthStatus("unauthorized");
   }, [clearAccessState]);
 
+  const resolvedUserIdRef = useRef<string | null>(null);
+
   useEffect(() => {
     let isMounted = true;
     let initialResolved = false;
@@ -220,15 +222,23 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         setUser(newSession?.user ?? null);
 
         if (newSession?.user) {
+          // SECURITY (UI accuracy): on any account change, drop privileged state
+          // synchronously so the previous user's admin/creator UI can never flash.
+          const changedUser = resolvedUserIdRef.current !== newSession.user.id;
+          if (changedUser) {
+            clearAccessState();
+            resolvedUserIdRef.current = newSession.user.id;
+          }
           // Background refresh: never blank protected routes on token refresh/focus.
           // If the initial load never released, this also rescues the loading state.
           setTimeout(() => {
             if (!isMounted) return;
-            void resolveAccess(newSession.user.id, { background: initialResolved });
+            void resolveAccess(newSession.user.id, { background: initialResolved && !changedUser });
           }, 0);
           return;
         }
 
+        resolvedUserIdRef.current = null;
         clearAccessState();
         setAuthStatus("unauthorized");
       }
@@ -241,8 +251,13 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       setUser(existingSession?.user ?? null);
 
       if (existingSession?.user) {
+        if (resolvedUserIdRef.current !== existingSession.user.id) {
+          clearAccessState();
+          resolvedUserIdRef.current = existingSession.user.id;
+        }
         await resolveAccess(existingSession.user.id);
       } else {
+        resolvedUserIdRef.current = null;
         clearAccessState();
         setAuthStatus("unauthorized");
       }
@@ -254,6 +269,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       subscription.unsubscribe();
     };
   }, [clearAccessState, resolveAccess]);
+
 
 
   // Refresh subscription state on sign-in so profile billing fields stay current.
