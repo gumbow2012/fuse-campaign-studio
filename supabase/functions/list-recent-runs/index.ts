@@ -122,14 +122,22 @@ Deno.serve(async (req) => {
       });
     }
 
-    return json({
-      jobs: (jobs ?? []).map((job: any) => {
+    const responseJobs = await Promise.all(
+      (jobs ?? []).map(async (job: any) => {
         // P0 failure taxonomy: raw provider/moderation strings are assembled
         // ONLY for privileged (admin/dev) callers. Customers get polished copy.
         const rawError = extractProviderDetail(job.result_payload?.rawPayload?.detail) ?? job.error_log ?? null;
         const publicFailure = job.status === "failed"
           ? toPublicGenerationFailure({ rawError })
           : null;
+        // Stage A asset isolation: deliver private media via signed URLs.
+        const outputs = await Promise.all(
+          collectDeliverableOutputs(outputsByJobId.get(job.id) ?? [], outputExposureByNodeId)
+            .map(async (output: any) => ({
+              ...output,
+              url: await signFuseAssetUrl(admin, output.url ?? null),
+            })),
+        );
         return {
         id: job.id,
         status: job.status,
@@ -143,11 +151,14 @@ Deno.serve(async (req) => {
         versionNumber: job.template_versions?.version_number ?? null,
         reviewStatus: job.template_versions?.review_status ?? "Unreviewed",
         telemetry: job.result_payload?.telemetry ?? {},
-        outputs: collectDeliverableOutputs(outputsByJobId.get(job.id) ?? [], outputExposureByNodeId),
+        outputs,
         feedback: feedbackByJobId.get(job.id) ?? null,
         };
       }),
-    });
+    );
+
+    return json({ jobs: responseJobs });
+
   } catch (error) {
     return json({ error: errorMessage(error) }, 400);
   }
