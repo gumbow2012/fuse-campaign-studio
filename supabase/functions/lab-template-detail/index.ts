@@ -6,6 +6,7 @@ import { readEdgeOrder, sortEdgesByExecutionOrder } from "../_shared/edge-order.
 import { getNodeAssetRequirement, getNodeEditorConfig } from "../_shared/template-editor.ts";
 import { readCastConfig } from "../_shared/cast-config.ts";
 import { resolveCustomizability } from "../_shared/template-fork.ts";
+import { signFuseAssetUrl } from "../_shared/signed-media.ts";
 
 function readNodeSortOrder(node: any, fallbackIndex = 999) {
   const raw = node?.prompt_config?.sort_order;
@@ -315,7 +316,7 @@ Deno.serve(async (req) => {
       castConfig: readCastConfig((version as any).cast_config),
       canCustomize: customizable,
       userInputs,
-      nodes: numberedNodes,
+      nodes: signedNodes,
       edges: (edges ?? []).map((edge: any) => ({
         id: edge.id,
         sourceNodeId: edge.source_node_id,
