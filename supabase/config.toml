@@ -131,6 +131,9 @@ verify_jwt = false
 [functions.admin-billing-debug]
 verify_jwt = false
 
+[functions.admin-free-preview-config]
+verify_jwt = true
+
 [functions.admin-template-workbench]
 verify_jwt = false
 
