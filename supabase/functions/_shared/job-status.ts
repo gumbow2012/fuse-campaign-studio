@@ -463,7 +463,24 @@ export async function buildJobStatusResponse(
       };
     });
 
+  // Stage A asset isolation: private fuse-assets media is delivered as
+  // short-lived signed URLs. Stored DB values stay canonical; signing failures
+  // fall back to the original URL.
+  const signedPublicOutputs = await Promise.all(
+    publicOutputs.map(async (output: any) => ({
+      ...output,
+      url: await signFuseAssetUrl(admin, output.url ?? null),
+    })),
+  );
+  const signedUserInputs = await Promise.all(
+    userInputs.map(async (input: any) => ({
+      ...input,
+      value: await signFuseAssetUrl(admin, input.value ?? null),
+    })),
+  );
+
   const base = {
+
     jobId: job.id,
     startedAt: job.started_at ?? null,
     completedAt: job.completed_at ?? null,
