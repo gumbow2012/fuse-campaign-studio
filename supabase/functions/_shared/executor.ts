@@ -1121,6 +1121,9 @@ export async function finalizeJobIfTerminal(admin: AdminClient, jobId: string) {
 
   // P5C — one immutable creator earning per successful monetized customer run.
   await createCreatorEarningForJob(admin, { jobId });
+
+  // F2 — a completed free first video burns the entitlement (reserved -> consumed).
+  await consumeFreeVideoEntitlementForJob(admin, jobId);
 }
 
 export async function runGraphJob(admin: AdminClient, jobId: string) {
