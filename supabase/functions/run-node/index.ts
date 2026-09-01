@@ -1,4 +1,5 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
+import { resolveExecutionUrl, resolveExecutionUrls } from "../_shared/asset-access.ts";
 
 import {
   corsHeaders,
