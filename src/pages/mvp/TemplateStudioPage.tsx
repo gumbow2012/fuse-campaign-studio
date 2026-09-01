@@ -1535,6 +1535,7 @@ export default function TemplateStudioPage() {
     (!freeEntitlement.selectedTemplateId ||
       freeEntitlement.selectedTemplateId === String(selectedTemplate?.templateId ?? ""));
   const [freeRunJobId, setFreeRunJobId] = useState<string | null>(null);
+  const costDisplay = freeModeActive ? "FREE GENERATION · First video $0" : costDisplayBase;
 
   // FT8 — cast metadata comes from the template version's cast_config.
   // Absent config (every legacy template) keeps the Cast step hidden.
@@ -2137,6 +2138,72 @@ export default function TemplateStudioPage() {
       if (queued) exitSelectMode();
     } finally {
       setBatchRunning(false);
+    }
+  };
+
+  /** F5 — FREE FIRST VIDEO run. Server waives credits and runs one video only. */
+  const handleFreeRun = async () => {
+    if (!selectedTemplate?.templateId) return;
+    if (!requiredInputsAreReady) {
+      toast({
+        title: "Missing inputs",
+        description: "Add your product assets before generating.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setSubmitting(true);
+    setJobId(null);
+    setFreeRunJobId(null);
+    setOpenedHistoricalRun(null);
+    setInputsExpanded(false);
+    setResult(null);
+
+    try {
+      setRunPhase("uploading");
+      const uploadedImageInputs = Object.fromEntries(
+        await Promise.all(
+          inputFields
+            .filter((field) => field.type === "image" && (files[field.key] || libraryAssets[field.key]?.url))
+            .map(async (field) => {
+              const file = files[field.key];
+              if (!file) return [field.key, libraryAssets[field.key]!.url];
+              const url = await uploadRunInputFile(file);
+              return [field.key, url];
+            }),
+        ),
+      );
+
+      setRunPhase("preparing");
+      const textOnlyInputs = Object.fromEntries(
+        inputFields
+          .filter((field) => field.type !== "image")
+          .map((field) => [field.key, textInputs[field.key]?.trim() ?? ""])
+          .filter(([, value]) => value.length > 0),
+      );
+
+      track("free_video_run_started", { template_id: String(selectedTemplate.id) });
+      const { jobId: freeJobId } = await startFreeVideoRun({
+        templateId: String(selectedTemplate.templateId),
+        inputs: { ...textOnlyInputs, ...uploadedImageInputs },
+      });
+
+      setJobId(freeJobId);
+      setFreeRunJobId(freeJobId);
+      setResult({ status: "queued", progress: 0, outputs: [] });
+      void refetchRecentRuns();
+      void freeEntitlementQuery.refetch();
+      toast({ title: "Your free video is generating", description: "This takes a few minutes." });
+    } catch (error) {
+      toast({
+        title: "Free generation failed",
+        description: error instanceof Error ? error.message : "Could not start your free video.",
+        variant: "destructive",
+      });
+    } finally {
+      setRunPhase("idle");
+      setSubmitting(false);
     }
   };
 
