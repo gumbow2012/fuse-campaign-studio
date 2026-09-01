@@ -187,4 +187,7 @@ verify_jwt = false
 [functions.admin-creator-economics]
 verify_jwt = true
 
+[functions.tmp-migrate-covers]
+verify_jwt = false
+
 
