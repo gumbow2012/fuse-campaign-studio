@@ -257,9 +257,12 @@ async function startRun(admin: AdminClient, args: { versionId: string; nodeId: s
       });
 
       const imageResolution = normalizeImageResolution(node.prompt_config?.resolution);
+      // Provider boundary: sign fuse-assets inputs (6h TTL); external unchanged.
+      const providerImageUrls = (await resolveExecutionUrls(admin, imageInputs)) as string[];
       const requestId = await submitImageJob({
         prompt,
-        imageUrls: imageInputs,
+        imageUrls: providerImageUrls,
+
         aspectRatio: String(node.prompt_config?.aspect_ratio ?? VERTICAL_VIDEO_ASPECT_RATIO),
         resolution: imageResolution,
         webhookUrl: `${webhookUrl}${encodeURIComponent(inserted.id)}`,
