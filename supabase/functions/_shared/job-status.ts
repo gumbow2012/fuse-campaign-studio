@@ -505,15 +505,40 @@ export async function buildJobStatusResponse(
       reviewStatus: job.template_versions?.review_status ?? "Unreviewed",
       inputs: templateInputs,
     },
-    userInputs,
+    userInputs: signedUserInputs,
     outputTotals: totals,
     publicGraph,
   };
 
   // Sensitive fields are never assembled into the non-privileged payload.
   if (!includeSensitive) {
-    return { ...base, outputs: publicOutputs };
+    return { ...base, outputs: signedPublicOutputs };
   }
+
+  const signedNumberedOutputs = await Promise.all(
+    numberedOutputs.map(async (output: any) => ({
+      ...output,
+      url: await signFuseAssetUrl(admin, output.url ?? null),
+    })),
+  );
+  const signedTemplateRefs = await Promise.all(
+    templateRefs.map(async (ref: any) => ({
+      ...ref,
+      assetUrl: await signFuseAssetUrl(admin, ref.assetUrl ?? null),
+    })),
+  );
+  const signedSteps = await Promise.all(
+    sensitiveSteps().map(async (step: any) => ({
+      ...step,
+      outputUrl: await signFuseAssetUrl(admin, step.outputUrl ?? null),
+      sourceInputs: await Promise.all(
+        (step.sourceInputs ?? []).map(async (source: any) => ({
+          ...source,
+          sourceUrl: await signFuseAssetUrl(admin, source.sourceUrl ?? null),
+        })),
+      ),
+    })),
+  );
 
   return {
     ...base,
@@ -521,10 +546,11 @@ export async function buildJobStatusResponse(
     // the customer-facing publicFailure contract.
     error: resolvedJobError,
     providerFailure,
-    template: { ...base.template, hiddenRefs: templateRefs },
+    template: { ...base.template, hiddenRefs: signedTemplateRefs },
     inputPayload: jobInputs,
-    outputs: numberedOutputs,
-    steps: sensitiveSteps(),
+    outputs: signedNumberedOutputs,
+    steps: signedSteps,
   };
+
 }
 
