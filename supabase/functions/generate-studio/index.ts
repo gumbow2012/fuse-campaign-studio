@@ -1,5 +1,9 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
-import { resolveDisplayUrls, resolveExecutionUrls } from "../_shared/asset-access.ts";
+import {
+  resolveDisplayUrls,
+  resolveExecutionUrl,
+  resolveExecutionUrls,
+} from "../_shared/asset-access.ts";
 
 import {
   corsHeaders,
@@ -415,6 +419,16 @@ async function startGeneration(
 
   const webhookUrl = `${webhookBase}${encodeURIComponent(inserted.id)}`;
 
+  /**
+   * Provider boundary only: fuse-assets inputs are handed to the provider as
+   * long-lived (6h) signed URLs. Stored payloads keep canonical values, and
+   * external (fal) URLs pass through unchanged.
+   */
+  const providerReferenceUrls = (await resolveExecutionUrls(admin, referenceUrls)) as string[];
+  const providerStartImageUrl = startImageUrl
+    ? ((await resolveExecutionUrl(admin, startImageUrl)) as string)
+    : startImageUrl;
+
   try {
     if (kind === "image") {
       const aspect = requestedAspect(input.aspectRatio);
@@ -443,8 +457,15 @@ async function startGeneration(
       });
 
       const falInput = built.input;
+      const providerFalInput: Record<string, unknown> = { ...falInput };
+      if (Array.isArray((falInput as any).image_urls)) {
+        providerFalInput.image_urls = providerReferenceUrls;
+      }
+      if (typeof (falInput as any).image_url === "string" && providerReferenceUrls[0]) {
+        providerFalInput.image_url = providerReferenceUrls[0];
+      }
 
-      const requestId = await submitFalJob(endpointId, falInput, webhookUrl);
+      const requestId = await submitFalJob(endpointId, providerFalInput, webhookUrl);
 
       const { data: updated } = await admin
         .from("studio_generations")
@@ -547,7 +568,7 @@ async function startGeneration(
       const submitted = await submitSeedanceReferenceVideoJob({
         modelKey: videoModel.key,
         prompt,
-        imageUrls: referenceUrls,
+        imageUrls: providerReferenceUrls,
         duration,
         ...(resolution ? { resolution } : {}),
         ...(aspectRatio ? { aspectRatio } : {}),
@@ -567,10 +588,13 @@ async function startGeneration(
         ...(aspectRatio ? { aspect_ratio: aspectRatio } : {}),
         ...(generateAudio === null ? {} : { generate_audio: generateAudio }),
       };
+      const providerEndFrameUrl = endFrameUrl
+        ? ((await resolveExecutionUrl(admin, endFrameUrl)) as string)
+        : endFrameUrl;
       requestId = await submitVideoJob({
         prompt,
-        initImageUrl: startImageUrl,
-        ...(endFrameUrl ? { endFrameUrl } : {}),
+        initImageUrl: providerStartImageUrl,
+        ...(providerEndFrameUrl ? { endFrameUrl: providerEndFrameUrl } : {}),
         modelKey: videoModel.key,
         duration,
         ...(aspectRatio ? { aspectRatio } : {}),
