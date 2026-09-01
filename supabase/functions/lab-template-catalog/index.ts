@@ -1,6 +1,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 
 import { corsHeaders, createAdminClient, errorMessage, json } from "../_shared/supabase-admin.ts";
+import { resolveDisplayUrl } from "../_shared/asset-access.ts";
 import { buildTemplateInputPlan } from "../_shared/template-inputs.ts";
 import { readCastConfig } from "../_shared/cast-config.ts";
 import { getTemplateCreditCost } from "../_shared/template-pricing.ts";
@@ -315,7 +316,14 @@ Deno.serve(async (req) => {
       entry.estimatedCreditsPerRun = entry.baseCreditsPerRun + surcharge;
     }
 
+    // Asset access hardening: fuse-assets covers are delivered as short-lived
+    // signed URLs. External/fuse-public URLs pass through unchanged.
+    await Promise.all(catalog.map(async (entry) => {
+      entry.previewUrl = await resolveDisplayUrl(admin, entry.previewUrl ?? null);
+    }));
+
     return json({ templates: catalog });
+
   } catch (error) {
     return json({ error: errorMessage(error) }, 400);
   }

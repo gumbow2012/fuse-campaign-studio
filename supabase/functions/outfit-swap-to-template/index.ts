@@ -8,6 +8,7 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
  * runner already understand.
  */
 
+import { signDeepDisplayUrls } from "../_shared/asset-access.ts";
 import {
   corsHeaders,
   createAdminClient,
@@ -399,7 +400,7 @@ Deno.serve(async (req) => {
       },
     }, admin).catch(() => null);
 
-    return json({
+    return json(await signDeepDisplayUrls(admin, {
       templateId: template.id,
       templateName: template.name,
       versionId,
@@ -411,7 +412,7 @@ Deno.serve(async (req) => {
       nodeCount: nodes.length,
       edgeCount: edges.length,
       positions,
-    });
+    }));
   } catch (error) {
     const message = errorMessage(error);
     const forbidden = message === "Builder access required";

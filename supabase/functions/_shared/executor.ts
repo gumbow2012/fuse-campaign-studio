@@ -1,4 +1,5 @@
 import { createAdminClient, logAuditEvent } from "./supabase-admin.ts";
+import { resolveExecutionUrl, resolveExecutionUrls } from "./asset-access.ts";
 import {
   getFalPricing,
   getFalQueueResult,
@@ -1379,9 +1380,14 @@ export async function runGraphJob(admin: AdminClient, jobId: string) {
             })
             .eq("id", step.id);
 
+          // Provider boundary: sign fuse-assets inputs (6h TTL). External
+          // (fal) URLs pass through unchanged. Stored values are untouched.
+          const providerImageUrls = (await resolveExecutionUrls(admin, effectiveInputs)) as string[];
+
           const requestId = await submitImageJob({
             prompt,
-            imageUrls: effectiveInputs,
+            imageUrls: providerImageUrls,
+
             aspectRatio: String(node.prompt_config?.aspect_ratio ?? "9:16"),
             // nano-banana-pro really accepts 1K/2K/4K — pass the chosen value
             // through instead of silently rendering at the 1K default.
@@ -1465,8 +1471,10 @@ export async function runGraphJob(admin: AdminClient, jobId: string) {
               step,
               node,
               prompt,
-              imageUrls: resolvedImageInputs,
+              // Provider boundary signing (6h TTL); external URLs unchanged.
+              imageUrls: (await resolveExecutionUrls(admin, resolvedImageInputs)) as string[],
             });
+
             step.provider_request_id = multiRefRequestId;
             await refreshJobProgress(admin, job.id);
             continue;
@@ -1508,10 +1516,18 @@ export async function runGraphJob(admin: AdminClient, jobId: string) {
               },
           );
 
+          // Provider boundary: sign fuse-assets inputs (6h TTL). External
+          // (fal) URLs pass through unchanged. Stored values are untouched.
+          const providerInitImageUrl = (await resolveExecutionUrl(admin, initImageUrl)) as string;
+          const providerEndFrameUrl = endFrameUrl
+            ? ((await resolveExecutionUrl(admin, endFrameUrl)) as string)
+            : endFrameUrl;
+
           const requestId = await submitVideoJob({
             prompt,
-            initImageUrl,
-            endFrameUrl,
+            initImageUrl: providerInitImageUrl,
+            endFrameUrl: providerEndFrameUrl,
+
             modelKey: videoModel.key,
             duration: effectiveDuration,
             aspectRatio: effectiveAspect,

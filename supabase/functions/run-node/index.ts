@@ -1,4 +1,5 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
+import { resolveExecutionUrl, resolveExecutionUrls } from "../_shared/asset-access.ts";
 
 import {
   corsHeaders,
@@ -257,9 +258,12 @@ async function startRun(admin: AdminClient, args: { versionId: string; nodeId: s
       });
 
       const imageResolution = normalizeImageResolution(node.prompt_config?.resolution);
+      // Provider boundary: sign fuse-assets inputs (6h TTL); external unchanged.
+      const providerImageUrls = (await resolveExecutionUrls(admin, imageInputs)) as string[];
       const requestId = await submitImageJob({
         prompt,
-        imageUrls: imageInputs,
+        imageUrls: providerImageUrls,
+
         aspectRatio: String(node.prompt_config?.aspect_ratio ?? VERTICAL_VIDEO_ASPECT_RATIO),
         resolution: imageResolution,
         webhookUrl: `${webhookUrl}${encodeURIComponent(inserted.id)}`,
@@ -322,10 +326,17 @@ async function startRun(admin: AdminClient, args: { versionId: string; nodeId: s
       fallbackUsdPerSecond: videoFallbackUsdPerSecond(videoModel, generateAudio) ?? null,
     });
 
+    // Provider boundary: sign fuse-assets inputs (6h TTL); external unchanged.
+    const providerInitImageUrl = (await resolveExecutionUrl(admin, initImageUrl)) as string;
+    const providerEndFrameUrl = endFrameUrl
+      ? ((await resolveExecutionUrl(admin, endFrameUrl)) as string)
+      : endFrameUrl;
+
     const requestId = await submitVideoJob({
       prompt,
-      initImageUrl,
-      endFrameUrl,
+      initImageUrl: providerInitImageUrl,
+      endFrameUrl: providerEndFrameUrl,
+
       modelKey: videoModel.key,
       duration,
       aspectRatio,
