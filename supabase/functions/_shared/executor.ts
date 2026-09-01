@@ -1508,10 +1508,18 @@ export async function runGraphJob(admin: AdminClient, jobId: string) {
               },
           );
 
+          // Provider boundary: sign fuse-assets inputs (6h TTL). External
+          // (fal) URLs pass through unchanged. Stored values are untouched.
+          const providerInitImageUrl = (await resolveExecutionUrl(admin, initImageUrl)) as string;
+          const providerEndFrameUrl = endFrameUrl
+            ? ((await resolveExecutionUrl(admin, endFrameUrl)) as string)
+            : endFrameUrl;
+
           const requestId = await submitVideoJob({
             prompt,
-            initImageUrl,
-            endFrameUrl,
+            initImageUrl: providerInitImageUrl,
+            endFrameUrl: providerEndFrameUrl,
+
             modelKey: videoModel.key,
             duration: effectiveDuration,
             aspectRatio: effectiveAspect,
