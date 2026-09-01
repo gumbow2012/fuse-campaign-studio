@@ -1379,9 +1379,14 @@ export async function runGraphJob(admin: AdminClient, jobId: string) {
             })
             .eq("id", step.id);
 
+          // Provider boundary: sign fuse-assets inputs (6h TTL). External
+          // (fal) URLs pass through unchanged. Stored values are untouched.
+          const providerImageUrls = (await resolveExecutionUrls(admin, effectiveInputs)) as string[];
+
           const requestId = await submitImageJob({
             prompt,
-            imageUrls: effectiveInputs,
+            imageUrls: providerImageUrls,
+
             aspectRatio: String(node.prompt_config?.aspect_ratio ?? "9:16"),
             // nano-banana-pro really accepts 1K/2K/4K — pass the chosen value
             // through instead of silently rendering at the 1K default.
