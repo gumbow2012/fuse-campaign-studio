@@ -1,5 +1,5 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
-import { signDeepDisplayUrls } from "../_shared/asset-access.ts";
+import { resolveExecutionUrl, signDeepDisplayUrls } from "../_shared/asset-access.ts";
 
 import {
   corsHeaders,
@@ -3875,9 +3875,13 @@ async function startAnimateFrame(admin: AdminClient, args: {
       args.userId,
     );
 
+    // Provider boundary: hand Kling a long-lived signed URL for fuse-assets
+    // objects (external URLs pass through unchanged).
+    const providerImageUrl = (await resolveExecutionUrl(admin, conditioned.url)) as string;
+
 
     const falInput = buildVideoModelInput(ANIMATE_MODEL_KEY, {
-      imageUrl: conditioned.url,
+      imageUrl: providerImageUrl,
       prompt,
       duration: requestedDuration,
       generateAudio: false,

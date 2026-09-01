@@ -8,6 +8,7 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
  * runner already understand.
  */
 
+import { signDeepDisplayUrls } from "../_shared/asset-access.ts";
 import {
   corsHeaders,
   createAdminClient,
