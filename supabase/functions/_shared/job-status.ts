@@ -8,6 +8,8 @@ import { sortEdgesByExecutionOrder } from "./edge-order.ts";
 import { buildTemplateInputPlan } from "./template-inputs.ts";
 import { getNodeEditorConfig } from "./template-editor.ts";
 import { toPublicGenerationFailure } from "./generation-failure.ts";
+import { signFuseAssetUrl } from "./signed-media.ts";
+
 
 type AdminClient = ReturnType<typeof createAdminClient>;
 
