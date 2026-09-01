@@ -66,7 +66,11 @@ Deno.serve(async (req) => {
 
     const activeJobs = (jobs ?? []).filter((job: any) => job.status === "running" || job.status === "queued");
     for (const job of activeJobs) {
-      await reconcileRunningSteps(admin, job.id);
+      try {
+        await reconcileRunningSteps(admin, job.id);
+      } catch (err) {
+        console.error(`list-recent-runs: reconcile skipped for job ${job.id}:`, err);
+      }
     }
 
     if (activeJobs.length) {
