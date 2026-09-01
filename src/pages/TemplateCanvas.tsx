@@ -25,6 +25,7 @@ import {
 } from "@/lib/templateBuilder";
 import CastConfigPanel from "@/components/lab/CastConfigPanel";
 import CreatorRoyaltyPanel from "@/components/creator/CreatorRoyaltyPanel";
+import FreeFirstVideoPanel from "@/components/admin/FreeFirstVideoPanel";
 
 import QuickPublishButton from "@/components/lab/QuickPublishButton";
 import CreatorBuilderHelpPanel from "@/components/creator/CreatorBuilderHelpPanel";
@@ -3765,6 +3766,11 @@ const TemplateCanvas = () => {
                   }
                   invoke={invokeWorkbench}
                 />
+              </div>
+            ) : null}
+            {canPublishTemplates && selectedTemplate ? (
+              <div className="mt-4">
+                <FreeFirstVideoPanel templateId={selectedTemplate.templateId} />
               </div>
             ) : null}
             {canPublishTemplates && detail ? (
