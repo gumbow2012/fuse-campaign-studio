@@ -52,6 +52,8 @@ async function post(body: Record<string, unknown>, accessToken?: string | null) 
   return data;
 }
 
+const INTENT_STORAGE_KEY = "fuse_fv_intent";
+
 /** Logged-out: persist the intent, then create the account. */
 export async function createFreeVideoIntent(templateId: string) {
   const data = await post({
@@ -59,7 +61,15 @@ export async function createFreeVideoIntent(templateId: string) {
     templateId,
     attribution: readAcquisitionAttribution(),
   });
-  return { intentId: data.intentId ? String(data.intentId) : null };
+  const intentId = data.intentId ? String(data.intentId) : null;
+  if (intentId && typeof window !== "undefined") {
+    try {
+      window.localStorage.setItem(INTENT_STORAGE_KEY, intentId);
+    } catch {
+      /* storage unavailable — cookie fallback still applies */
+    }
+  }
+  return { intentId };
 }
 
 /** "CREATE ACCOUNT & GENERATE FREE" — intent first, then signup. */
@@ -80,6 +90,26 @@ export async function startFreeVideoSignup(args: {
 /** Authenticated: resolve the campaign from the durable intent. */
 export async function claimFreeVideoIntent(): Promise<{ templateId: string | null }> {
   const { data: { session } } = await supabase.auth.getSession();
-  const data = await post({ action: "claim" }, session?.access_token ?? null);
-  return { templateId: data.templateId ? String(data.templateId) : null };
+  let storedIntentId: string | null = null;
+  if (typeof window !== "undefined") {
+    try {
+      storedIntentId = window.localStorage.getItem(INTENT_STORAGE_KEY);
+    } catch {
+      storedIntentId = null;
+    }
+  }
+  const data = await post(
+    { action: "claim", ...(storedIntentId ? { intentId: storedIntentId } : {}) },
+    session?.access_token ?? null,
+  );
+  const templateId = data.templateId ? String(data.templateId) : null;
+  if (templateId && typeof window !== "undefined") {
+    try {
+      window.localStorage.removeItem(INTENT_STORAGE_KEY);
+    } catch {
+      /* ignore */
+    }
+  }
+  return { templateId };
 }
+
