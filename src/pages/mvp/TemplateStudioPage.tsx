@@ -73,6 +73,7 @@ import TemplateUnlockModal from "@/components/mvp/TemplateUnlockModal";
 import PlanActivationNotice from "@/components/mvp/PlanActivationNotice";
 import KeepCreatingPanel from "@/components/mvp/KeepCreatingPanel";
 import { fetchMyFreeVideoEntitlement, startFreeVideoRun } from "@/services/freeVideoRun";
+import { trackFreeVideo } from "@/lib/analytics/freeVideoEvents";
 
 import {
   clearPendingGenerationIntent,
@@ -1537,6 +1538,21 @@ export default function TemplateStudioPage() {
   const [freeRunJobId, setFreeRunJobId] = useState<string | null>(null);
   const costDisplay = freeModeActive ? "FREE GENERATION · First video $0" : costDisplayBase;
 
+  /* F7 — free funnel telemetry (safe descriptors only). */
+  const freeBuilderTrackedRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!freeModeActive || !selectedTemplate) return;
+    const key = String(selectedTemplate.templateId);
+    if (freeBuilderTrackedRef.current === key) return;
+    freeBuilderTrackedRef.current = key;
+    trackFreeVideo("free_video_builder_opened", {
+      template_id: key,
+      campaign_slug: selectedTemplate.name ?? null,
+    });
+  }, [freeModeActive, selectedTemplate]);
+
+  const freeTerminalTrackedRef = useRef<string | null>(null);
+
   // FT8 — cast metadata comes from the template version's cast_config.
   // Absent config (every legacy template) keeps the Cast step hidden.
   const castConfig = selectedTemplate?.castConfig ?? null;
@@ -2184,6 +2200,10 @@ export default function TemplateStudioPage() {
       );
 
       track("free_video_run_started", { template_id: String(selectedTemplate.id) });
+      trackFreeVideo("free_video_generation_started", {
+        template_id: String(selectedTemplate.templateId),
+        campaign_slug: selectedTemplate.name ?? null,
+      });
       const { jobId: freeJobId } = await startFreeVideoRun({
         templateId: String(selectedTemplate.templateId),
         inputs: { ...textOnlyInputs, ...uploadedImageInputs },
@@ -2196,6 +2216,10 @@ export default function TemplateStudioPage() {
       void freeEntitlementQuery.refetch();
       toast({ title: "Your free video is generating", description: "This takes a few minutes." });
     } catch (error) {
+      trackFreeVideo("free_video_generation_failed", {
+        template_id: selectedTemplate ? String(selectedTemplate.templateId) : null,
+        stage: "start",
+      });
       toast({
         title: "Free generation failed",
         description: error instanceof Error ? error.message : "Could not start your free video.",
@@ -2524,6 +2548,19 @@ export default function TemplateStudioPage() {
 
 
   const isRunning = result?.status === "queued" || result?.status === "running" || result?.status === "video_pending";
+
+  useEffect(() => {
+    if (!freeRunJobId || activeRunId !== freeRunJobId) return;
+    const status = result?.status;
+    if (status !== "complete" && status !== "failed") return;
+    const key = `${freeRunJobId}:${status}`;
+    if (freeTerminalTrackedRef.current === key) return;
+    freeTerminalTrackedRef.current = key;
+    trackFreeVideo(
+      status === "complete" ? "free_video_generation_completed" : "free_video_generation_failed",
+      { template_id: selectedTemplate ? String(selectedTemplate.templateId) : null, stage: "run" },
+    );
+  }, [freeRunJobId, activeRunId, result?.status, selectedTemplate]);
 
   /* Rows matching the ACTUAL rendered column count (2 <640px, 3 at sm). */
   const templateRows = useMemo(() => {
@@ -3558,7 +3595,14 @@ export default function TemplateStudioPage() {
                 <div className="mt-6 space-y-5">
                   <CampaignResults
                     outputs={result.outputs}
-                    onDownload={handleDownloadSingleOutput}
+                    onDownload={(output, index) => {
+                      if (freeRunJobId && activeRunId === freeRunJobId) {
+                        trackFreeVideo("free_video_downloaded", {
+                          template_id: selectedTemplate ? String(selectedTemplate.templateId) : null,
+                        });
+                      }
+                      handleDownloadSingleOutput(output, index);
+                    }}
                     onRegenerate={(outputNumber) => void regeneration.requestRegenerate(outputNumber)}
                     revisionsByOutput={regeneration.revisionsByOutput}
                   />
