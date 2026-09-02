@@ -106,25 +106,42 @@ Deno.serve(async (req) => {
         .single();
       if (insertError) throw new Error(insertError.message);
 
-      const cookie = `${NONCE_COOKIE}=${encodeURIComponent(nonce)}; Path=/; Max-Age=${COOKIE_MAX_AGE}; HttpOnly; Secure; SameSite=Lax`;
+      const cookie = `${NONCE_COOKIE}=${encodeURIComponent(nonce)}; Path=/; Max-Age=${COOKIE_MAX_AGE}; HttpOnly; Secure; SameSite=None`;
       return json({ intentId: String(intent.id) }, 200, { "Set-Cookie": cookie });
     }
 
     if (action === "claim") {
       const user = await requireUser(req, admin);
 
-      const nonce = readCookie(req, NONCE_COOKIE);
-      if (!nonce) return json({ templateId: null });
+      const bodyIntentId = typeof body.intentId === "string" ? body.intentId.trim() : "";
+      const select = "id, template_id, attribution, status, expires_at";
+      let intent: Record<string, unknown> | null = null;
 
-      const claimNonceHash = await sha256Hex(nonce);
-      const { data: intent, error: intentError } = await admin
-        .from("free_video_intents")
-        .select("id, template_id, attribution, status, expires_at")
-        .eq("claim_nonce_hash", claimNonceHash)
-        .eq("status", "pending")
-        .maybeSingle();
-      if (intentError) throw new Error(intentError.message);
+      if (bodyIntentId) {
+        const { data, error } = await admin
+          .from("free_video_intents")
+          .select(select)
+          .eq("id", bodyIntentId)
+          .eq("status", "pending")
+          .maybeSingle();
+        if (error) throw new Error(error.message);
+        intent = (data as Record<string, unknown> | null) ?? null;
+      } else {
+        const nonce = readCookie(req, NONCE_COOKIE);
+        if (!nonce) return json({ templateId: null });
+        const claimNonceHash = await sha256Hex(nonce);
+        const { data, error } = await admin
+          .from("free_video_intents")
+          .select(select)
+          .eq("claim_nonce_hash", claimNonceHash)
+          .eq("status", "pending")
+          .maybeSingle();
+        if (error) throw new Error(error.message);
+        intent = (data as Record<string, unknown> | null) ?? null;
+      }
+
       if (!intent) return json({ templateId: null });
+
 
       const expiresAt = (intent as any).expires_at ? new Date((intent as any).expires_at).getTime() : null;
       if (expiresAt && expiresAt < Date.now()) {
