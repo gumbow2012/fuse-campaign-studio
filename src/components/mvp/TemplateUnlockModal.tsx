@@ -70,6 +70,7 @@ export default function TemplateUnlockModal({
   freeVideoOffer,
 }: Props) {
   const { loading, startPlanCheckout } = useMembershipCheckout();
+  const navigate = useNavigate();
   const starter = STRIPE_TIERS.starter;
   const busy = Boolean(loading);
   const name = (displayName || fullName || "this template").toUpperCase();
