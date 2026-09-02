@@ -65,9 +65,11 @@ Deno.serve(async (req) => {
     const body = (await req.json().catch(() => ({}))) as {
       action?: string;
       templateId?: string;
+      intentId?: string;
       attribution?: Record<string, unknown>;
     };
     const action = String(body.action ?? "");
+
 
     if (action === "create") {
       const requestedTemplate = typeof body.templateId === "string" ? body.templateId.trim() : "";
