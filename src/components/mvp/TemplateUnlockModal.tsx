@@ -1,9 +1,12 @@
 import { useEffect, useState } from "react";
 import { ArrowRight, Loader2, Sparkles, X } from "lucide-react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { startFreeVideoSignup } from "@/services/freeVideoIntent";
+import { supabase } from "@/integrations/supabase/client";
+import { claimFreeVideoIntent, startFreeVideoSignup } from "@/services/freeVideoIntent";
+import { fetchMyFreeVideoEntitlement } from "@/services/freeVideoRun";
+import { trackFreeVideo } from "@/lib/analytics/freeVideoEvents";
 import { useMembershipCheckout } from "@/hooks/useMembershipCheckout";
 import { STRIPE_TIERS } from "@/lib/stripe-config";
 import { track } from "@/lib/analytics/track";
