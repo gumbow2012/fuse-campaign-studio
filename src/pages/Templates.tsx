@@ -83,7 +83,15 @@ const Templates = () => {
                         <span className="text-lg font-black tracking-tighter text-muted-foreground/30 select-none">{t.name}</span>
                       </div>
                     )}
-                    <span className={`absolute top-2 left-2 text-[8px] font-black uppercase tracking-wider ${color} bg-background/70 backdrop-blur-sm px-2 py-0.5 rounded-md`}>
+                    {t.free_preview_enabled === true && (
+                      <span
+                        title="Your first video is free"
+                        aria-label="Your first video is free"
+                        className="absolute top-2 left-2 text-[8px] font-black uppercase tracking-[0.18em] text-emerald-100 bg-emerald-500/25 border border-emerald-300/50 shadow-[0_0_14px_-4px_rgba(16,185,129,0.9)] backdrop-blur-sm px-2 py-0.5 rounded-full">
+                        Free
+                      </span>
+                    )}
+                    <span className={`absolute ${t.free_preview_enabled === true ? "top-8" : "top-2"} left-2 text-[8px] font-black uppercase tracking-wider ${color} bg-background/70 backdrop-blur-sm px-2 py-0.5 rounded-md`}>
                       {cat}
                     </span>
                     <span className="absolute top-2 right-2">
