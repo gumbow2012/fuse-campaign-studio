@@ -427,15 +427,17 @@ export default function TemplateUnlockModal({
 
 
 
-          <p className="mt-3 text-center text-[11px] text-slate-500">
-            Already have an account?{" "}
-            <Link
-              to={`/auth?mode=signin&next=${encodeURIComponent(returnPath)}`}
-              className="text-slate-300 underline underline-offset-2 hover:text-cyan-200"
-            >
-              Sign in
-            </Link>
-          </p>
+          {freeVideoOffer ? null : (
+            <p className="mt-3 text-center text-[11px] text-slate-500">
+              Already have an account?{" "}
+              <Link
+                to={`/auth?mode=signin&next=${encodeURIComponent(returnPath)}`}
+                className="text-slate-300 underline underline-offset-2 hover:text-cyan-200"
+              >
+                Sign in
+              </Link>
+            </p>
+          )}
         </div>
       </div>
     </div>
