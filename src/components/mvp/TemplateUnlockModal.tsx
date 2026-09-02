@@ -1,9 +1,12 @@
 import { useEffect, useState } from "react";
 import { ArrowRight, Loader2, Sparkles, X } from "lucide-react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { startFreeVideoSignup } from "@/services/freeVideoIntent";
+import { supabase } from "@/integrations/supabase/client";
+import { claimFreeVideoIntent, startFreeVideoSignup } from "@/services/freeVideoIntent";
+import { fetchMyFreeVideoEntitlement } from "@/services/freeVideoRun";
+import { trackFreeVideo } from "@/lib/analytics/freeVideoEvents";
 import { useMembershipCheckout } from "@/hooks/useMembershipCheckout";
 import { STRIPE_TIERS } from "@/lib/stripe-config";
 import { track } from "@/lib/analytics/track";
@@ -67,6 +70,7 @@ export default function TemplateUnlockModal({
   freeVideoOffer,
 }: Props) {
   const { loading, startPlanCheckout } = useMembershipCheckout();
+  const navigate = useNavigate();
   const starter = STRIPE_TIERS.starter;
   const busy = Boolean(loading);
   const name = (displayName || fullName || "this template").toUpperCase();
@@ -77,14 +81,20 @@ export default function TemplateUnlockModal({
   const [freeSubmitting, setFreeSubmitting] = useState(false);
   const [freeError, setFreeError] = useState<string | null>(null);
   const [checkEmail, setCheckEmail] = useState(false);
+  /** B — returning verified user claims the free video by signing in. */
+  const [mode, setMode] = useState<"signup" | "signin">("signup");
+
+  const freeProps = { template_id: templateId, campaign_slug: fullName || displayName || null };
 
   const submitFreeSignup = async () => {
     if (!templateId) return;
     setFreeError(null);
     setFreeSubmitting(true);
     try {
-      track("free_video_signup_started", { template_id: templateId });
+      trackFreeVideo("free_video_signup_started", freeProps);
       await startFreeVideoSignup({ templateId, email: email.trim(), password });
+      trackFreeVideo("free_video_account_created", freeProps);
+      trackFreeVideo("free_video_email_verification_sent", freeProps);
       setCheckEmail(true);
     } catch (error) {
       setFreeError(error instanceof Error ? error.message : "Could not create your account.");
@@ -93,12 +103,66 @@ export default function TemplateUnlockModal({
     }
   };
 
+  /**
+   * Sign in, then let the SERVER resolve the free entitlement: the stored
+   * intent is claimed (when present) and the entitled template decides where we
+   * land. Users who already consumed their free video simply continue as usual.
+   */
+  const submitFreeSignIn = async () => {
+    setFreeError(null);
+    setFreeSubmitting(true);
+    try {
+      const { error } = await supabase.auth.signInWithPassword({
+        email: email.trim(),
+        password,
+      });
+      if (error) throw new Error(error.message);
+      trackFreeVideo("free_video_signin_claim_started", freeProps);
+
+      let claimedTemplateId: string | null = null;
+      try {
+        const claim = await claimFreeVideoIntent();
+        claimedTemplateId = claim.templateId;
+      } catch {
+        claimedTemplateId = null;
+      }
+
+      if (!claimedTemplateId) {
+        const entitlement = await fetchMyFreeVideoEntitlement();
+        if (entitlement?.status === "available") {
+          claimedTemplateId = entitlement.selectedTemplateId ?? templateId ?? null;
+        }
+      }
+
+      if (claimedTemplateId) {
+        trackFreeVideo("free_video_email_verified", { ...freeProps, via: "signin" });
+        onOpenChange(false);
+        navigate(`/app/templates/${claimedTemplateId}`, { replace: true });
+        return;
+      }
+
+      onOpenChange(false);
+      navigate(returnPath || "/app/templates", { replace: true });
+    } catch (error) {
+      setFreeError(error instanceof Error ? error.message : "Could not sign you in.");
+    } finally {
+      setFreeSubmitting(false);
+    }
+  };
+
   useEffect(() => {
     if (!open) return;
     track("template_confirmation_view", { template_id: templateId });
-    track("plan_offer_view", { template_id: templateId, plan_key: "starter" });
+    if (freeVideoOffer) {
+      trackFreeVideo("free_video_gate_viewed", {
+        template_id: templateId,
+        campaign_slug: fullName || displayName || null,
+      });
+    } else {
+      track("plan_offer_view", { template_id: templateId, plan_key: "starter" });
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open]);
+  }, [open, freeVideoOffer]);
 
   useEffect(() => {
     if (!open) return;
@@ -186,11 +250,12 @@ export default function TemplateUnlockModal({
             /* F6 — FREE FIRST VIDEO variant. No plan / credit language here. */
             <div>
               <h2 className="pr-8 font-display text-[1.5rem] font-bold uppercase leading-tight tracking-[-0.03em] text-white sm:text-[1.75rem]">
-                Create your first video free
+                {mode === "signin" ? "Sign in to claim your free video" : "Create your first video free"}
               </h2>
               <p className="mt-2.5 text-sm leading-6 text-slate-400">
-                Start with {displayName || fullName} — create your account and generate your first
-                campaign video free.
+                {mode === "signin"
+                  ? `Sign in and we'll open ${displayName || fullName} with your free video ready to generate.`
+                  : `Start with ${displayName || fullName} — create your account and generate your first campaign video free.`}
               </p>
 
               <ul className="mt-4 space-y-1.5 text-sm text-white/85">
@@ -213,7 +278,8 @@ export default function TemplateUnlockModal({
                   className="mt-5 space-y-3"
                   onSubmit={(event) => {
                     event.preventDefault();
-                    void submitFreeSignup();
+                    if (mode === "signin") void submitFreeSignIn();
+                    else void submitFreeSignup();
                   }}
                 >
                   <Input
@@ -228,9 +294,9 @@ export default function TemplateUnlockModal({
                   <Input
                     type="password"
                     required
-                    minLength={8}
-                    autoComplete="new-password"
-                    placeholder="Create a password"
+                    minLength={mode === "signin" ? undefined : 8}
+                    autoComplete={mode === "signin" ? "current-password" : "new-password"}
+                    placeholder={mode === "signin" ? "Your password" : "Create a password"}
                     value={password}
                     onChange={(event) => setPassword(event.target.value)}
                     className="rounded-xl border-white/10 bg-white/[0.04] text-white placeholder:text-slate-500"
@@ -242,9 +308,21 @@ export default function TemplateUnlockModal({
                     className="w-full justify-center rounded-full bg-cyan-300 py-6 font-display text-[12px] font-semibold uppercase tracking-[0.16em] text-slate-950 hover:bg-cyan-200"
                   >
                     {freeSubmitting ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : null}
-                    Create account &amp; generate free
+                    {mode === "signin" ? "Sign in & claim free video" : "Create account & generate free"}
                     <ArrowRight className="h-4 w-4" aria-hidden />
                   </Button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setFreeError(null);
+                      setMode(mode === "signin" ? "signup" : "signin");
+                    }}
+                    className="w-full text-center text-[11px] text-slate-400 underline underline-offset-2 hover:text-cyan-200"
+                  >
+                    {mode === "signin"
+                      ? "New to FUSE? Create an account"
+                      : "Already have an account? Sign in to claim it"}
+                  </button>
                 </form>
               )}
             </div>
@@ -349,15 +427,17 @@ export default function TemplateUnlockModal({
 
 
 
-          <p className="mt-3 text-center text-[11px] text-slate-500">
-            Already have an account?{" "}
-            <Link
-              to={`/auth?mode=signin&next=${encodeURIComponent(returnPath)}`}
-              className="text-slate-300 underline underline-offset-2 hover:text-cyan-200"
-            >
-              Sign in
-            </Link>
-          </p>
+          {freeVideoOffer ? null : (
+            <p className="mt-3 text-center text-[11px] text-slate-500">
+              Already have an account?{" "}
+              <Link
+                to={`/auth?mode=signin&next=${encodeURIComponent(returnPath)}`}
+                className="text-slate-300 underline underline-offset-2 hover:text-cyan-200"
+              >
+                Sign in
+              </Link>
+            </p>
+          )}
         </div>
       </div>
     </div>

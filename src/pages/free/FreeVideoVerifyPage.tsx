@@ -10,6 +10,7 @@ import { useNavigate } from "react-router-dom";
 import { Check, Loader2 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { claimFreeVideoIntent } from "@/services/freeVideoIntent";
+import { trackFreeVideo } from "@/lib/analytics/freeVideoEvents";
 
 export default function FreeVideoVerifyPage() {
   const navigate = useNavigate();
@@ -29,6 +30,7 @@ export default function FreeVideoVerifyPage() {
     void (async () => {
       try {
         const { templateId } = await claimFreeVideoIntent();
+        trackFreeVideo("free_video_email_verified", { template_id: templateId, via: "email" });
         navigate(templateId ? `/app/templates/${templateId}` : "/app/templates", { replace: true });
       } catch {
         navigate("/app/templates", { replace: true });
