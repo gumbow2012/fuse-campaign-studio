@@ -294,9 +294,9 @@ export default function TemplateUnlockModal({
                   <Input
                     type="password"
                     required
-                    minLength={8}
-                    autoComplete="new-password"
-                    placeholder="Create a password"
+                    minLength={mode === "signin" ? undefined : 8}
+                    autoComplete={mode === "signin" ? "current-password" : "new-password"}
+                    placeholder={mode === "signin" ? "Your password" : "Create a password"}
                     value={password}
                     onChange={(event) => setPassword(event.target.value)}
                     className="rounded-xl border-white/10 bg-white/[0.04] text-white placeholder:text-slate-500"
@@ -308,9 +308,21 @@ export default function TemplateUnlockModal({
                     className="w-full justify-center rounded-full bg-cyan-300 py-6 font-display text-[12px] font-semibold uppercase tracking-[0.16em] text-slate-950 hover:bg-cyan-200"
                   >
                     {freeSubmitting ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : null}
-                    Create account &amp; generate free
+                    {mode === "signin" ? "Sign in & claim free video" : "Create account & generate free"}
                     <ArrowRight className="h-4 w-4" aria-hidden />
                   </Button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setFreeError(null);
+                      setMode(mode === "signin" ? "signup" : "signin");
+                    }}
+                    className="w-full text-center text-[11px] text-slate-400 underline underline-offset-2 hover:text-cyan-200"
+                  >
+                    {mode === "signin"
+                      ? "New to FUSE? Create an account"
+                      : "Already have an account? Sign in to claim it"}
+                  </button>
                 </form>
               )}
             </div>
