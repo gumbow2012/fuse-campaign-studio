@@ -81,14 +81,20 @@ export default function TemplateUnlockModal({
   const [freeSubmitting, setFreeSubmitting] = useState(false);
   const [freeError, setFreeError] = useState<string | null>(null);
   const [checkEmail, setCheckEmail] = useState(false);
+  /** B — returning verified user claims the free video by signing in. */
+  const [mode, setMode] = useState<"signup" | "signin">("signup");
+
+  const freeProps = { template_id: templateId, campaign_slug: fullName || displayName || null };
 
   const submitFreeSignup = async () => {
     if (!templateId) return;
     setFreeError(null);
     setFreeSubmitting(true);
     try {
-      track("free_video_signup_started", { template_id: templateId });
+      trackFreeVideo("free_video_signup_started", freeProps);
       await startFreeVideoSignup({ templateId, email: email.trim(), password });
+      trackFreeVideo("free_video_account_created", freeProps);
+      trackFreeVideo("free_video_email_verification_sent", freeProps);
       setCheckEmail(true);
     } catch (error) {
       setFreeError(error instanceof Error ? error.message : "Could not create your account.");
@@ -97,12 +103,66 @@ export default function TemplateUnlockModal({
     }
   };
 
+  /**
+   * Sign in, then let the SERVER resolve the free entitlement: the stored
+   * intent is claimed (when present) and the entitled template decides where we
+   * land. Users who already consumed their free video simply continue as usual.
+   */
+  const submitFreeSignIn = async () => {
+    setFreeError(null);
+    setFreeSubmitting(true);
+    try {
+      const { error } = await supabase.auth.signInWithPassword({
+        email: email.trim(),
+        password,
+      });
+      if (error) throw new Error(error.message);
+      trackFreeVideo("free_video_signin_claim_started", freeProps);
+
+      let claimedTemplateId: string | null = null;
+      try {
+        const claim = await claimFreeVideoIntent();
+        claimedTemplateId = claim.templateId;
+      } catch {
+        claimedTemplateId = null;
+      }
+
+      if (!claimedTemplateId) {
+        const entitlement = await fetchMyFreeVideoEntitlement();
+        if (entitlement?.status === "available") {
+          claimedTemplateId = entitlement.selectedTemplateId ?? templateId ?? null;
+        }
+      }
+
+      if (claimedTemplateId) {
+        trackFreeVideo("free_video_email_verified", { ...freeProps, via: "signin" });
+        onOpenChange(false);
+        navigate(`/app/templates/${claimedTemplateId}`, { replace: true });
+        return;
+      }
+
+      onOpenChange(false);
+      navigate(returnPath || "/app/templates", { replace: true });
+    } catch (error) {
+      setFreeError(error instanceof Error ? error.message : "Could not sign you in.");
+    } finally {
+      setFreeSubmitting(false);
+    }
+  };
+
   useEffect(() => {
     if (!open) return;
     track("template_confirmation_view", { template_id: templateId });
-    track("plan_offer_view", { template_id: templateId, plan_key: "starter" });
+    if (freeVideoOffer) {
+      trackFreeVideo("free_video_gate_viewed", {
+        template_id: templateId,
+        campaign_slug: fullName || displayName || null,
+      });
+    } else {
+      track("plan_offer_view", { template_id: templateId, plan_key: "starter" });
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open]);
+  }, [open, freeVideoOffer]);
 
   useEffect(() => {
     if (!open) return;
