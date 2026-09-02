@@ -19,18 +19,15 @@ const NONCE_COOKIE = "fuse_fv_nonce";
 const COOKIE_MAX_AGE = 60 * 60 * 24; // 24h
 const INTENT_TTL_MS = COOKIE_MAX_AGE * 1000;
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-  "Access-Control-Allow-Methods": "POST,OPTIONS",
-  "Access-Control-Allow-Credentials": "true",
-};
-
-function json(body: unknown, status = 200, extraHeaders: Record<string, string> = {}) {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { ...corsHeaders, "Content-Type": "application/json", ...extraHeaders },
-  });
+function corsFor(req: Request) {
+  const origin = req.headers.get("origin") ?? "*";
+  return {
+    "Access-Control-Allow-Origin": origin,
+    "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+    "Access-Control-Allow-Methods": "POST,OPTIONS",
+    "Access-Control-Allow-Credentials": "true",
+    "Vary": "Origin",
+  };
 }
 
 async function sha256Hex(value: string) {
