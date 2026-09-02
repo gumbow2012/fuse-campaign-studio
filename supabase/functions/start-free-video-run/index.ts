@@ -145,19 +145,26 @@ Deno.serve(async (req) => {
     }
 
     const body = (await req.json().catch(() => ({}))) as Body;
-    const templateId = typeof body.templateId === "string" ? body.templateId.trim() : "";
-    if (!templateId) throw new FreeVideoError("templateId is required");
+    const requestedTemplate = typeof body.templateId === "string" ? body.templateId.trim() : "";
+    if (!requestedTemplate) throw new FreeVideoError("templateId is required");
 
     // (b) TEMPLATE GATE — free preview must be explicitly enabled with a target node.
-    const { data: template, error: templateError } = await admin
+    // The gate may pass a template NAME or the canonical uuid; resolve both.
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+      requestedTemplate,
+    );
+    const templateQuery = admin
       .from("fuse_templates")
-      .select("id, name, free_preview_enabled, activation_video_node_id")
-      .eq("id", templateId)
-      .maybeSingle();
+      .select("id, name, free_preview_enabled, activation_video_node_id");
+    const { data: template, error: templateError } = await (isUuid
+      ? templateQuery.eq("id", requestedTemplate)
+      : templateQuery.ilike("name", requestedTemplate)
+    ).maybeSingle();
     if (templateError) throw new Error(templateError.message);
     if (!template || (template as any).free_preview_enabled !== true || !(template as any).activation_video_node_id) {
       throw new FreeVideoError("Free video not available for this template", 400, "FREE_VIDEO_UNAVAILABLE");
     }
+    const templateId = String((template as any).id);
     const targetNodeId = String((template as any).activation_video_node_id);
     const templateName = String((template as any).name ?? "");
 
