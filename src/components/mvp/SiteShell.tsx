@@ -230,7 +230,7 @@ export default function SiteShell({ children }: { children: ReactNode }) {
                   <Link to="/auth?mode=signin">Sign in</Link>
                 </Button>
                 <Button asChild className={cn("h-9 rounded-full bg-cyan-300 px-3 text-sm font-semibold text-slate-950 hover:bg-cyan-200", focusRing)}>
-                  <Link to="/auth?mode=signup">Try FUSE</Link>
+                  <Link to="/auth?mode=signup">Free first video</Link>
                 </Button>
               </div>
             )}
@@ -326,7 +326,7 @@ export default function SiteShell({ children }: { children: ReactNode }) {
                       <>
                         <Button asChild className={cn("min-h-11 w-full rounded-full bg-cyan-300 text-slate-950 hover:bg-cyan-200", focusRing)}>
                           <Link to="/auth?mode=signup" onClick={closeMenu}>
-                            Try FUSE
+                            Free first video
                           </Link>
                         </Button>
                         <Button
@@ -413,7 +413,7 @@ export default function SiteShell({ children }: { children: ReactNode }) {
                         <Link to="/auth?mode=signin">Sign in</Link>
                       </Button>
                       <Button asChild className={cn("h-10 rounded-full bg-cyan-300 px-5 text-sm font-semibold text-slate-950 hover:bg-cyan-200", focusRing)}>
-                        <Link to="/auth?mode=signup">Try FUSE</Link>
+                        <Link to="/auth?mode=signup">Free first video</Link>
                       </Button>
                     </>
 

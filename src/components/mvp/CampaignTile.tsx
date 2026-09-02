@@ -115,6 +115,8 @@ export interface CampaignTileProps {
   selected: boolean;
   eager?: boolean;
   statusPill?: "new" | "trending" | null;
+  /** Shows the green FREE pill when this campaign offers the free first video. */
+  freeVideo?: boolean;
   onSelect: () => void;
   onDetails?: () => void;
   /** Fires once when the tile first becomes visible. */
@@ -136,6 +138,7 @@ export default function CampaignTile({
   selected,
   eager,
   statusPill,
+  freeVideo,
   onSelect,
   onDetails,
   onImpression,
@@ -197,8 +200,18 @@ export default function CampaignTile({
               eager={eager}
             />
 
+            {freeVideo ? (
+              <span
+                title="Your first video is free"
+                aria-label="Your first video is free"
+                className="pointer-events-none absolute left-1.5 top-1.5 z-10 rounded-full border border-emerald-300/50 bg-emerald-500/25 px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-[0.18em] text-emerald-100 shadow-[0_0_14px_-4px_rgba(16,185,129,0.9)] backdrop-blur"
+              >
+                Free
+              </span>
+            ) : null}
+
             {statusPill ? (
-              <span className="pointer-events-none absolute left-1.5 top-1.5 rounded-full border border-cyan-300/40 bg-black/70 px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-[0.16em] text-cyan-100 backdrop-blur">
+              <span className={cn("pointer-events-none absolute top-1.5 rounded-full border border-cyan-300/40 bg-black/70 px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-[0.16em] text-cyan-100 backdrop-blur", freeVideo ? "right-1.5" : "left-1.5")}>
                 {statusPill === "new" ? "New" : "Trending"}
               </span>
             ) : null}
