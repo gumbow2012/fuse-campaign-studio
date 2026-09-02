@@ -250,11 +250,12 @@ export default function TemplateUnlockModal({
             /* F6 — FREE FIRST VIDEO variant. No plan / credit language here. */
             <div>
               <h2 className="pr-8 font-display text-[1.5rem] font-bold uppercase leading-tight tracking-[-0.03em] text-white sm:text-[1.75rem]">
-                Create your first video free
+                {mode === "signin" ? "Sign in to claim your free video" : "Create your first video free"}
               </h2>
               <p className="mt-2.5 text-sm leading-6 text-slate-400">
-                Start with {displayName || fullName} — create your account and generate your first
-                campaign video free.
+                {mode === "signin"
+                  ? `Sign in and we'll open ${displayName || fullName} with your free video ready to generate.`
+                  : `Start with ${displayName || fullName} — create your account and generate your first campaign video free.`}
               </p>
 
               <ul className="mt-4 space-y-1.5 text-sm text-white/85">
