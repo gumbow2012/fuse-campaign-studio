@@ -10,6 +10,7 @@ import { useNavigate } from "react-router-dom";
 import { Check, Loader2 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { claimFreeVideoIntent } from "@/services/freeVideoIntent";
+import { trackFreeVideo } from "@/lib/analytics/freeVideoEvents";
 
 export default function FreeVideoVerifyPage() {
   const navigate = useNavigate();
