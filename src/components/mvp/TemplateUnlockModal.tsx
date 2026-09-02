@@ -278,7 +278,8 @@ export default function TemplateUnlockModal({
                   className="mt-5 space-y-3"
                   onSubmit={(event) => {
                     event.preventDefault();
-                    void submitFreeSignup();
+                    if (mode === "signin") void submitFreeSignIn();
+                    else void submitFreeSignup();
                   }}
                 >
                   <Input
