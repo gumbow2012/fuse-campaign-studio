@@ -70,18 +70,23 @@ Deno.serve(async (req) => {
     const action = String(body.action ?? "");
 
     if (action === "create") {
-      const templateId = typeof body.templateId === "string" ? body.templateId.trim() : "";
-      if (!templateId) return json({ error: "templateId is required" }, 400);
+      const requestedTemplate = typeof body.templateId === "string" ? body.templateId.trim() : "";
+      if (!requestedTemplate) return json({ error: "templateId is required" }, 400);
 
-      const { data: template, error: templateError } = await admin
-        .from("fuse_templates")
-        .select("id, free_preview_enabled")
-        .eq("id", templateId)
-        .maybeSingle();
+      // The gate may pass a template NAME or the canonical uuid; resolve both.
+      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+        requestedTemplate,
+      );
+      const templateQuery = admin.from("fuse_templates").select("id, free_preview_enabled");
+      const { data: template, error: templateError } = await (isUuid
+        ? templateQuery.eq("id", requestedTemplate)
+        : templateQuery.ilike("name", requestedTemplate)
+      ).maybeSingle();
       if (templateError) throw new Error(templateError.message);
       if (!template || (template as any).free_preview_enabled !== true) {
         return json({ error: "Free video not available for this template" }, 400);
       }
+      const templateId = String((template as any).id);
 
       const nonce = crypto.randomUUID().replace(/-/g, "") + crypto.randomUUID().replace(/-/g, "");
       const claimNonceHash = await sha256Hex(nonce);
