@@ -50,6 +50,13 @@ function asAttribution(value: unknown): Record<string, unknown> {
 }
 
 Deno.serve(async (req) => {
+  const corsHeaders = corsFor(req);
+  const json = (body: unknown, status = 200, extraHeaders: Record<string, string> = {}) =>
+    new Response(JSON.stringify(body), {
+      status,
+      headers: { ...corsHeaders, "Content-Type": "application/json", ...extraHeaders },
+    });
+
   if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: corsHeaders });
 
   const admin = createAdminClient();
