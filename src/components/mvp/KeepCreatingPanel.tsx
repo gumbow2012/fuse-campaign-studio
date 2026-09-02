@@ -5,6 +5,7 @@
  * nothing is hardcoded here. Credit top-ups reuse the existing pack dialog.
  */
 
+import { useEffect } from "react";
 import { ArrowRight, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import CreditPackDialog from "@/components/mvp/CreditPackDialog";
@@ -12,6 +13,7 @@ import { useMembershipCheckout } from "@/hooks/useMembershipCheckout";
 import { STRIPE_TIERS } from "@/lib/stripe-config";
 import { STARTER_WELCOME_BADGE, starterWelcomePrice } from "@/lib/starterWelcomeOffer";
 import { track } from "@/lib/analytics/track";
+import { trackFreeVideo } from "@/lib/analytics/freeVideoEvents";
 
 const usd = (dollars: number) =>
   dollars.toLocaleString("en-US", {
@@ -23,6 +25,11 @@ const usd = (dollars: number) =>
 export default function KeepCreatingPanel({ templateId }: { templateId?: string | null }) {
   const { loading, startPlanCheckout } = useMembershipCheckout();
   const starter = STRIPE_TIERS.starter;
+
+  useEffect(() => {
+    trackFreeVideo("post_free_paywall_viewed", { template_id: templateId ?? null });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return (
     <div className="rounded-[1.5rem] border border-cyan-300/25 bg-cyan-300/[0.06] p-5">
@@ -57,6 +64,7 @@ export default function KeepCreatingPanel({ templateId }: { templateId?: string 
         <Button
           onClick={() => {
             track("keep_creating_starter_click", { template_id: templateId ?? null });
+            trackFreeVideo("post_free_starter_started", { template_id: templateId ?? null });
             void startPlanCheckout("starter", { templateId: templateId ?? undefined });
           }}
           disabled={Boolean(loading)}
@@ -71,6 +79,7 @@ export default function KeepCreatingPanel({ templateId }: { templateId?: string 
           trigger={
             <Button
               variant="outline"
+              onClick={() => trackFreeVideo("post_free_topup_started", { template_id: templateId ?? null })}
               className="rounded-full border-white/15 bg-white/5 px-5 font-display text-[12px] font-semibold uppercase tracking-[0.16em] text-slate-100 hover:bg-white/10"
             >
               Buy credits
