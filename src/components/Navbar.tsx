@@ -331,6 +331,7 @@ const MobileMenu = ({ onClose }: { onClose: () => void }) => {
                 Account
               </p>
               <DrawerLink to="/app/campaigns">Your Campaigns</DrawerLink>
+              <DrawerLink to="/app/video-editor">Video Editor</DrawerLink>
               <DrawerLink to="/account">Account</DrawerLink>
               <DrawerLink to="/app/notifications">Notifications</DrawerLink>
               <DrawerLink to="/pricing">Plans &amp; Billing</DrawerLink>
