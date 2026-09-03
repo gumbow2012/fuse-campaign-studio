@@ -272,6 +272,57 @@ export default function CampaignEditorPage() {
     [projectId, setMusic],
   );
 
+  const tabBar = (
+    <div className="grid grid-cols-3 gap-1.5 rounded-2xl border border-white/10 bg-slate-950/70 p-1.5">
+      {([
+        { id: "clip", label: "Clip" },
+        { id: "text", label: `Text${textLayers.length ? ` (${textLayers.length})` : ""}` },
+        { id: "music", label: music ? "Music ✓" : "Music" },
+      ] as const).map((item) => (
+        <button
+          key={item.id}
+          type="button"
+          aria-pressed={tab === item.id}
+          onClick={() => setTab(item.id)}
+          className={cn(
+            "rounded-xl px-2 py-2 font-display text-[11px] uppercase tracking-[0.14em] transition-colors",
+            tab === item.id
+              ? "bg-cyan-400/15 text-cyan-100"
+              : "text-slate-400 hover:text-slate-200",
+          )}
+        >
+          {item.label}
+        </button>
+      ))}
+    </div>
+  );
+
+  const textPanel = (
+    <TextInspector
+      layers={textLayers}
+      selectedId={selectedTextId}
+      onSelect={setSelectedTextId}
+      onAdd={addText}
+      onPatch={patchText}
+      onDelete={deleteText}
+      onDuplicate={duplicateText}
+      durationMs={durationMs}
+      currentMs={currentMs}
+    />
+  );
+
+  const musicPanel = (
+    <MusicPanel
+      music={music}
+      uploading={musicUploading}
+      error={musicError}
+      onUpload={(file) => void onUploadMusic(file)}
+      onPatch={patchMusic}
+      onRemove={() => setMusic(null, "remove music")}
+      durationMs={durationMs}
+    />
+  );
+
   const saveLabel =
     saveState === "saving"
       ? "Saving…"
@@ -415,6 +466,7 @@ export default function CampaignEditorPage() {
               musicUrl={musicUrl}
             />
             <div className="space-y-4">
+              {tabBar}
               <div className="rounded-2xl border border-cyan-300/25 bg-slate-950/70 p-4">
                 <h2 className="font-display text-sm uppercase tracking-[0.16em] text-white">Your video</h2>
                 <p className="mt-1 text-[11px] text-slate-500">
@@ -450,6 +502,7 @@ export default function CampaignEditorPage() {
                   </Button>
                 ) : null}
               </div>
+              {tab === "clip" ? (
               <ClipInspector
               segment={selected}
               clipNumber={1}
@@ -475,6 +528,11 @@ export default function CampaignEditorPage() {
               onDuplicate={() => runOp({ op: "duplicate", payload: { segment_id: selected.id } })}
               onRemove={() => runOp({ op: "remove", payload: { segment_id: selected.id } })}
                   />
+              ) : tab === "text" ? (
+                textPanel
+              ) : (
+                musicPanel
+              )}
             </div>
           </div>
         ) : (
@@ -501,7 +559,12 @@ export default function CampaignEditorPage() {
                 musicUrl={musicUrl}
               />
               <div className="space-y-4">
-                {selected ? (
+                {tabBar}
+                {tab === "text" ? (
+                  textPanel
+                ) : tab === "music" ? (
+                  musicPanel
+                ) : selected ? (
                   <ClipInspector
                     segment={selected}
                     clipNumber={selectedIndex + 1}
