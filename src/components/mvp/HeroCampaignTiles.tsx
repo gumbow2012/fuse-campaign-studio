@@ -13,11 +13,6 @@ import { track } from "@/lib/analytics/track";
  * muted + inline; `prefers-reduced-motion` keeps the poster frame still.
  */
 
-function builderHref(templateId?: string | null) {
-  const id = templateId ? String(templateId) : "";
-  return id ? `/app/templates?template=${encodeURIComponent(id)}` : "/app/templates";
-}
-
 function useReducedMotion() {
   const [reduced, setReduced] = useState(false);
   useEffect(() => {

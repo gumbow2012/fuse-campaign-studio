@@ -26,10 +26,18 @@ import {
   reorderTemplateMedia,
   setTemplateMediaFeatured,
   setTemplateMediaPublished,
+  updateTemplateMediaCategory,
   updateTemplateMediaLabel,
   uploadTemplateMediaFile,
   type AdminTemplateMediaRow,
 } from "@/services/templateDetailPage";
+
+const CATEGORY_OPTIONS = [
+  { value: "", label: "No category" },
+  { value: "full_body", label: "Full-body" },
+  { value: "product_detail", label: "Product detail" },
+  { value: "lifestyle", label: "Lifestyle" },
+] as const;
 
 function errorMessage(error: unknown) {
   return error instanceof Error ? error.message : "Something went wrong";
@@ -39,6 +47,7 @@ export default function AdminTemplateMediaManager({ templateId }: { templateId: 
   const queryClient = useQueryClient();
   const fileRef = useRef<HTMLInputElement | null>(null);
   const [label, setLabel] = useState("");
+  const [category, setCategory] = useState("");
   const [uploading, setUploading] = useState(false);
   const [dragId, setDragId] = useState<string | null>(null);
   const [order, setOrder] = useState<string[] | null>(null);
@@ -81,6 +90,7 @@ export default function AdminTemplateMediaManager({ templateId }: { templateId: 
         sourcePath: path,
         mediaType,
         label: label.trim() || file.name.replace(/\.[^.]+$/, ""),
+        category: category || null,
       });
       setLabel("");
       toast({ title: "Example added" });
@@ -125,6 +135,18 @@ export default function AdminTemplateMediaManager({ templateId }: { templateId: 
             placeholder="Label (optional)"
             className="h-9 w-40 border-white/10 bg-black/40 text-xs text-white"
           />
+          <select
+            value={category}
+            onChange={(event) => setCategory(event.target.value)}
+            aria-label="Shot category for the next upload"
+            className="h-9 rounded-md border border-white/10 bg-black/40 px-2 text-xs text-white"
+          >
+            {CATEGORY_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
           <input
             ref={fileRef}
             type="file"
@@ -189,6 +211,21 @@ export default function AdminTemplateMediaManager({ templateId }: { templateId: 
                   }}
                   className="h-8 border-white/10 bg-black/40 text-xs text-white"
                 />
+                <select
+                  value={row.category ?? ""}
+                  aria-label="Shot category"
+                  onChange={(event) => {
+                    const next = event.target.value;
+                    mutate.mutate(() => updateTemplateMediaCategory(row.id, next || null));
+                  }}
+                  className="mt-1 h-7 rounded-md border border-white/10 bg-black/40 px-1.5 text-[11px] text-white"
+                >
+                  {CATEGORY_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
                 <p className="mt-1 font-mono text-[9px] uppercase tracking-[0.2em] text-slate-500">
                   {row.media_type}
                   {row.is_featured ? " · featured" : ""}
