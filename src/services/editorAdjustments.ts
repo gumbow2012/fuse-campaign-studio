@@ -553,7 +553,10 @@ export function buildRenderSpec(adjustments: Adjustments): RenderSpec {
     spec.transform.rotate === 0 &&
     !spec.transform.flip &&
     spec.transform.fit === "contain" &&
-    spec.transform.aspect === null;
+    spec.transform.aspect === null &&
+    motionIsNeutral(motion) &&
+    audioIsNeutral(audio);
+
 
   return spec;
 }
