@@ -11,6 +11,7 @@ import { deriveTemplateFit } from "@/lib/brandTemplateFit";
 import TemplateFitBadge from "@/components/brand/TemplateFitBadge";
 import TemplateRequirementNudge from "@/components/brand/TemplateRequirementNudge";
 import FavoriteTemplateButton from "@/components/templates/FavoriteTemplateButton";
+import TemplatePreviewGallery from "@/components/templates/TemplatePreviewGallery";
 import { useTemplateFavorites } from "@/hooks/useTemplateFavorites";
 import { cn } from "@/lib/utils";
 import type { ApiTemplate } from "@/services/fuseApi";
@@ -124,7 +125,15 @@ export default function TemplateDetailDialog({
       <DialogContent className="max-w-3xl border-white/10 bg-slate-950/95 p-0">
         <div className="grid gap-0 md:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)]">
           <div className="overflow-hidden bg-black md:rounded-l-lg">
-            <DetailMedia template={template} className="aspect-[9/16] h-full w-full object-cover" />
+            {/* Preview Gallery — signed media fetched when the dialog opens. */}
+            <TemplatePreviewGallery
+              templateId={templateId}
+              enabled={open}
+              fallbackUrl={template.preview_url ?? null}
+              fallbackIsVideo={isVideoAsset(template)}
+              frameClassName="aspect-[9/16] w-full"
+              className="h-full"
+            />
           </div>
 
           <div className="space-y-5 p-6">
