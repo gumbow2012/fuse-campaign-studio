@@ -564,6 +564,23 @@ export default function CampaignEditorPage() {
                 ) : null}
               </div>
               {tab === "clip" ? (
+                mode === "basic" ? (
+                  <BasicInspector
+                    segment={selected}
+                    clipNumber={1}
+                    clipTotal={active.length}
+                    onAdjust={onAdjust}
+                    onRecord={onRecordAdjust}
+                    onResetAll={() => resetAdjust(selected.id, "clip")}
+                    onVolume={(volume) => runOp({ op: "volume", payload: { segment_id: selected.id, volume } })}
+                    onMute={(muted) => runOp({ op: "mute", payload: { segment_id: selected.id, muted } })}
+                    onTrim={(start, end) => onTrim(selected.id, start, end)}
+                    onTrimCommit={(start, end) => onTrimCommit(selected.id, start, end)}
+                    onAddText={addText}
+                    onAddMusic={() => setTab("music")}
+                    onOpenAdvanced={requestAdvanced}
+                  />
+                ) : (
               <ClipInspector
               segment={selected}
               clipNumber={1}
@@ -589,6 +606,7 @@ export default function CampaignEditorPage() {
               onDuplicate={() => runOp({ op: "duplicate", payload: { segment_id: selected.id } })}
               onRemove={() => runOp({ op: "remove", payload: { segment_id: selected.id } })}
                   />
+                )
               ) : tab === "text" ? (
                 textPanel
               ) : (
@@ -664,6 +682,23 @@ export default function CampaignEditorPage() {
                 ) : tab === "music" ? (
                   musicPanel
                 ) : selected ? (
+                  mode === "basic" ? (
+                    <BasicInspector
+                      segment={selected}
+                      clipNumber={selectedIndex + 1}
+                      clipTotal={active.length}
+                      onAdjust={onAdjust}
+                      onRecord={onRecordAdjust}
+                      onResetAll={() => resetAdjust(selected.id, "clip")}
+                      onVolume={(volume) => runOp({ op: "volume", payload: { segment_id: selected.id, volume } })}
+                      onMute={(muted) => runOp({ op: "mute", payload: { segment_id: selected.id, muted } })}
+                      onTrim={(start, end) => onTrim(selected.id, start, end)}
+                      onTrimCommit={(start, end) => onTrimCommit(selected.id, start, end)}
+                      onAddText={addText}
+                      onAddMusic={() => setTab("music")}
+                      onOpenAdvanced={requestAdvanced}
+                    />
+                  ) : (
                   <ClipInspector
                     segment={selected}
                     clipNumber={selectedIndex + 1}
@@ -689,6 +724,7 @@ export default function CampaignEditorPage() {
                     onDuplicate={() => runOp({ op: "duplicate", payload: { segment_id: selected.id } })}
                     onRemove={() => runOp({ op: "remove", payload: { segment_id: selected.id } })}
                   />
+                  )
                 ) : (
                   <div className="rounded-2xl border border-white/10 bg-slate-950/60 p-4 text-sm text-slate-400">
                     Tap a clip on the timeline to edit it.
@@ -716,6 +752,29 @@ export default function CampaignEditorPage() {
           <ArrowRight className="ml-2 h-4 w-4" />
         </Button>
       </div>
+
+      {saveState === "error" ? (
+        <div className="fixed bottom-24 left-1/2 z-50 flex -translate-x-1/2 items-center gap-3 rounded-xl border border-amber-300/40 bg-slate-950/95 px-4 py-2.5 text-[12px] text-amber-100 shadow-lg md:bottom-6">
+          <span>{saveError ?? "We couldn't save your latest change."} Your edits are still here.</span>
+          <button
+            type="button"
+            onClick={retrySave}
+            className="rounded-lg border border-amber-300/50 px-2 py-1 font-display text-[10px] uppercase tracking-[0.14em]"
+          >
+            Retry
+          </button>
+        </div>
+      ) : null}
+
+      <AdvancedModeDialog
+        open={advancedPromptOpen}
+        onOpenChange={setAdvancedPromptOpen}
+        onConfirm={(dontShowAgain) => {
+          if (dontShowAgain) writeAdvancedPromptHidden(true);
+          setAdvancedPromptOpen(false);
+          applyMode("advanced");
+        }}
+      />
 
       <ExportModal
         open={exportOpen}
