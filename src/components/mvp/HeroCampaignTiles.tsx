@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import type { Entry } from "@/lib/homeMediaAllocator";
+import { templateDetailPath } from "@/lib/templateSlug";
 import { track } from "@/lib/analytics/track";
 
 /**
@@ -153,7 +154,7 @@ export default function HeroCampaignTiles({
         return (
           <Link
             key={`hero-tile-${templateId}-${index}`}
-            to={builderHref(templateId)}
+            to={templateDetailPath(entry.template)}
             onClick={() =>
               track("homepage_campaign_preview_click", { template_id: templateId, slot: index })
             }

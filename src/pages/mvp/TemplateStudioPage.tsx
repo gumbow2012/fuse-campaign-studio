@@ -120,6 +120,7 @@ import { useCampaignHistory } from "@/hooks/useCampaignHistory";
 import { formatCampaignOutputs, formatCampaignOutputsLong } from "@/lib/campaignOutputs";
 import { campaignDisplayName } from "@/lib/campaignDisplayName";
 import CampaignTile from "@/components/mvp/CampaignTile";
+import { templateDetailPath } from "@/lib/templateSlug";
 
 
 /**
@@ -3187,16 +3188,15 @@ export default function TemplateStudioPage() {
                         toggleBatchSelection(template.id);
                         return;
                       }
-                      track("campaign_select", { template_id: template.id });
-                      track("campaign_builder_open", { template_id: template.id });
-                      handleTemplateSelect(template.id);
+                      track("template_view", { template_id: template.id });
+                      navigate(templateDetailPath(template));
                     }}
                     onDetails={
                       selectMode
                         ? undefined
                         : () => {
                             track("template_view", { template_id: template.id });
-                            setDetailTemplateId(template.id);
+                            navigate(templateDetailPath(template));
                           }
                     }
                     onImpression={() => {
