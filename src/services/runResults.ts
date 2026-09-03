@@ -59,6 +59,10 @@ function normalize(raw: unknown, runId: string): RunResults {
     failed_steps: failed
       .filter((step) => typeof step.step_id === "string" && step.step_id)
       .map((step) => ({ step_id: String(step.step_id), node_id: (step.node_id as string | null) ?? null })),
+    error_summary:
+      typeof body.error_summary === "string" && body.error_summary.trim() ? body.error_summary.trim() : null,
+    is_transient: Boolean(body.is_transient),
+    retry_count: Number(body.retry_count ?? 0) || 0,
   };
 }
 
@@ -71,8 +75,28 @@ export async function fetchRunResults(runId: string): Promise<RunResults> {
   return normalize(data, runId);
 }
 
-/** Free retry of one failed step. Retried clips land in the editor's Available Media. */
-export async function rerunFailedStep(stepId: string): Promise<void> {
-  const { error } = await supabase.functions.invoke("rerun-step", { body: { step_id: stepId } });
-  if (error) throw new Error(error.message || "We couldn't retry that output.");
+export type RetryFailedRunResult = {
+  status: string;
+  retried: number;
+  reset_steps: number;
+  resumed: boolean;
+};
+
+/**
+ * Free retry of every failed node in a run. Completed outputs are never touched
+ * or re-charged. Retried clips land in the editor's Available Media.
+ */
+export async function retryFailedRun(runId: string): Promise<RetryFailedRunResult> {
+  const { data, error } = await supabase.functions.invoke("retry-failed-run", {
+    body: { run_id: runId },
+  });
+  if (error) throw new Error(error.message || "We couldn't retry those outputs.");
+  const body = (data ?? {}) as Record<string, unknown>;
+  return {
+    status: String(body.status ?? "running"),
+    retried: Number(body.retried ?? 0) || 0,
+    reset_steps: Number(body.reset_steps ?? 0) || 0,
+    resumed: Boolean(body.resumed),
+  };
 }
+
