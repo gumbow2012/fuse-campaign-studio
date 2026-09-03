@@ -12,12 +12,15 @@ import { supabase } from "@/integrations/supabase/client";
 
 export type TemplateMediaType = "image" | "video";
 
+export type TemplateMediaCategory = "full_body" | "product_detail" | "lifestyle";
+
 export interface TemplateGalleryItem {
   id: string;
   media_type: TemplateMediaType;
   url: string;
   poster_url: string | null;
   label: string | null;
+  category: string | null;
   is_primary: boolean;
 }
 
@@ -33,6 +36,7 @@ export interface TemplateDetailPageData {
   required_inputs: Array<{ name: string; expected: TemplateMediaType | string }>;
   est_generation_seconds: number | null;
   allow_customer_edit: boolean;
+  hero: { media_type: TemplateMediaType; url: string; poster_url: string | null } | null;
   featured: { media_type: TemplateMediaType; url: string; poster_url: string | null } | null;
   gallery: TemplateGalleryItem[];
 }
@@ -56,6 +60,7 @@ function normalizeGalleryItem(raw: unknown, index: number): TemplateGalleryItem 
     url,
     poster_url: str(row.poster_url) || null,
     label: str(row.label) || null,
+    category: str(row.category) || null,
     is_primary: row.is_primary === true,
   };
 }
@@ -69,6 +74,8 @@ function normalizeDetail(raw: unknown): TemplateDetailPageData | null {
 
   const featuredRaw = row.featured as Record<string, unknown> | null | undefined;
   const featuredUrl = featuredRaw ? str(featuredRaw.url) : "";
+  const heroRaw = (row.hero ?? row.featured) as Record<string, unknown> | null | undefined;
+  const heroUrl = heroRaw ? str(heroRaw.url) : "";
 
   return {
     id,
@@ -93,6 +100,13 @@ function normalizeDetail(raw: unknown): TemplateDetailPageData | null {
     est_generation_seconds:
       row.est_generation_seconds == null ? null : Number(row.est_generation_seconds) || 0,
     allow_customer_edit: row.allow_customer_edit === true,
+    hero: heroUrl
+      ? {
+          media_type: mediaType(heroRaw?.media_type),
+          url: heroUrl,
+          poster_url: str(heroRaw?.poster_url) || null,
+        }
+      : null,
     featured: featuredUrl
       ? {
           media_type: mediaType(featuredRaw?.media_type),
@@ -130,6 +144,7 @@ export interface AdminTemplateMediaRow {
   url: string | null;
   poster_url: string | null;
   label: string | null;
+  category: string | null;
   published: boolean;
   is_featured: boolean;
   sort_order: number;
@@ -146,6 +161,7 @@ function normalizeAdminRow(raw: unknown, index: number): AdminTemplateMediaRow |
     url: str(row.url) || str(row.signed_url) || null,
     poster_url: str(row.poster_url) || null,
     label: str(row.label) || null,
+    category: str(row.category) || null,
     published: row.published !== false,
     is_featured: row.is_featured === true || row.is_primary === true,
     sort_order: Number(row.sort_order ?? index) || 0,
@@ -202,6 +218,7 @@ export async function addTemplateMedia(input: {
   sourcePath: string;
   mediaType: TemplateMediaType;
   label: string;
+  category?: string | null;
   posterPath?: string | null;
 }) {
   return mediaOp({
@@ -210,6 +227,7 @@ export async function addTemplateMedia(input: {
     source_path: input.sourcePath,
     media_type: input.mediaType,
     label: input.label,
+    ...(input.category ? { category: input.category } : {}),
     ...(input.posterPath ? { poster_path: input.posterPath } : {}),
   });
 }
@@ -220,6 +238,10 @@ export async function reorderTemplateMedia(templateId: string, order: string[]) 
 
 export async function updateTemplateMediaLabel(id: string, label: string) {
   return mediaOp({ op: "update", id, label });
+}
+
+export async function updateTemplateMediaCategory(id: string, category: string | null) {
+  return mediaOp({ op: "update", id, category });
 }
 
 export async function setTemplateMediaPublished(id: string, published: boolean) {
