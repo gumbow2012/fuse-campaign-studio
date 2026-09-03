@@ -3593,6 +3593,17 @@ export default function TemplateStudioPage() {
 
               {result?.status === "complete" ? (
                 <div className="mt-6 space-y-5">
+                  {/* Additive: editor entry point once the run is done. */}
+                  <CampaignReadyBanner
+                    jobId={activeRunId}
+                    videoCount={completedVideoOutputCount}
+                    failedCount={Math.max(0, expectedVideoOutputCount - completedVideoOutputCount)}
+                    onViewOutputs={() => {
+                      outputsGridRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+                    }}
+                  />
+                  <div ref={outputsGridRef} />
+
                   <CampaignResults
                     outputs={result.outputs}
                     onDownload={(output, index) => {
