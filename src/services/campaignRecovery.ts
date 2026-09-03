@@ -48,7 +48,7 @@ export async function recoverCampaignOutputs(jobId: string): Promise<CampaignRec
   const failed = Array.isArray(payload.failed_outputs) ? payload.failed_outputs : [];
 
   const readyOutputs: RecoveredOutput[] = ready
-    .map((item, index) => {
+    .map((item, index): RecoveredOutput | null => {
       const row = (item ?? {}) as Record<string, unknown>;
       const url = typeof row.url === "string" ? row.url : "";
       if (!url) return null;
