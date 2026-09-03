@@ -33,7 +33,6 @@ import {
 import { PerformanceBlock, PerformanceDisclaimer } from "@/components/TemplatePerformance";
 import HeroCampaignTiles from "@/components/mvp/HeroCampaignTiles";
 import HeroWorkflowAnimation from "@/components/mvp/HeroWorkflowAnimation";
-import NewDropsShelf from "@/components/mvp/NewDropsShelf";
 import FeaturedCollabSection from "@/components/mvp/FeaturedCollabSection";
 
 import { track } from "@/lib/analytics/track";
@@ -469,22 +468,8 @@ export default function HomePage() {
   }, [curatedShelves, trendingRanked, heroPair]);
 
 
-  /**
-   * NEW DROPS fill — other eligible LIVE campaigns (valid preview media only)
-   * used to reach the right edge of the rail. Never badged as new; timestamps
-   * and merchandising are untouched.
-   */
-  const newDropsFill = useMemo<Entry[]>(() => {
-    const claimed = new Set(newToday.map((entry) => String(entry.template.id ?? "")));
-    return templates
-      .filter((template) => !claimed.has(String(template.id ?? "")))
-      .map((template) => {
-        const media = resolveMedia(template);
-        return media ? ({ template, media } as Entry) : null;
-      })
-      .filter(Boolean as unknown as (value: Entry | null) => value is Entry)
-      .slice(0, 14);
-  }, [templates, newToday]);
+
+
 
   /** Hero is pinned to two specific templates; fall back to the allocator. */
 
@@ -973,22 +958,6 @@ export default function HomePage() {
       {/* 1.35 · EXCLUSIVE CREATOR COLLABS — hidden when no active drop. */}
       <FeaturedCollabSection />
 
-      {/* 1.4 · NEW DROPS — <lg: media-first rail; lg+: previous desktop shelf. */}
-      <div className="lg:hidden">
-        <NewDropsShelf entries={newToday} fill={newDropsFill} />
-      </div>
-      <div className="hidden lg:block">
-        <Shelf
-          id="new-today"
-          label="New Drops"
-          heading="Just dropped"
-          description="The newest campaigns ready to run."
-          entries={newToday.length ? newToday : newDropsFill}
-          perfMap={perfMap}
-          runsMap={popularity}
-          badge={{ tone: "new", label: "New" }}
-        />
-      </div>
 
 
       {/* 1.6 · HOW IT WORKS — compact row, no giant cards */}
