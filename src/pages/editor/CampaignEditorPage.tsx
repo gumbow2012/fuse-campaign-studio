@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { ArrowLeft, ArrowRight, Check, Download, Loader2, Redo2, Undo2 } from "lucide-react";
+import { ArrowLeft, ArrowRight, Check, Download, Loader2, Redo2, Sliders, Undo2 } from "lucide-react";
 import SiteShell from "@/components/mvp/SiteShell";
 import PageMeta from "@/components/mvp/PageMeta";
 import { Button } from "@/components/ui/button";
@@ -12,6 +12,15 @@ import TextInspector from "@/components/editor/inspector/TextInspector";
 import MusicPanel from "@/components/editor/inspector/MusicPanel";
 import UnusedClips from "@/components/editor/UnusedClips";
 import ExportModal from "@/components/editor/ExportModal";
+import BasicInspector from "@/components/editor/inspector/BasicInspector";
+import AdvancedModeDialog from "@/components/editor/AdvancedModeDialog";
+import {
+  readAdvancedPromptHidden,
+  readEditorMode,
+  writeAdvancedPromptHidden,
+  writeEditorMode,
+  type EditorMode,
+} from "@/services/editorMode";
 import { useCampaignEditor } from "@/hooks/useCampaignEditor";
 import { useCampaignExport } from "@/hooks/useCampaignExport";
 import { clipDurationMs, formatSeconds, formatTimecode } from "@/services/campaignEditor";
@@ -50,6 +59,8 @@ export default function CampaignEditorPage() {
     loading,
     loadError,
     saveState,
+    saveError,
+    retrySave,
     selectedId,
     setSelectedId,
     runOp,
@@ -110,6 +121,29 @@ export default function CampaignEditorPage() {
   const [exportOpen, setExportOpen] = useState(false);
   const [scope, setScope] = useState<"clip" | "all">("clip");
   const [clipboard, setClipboard] = useState<Adjustments | null>(null);
+  /** Every project opens straight into BASIC; the choice is remembered per project. */
+  const [mode, setMode] = useState<EditorMode>(() => readEditorMode(projectId));
+  const [advancedPromptOpen, setAdvancedPromptOpen] = useState(false);
+
+  useEffect(() => {
+    setMode(readEditorMode(projectId));
+  }, [projectId]);
+
+  const applyMode = useCallback(
+    (next: EditorMode) => {
+      setMode(next);
+      writeEditorMode(projectId, next);
+    },
+    [projectId],
+  );
+
+  const requestAdvanced = useCallback(() => {
+    if (readAdvancedPromptHidden()) {
+      applyMode("advanced");
+      return;
+    }
+    setAdvancedPromptOpen(true);
+  }, [applyMode]);
   const trimDraftRef = useRef<{ id: string; start: number; end: number } | null>(null);
 
   const selected = useMemo(
@@ -328,9 +362,11 @@ export default function CampaignEditorPage() {
       ? "Saving…"
       : saveState === "saved"
         ? "Saved"
-        : saveState === "error"
-          ? "Retrying…"
-          : "";
+        : saveState === "dirty"
+          ? "Unsaved changes"
+          : saveState === "error"
+            ? "Couldn't save"
+            : "";
 
   if (loading) {
     return (
@@ -407,6 +443,29 @@ export default function CampaignEditorPage() {
               {saveState === "saved" ? <Check className="h-3 w-3 text-cyan-300" /> : null}
               {saveLabel}
             </span>
+            {saveState === "error" ? (
+              <button
+                type="button"
+                onClick={retrySave}
+                className="rounded-lg border border-amber-300/40 bg-amber-400/10 px-2 py-1 text-[11px] text-amber-100"
+              >
+                Retry
+              </button>
+            ) : null}
+            <span
+              className="hidden rounded-lg border border-white/10 bg-white/[0.03] px-2 py-1 font-display text-[10px] uppercase tracking-[0.16em] text-slate-300 sm:inline-block"
+              aria-label={`Editor mode: ${mode}`}
+            >
+              {mode === "basic" ? "Basic" : "Advanced"}
+            </span>
+            <button
+              type="button"
+              onClick={() => (mode === "basic" ? requestAdvanced() : applyMode("basic"))}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/[0.03] px-2.5 py-1.5 text-[11px] text-slate-300 hover:border-cyan-300/50 hover:text-cyan-100"
+            >
+              <Sliders className="h-3.5 w-3.5" />
+              {mode === "basic" ? "Advanced editor" : "Basic editor"}
+            </button>
             <button
               type="button"
               aria-label="Undo"
@@ -505,6 +564,23 @@ export default function CampaignEditorPage() {
                 ) : null}
               </div>
               {tab === "clip" ? (
+                mode === "basic" ? (
+                  <BasicInspector
+                    segment={selected}
+                    clipNumber={1}
+                    clipTotal={active.length}
+                    onAdjust={onAdjust}
+                    onRecord={onRecordAdjust}
+                    onResetAll={() => resetAdjust(selected.id, "clip")}
+                    onVolume={(volume) => runOp({ op: "volume", payload: { segment_id: selected.id, volume } })}
+                    onMute={(muted) => runOp({ op: "mute", payload: { segment_id: selected.id, muted } })}
+                    onTrim={(start, end) => onTrim(selected.id, start, end)}
+                    onTrimCommit={(start, end) => onTrimCommit(selected.id, start, end)}
+                    onAddText={addText}
+                    onAddMusic={() => setTab("music")}
+                    onOpenAdvanced={requestAdvanced}
+                  />
+                ) : (
               <ClipInspector
               segment={selected}
               clipNumber={1}
@@ -530,6 +606,7 @@ export default function CampaignEditorPage() {
               onDuplicate={() => runOp({ op: "duplicate", payload: { segment_id: selected.id } })}
               onRemove={() => runOp({ op: "remove", payload: { segment_id: selected.id } })}
                   />
+                )
               ) : tab === "text" ? (
                 textPanel
               ) : (
@@ -605,6 +682,23 @@ export default function CampaignEditorPage() {
                 ) : tab === "music" ? (
                   musicPanel
                 ) : selected ? (
+                  mode === "basic" ? (
+                    <BasicInspector
+                      segment={selected}
+                      clipNumber={selectedIndex + 1}
+                      clipTotal={active.length}
+                      onAdjust={onAdjust}
+                      onRecord={onRecordAdjust}
+                      onResetAll={() => resetAdjust(selected.id, "clip")}
+                      onVolume={(volume) => runOp({ op: "volume", payload: { segment_id: selected.id, volume } })}
+                      onMute={(muted) => runOp({ op: "mute", payload: { segment_id: selected.id, muted } })}
+                      onTrim={(start, end) => onTrim(selected.id, start, end)}
+                      onTrimCommit={(start, end) => onTrimCommit(selected.id, start, end)}
+                      onAddText={addText}
+                      onAddMusic={() => setTab("music")}
+                      onOpenAdvanced={requestAdvanced}
+                    />
+                  ) : (
                   <ClipInspector
                     segment={selected}
                     clipNumber={selectedIndex + 1}
@@ -630,6 +724,7 @@ export default function CampaignEditorPage() {
                     onDuplicate={() => runOp({ op: "duplicate", payload: { segment_id: selected.id } })}
                     onRemove={() => runOp({ op: "remove", payload: { segment_id: selected.id } })}
                   />
+                  )
                 ) : (
                   <div className="rounded-2xl border border-white/10 bg-slate-950/60 p-4 text-sm text-slate-400">
                     Tap a clip on the timeline to edit it.
@@ -657,6 +752,29 @@ export default function CampaignEditorPage() {
           <ArrowRight className="ml-2 h-4 w-4" />
         </Button>
       </div>
+
+      {saveState === "error" ? (
+        <div className="fixed bottom-24 left-1/2 z-50 flex -translate-x-1/2 items-center gap-3 rounded-xl border border-amber-300/40 bg-slate-950/95 px-4 py-2.5 text-[12px] text-amber-100 shadow-lg md:bottom-6">
+          <span>{saveError ?? "We couldn't save your latest change."} Your edits are still here.</span>
+          <button
+            type="button"
+            onClick={retrySave}
+            className="rounded-lg border border-amber-300/50 px-2 py-1 font-display text-[10px] uppercase tracking-[0.14em]"
+          >
+            Retry
+          </button>
+        </div>
+      ) : null}
+
+      <AdvancedModeDialog
+        open={advancedPromptOpen}
+        onOpenChange={setAdvancedPromptOpen}
+        onConfirm={(dontShowAgain) => {
+          if (dontShowAgain) writeAdvancedPromptHidden(true);
+          setAdvancedPromptOpen(false);
+          applyMode("advanced");
+        }}
+      />
 
       <ExportModal
         open={exportOpen}
