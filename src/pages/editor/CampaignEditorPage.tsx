@@ -138,6 +138,8 @@ export default function CampaignEditorPage() {
       <PageMeta
         title="Campaign Editor · FUSE"
         description="Trim, reorder and export the video clips your FUSE campaign generated."
+        path={`/editor/${projectId ?? ""}`}
+        noindex
       />
 
       <div className="mx-auto w-full max-w-6xl px-4 pb-32 pt-6 sm:px-6">
