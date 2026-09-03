@@ -208,6 +208,14 @@ export const ASPECT_OPTIONS: { id: FramingAspect; label: string }[] = [
   { id: "16:9", label: "16:9" },
 ];
 
+export const ASPECT_RATIO_VALUES: Record<FramingAspect, number | null> = {
+  original: null,
+  "9:16": 9 / 16,
+  "4:5": 4 / 5,
+  "1:1": 1,
+  "16:9": 16 / 9,
+};
+
 /** Auto-enhance is a fixed, gentle curve — predictable and reversible. */
 export const AUTO_ENHANCE: ColorPatch = {
   exposure: 5,
@@ -305,6 +313,8 @@ export type RenderSpec = {
     rotate: number;
     flip: boolean;
     fit: "contain" | "cover" | "fill";
+    /** Per-clip aspect box (w/h) inside the export frame, null = use the frame. */
+    aspect: number | null;
   };
   overlays: {
     tints: TintOverlay[];
@@ -325,7 +335,6 @@ export function buildRenderSpec(adjustments: Adjustments): RenderSpec {
   const contrast =
     1 +
     (color.contrast / 100) * 0.55 +
-    (color.clarityLike ?? 0) +
     (grain.clarity / 100) * 0.22 +
     (color.whites / 100) * 0.1 -
     (color.blacks / 100) * 0.12 +
@@ -385,6 +394,7 @@ export function buildRenderSpec(adjustments: Adjustments): RenderSpec {
       rotate: round(framing.rotate, 2),
       flip: framing.flip,
       fit: framing.fit === "fill" ? "cover" : framing.fit === "stretch" ? "fill" : "contain",
+      aspect: ASPECT_RATIO_VALUES[framing.aspect] ?? null,
     },
     overlays: {
       tints,
@@ -411,7 +421,8 @@ export function buildRenderSpec(adjustments: Adjustments): RenderSpec {
     spec.transform.offsetY === 0 &&
     spec.transform.rotate === 0 &&
     !spec.transform.flip &&
-    spec.transform.fit === "contain";
+    spec.transform.fit === "contain" &&
+    spec.transform.aspect === null;
 
   return spec;
 }
