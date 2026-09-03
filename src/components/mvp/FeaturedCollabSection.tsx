@@ -8,6 +8,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
+import { templateDetailPath } from "@/lib/templateSlug";
 import { useQuery } from "@tanstack/react-query";
 import { ArrowRight, ImageOff, Play, Timer, Video as VideoIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -15,9 +16,6 @@ import { track } from "@/lib/analytics/track";
 import { campaignDisplayName } from "@/lib/campaignDisplayName";
 import { fetchFeaturedDrop, type FeaturedDropTemplate } from "@/services/featuredDrops";
 
-function runHref(name: string) {
-  return name ? `/app/templates?template=${encodeURIComponent(name)}` : "/app/templates";
-}
 
 /** Countdown while the drop is within 10 days, otherwise a plain end date. */
 function useDropWindow(endsAt: string | null) {
@@ -221,7 +219,7 @@ export default function FeaturedCollabSection() {
           {templates.map((template, index) => (
             <Link
               key={template.id}
-              to={runHref(template.name)}
+              to={templateDetailPath({ name: template.name, id: template.id })}
               aria-label={`Run ${template.name}`}
               onClick={() =>
                 track("homepage_campaign_card_click", {

@@ -32,6 +32,7 @@ import {
 } from "@/services/templatePerformance";
 import { PerformanceBlock, PerformanceDisclaimer } from "@/components/TemplatePerformance";
 import HeroCampaignTiles from "@/components/mvp/HeroCampaignTiles";
+import { templateDetailPath } from "@/lib/templateSlug";
 import HeroWorkflowAnimation from "@/components/mvp/HeroWorkflowAnimation";
 import FeaturedCollabSection from "@/components/mvp/FeaturedCollabSection";
 
@@ -204,7 +205,8 @@ function TemplateCard({
   const outputs = outputLabel(entry.template);
   const vibe = entry.template.category ?? entry.template.tags?.[0] ?? null;
   const templateId = String(entry.template.id ?? "");
-  const templateHref = builderHref(templateId);
+  /** Cards open the template product page — never the builder directly. */
+  const templateHref = templateDetailPath({ name: entry.template.name, id: templateId });
 
 
   return (
@@ -257,7 +259,7 @@ function TemplateCard({
           className="relative z-20 mt-3 h-9 w-full rounded-full bg-cyan-300 text-[12px] font-semibold uppercase tracking-[0.14em] text-slate-950 hover:bg-cyan-200"
         >
           <Link to={templateHref} onClick={() => track("homepage_campaign_card_click", { template_id: templateId })}>
-            Unlock this template →
+            View this template →
           </Link>
         </Button>
       </div>

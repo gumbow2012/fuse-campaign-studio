@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import CampaignPreviewModal from "./CampaignPreviewModal";
+import { templateDetailPath } from "@/lib/templateSlug";
 
 interface Template {
   id: string;
@@ -37,12 +38,9 @@ const DropTemplateCard = ({ template, volLabel }: { template: Template; volLabel
   const [showPreview, setShowPreview] = useState(false);
   const navigate = useNavigate();
 
+  /** Cards open the template product page — the builder opens from there. */
   const handleRunClick = () => {
-    if (template.dbTemplateId) {
-      navigate(`/app/templates/run?templateId=${template.dbTemplateId}`);
-    } else {
-      navigate("/app/templates/run");
-    }
+    navigate(templateDetailPath({ name: template.name, id: template.dbTemplateId ?? template.id }));
   };
   return (
     <>
