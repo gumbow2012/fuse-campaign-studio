@@ -1011,6 +1011,21 @@ export default function TemplateStudioPage() {
         : "running";
   const workspaceTemplateName = openedHistoricalRun?.templateName ?? selectedTemplate?.name ?? null;
 
+  // Editor entry point: how many video deliverables actually landed.
+  const outputsGridRef = useRef<HTMLDivElement | null>(null);
+  const isVideoOutput = (output: RunnerOutput) =>
+    String(output.type ?? "").toLowerCase().includes("video") || /\.(mp4|mov|webm)(\?|$)/i.test(output.url ?? "");
+  const completedVideoOutputCount = (result?.outputs ?? []).filter(isVideoOutput).length;
+  const expectedVideoOutputCount = Math.max(
+    completedVideoOutputCount,
+    (result?.publicGraph?.nodes ?? []).filter((node) =>
+      String((node as { kind?: string; type?: string }).kind ?? (node as { type?: string }).type ?? "")
+        .toLowerCase()
+        .includes("video"),
+    ).length,
+  );
+
+
   // Achievements: a completed campaign is a real signal — evaluate once per run.
   const achievementRunRef = useRef<string | null>(null);
   // P7 — set when a restored/first run auto-starts, consumed on completion.
