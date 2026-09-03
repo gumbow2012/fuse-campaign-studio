@@ -1736,78 +1736,110 @@ export default function GenerationStudio() {
   const assetGrid = (
     rawItems: { id: string; url: string; type: string; generationId: string | null; favorited?: boolean }[],
     empty: string,
+    gridKey = "default",
   ) => {
-    const items = favoritesOnly ? rawItems.filter((item) => item.favorited) : rawItems;
+    const all = favoritesOnly ? rawItems.filter((item) => item.favorited) : rawItems;
+    const shown = gridPages[gridKey] ?? ASSET_GRID_PAGE;
+    const items = all.slice(0, shown);
     const ids = items.map((item) => item.id);
-    if (!items.length) return <p className="text-xs text-muted-foreground">{empty}</p>;
+    if (!all.length) {
+      return (
+        <div className="rounded-xl border border-dashed border-white/12 bg-white/[0.02] p-8 text-center">
+          <p className="text-xs text-muted-foreground">{empty}</p>
+        </div>
+      );
+    }
     return (
-      <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
-        {items.map((item) => {
-          const isSelected = selected.includes(item.id);
-          return (
-            <div
-              key={item.id}
-              className={cn(
-                "group relative overflow-hidden rounded-xl border bg-black/40",
-                isSelected ? "border-cyan-300/70 ring-1 ring-cyan-300/40" : "border-white/10",
-              )}
-            >
-              {item.generationId ? (
-                <button
-                  type="button"
-                  aria-label="Open asset details"
-                  onClick={() => setLightboxId(item.generationId)}
-                  className="block w-full cursor-zoom-in"
-                >
-                  {item.type === "video" ? (
-                    <video src={item.url} className="aspect-square w-full object-cover" muted preload="none" />
-                  ) : (
-                    <img src={item.url} alt="Asset" className="aspect-square w-full object-cover" />
-                  )}
-                </button>
-              ) : item.type === "video" ? (
-                <video src={item.url} className="aspect-square w-full object-cover" muted preload="none" />
-              ) : (
-                <img src={item.url} alt="Asset" className="aspect-square w-full object-cover" />
-              )}
-              <button
-                type="button"
-                aria-label={isSelected ? "Deselect asset" : "Select asset"}
-                onClick={(event) => {
-                  event.stopPropagation();
-                  event.preventDefault();
-                  toggleSelect(item.id, ids, event.shiftKey);
-                }}
-                className="absolute left-1 top-1 z-10 rounded-md bg-black/70 p-1 text-cyan-100"
+      <>
+        <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
+          {items.map((item, index) => {
+            const isSelected = selected.includes(item.id);
+            const preview = (
+              <AssetThumbnail
+                url={item.url}
+                type={item.type}
+                previewUrl={item.previewUrl ?? null}
+                priority={index < 8}
+              />
+            );
+            return (
+              <div
+                key={item.id}
+                className={cn(
+                  "group relative overflow-hidden rounded-xl border bg-black/40",
+                  isSelected ? "border-cyan-300/70 ring-1 ring-cyan-300/40" : "border-white/10",
+                )}
               >
-                {isSelected ? <CheckSquare size={13} /> : <Square size={13} />}
-              </button>
+                {item.generationId ? (
+                  <button
+                    type="button"
+                    aria-label="Open asset details"
+                    onClick={() => setLightboxId(item.generationId)}
+                    className="block w-full cursor-zoom-in"
+                  >
+                    {preview}
+                  </button>
+                ) : (
+                  preview
+                )}
 
-              {item.generationId ? (
-                <FavoriteButton
-                  favorited={item.favorited === true}
-                  size={12}
-                  className="absolute right-1 top-1 z-10 h-6 w-6"
-                  onToggle={() => {
-                    const target = generations.find((entry) => entry.id === item.generationId);
-                    if (target) void toggleFavorite(target);
-                  }}
-                />
-              ) : null}
+                <p className="truncate px-2 py-1.5 text-[10px] text-muted-foreground" title={assetFileName(item.url)}>
+                  {assetFileName(item.url)}
+                </p>
 
-              {item.type === "image" ? (
                 <button
                   type="button"
-                  onClick={() => addReference(item.url)}
-                  className="absolute inset-x-1 bottom-1 rounded-md bg-black/75 py-1 text-[10px] uppercase tracking-wide text-cyan-100 opacity-0 transition-opacity group-hover:opacity-100"
+                  aria-label={isSelected ? "Deselect asset" : "Select asset"}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    event.preventDefault();
+                    toggleSelect(item.id, ids, event.shiftKey);
+                  }}
+                  className="absolute left-1 top-1 z-10 rounded-md bg-black/70 p-1 text-cyan-100"
                 >
-                  Use as ref
+                  {isSelected ? <CheckSquare size={13} /> : <Square size={13} />}
                 </button>
-              ) : null}
-            </div>
-          );
-        })}
-      </div>
+
+                {item.generationId ? (
+                  <FavoriteButton
+                    favorited={item.favorited === true}
+                    size={12}
+                    className="absolute right-1 top-1 z-10 h-6 w-6"
+                    onToggle={() => {
+                      const target = generations.find((entry) => entry.id === item.generationId);
+                      if (target) void toggleFavorite(target);
+                    }}
+                  />
+                ) : null}
+
+                {item.type === "image" ? (
+                  <button
+                    type="button"
+                    onClick={() => addReference(item.url)}
+                    className="absolute inset-x-1 bottom-7 rounded-md bg-black/75 py-1 text-[10px] uppercase tracking-wide text-cyan-100 opacity-0 transition-opacity group-hover:opacity-100"
+                  >
+                    Use as ref
+                  </button>
+                ) : null}
+              </div>
+            );
+          })}
+        </div>
+        {all.length > items.length ? (
+          <div className="mt-4 flex justify-center">
+            <Button
+              type="button"
+              variant="outline"
+              className="border-white/15 bg-white/[0.03]"
+              onClick={() =>
+                setGridPages((prev) => ({ ...prev, [gridKey]: shown + ASSET_GRID_PAGE }))
+              }
+            >
+              Load more ({all.length - items.length} left)
+            </Button>
+          </div>
+        ) : null}
+      </>
     );
   };
 
