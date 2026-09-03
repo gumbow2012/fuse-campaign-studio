@@ -4,6 +4,14 @@
  */
 import { supabase } from "@/integrations/supabase/client";
 import { looseTable } from "@/services/looseTable";
+import { normalizeAdjustments, type Adjustments } from "@/services/editorAdjustments";
+import {
+  normalizeExportSettings,
+  type ExportSettings,
+} from "@/services/exportSettings";
+
+export type TextLayer = Record<string, unknown>;
+export type MusicTrack = Record<string, unknown> | null;
 
 export type EditProject = {
   id: string;
@@ -11,6 +19,11 @@ export type EditProject = {
   aspect_ratio: string | null;
   status: string | null;
   revision: number;
+  export_settings: ExportSettings;
+  /** Overlay text layers — persisted verbatim (text phase). */
+  text_layers: TextLayer[];
+  /** Music track reference + settings (music phase). */
+  music: MusicTrack;
 };
 
 export type EditSegment = {
@@ -26,6 +39,8 @@ export type EditSegment = {
   removed: boolean;
   /** Short-lived signed playback url (expires ~1h). */
   url: string | null;
+  /** Non-destructive per-clip adjustments (framing / color / grain / motion / audio). */
+  adjustments: Adjustments;
 };
 
 export type EditorState = { project: EditProject; segments: EditSegment[] };
@@ -37,7 +52,20 @@ export type EditOp =
   | { op: "volume"; payload: { segment_id: string; volume: number } }
   | { op: "remove"; payload: { segment_id: string } }
   | { op: "restore"; payload: { segment_id: string } }
-  | { op: "duplicate"; payload: { segment_id: string } };
+  | { op: "duplicate"; payload: { segment_id: string } }
+  | {
+      op: "adjust";
+      payload: { segment_id: string; adjustments: Record<string, unknown>; scope: "clip" | "all" };
+    }
+  | { op: "reset_adjust"; payload: { segment_id?: string; scope: "clip" | "all" } }
+  | {
+      op: "set_meta";
+      payload: {
+        export_settings?: ExportSettings;
+        text_layers?: TextLayer[];
+        music?: MusicTrack;
+      };
+    };
 
 export type UpdateResult = {
   status: "ok" | "conflict" | "forbidden" | "not_found" | "error";
@@ -63,6 +91,7 @@ function normalizeSegment(raw: Record<string, unknown>): EditSegment {
     muted: Boolean(raw.muted),
     removed: Boolean(raw.removed),
     url: typeof raw.url === "string" ? raw.url : null,
+    adjustments: normalizeAdjustments(raw.adjustments),
   };
 }
 
@@ -76,6 +105,12 @@ function normalizeState(data: unknown): EditorState {
       aspect_ratio: (project.aspect_ratio as string | null) ?? null,
       status: (project.status as string | null) ?? null,
       revision: Number(project.revision ?? 0) || 0,
+      export_settings: normalizeExportSettings(
+        project.export_settings,
+        (project.aspect_ratio as string | null) ?? null,
+      ),
+      text_layers: Array.isArray(project.text_layers) ? (project.text_layers as TextLayer[]) : [],
+      music: (project.music as MusicTrack) ?? null,
     },
     segments: (payload.segments ?? []).map(normalizeSegment).sort((a, b) => a.position - b.position),
   };
