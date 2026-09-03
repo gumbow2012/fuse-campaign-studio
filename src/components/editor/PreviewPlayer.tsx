@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Maximize2, Pause, Play, Volume2, VolumeX } from "lucide-react";
 import { clipDurationMs, formatTimecode, resolveAspect, type EditSegment } from "@/services/campaignEditor";
 import { cn } from "@/lib/utils";
+import { buildRenderSpec } from "@/services/editorAdjustments";
+import { frameBoxStyle, overlayLayersFor, videoStyleFor } from "@/lib/editorPreviewStyle";
 
 /**
  * Client-side sequenced preview: plays each active segment inside its trim
