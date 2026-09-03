@@ -22,13 +22,13 @@ import {
 import type { BrandProfile } from "@/services/brandProfiles";
 import type { AvatarProfile } from "@/services/avatarProfiles";
 import {
-import AssetThumbnail from "@/components/studio/AssetThumbnail";
   buildBrandAssetLibrary,
   type BrandAssetCategory,
   type BrandAssetGroup,
   type BrandAssetItem,
   type BrandAssetProductDetail,
 } from "@/services/brandAssetLibrary";
+import AssetThumbnail from "@/components/studio/AssetThumbnail";
 
 const FILTERS: { id: BrandAssetCategory | "all"; label: string }[] = [
   { id: "all", label: "All" },
