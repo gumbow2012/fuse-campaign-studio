@@ -166,12 +166,26 @@ export default function RunResultsPage() {
               ) : null}
             </div>
 
-            {retrying || retried.length ? (
+            {retrying || retryStarted ? (
               <p className="mt-3 text-[12px] text-cyan-100">
-                {retried.length} of {results.failed_steps.length} retries started. Retried clips will
-                appear in the editor's “Available Media”, not on your timeline.
+                {retrying ? "Starting your retries…" : "Retry started — your campaign is re-running."} Retried
+                clips will appear in the editor's “Available Media”, not on your timeline.
               </p>
             ) : null}
+
+            {results.failed_steps.length || results.error_summary ? (
+              <div className="mt-4 rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+                <p className="text-sm text-slate-200">
+                  {results.is_transient
+                    ? "Some clips are temporarily unavailable and we're retrying them automatically."
+                    : results.error_summary || "Some clips didn't finish."}
+                </p>
+                <p className="mt-1 text-[12px] text-slate-400">
+                  You're never charged for clips that don't finish.
+                </p>
+              </div>
+            ) : null}
+
 
             <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
               {results.outputs.map((output, index) => (
