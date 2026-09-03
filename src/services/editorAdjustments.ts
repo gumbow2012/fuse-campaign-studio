@@ -403,9 +403,33 @@ export type RenderSpec = {
     vignette: number; // 0..1
     grain: { alpha: number; tile: number; softness: number } | null;
   };
+  /** Time-based motion, resolved per frame by `frameMotionAt`. */
+  motion: {
+    speed: number;
+    reverse: boolean;
+    freezeMs: number;
+    fadeInMs: number;
+    fadeOutMs: number;
+    blurPx: number;
+    panZoom: PanZoomMode;
+    panZoomAmount: number;
+    ease: boolean;
+    stabilizeScale: number;
+  };
+  /** Audio treatment for the mixer / encoder. */
+  audio: {
+    fadeInMs: number;
+    fadeOutMs: number;
+    musicDuck: number;
+    voiceEnhance: boolean;
+    noiseReduction: number;
+    normalize: boolean;
+    detached: boolean;
+  };
   /** Neutral spec → the exporter can stream-copy instead of re-encoding. */
   identity: boolean;
 };
+
 
 const round = (value: number, places = 4) => Number(value.toFixed(places));
 
