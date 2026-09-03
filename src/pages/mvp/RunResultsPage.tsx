@@ -231,7 +231,7 @@ export default function RunResultsPage() {
             {results.failed_steps.length ? (
               <div className="mt-6">
                 <p className="font-display text-[11px] uppercase tracking-[0.18em] text-amber-200">
-                  Needs retry
+                  {retryStarted ? "Re-running" : "Needs retry"}
                 </p>
                 <div className="mt-2 flex flex-wrap gap-2">
                   {results.failed_steps.map((step) => (
@@ -239,17 +239,14 @@ export default function RunResultsPage() {
                       key={step.step_id}
                       className="inline-flex items-center gap-1.5 rounded-xl border border-amber-300/30 bg-amber-400/10 px-2.5 py-1.5 text-[11px] text-amber-100"
                     >
-                      {retried.includes(step.step_id) ? (
-                        <Check className="h-3 w-3" />
-                      ) : (
-                        <AlertTriangle className="h-3 w-3" />
-                      )}
-                      {retried.includes(step.step_id) ? "Retry started" : "Clip needs a retry"}
+                      {retryStarted ? <Check className="h-3 w-3" /> : <AlertTriangle className="h-3 w-3" />}
+                      {retryStarted ? "Retry started" : "Clip needs a retry"}
                     </span>
                   ))}
                 </div>
               </div>
             ) : null}
+
 
             {!results.outputs.length ? (
               <p className="mt-8 text-sm text-slate-400">
