@@ -86,6 +86,7 @@ import CreatorApplyPage from "@/pages/mvp/CreatorApplyPage";
 import CreatorsDirectoryPage from "@/pages/mvp/CreatorsDirectoryPage";
 import ForgotPasswordPage from "@/pages/mvp/ForgotPasswordPage";
 import HomePage from "@/pages/mvp/HomePage";
+import TemplateDetailPage from "@/pages/mvp/TemplateDetailPage";
 import NotFoundPage from "@/pages/mvp/NotFoundPage";
 import ResetPasswordPage from "@/pages/mvp/ResetPasswordPage";
 import TemplateStudioPage from "@/pages/mvp/TemplateStudioPage";
@@ -282,6 +283,7 @@ const App = () => (
 
             <Route path="/dashboard" element={<Navigate to="/app/templates" replace />} />
             <Route path="/templates" element={<Navigate to="/app/templates" replace />} />
+            <Route path="/templates/:slug" element={<TemplateDetailPage />} />
             <Route path="/projects" element={<Navigate to="/app/templates" replace />} />
             <Route path="/projects/:projectId" element={<Navigate to="/app/templates" replace />} />
             <Route path="/app/jobs" element={<Navigate to="/app/templates" replace />} />

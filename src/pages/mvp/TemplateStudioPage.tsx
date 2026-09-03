@@ -120,6 +120,7 @@ import { useCampaignHistory } from "@/hooks/useCampaignHistory";
 import { formatCampaignOutputs, formatCampaignOutputsLong } from "@/lib/campaignOutputs";
 import { campaignDisplayName } from "@/lib/campaignDisplayName";
 import CampaignTile from "@/components/mvp/CampaignTile";
+import { templateDetailPath } from "@/lib/templateSlug";
 
 
 /**
@@ -3195,7 +3196,7 @@ export default function TemplateStudioPage() {
                         ? undefined
                         : () => {
                             track("template_view", { template_id: template.id });
-                            setDetailTemplateId(template.id);
+                            navigate(templateDetailPath(template));
                           }
                     }
                     onImpression={() => {
