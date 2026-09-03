@@ -160,12 +160,20 @@ export function useCampaignEditor(projectId: string | undefined) {
   const [saveState, setSaveState] = useState<SaveState>("idle");
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
+  const [saveError, setSaveError] = useState<string | null>(null);
+
   const revisionRef = useRef(0);
   const segmentsRef = useRef<EditSegment[]>([]);
   const projectRef = useRef<EditProject | null>(null);
   const queueRef = useRef<EditOp[]>([]);
   const flushTimerRef = useRef<number | null>(null);
   const inFlightRef = useRef(false);
+  /**
+   * Monotonic counter of LOCAL intent. A server response may only replace local
+   * state when no newer local edit happened while the request was in flight —
+   * this is what stops a save response from reverting the user's newest change.
+   */
+  const localVersionRef = useRef(0);
   const historyRef = useRef<{ past: HistoryEntry[]; future: HistoryEntry[] }>({ past: [], future: [] });
   const [historyVersion, setHistoryVersion] = useState(0);
 
@@ -179,6 +187,17 @@ export function useCampaignEditor(projectId: string | undefined) {
     revisionRef.current = next.project.revision;
     setSegments(next.segments);
     segmentsRef.current = next.segments;
+  }, []);
+
+  /** Take only the server's revision — never its media/adjustment values. */
+  const adoptRevision = useCallback((serverProject: EditProject) => {
+    revisionRef.current = serverProject.revision;
+    setProject((current) => {
+      if (!current) return current;
+      const next = { ...current, revision: serverProject.revision, status: serverProject.status };
+      projectRef.current = next;
+      return next;
+    });
   }, []);
 
   const reload = useCallback(async () => {
@@ -215,53 +234,90 @@ export function useCampaignEditor(projectId: string | undefined) {
     };
   }, [projectId, adopt]);
 
-  /** Refresh signed urls periodically (they expire ~1h). */
+  /**
+   * Refresh signed playback urls periodically (they expire ~1h).
+   * Source media is immutable: only the urls are merged back, never adjustments.
+   */
   useEffect(() => {
     if (!projectId) return;
-    const timer = window.setInterval(() => void reload(), 40 * 60 * 1000);
+    const timer = window.setInterval(() => {
+      void (async () => {
+        try {
+          const state = await loadEditorState(projectId);
+          const urls = new Map(state.segments.map((segment) => [segment.id, segment.url]));
+          setSegments((current) => {
+            const next = current.map((segment) =>
+              urls.has(segment.id) ? { ...segment, url: urls.get(segment.id) ?? segment.url } : segment,
+            );
+            segmentsRef.current = next;
+            return next;
+          });
+        } catch {
+          /* keep working with the current urls */
+        }
+      })();
+    }, 40 * 60 * 1000);
     return () => window.clearInterval(timer);
-  }, [projectId, reload]);
+  }, [projectId]);
 
   const drain = useCallback(async () => {
     if (!projectId || inFlightRef.current) return;
+    if (!queueRef.current.length) return;
     inFlightRef.current = true;
     setSaveState("saving");
     try {
       while (queueRef.current.length) {
-        const op = queueRef.current.shift() as EditOp;
+        const op = queueRef.current[0];
+        const versionAtSend = localVersionRef.current;
         let result = await applyEditOp(projectId, revisionRef.current, op);
 
+        // Conflict: reconcile ONLY the revision, keep the user's local intent,
+        // then replay this op against the newest revision.
         if (result.status === "conflict" && result.project) {
-          adopt({ project: result.project, segments: result.segments ?? segmentsRef.current });
+          adoptRevision(result.project);
           result = await applyEditOp(projectId, revisionRef.current, op);
         }
 
         if (result.status === "ok" && result.project) {
-          adopt({ project: result.project, segments: result.segments ?? segmentsRef.current });
-        } else if (result.status !== "ok") {
+          queueRef.current.shift();
+          const stale = localVersionRef.current !== versionAtSend || queueRef.current.length > 0;
+          if (stale || !result.segments) {
+            // Newer local edits exist (or no segments echoed) — never overwrite them.
+            adoptRevision(result.project);
+          } else {
+            adopt({ project: result.project, segments: result.segments });
+          }
+          setSaveError(null);
+        } else {
+          // Keep the op queued and the user's work visible — no reload, no revert.
           setSaveState("error");
-          queueRef.current = [];
-          await reload();
+          setSaveError(result.error || "We couldn't save your latest change.");
           return;
         }
       }
       setSaveState("saved");
-    } catch {
+      setSaveError(null);
+    } catch (error) {
       setSaveState("error");
-      queueRef.current = [];
-      await reload();
+      setSaveError(error instanceof Error ? error.message : "We couldn't save your latest change.");
     } finally {
       inFlightRef.current = false;
-      if (queueRef.current.length) void drain();
+      if (queueRef.current.length && saveStateRef.current !== "error") void drain();
     }
-  }, [projectId, adopt, reload]);
+  }, [projectId, adopt, adoptRevision]);
+
+  const saveStateRef = useRef<SaveState>("idle");
+  saveStateRef.current = saveState;
 
   const enqueue = useCallback(
     (op: EditOp, immediate: boolean) => {
-      // Coalesce repeated debounced ops for the same target.
+      // Coalesce repeated debounced ops for the same target so rapid slider
+      // changes resolve to the NEWEST value with a single write.
       if (DEBOUNCED_OPS.has(op.op)) {
         const segmentId = (op.payload as { segment_id?: string }).segment_id;
-        queueRef.current = queueRef.current.filter(
+        const keepHead = inFlightRef.current ? 1 : 0;
+        const head = queueRef.current.slice(0, keepHead);
+        const tail = queueRef.current.slice(keepHead).filter(
           (queued) =>
             !(
               queued.op === op.op &&
@@ -269,14 +325,24 @@ export function useCampaignEditor(projectId: string | undefined) {
               (queued.payload as { scope?: string }).scope === (op.payload as { scope?: string }).scope
             ),
         );
+        queueRef.current = [...head, ...tail];
       }
       queueRef.current.push(op);
-      setSaveState("saving");
+      localVersionRef.current += 1;
+      setSaveState((current) => (current === "saving" ? current : "dirty"));
       if (flushTimerRef.current) window.clearTimeout(flushTimerRef.current);
-      flushTimerRef.current = window.setTimeout(() => void drain(), immediate ? 0 : 500);
+      flushTimerRef.current = window.setTimeout(() => void drain(), immediate ? 0 : 600);
     },
     [drain],
   );
+
+  /** Manual retry after a failed save — the queued ops are still intact. */
+  const retrySave = useCallback(() => {
+    setSaveError(null);
+    setSaveState(queueRef.current.length ? "dirty" : "saved");
+    void drain();
+  }, [drain]);
+
 
   /** Public mutation entry point — optimistic UI first, then autosave. */
   const runOp = useCallback(
