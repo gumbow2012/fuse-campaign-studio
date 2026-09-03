@@ -21,6 +21,8 @@ import { cn } from "@/lib/utils";
 
 /** Deep-links into the Studio workspace using the existing `?run=` flow. */
 function campaignHref(run: CampaignRun) {
+  // A run that didn't finish opens its RESULTS view, never the upload flow.
+  if (run.status === "failed") return `/app/runs/${encodeURIComponent(run.id)}`;
   return `/app/templates?run=${encodeURIComponent(run.id)}`;
 }
 

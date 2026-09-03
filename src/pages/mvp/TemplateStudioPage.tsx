@@ -1161,6 +1161,11 @@ export default function TemplateStudioPage() {
 
   /** Open a previous run directly into the expanded campaign workspace. */
   const handleOpenHistoricalRun = (run: RecentRun) => {
+    // "Didn't finish" runs open their results view instead of the upload flow.
+    if (run.status === "failed") {
+      navigate(`/app/runs/${encodeURIComponent(run.id)}`);
+      return;
+    }
     setJobId(null);
     setInputsExpanded(false);
     setOpenedHistoricalRun(run);

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   activeSegments,
+  availableMedia,
   applyEditOp,
   clipDurationMs,
   loadEditorState,
@@ -70,6 +71,15 @@ function applyLocally(segments: EditSegment[], op: EditOp): EditSegment[] {
       return segments.map((segment) =>
         segment.id === op.payload.segment_id ? { ...segment, removed: true } : segment,
       );
+    case "add_to_timeline": {
+      const nextPosition =
+        segments.filter((segment) => segment.on_timeline).reduce((max, segment) => Math.max(max, segment.position), -1) + 1;
+      return segments.map((segment) =>
+        segment.id === op.payload.segment_id
+          ? { ...segment, on_timeline: true, removed: false, position: nextPosition }
+          : segment,
+      );
+    }
     case "restore":
       return segments.map((segment) =>
         segment.id === op.payload.segment_id ? { ...segment, removed: false } : segment,
@@ -478,6 +488,7 @@ export function useCampaignEditor(projectId: string | undefined) {
   );
 
   const active = useMemo(() => activeSegments(segments), [segments]);
+  const media = useMemo(() => availableMedia(segments), [segments]);
   const unused = useMemo(() => removedSegments(segments), [segments]);
   const durationMs = useMemo(() => totalDurationMs(segments), [segments]);
 
@@ -491,6 +502,7 @@ export function useCampaignEditor(projectId: string | undefined) {
     segments,
     active,
     unused,
+    availableMedia: media,
     durationMs,
     loading,
     loadError,

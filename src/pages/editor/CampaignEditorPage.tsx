@@ -11,6 +11,7 @@ import ClipInspector from "@/components/editor/inspector/ClipInspector";
 import TextInspector from "@/components/editor/inspector/TextInspector";
 import MusicPanel from "@/components/editor/inspector/MusicPanel";
 import UnusedClips from "@/components/editor/UnusedClips";
+import AvailableMedia from "@/components/editor/AvailableMedia";
 import ExportModal from "@/components/editor/ExportModal";
 import BasicInspector from "@/components/editor/inspector/BasicInspector";
 import AdvancedModeDialog from "@/components/editor/AdvancedModeDialog";
@@ -55,6 +56,7 @@ export default function CampaignEditorPage() {
     project,
     active,
     unused,
+    availableMedia,
     durationMs,
     loading,
     loadError,
@@ -397,7 +399,7 @@ export default function CampaignEditorPage() {
     );
   }
 
-  const singleClip = active.length === 1 && unused.length === 0;
+  const singleClip = active.length === 1 && unused.length === 0 && availableMedia.length === 0;
 
   return (
     <SiteShell>
@@ -668,6 +670,11 @@ export default function CampaignEditorPage() {
               onSelectMusic={() => setTab("music")}
               onMusicStart={(startMs) => patchMusic({ startMs })}
               onMusicStartCommit={(startMs) => patchMusic({ startMs }, { label: "music start" })}
+            />
+
+            <AvailableMedia
+              segments={availableMedia}
+              onAdd={(id) => runOp({ op: "add_to_timeline", payload: { segment_id: id } }, { immediate: true })}
             />
 
             <UnusedClips

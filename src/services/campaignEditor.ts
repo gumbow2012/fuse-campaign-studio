@@ -39,6 +39,8 @@ export type EditSegment = {
   volume: number;
   muted: boolean;
   removed: boolean;
+  /** False = attached media that is NOT on the active timeline (Available Media). */
+  on_timeline: boolean;
   /** Short-lived signed playback url (expires ~1h). */
   url: string | null;
   /** Non-destructive per-clip adjustments (framing / color / grain / motion / audio). */
@@ -55,6 +57,7 @@ export type EditOp =
   | { op: "remove"; payload: { segment_id: string } }
   | { op: "restore"; payload: { segment_id: string } }
   | { op: "duplicate"; payload: { segment_id: string } }
+  | { op: "add_to_timeline"; payload: { segment_id: string } }
   | {
       op: "adjust";
       payload: { segment_id: string; adjustments: Record<string, unknown>; scope: "clip" | "all" };
@@ -92,6 +95,7 @@ function normalizeSegment(raw: Record<string, unknown>): EditSegment {
     volume: typeof raw.volume === "number" ? raw.volume : Number(raw.volume ?? 1) || 1,
     muted: Boolean(raw.muted),
     removed: Boolean(raw.removed),
+    on_timeline: raw.on_timeline === undefined || raw.on_timeline === null ? true : Boolean(raw.on_timeline),
     url: typeof raw.url === "string" ? raw.url : null,
     adjustments: normalizeAdjustments(raw.adjustments),
   };
@@ -223,10 +227,14 @@ export async function findEditProjectForRun(executionJobId: string): Promise<Edi
 /* ------------------------------ helpers ------------------------------ */
 
 export const activeSegments = (segments: EditSegment[]) =>
-  segments.filter((s) => !s.removed).sort((a, b) => a.position - b.position);
+  segments.filter((s) => !s.removed && s.on_timeline).sort((a, b) => a.position - b.position);
 
 export const removedSegments = (segments: EditSegment[]) =>
-  segments.filter((s) => s.removed).sort((a, b) => a.position - b.position);
+  segments.filter((s) => s.removed && s.on_timeline).sort((a, b) => a.position - b.position);
+
+/** Attached media that isn't on the timeline yet (e.g. retried outputs). */
+export const availableMedia = (segments: EditSegment[]) =>
+  segments.filter((s) => !s.on_timeline).sort((a, b) => a.position - b.position);
 
 export const clipDurationMs = (segment: EditSegment) =>
   Math.max(0, segment.trim_end_ms - segment.trim_start_ms);
