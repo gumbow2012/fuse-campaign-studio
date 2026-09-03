@@ -65,17 +65,39 @@ export type Grain = {
   bloom: number; // 0..100
 };
 
-/** Reserved for the motion/audio phase — persisted verbatim, never dropped. */
-export type MotionAdjust = Record<string, unknown>;
-export type AudioAdjust = Record<string, unknown>;
+export type PanZoomMode = "none" | "in" | "out" | "left" | "right" | "up" | "down";
+
+export type Motion = {
+  speed: number; // 0.25..4 (1 = source speed)
+  reverse: boolean;
+  freezeMs: number; // hold the final frame, 0..3000
+  fadeInMs: number; // 0..3000
+  fadeOutMs: number;
+  motionBlur: number; // 0..100
+  panZoom: PanZoomMode;
+  panZoomAmount: number; // 0..100
+  ease: boolean; // ease the pan/zoom in and out
+  stabilize: boolean; // gentle crop-in that hides handheld drift
+};
+
+export type Audio = {
+  fadeInMs: number;
+  fadeOutMs: number;
+  musicDuck: number; // 0..100 — how much the music drops under this clip
+  voiceEnhance: boolean;
+  noiseReduction: number; // 0..100
+  normalize: boolean;
+  detached: boolean; // source audio detached (silent) but video kept
+};
 
 export type Adjustments = {
   framing: Framing;
   color: Color;
   grain: Grain;
-  motion: MotionAdjust;
-  audio: AudioAdjust;
+  motion: Motion;
+  audio: Audio;
 };
+
 
 export const DEFAULT_FRAMING: Framing = {
   aspect: "original",
