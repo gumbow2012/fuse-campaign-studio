@@ -85,6 +85,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { uploadRunInputFile } from "@/services/runInputUpload";
 import { cn } from "@/lib/utils";
 import { useNearViewport } from "@/hooks/useNearViewport";
+import AssetThumbnail from "@/components/studio/AssetThumbnail";
 import {
   FieldHelper,
   FusePanel,
@@ -289,6 +290,19 @@ type Generation = {
   createdAt: string | null;
   completedAt: string | null;
 };
+
+const ASSET_GRID_PAGE = 24;
+
+/** Human-readable file name for an asset reference (handles spaces/punctuation). */
+function assetFileName(ref: string): string {
+  const path = ref.split("?")[0];
+  const last = path.split("/").filter(Boolean).pop() ?? "asset";
+  try {
+    return decodeURIComponent(last);
+  } catch {
+    return last;
+  }
+}
 
 /** Prompt + reference urls that produced a generation, read from the stored payload. */
 function generationRecipe(generation: Generation) {
@@ -890,6 +904,8 @@ export default function GenerationStudio() {
   const [confirmSingle, setConfirmSingle] = useState<Generation | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [favoritesOnly, setFavoritesOnly] = useState(false);
+  /** Per-grid page size so we batch-sign one page of thumbnails at a time. */
+  const [gridPages, setGridPages] = useState<Record<string, number>>({});
   const composerRef = useRef<HTMLElement | null>(null);
 
   const [deleting, setDeleting] = useState(false);
@@ -1734,7 +1750,14 @@ export default function GenerationStudio() {
   };
 
   const assetGrid = (
-    rawItems: { id: string; url: string; type: string; generationId: string | null; favorited?: boolean }[],
+    rawItems: {
+      id: string;
+      url: string;
+      type: string;
+      previewUrl?: string | null;
+      generationId: string | null;
+      favorited?: boolean;
+    }[],
     empty: string,
     gridKey = "default",
   ) => {
@@ -2592,12 +2615,12 @@ export default function GenerationStudio() {
                   <SectionLabel hint="Click a tile's checkbox to select — shift-click for a range">
                     Generated outputs
                   </SectionLabel>
-                  {assetGrid(visibleOutputs, "No generated assets yet.")}
+                  {assetGrid(visibleOutputs, "No generated assets yet.", "outputs")}
                 </div>
                 {assetTypeFilter !== "video" ? (
                   <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
                     <SectionLabel>Uploaded references</SectionLabel>
-                    {assetGrid(visibleUploads, "Uploaded references appear here.")}
+                    {assetGrid(visibleUploads, "Uploaded references appear here.", "uploads")}
                   </div>
                 ) : null}
               </TabsContent>
