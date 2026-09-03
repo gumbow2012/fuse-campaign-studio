@@ -750,7 +750,9 @@ export default function TemplateStudioPage() {
   const activeFilterCount = Object.values(perfFilters).filter(Boolean).length;
 
   /** Output-type segment — reads the existing template output_type, no new engine. */
-  const [outputTypeFilter, setOutputTypeFilter] = useState<"all" | "image" | "video">("all");
+  const [outputTypeFilter, setOutputTypeFilter] = useState<"all" | "image" | "video">(
+    () => (readExploreState()?.outputTypeFilter as "all" | "image" | "video") ?? "all",
+  );
 
   const outputTypeCounts = useMemo(() => {
     let image = 0;
@@ -764,7 +766,7 @@ export default function TemplateStudioPage() {
 
   /** RETENTION P1 — favorites (separate from the hidden filter block). */
   const { canFavorite, isFavorite, toggleFavorite, favoriteCount, favoriteIds } = useTemplateFavorites();
-  const [favoritesOnly, setFavoritesOnly] = useState(false);
+  const [favoritesOnly, setFavoritesOnly] = useState(() => readExploreState()?.favoritesOnly === true);
   useEffect(() => {
     if (!canFavorite && favoritesOnly) setFavoritesOnly(false);
   }, [canFavorite, favoritesOnly]);
@@ -773,8 +775,37 @@ export default function TemplateStudioPage() {
    * Feed chips + search — PRESENTATION ONLY. They narrow what is rendered and
    * never reorder the merchandised catalog or touch identifiers.
    */
-  const [feedSearch, setFeedSearch] = useState("");
-  const [feedChip, setFeedChip] = useState<FeedChip>("all");
+  const [feedSearch, setFeedSearch] = useState(() => readExploreState()?.feedSearch ?? "");
+  const [feedChip, setFeedChip] = useState<FeedChip>(
+    () => (readExploreState()?.feedChip as FeedChip) ?? "all",
+  );
+
+  /**
+   * EXPLORE CONTINUITY — filters + scroll survive a trip to a template product
+   * page and back. Presentation only: nothing here touches the catalog order.
+   */
+  useEffect(() => {
+    writeExploreState({ feedSearch, feedChip, outputTypeFilter, favoritesOnly });
+  }, [feedSearch, feedChip, outputTypeFilter, favoritesOnly]);
+
+  useEffect(() => {
+    const saved = readExploreState()?.scrollY;
+    if (typeof saved !== "number" || saved <= 0) return;
+    const frame = window.requestAnimationFrame(() => window.scrollTo({ top: saved }));
+    return () => window.cancelAnimationFrame(frame);
+  }, []);
+
+  useEffect(() => {
+    const persist = () => {
+      const current = readExploreState() ?? {};
+      writeExploreState({ ...current, scrollY: window.scrollY });
+    };
+    window.addEventListener("scroll", persist, { passive: true });
+    return () => {
+      persist();
+      window.removeEventListener("scroll", persist);
+    };
+  }, []);
 
   const matchesFeedChip = useCallback(
     (template: ApiTemplate) => {
