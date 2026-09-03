@@ -468,22 +468,8 @@ export default function HomePage() {
   }, [curatedShelves, trendingRanked, heroPair]);
 
 
-  /**
-   * NEW DROPS fill — other eligible LIVE campaigns (valid preview media only)
-   * used to reach the right edge of the rail. Never badged as new; timestamps
-   * and merchandising are untouched.
-   */
-  const newDropsFill = useMemo<Entry[]>(() => {
-    const claimed = new Set(newToday.map((entry) => String(entry.template.id ?? "")));
-    return templates
-      .filter((template) => !claimed.has(String(template.id ?? "")))
-      .map((template) => {
-        const media = resolveMedia(template);
-        return media ? ({ template, media } as Entry) : null;
-      })
-      .filter(Boolean as unknown as (value: Entry | null) => value is Entry)
-      .slice(0, 14);
-  }, [templates, newToday]);
+
+
 
   /** Hero is pinned to two specific templates; fall back to the allocator. */
 
