@@ -23,6 +23,7 @@ import {
   type LibraryAssetKind,
 } from "@/services/libraryAssets";
 import { cn } from "@/lib/utils";
+import AssetThumbnail from "@/components/studio/AssetThumbnail";
 
 interface LibraryPickerDialogProps {
   /** Compatible kinds for this input; empty means show everything. */
@@ -145,11 +146,10 @@ export default function LibraryPickerDialog({
                   className="group overflow-hidden rounded-2xl border border-white/10 bg-black/30 text-left transition hover:border-cyan-200/50"
                 >
                   <div className="aspect-square overflow-hidden bg-slate-900">
-                    <img
-                      src={asset.url}
-                      alt={asset.name ?? "Library asset"}
-                      loading="lazy"
-                      className="h-full w-full object-cover transition duration-300 group-hover:scale-[1.03]"
+                    <AssetThumbnail
+                      url={asset.url}
+                      type={asset.kind === "video" ? "video" : "image"}
+                      className="transition duration-300 group-hover:scale-[1.03]"
                     />
                   </div>
                   <div className="p-2">

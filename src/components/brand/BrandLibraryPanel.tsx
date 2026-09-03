@@ -22,6 +22,7 @@ import {
 import type { BrandProfile } from "@/services/brandProfiles";
 import type { AvatarProfile } from "@/services/avatarProfiles";
 import {
+import AssetThumbnail from "@/components/studio/AssetThumbnail";
   buildBrandAssetLibrary,
   type BrandAssetCategory,
   type BrandAssetGroup,
@@ -65,15 +66,8 @@ function AssetTile({
         <div className="aspect-square bg-black/40">
           {isSwatch ? (
             <div className="h-full w-full" style={{ background: item.url }} />
-          ) : isVideo ? (
-            <video src={item.url} muted playsInline className="h-full w-full object-cover" />
           ) : (
-            <img
-              src={item.url}
-              alt={item.title}
-              loading="lazy"
-              className="h-full w-full object-cover"
-            />
+            <AssetThumbnail url={item.url} type={isVideo ? "video" : "image"} />
           )}
         </div>
       </button>
