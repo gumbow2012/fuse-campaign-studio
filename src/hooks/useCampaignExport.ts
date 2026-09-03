@@ -26,7 +26,12 @@ export function useCampaignExport(
 ) {
   const [status, setStatus] = useState<ExportStatus>(campaignExport.getStatus());
 
-  useEffect(() => campaignExport.subscribe(setStatus), []);
+  useEffect(() => {
+    const unsubscribe = campaignExport.subscribe(setStatus);
+    return () => {
+      unsubscribe();
+    };
+  }, []);
 
   const aspect = resolveAspect(aspectRatio);
   const target = useMemo<ExportTarget>(
