@@ -23,6 +23,8 @@ import BrandProfilesPage from "@/pages/BrandProfilesPage";
 import BrandOnboardingPage from "@/pages/BrandOnboardingPage";
 import AvatarProfilesPage from "@/pages/AvatarProfilesPage";
 import FreeVideoVerifyPage from "@/pages/free/FreeVideoVerifyPage";
+import CampaignEditorPage from "@/pages/editor/CampaignEditorPage";
+
 
 import AdminRoute from "@/components/AdminRoute";
 import BuilderRoute from "@/components/BuilderRoute";
