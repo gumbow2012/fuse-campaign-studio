@@ -4,7 +4,7 @@
  */
 import { supabase } from "@/integrations/supabase/client";
 import { looseTable } from "@/services/looseTable";
-import { normalizeAdjustments, type Adjustments } from "@/services/editorAdjustments";
+import { normalizeAdjustments, timelineDurationMs, type Adjustments } from "@/services/editorAdjustments";
 import { normalizeTextLayers, type TextLayer } from "@/services/editorText";
 import { normalizeMusic, type MusicTrack } from "@/services/editorMusic";
 import {
@@ -231,8 +231,12 @@ export const removedSegments = (segments: EditSegment[]) =>
 export const clipDurationMs = (segment: EditSegment) =>
   Math.max(0, segment.trim_end_ms - segment.trim_start_ms);
 
+/** Timeline length of a clip once speed + freeze frame are applied. */
+export const playbackDurationMs = (segment: EditSegment) =>
+  timelineDurationMs(clipDurationMs(segment), segment.adjustments.motion);
+
 export const totalDurationMs = (segments: EditSegment[]) =>
-  activeSegments(segments).reduce((sum, segment) => sum + clipDurationMs(segment), 0);
+  activeSegments(segments).reduce((sum, segment) => sum + playbackDurationMs(segment), 0);
 
 export function formatTimecode(ms: number) {
   const total = Math.max(0, Math.round(ms / 1000));
