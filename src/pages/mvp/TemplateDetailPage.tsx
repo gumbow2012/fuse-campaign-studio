@@ -136,7 +136,7 @@ export default function TemplateDetailPage() {
           "Explore this FUSE campaign template: real examples, required inputs, outputs and credit cost."
         }
         path={`/templates/${slug}`}
-        image={featured?.poster_url ?? featured?.url ?? null}
+        image={null}
       />
 
       <div className="relative mx-auto w-full max-w-6xl px-4 py-8 sm:px-6 lg:py-12">
