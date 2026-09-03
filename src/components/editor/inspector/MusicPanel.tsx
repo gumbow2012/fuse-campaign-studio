@@ -82,7 +82,7 @@ export default function MusicPanel({
             max={1.5}
             step={0.05}
             onChange={(value) => onPatch({ volume: value })}
-            onCommit={(value) => onPatch({ volume: value }, "music level")}
+            onCommit={(value) => onPatch({ volume: value }, { label: "music level" })}
           />
           <AdjustSlider
             label="Duck under speech"
@@ -91,7 +91,7 @@ export default function MusicPanel({
             max={100}
             suffix="%"
             onChange={(value) => onPatch({ duck: value })}
-            onCommit={(value) => onPatch({ duck: value }, "music ducking")}
+            onCommit={(value) => onPatch({ duck: value }, { label: "music ducking" })}
           />
           <AdjustSlider
             label="Fade in"
@@ -101,7 +101,7 @@ export default function MusicPanel({
             step={100}
             suffix="ms"
             onChange={(value) => onPatch({ fadeInMs: value })}
-            onCommit={(value) => onPatch({ fadeInMs: value }, "music fade in")}
+            onCommit={(value) => onPatch({ fadeInMs: value }, { label: "music fade in" })}
           />
           <AdjustSlider
             label="Fade out"
@@ -111,7 +111,7 @@ export default function MusicPanel({
             step={100}
             suffix="ms"
             onChange={(value) => onPatch({ fadeOutMs: value })}
-            onCommit={(value) => onPatch({ fadeOutMs: value }, "music fade out")}
+            onCommit={(value) => onPatch({ fadeOutMs: value }, { label: "music fade out" })}
           />
           <AdjustSlider
             label="Start on timeline"
@@ -121,7 +121,7 @@ export default function MusicPanel({
             step={100}
             suffix="ms"
             onChange={(value) => onPatch({ startMs: value })}
-            onCommit={(value) => onPatch({ startMs: value }, "music start")}
+            onCommit={(value) => onPatch({ startMs: value }, { label: "music start" })}
           />
           <AdjustSlider
             label="Song start"
@@ -131,7 +131,7 @@ export default function MusicPanel({
             step={100}
             suffix="ms"
             onChange={(value) => onPatch({ clipStartMs: value })}
-            onCommit={(value) => onPatch({ clipStartMs: value }, "music trim")}
+            onCommit={(value) => onPatch({ clipStartMs: value }, { label: "music trim" })}
           />
           <AdjustSlider
             label="Song end"
@@ -141,13 +141,13 @@ export default function MusicPanel({
             step={100}
             suffix="ms"
             onChange={(value) => onPatch({ clipEndMs: value })}
-            onCommit={(value) => onPatch({ clipEndMs: value }, "music trim")}
+            onCommit={(value) => onPatch({ clipEndMs: value }, { label: "music trim" })}
           />
           <OptionRow<MusicFillMode>
             label="Fill"
             columns={3}
             value={music.mode}
-            onChange={(id) => onPatch({ mode: id }, "music fill")}
+            onChange={(id) => onPatch({ mode: id }, { label: "music fill" })}
             options={[
               { id: "trim", label: "Trim to video" },
               { id: "loop", label: "Loop to fill" },
@@ -158,12 +158,12 @@ export default function MusicPanel({
             <ToggleChip
               label={music.muted ? "Muted" : "Mute"}
               active={music.muted}
-              onToggle={() => onPatch({ muted: !music.muted }, "music mute")}
+              onToggle={() => onPatch({ muted: !music.muted }, { label: "music mute" })}
             />
             <ToggleChip
               label="Loop"
               active={music.mode === "loop"}
-              onToggle={() => onPatch({ mode: music.mode === "loop" ? "trim" : "loop" }, "music loop")}
+              onToggle={() => onPatch({ mode: music.mode === "loop" ? "trim" : "loop" }, { label: "music loop" })}
             />
             <button
               type="button"
