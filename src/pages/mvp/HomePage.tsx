@@ -34,6 +34,7 @@ import { PerformanceBlock, PerformanceDisclaimer } from "@/components/TemplatePe
 import HeroCampaignTiles from "@/components/mvp/HeroCampaignTiles";
 import HeroWorkflowAnimation from "@/components/mvp/HeroWorkflowAnimation";
 import NewDropsShelf from "@/components/mvp/NewDropsShelf";
+import FeaturedCollabSection from "@/components/mvp/FeaturedCollabSection";
 
 import { track } from "@/lib/analytics/track";
 
@@ -968,6 +969,9 @@ export default function HomePage() {
       </section>
 
 
+
+      {/* 1.35 · EXCLUSIVE CREATOR COLLABS — hidden when no active drop. */}
+      <FeaturedCollabSection />
 
       {/* 1.4 · NEW DROPS — <lg: media-first rail; lg+: previous desktop shelf. */}
       <div className="lg:hidden">
