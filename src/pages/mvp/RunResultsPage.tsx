@@ -69,31 +69,27 @@ export default function RunResultsPage() {
   };
 
   const retryFailed = async () => {
-    if (!results?.failed_steps.length) return;
+    if (!runId || !results?.failed_steps.length) return;
     setRetrying(true);
-    const done: string[] = [];
-    for (const step of results.failed_steps) {
-      try {
-        await rerunFailedStep(step.step_id);
-        done.push(step.step_id);
-        setRetried([...done]);
-      } catch {
-        toast({
-          title: "One retry didn't start",
-          description: "You can try again in a moment.",
-          variant: "destructive",
-        });
-      }
-    }
-    setRetrying(false);
-    await load();
-    if (done.length) {
+    try {
+      await retryFailedRun(runId);
+      setRetryStarted(true);
       toast({
         title: "Retrying your clips",
         description: "Retried clips appear in the editor's Available Media, not on your timeline.",
       });
+    } catch {
+      toast({
+        title: "Retry didn't start",
+        description: "You can try again in a moment.",
+        variant: "destructive",
+      });
+    } finally {
+      setRetrying(false);
+      await load();
     }
   };
+
 
   if (loading) {
     return (
