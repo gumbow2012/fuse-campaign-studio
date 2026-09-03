@@ -226,6 +226,15 @@ const App = () => (
             <Route path="/app/templates" element={<TemplateStudioPage />} />
             <Route path="/free/verify" element={<FreeVideoVerifyPage />} />
             <Route
+              path="/editor/:projectId"
+              element={
+                <CustomerRoute>
+                  <CampaignEditorPage />
+                </CustomerRoute>
+              }
+            />
+
+            <Route
               path="/app/notifications"
               element={
                 <CustomerRoute>
