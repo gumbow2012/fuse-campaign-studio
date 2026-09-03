@@ -4,7 +4,7 @@
  * more than the active item.
  */
 
-import { useCallback, useEffect } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { ChevronLeft, ChevronRight, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { TemplateGalleryItem } from "@/services/templateDetailPage";
@@ -22,6 +22,7 @@ export default function TemplateMediaLightbox({
 }) {
   const total = items.length;
   const active = items[index] ?? null;
+  const touchStart = useRef<{ x: number; y: number } | null>(null);
 
   const step = useCallback(
     (delta: number) => {
@@ -95,6 +96,20 @@ export default function TemplateMediaLightbox({
       <div
         className="relative flex max-h-[88vh] w-full max-w-4xl flex-col items-center gap-3 px-4"
         onClick={(event) => event.stopPropagation()}
+        onTouchStart={(event) => {
+          const touch = event.touches[0];
+          touchStart.current = { x: touch.clientX, y: touch.clientY };
+        }}
+        onTouchEnd={(event) => {
+          const start = touchStart.current;
+          touchStart.current = null;
+          if (!start) return;
+          const touch = event.changedTouches[0];
+          const dx = touch.clientX - start.x;
+          const dy = touch.clientY - start.y;
+          if (Math.abs(dx) < 48 || Math.abs(dx) < Math.abs(dy)) return;
+          step(dx < 0 ? 1 : -1);
+        }}
       >
         {active.media_type === "video" ? (
           <video
