@@ -280,6 +280,40 @@ const num = (value: unknown, fallback: number, min: number, max: number) => {
   return Math.min(max, Math.max(min, parsed));
 };
 
+const PAN_ZOOM_MODES: PanZoomMode[] = ["none", "in", "out", "left", "right", "up", "down"];
+
+export function normalizeMotion(raw: unknown): Motion {
+  const motion = (raw ?? {}) as Record<string, unknown>;
+  return {
+    speed: num(motion.speed, 1, 0.25, 4),
+    reverse: !!motion.reverse,
+    freezeMs: num(motion.freezeMs, 0, 0, 3000),
+    fadeInMs: num(motion.fadeInMs, 0, 0, 3000),
+    fadeOutMs: num(motion.fadeOutMs, 0, 0, 3000),
+    motionBlur: num(motion.motionBlur, 0, 0, 100),
+    panZoom: PAN_ZOOM_MODES.includes(motion.panZoom as PanZoomMode)
+      ? (motion.panZoom as PanZoomMode)
+      : "none",
+    panZoomAmount: num(motion.panZoomAmount, 30, 0, 100),
+    ease: motion.ease === undefined ? true : !!motion.ease,
+    stabilize: !!motion.stabilize,
+  };
+}
+
+export function normalizeAudio(raw: unknown): Audio {
+  const audio = (raw ?? {}) as Record<string, unknown>;
+  return {
+    fadeInMs: num(audio.fadeInMs, 0, 0, 5000),
+    fadeOutMs: num(audio.fadeOutMs, 0, 0, 5000),
+    musicDuck: num(audio.musicDuck, 0, 0, 100),
+    voiceEnhance: !!audio.voiceEnhance,
+    noiseReduction: num(audio.noiseReduction, 0, 0, 100),
+    normalize: !!audio.normalize,
+    detached: !!audio.detached,
+  };
+}
+
+
 export function normalizeAdjustments(raw: unknown): Adjustments {
   const source = (raw ?? {}) as Record<string, Record<string, unknown> | undefined>;
   const framing = source.framing ?? {};
