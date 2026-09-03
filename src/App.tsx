@@ -24,6 +24,8 @@ import BrandOnboardingPage from "@/pages/BrandOnboardingPage";
 import AvatarProfilesPage from "@/pages/AvatarProfilesPage";
 import FreeVideoVerifyPage from "@/pages/free/FreeVideoVerifyPage";
 import CampaignEditorPage from "@/pages/editor/CampaignEditorPage";
+import RunResultsPage from "@/pages/mvp/RunResultsPage";
+import VideoEditorLibraryPage from "@/pages/mvp/VideoEditorLibraryPage";
 
 
 import AdminRoute from "@/components/AdminRoute";
@@ -227,6 +229,22 @@ const App = () => (
             <Route path="/billing" element={<Navigate to="/pricing" replace />} />
             <Route path="/app/templates" element={<TemplateStudioPage />} />
             <Route path="/free/verify" element={<FreeVideoVerifyPage />} />
+            <Route
+              path="/app/runs/:runId"
+              element={
+                <CustomerRoute>
+                  <RunResultsPage />
+                </CustomerRoute>
+              }
+            />
+            <Route
+              path="/app/video-editor"
+              element={
+                <CustomerRoute>
+                  <VideoEditorLibraryPage />
+                </CustomerRoute>
+              }
+            />
             <Route
               path="/editor/:projectId"
               element={
