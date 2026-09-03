@@ -337,8 +337,9 @@ export function normalizeAdjustments(raw: unknown): Adjustments {
       vignette: num(grain.vignette, 0, 0, 100),
       bloom: num(grain.bloom, 0, 0, 100),
     },
-    motion: (source.motion as MotionAdjust) ?? {},
-    audio: (source.audio as AudioAdjust) ?? {},
+    motion: normalizeMotion(source.motion),
+    audio: normalizeAudio(source.audio),
+
   };
 }
 
