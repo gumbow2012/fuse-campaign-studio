@@ -506,7 +506,7 @@ async function renderSegment(segment: WorkerSegment, target: ExportTarget): Prom
     };
   } else {
     const { video, durationUs } = await encodeVideo(source, segment, target);
-    rendered = { key, mode: "encode", video, audio: await encodeAudio(source, segment), durationUs };
+    rendered = { key, mode: "encode", video, audio: await encodeAudio(source, segment, target), durationUs };
   }
 
   cache.set(key, rendered);
