@@ -4,14 +4,16 @@
  */
 import { supabase } from "@/integrations/supabase/client";
 import { looseTable } from "@/services/looseTable";
-import { normalizeAdjustments, type Adjustments } from "@/services/editorAdjustments";
+import { normalizeAdjustments, timelineDurationMs, type Adjustments } from "@/services/editorAdjustments";
+import { normalizeTextLayers, type TextLayer } from "@/services/editorText";
+import { normalizeMusic, type MusicTrack } from "@/services/editorMusic";
 import {
   normalizeExportSettings,
   type ExportSettings,
 } from "@/services/exportSettings";
 
-export type TextLayer = Record<string, unknown>;
-export type MusicTrack = Record<string, unknown> | null;
+export type { TextLayer } from "@/services/editorText";
+export type { MusicTrack } from "@/services/editorMusic";
 
 export type EditProject = {
   id: string;
@@ -23,7 +25,7 @@ export type EditProject = {
   /** Overlay text layers — persisted verbatim (text phase). */
   text_layers: TextLayer[];
   /** Music track reference + settings (music phase). */
-  music: MusicTrack;
+  music: MusicTrack | null;
 };
 
 export type EditSegment = {
@@ -63,7 +65,7 @@ export type EditOp =
       payload: {
         export_settings?: ExportSettings;
         text_layers?: TextLayer[];
-        music?: MusicTrack;
+        music?: MusicTrack | null;
       };
     };
 
@@ -109,8 +111,8 @@ function normalizeState(data: unknown): EditorState {
         project.export_settings,
         (project.aspect_ratio as string | null) ?? null,
       ),
-      text_layers: Array.isArray(project.text_layers) ? (project.text_layers as TextLayer[]) : [],
-      music: (project.music as MusicTrack) ?? null,
+      text_layers: normalizeTextLayers(project.text_layers),
+      music: normalizeMusic(project.music),
     },
     segments: (payload.segments ?? []).map(normalizeSegment).sort((a, b) => a.position - b.position),
   };
@@ -229,8 +231,12 @@ export const removedSegments = (segments: EditSegment[]) =>
 export const clipDurationMs = (segment: EditSegment) =>
   Math.max(0, segment.trim_end_ms - segment.trim_start_ms);
 
+/** Timeline length of a clip once speed + freeze frame are applied. */
+export const playbackDurationMs = (segment: EditSegment) =>
+  timelineDurationMs(clipDurationMs(segment), segment.adjustments.motion);
+
 export const totalDurationMs = (segments: EditSegment[]) =>
-  activeSegments(segments).reduce((sum, segment) => sum + clipDurationMs(segment), 0);
+  activeSegments(segments).reduce((sum, segment) => sum + playbackDurationMs(segment), 0);
 
 export function formatTimecode(ms: number) {
   const total = Math.max(0, Math.round(ms / 1000));

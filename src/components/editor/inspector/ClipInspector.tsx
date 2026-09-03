@@ -19,6 +19,7 @@ import {
   type FitMode,
   type FramingAspect,
   type GrainPresetId,
+  type PanZoomMode,
 } from "@/services/editorAdjustments";
 
 export type AdjustOptions = { record?: boolean; immediate?: boolean; label?: string };
@@ -51,7 +52,7 @@ export default function ClipInspector({
   onScopeChange: (scope: "clip" | "all") => void;
   onAdjust: (patch: Patch, options?: AdjustOptions) => void;
   onRecord: (undoPatch: Patch, redoPatch: Patch, label: string) => void;
-  onResetSection: (section: "framing" | "color" | "grain") => void;
+  onResetSection: (section: "framing" | "color" | "grain" | "motion" | "audio") => void;
   onResetAll: () => void;
   onCopy: () => void;
   onPaste: () => void;
@@ -62,14 +63,20 @@ export default function ClipInspector({
   onDuplicate: () => void;
   onRemove: () => void;
 }) {
-  const { framing, color, grain } = segment.adjustments;
-  const [open, setOpen] = useState<Record<string, boolean>>({ framing: true, color: false, grain: false, audio: false });
+  const { framing, color, grain, motion, audio } = segment.adjustments;
+  const [open, setOpen] = useState<Record<string, boolean>>({
+    framing: true,
+    color: false,
+    grain: false,
+    motion: false,
+    audio: false,
+  });
   const beforeRef = useRef<Record<string, number>>({});
   const toggle = (key: string) => setOpen((state) => ({ ...state, [key]: !state[key] }));
 
   /** Continuous control: live preview while dragging, one undo step per gesture. */
   const drag = (
-    namespace: "framing" | "color" | "grain",
+    namespace: "framing" | "color" | "grain" | "motion" | "audio",
     key: string,
     current: number,
     label: string,
@@ -340,12 +347,110 @@ export default function ClipInspector({
         </p>
       </InspectorSection>
 
-      {/* Audio (volume/mute today, full audio tools next build) */}
+      {/* 4 — Motion */}
+      <InspectorSection
+        title="Motion"
+        meta={motion.speed === 1 ? undefined : `${motion.speed.toFixed(2)}×`}
+        open={!!open.motion}
+        onToggle={() => toggle("motion")}
+        onReset={() => onResetSection("motion")}
+      >
+        <AdjustSlider
+          label="Playback speed"
+          value={motion.speed}
+          min={0.25}
+          max={4}
+          step={0.05}
+          suffix="×"
+          {...drag("motion", "speed", motion.speed, "playback speed")}
+        />
+        <div className="flex flex-wrap gap-1.5">
+          <ToggleChip
+            label="Reverse"
+            active={motion.reverse}
+            onToggle={() => set({ motion: { reverse: !motion.reverse } }, "reverse")}
+          />
+          <ToggleChip
+            label="Stabilize"
+            active={motion.stabilize}
+            onToggle={() => set({ motion: { stabilize: !motion.stabilize } }, "stabilize")}
+          />
+          <ToggleChip
+            label="Ease in / out"
+            active={motion.ease}
+            onToggle={() => set({ motion: { ease: !motion.ease } }, "easing")}
+          />
+        </div>
+        <AdjustSlider
+          label="Freeze last frame"
+          value={motion.freezeMs}
+          min={0}
+          max={3000}
+          step={100}
+          suffix="ms"
+          {...drag("motion", "freezeMs", motion.freezeMs, "freeze frame")}
+        />
+        <AdjustSlider
+          label="Fade in"
+          value={motion.fadeInMs}
+          min={0}
+          max={3000}
+          step={50}
+          suffix="ms"
+          {...drag("motion", "fadeInMs", motion.fadeInMs, "fade in")}
+        />
+        <AdjustSlider
+          label="Fade out"
+          value={motion.fadeOutMs}
+          min={0}
+          max={3000}
+          step={50}
+          suffix="ms"
+          {...drag("motion", "fadeOutMs", motion.fadeOutMs, "fade out")}
+        />
+        <AdjustSlider
+          label="Motion blur"
+          value={motion.motionBlur}
+          min={0}
+          max={100}
+          {...drag("motion", "motionBlur", motion.motionBlur, "motion blur")}
+        />
+        <OptionRow<PanZoomMode>
+          label="Pan & zoom"
+          columns={4}
+          value={motion.panZoom}
+          onChange={(id) => set({ motion: { panZoom: id } }, "pan & zoom")}
+          options={[
+            { id: "none", label: "Off" },
+            { id: "in", label: "Zoom in" },
+            { id: "out", label: "Zoom out" },
+            { id: "left", label: "Pan ←" },
+            { id: "right", label: "Pan →" },
+            { id: "up", label: "Pan ↑" },
+            { id: "down", label: "Pan ↓" },
+          ]}
+        />
+        {motion.panZoom !== "none" ? (
+          <AdjustSlider
+            label="Pan & zoom amount"
+            value={motion.panZoomAmount}
+            min={0}
+            max={100}
+            {...drag("motion", "panZoomAmount", motion.panZoomAmount, "pan & zoom amount")}
+          />
+        ) : null}
+        <p className="text-[10px] leading-relaxed text-slate-500">
+          Reverse renders up to 15s per clip. Stabilize adds a gentle crop-in that hides handheld drift.
+        </p>
+      </InspectorSection>
+
+      {/* 5 — Audio */}
       <InspectorSection
         title="Audio"
-        meta={segment.muted ? "muted" : `${Math.round(segment.volume * 100)}%`}
+        meta={segment.muted || audio.detached ? "silent" : `${Math.round(segment.volume * 100)}%`}
         open={!!open.audio}
         onToggle={() => toggle("audio")}
+        onReset={() => onResetSection("audio")}
       >
         <AdjustSlider
           label="Volume"
@@ -368,9 +473,62 @@ export default function ClipInspector({
           {segment.muted ? <VolumeX className="mr-2 h-4 w-4" /> : <Volume2 className="mr-2 h-4 w-4" />}
           {segment.muted ? "Muted" : "Mute"}
         </Button>
+        <AdjustSlider
+          label="Audio fade in"
+          value={audio.fadeInMs}
+          min={0}
+          max={5000}
+          step={50}
+          suffix="ms"
+          {...drag("audio", "fadeInMs", audio.fadeInMs, "audio fade in")}
+        />
+        <AdjustSlider
+          label="Audio fade out"
+          value={audio.fadeOutMs}
+          min={0}
+          max={5000}
+          step={50}
+          suffix="ms"
+          {...drag("audio", "fadeOutMs", audio.fadeOutMs, "audio fade out")}
+        />
+        <AdjustSlider
+          label="Duck music under this clip"
+          value={audio.musicDuck}
+          min={0}
+          max={100}
+          suffix="%"
+          {...drag("audio", "musicDuck", audio.musicDuck, "music ducking")}
+        />
+        <AdjustSlider
+          label="Noise reduction"
+          value={audio.noiseReduction}
+          min={0}
+          max={100}
+          {...drag("audio", "noiseReduction", audio.noiseReduction, "audio noise reduction")}
+        />
+        <div className="flex flex-wrap gap-1.5">
+          <ToggleChip
+            label="Voice enhance"
+            active={audio.voiceEnhance}
+            onToggle={() => set({ audio: { voiceEnhance: !audio.voiceEnhance } }, "voice enhance")}
+          />
+          <ToggleChip
+            label="Normalize loudness"
+            active={audio.normalize}
+            onToggle={() => set({ audio: { normalize: !audio.normalize } }, "loudness")}
+          />
+          <ToggleChip
+            label="Detach audio"
+            active={audio.detached}
+            onToggle={() => set({ audio: { detached: !audio.detached } }, "detach audio")}
+          />
+        </div>
+        <p className="text-[10px] leading-relaxed text-slate-500">
+          Detach keeps the picture and drops this clip&apos;s sound — add a music track to replace it.
+        </p>
       </InspectorSection>
 
-      {/* 5 — Copy / paste / reset + clip actions */}
+      {/* 6 — Copy / paste / reset + clip actions */}
       <div className="grid gap-2 rounded-2xl border border-white/10 bg-slate-950/70 p-4">
         <div className="grid grid-cols-2 gap-2">
           <Button

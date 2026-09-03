@@ -65,17 +65,39 @@ export type Grain = {
   bloom: number; // 0..100
 };
 
-/** Reserved for the motion/audio phase — persisted verbatim, never dropped. */
-export type MotionAdjust = Record<string, unknown>;
-export type AudioAdjust = Record<string, unknown>;
+export type PanZoomMode = "none" | "in" | "out" | "left" | "right" | "up" | "down";
+
+export type Motion = {
+  speed: number; // 0.25..4 (1 = source speed)
+  reverse: boolean;
+  freezeMs: number; // hold the final frame, 0..3000
+  fadeInMs: number; // 0..3000
+  fadeOutMs: number;
+  motionBlur: number; // 0..100
+  panZoom: PanZoomMode;
+  panZoomAmount: number; // 0..100
+  ease: boolean; // ease the pan/zoom in and out
+  stabilize: boolean; // gentle crop-in that hides handheld drift
+};
+
+export type Audio = {
+  fadeInMs: number;
+  fadeOutMs: number;
+  musicDuck: number; // 0..100 — how much the music drops under this clip
+  voiceEnhance: boolean;
+  noiseReduction: number; // 0..100
+  normalize: boolean;
+  detached: boolean; // source audio detached (silent) but video kept
+};
 
 export type Adjustments = {
   framing: Framing;
   color: Color;
   grain: Grain;
-  motion: MotionAdjust;
-  audio: AudioAdjust;
+  motion: Motion;
+  audio: Audio;
 };
+
 
 export const DEFAULT_FRAMING: Framing = {
   aspect: "original",
@@ -119,13 +141,38 @@ export const DEFAULT_GRAIN: Grain = {
   bloom: 0,
 };
 
+/** Motion defaults are strictly neutral so exports can still stream-copy. */
+export const DEFAULT_MOTION: Motion = {
+  speed: 1,
+  reverse: false,
+  freezeMs: 0,
+  fadeInMs: 0,
+  fadeOutMs: 0,
+  motionBlur: 0,
+  panZoom: "none",
+  panZoomAmount: 30,
+  ease: true,
+  stabilize: false,
+};
+
+export const DEFAULT_AUDIO: Audio = {
+  fadeInMs: 0,
+  fadeOutMs: 0,
+  musicDuck: 0,
+  voiceEnhance: false,
+  noiseReduction: 0,
+  normalize: false,
+  detached: false,
+};
+
 export const DEFAULT_ADJUSTMENTS: Adjustments = {
   framing: DEFAULT_FRAMING,
   color: DEFAULT_COLOR,
   grain: DEFAULT_GRAIN,
-  motion: {},
-  audio: {},
+  motion: DEFAULT_MOTION,
+  audio: DEFAULT_AUDIO,
 };
+
 
 /* ------------------------------ presets ------------------------------ */
 
@@ -233,6 +280,40 @@ const num = (value: unknown, fallback: number, min: number, max: number) => {
   return Math.min(max, Math.max(min, parsed));
 };
 
+const PAN_ZOOM_MODES: PanZoomMode[] = ["none", "in", "out", "left", "right", "up", "down"];
+
+export function normalizeMotion(raw: unknown): Motion {
+  const motion = (raw ?? {}) as Record<string, unknown>;
+  return {
+    speed: num(motion.speed, 1, 0.25, 4),
+    reverse: !!motion.reverse,
+    freezeMs: num(motion.freezeMs, 0, 0, 3000),
+    fadeInMs: num(motion.fadeInMs, 0, 0, 3000),
+    fadeOutMs: num(motion.fadeOutMs, 0, 0, 3000),
+    motionBlur: num(motion.motionBlur, 0, 0, 100),
+    panZoom: PAN_ZOOM_MODES.includes(motion.panZoom as PanZoomMode)
+      ? (motion.panZoom as PanZoomMode)
+      : "none",
+    panZoomAmount: num(motion.panZoomAmount, 30, 0, 100),
+    ease: motion.ease === undefined ? true : !!motion.ease,
+    stabilize: !!motion.stabilize,
+  };
+}
+
+export function normalizeAudio(raw: unknown): Audio {
+  const audio = (raw ?? {}) as Record<string, unknown>;
+  return {
+    fadeInMs: num(audio.fadeInMs, 0, 0, 5000),
+    fadeOutMs: num(audio.fadeOutMs, 0, 0, 5000),
+    musicDuck: num(audio.musicDuck, 0, 0, 100),
+    voiceEnhance: !!audio.voiceEnhance,
+    noiseReduction: num(audio.noiseReduction, 0, 0, 100),
+    normalize: !!audio.normalize,
+    detached: !!audio.detached,
+  };
+}
+
+
 export function normalizeAdjustments(raw: unknown): Adjustments {
   const source = (raw ?? {}) as Record<string, Record<string, unknown> | undefined>;
   const framing = source.framing ?? {};
@@ -290,8 +371,9 @@ export function normalizeAdjustments(raw: unknown): Adjustments {
       vignette: num(grain.vignette, 0, 0, 100),
       bloom: num(grain.bloom, 0, 0, 100),
     },
-    motion: (source.motion as MotionAdjust) ?? {},
-    audio: (source.audio as AudioAdjust) ?? {},
+    motion: normalizeMotion(source.motion),
+    audio: normalizeAudio(source.audio),
+
   };
 }
 
@@ -321,14 +403,39 @@ export type RenderSpec = {
     vignette: number; // 0..1
     grain: { alpha: number; tile: number; softness: number } | null;
   };
+  /** Time-based motion, resolved per frame by `frameMotionAt`. */
+  motion: {
+    speed: number;
+    reverse: boolean;
+    freezeMs: number;
+    fadeInMs: number;
+    fadeOutMs: number;
+    blurPx: number;
+    panZoom: PanZoomMode;
+    panZoomAmount: number;
+    ease: boolean;
+    stabilizeScale: number;
+  };
+  /** Audio treatment for the mixer / encoder. */
+  audio: {
+    fadeInMs: number;
+    fadeOutMs: number;
+    musicDuck: number;
+    voiceEnhance: boolean;
+    noiseReduction: number;
+    normalize: boolean;
+    detached: boolean;
+  };
   /** Neutral spec → the exporter can stream-copy instead of re-encoding. */
   identity: boolean;
 };
 
+
 const round = (value: number, places = 4) => Number(value.toFixed(places));
 
 export function buildRenderSpec(adjustments: Adjustments): RenderSpec {
-  const { color, grain, framing } = adjustments;
+  const { color, grain, framing, motion, audio } = adjustments;
+
 
   const brightness =
     1 + (color.exposure / 100) * 0.55 + (color.highlights / 100) * 0.08 + (color.shadows / 100) * 0.07;
@@ -352,7 +459,9 @@ export function buildRenderSpec(adjustments: Adjustments): RenderSpec {
     `contrast(${round(Math.max(0.2, contrast))})`,
     `saturate(${round(saturate)})`,
   ];
-  if (blur > 0.01) parts.push(`blur(${round(blur, 2)}px)`);
+  const motionBlurPx = round((motion.motionBlur / 100) * 3.2, 2);
+  if (blur + motionBlurPx > 0.01) parts.push(`blur(${round(blur + motionBlurPx, 2)}px)`);
+
 
   const tints: TintOverlay[] = [];
   if (Math.abs(color.temperature) > 1) {
@@ -408,7 +517,29 @@ export function buildRenderSpec(adjustments: Adjustments): RenderSpec {
             }
           : null,
     },
+    motion: {
+      speed: round(motion.speed, 3),
+      reverse: motion.reverse,
+      freezeMs: Math.round(motion.freezeMs),
+      fadeInMs: Math.round(motion.fadeInMs),
+      fadeOutMs: Math.round(motion.fadeOutMs),
+      blurPx: motionBlurPx,
+      panZoom: motion.panZoom,
+      panZoomAmount: round(motion.panZoomAmount),
+      ease: motion.ease,
+      stabilizeScale: motion.stabilize ? 1.06 : 1,
+    },
+    audio: {
+      fadeInMs: Math.round(audio.fadeInMs),
+      fadeOutMs: Math.round(audio.fadeOutMs),
+      musicDuck: round(audio.musicDuck),
+      voiceEnhance: audio.voiceEnhance,
+      noiseReduction: round(audio.noiseReduction),
+      normalize: audio.normalize,
+      detached: audio.detached,
+    },
     identity: false,
+
   };
 
   spec.identity =
@@ -422,7 +553,10 @@ export function buildRenderSpec(adjustments: Adjustments): RenderSpec {
     spec.transform.rotate === 0 &&
     !spec.transform.flip &&
     spec.transform.fit === "contain" &&
-    spec.transform.aspect === null;
+    spec.transform.aspect === null &&
+    motionIsNeutral(motion) &&
+    audioIsNeutral(audio);
+
 
   return spec;
 }
@@ -502,4 +636,110 @@ export function matchAllAdjustments(list: Adjustments[]): { color: Partial<Color
       vignette: mean((item) => item.grain.vignette),
     },
   };
+}
+
+/* ------------------------------ motion maths ------------------------------ */
+
+export function motionIsNeutral(motion: Motion) {
+  return (
+    motion.speed === 1 &&
+    !motion.reverse &&
+    motion.freezeMs === 0 &&
+    motion.fadeInMs === 0 &&
+    motion.fadeOutMs === 0 &&
+    motion.motionBlur === 0 &&
+    motion.panZoom === "none" &&
+    !motion.stabilize
+  );
+}
+
+export function audioIsNeutral(audio: Audio) {
+  return (
+    audio.fadeInMs === 0 &&
+    audio.fadeOutMs === 0 &&
+    audio.musicDuck === 0 &&
+    !audio.voiceEnhance &&
+    audio.noiseReduction === 0 &&
+    !audio.normalize &&
+    !audio.detached
+  );
+}
+
+/** Timeline duration of a clip once speed + freeze frame are applied. */
+export function timelineDurationMs(trimmedMs: number, motion: Motion | RenderSpec["motion"]) {
+  const speed = Math.min(4, Math.max(0.25, motion.speed || 1));
+  return Math.max(0, Math.round(trimmedMs / speed) + Math.round(motion.freezeMs || 0));
+}
+
+const easeInOut = (t: number) => (t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2);
+
+/** Per-frame motion result: extra scale/offset from pan & zoom plus fade opacity. */
+export function frameMotionAt(
+  spec: RenderSpec,
+  elapsedMs: number,
+  durationMs: number,
+): { scale: number; offsetX: number; offsetY: number; opacity: number } {
+  const motion = spec.motion;
+  const total = Math.max(1, durationMs);
+  const raw = Math.min(1, Math.max(0, elapsedMs / total));
+  const progress = motion.ease ? easeInOut(raw) : raw;
+  const amount = motion.panZoomAmount / 100;
+
+  let scale = motion.stabilizeScale;
+  let offsetX = 0;
+  let offsetY = 0;
+
+  switch (motion.panZoom) {
+    case "in":
+      scale *= 1 + amount * 0.35 * progress;
+      break;
+    case "out":
+      scale *= 1 + amount * 0.35 * (1 - progress);
+      break;
+    case "left":
+      scale *= 1 + amount * 0.18;
+      offsetX = amount * 12 * (0.5 - progress) * 2;
+      break;
+    case "right":
+      scale *= 1 + amount * 0.18;
+      offsetX = -amount * 12 * (0.5 - progress) * 2;
+      break;
+    case "up":
+      scale *= 1 + amount * 0.18;
+      offsetY = amount * 12 * (0.5 - progress) * 2;
+      break;
+    case "down":
+      scale *= 1 + amount * 0.18;
+      offsetY = -amount * 12 * (0.5 - progress) * 2;
+      break;
+    default:
+      break;
+  }
+
+  let opacity = 1;
+  if (motion.fadeInMs > 0) opacity = Math.min(opacity, Math.min(1, elapsedMs / motion.fadeInMs));
+  if (motion.fadeOutMs > 0) {
+    opacity = Math.min(opacity, Math.min(1, Math.max(0, total - elapsedMs) / motion.fadeOutMs));
+  }
+
+  return {
+    scale: Number(scale.toFixed(4)),
+    offsetX: Number(offsetX.toFixed(3)),
+    offsetY: Number(offsetY.toFixed(3)),
+    opacity: Number(Math.max(0, Math.min(1, opacity)).toFixed(3)),
+  };
+}
+
+/** Linear audio gain envelope for one clip (used by preview and the mixer). */
+export function audioGainAt(spec: RenderSpec, baseGain: number, elapsedMs: number, durationMs: number) {
+  if (spec.audio.detached) return 0;
+  let gain = baseGain;
+  const total = Math.max(1, durationMs);
+  if (spec.audio.fadeInMs > 0) gain *= Math.min(1, elapsedMs / spec.audio.fadeInMs);
+  if (spec.audio.fadeOutMs > 0) {
+    gain *= Math.min(1, Math.max(0, total - elapsedMs) / spec.audio.fadeOutMs);
+  }
+  if (spec.audio.normalize) gain *= 1.15;
+  if (spec.audio.voiceEnhance) gain *= 1.08;
+  return Math.max(0, Math.min(2, gain));
 }

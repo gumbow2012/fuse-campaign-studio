@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { clipDurationMs, formatSeconds, type EditSegment } from "@/services/campaignEditor";
+import { formatSeconds, playbackDurationMs, type EditSegment } from "@/services/campaignEditor";
 import { cn } from "@/lib/utils";
+import type { TextLayer } from "@/services/editorText";
+import { musicTimelineDurationMs, type MusicTrack } from "@/services/editorMusic";
 
 const PX_PER_SEC = 62;
 const MIN_CLIP_MS = 400;
@@ -8,6 +10,8 @@ const MIN_CLIP_MS = 400;
 type DragState =
   | { kind: "reorder"; id: string; startX: number; dx: number }
   | { kind: "trim"; id: string; edge: "start" | "end"; startX: number; startValue: number }
+  | { kind: "text"; id: string; startX: number; startValue: number }
+  | { kind: "music"; startX: number; startValue: number }
   | { kind: "playhead" }
   | null;
 
@@ -21,6 +25,15 @@ export default function EditorTimeline({
   onTrimCommit,
   currentMs,
   onSeek,
+  textLayers = [],
+  selectedTextId = null,
+  onSelectText,
+  onTextTime,
+  onTextTimeCommit,
+  music = null,
+  onSelectMusic,
+  onMusicStart,
+  onMusicStartCommit,
 }: {
   segments: EditSegment[];
   selectedId: string | null;
@@ -30,6 +43,15 @@ export default function EditorTimeline({
   onTrimCommit: (id: string, startMs: number, endMs: number) => void;
   currentMs: number;
   onSeek: (ms: number) => void;
+  textLayers?: TextLayer[];
+  selectedTextId?: string | null;
+  onSelectText?: (id: string) => void;
+  onTextTime?: (id: string, startMs: number) => void;
+  onTextTimeCommit?: (id: string, startMs: number) => void;
+  music?: MusicTrack | null;
+  onSelectMusic?: () => void;
+  onMusicStart?: (startMs: number) => void;
+  onMusicStartCommit?: (startMs: number) => void;
 }) {
   const [drag, setDrag] = useState<DragState>(null);
   const trackRef = useRef<HTMLDivElement | null>(null);
@@ -37,7 +59,7 @@ export default function EditorTimeline({
   dragRef.current = drag;
 
   const widthOf = (segment: EditSegment) =>
-    Math.max(48, (clipDurationMs(segment) / 1000) * PX_PER_SEC);
+    Math.max(48, (playbackDurationMs(segment) / 1000) * PX_PER_SEC);
 
   const offsetsPx: number[] = [];
   let running = 0;
@@ -57,9 +79,9 @@ export default function EditorTimeline({
         const width = widthOf(segments[i]);
         if (x <= offsetsPx[i] + width) {
           const withinPx = Math.max(0, x - offsetsPx[i]);
-          return acc + Math.min(clipDurationMs(segments[i]), (withinPx / PX_PER_SEC) * 1000);
+          return acc + Math.min(playbackDurationMs(segments[i]), (withinPx / PX_PER_SEC) * 1000);
         }
-        acc += clipDurationMs(segments[i]);
+        acc += playbackDurationMs(segments[i]);
       }
       return acc;
     },
@@ -80,6 +102,16 @@ export default function EditorTimeline({
       }
       if (state.kind === "reorder") {
         setDrag({ ...state, dx: event.clientX - state.startX });
+        return;
+      }
+      if (state.kind === "text") {
+        const deltaMs = ((event.clientX - state.startX) / PX_PER_SEC) * 1000;
+        onTextTime?.(state.id, Math.max(0, Math.round(state.startValue + deltaMs)));
+        return;
+      }
+      if (state.kind === "music") {
+        const deltaMs = ((event.clientX - state.startX) / PX_PER_SEC) * 1000;
+        onMusicStart?.(Math.max(0, Math.round(state.startValue + deltaMs)));
         return;
       }
       const segment = segments.find((item) => item.id === state.id);
@@ -109,6 +141,15 @@ export default function EditorTimeline({
         if (segment) onTrimCommit(segment.id, segment.trim_start_ms, segment.trim_end_ms);
         return;
       }
+      if (state.kind === "text") {
+        const layer = textLayers.find((item) => item.id === state.id);
+        if (layer) onTextTimeCommit?.(layer.id, layer.startMs);
+        return;
+      }
+      if (state.kind === "music") {
+        if (music) onMusicStartCommit?.(music.startMs);
+        return;
+      }
       if (state.kind === "reorder") {
         const fromIndex = segments.findIndex((item) => item.id === state.id);
         if (fromIndex === -1) return;
@@ -131,12 +172,30 @@ export default function EditorTimeline({
       window.removeEventListener("pointerup", onUp);
       window.removeEventListener("pointercancel", onUp);
     };
-  }, [drag, segments, msFromClientX, onSeek, onTrim, onTrimCommit, onReorder]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [drag, segments, textLayers, music, msFromClientX, onSeek, onTrim, onTrimCommit, onReorder]);
+
+  /** Absolute timeline ms → px inside the track (matches the playhead maths). */
+  const msToPx = useCallback(
+    (ms: number) => {
+      let remaining = Math.max(0, ms);
+      for (let i = 0; i < segments.length; i += 1) {
+        const duration = playbackDurationMs(segments[i]);
+        if (remaining <= duration) return offsetsPx[i] + (remaining / 1000) * PX_PER_SEC;
+        remaining -= duration;
+      }
+      return running > 0 ? running - 8 : 0;
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [segments, offsetsPx.join(","), running],
+  );
+
+  const totalMs = segments.reduce((sum, segment) => sum + playbackDurationMs(segment), 0);
 
   const playheadPx = (() => {
     let remaining = currentMs;
     for (let i = 0; i < segments.length; i += 1) {
-      const duration = clipDurationMs(segments[i]);
+      const duration = playbackDurationMs(segments[i]);
       if (remaining <= duration) return offsetsPx[i] + (remaining / 1000) * PX_PER_SEC;
       remaining -= duration;
     }
@@ -167,7 +226,13 @@ export default function EditorTimeline({
           setDrag({ kind: "playhead" });
         }}
       >
-        <div className="relative flex min-h-[104px] items-stretch gap-2" style={{ width: Math.max(running, 1) }}>
+        <div
+          className="relative flex items-stretch gap-2"
+          style={{
+            width: Math.max(running, 1),
+            minHeight: 104 + (textLayers.length || music ? (textLayers.length + (music ? 1 : 0)) * 28 + 12 : 0),
+          }}
+        >
           {segments.map((segment, i) => {
             const selected = segment.id === selectedId;
             const isDragging = drag?.kind === "reorder" && drag.id === segment.id;
@@ -218,7 +283,7 @@ export default function EditorTimeline({
                   <span className="font-display text-[10px] uppercase tracking-[0.14em] text-white/90">
                     {i + 1}
                   </span>
-                  <span className="font-mono text-[10px] text-cyan-200">{formatSeconds(clipDurationMs(segment))}</span>
+                  <span className="font-mono text-[10px] text-cyan-200">{formatSeconds(playbackDurationMs(segment))}</span>
                 </div>
 
                 <span
@@ -258,6 +323,83 @@ export default function EditorTimeline({
               </div>
             );
           })}
+
+          {/* Text + music tracks share the clip ruler */}
+          {textLayers.length || music ? (
+            <div className="pointer-events-none absolute left-0 top-[108px] w-full">
+              {textLayers.map((layer, row) => {
+                const left = msToPx(layer.startMs);
+                const width = Math.max(24, msToPx(layer.endMs) - left);
+                return (
+                  <div
+                    key={layer.id}
+                    data-clip
+                    role="button"
+                    tabIndex={0}
+                    aria-label={`Text layer ${layer.text.slice(0, 24)}`}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" || event.key === " ") onSelectText?.(layer.id);
+                    }}
+                    onPointerDown={(event) => {
+                      event.stopPropagation();
+                      onSelectText?.(layer.id);
+                      if (onTextTime) {
+                        setDrag({ kind: "text", id: layer.id, startX: event.clientX, startValue: layer.startMs });
+                      }
+                    }}
+                    className={cn(
+                      "pointer-events-auto absolute flex h-6 cursor-grab items-center overflow-hidden rounded-md border px-2 active:cursor-grabbing",
+                      selectedTextId === layer.id
+                        ? "border-cyan-300 bg-cyan-400/20"
+                        : "border-white/15 bg-white/[0.06] hover:border-white/30",
+                      layer.hidden ? "opacity-40" : "",
+                    )}
+                    style={{ left, width, top: row * 28 }}
+                  >
+                    <span className="truncate font-display text-[10px] uppercase tracking-[0.14em] text-white/90">
+                      {layer.text || "Text"}
+                    </span>
+                  </div>
+                );
+              })}
+              {music ? (
+                <div
+                  data-clip
+                  role="button"
+                  tabIndex={0}
+                  aria-label={`Music track ${music.name}`}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" || event.key === " ") onSelectMusic?.();
+                  }}
+                  onPointerDown={(event) => {
+                    event.stopPropagation();
+                    onSelectMusic?.();
+                    if (onMusicStart) {
+                      setDrag({ kind: "music", startX: event.clientX, startValue: music.startMs });
+                    }
+                  }}
+                  className={cn(
+                    "pointer-events-auto absolute flex h-7 cursor-grab items-center gap-2 overflow-hidden rounded-md border px-2 active:cursor-grabbing",
+                    music.muted
+                      ? "border-white/15 bg-white/[0.05] opacity-60"
+                      : "border-emerald-300/50 bg-emerald-400/15",
+                  )}
+                  style={{
+                    left: msToPx(music.startMs),
+                    width: Math.max(
+                      32,
+                      msToPx(music.startMs + musicTimelineDurationMs(music, totalMs)) - msToPx(music.startMs),
+                    ),
+                    top: textLayers.length * 28,
+                  }}
+                >
+                  <span className="truncate font-display text-[10px] uppercase tracking-[0.14em] text-emerald-100">
+                    {music.name}
+                  </span>
+                </div>
+              ) : null}
+            </div>
+          ) : null}
 
           {/* Playhead */}
           <div

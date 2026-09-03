@@ -1,14 +1,22 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Maximize2, Pause, Play, Volume2, VolumeX } from "lucide-react";
-import { clipDurationMs, formatTimecode, resolveAspect, type EditSegment } from "@/services/campaignEditor";
+import {
+  formatTimecode,
+  playbackDurationMs,
+  resolveAspect,
+  type EditSegment,
+} from "@/services/campaignEditor";
 import { cn } from "@/lib/utils";
-import { buildRenderSpec } from "@/services/editorAdjustments";
+import { audioGainAt, buildRenderSpec, frameMotionAt } from "@/services/editorAdjustments";
 import { frameBoxStyle, overlayLayersFor, videoStyleFor } from "@/lib/editorPreviewStyle";
+import { musicGainAt, musicSourceOffsetMs, type MusicTrack } from "@/services/editorMusic";
+import type { TextLayer } from "@/services/editorText";
+import TextOverlay from "@/components/editor/TextOverlay";
 
 /**
  * Client-side sequenced preview: plays each active segment inside its trim
- * window, back to back, so the run feels like one assembled campaign.
- * No server render is involved.
+ * window, back to back, with motion, music and text applied — the same maths
+ * the export worker uses. No server render is involved.
  */
 export default function PreviewPlayer({
   segments,
@@ -19,6 +27,14 @@ export default function PreviewPlayer({
   playing,
   onPlayingChange,
   className,
+  textLayers = [],
+  selectedTextId = null,
+  onSelectText,
+  onMoveText,
+  onMoveTextCommit,
+  showGuides = false,
+  music = null,
+  musicUrl = null,
 }: {
   segments: EditSegment[];
   aspectRatio: string | null;
@@ -29,133 +45,213 @@ export default function PreviewPlayer({
   playing: boolean;
   onPlayingChange: (playing: boolean) => void;
   className?: string;
+  textLayers?: TextLayer[];
+  selectedTextId?: string | null;
+  onSelectText?: (id: string) => void;
+  onMoveText?: (id: string, x: number, y: number) => void;
+  onMoveTextCommit?: (id: string, x: number, y: number) => void;
+  showGuides?: boolean;
+  music?: MusicTrack | null;
+  musicUrl?: string | null;
 }) {
   const aspect = resolveAspect(aspectRatio);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const videoRefs = useRef<(HTMLVideoElement | null)[]>([]);
+  const frameRefs = useRef<(HTMLDivElement | null)[]>([]);
+  const musicRef = useRef<HTMLAudioElement | null>(null);
   const [index, setIndex] = useState(0);
   const [masterVolume, setMasterVolume] = useState(1);
   const [masterMuted, setMasterMuted] = useState(false);
   const rafRef = useRef<number | null>(null);
+  const clockRef = useRef({ timelineMs: 0, lastTs: 0 });
 
+  const specs = useMemo(() => segments.map((segment) => buildRenderSpec(segment.adjustments)), [segments]);
+  const durations = useMemo(() => segments.map((segment) => playbackDurationMs(segment)), [segments]);
   const offsets = useMemo(() => {
     let sum = 0;
-    return segments.map((segment) => {
+    return durations.map((duration) => {
       const start = sum;
-      sum += clipDurationMs(segment);
+      sum += duration;
       return start;
     });
-  }, [segments]);
-  const totalMs = useMemo(
-    () => segments.reduce((sum, segment) => sum + clipDurationMs(segment), 0),
-    [segments],
-  );
+  }, [durations]);
+  const totalMs = useMemo(() => durations.reduce((sum, value) => sum + value, 0), [durations]);
 
   const locate = useCallback(
     (globalMs: number) => {
       if (!segments.length) return { index: 0, localMs: 0 };
       for (let i = segments.length - 1; i >= 0; i -= 1) {
         if (globalMs >= offsets[i]) {
-          return { index: i, localMs: Math.min(globalMs - offsets[i], clipDurationMs(segments[i])) };
+          return { index: i, localMs: Math.min(globalMs - offsets[i], durations[i]) };
         }
       }
       return { index: 0, localMs: 0 };
     },
-    [segments, offsets],
+    [segments, offsets, durations],
   );
 
-  /* Apply per-clip audio settings. */
-  useEffect(() => {
-    segments.forEach((segment, i) => {
+  /** Position a clip's video element for a local timeline position. */
+  const applyClipFrame = useCallback(
+    (i: number, localMs: number, seeking: boolean) => {
+      const segment = segments[i];
+      const spec = specs[i];
       const video = videoRefs.current[i];
-      if (!video) return;
-      video.volume = Math.min(1, Math.max(0, segment.volume * masterVolume));
-      video.muted = segment.muted || masterMuted || i !== index;
-    });
-  }, [segments, masterVolume, masterMuted, index]);
+      if (!segment || !video || !spec) return;
+      const motion = spec.motion;
+      const trimmed = Math.max(0, segment.trim_end_ms - segment.trim_start_ms);
+      const playableMs = Math.max(0, durations[i] - motion.freezeMs);
+      const frozen = localMs > playableMs;
+      const sourceMs = Math.min(trimmed, Math.max(0, (frozen ? playableMs : localMs) * motion.speed));
+      const targetSeconds =
+        (motion.reverse
+          ? segment.trim_end_ms - sourceMs
+          : segment.trim_start_ms + sourceMs) / 1000;
+
+      const manual = motion.reverse || frozen;
+      if (manual) {
+        if (!video.paused) video.pause();
+        if (Math.abs(video.currentTime - targetSeconds) > 0.02) {
+          try {
+            video.currentTime = Math.max(0, targetSeconds);
+          } catch {
+            /* metadata not ready */
+          }
+        }
+      } else {
+        if (video.playbackRate !== motion.speed) video.playbackRate = motion.speed;
+        if (seeking || Math.abs(video.currentTime - targetSeconds) > 0.25) {
+          try {
+            video.currentTime = Math.max(0, targetSeconds);
+          } catch {
+            /* metadata not ready */
+          }
+        }
+      }
+
+      // Motion (pan/zoom, fades) is applied to the frame wrapper each tick.
+      const frame = frameRefs.current[i];
+      const state = frameMotionAt(spec, localMs, Math.max(1, durations[i]));
+      if (frame) {
+        frame.style.opacity = String(state.opacity);
+        frame.style.transform = `translate(${state.offsetX}%, ${state.offsetY}%) scale(${state.scale})`;
+      }
+
+      const gain = audioGainAt(spec, segment.muted ? 0 : segment.volume, localMs, Math.max(1, durations[i]));
+      video.volume = Math.min(1, Math.max(0, gain * masterVolume));
+      video.muted = masterMuted || gain === 0 || manual;
+    },
+    [segments, specs, durations, masterVolume, masterMuted],
+  );
+
+  /** Keep the music element aligned with the timeline. */
+  const applyMusic = useCallback(
+    (timelineMs: number, seeking: boolean, isPlaying: boolean) => {
+      const audio = musicRef.current;
+      if (!audio || !music) return;
+      const clipGain = (() => {
+        const target = locate(timelineMs);
+        const spec = specs[target.index];
+        const segment = segments[target.index];
+        if (!spec || !segment) return 0;
+        return audioGainAt(spec, segment.muted ? 0 : segment.volume, target.localMs, durations[target.index] || 1);
+      })();
+      const duckAmount = Math.max(music.duck, specs[locate(timelineMs).index]?.audio.musicDuck ?? 0) / 100;
+      const duck = clipGain > 0.01 ? 1 - duckAmount : 1;
+      const gain = musicGainAt(music, timelineMs, totalMs) * duck * masterVolume;
+      audio.volume = Math.min(1, Math.max(0, gain));
+      audio.muted = masterMuted || gain <= 0;
+      const sourceSeconds = musicSourceOffsetMs(music, timelineMs) / 1000;
+      if (seeking || Math.abs(audio.currentTime - sourceSeconds) > 0.35) {
+        try {
+          audio.currentTime = Math.max(0, sourceSeconds);
+        } catch {
+          /* not ready */
+        }
+      }
+      if (isPlaying && gain > 0 && audio.paused) void audio.play().catch(() => undefined);
+      if ((!isPlaying || gain <= 0) && !audio.paused) audio.pause();
+    },
+    [music, locate, specs, segments, durations, totalMs, masterVolume, masterMuted],
+  );
 
   /* Explicit seeks from the timeline / playhead. */
   useEffect(() => {
     if (!segments.length) return;
     const target = locate(currentMs);
+    clockRef.current.timelineMs = currentMs;
     setIndex(target.index);
-    const video = videoRefs.current[target.index];
-    if (video) {
-      const seconds = (segments[target.index].trim_start_ms + target.localMs) / 1000;
-      try {
-        video.currentTime = seconds;
-      } catch {
-        /* metadata not ready yet — onLoadedMetadata re-applies */
-      }
-    }
+    applyClipFrame(target.index, target.localMs, true);
+    applyMusic(currentMs, true, playing);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [seekNonce]);
 
-  /* Keep the active clip anchored to its trim window when the index changes. */
+  /* Re-apply the static frame whenever adjustments change while paused. */
   useEffect(() => {
-    const segment = segments[index];
-    const video = videoRefs.current[index];
-    if (!segment || !video) return;
-    if (video.currentTime * 1000 < segment.trim_start_ms - 60 || video.currentTime * 1000 > segment.trim_end_ms) {
-      try {
-        video.currentTime = segment.trim_start_ms / 1000;
-      } catch {
-        /* ignore */
-      }
-    }
-    // Warm the next clip for a clean cut.
+    if (playing) return;
+    const target = locate(clockRef.current.timelineMs);
+    applyClipFrame(target.index, target.localMs, false);
+    applyMusic(clockRef.current.timelineMs, false, false);
+  }, [playing, applyClipFrame, applyMusic, locate, specs]);
+
+  /* Warm the next clip for a clean cut. */
+  useEffect(() => {
     const next = videoRefs.current[index + 1];
-    if (next && segments[index + 1]) {
+    const segment = segments[index + 1];
+    if (next && segment) {
       try {
-        next.currentTime = segments[index + 1].trim_start_ms / 1000;
+        next.currentTime = segment.trim_start_ms / 1000;
       } catch {
         /* ignore */
       }
     }
   }, [index, segments]);
 
-  /* Playback driver. */
-  useEffect(() => {
-    const video = videoRefs.current[index];
-    if (!video) return;
-    if (playing) void video.play().catch(() => onPlayingChange(false));
-    else video.pause();
-    segments.forEach((_, i) => {
-      if (i !== index) videoRefs.current[i]?.pause();
-    });
-  }, [playing, index, segments, onPlayingChange]);
-
+  /* Playback driver — one master clock so speed/reverse/freeze stay in sync. */
   useEffect(() => {
     if (!playing) {
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
       rafRef.current = null;
+      segments.forEach((_, i) => videoRefs.current[i]?.pause());
+      musicRef.current?.pause();
       return;
     }
-    const tick = () => {
-      const segment = segments[index];
-      const video = videoRefs.current[index];
-      if (segment && video) {
-        const localMs = Math.max(0, video.currentTime * 1000 - segment.trim_start_ms);
-        const duration = clipDurationMs(segment);
-        if (localMs >= duration - 20) {
-          if (index + 1 < segments.length) {
-            setIndex(index + 1);
-          } else {
-            onPlayingChange(false);
-            onCurrentMs(totalMs);
-            return;
-          }
-        } else {
-          onCurrentMs(offsets[index] + localMs);
-        }
+    if (clockRef.current.timelineMs >= totalMs - 20) clockRef.current.timelineMs = 0;
+    clockRef.current.lastTs = performance.now();
+
+    const tick = (now: number) => {
+      const delta = Math.min(250, now - clockRef.current.lastTs);
+      clockRef.current.lastTs = now;
+      clockRef.current.timelineMs += delta;
+
+      if (clockRef.current.timelineMs >= totalMs) {
+        clockRef.current.timelineMs = totalMs;
+        onCurrentMs(totalMs);
+        onPlayingChange(false);
+        return;
       }
+
+      const target = locate(clockRef.current.timelineMs);
+      if (target.index !== index) setIndex(target.index);
+      segments.forEach((_, i) => {
+        if (i !== target.index) videoRefs.current[i]?.pause();
+      });
+      const video = videoRefs.current[target.index];
+      const spec = specs[target.index];
+      const manual =
+        !!spec &&
+        (spec.motion.reverse || target.localMs > Math.max(0, durations[target.index] - spec.motion.freezeMs));
+      if (video && !manual && video.paused) void video.play().catch(() => undefined);
+      applyClipFrame(target.index, target.localMs, false);
+      applyMusic(clockRef.current.timelineMs, false, true);
+      onCurrentMs(clockRef.current.timelineMs);
       rafRef.current = requestAnimationFrame(tick);
     };
     rafRef.current = requestAnimationFrame(tick);
     return () => {
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
     };
-  }, [playing, index, segments, offsets, totalMs, onCurrentMs, onPlayingChange]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [playing, totalMs, index, applyClipFrame, applyMusic, locate]);
 
   const toggleFullscreen = () => {
     const node = containerRef.current;
@@ -165,7 +261,10 @@ export default function PreviewPlayer({
   };
 
   const restartIfEnded = () => {
-    if (currentMs >= totalMs - 30) onCurrentMs(0);
+    if (currentMs >= totalMs - 30) {
+      clockRef.current.timelineMs = 0;
+      onCurrentMs(0);
+    }
   };
 
   return (
@@ -181,7 +280,7 @@ export default function PreviewPlayer({
           </div>
         ) : null}
         {segments.map((segment, i) => {
-          const spec = buildRenderSpec(segment.adjustments);
+          const spec = specs[i];
           return (
             <div
               key={segment.id}
@@ -191,7 +290,13 @@ export default function PreviewPlayer({
               )}
             >
               <div className="absolute inset-0 grid place-items-center bg-black">
-                <div className="relative overflow-hidden" style={frameBoxStyle(spec)}>
+                <div
+                  ref={(node) => {
+                    frameRefs.current[i] = node;
+                  }}
+                  className="relative overflow-hidden"
+                  style={frameBoxStyle(spec)}
+                >
                   <video
                     ref={(node) => {
                       videoRefs.current[i] = node;
@@ -215,10 +320,27 @@ export default function PreviewPlayer({
           );
         })}
 
+        {textLayers.length ? (
+          <TextOverlay
+            layers={textLayers}
+            currentMs={currentMs}
+            selectedId={selectedTextId}
+            onSelect={onSelectText}
+            onMove={onMoveText}
+            onMoveCommit={onMoveTextCommit}
+            interactive={!!onMoveText}
+            showGuides={showGuides}
+          />
+        ) : null}
+
         <div className="pointer-events-none absolute left-3 top-3 rounded-full border border-white/10 bg-black/60 px-2.5 py-1 font-display text-[10px] uppercase tracking-[0.18em] text-cyan-200">
           Clip {Math.min(index + 1, Math.max(segments.length, 1))} / {segments.length || 1}
         </div>
       </div>
+
+      {music && musicUrl ? (
+        <audio ref={musicRef} src={musicUrl} preload="auto" className="hidden" />
+      ) : null}
 
       <div className="flex items-center gap-3 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2">
         <button

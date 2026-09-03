@@ -12,9 +12,11 @@
  */
 import { createFile, DataStream, MP4BoxBuffer } from "mp4box";
 import { ArrayBufferTarget, Muxer } from "mp4-muxer";
-import { noiseTileBytes, type RenderSpec } from "@/services/editorAdjustments";
+import { frameMotionAt, noiseTileBytes, timelineDurationMs, type RenderSpec } from "@/services/editorAdjustments";
+import { drawTextLayers } from "@/services/videoExport/drawText";
 import {
   segmentCacheKey,
+  type MixedAudioPayload,
   type ExportTarget,
   type WorkerRequest,
   type WorkerResponse,
@@ -143,9 +145,19 @@ async function demux(url: string): Promise<Demuxed> {
 
 const TOLERANCE_US = 60_000;
 
+function textOverlaps(target: ExportTarget, segment: WorkerSegment) {
+  if (!target.textLayers.length) return false;
+  const start = segment.timelineOffsetMs;
+  const end = start + timelineDurationMs(segment.trim_end_ms - segment.trim_start_ms, segment.render.motion);
+  return target.textLayers.some(
+    (layer) => !layer.hidden && layer.endMs > start && layer.startMs < end,
+  );
+}
+
 function canStreamCopy(source: Demuxed, segment: WorkerSegment, target: ExportTarget) {
   const video = source.video;
   if (!video) return false;
+  if (textOverlaps(target, segment)) return false;
   if (!video.codec.startsWith("avc1")) return false;
   if (video.width !== target.width || video.height !== target.height) return false;
   if (segment.volume !== 1) return false;
@@ -215,8 +227,10 @@ function paintFrame(
   frame: any,
   target: ExportTarget,
   spec: RenderSpec,
+  timing: { elapsedMs: number; durationMs: number; timelineMs: number },
 ) {
   const { transform, overlays } = spec;
+  const motion = frameMotionAt(spec, timing.elapsedMs, timing.durationMs);
   ctx.save();
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.clearRect(0, 0, target.width, target.height);
@@ -244,11 +258,12 @@ function paintFrame(
 
   ctx.filter = spec.filter;
   ctx.translate(
-    boxX + boxW / 2 + (transform.offsetX / 100) * boxW,
-    boxY + boxH / 2 + (transform.offsetY / 100) * boxH,
+    boxX + boxW / 2 + ((transform.offsetX + motion.offsetX) / 100) * boxW,
+    boxY + boxH / 2 + ((transform.offsetY + motion.offsetY) / 100) * boxH,
   );
   ctx.rotate((transform.rotate * Math.PI) / 180);
-  ctx.scale(transform.scale * (transform.flip ? -1 : 1), transform.scale);
+  const frameScale = transform.scale * motion.scale;
+  ctx.scale(frameScale * (transform.flip ? -1 : 1), frameScale);
 
   const sourceW = frame.displayWidth || frame.codedWidth || boxW;
   const sourceH = frame.displayHeight || frame.codedHeight || boxH;
@@ -309,6 +324,18 @@ function paintFrame(
     }
   }
   ctx.restore();
+
+  if (target.textLayers.length) {
+    drawTextLayers(ctx, target.textLayers, timing.timelineMs, target.width, target.height);
+  }
+
+  if (motion.opacity < 0.999) {
+    ctx.save();
+    ctx.globalAlpha = 1 - motion.opacity;
+    ctx.fillStyle = "#000";
+    ctx.fillRect(0, 0, target.width, target.height);
+    ctx.restore();
+  }
 }
 
 async function encodeVideo(source: Demuxed, segment: WorkerSegment, target: ExportTarget) {
@@ -349,17 +376,47 @@ async function encodeVideo(source: Demuxed, segment: WorkerSegment, target: Expo
     ...(target.codec === "h265" ? { hevc: { format: "hevc" } } : { avc: { format: "avc" } }),
   });
 
+  const motion = segment.render.motion;
+  const speed = Math.min(4, Math.max(0.25, motion.speed || 1));
+  const frameDurUs = Math.round(1e6 / target.fps);
+  const outDurationMs = timelineDurationMs(segment.trim_end_ms - segment.trim_start_ms, motion);
+  const timelineMs = segment.timelineOffsetMs;
+  const REVERSE_FRAME_LIMIT = 480;
+
+  /** Paints one source frame at its output position and hands it to the encoder. */
+  const emit = (frame: any, outTsUs: number, durUs: number) => {
+    paintFrame(ctx, frame, target, segment.render, {
+      elapsedMs: outTsUs / 1000,
+      durationMs: outDurationMs,
+      timelineMs: timelineMs + outTsUs / 1000,
+    });
+    const rebased = new g.VideoFrame(canvas, { timestamp: Math.max(0, Math.round(outTsUs)), duration: durUs });
+    encoder.encode(rebased);
+    rebased.close();
+  };
+
+  const buffered: any[] = [];
+  let lastOutTsUs = 0;
+
   const decoder = new g.VideoDecoder({
     output: (frame: any) => {
+      if (frame.timestamp < startUs || frame.timestamp >= endUs) {
+        frame.close();
+        return;
+      }
+      if (motion.reverse) {
+        if (buffered.length >= REVERSE_FRAME_LIMIT) {
+          frame.close();
+          return;
+        }
+        buffered.push(frame);
+        return;
+      }
       try {
-        if (frame.timestamp < startUs || frame.timestamp >= endUs) return;
-        paintFrame(ctx, frame, target, segment.render);
-        const rebased = new g.VideoFrame(canvas, {
-          timestamp: frame.timestamp - startUs,
-          duration: frame.duration ?? Math.round(1e6 / target.fps),
-        });
-        encoder.encode(rebased);
-        rebased.close();
+        const outTsUs = (frame.timestamp - startUs) / speed;
+        const durUs = Math.max(1, Math.round((frame.duration ?? frameDurUs) / speed));
+        emit(frame, outTsUs, durUs);
+        lastOutTsUs = outTsUs + durUs;
       } finally {
         frame.close();
       }
@@ -386,19 +443,49 @@ async function encodeVideo(source: Demuxed, segment: WorkerSegment, target: Expo
     }));
   }
   await decoder.flush();
+
+  // Reverse plays the buffered frames back to front, evenly spaced.
+  if (motion.reverse) {
+    const durUs = Math.max(1, Math.round(frameDurUs / speed));
+    for (let index = buffered.length - 1; index >= 0; index -= 1) {
+      const frame = buffered[index];
+      const outTsUs = (buffered.length - 1 - index) * durUs;
+      try {
+        emit(frame, outTsUs, durUs);
+        lastOutTsUs = outTsUs + durUs;
+      } finally {
+        frame.close();
+      }
+    }
+    buffered.length = 0;
+  }
+
+  // Freeze frame: hold the final painted frame for the requested tail.
+  if (motion.freezeMs > 0 && lastOutTsUs > 0) {
+    const holdUs = motion.freezeMs * 1000;
+    for (let elapsed = 0; elapsed < holdUs; elapsed += frameDurUs) {
+      const outTsUs = lastOutTsUs + elapsed;
+      const held = new g.VideoFrame(canvas, { timestamp: Math.round(outTsUs), duration: frameDurUs });
+      encoder.encode(held);
+      held.close();
+    }
+    lastOutTsUs += holdUs;
+  }
+
   await encoder.flush();
   decoder.close();
   encoder.close();
 
   const durationUs = chunks.length
     ? chunks[chunks.length - 1].ptsUs + Math.max(chunks[chunks.length - 1].durUs, 1)
-    : endUs - startUs;
+    : Math.round(outDurationMs * 1000) || endUs - startUs;
 
   return {
     video: { codec: encodeCodec, description, width: target.width, height: target.height, chunks },
     durationUs,
   };
 }
+
 
 async function encodeAudio(source: Demuxed, segment: WorkerSegment, target: ExportTarget) {
   const audio = source.audio;
@@ -514,6 +601,63 @@ async function renderSegment(segment: WorkerSegment, target: ExportTarget): Prom
   return rendered;
 }
 
+/* --------------------------- mixed audio track --------------------------- */
+
+/** Encodes the main-thread audio mixdown (clip audio + music) into AAC chunks. */
+async function encodeMixedAudio(mixed: MixedAudioPayload, target: ExportTarget) {
+  if (!g.AudioEncoder) return undefined;
+  const chunks: Chunk[] = [];
+  let description: Uint8Array | undefined;
+
+  const encoder = new g.AudioEncoder({
+    output: (chunk: any, meta: any) => {
+      if (meta?.decoderConfig?.description && !description) {
+        description = new Uint8Array(meta.decoderConfig.description);
+      }
+      const data = new Uint8Array(chunk.byteLength);
+      chunk.copyTo(data);
+      chunks.push({ data, key: true, ptsUs: chunk.timestamp, durUs: chunk.duration ?? 0 });
+    },
+    error: () => undefined,
+  });
+  encoder.configure({
+    codec: "mp4a.40.2",
+    sampleRate: mixed.sampleRate,
+    numberOfChannels: mixed.channels,
+    bitrate: target.audioBitrate || 128_000,
+  });
+
+  const BLOCK = 1024;
+  const totalFrames = mixed.planes[0]?.length ?? 0;
+  for (let offset = 0; offset < totalFrames; offset += BLOCK) {
+    const frames = Math.min(BLOCK, totalFrames - offset);
+    const planar = new Float32Array(frames * mixed.channels);
+    for (let channel = 0; channel < mixed.channels; channel += 1) {
+      const plane = mixed.planes[Math.min(channel, mixed.planes.length - 1)];
+      planar.set(plane.subarray(offset, offset + frames), channel * frames);
+    }
+    encoder.encode(new g.AudioData({
+      format: "f32-planar",
+      sampleRate: mixed.sampleRate,
+      numberOfFrames: frames,
+      numberOfChannels: mixed.channels,
+      timestamp: Math.round((offset / mixed.sampleRate) * 1e6),
+      data: planar,
+    }));
+  }
+
+  try {
+    await encoder.flush();
+  } catch {
+    /* audio is best-effort — video still exports */
+  }
+  encoder.close();
+
+  return chunks.length
+    ? { codec: "mp4a.40.2", description, sampleRate: mixed.sampleRate, channels: mixed.channels, chunks }
+    : undefined;
+}
+
 /* -------------------------------- muxing -------------------------------- */
 
 function sameDescription(a?: Uint8Array, b?: Uint8Array) {
@@ -524,7 +668,7 @@ function sameDescription(a?: Uint8Array, b?: Uint8Array) {
 }
 
 async function runExport(request: Extract<WorkerRequest, { type: "export" }>) {
-  const { jobId, segments, target, fileName } = request;
+  const { jobId, segments, target, fileName, mixedAudio } = request;
   const rendered: Rendered[] = [];
 
   for (let index = 0; index < segments.length; index += 1) {
@@ -555,12 +699,19 @@ async function runExport(request: Extract<WorkerRequest, { type: "export" }>) {
     rendered[index] = { ...candidate, mode: "encode", video, durationUs };
   }
 
+  let mixedTrack: Rendered["audio"] | undefined;
+  if (mixedAudio && !target.removeAudio) {
+    post({ type: "export-progress", jobId, progress: 84, stage: "Mixing audio" });
+    mixedTrack = await encodeMixedAudio(mixedAudio, target);
+  }
+
   post({ type: "export-progress", jobId, progress: 88, stage: "Combining clips" });
 
   const sequence = target.loop ? [...rendered, ...rendered] : rendered;
 
-  const hasAudio = rendered.some((item) => item.audio);
-  const audioRef = rendered.find((item) => item.audio)?.audio;
+  const useMixed = !!mixedTrack;
+  const hasAudio = useMixed || rendered.some((item) => item.audio);
+  const audioRef = mixedTrack ?? rendered.find((item) => item.audio)?.audio;
 
   const muxer = new Muxer({
     target: new ArrayBufferTarget(),
@@ -594,7 +745,7 @@ async function runExport(request: Extract<WorkerRequest, { type: "export" }>) {
         videoMeta,
       );
     }
-    if (item.audio && audioRef) {
+    if (!useMixed && item.audio && audioRef) {
       const audioMeta = {
         decoderConfig: {
           codec: item.audio.codec,
@@ -614,6 +765,20 @@ async function runExport(request: Extract<WorkerRequest, { type: "export" }>) {
       }
     }
     offsetUs += item.durationUs;
+  }
+
+  if (mixedTrack) {
+    const audioMeta = {
+      decoderConfig: {
+        codec: mixedTrack.codec,
+        description: mixedTrack.description,
+        numberOfChannels: mixedTrack.channels,
+        sampleRate: mixedTrack.sampleRate,
+      },
+    } as any;
+    for (const chunk of mixedTrack.chunks) {
+      muxer.addAudioChunkRaw(chunk.data, "key", chunk.ptsUs, Math.max(chunk.durUs, 1), audioMeta);
+    }
   }
 
   muxer.finalize();

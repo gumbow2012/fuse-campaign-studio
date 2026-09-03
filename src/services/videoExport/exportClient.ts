@@ -8,6 +8,7 @@ import {
   exportFileName,
   segmentCacheKey,
   type ExportTarget,
+  type MixedAudioPayload,
   type WorkerRequest,
   type WorkerResponse,
   type WorkerSegment,
@@ -142,7 +143,12 @@ class CampaignExportController {
     this.emit({ cachedKeys: this.status.cachedKeys.filter((key) => keys.includes(key)) });
   }
 
-  start(segments: WorkerSegment[], target: ExportTarget, projectName: string | null) {
+  start(
+    segments: WorkerSegment[],
+    target: ExportTarget,
+    projectName: string | null,
+    mixedAudio?: MixedAudioPayload | null,
+  ) {
     const worker = this.ensureWorker();
     if (!worker || !this.supported) {
       this.emit({ phase: "unsupported", error: "This browser can't render video locally." });
@@ -164,6 +170,7 @@ class CampaignExportController {
       segments,
       target,
       fileName: exportFileName(projectName),
+      mixedAudio: mixedAudio ?? null,
     });
   }
 
