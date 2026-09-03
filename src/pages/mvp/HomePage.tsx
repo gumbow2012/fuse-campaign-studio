@@ -33,7 +33,6 @@ import {
 import { PerformanceBlock, PerformanceDisclaimer } from "@/components/TemplatePerformance";
 import HeroCampaignTiles from "@/components/mvp/HeroCampaignTiles";
 import HeroWorkflowAnimation from "@/components/mvp/HeroWorkflowAnimation";
-import NewDropsShelf from "@/components/mvp/NewDropsShelf";
 import FeaturedCollabSection from "@/components/mvp/FeaturedCollabSection";
 
 import { track } from "@/lib/analytics/track";
