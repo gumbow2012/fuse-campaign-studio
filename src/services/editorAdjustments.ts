@@ -434,7 +434,8 @@ export type RenderSpec = {
 const round = (value: number, places = 4) => Number(value.toFixed(places));
 
 export function buildRenderSpec(adjustments: Adjustments): RenderSpec {
-  const { color, grain, framing } = adjustments;
+  const { color, grain, framing, motion, audio } = adjustments;
+
 
   const brightness =
     1 + (color.exposure / 100) * 0.55 + (color.highlights / 100) * 0.08 + (color.shadows / 100) * 0.07;
