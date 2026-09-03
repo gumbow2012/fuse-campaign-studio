@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { ArrowLeft, ArrowRight, Check, Download, Loader2, Redo2, Undo2 } from "lucide-react";
 import SiteShell from "@/components/mvp/SiteShell";
@@ -8,24 +8,34 @@ import { Slider } from "@/components/ui/slider";
 import PreviewPlayer from "@/components/editor/PreviewPlayer";
 import EditorTimeline from "@/components/editor/EditorTimeline";
 import ClipInspector from "@/components/editor/inspector/ClipInspector";
+import TextInspector from "@/components/editor/inspector/TextInspector";
+import MusicPanel from "@/components/editor/inspector/MusicPanel";
 import UnusedClips from "@/components/editor/UnusedClips";
 import ExportModal from "@/components/editor/ExportModal";
 import { useCampaignEditor } from "@/hooks/useCampaignEditor";
 import { useCampaignExport } from "@/hooks/useCampaignExport";
 import { clipDurationMs, formatSeconds, formatTimecode } from "@/services/campaignEditor";
 import {
+  DEFAULT_AUDIO,
   DEFAULT_COLOR,
   DEFAULT_FRAMING,
   DEFAULT_GRAIN,
+  DEFAULT_MOTION,
   matchAllAdjustments,
   type Adjustments,
 } from "@/services/editorAdjustments";
 import { normalizeExportSettings } from "@/services/exportSettings";
+import { createTextLayer, type TextLayer } from "@/services/editorText";
+import type { MusicTrack } from "@/services/editorMusic";
+import { signMusicUrl, uploadMusicFile } from "@/services/editorMusicUpload";
+import { cn } from "@/lib/utils";
 
 const SECTION_DEFAULTS = {
   framing: DEFAULT_FRAMING,
   color: DEFAULT_COLOR,
   grain: DEFAULT_GRAIN,
+  motion: DEFAULT_MOTION,
+  audio: DEFAULT_AUDIO,
 } as const;
 
 /** FUSE Campaign Editor — assemble the clips a campaign generated. */
@@ -48,6 +58,8 @@ export default function CampaignEditorPage() {
     adjust,
     resetAdjust,
     setExportSettings,
+    setTextLayers,
+    setMusic,
 
     undo,
     redo,
@@ -55,11 +67,40 @@ export default function CampaignEditorPage() {
     canRedo,
   } = editor;
 
+  const textLayers = useMemo<TextLayer[]>(() => project?.text_layers ?? [], [project?.text_layers]);
+  const music = project?.music ?? null;
+  const [musicUrl, setMusicUrl] = useState<string | null>(null);
+  const [musicUploading, setMusicUploading] = useState(false);
+  const [musicError, setMusicError] = useState<string | null>(null);
+  const [tab, setTab] = useState<"clip" | "text" | "music">("clip");
+  const [selectedTextId, setSelectedTextId] = useState<string | null>(null);
+
+  /** Music playback url is signed on load and refreshed when the track changes. */
+  useEffect(() => {
+    let cancelled = false;
+    if (!music?.path) {
+      setMusicUrl(null);
+      return;
+    }
+    void signMusicUrl(music.path).then((url) => {
+      if (!cancelled) setMusicUrl(url);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [music?.path]);
+
   const exportSettings = useMemo(
     () => normalizeExportSettings(project?.export_settings, project?.aspect_ratio ?? null),
     [project?.export_settings, project?.aspect_ratio],
   );
-  const exportApi = useCampaignExport(active, exportSettings, project?.name ?? null);
+  const exportApi = useCampaignExport(
+    active,
+    exportSettings,
+    project?.name ?? null,
+    textLayers,
+    music ? { track: music, url: musicUrl } : null,
+  );
   const exportStatus = exportApi.status;
   const exportBusy = exportStatus.phase === "preparing" || exportStatus.phase === "rendering";
 
@@ -160,6 +201,76 @@ export default function CampaignEditorPage() {
     );
   }, [active, runOps, selected]);
 
+
+  /* ------------------------------ text layers ------------------------------ */
+
+  const patchText = useCallback(
+    (id: string, patch: Partial<TextLayer>, options?: { label?: string }) => {
+      setTextLayers(
+        textLayers.map((layer) => (layer.id === id ? { ...layer, ...patch } : layer)),
+        options?.label ?? "text",
+      );
+    },
+    [setTextLayers, textLayers],
+  );
+
+  const addText = useCallback(() => {
+    const layer = createTextLayer({
+      startMs: Math.round(currentMs),
+      endMs: Math.round(currentMs) + 3000,
+    });
+    setTextLayers([...textLayers, layer], "add text", true);
+    setSelectedTextId(layer.id);
+    setTab("text");
+  }, [currentMs, setTextLayers, textLayers]);
+
+  const duplicateText = useCallback(
+    (id: string) => {
+      const source = textLayers.find((layer) => layer.id === id);
+      if (!source) return;
+      const copy = createTextLayer({ ...source, y: Math.min(0.95, source.y + 0.08) });
+      setTextLayers([...textLayers, copy], "duplicate text", true);
+      setSelectedTextId(copy.id);
+    },
+    [setTextLayers, textLayers],
+  );
+
+  const deleteText = useCallback(
+    (id: string) => {
+      setTextLayers(textLayers.filter((layer) => layer.id !== id), "delete text", true);
+      setSelectedTextId((current) => (current === id ? null : current));
+    },
+    [setTextLayers, textLayers],
+  );
+
+  /* --------------------------------- music --------------------------------- */
+
+  const patchMusic = useCallback(
+    (patch: Partial<MusicTrack>, options?: { label?: string }) => {
+      if (!music) return;
+      setMusic({ ...music, ...patch }, options?.label ?? "music");
+    },
+    [music, setMusic],
+  );
+
+  const onUploadMusic = useCallback(
+    async (file: File) => {
+      if (!projectId) return;
+      setMusicError(null);
+      setMusicUploading(true);
+      try {
+        const result = await uploadMusicFile(projectId, file);
+        setMusicUrl(result.url);
+        setMusic(result.music, "add music");
+        setTab("music");
+      } catch (error) {
+        setMusicError(error instanceof Error ? error.message : "That track could not be added.");
+      } finally {
+        setMusicUploading(false);
+      }
+    },
+    [projectId, setMusic],
+  );
 
   const saveLabel =
     saveState === "saving"
@@ -291,6 +402,17 @@ export default function CampaignEditorPage() {
               seekNonce={seekNonce}
               playing={playing}
               onPlayingChange={setPlaying}
+              textLayers={textLayers}
+              selectedTextId={selectedTextId}
+              onSelectText={(id) => {
+                setSelectedTextId(id);
+                setTab("text");
+              }}
+              onMoveText={(id, x, y) => patchText(id, { x, y })}
+              onMoveTextCommit={(id, x, y) => patchText(id, { x, y }, { label: "move text" })}
+              showGuides={tab === "text"}
+              music={music}
+              musicUrl={musicUrl}
             />
             <div className="space-y-4">
               <div className="rounded-2xl border border-cyan-300/25 bg-slate-950/70 p-4">
@@ -366,6 +488,17 @@ export default function CampaignEditorPage() {
                 seekNonce={seekNonce}
                 playing={playing}
                 onPlayingChange={setPlaying}
+                textLayers={textLayers}
+                selectedTextId={selectedTextId}
+                onSelectText={(id) => {
+                  setSelectedTextId(id);
+                  setTab("text");
+                }}
+                onMoveText={(id, x, y) => patchText(id, { x, y })}
+                onMoveTextCommit={(id, x, y) => patchText(id, { x, y }, { label: "move text" })}
+                showGuides={tab === "text"}
+                music={music}
+                musicUrl={musicUrl}
               />
               <div className="space-y-4">
                 {selected ? (
@@ -414,6 +547,25 @@ export default function CampaignEditorPage() {
               onTrimCommit={onTrimCommit}
               currentMs={currentMs}
               onSeek={seek}
+              textLayers={textLayers}
+              selectedTextId={selectedTextId}
+              onSelectText={(id) => {
+                setSelectedTextId(id);
+                setTab("text");
+              }}
+              onTextTime={(id, startMs) => {
+                const layer = textLayers.find((item) => item.id === id);
+                if (!layer) return;
+                patchText(id, { startMs, endMs: startMs + (layer.endMs - layer.startMs) });
+              }}
+              onTextTimeCommit={(id) => {
+                const layer = textLayers.find((item) => item.id === id);
+                if (layer) patchText(id, { startMs: layer.startMs }, { label: "move text" });
+              }}
+              music={music}
+              onSelectMusic={() => setTab("music")}
+              onMusicStart={(startMs) => patchMusic({ startMs })}
+              onMusicStartCommit={(startMs) => patchMusic({ startMs }, { label: "music start" })}
             />
 
             <UnusedClips
