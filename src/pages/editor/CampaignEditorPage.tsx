@@ -446,7 +446,7 @@ export default function CampaignEditorPage() {
 
         {singleClip && selected ? (
           /* FREE-FIRST single clip — no empty timeline, just the essentials. */
-          <div className="mt-6 grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
+          <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1fr)_340px] lg:items-start">
             <PreviewPlayer
               segments={active}
               aspectRatio={project.aspect_ratio}
@@ -467,7 +467,7 @@ export default function CampaignEditorPage() {
               music={music}
               musicUrl={musicUrl}
             />
-            <div className="space-y-4">
+            <div className="space-y-4 lg:sticky lg:top-4 lg:max-h-[calc(100vh-7rem)] lg:overflow-y-auto lg:pr-1">
               {tabBar}
               <div className="rounded-2xl border border-cyan-300/25 bg-slate-950/70 p-4">
                 <h2 className="font-display text-sm uppercase tracking-[0.16em] text-white">Your video</h2>
@@ -538,8 +538,8 @@ export default function CampaignEditorPage() {
             </div>
           </div>
         ) : (
-          <div className="mt-6 space-y-4">
-            <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
+          <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1fr)_340px] lg:items-start">
+            <div className="space-y-3">
               <PreviewPlayer
                 segments={active}
                 aspectRatio={project.aspect_ratio}
@@ -560,46 +560,6 @@ export default function CampaignEditorPage() {
                 music={music}
                 musicUrl={musicUrl}
               />
-              <div className="space-y-4">
-                {tabBar}
-                {tab === "text" ? (
-                  textPanel
-                ) : tab === "music" ? (
-                  musicPanel
-                ) : selected ? (
-                  <ClipInspector
-                    segment={selected}
-                    clipNumber={selectedIndex + 1}
-                    clipTotal={active.length}
-                    scope={scope}
-                    onScopeChange={setScope}
-                    onAdjust={onAdjust}
-                    onRecord={onRecordAdjust}
-                    onResetSection={onResetSection}
-                    onResetAll={() => resetAdjust(selected.id, scope)}
-                    onCopy={() => setClipboard(selected.adjustments)}
-                    onPaste={() => {
-                      if (!clipboard) return;
-                      onAdjust(clipboard as unknown as Record<string, unknown>, {
-                        immediate: true,
-                        label: "paste adjustments",
-                      });
-                    }}
-                    canPaste={!!clipboard}
-                    onMatchAll={onMatchAll}
-                    onVolume={(volume) => runOp({ op: "volume", payload: { segment_id: selected.id, volume } })}
-                    onMute={(muted) => runOp({ op: "mute", payload: { segment_id: selected.id, muted } })}
-                    onDuplicate={() => runOp({ op: "duplicate", payload: { segment_id: selected.id } })}
-                    onRemove={() => runOp({ op: "remove", payload: { segment_id: selected.id } })}
-                  />
-                ) : (
-                  <div className="rounded-2xl border border-white/10 bg-slate-950/60 p-4 text-sm text-slate-400">
-                    Tap a clip on the timeline to edit it.
-                  </div>
-                )}
-              </div>
-            </div>
-
             <EditorTimeline
               segments={active}
               selectedId={selectedId}
@@ -637,6 +597,45 @@ export default function CampaignEditorPage() {
               segments={unused}
               onRestore={(id) => runOp({ op: "restore", payload: { segment_id: id } }, { immediate: true })}
             />
+            </div>
+              <div className="space-y-4 lg:sticky lg:top-4 lg:max-h-[calc(100vh-7rem)] lg:overflow-y-auto lg:pr-1">
+                {tabBar}
+                {tab === "text" ? (
+                  textPanel
+                ) : tab === "music" ? (
+                  musicPanel
+                ) : selected ? (
+                  <ClipInspector
+                    segment={selected}
+                    clipNumber={selectedIndex + 1}
+                    clipTotal={active.length}
+                    scope={scope}
+                    onScopeChange={setScope}
+                    onAdjust={onAdjust}
+                    onRecord={onRecordAdjust}
+                    onResetSection={onResetSection}
+                    onResetAll={() => resetAdjust(selected.id, scope)}
+                    onCopy={() => setClipboard(selected.adjustments)}
+                    onPaste={() => {
+                      if (!clipboard) return;
+                      onAdjust(clipboard as unknown as Record<string, unknown>, {
+                        immediate: true,
+                        label: "paste adjustments",
+                      });
+                    }}
+                    canPaste={!!clipboard}
+                    onMatchAll={onMatchAll}
+                    onVolume={(volume) => runOp({ op: "volume", payload: { segment_id: selected.id, volume } })}
+                    onMute={(muted) => runOp({ op: "mute", payload: { segment_id: selected.id, muted } })}
+                    onDuplicate={() => runOp({ op: "duplicate", payload: { segment_id: selected.id } })}
+                    onRemove={() => runOp({ op: "remove", payload: { segment_id: selected.id } })}
+                  />
+                ) : (
+                  <div className="rounded-2xl border border-white/10 bg-slate-950/60 p-4 text-sm text-slate-400">
+                    Tap a clip on the timeline to edit it.
+                  </div>
+                )}
+              </div>
           </div>
         )}
       </div>
