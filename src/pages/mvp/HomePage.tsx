@@ -973,22 +973,6 @@ export default function HomePage() {
       {/* 1.35 · EXCLUSIVE CREATOR COLLABS — hidden when no active drop. */}
       <FeaturedCollabSection />
 
-      {/* 1.4 · NEW DROPS — <lg: media-first rail; lg+: previous desktop shelf. */}
-      <div className="lg:hidden">
-        <NewDropsShelf entries={newToday} fill={newDropsFill} />
-      </div>
-      <div className="hidden lg:block">
-        <Shelf
-          id="new-today"
-          label="New Drops"
-          heading="Just dropped"
-          description="The newest campaigns ready to run."
-          entries={newToday.length ? newToday : newDropsFill}
-          perfMap={perfMap}
-          runsMap={popularity}
-          badge={{ tone: "new", label: "New" }}
-        />
-      </div>
 
 
       {/* 1.6 · HOW IT WORKS — compact row, no giant cards */}
