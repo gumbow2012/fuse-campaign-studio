@@ -28,6 +28,8 @@ export default function CampaignEditorPage() {
     selectedId,
     setSelectedId,
     runOp,
+    recordHistory,
+
     undo,
     redo,
     canUndo,
