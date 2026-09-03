@@ -16,6 +16,8 @@ import {
   type Adjustments,
 } from "@/services/editorAdjustments";
 import type { ExportSettings } from "@/services/exportSettings";
+import type { TextLayer } from "@/services/editorText";
+import type { MusicTrack } from "@/services/editorMusic";
 
 export type SaveState = "idle" | "saving" | "saved" | "error" | "conflict";
 
@@ -395,6 +397,20 @@ export function useCampaignEditor(projectId: string | undefined) {
     [runOp],
   );
 
+  const setTextLayers = useCallback(
+    (layers: TextLayer[], label = "text layers", immediate = false) => {
+      runOp({ op: "set_meta", payload: { text_layers: layers } }, { label, immediate });
+    },
+    [runOp],
+  );
+
+  const setMusic = useCallback(
+    (music: MusicTrack | null, label = "music") => {
+      runOp({ op: "set_meta", payload: { music } }, { label });
+    },
+    [runOp],
+  );
+
   const active = useMemo(() => activeSegments(segments), [segments]);
   const unused = useMemo(() => removedSegments(segments), [segments]);
   const durationMs = useMemo(() => totalDurationMs(segments), [segments]);
@@ -421,6 +437,8 @@ export function useCampaignEditor(projectId: string | undefined) {
     adjust,
     resetAdjust,
     setExportSettings,
+    setTextLayers,
+    setMusic,
     reload,
     undo,
     redo,
