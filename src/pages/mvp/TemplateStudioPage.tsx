@@ -3187,9 +3187,8 @@ export default function TemplateStudioPage() {
                         toggleBatchSelection(template.id);
                         return;
                       }
-                      track("campaign_select", { template_id: template.id });
-                      track("campaign_builder_open", { template_id: template.id });
-                      handleTemplateSelect(template.id);
+                      track("template_view", { template_id: template.id });
+                      navigate(templateDetailPath(template));
                     }}
                     onDetails={
                       selectMode
