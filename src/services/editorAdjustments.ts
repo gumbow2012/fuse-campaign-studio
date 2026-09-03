@@ -141,13 +141,38 @@ export const DEFAULT_GRAIN: Grain = {
   bloom: 0,
 };
 
+/** Motion defaults are strictly neutral so exports can still stream-copy. */
+export const DEFAULT_MOTION: Motion = {
+  speed: 1,
+  reverse: false,
+  freezeMs: 0,
+  fadeInMs: 0,
+  fadeOutMs: 0,
+  motionBlur: 0,
+  panZoom: "none",
+  panZoomAmount: 30,
+  ease: true,
+  stabilize: false,
+};
+
+export const DEFAULT_AUDIO: Audio = {
+  fadeInMs: 0,
+  fadeOutMs: 0,
+  musicDuck: 0,
+  voiceEnhance: false,
+  noiseReduction: 0,
+  normalize: false,
+  detached: false,
+};
+
 export const DEFAULT_ADJUSTMENTS: Adjustments = {
   framing: DEFAULT_FRAMING,
   color: DEFAULT_COLOR,
   grain: DEFAULT_GRAIN,
-  motion: {},
-  audio: {},
+  motion: DEFAULT_MOTION,
+  audio: DEFAULT_AUDIO,
 };
+
 
 /* ------------------------------ presets ------------------------------ */
 
