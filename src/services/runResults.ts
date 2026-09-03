@@ -24,7 +24,11 @@ export type RunResults = {
   edit_project_id: string | null;
   outputs: RunOutput[];
   failed_steps: RunFailedStep[];
+  error_summary: string | null;
+  is_transient: boolean;
+  retry_count: number;
 };
+
 
 function normalize(raw: unknown, runId: string): RunResults {
   const body = (raw ?? {}) as Record<string, unknown>;
