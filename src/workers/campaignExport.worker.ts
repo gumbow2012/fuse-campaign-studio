@@ -601,6 +601,63 @@ async function renderSegment(segment: WorkerSegment, target: ExportTarget): Prom
   return rendered;
 }
 
+/* --------------------------- mixed audio track --------------------------- */
+
+/** Encodes the main-thread audio mixdown (clip audio + music) into AAC chunks. */
+async function encodeMixedAudio(mixed: MixedAudioPayload, target: ExportTarget) {
+  if (!g.AudioEncoder) return undefined;
+  const chunks: Chunk[] = [];
+  let description: Uint8Array | undefined;
+
+  const encoder = new g.AudioEncoder({
+    output: (chunk: any, meta: any) => {
+      if (meta?.decoderConfig?.description && !description) {
+        description = new Uint8Array(meta.decoderConfig.description);
+      }
+      const data = new Uint8Array(chunk.byteLength);
+      chunk.copyTo(data);
+      chunks.push({ data, key: true, ptsUs: chunk.timestamp, durUs: chunk.duration ?? 0 });
+    },
+    error: () => undefined,
+  });
+  encoder.configure({
+    codec: "mp4a.40.2",
+    sampleRate: mixed.sampleRate,
+    numberOfChannels: mixed.channels,
+    bitrate: target.audioBitrate || 128_000,
+  });
+
+  const BLOCK = 1024;
+  const totalFrames = mixed.planes[0]?.length ?? 0;
+  for (let offset = 0; offset < totalFrames; offset += BLOCK) {
+    const frames = Math.min(BLOCK, totalFrames - offset);
+    const planar = new Float32Array(frames * mixed.channels);
+    for (let channel = 0; channel < mixed.channels; channel += 1) {
+      const plane = mixed.planes[Math.min(channel, mixed.planes.length - 1)];
+      planar.set(plane.subarray(offset, offset + frames), channel * frames);
+    }
+    encoder.encode(new g.AudioData({
+      format: "f32-planar",
+      sampleRate: mixed.sampleRate,
+      numberOfFrames: frames,
+      numberOfChannels: mixed.channels,
+      timestamp: Math.round((offset / mixed.sampleRate) * 1e6),
+      data: planar,
+    }));
+  }
+
+  try {
+    await encoder.flush();
+  } catch {
+    /* audio is best-effort — video still exports */
+  }
+  encoder.close();
+
+  return chunks.length
+    ? { codec: "mp4a.40.2", description, sampleRate: mixed.sampleRate, channels: mixed.channels, chunks }
+    : undefined;
+}
+
 /* -------------------------------- muxing -------------------------------- */
 
 function sameDescription(a?: Uint8Array, b?: Uint8Array) {
@@ -611,7 +668,7 @@ function sameDescription(a?: Uint8Array, b?: Uint8Array) {
 }
 
 async function runExport(request: Extract<WorkerRequest, { type: "export" }>) {
-  const { jobId, segments, target, fileName } = request;
+  const { jobId, segments, target, fileName, mixedAudio } = request;
   const rendered: Rendered[] = [];
 
   for (let index = 0; index < segments.length; index += 1) {
@@ -642,12 +699,19 @@ async function runExport(request: Extract<WorkerRequest, { type: "export" }>) {
     rendered[index] = { ...candidate, mode: "encode", video, durationUs };
   }
 
+  let mixedTrack: Rendered["audio"] | undefined;
+  if (mixedAudio && !target.removeAudio) {
+    post({ type: "export-progress", jobId, progress: 84, stage: "Mixing audio" });
+    mixedTrack = await encodeMixedAudio(mixedAudio, target);
+  }
+
   post({ type: "export-progress", jobId, progress: 88, stage: "Combining clips" });
 
   const sequence = target.loop ? [...rendered, ...rendered] : rendered;
 
-  const hasAudio = rendered.some((item) => item.audio);
-  const audioRef = rendered.find((item) => item.audio)?.audio;
+  const useMixed = !!mixedTrack;
+  const hasAudio = useMixed || rendered.some((item) => item.audio);
+  const audioRef = mixedTrack ?? rendered.find((item) => item.audio)?.audio;
 
   const muxer = new Muxer({
     target: new ArrayBufferTarget(),
@@ -681,7 +745,7 @@ async function runExport(request: Extract<WorkerRequest, { type: "export" }>) {
         videoMeta,
       );
     }
-    if (item.audio && audioRef) {
+    if (!useMixed && item.audio && audioRef) {
       const audioMeta = {
         decoderConfig: {
           codec: item.audio.codec,
@@ -701,6 +765,20 @@ async function runExport(request: Extract<WorkerRequest, { type: "export" }>) {
       }
     }
     offsetUs += item.durationUs;
+  }
+
+  if (mixedTrack) {
+    const audioMeta = {
+      decoderConfig: {
+        codec: mixedTrack.codec,
+        description: mixedTrack.description,
+        numberOfChannels: mixedTrack.channels,
+        sampleRate: mixedTrack.sampleRate,
+      },
+    } as any;
+    for (const chunk of mixedTrack.chunks) {
+      muxer.addAudioChunkRaw(chunk.data, "key", chunk.ptsUs, Math.max(chunk.durUs, 1), audioMeta);
+    }
   }
 
   muxer.finalize();
