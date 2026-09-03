@@ -3,6 +3,7 @@
  * No signed urls are ever persisted — they are passed per request and dropped.
  */
 import type { RenderSpec } from "@/services/editorAdjustments";
+import type { TextLayer } from "@/services/editorText";
 
 export type ExportTarget = {
   width: number;
@@ -15,6 +16,10 @@ export type ExportTarget = {
   codec: "h264" | "h265";
   removeAudio: boolean;
   loop: boolean;
+  /** Overlay text burned into the frames (timed against the whole timeline). */
+  textLayers: TextLayer[];
+  /** Signature of the text layers — part of the per-clip cache identity. */
+  textSignature: string;
 };
 
 /** One clip as the worker needs it (already resolved to a signed playback url). */
@@ -27,6 +32,15 @@ export type WorkerSegment = {
   volume: number;
   /** Precomputed on the main thread so preview and export share one source of truth. */
   render: RenderSpec;
+  /** Where this clip starts on the timeline — text layers are timed globally. */
+  timelineOffsetMs: number;
+};
+
+/** One fully mixed audio track (music + clip audio), rendered on the main thread. */
+export type MixedAudioPayload = {
+  sampleRate: number;
+  channels: number;
+  planes: Float32Array[];
 };
 
 /** Cache identity — any change here means that one segment must be re-rendered. */
@@ -39,13 +53,29 @@ export function segmentCacheKey(segment: WorkerSegment, target: ExportTarget) {
     `v${segment.volume.toFixed(2)}`,
     `${target.width}x${target.height}@${target.fps}`,
     `${target.codec}:${target.videoBitrate}:${target.removeAudio ? "na" : target.audioBitrate}`,
-    segment.render.identity ? "id" : JSON.stringify([segment.render.filter, segment.render.transform, segment.render.overlays]),
+    segment.render.identity
+      ? "id"
+      : JSON.stringify([
+          segment.render.filter,
+          segment.render.transform,
+          segment.render.overlays,
+          segment.render.motion,
+        ]),
+    target.textLayers.length ? `t${Math.round(segment.timelineOffsetMs)}:${target.textSignature}` : "t0",
   ].join("|");
 }
 
 export type WorkerRequest =
   | { type: "prerender"; segments: WorkerSegment[]; target: ExportTarget }
-  | { type: "export"; jobId: string; segments: WorkerSegment[]; target: ExportTarget; fileName: string }
+  | {
+      type: "export";
+      jobId: string;
+      segments: WorkerSegment[];
+      target: ExportTarget;
+      fileName: string;
+      /** When present the worker uses this single track instead of per-clip audio. */
+      mixedAudio?: MixedAudioPayload | null;
+    }
   | { type: "cancel"; jobId: string }
   | { type: "invalidate"; keys: string[] }
   | { type: "keep"; keys: string[] };
