@@ -151,10 +151,11 @@ export default function CampaignEditorPage() {
             size="sm"
             className="border-white/10 bg-white/[0.03] text-slate-300"
           >
-            <Link to="/app/templates">
+            <Link to="/app/templates" title="View all generated outputs">
               <ArrowLeft className="mr-1.5 h-3.5 w-3.5" />
-              Back
+              All outputs
             </Link>
+
           </Button>
           <div className="min-w-0">
             <h1 className="truncate font-display text-lg uppercase tracking-[0.1em] text-white sm:text-xl">
