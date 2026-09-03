@@ -18,7 +18,8 @@ export default function RunResultsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [retrying, setRetrying] = useState(false);
-  const [retried, setRetried] = useState<string[]>([]);
+  const [retryStarted, setRetryStarted] = useState(false);
+
 
   const load = useCallback(async () => {
     if (!runId) return;
