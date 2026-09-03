@@ -241,6 +241,17 @@ export function useCampaignEditor(projectId: string | undefined) {
     [enqueue],
   );
 
+  /** Record one undoable step manually (used for continuous drags). */
+  const recordHistory = useCallback((undoOp: EditOp, redoOp: EditOp, label?: string) => {
+    historyRef.current.past = [
+      ...historyRef.current.past.slice(-49),
+      { label: label ?? redoOp.op, undo: undoOp, redo: redoOp },
+    ];
+    historyRef.current.future = [];
+    setHistoryVersion((v) => v + 1);
+  }, []);
+
+
   const undo = useCallback(() => {
     const entry = historyRef.current.past.pop();
     if (!entry) return;
