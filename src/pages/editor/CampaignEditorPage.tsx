@@ -205,7 +205,13 @@ export default function CampaignEditorPage() {
               onClick={() => setExportOpen(true)}
               className="hidden bg-cyan-400 font-display uppercase tracking-[0.08em] text-slate-950 hover:bg-cyan-300 md:inline-flex"
             >
-              Export video
+              {exportBusy
+                ? `Rendering ${exportStatus.progress}%`
+                : exportStatus.phase === "done"
+                  ? "Download video"
+                  : exportApi.readyClips >= exportApi.clipCount && exportApi.clipCount > 0
+                    ? "Quick export"
+                    : "Export video"}
               <ArrowRight className="ml-2 h-4 w-4" />
             </Button>
           </div>
@@ -330,7 +336,11 @@ export default function CampaignEditorPage() {
           onClick={() => setExportOpen(true)}
           className="w-full bg-cyan-400 font-display uppercase tracking-[0.08em] text-slate-950 hover:bg-cyan-300"
         >
-          Export video
+          {exportBusy
+            ? `Rendering ${exportStatus.progress}%`
+            : exportStatus.phase === "done"
+              ? "Download video"
+              : "Export video"}
           <ArrowRight className="ml-2 h-4 w-4" />
         </Button>
       </div>
@@ -338,10 +348,8 @@ export default function CampaignEditorPage() {
       <ExportModal
         open={exportOpen}
         onOpenChange={setExportOpen}
-        projectId={project.id}
-        aspectRatio={project.aspect_ratio}
         durationMs={durationMs}
-        clipCount={active.length}
+        exportApi={exportApi}
       />
     </SiteShell>
   );
