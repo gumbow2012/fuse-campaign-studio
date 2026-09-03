@@ -349,6 +349,15 @@ export default function TemplateDetailPage() {
           onClose={() => setFeaturedOpen(false)}
         />
       ) : null}
+
+      {gridIndex !== null && template && template.gallery.length ? (
+        <TemplateMediaLightbox
+          items={template.gallery}
+          index={gridIndex}
+          onIndexChange={setGridIndex}
+          onClose={() => setGridIndex(null)}
+        />
+      ) : null}
     </SiteShell>
   );
 }
