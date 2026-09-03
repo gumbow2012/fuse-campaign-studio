@@ -637,3 +637,109 @@ export function matchAllAdjustments(list: Adjustments[]): { color: Partial<Color
     },
   };
 }
+
+/* ------------------------------ motion maths ------------------------------ */
+
+export function motionIsNeutral(motion: Motion) {
+  return (
+    motion.speed === 1 &&
+    !motion.reverse &&
+    motion.freezeMs === 0 &&
+    motion.fadeInMs === 0 &&
+    motion.fadeOutMs === 0 &&
+    motion.motionBlur === 0 &&
+    motion.panZoom === "none" &&
+    !motion.stabilize
+  );
+}
+
+export function audioIsNeutral(audio: Audio) {
+  return (
+    audio.fadeInMs === 0 &&
+    audio.fadeOutMs === 0 &&
+    audio.musicDuck === 0 &&
+    !audio.voiceEnhance &&
+    audio.noiseReduction === 0 &&
+    !audio.normalize &&
+    !audio.detached
+  );
+}
+
+/** Timeline duration of a clip once speed + freeze frame are applied. */
+export function timelineDurationMs(trimmedMs: number, motion: Motion | RenderSpec["motion"]) {
+  const speed = Math.min(4, Math.max(0.25, motion.speed || 1));
+  return Math.max(0, Math.round(trimmedMs / speed) + Math.round(motion.freezeMs || 0));
+}
+
+const easeInOut = (t: number) => (t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2);
+
+/** Per-frame motion result: extra scale/offset from pan & zoom plus fade opacity. */
+export function frameMotionAt(
+  spec: RenderSpec,
+  elapsedMs: number,
+  durationMs: number,
+): { scale: number; offsetX: number; offsetY: number; opacity: number } {
+  const motion = spec.motion;
+  const total = Math.max(1, durationMs);
+  const raw = Math.min(1, Math.max(0, elapsedMs / total));
+  const progress = motion.ease ? easeInOut(raw) : raw;
+  const amount = motion.panZoomAmount / 100;
+
+  let scale = motion.stabilizeScale;
+  let offsetX = 0;
+  let offsetY = 0;
+
+  switch (motion.panZoom) {
+    case "in":
+      scale *= 1 + amount * 0.35 * progress;
+      break;
+    case "out":
+      scale *= 1 + amount * 0.35 * (1 - progress);
+      break;
+    case "left":
+      scale *= 1 + amount * 0.18;
+      offsetX = amount * 12 * (0.5 - progress) * 2;
+      break;
+    case "right":
+      scale *= 1 + amount * 0.18;
+      offsetX = -amount * 12 * (0.5 - progress) * 2;
+      break;
+    case "up":
+      scale *= 1 + amount * 0.18;
+      offsetY = amount * 12 * (0.5 - progress) * 2;
+      break;
+    case "down":
+      scale *= 1 + amount * 0.18;
+      offsetY = -amount * 12 * (0.5 - progress) * 2;
+      break;
+    default:
+      break;
+  }
+
+  let opacity = 1;
+  if (motion.fadeInMs > 0) opacity = Math.min(opacity, Math.min(1, elapsedMs / motion.fadeInMs));
+  if (motion.fadeOutMs > 0) {
+    opacity = Math.min(opacity, Math.min(1, Math.max(0, total - elapsedMs) / motion.fadeOutMs));
+  }
+
+  return {
+    scale: Number(scale.toFixed(4)),
+    offsetX: Number(offsetX.toFixed(3)),
+    offsetY: Number(offsetY.toFixed(3)),
+    opacity: Number(Math.max(0, Math.min(1, opacity)).toFixed(3)),
+  };
+}
+
+/** Linear audio gain envelope for one clip (used by preview and the mixer). */
+export function audioGainAt(spec: RenderSpec, baseGain: number, elapsedMs: number, durationMs: number) {
+  if (spec.audio.detached) return 0;
+  let gain = baseGain;
+  const total = Math.max(1, durationMs);
+  if (spec.audio.fadeInMs > 0) gain *= Math.min(1, elapsedMs / spec.audio.fadeInMs);
+  if (spec.audio.fadeOutMs > 0) {
+    gain *= Math.min(1, Math.max(0, total - elapsedMs) / spec.audio.fadeOutMs);
+  }
+  if (spec.audio.normalize) gain *= 1.15;
+  if (spec.audio.voiceEnhance) gain *= 1.08;
+  return Math.max(0, Math.min(2, gain));
+}
