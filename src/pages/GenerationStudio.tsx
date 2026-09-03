@@ -1611,6 +1611,9 @@ export default function GenerationStudio() {
         id: entry.id,
         url: entry.outputUrl as string,
         type: entry.outputType === "video" ? "video" : "image",
+        // Optimized thumbnail / poster frame when one exists — signed like any
+        // other private reference.
+        previewUrl: entry.previewUrl ?? entry.posterUrl ?? null,
         generationId: entry.id,
         createdAt: entry.createdAt,
         favorited: entry.favorited === true,
@@ -1619,6 +1622,7 @@ export default function GenerationStudio() {
       id: `upload:${url}`,
       url,
       type: "image" as const,
+      previewUrl: null as string | null,
       generationId: null as string | null,
       // Uploads have no timestamp — the store is newest-first, so use its order.
       createdAt: null as string | null,
