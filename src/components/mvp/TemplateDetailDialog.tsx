@@ -11,6 +11,7 @@ import { deriveTemplateFit } from "@/lib/brandTemplateFit";
 import TemplateFitBadge from "@/components/brand/TemplateFitBadge";
 import TemplateRequirementNudge from "@/components/brand/TemplateRequirementNudge";
 import FavoriteTemplateButton from "@/components/templates/FavoriteTemplateButton";
+import TemplatePreviewGallery from "@/components/templates/TemplatePreviewGallery";
 import { useTemplateFavorites } from "@/hooks/useTemplateFavorites";
 import { cn } from "@/lib/utils";
 import type { ApiTemplate } from "@/services/fuseApi";
