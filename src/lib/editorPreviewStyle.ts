@@ -30,8 +30,8 @@ export function videoStyleFor(spec: RenderSpec): React.CSSProperties {
     objectFit: transform.fit,
     transform: [
       `translate(${transform.offsetX}%, ${transform.offsetY}%)`,
-      `scale(${transform.scale})`,
       `rotate(${transform.rotate}deg)`,
+      `scale(${transform.scale})`,
       transform.flip ? "scaleX(-1)" : "",
     ]
       .filter(Boolean)
