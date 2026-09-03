@@ -11,6 +11,7 @@ import ClipPanel from "@/components/editor/ClipPanel";
 import UnusedClips from "@/components/editor/UnusedClips";
 import ExportModal from "@/components/editor/ExportModal";
 import { useCampaignEditor } from "@/hooks/useCampaignEditor";
+import { useCampaignExport } from "@/hooks/useCampaignExport";
 import { clipDurationMs, formatSeconds, formatTimecode } from "@/services/campaignEditor";
 
 /** FUSE Campaign Editor — assemble the clips a campaign generated. */
@@ -35,6 +36,10 @@ export default function CampaignEditorPage() {
     canUndo,
     canRedo,
   } = editor;
+
+  const exportApi = useCampaignExport(active, project?.aspect_ratio ?? null, project?.name ?? null);
+  const exportStatus = exportApi.status;
+  const exportBusy = exportStatus.phase === "preparing" || exportStatus.phase === "rendering";
 
   const [currentMs, setCurrentMs] = useState(0);
   const [playing, setPlaying] = useState(false);
@@ -200,7 +205,13 @@ export default function CampaignEditorPage() {
               onClick={() => setExportOpen(true)}
               className="hidden bg-cyan-400 font-display uppercase tracking-[0.08em] text-slate-950 hover:bg-cyan-300 md:inline-flex"
             >
-              Export video
+              {exportBusy
+                ? `Rendering ${exportStatus.progress}%`
+                : exportStatus.phase === "done"
+                  ? "Download video"
+                  : exportApi.readyClips >= exportApi.clipCount && exportApi.clipCount > 0
+                    ? "Quick export"
+                    : "Export video"}
               <ArrowRight className="ml-2 h-4 w-4" />
             </Button>
           </div>
@@ -325,7 +336,11 @@ export default function CampaignEditorPage() {
           onClick={() => setExportOpen(true)}
           className="w-full bg-cyan-400 font-display uppercase tracking-[0.08em] text-slate-950 hover:bg-cyan-300"
         >
-          Export video
+          {exportBusy
+            ? `Rendering ${exportStatus.progress}%`
+            : exportStatus.phase === "done"
+              ? "Download video"
+              : "Export video"}
           <ArrowRight className="ml-2 h-4 w-4" />
         </Button>
       </div>
@@ -333,10 +348,8 @@ export default function CampaignEditorPage() {
       <ExportModal
         open={exportOpen}
         onOpenChange={setExportOpen}
-        projectId={project.id}
-        aspectRatio={project.aspect_ratio}
         durationMs={durationMs}
-        clipCount={active.length}
+        exportApi={exportApi}
       />
     </SiteShell>
   );
