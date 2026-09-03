@@ -289,6 +289,8 @@ export function useCampaignEditor(projectId: string | undefined) {
     selectedId,
     setSelectedId,
     runOp,
+    recordHistory,
+
     reload,
     undo,
     redo,
