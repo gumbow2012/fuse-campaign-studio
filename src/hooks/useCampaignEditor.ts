@@ -176,8 +176,6 @@ export function useCampaignEditor(projectId: string | undefined) {
   const localVersionRef = useRef(0);
   const historyRef = useRef<{ past: HistoryEntry[]; future: HistoryEntry[] }>({ past: [], future: [] });
   const [historyVersion, setHistoryVersion] = useState(0);
-  const saveStateRef = useRef<SaveState>("idle");
-  saveStateRef.current = saveState;
 
   segmentsRef.current = segments;
   projectRef.current = project;
@@ -267,6 +265,7 @@ export function useCampaignEditor(projectId: string | undefined) {
     if (!queueRef.current.length) return;
     inFlightRef.current = true;
     setSaveState("saving");
+    let failed = false;
     try {
       while (queueRef.current.length) {
         const op = queueRef.current[0];
@@ -292,6 +291,7 @@ export function useCampaignEditor(projectId: string | undefined) {
           setSaveError(null);
         } else {
           // Keep the op queued and the user's work visible — no reload, no revert.
+          failed = true;
           setSaveState("error");
           setSaveError(result.error || "We couldn't save your latest change.");
           return;
@@ -300,11 +300,12 @@ export function useCampaignEditor(projectId: string | undefined) {
       setSaveState("saved");
       setSaveError(null);
     } catch (error) {
+      failed = true;
       setSaveState("error");
       setSaveError(error instanceof Error ? error.message : "We couldn't save your latest change.");
     } finally {
       inFlightRef.current = false;
-      if (queueRef.current.length && saveStateRef.current !== "error") void drain();
+      if (queueRef.current.length && !failed) void drain();
     }
   }, [projectId, adopt, adoptRevision]);
 
