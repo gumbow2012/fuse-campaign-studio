@@ -12,9 +12,11 @@
  */
 import { createFile, DataStream, MP4BoxBuffer } from "mp4box";
 import { ArrayBufferTarget, Muxer } from "mp4-muxer";
-import { noiseTileBytes, type RenderSpec } from "@/services/editorAdjustments";
+import { frameMotionAt, noiseTileBytes, timelineDurationMs, type RenderSpec } from "@/services/editorAdjustments";
+import { drawTextLayers } from "@/services/videoExport/drawText";
 import {
   segmentCacheKey,
+  type MixedAudioPayload,
   type ExportTarget,
   type WorkerRequest,
   type WorkerResponse,
@@ -143,9 +145,19 @@ async function demux(url: string): Promise<Demuxed> {
 
 const TOLERANCE_US = 60_000;
 
+function textOverlaps(target: ExportTarget, segment: WorkerSegment) {
+  if (!target.textLayers.length) return false;
+  const start = segment.timelineOffsetMs;
+  const end = start + timelineDurationMs(segment.trim_end_ms - segment.trim_start_ms, segment.render.motion);
+  return target.textLayers.some(
+    (layer) => !layer.hidden && layer.endMs > start && layer.startMs < end,
+  );
+}
+
 function canStreamCopy(source: Demuxed, segment: WorkerSegment, target: ExportTarget) {
   const video = source.video;
   if (!video) return false;
+  if (textOverlaps(target, segment)) return false;
   if (!video.codec.startsWith("avc1")) return false;
   if (video.width !== target.width || video.height !== target.height) return false;
   if (segment.volume !== 1) return false;
@@ -215,8 +227,10 @@ function paintFrame(
   frame: any,
   target: ExportTarget,
   spec: RenderSpec,
+  timing: { elapsedMs: number; durationMs: number; timelineMs: number },
 ) {
   const { transform, overlays } = spec;
+  const motion = frameMotionAt(spec, timing.elapsedMs, timing.durationMs);
   ctx.save();
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.clearRect(0, 0, target.width, target.height);
@@ -244,11 +258,12 @@ function paintFrame(
 
   ctx.filter = spec.filter;
   ctx.translate(
-    boxX + boxW / 2 + (transform.offsetX / 100) * boxW,
-    boxY + boxH / 2 + (transform.offsetY / 100) * boxH,
+    boxX + boxW / 2 + ((transform.offsetX + motion.offsetX) / 100) * boxW,
+    boxY + boxH / 2 + ((transform.offsetY + motion.offsetY) / 100) * boxH,
   );
   ctx.rotate((transform.rotate * Math.PI) / 180);
-  ctx.scale(transform.scale * (transform.flip ? -1 : 1), transform.scale);
+  const frameScale = transform.scale * motion.scale;
+  ctx.scale(frameScale * (transform.flip ? -1 : 1), frameScale);
 
   const sourceW = frame.displayWidth || frame.codedWidth || boxW;
   const sourceH = frame.displayHeight || frame.codedHeight || boxH;
@@ -309,6 +324,18 @@ function paintFrame(
     }
   }
   ctx.restore();
+
+  if (target.textLayers.length) {
+    drawTextLayers(ctx, target.textLayers, timing.timelineMs, target.width, target.height);
+  }
+
+  if (motion.opacity < 0.999) {
+    ctx.save();
+    ctx.globalAlpha = 1 - motion.opacity;
+    ctx.fillStyle = "#000";
+    ctx.fillRect(0, 0, target.width, target.height);
+    ctx.restore();
+  }
 }
 
 async function encodeVideo(source: Demuxed, segment: WorkerSegment, target: ExportTarget) {
