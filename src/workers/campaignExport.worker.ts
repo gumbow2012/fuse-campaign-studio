@@ -376,17 +376,47 @@ async function encodeVideo(source: Demuxed, segment: WorkerSegment, target: Expo
     ...(target.codec === "h265" ? { hevc: { format: "hevc" } } : { avc: { format: "avc" } }),
   });
 
+  const motion = segment.render.motion;
+  const speed = Math.min(4, Math.max(0.25, motion.speed || 1));
+  const frameDurUs = Math.round(1e6 / target.fps);
+  const outDurationMs = timelineDurationMs(segment.trim_end_ms - segment.trim_start_ms, motion);
+  const timelineMs = segment.timelineOffsetMs;
+  const REVERSE_FRAME_LIMIT = 480;
+
+  /** Paints one source frame at its output position and hands it to the encoder. */
+  const emit = (frame: any, outTsUs: number, durUs: number) => {
+    paintFrame(ctx, frame, target, segment.render, {
+      elapsedMs: outTsUs / 1000,
+      durationMs: outDurationMs,
+      timelineMs: timelineMs + outTsUs / 1000,
+    });
+    const rebased = new g.VideoFrame(canvas, { timestamp: Math.max(0, Math.round(outTsUs)), duration: durUs });
+    encoder.encode(rebased);
+    rebased.close();
+  };
+
+  const buffered: any[] = [];
+  let lastOutTsUs = 0;
+
   const decoder = new g.VideoDecoder({
     output: (frame: any) => {
+      if (frame.timestamp < startUs || frame.timestamp >= endUs) {
+        frame.close();
+        return;
+      }
+      if (motion.reverse) {
+        if (buffered.length >= REVERSE_FRAME_LIMIT) {
+          frame.close();
+          return;
+        }
+        buffered.push(frame);
+        return;
+      }
       try {
-        if (frame.timestamp < startUs || frame.timestamp >= endUs) return;
-        paintFrame(ctx, frame, target, segment.render);
-        const rebased = new g.VideoFrame(canvas, {
-          timestamp: frame.timestamp - startUs,
-          duration: frame.duration ?? Math.round(1e6 / target.fps),
-        });
-        encoder.encode(rebased);
-        rebased.close();
+        const outTsUs = (frame.timestamp - startUs) / speed;
+        const durUs = Math.max(1, Math.round((frame.duration ?? frameDurUs) / speed));
+        emit(frame, outTsUs, durUs);
+        lastOutTsUs = outTsUs + durUs;
       } finally {
         frame.close();
       }
@@ -413,19 +443,49 @@ async function encodeVideo(source: Demuxed, segment: WorkerSegment, target: Expo
     }));
   }
   await decoder.flush();
+
+  // Reverse plays the buffered frames back to front, evenly spaced.
+  if (motion.reverse) {
+    const durUs = Math.max(1, Math.round(frameDurUs / speed));
+    for (let index = buffered.length - 1; index >= 0; index -= 1) {
+      const frame = buffered[index];
+      const outTsUs = (buffered.length - 1 - index) * durUs;
+      try {
+        emit(frame, outTsUs, durUs);
+        lastOutTsUs = outTsUs + durUs;
+      } finally {
+        frame.close();
+      }
+    }
+    buffered.length = 0;
+  }
+
+  // Freeze frame: hold the final painted frame for the requested tail.
+  if (motion.freezeMs > 0 && lastOutTsUs > 0) {
+    const holdUs = motion.freezeMs * 1000;
+    for (let elapsed = 0; elapsed < holdUs; elapsed += frameDurUs) {
+      const outTsUs = lastOutTsUs + elapsed;
+      const held = new g.VideoFrame(canvas, { timestamp: Math.round(outTsUs), duration: frameDurUs });
+      encoder.encode(held);
+      held.close();
+    }
+    lastOutTsUs += holdUs;
+  }
+
   await encoder.flush();
   decoder.close();
   encoder.close();
 
   const durationUs = chunks.length
     ? chunks[chunks.length - 1].ptsUs + Math.max(chunks[chunks.length - 1].durUs, 1)
-    : endUs - startUs;
+    : Math.round(outDurationMs * 1000) || endUs - startUs;
 
   return {
     video: { codec: encodeCodec, description, width: target.width, height: target.height, chunks },
     durationUs,
   };
 }
+
 
 async function encodeAudio(source: Demuxed, segment: WorkerSegment, target: ExportTarget) {
   const audio = source.audio;
