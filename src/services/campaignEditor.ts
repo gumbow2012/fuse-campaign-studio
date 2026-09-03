@@ -1,0 +1,221 @@
+/**
+ * FUSE Campaign Editor — thin client over the existing edit edge functions.
+ * Signed playback urls are NEVER persisted; they are re-fetched on demand.
+ */
+import { supabase } from "@/integrations/supabase/client";
+import { looseTable } from "@/services/looseTable";
+
+export type EditProject = {
+  id: string;
+  name: string | null;
+  aspect_ratio: string | null;
+  status: string | null;
+  revision: number;
+};
+
+export type EditSegment = {
+  id: string;
+  source_path: string;
+  source_label: string | null;
+  source_duration_ms: number;
+  position: number;
+  trim_start_ms: number;
+  trim_end_ms: number;
+  volume: number;
+  muted: boolean;
+  removed: boolean;
+  /** Short-lived signed playback url (expires ~1h). */
+  url: string | null;
+};
+
+export type EditorState = { project: EditProject; segments: EditSegment[] };
+
+export type EditOp =
+  | { op: "reorder"; payload: { order: string[] } }
+  | { op: "trim"; payload: { segment_id: string; trim_start_ms: number; trim_end_ms: number } }
+  | { op: "mute"; payload: { segment_id: string; muted: boolean } }
+  | { op: "volume"; payload: { segment_id: string; volume: number } }
+  | { op: "remove"; payload: { segment_id: string } }
+  | { op: "restore"; payload: { segment_id: string } }
+  | { op: "duplicate"; payload: { segment_id: string } };
+
+export type UpdateResult = {
+  status: "ok" | "conflict" | "forbidden" | "not_found" | "error";
+  project?: EditProject;
+  segments?: EditSegment[];
+  error?: string;
+};
+
+function normalizeSegment(raw: Record<string, unknown>): EditSegment {
+  const duration = Number(raw.source_duration_ms ?? 0) || 0;
+  const trimStart = Math.max(0, Number(raw.trim_start_ms ?? 0) || 0);
+  const rawEnd = Number(raw.trim_end_ms ?? duration);
+  const trimEnd = Math.min(duration || rawEnd, rawEnd > trimStart ? rawEnd : duration);
+  return {
+    id: String(raw.id),
+    source_path: String(raw.source_path ?? ""),
+    source_label: (raw.source_label as string | null) ?? null,
+    source_duration_ms: duration,
+    position: Number(raw.position ?? 0) || 0,
+    trim_start_ms: trimStart,
+    trim_end_ms: trimEnd,
+    volume: typeof raw.volume === "number" ? raw.volume : Number(raw.volume ?? 1) || 1,
+    muted: Boolean(raw.muted),
+    removed: Boolean(raw.removed),
+    url: typeof raw.url === "string" ? raw.url : null,
+  };
+}
+
+function normalizeState(data: unknown): EditorState {
+  const payload = (data ?? {}) as { project?: Record<string, unknown>; segments?: Record<string, unknown>[] };
+  const project = payload.project ?? {};
+  return {
+    project: {
+      id: String(project.id ?? ""),
+      name: (project.name as string | null) ?? null,
+      aspect_ratio: (project.aspect_ratio as string | null) ?? null,
+      status: (project.status as string | null) ?? null,
+      revision: Number(project.revision ?? 0) || 0,
+    },
+    segments: (payload.segments ?? []).map(normalizeSegment).sort((a, b) => a.position - b.position),
+  };
+}
+
+/** Load (or refresh) the editor state, including fresh signed urls. */
+export async function loadEditorState(projectId: string): Promise<EditorState> {
+  const { data, error } = await supabase.functions.invoke("sign-edit-media", {
+    body: { project_id: projectId },
+  });
+  if (error) throw new Error(error.message || "Could not load this campaign edit.");
+  const state = normalizeState(data);
+  if (!state.project.id) throw new Error("This campaign edit could not be found.");
+  return state;
+}
+
+/** Apply one edit op with optimistic-concurrency guard. */
+export async function applyEditOp(
+  projectId: string,
+  expectedRevision: number,
+  op: EditOp,
+): Promise<UpdateResult> {
+  const { data, error } = await supabase.functions.invoke("edit-project-update", {
+    body: { project_id: projectId, expected_revision: expectedRevision, ...op },
+  });
+
+  // A 409 conflict still carries the newest state in the response body.
+  const body = (data ?? (error as unknown as { context?: { body?: unknown } })?.context?.body ?? null) as
+    | Record<string, unknown>
+    | null;
+
+  if (!body) {
+    return { status: "error", error: error?.message || "Could not save that change." };
+  }
+
+  const status = String(body.status ?? "error") as UpdateResult["status"];
+  const state = normalizeState(body);
+  return {
+    status,
+    project: state.project.id ? state.project : undefined,
+    segments: body.segments ? state.segments : undefined,
+    error: typeof body.error === "string" ? body.error : undefined,
+  };
+}
+
+export type ExportResult = {
+  status: string;
+  export?: { id: string; status: string; duration_ms?: number; aspect_ratio?: string; output_path?: string | null };
+  render_pipeline?: "connecting" | "connected";
+};
+
+export async function exportCampaign(
+  projectId: string,
+  settings: { aspect_ratio: string; width: number; height: number },
+): Promise<ExportResult> {
+  const { data, error } = await supabase.functions.invoke("export-campaign", {
+    body: { project_id: projectId, settings },
+  });
+  if (error) throw new Error(error.message || "Could not start the export.");
+  return (data ?? { status: "queued" }) as ExportResult;
+}
+
+export type EditProjectSummary = {
+  id: string;
+  status: string | null;
+  revision: number;
+  segmentCount: number;
+};
+
+/**
+ * Result-page lookup: does this finished run have an edit project?
+ * Reads the owner's own row directly (RLS scoped). Never throws.
+ */
+export async function findEditProjectForRun(executionJobId: string): Promise<EditProjectSummary | null> {
+  try {
+    const { data, error } = await looseTable("campaign_edit_projects")
+      .select("id,status,revision")
+      .eq("execution_job_id", executionJobId)
+      .limit(1)
+      .maybeSingle();
+    if (error || !data) return null;
+    const id = String(data.id ?? "");
+    if (!id) return null;
+
+    let segmentCount = 0;
+    try {
+      const { data: segs } = await looseTable("campaign_edit_segments")
+        .select("id,removed")
+        .eq("project_id", id);
+      segmentCount = Array.isArray(segs)
+        ? (segs as { removed?: boolean }[]).filter((s) => !s.removed).length
+        : 0;
+    } catch {
+      segmentCount = 0;
+    }
+
+    return {
+      id,
+      status: (data.status as string | null) ?? null,
+      revision: Number(data.revision ?? 0) || 0,
+      segmentCount,
+    };
+  } catch {
+    return null;
+  }
+}
+
+/* ------------------------------ helpers ------------------------------ */
+
+export const activeSegments = (segments: EditSegment[]) =>
+  segments.filter((s) => !s.removed).sort((a, b) => a.position - b.position);
+
+export const removedSegments = (segments: EditSegment[]) =>
+  segments.filter((s) => s.removed).sort((a, b) => a.position - b.position);
+
+export const clipDurationMs = (segment: EditSegment) =>
+  Math.max(0, segment.trim_end_ms - segment.trim_start_ms);
+
+export const totalDurationMs = (segments: EditSegment[]) =>
+  activeSegments(segments).reduce((sum, segment) => sum + clipDurationMs(segment), 0);
+
+export function formatTimecode(ms: number) {
+  const total = Math.max(0, Math.round(ms / 1000));
+  const minutes = Math.floor(total / 60);
+  const seconds = total % 60;
+  return `${minutes}:${String(seconds).padStart(2, "0")}`;
+}
+
+export function formatSeconds(ms: number) {
+  return `${(Math.max(0, ms) / 1000).toFixed(1)}s`;
+}
+
+export const ASPECT_PRESETS: Record<string, { width: number; height: number; label: string }> = {
+  "9:16": { width: 1080, height: 1920, label: "9:16 vertical" },
+  "1:1": { width: 1080, height: 1080, label: "1:1 square" },
+  "4:5": { width: 1080, height: 1350, label: "4:5 portrait" },
+  "16:9": { width: 1920, height: 1080, label: "16:9 landscape" },
+};
+
+export function resolveAspect(ratio: string | null | undefined) {
+  const key = ratio && ASPECT_PRESETS[ratio] ? ratio : "9:16";
+  return { ratio: key, ...ASPECT_PRESETS[key] };
+}
