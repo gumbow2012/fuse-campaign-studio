@@ -11,6 +11,7 @@ import ClipPanel from "@/components/editor/ClipPanel";
 import UnusedClips from "@/components/editor/UnusedClips";
 import ExportModal from "@/components/editor/ExportModal";
 import { useCampaignEditor } from "@/hooks/useCampaignEditor";
+import { useCampaignExport } from "@/hooks/useCampaignExport";
 import { clipDurationMs, formatSeconds, formatTimecode } from "@/services/campaignEditor";
 
 /** FUSE Campaign Editor — assemble the clips a campaign generated. */
