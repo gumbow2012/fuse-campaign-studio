@@ -4,7 +4,7 @@ import { AlertTriangle, ArrowLeft, Check, Download, Loader2, RefreshCw, Scissors
 import SiteShell from "@/components/mvp/SiteShell";
 import PageMeta from "@/components/mvp/PageMeta";
 import { Button } from "@/components/ui/button";
-import { fetchRunResults, rerunFailedStep, type RunResults } from "@/services/runResults";
+import { fetchRunResults, retryFailedRun, type RunResults } from "@/services/runResults";
 import { toast } from "@/hooks/use-toast";
 
 /**
