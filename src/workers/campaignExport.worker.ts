@@ -12,6 +12,7 @@
  */
 import { createFile, DataStream, MP4BoxBuffer } from "mp4box";
 import { ArrayBufferTarget, Muxer } from "mp4-muxer";
+import { noiseTileBytes, type RenderSpec } from "@/services/editorAdjustments";
 import {
   segmentCacheKey,
   type ExportTarget,
@@ -148,6 +149,8 @@ function canStreamCopy(source: Demuxed, segment: WorkerSegment, target: ExportTa
   if (!video.codec.startsWith("avc1")) return false;
   if (video.width !== target.width || video.height !== target.height) return false;
   if (segment.volume !== 1) return false;
+  if (!segment.render.identity) return false;
+  if (target.codec !== "h264") return false;
   const startUs = segment.trim_start_ms * 1000;
   const anchor = [...video.chunks].reverse().find((chunk) => chunk.key && chunk.ptsUs <= startUs + TOLERANCE_US);
   return !!anchor && Math.abs(anchor.ptsUs - startUs) <= TOLERANCE_US;
@@ -174,8 +177,9 @@ function sliceCopy(source: Demuxed, segment: WorkerSegment): Rendered["video"] &
   return { ...video, chunks, durationUs };
 }
 
-function sliceAudioCopy(source: Demuxed, segment: WorkerSegment) {
+function sliceAudioCopy(source: Demuxed, segment: WorkerSegment, target: ExportTarget) {
   const audio = source.audio;
+  if (target.removeAudio) return undefined;
   if (!audio || segment.muted || segment.volume !== 1) return undefined;
   const startUs = segment.trim_start_ms * 1000;
   const endUs = segment.trim_end_ms * 1000;
@@ -183,6 +187,128 @@ function sliceAudioCopy(source: Demuxed, segment: WorkerSegment) {
     .filter((chunk) => chunk.ptsUs + chunk.durUs > startUs && chunk.ptsUs < endUs)
     .map((chunk) => ({ ...chunk, ptsUs: Math.max(0, chunk.ptsUs - startUs) }));
   return chunks.length ? { ...audio, chunks } : undefined;
+}
+
+
+/* ------------------------- adjustment compositing ------------------------ */
+
+const grainPatterns = new Map<string, CanvasPattern | null>();
+
+function grainPattern(ctx: OffscreenCanvasRenderingContext2D, tile: number, softness: number) {
+  const key = `${tile}|${softness.toFixed(2)}`;
+  if (grainPatterns.has(key)) return grainPatterns.get(key) ?? null;
+  const { bytes, dimension } = noiseTileBytes(tile, softness);
+  const canvas = new OffscreenCanvas(dimension, dimension);
+  const tileCtx = canvas.getContext("2d");
+  let pattern: CanvasPattern | null = null;
+  if (tileCtx) {
+    tileCtx.putImageData(new ImageData(bytes, dimension, dimension), 0, 0);
+    pattern = ctx.createPattern(canvas, "repeat");
+  }
+  grainPatterns.set(key, pattern);
+  return pattern;
+}
+
+/** Draws one decoded frame with its framing + colour + grain adjustments applied. */
+function paintFrame(
+  ctx: OffscreenCanvasRenderingContext2D,
+  frame: any,
+  target: ExportTarget,
+  spec: RenderSpec,
+) {
+  const { transform, overlays } = spec;
+  ctx.save();
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.clearRect(0, 0, target.width, target.height);
+  ctx.fillStyle = "#000";
+  ctx.fillRect(0, 0, target.width, target.height);
+
+  // Per-clip aspect box inside the export frame.
+  let boxW = target.width;
+  let boxH = target.height;
+  if (transform.aspect) {
+    if (target.width / target.height > transform.aspect) {
+      boxH = target.height;
+      boxW = Math.round(target.height * transform.aspect);
+    } else {
+      boxW = target.width;
+      boxH = Math.round(target.width / transform.aspect);
+    }
+  }
+  const boxX = (target.width - boxW) / 2;
+  const boxY = (target.height - boxH) / 2;
+
+  ctx.beginPath();
+  ctx.rect(boxX, boxY, boxW, boxH);
+  ctx.clip();
+
+  ctx.filter = spec.filter;
+  ctx.translate(
+    boxX + boxW / 2 + (transform.offsetX / 100) * boxW,
+    boxY + boxH / 2 + (transform.offsetY / 100) * boxH,
+  );
+  ctx.rotate((transform.rotate * Math.PI) / 180);
+  ctx.scale(transform.scale * (transform.flip ? -1 : 1), transform.scale);
+
+  const sourceW = frame.displayWidth || frame.codedWidth || boxW;
+  const sourceH = frame.displayHeight || frame.codedHeight || boxH;
+  const sourceRatio = sourceW / sourceH;
+  const boxRatio = boxW / boxH;
+  let drawW = boxW;
+  let drawH = boxH;
+  if (transform.fit === "contain") {
+    if (sourceRatio > boxRatio) drawH = boxW / sourceRatio;
+    else drawW = boxH * sourceRatio;
+  } else if (transform.fit === "cover") {
+    if (sourceRatio > boxRatio) drawW = boxH * sourceRatio;
+    else drawH = boxW / sourceRatio;
+  }
+  ctx.drawImage(frame, -drawW / 2, -drawH / 2, drawW, drawH);
+  ctx.filter = "none";
+  ctx.restore();
+
+  // Overlays share the aspect box and never get the colour filter.
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(boxX, boxY, boxW, boxH);
+  ctx.clip();
+
+  for (const tint of overlays.tints) {
+    ctx.globalAlpha = tint.alpha;
+    ctx.globalCompositeOperation = tint.blend as GlobalCompositeOperation;
+    ctx.fillStyle = `rgb(${tint.color[0]}, ${tint.color[1]}, ${tint.color[2]})`;
+    ctx.fillRect(boxX, boxY, boxW, boxH);
+  }
+  ctx.globalAlpha = 1;
+  ctx.globalCompositeOperation = "source-over";
+
+  if (overlays.vignette > 0) {
+    const gradient = ctx.createRadialGradient(
+      boxX + boxW / 2,
+      boxY + boxH / 2,
+      Math.min(boxW, boxH) * 0.32,
+      boxX + boxW / 2,
+      boxY + boxH / 2,
+      Math.max(boxW, boxH) * 0.72,
+    );
+    gradient.addColorStop(0, "rgba(0,0,0,0)");
+    gradient.addColorStop(1, `rgba(0,0,0,${overlays.vignette})`);
+    ctx.fillStyle = gradient;
+    ctx.fillRect(boxX, boxY, boxW, boxH);
+  }
+
+  if (overlays.grain) {
+    const pattern = grainPattern(ctx, overlays.grain.tile, overlays.grain.softness);
+    if (pattern) {
+      ctx.globalAlpha = overlays.grain.alpha;
+      ctx.globalCompositeOperation = "overlay";
+      ctx.fillStyle = pattern;
+      ctx.fillRect(boxX, boxY, boxW, boxH);
+      ctx.globalAlpha = 1;
+      ctx.globalCompositeOperation = "source-over";
+    }
+  }
+  ctx.restore();
 }
 
 async function encodeVideo(source: Demuxed, segment: WorkerSegment, target: ExportTarget) {
@@ -213,20 +339,21 @@ async function encodeVideo(source: Demuxed, segment: WorkerSegment, target: Expo
       throw error instanceof Error ? error : new Error(String(error));
     },
   });
+  const encodeCodec = target.codec === "h265" ? "hev1.1.6.L120.B0" : "avc1.640028";
   encoder.configure({
-    codec: "avc1.640028",
+    codec: encodeCodec,
     width: target.width,
     height: target.height,
     framerate: target.fps,
-    bitrate: Math.round(target.width * target.height * target.fps * 0.12),
-    avc: { format: "avc" },
+    bitrate: target.videoBitrate || Math.round(target.width * target.height * target.fps * 0.12),
+    ...(target.codec === "h265" ? { hevc: { format: "hevc" } } : { avc: { format: "avc" } }),
   });
 
   const decoder = new g.VideoDecoder({
     output: (frame: any) => {
       try {
         if (frame.timestamp < startUs || frame.timestamp >= endUs) return;
-        ctx.drawImage(frame, 0, 0, target.width, target.height);
+        paintFrame(ctx, frame, target, segment.render);
         const rebased = new g.VideoFrame(canvas, {
           timestamp: frame.timestamp - startUs,
           duration: frame.duration ?? Math.round(1e6 / target.fps),
@@ -268,13 +395,14 @@ async function encodeVideo(source: Demuxed, segment: WorkerSegment, target: Expo
     : endUs - startUs;
 
   return {
-    video: { codec: "avc1.640028", description, width: target.width, height: target.height, chunks },
+    video: { codec: encodeCodec, description, width: target.width, height: target.height, chunks },
     durationUs,
   };
 }
 
-async function encodeAudio(source: Demuxed, segment: WorkerSegment) {
+async function encodeAudio(source: Demuxed, segment: WorkerSegment, target: ExportTarget) {
   const audio = source.audio;
+  if (target.removeAudio) return undefined;
   if (!audio || segment.muted) return undefined;
   if (!g.AudioDecoder || !g.AudioEncoder) return undefined;
 
@@ -298,7 +426,7 @@ async function encodeAudio(source: Demuxed, segment: WorkerSegment) {
     codec: "mp4a.40.2",
     sampleRate: audio.sampleRate,
     numberOfChannels: audio.channels,
-    bitrate: 128_000,
+    bitrate: target.audioBitrate || 128_000,
   });
 
   const gain = Math.min(2, Math.max(0, segment.volume));
@@ -373,12 +501,12 @@ async function renderSegment(segment: WorkerSegment, target: ExportTarget): Prom
       key,
       mode: "copy",
       video,
-      audio: sliceAudioCopy(source, segment),
+      audio: sliceAudioCopy(source, segment, target),
       durationUs,
     };
   } else {
     const { video, durationUs } = await encodeVideo(source, segment, target);
-    rendered = { key, mode: "encode", video, audio: await encodeAudio(source, segment), durationUs };
+    rendered = { key, mode: "encode", video, audio: await encodeAudio(source, segment, target), durationUs };
   }
 
   cache.set(key, rendered);
@@ -429,12 +557,18 @@ async function runExport(request: Extract<WorkerRequest, { type: "export" }>) {
 
   post({ type: "export-progress", jobId, progress: 88, stage: "Combining clips" });
 
+  const sequence = target.loop ? [...rendered, ...rendered] : rendered;
+
   const hasAudio = rendered.some((item) => item.audio);
   const audioRef = rendered.find((item) => item.audio)?.audio;
 
   const muxer = new Muxer({
     target: new ArrayBufferTarget(),
-    video: { codec: "avc", width: reference.video.width, height: reference.video.height },
+    video: {
+      codec: target.codec === "h265" ? "hevc" : "avc",
+      width: reference.video.width,
+      height: reference.video.height,
+    },
     audio: hasAudio && audioRef
       ? { codec: "aac", numberOfChannels: audioRef.channels, sampleRate: audioRef.sampleRate }
       : undefined,
@@ -442,7 +576,7 @@ async function runExport(request: Extract<WorkerRequest, { type: "export" }>) {
   });
 
   let offsetUs = 0;
-  for (const item of rendered) {
+  for (const item of sequence) {
     const videoMeta = {
       decoderConfig: {
         codec: item.video.codec,

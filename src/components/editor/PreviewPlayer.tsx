@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Maximize2, Pause, Play, Volume2, VolumeX } from "lucide-react";
 import { clipDurationMs, formatTimecode, resolveAspect, type EditSegment } from "@/services/campaignEditor";
 import { cn } from "@/lib/utils";
+import { buildRenderSpec } from "@/services/editorAdjustments";
+import { frameBoxStyle, overlayLayersFor, videoStyleFor } from "@/lib/editorPreviewStyle";
 
 /**
  * Client-side sequenced preview: plays each active segment inside its trim
@@ -178,25 +180,41 @@ export default function PreviewPlayer({
             No clips in this edit yet — restore one from Unused clips.
           </div>
         ) : null}
-        {segments.map((segment, i) => (
-          <video
-            key={segment.id}
-            ref={(node) => {
-              videoRefs.current[i] = node;
-            }}
-            src={segment.url ?? undefined}
-            playsInline
-            preload={i <= index + 1 ? "auto" : "metadata"}
-            onLoadedMetadata={() => {
-              const video = videoRefs.current[i];
-              if (video) video.currentTime = segment.trim_start_ms / 1000;
-            }}
-            className={cn(
-              "absolute inset-0 h-full w-full object-contain transition-opacity duration-100",
-              i === index ? "opacity-100" : "pointer-events-none opacity-0",
-            )}
-          />
-        ))}
+        {segments.map((segment, i) => {
+          const spec = buildRenderSpec(segment.adjustments);
+          return (
+            <div
+              key={segment.id}
+              className={cn(
+                "absolute inset-0 transition-opacity duration-100",
+                i === index ? "opacity-100" : "pointer-events-none opacity-0",
+              )}
+            >
+              <div className="absolute inset-0 grid place-items-center bg-black">
+                <div className="relative overflow-hidden" style={frameBoxStyle(spec)}>
+                  <video
+                    ref={(node) => {
+                      videoRefs.current[i] = node;
+                    }}
+                    src={segment.url ?? undefined}
+                    playsInline
+                    preload={i <= index + 1 ? "auto" : "metadata"}
+                    onLoadedMetadata={() => {
+                      const video = videoRefs.current[i];
+                      if (video) video.currentTime = segment.trim_start_ms / 1000;
+                    }}
+                    className="h-full w-full"
+                    style={videoStyleFor(spec)}
+                  />
+                  {overlayLayersFor(spec).map((layer) => (
+                    <div key={layer.key} className="pointer-events-none absolute inset-0" style={layer.style} />
+                  ))}
+                </div>
+              </div>
+            </div>
+          );
+        })}
+
         <div className="pointer-events-none absolute left-3 top-3 rounded-full border border-white/10 bg-black/60 px-2.5 py-1 font-display text-[10px] uppercase tracking-[0.18em] text-cyan-200">
           Clip {Math.min(index + 1, Math.max(segments.length, 1))} / {segments.length || 1}
         </div>

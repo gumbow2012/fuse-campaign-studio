@@ -7,12 +7,26 @@ import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
 import PreviewPlayer from "@/components/editor/PreviewPlayer";
 import EditorTimeline from "@/components/editor/EditorTimeline";
-import ClipPanel from "@/components/editor/ClipPanel";
+import ClipInspector from "@/components/editor/inspector/ClipInspector";
 import UnusedClips from "@/components/editor/UnusedClips";
 import ExportModal from "@/components/editor/ExportModal";
 import { useCampaignEditor } from "@/hooks/useCampaignEditor";
 import { useCampaignExport } from "@/hooks/useCampaignExport";
 import { clipDurationMs, formatSeconds, formatTimecode } from "@/services/campaignEditor";
+import {
+  DEFAULT_COLOR,
+  DEFAULT_FRAMING,
+  DEFAULT_GRAIN,
+  matchAllAdjustments,
+  type Adjustments,
+} from "@/services/editorAdjustments";
+import { normalizeExportSettings } from "@/services/exportSettings";
+
+const SECTION_DEFAULTS = {
+  framing: DEFAULT_FRAMING,
+  color: DEFAULT_COLOR,
+  grain: DEFAULT_GRAIN,
+} as const;
 
 /** FUSE Campaign Editor — assemble the clips a campaign generated. */
 export default function CampaignEditorPage() {
@@ -29,7 +43,11 @@ export default function CampaignEditorPage() {
     selectedId,
     setSelectedId,
     runOp,
+    runOps,
     recordHistory,
+    adjust,
+    resetAdjust,
+    setExportSettings,
 
     undo,
     redo,
@@ -37,7 +55,11 @@ export default function CampaignEditorPage() {
     canRedo,
   } = editor;
 
-  const exportApi = useCampaignExport(active, project?.aspect_ratio ?? null, project?.name ?? null);
+  const exportSettings = useMemo(
+    () => normalizeExportSettings(project?.export_settings, project?.aspect_ratio ?? null),
+    [project?.export_settings, project?.aspect_ratio],
+  );
+  const exportApi = useCampaignExport(active, exportSettings, project?.name ?? null);
   const exportStatus = exportApi.status;
   const exportBusy = exportStatus.phase === "preparing" || exportStatus.phase === "rendering";
 
@@ -45,6 +67,8 @@ export default function CampaignEditorPage() {
   const [playing, setPlaying] = useState(false);
   const [seekNonce, setSeekNonce] = useState(0);
   const [exportOpen, setExportOpen] = useState(false);
+  const [scope, setScope] = useState<"clip" | "all">("clip");
+  const [clipboard, setClipboard] = useState<Adjustments | null>(null);
   const trimDraftRef = useRef<{ id: string; start: number; end: number } | null>(null);
 
   const selected = useMemo(
@@ -96,6 +120,45 @@ export default function CampaignEditorPage() {
     },
     [runOp, seek, recordHistory],
   );
+
+  /* ----------------------------- adjustments ----------------------------- */
+
+  const onAdjust = useCallback(
+    (patch: Record<string, unknown>, options?: { record?: boolean; immediate?: boolean; label?: string }) => {
+      if (!selected) return;
+      adjust(selected.id, patch, scope, options);
+    },
+    [adjust, selected, scope],
+  );
+
+  /** One undo step per drag gesture (inspector reports before/after patches). */
+  const onRecordAdjust = useCallback(
+    (undoPatch: Record<string, unknown>, redoPatch: Record<string, unknown>, label: string) => {
+      if (!selected) return;
+      recordHistory(
+        { op: "adjust", payload: { segment_id: selected.id, adjustments: undoPatch, scope } },
+        { op: "adjust", payload: { segment_id: selected.id, adjustments: redoPatch, scope } },
+        label,
+      );
+    },
+    [recordHistory, selected, scope],
+  );
+
+  const onResetSection = useCallback(
+    (section: "framing" | "color" | "grain") => {
+      onAdjust({ [section]: SECTION_DEFAULTS[section] }, { immediate: true, label: `reset ${section}` });
+    },
+    [onAdjust],
+  );
+
+  const onMatchAll = useCallback(() => {
+    if (!selected) return;
+    const patch = matchAllAdjustments(active.map((segment) => segment.adjustments));
+    runOps(
+      [{ op: "adjust", payload: { segment_id: selected.id, adjustments: patch, scope: "all" } }],
+      { label: "match all clips", immediate: true },
+    );
+  }, [active, runOps, selected]);
 
 
   const saveLabel =
@@ -265,14 +328,31 @@ export default function CampaignEditorPage() {
                   </Button>
                 ) : null}
               </div>
-              <ClipPanel
-                segment={selected}
-                clipNumber={1}
-                onVolume={(volume) => runOp({ op: "volume", payload: { segment_id: selected.id, volume } })}
-                onMute={(muted) => runOp({ op: "mute", payload: { segment_id: selected.id, muted } })}
-                onDuplicate={() => runOp({ op: "duplicate", payload: { segment_id: selected.id } })}
-                onRemove={() => runOp({ op: "remove", payload: { segment_id: selected.id } })}
-              />
+              <ClipInspector
+              segment={selected}
+              clipNumber={1}
+              clipTotal={active.length}
+              scope={scope}
+              onScopeChange={setScope}
+              onAdjust={onAdjust}
+              onRecord={onRecordAdjust}
+              onResetSection={onResetSection}
+              onResetAll={() => resetAdjust(selected.id, scope)}
+              onCopy={() => setClipboard(selected.adjustments)}
+              onPaste={() => {
+                if (!clipboard) return;
+                onAdjust(clipboard as unknown as Record<string, unknown>, {
+                  immediate: true,
+                  label: "paste adjustments",
+                });
+              }}
+              canPaste={!!clipboard}
+              onMatchAll={onMatchAll}
+              onVolume={(volume) => runOp({ op: "volume", payload: { segment_id: selected.id, volume } })}
+              onMute={(muted) => runOp({ op: "mute", payload: { segment_id: selected.id, muted } })}
+              onDuplicate={() => runOp({ op: "duplicate", payload: { segment_id: selected.id } })}
+              onRemove={() => runOp({ op: "remove", payload: { segment_id: selected.id } })}
+                  />
             </div>
           </div>
         ) : (
@@ -289,12 +369,27 @@ export default function CampaignEditorPage() {
               />
               <div className="space-y-4">
                 {selected ? (
-                  <ClipPanel
+                  <ClipInspector
                     segment={selected}
                     clipNumber={selectedIndex + 1}
-                    onVolume={(volume) =>
-                      runOp({ op: "volume", payload: { segment_id: selected.id, volume } })
-                    }
+                    clipTotal={active.length}
+                    scope={scope}
+                    onScopeChange={setScope}
+                    onAdjust={onAdjust}
+                    onRecord={onRecordAdjust}
+                    onResetSection={onResetSection}
+                    onResetAll={() => resetAdjust(selected.id, scope)}
+                    onCopy={() => setClipboard(selected.adjustments)}
+                    onPaste={() => {
+                      if (!clipboard) return;
+                      onAdjust(clipboard as unknown as Record<string, unknown>, {
+                        immediate: true,
+                        label: "paste adjustments",
+                      });
+                    }}
+                    canPaste={!!clipboard}
+                    onMatchAll={onMatchAll}
+                    onVolume={(volume) => runOp({ op: "volume", payload: { segment_id: selected.id, volume } })}
                     onMute={(muted) => runOp({ op: "mute", payload: { segment_id: selected.id, muted } })}
                     onDuplicate={() => runOp({ op: "duplicate", payload: { segment_id: selected.id } })}
                     onRemove={() => runOp({ op: "remove", payload: { segment_id: selected.id } })}
@@ -350,6 +445,8 @@ export default function CampaignEditorPage() {
         onOpenChange={setExportOpen}
         durationMs={durationMs}
         exportApi={exportApi}
+        settings={exportSettings}
+        onSettingsChange={(patch) => setExportSettings({ ...exportSettings, ...patch })}
       />
     </SiteShell>
   );

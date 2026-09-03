@@ -2,12 +2,19 @@
  * Shared contract between the editor UI (main thread) and the export worker.
  * No signed urls are ever persisted — they are passed per request and dropped.
  */
+import type { RenderSpec } from "@/services/editorAdjustments";
 
 export type ExportTarget = {
   width: number;
   height: number;
   fps: number;
   aspectRatio: string;
+  /** Encoder settings resolved from the project's export settings. */
+  videoBitrate: number;
+  audioBitrate: number;
+  codec: "h264" | "h265";
+  removeAudio: boolean;
+  loop: boolean;
 };
 
 /** One clip as the worker needs it (already resolved to a signed playback url). */
@@ -18,6 +25,8 @@ export type WorkerSegment = {
   trim_end_ms: number;
   muted: boolean;
   volume: number;
+  /** Precomputed on the main thread so preview and export share one source of truth. */
+  render: RenderSpec;
 };
 
 /** Cache identity — any change here means that one segment must be re-rendered. */
@@ -29,6 +38,8 @@ export function segmentCacheKey(segment: WorkerSegment, target: ExportTarget) {
     segment.muted ? "m1" : "m0",
     `v${segment.volume.toFixed(2)}`,
     `${target.width}x${target.height}@${target.fps}`,
+    `${target.codec}:${target.videoBitrate}:${target.removeAudio ? "na" : target.audioBitrate}`,
+    segment.render.identity ? "id" : JSON.stringify([segment.render.filter, segment.render.transform, segment.render.overlays]),
   ].join("|");
 }
 

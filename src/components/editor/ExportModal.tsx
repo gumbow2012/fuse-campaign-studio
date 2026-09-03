@@ -1,9 +1,11 @@
-import { Download, Loader2, RotateCcw, Zap } from "lucide-react";
+import { Download, RotateCcw, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Progress } from "@/components/ui/progress";
 import { formatTimecode } from "@/services/campaignEditor";
 import { triggerDownload } from "@/services/videoExport/exportClient";
+import ExportSettingsPanel from "@/components/editor/ExportSettingsPanel";
+import type { ExportSettings } from "@/services/exportSettings";
 import type { useCampaignExport } from "@/hooks/useCampaignExport";
 
 type ExportApi = ReturnType<typeof useCampaignExport>;
@@ -14,18 +16,22 @@ export default function ExportModal({
   onOpenChange,
   durationMs,
   exportApi,
+  settings,
+  onSettingsChange,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   durationMs: number;
   exportApi: ExportApi;
+  settings: ExportSettings;
+  onSettingsChange: (patch: Partial<ExportSettings>) => void;
 }) {
-  const { status, aspect, start, cancel, reset, supported, clipCount, readyClips, clipDownloads } = exportApi;
+  const { status, target, start, cancel, reset, supported, clipCount, readyClips, clipDownloads } = exportApi;
   const busy = status.phase === "preparing" || status.phase === "rendering";
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md border-white/10 bg-slate-950/95">
+      <DialogContent className="max-h-[88vh] max-w-md overflow-y-auto border-white/10 bg-slate-950/95">
         <DialogHeader>
           <DialogTitle className="font-display uppercase tracking-[0.12em] text-white">
             Export video
@@ -34,8 +40,8 @@ export default function ExportModal({
 
         <dl className="grid grid-cols-3 gap-2 text-center">
           {[
-            { label: "Ratio", value: aspect.ratio },
-            { label: "Duration", value: formatTimecode(durationMs) },
+            { label: "Ratio", value: target.aspectRatio },
+            { label: "Duration", value: formatTimecode(durationMs * (settings.loop ? 2 : 1)) },
             { label: "Clips", value: String(clipCount) },
           ].map((item) => (
             <div key={item.label} className="rounded-xl border border-white/10 bg-white/[0.03] p-3">
@@ -44,9 +50,7 @@ export default function ExportModal({
             </div>
           ))}
         </dl>
-        <p className="text-center text-[11px] text-slate-500">
-          {aspect.width}×{aspect.height} · {aspect.label} · rendered on this device
-        </p>
+        <p className="text-center text-[11px] text-slate-500">Rendered on this device — nothing queues.</p>
 
         {!supported ? (
           <div className="space-y-3 rounded-xl border border-amber-300/25 bg-amber-400/[0.06] p-4">
@@ -114,6 +118,7 @@ export default function ExportModal({
           </div>
         ) : (
           <>
+            <ExportSettingsPanel settings={settings} durationMs={durationMs} onChange={onSettingsChange} />
             <Button
               type="button"
               onClick={start}
