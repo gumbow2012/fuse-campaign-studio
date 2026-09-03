@@ -41,6 +41,8 @@ import { CampaignBuildGraph, type PublicGraph } from "@/components/templates/Cam
 import CampaignOutputsPanel from "@/components/templates/CampaignOutputsPanel";
 import CampaignResults from "@/components/templates/CampaignResults";
 import CampaignReadyBanner from "@/components/editor/CampaignReadyBanner";
+import RecoveredCampaignResults from "@/components/templates/RecoveredCampaignResults";
+import { useCampaignRecovery } from "@/hooks/useCampaignRecovery";
 
 import RegenerateOutputDialog from "@/components/templates/RegenerateOutputDialog";
 import { useOutputRegeneration } from "@/hooks/useOutputRegeneration";
@@ -1067,6 +1069,30 @@ export default function TemplateStudioPage() {
   });
 
 
+
+  /**
+   * URGENT recovery — once a run is terminal (or a stored run is opened), always ask
+   * the server for the durable successful outputs with signed, downloadable URLs.
+   * result_payload is empty for failed jobs, so this is the authoritative source.
+   */
+  const recoveryEnabled = Boolean(activeRunId) && !!result && !ACTIVE_RUN_STATUSES.has(result.status);
+  const campaignRecovery = useCampaignRecovery(activeRunId, recoveryEnabled);
+  const recovered = campaignRecovery.recovery;
+  const hasRecoveredOutputs = (recovered?.ready_outputs.length ?? 0) > 0;
+  const showRecoveryView =
+    hasRecoveredOutputs && (recovered?.status === "partial" || result?.status === "failed");
+  /** Signed URLs win over any stored public URL (the bucket is private). */
+  const displayOutputs: RunnerOutput[] = hasRecoveredOutputs
+    ? (recovered?.ready_outputs ?? []).map((output, index) => ({
+        type: output.type,
+        url: output.url,
+        label: output.label,
+        outputNumber: output.outputNumber ?? index + 1,
+      }))
+    : (result?.outputs ?? []);
+  const handleRecoveredDownload = (output: { node_id: string; type: "video" | "image"; url: string }, index: number) => {
+    void campaignRecovery.download(output as never, index, workspaceTemplateName);
+  };
 
   const currentResultFeedback: RunFeedbackRecord | null = activeRunId
     ? feedbackOverrides[activeRunId]
@@ -3597,7 +3623,21 @@ export default function TemplateStudioPage() {
                 </div>
               ) : null}
 
-              {result?.status === "failed" && !result.publicGraph?.nodes.length ? (
+              {/* Recovery: successful deliverables of a failed/partial run stay reachable. */}
+              {showRecoveryView && recovered ? (
+                <div className="mt-6">
+                  <RecoveredCampaignResults
+                    recovery={recovered}
+                    templateName={workspaceTemplateName}
+                    downloadState={campaignRecovery.downloadState}
+                    onDownload={handleRecoveredDownload}
+                    onRefresh={() => void campaignRecovery.refresh()}
+                    refreshing={campaignRecovery.loading}
+                  />
+                </div>
+              ) : null}
+
+              {result?.status === "failed" && !showRecoveryView && !result.publicGraph?.nodes.length ? (
                 <div className="mt-6 rounded-[1.5rem] border border-rose-400/20 bg-rose-400/10 p-5">
                   <p className="text-sm font-semibold text-rose-100">
                     {readPublicFailure(result.publicFailure).title}
@@ -3622,7 +3662,7 @@ export default function TemplateStudioPage() {
                   <div ref={outputsGridRef} />
 
                   <CampaignResults
-                    outputs={result.outputs}
+                    outputs={displayOutputs}
                     onDownload={(output, index) => {
                       if (freeRunJobId && activeRunId === freeRunJobId) {
                         trackFreeVideo("free_video_downloaded", {
