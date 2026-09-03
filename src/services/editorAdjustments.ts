@@ -459,7 +459,9 @@ export function buildRenderSpec(adjustments: Adjustments): RenderSpec {
     `contrast(${round(Math.max(0.2, contrast))})`,
     `saturate(${round(saturate)})`,
   ];
-  if (blur > 0.01) parts.push(`blur(${round(blur, 2)}px)`);
+  const motionBlurPx = round((motion.motionBlur / 100) * 3.2, 2);
+  if (blur + motionBlurPx > 0.01) parts.push(`blur(${round(blur + motionBlurPx, 2)}px)`);
+
 
   const tints: TintOverlay[] = [];
   if (Math.abs(color.temperature) > 1) {
