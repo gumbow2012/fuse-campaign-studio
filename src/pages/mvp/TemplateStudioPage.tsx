@@ -132,6 +132,42 @@ const SHOW_MARKETPLACE_FILTERS = false;
 
 /** Customer-facing feed chips (presentation filter only). */
 type FeedChip = "all" | "for_you" | "new" | "fashion" | "jewelry" | "product" | "video";
+
+/**
+ * Explore view state (filters + scroll) kept for the session so returning from
+ * a template product page lands the user exactly where they left off.
+ */
+const EXPLORE_STATE_KEY = "fuse.explore.viewstate.v1";
+
+type ExploreViewState = {
+  feedSearch?: string;
+  feedChip?: string;
+  outputTypeFilter?: string;
+  favoritesOnly?: boolean;
+  scrollY?: number;
+};
+
+function readExploreState(): ExploreViewState | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.sessionStorage.getItem(EXPLORE_STATE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as ExploreViewState;
+    return parsed && typeof parsed === "object" ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeExploreState(next: ExploreViewState) {
+  if (typeof window === "undefined") return;
+  try {
+    const current = readExploreState() ?? {};
+    window.sessionStorage.setItem(EXPLORE_STATE_KEY, JSON.stringify({ ...current, ...next }));
+  } catch {
+    /* session storage unavailable — continuity is best-effort. */
+  }
+}
 const FEED_CHIPS: Array<{ key: FeedChip; label: string }> = [
   { key: "all", label: "All" },
   { key: "new", label: "New" },
