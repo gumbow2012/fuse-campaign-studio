@@ -51,26 +51,45 @@ export default function CampaignEditorPage() {
     setSeekNonce((nonce) => nonce + 1);
   }, []);
 
-  /* Live trim feedback (optimistic, debounced save on release). */
+  /* Live trim feedback (optimistic, debounced save, one undo step per drag). */
   const onTrim = useCallback(
     (id: string, startMs: number, endMs: number) => {
-      trimDraftRef.current = { id, start: startMs, end: endMs };
-      runOp({ op: "trim", payload: { segment_id: id, trim_start_ms: startMs, trim_end_ms: endMs } });
+      if (!trimDraftRef.current || trimDraftRef.current.id !== id) {
+        const before = active.find((segment) => segment.id === id);
+        trimDraftRef.current = {
+          id,
+          start: before?.trim_start_ms ?? startMs,
+          end: before?.trim_end_ms ?? endMs,
+        };
+      }
+      runOp(
+        { op: "trim", payload: { segment_id: id, trim_start_ms: startMs, trim_end_ms: endMs } },
+        { record: false },
+      );
     },
-    [runOp],
+    [runOp, active],
   );
 
   const onTrimCommit = useCallback(
     (id: string, startMs: number, endMs: number) => {
+      const origin = trimDraftRef.current;
       trimDraftRef.current = null;
       runOp(
         { op: "trim", payload: { segment_id: id, trim_start_ms: startMs, trim_end_ms: endMs } },
         { immediate: true, record: false },
       );
+      if (origin && (origin.start !== startMs || origin.end !== endMs)) {
+        recordHistory(
+          { op: "trim", payload: { segment_id: id, trim_start_ms: origin.start, trim_end_ms: origin.end } },
+          { op: "trim", payload: { segment_id: id, trim_start_ms: startMs, trim_end_ms: endMs } },
+          "trim",
+        );
+      }
       seek(0);
     },
-    [runOp, seek],
+    [runOp, seek, recordHistory],
   );
+
 
   const saveLabel =
     saveState === "saving"
