@@ -40,6 +40,8 @@ import CastSelector, { PRIMARY_CAST_SLOT, type CastSelection } from "@/component
 import { CampaignBuildGraph, type PublicGraph } from "@/components/templates/CampaignBuildGraph";
 import CampaignOutputsPanel from "@/components/templates/CampaignOutputsPanel";
 import CampaignResults from "@/components/templates/CampaignResults";
+import CampaignReadyBanner from "@/components/editor/CampaignReadyBanner";
+
 import RegenerateOutputDialog from "@/components/templates/RegenerateOutputDialog";
 import { useOutputRegeneration } from "@/hooks/useOutputRegeneration";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -1010,6 +1012,21 @@ export default function TemplateStudioPage() {
         ? "failed"
         : "running";
   const workspaceTemplateName = openedHistoricalRun?.templateName ?? selectedTemplate?.name ?? null;
+
+  // Editor entry point: how many video deliverables actually landed.
+  const outputsGridRef = useRef<HTMLDivElement | null>(null);
+  const isVideoOutput = (output: RunnerOutput) =>
+    String(output.type ?? "").toLowerCase().includes("video") || /\.(mp4|mov|webm)(\?|$)/i.test(output.url ?? "");
+  const completedVideoOutputCount = (result?.outputs ?? []).filter(isVideoOutput).length;
+  const expectedVideoOutputCount = Math.max(
+    completedVideoOutputCount,
+    (result?.publicGraph?.nodes ?? []).filter((node) =>
+      String((node as { kind?: string; type?: string }).kind ?? (node as { type?: string }).type ?? "")
+        .toLowerCase()
+        .includes("video"),
+    ).length,
+  );
+
 
   // Achievements: a completed campaign is a real signal — evaluate once per run.
   const achievementRunRef = useRef<string | null>(null);
@@ -3593,6 +3610,17 @@ export default function TemplateStudioPage() {
 
               {result?.status === "complete" ? (
                 <div className="mt-6 space-y-5">
+                  {/* Additive: editor entry point once the run is done. */}
+                  <CampaignReadyBanner
+                    jobId={activeRunId}
+                    videoCount={completedVideoOutputCount}
+                    failedCount={Math.max(0, expectedVideoOutputCount - completedVideoOutputCount)}
+                    onViewOutputs={() => {
+                      outputsGridRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+                    }}
+                  />
+                  <div ref={outputsGridRef} />
+
                   <CampaignResults
                     outputs={result.outputs}
                     onDownload={(output, index) => {
