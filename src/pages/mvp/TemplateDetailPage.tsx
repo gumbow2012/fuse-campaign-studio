@@ -55,6 +55,7 @@ export default function TemplateDetailPage() {
   const navigate = useNavigate();
   const { isAdmin } = useAuth();
   const [featuredOpen, setFeaturedOpen] = useState(false);
+  const [gridIndex, setGridIndex] = useState<number | null>(null);
 
   const detailQuery = useQuery({
     queryKey: ["template-detail-page", slug],
