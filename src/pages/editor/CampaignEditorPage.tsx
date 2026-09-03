@@ -37,6 +37,10 @@ export default function CampaignEditorPage() {
     canRedo,
   } = editor;
 
+  const exportApi = useCampaignExport(active, project?.aspect_ratio ?? null, project?.name ?? null);
+  const exportStatus = exportApi.status;
+  const exportBusy = exportStatus.phase === "preparing" || exportStatus.phase === "rendering";
+
   const [currentMs, setCurrentMs] = useState(0);
   const [playing, setPlaying] = useState(false);
   const [seekNonce, setSeekNonce] = useState(0);
