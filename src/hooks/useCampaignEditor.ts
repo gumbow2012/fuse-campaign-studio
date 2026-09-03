@@ -19,7 +19,7 @@ import type { ExportSettings } from "@/services/exportSettings";
 import type { TextLayer } from "@/services/editorText";
 import type { MusicTrack } from "@/services/editorMusic";
 
-export type SaveState = "idle" | "saving" | "saved" | "error" | "conflict";
+export type SaveState = "idle" | "dirty" | "saving" | "saved" | "error";
 
 type HistoryEntry = { label: string; undo: EditOp[]; redo: EditOp[] };
 
@@ -176,6 +176,8 @@ export function useCampaignEditor(projectId: string | undefined) {
   const localVersionRef = useRef(0);
   const historyRef = useRef<{ past: HistoryEntry[]; future: HistoryEntry[] }>({ past: [], future: [] });
   const [historyVersion, setHistoryVersion] = useState(0);
+  const saveStateRef = useRef<SaveState>("idle");
+  saveStateRef.current = saveState;
 
   segmentsRef.current = segments;
   projectRef.current = project;
@@ -305,9 +307,6 @@ export function useCampaignEditor(projectId: string | undefined) {
       if (queueRef.current.length && saveStateRef.current !== "error") void drain();
     }
   }, [projectId, adopt, adoptRevision]);
-
-  const saveStateRef = useRef<SaveState>("idle");
-  saveStateRef.current = saveState;
 
   const enqueue = useCallback(
     (op: EditOp, immediate: boolean) => {
@@ -495,6 +494,8 @@ export function useCampaignEditor(projectId: string | undefined) {
     loading,
     loadError,
     saveState,
+    saveError,
+    retrySave,
     selectedId,
     setSelectedId,
     runOp,
