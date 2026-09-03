@@ -12,6 +12,7 @@
  */
 import { createFile, DataStream, MP4BoxBuffer } from "mp4box";
 import { ArrayBufferTarget, Muxer } from "mp4-muxer";
+import { noiseTileBytes, type RenderSpec } from "@/services/editorAdjustments";
 import {
   segmentCacheKey,
   type ExportTarget,
@@ -148,6 +149,8 @@ function canStreamCopy(source: Demuxed, segment: WorkerSegment, target: ExportTa
   if (!video.codec.startsWith("avc1")) return false;
   if (video.width !== target.width || video.height !== target.height) return false;
   if (segment.volume !== 1) return false;
+  if (!segment.render.identity) return false;
+  if (target.codec !== "h264") return false;
   const startUs = segment.trim_start_ms * 1000;
   const anchor = [...video.chunks].reverse().find((chunk) => chunk.key && chunk.ptsUs <= startUs + TOLERANCE_US);
   return !!anchor && Math.abs(anchor.ptsUs - startUs) <= TOLERANCE_US;
@@ -174,8 +177,9 @@ function sliceCopy(source: Demuxed, segment: WorkerSegment): Rendered["video"] &
   return { ...video, chunks, durationUs };
 }
 
-function sliceAudioCopy(source: Demuxed, segment: WorkerSegment) {
+function sliceAudioCopy(source: Demuxed, segment: WorkerSegment, target: ExportTarget) {
   const audio = source.audio;
+  if (target.removeAudio) return undefined;
   if (!audio || segment.muted || segment.volume !== 1) return undefined;
   const startUs = segment.trim_start_ms * 1000;
   const endUs = segment.trim_end_ms * 1000;
@@ -213,20 +217,21 @@ async function encodeVideo(source: Demuxed, segment: WorkerSegment, target: Expo
       throw error instanceof Error ? error : new Error(String(error));
     },
   });
+  const encodeCodec = target.codec === "h265" ? "hev1.1.6.L120.B0" : "avc1.640028";
   encoder.configure({
-    codec: "avc1.640028",
+    codec: encodeCodec,
     width: target.width,
     height: target.height,
     framerate: target.fps,
-    bitrate: Math.round(target.width * target.height * target.fps * 0.12),
-    avc: { format: "avc" },
+    bitrate: target.videoBitrate || Math.round(target.width * target.height * target.fps * 0.12),
+    ...(target.codec === "h265" ? { hevc: { format: "hevc" } } : { avc: { format: "avc" } }),
   });
 
   const decoder = new g.VideoDecoder({
     output: (frame: any) => {
       try {
         if (frame.timestamp < startUs || frame.timestamp >= endUs) return;
-        ctx.drawImage(frame, 0, 0, target.width, target.height);
+        paintFrame(ctx, frame, target, segment.render);
         const rebased = new g.VideoFrame(canvas, {
           timestamp: frame.timestamp - startUs,
           duration: frame.duration ?? Math.round(1e6 / target.fps),
@@ -268,13 +273,14 @@ async function encodeVideo(source: Demuxed, segment: WorkerSegment, target: Expo
     : endUs - startUs;
 
   return {
-    video: { codec: "avc1.640028", description, width: target.width, height: target.height, chunks },
+    video: { codec: encodeCodec, description, width: target.width, height: target.height, chunks },
     durationUs,
   };
 }
 
-async function encodeAudio(source: Demuxed, segment: WorkerSegment) {
+async function encodeAudio(source: Demuxed, segment: WorkerSegment, target: ExportTarget) {
   const audio = source.audio;
+  if (target.removeAudio) return undefined;
   if (!audio || segment.muted) return undefined;
   if (!g.AudioDecoder || !g.AudioEncoder) return undefined;
 
@@ -298,7 +304,7 @@ async function encodeAudio(source: Demuxed, segment: WorkerSegment) {
     codec: "mp4a.40.2",
     sampleRate: audio.sampleRate,
     numberOfChannels: audio.channels,
-    bitrate: 128_000,
+    bitrate: target.audioBitrate || 128_000,
   });
 
   const gain = Math.min(2, Math.max(0, segment.volume));
@@ -373,7 +379,7 @@ async function renderSegment(segment: WorkerSegment, target: ExportTarget): Prom
       key,
       mode: "copy",
       video,
-      audio: sliceAudioCopy(source, segment),
+      audio: sliceAudioCopy(source, segment, target),
       durationUs,
     };
   } else {
