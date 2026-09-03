@@ -40,6 +40,8 @@ import CastSelector, { PRIMARY_CAST_SLOT, type CastSelection } from "@/component
 import { CampaignBuildGraph, type PublicGraph } from "@/components/templates/CampaignBuildGraph";
 import CampaignOutputsPanel from "@/components/templates/CampaignOutputsPanel";
 import CampaignResults from "@/components/templates/CampaignResults";
+import CampaignReadyBanner from "@/components/editor/CampaignReadyBanner";
+
 import RegenerateOutputDialog from "@/components/templates/RegenerateOutputDialog";
 import { useOutputRegeneration } from "@/hooks/useOutputRegeneration";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
