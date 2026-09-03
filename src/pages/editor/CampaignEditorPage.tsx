@@ -461,7 +461,7 @@ export default function CampaignEditorPage() {
             <button
               type="button"
               onClick={() => (mode === "basic" ? requestAdvanced() : applyMode("basic"))}
-              className="hidden items-center gap-1.5 rounded-lg border border-white/10 bg-white/[0.03] px-2.5 py-1.5 text-[11px] text-slate-300 hover:border-cyan-300/50 hover:text-cyan-100 sm:inline-flex"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/[0.03] px-2.5 py-1.5 text-[11px] text-slate-300 hover:border-cyan-300/50 hover:text-cyan-100"
             >
               <Sliders className="h-3.5 w-3.5" />
               {mode === "basic" ? "Advanced editor" : "Basic editor"}
