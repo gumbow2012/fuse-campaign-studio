@@ -430,10 +430,12 @@ export default function CampaignEditorPage() {
               onClick={() => setExportOpen(true)}
               className="hidden bg-cyan-400 font-display uppercase tracking-[0.08em] text-slate-950 hover:bg-cyan-300 md:inline-flex"
             >
-              {exportBusy
-                ? `Rendering ${exportStatus.progress}%`
+              {exportApi.mixing
+                ? "Mixing audio…"
+                : exportBusy
+                ? `Exporting ${exportStatus.progress}% · Continue editing`
                 : exportStatus.phase === "done"
-                  ? "Download video"
+                  ? "Export ready · Download"
                   : exportApi.readyClips >= exportApi.clipCount && exportApi.clipCount > 0
                     ? "Quick export"
                     : "Export video"}
@@ -646,10 +648,12 @@ export default function CampaignEditorPage() {
           onClick={() => setExportOpen(true)}
           className="w-full bg-cyan-400 font-display uppercase tracking-[0.08em] text-slate-950 hover:bg-cyan-300"
         >
-          {exportBusy
-            ? `Rendering ${exportStatus.progress}%`
+          {exportApi.mixing
+            ? "Mixing audio…"
+            : exportBusy
+            ? `Exporting ${exportStatus.progress}%`
             : exportStatus.phase === "done"
-              ? "Download video"
+              ? "Export ready · Download"
               : "Export video"}
           <ArrowRight className="ml-2 h-4 w-4" />
         </Button>

@@ -26,8 +26,9 @@ export default function ExportModal({
   settings: ExportSettings;
   onSettingsChange: (patch: Partial<ExportSettings>) => void;
 }) {
-  const { status, target, start, cancel, reset, supported, clipCount, readyClips, clipDownloads } = exportApi;
-  const busy = status.phase === "preparing" || status.phase === "rendering";
+  const { status, target, start, cancel, reset, supported, clipCount, readyClips, clipDownloads, mixing } =
+    exportApi;
+  const busy = status.phase === "preparing" || status.phase === "rendering" || mixing;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -100,7 +101,9 @@ export default function ExportModal({
         ) : busy ? (
           <div className="space-y-3 rounded-xl border border-cyan-300/25 bg-cyan-400/[0.06] p-4">
             <div className="flex items-center justify-between text-xs text-cyan-100">
-              <span className="font-display uppercase tracking-[0.12em]">{status.stage || "Rendering"}</span>
+              <span className="font-display uppercase tracking-[0.12em]">
+                {mixing ? "Mixing audio" : status.stage || "Rendering"}
+              </span>
               <span className="font-mono">{status.progress}%</span>
             </div>
             <Progress value={status.progress} className="h-1.5" />
@@ -121,7 +124,7 @@ export default function ExportModal({
             <ExportSettingsPanel settings={settings} durationMs={durationMs} onChange={onSettingsChange} />
             <Button
               type="button"
-              onClick={start}
+              onClick={() => void start()}
               disabled={clipCount === 0}
               className="w-full bg-cyan-400 font-display uppercase tracking-[0.1em] text-slate-950 hover:bg-cyan-300"
             >
