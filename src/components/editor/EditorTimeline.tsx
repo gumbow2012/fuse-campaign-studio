@@ -4,7 +4,7 @@ import { cn } from "@/lib/utils";
 import type { TextLayer } from "@/services/editorText";
 import { musicTimelineDurationMs, type MusicTrack } from "@/services/editorMusic";
 
-const PX_PER_SEC = 62;
+const BASE_PX_PER_SEC = 62;
 const MIN_CLIP_MS = 400;
 
 type DragState =
@@ -55,11 +55,31 @@ export default function EditorTimeline({
 }) {
   const [drag, setDrag] = useState<DragState>(null);
   const trackRef = useRef<HTMLDivElement | null>(null);
+  const [trackWidth, setTrackWidth] = useState(0);
   const dragRef = useRef<DragState>(null);
   dragRef.current = drag;
 
+  /* The track always fills the editing column — no dead space after the last clip. */
+  useEffect(() => {
+    const node = trackRef.current;
+    if (!node) return;
+    const measure = () => setTrackWidth(node.clientWidth);
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, []);
+
+  const totalSeconds =
+    segments.reduce((sum, segment) => sum + playbackDurationMs(segment), 0) / 1000;
+  const gapPx = Math.max(0, segments.length - 1) * 8;
+  const pxPerSec =
+    totalSeconds > 0 && trackWidth > 0
+      ? Math.max(BASE_PX_PER_SEC, (trackWidth - gapPx - 4) / totalSeconds)
+      : BASE_PX_PER_SEC;
+
   const widthOf = (segment: EditSegment) =>
-    Math.max(48, (playbackDurationMs(segment) / 1000) * PX_PER_SEC);
+    Math.max(48, (playbackDurationMs(segment) / 1000) * pxPerSec);
 
   const offsetsPx: number[] = [];
   let running = 0;
@@ -79,14 +99,14 @@ export default function EditorTimeline({
         const width = widthOf(segments[i]);
         if (x <= offsetsPx[i] + width) {
           const withinPx = Math.max(0, x - offsetsPx[i]);
-          return acc + Math.min(playbackDurationMs(segments[i]), (withinPx / PX_PER_SEC) * 1000);
+          return acc + Math.min(playbackDurationMs(segments[i]), (withinPx / pxPerSec) * 1000);
         }
         acc += playbackDurationMs(segments[i]);
       }
       return acc;
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [segments, offsetsPx.join(",")],
+    [segments, offsetsPx.join(","), pxPerSec],
   );
 
   /* Global pointer handling for all drag interactions. */
@@ -105,18 +125,18 @@ export default function EditorTimeline({
         return;
       }
       if (state.kind === "text") {
-        const deltaMs = ((event.clientX - state.startX) / PX_PER_SEC) * 1000;
+        const deltaMs = ((event.clientX - state.startX) / pxPerSec) * 1000;
         onTextTime?.(state.id, Math.max(0, Math.round(state.startValue + deltaMs)));
         return;
       }
       if (state.kind === "music") {
-        const deltaMs = ((event.clientX - state.startX) / PX_PER_SEC) * 1000;
+        const deltaMs = ((event.clientX - state.startX) / pxPerSec) * 1000;
         onMusicStart?.(Math.max(0, Math.round(state.startValue + deltaMs)));
         return;
       }
       const segment = segments.find((item) => item.id === state.id);
       if (!segment) return;
-      const deltaMs = ((event.clientX - state.startX) / PX_PER_SEC) * 1000;
+      const deltaMs = ((event.clientX - state.startX) / pxPerSec) * 1000;
       if (state.edge === "start") {
         const next = Math.min(
           segment.trim_end_ms - MIN_CLIP_MS,
@@ -181,13 +201,13 @@ export default function EditorTimeline({
       let remaining = Math.max(0, ms);
       for (let i = 0; i < segments.length; i += 1) {
         const duration = playbackDurationMs(segments[i]);
-        if (remaining <= duration) return offsetsPx[i] + (remaining / 1000) * PX_PER_SEC;
+        if (remaining <= duration) return offsetsPx[i] + (remaining / 1000) * pxPerSec;
         remaining -= duration;
       }
       return running > 0 ? running - 8 : 0;
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [segments, offsetsPx.join(","), running],
+    [segments, offsetsPx.join(","), running, pxPerSec],
   );
 
   const totalMs = segments.reduce((sum, segment) => sum + playbackDurationMs(segment), 0);
@@ -196,7 +216,7 @@ export default function EditorTimeline({
     let remaining = currentMs;
     for (let i = 0; i < segments.length; i += 1) {
       const duration = playbackDurationMs(segments[i]);
-      if (remaining <= duration) return offsetsPx[i] + (remaining / 1000) * PX_PER_SEC;
+      if (remaining <= duration) return offsetsPx[i] + (remaining / 1000) * pxPerSec;
       remaining -= duration;
     }
     return running > 0 ? running - 8 : 0;
@@ -211,15 +231,15 @@ export default function EditorTimeline({
     dragIndex >= 0 ? Math.min(segments.length - 1, Math.max(0, dragIndex + dragShift)) : -1;
 
   return (
-    <div className="rounded-2xl border border-white/10 bg-slate-950/70 p-3">
-      <div className="mb-2 flex items-center justify-between px-1">
+    <div className="rounded-xl border border-white/10 bg-slate-950/70 px-2 py-2">
+      <div className="mb-1.5 flex items-center justify-between px-1">
         <span className="font-display text-[11px] uppercase tracking-[0.2em] text-slate-400">Timeline</span>
         <span className="text-[11px] text-slate-500">{segments.length} clips · drag to reorder · drag edges to trim</span>
       </div>
 
       <div
         ref={trackRef}
-        className="relative overflow-x-auto overflow-y-hidden pb-2"
+        className="relative w-full overflow-x-auto overflow-y-hidden pb-1"
         onPointerDown={(event) => {
           if ((event.target as HTMLElement).closest("[data-clip]")) return;
           onSeek(msFromClientX(event.clientX));

@@ -268,11 +268,15 @@ export default function PreviewPlayer({
   };
 
   return (
-    <div className={cn("flex flex-col gap-3", className)}>
+    <div className={cn("flex flex-col gap-2", className)}>
       <div
         ref={containerRef}
         className="relative mx-auto w-full overflow-hidden rounded-2xl border border-white/10 bg-black shadow-[0_0_60px_-24px_hsl(var(--electric-blue)/0.55)]"
-        style={{ maxWidth: `min(100%, ${(aspect.width / aspect.height) * 68}vh)`, aspectRatio: `${aspect.width} / ${aspect.height}` }}
+        style={{
+          maxWidth: `min(100%, ${(aspect.width / aspect.height) * 54}vh)`,
+          maxHeight: "54vh",
+          aspectRatio: `${aspect.width} / ${aspect.height}`,
+        }}
       >
         {segments.length === 0 ? (
           <div className="flex h-full items-center justify-center px-6 text-center text-sm text-slate-400">
@@ -342,7 +346,7 @@ export default function PreviewPlayer({
         <audio ref={musicRef} src={musicUrl} preload="auto" className="hidden" />
       ) : null}
 
-      <div className="flex items-center gap-3 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2">
+      <div className="flex items-center gap-3 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-1.5">
         <button
           type="button"
           aria-label={playing ? "Pause preview" : "Play preview"}
