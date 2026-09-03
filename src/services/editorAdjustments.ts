@@ -517,7 +517,29 @@ export function buildRenderSpec(adjustments: Adjustments): RenderSpec {
             }
           : null,
     },
+    motion: {
+      speed: round(motion.speed, 3),
+      reverse: motion.reverse,
+      freezeMs: Math.round(motion.freezeMs),
+      fadeInMs: Math.round(motion.fadeInMs),
+      fadeOutMs: Math.round(motion.fadeOutMs),
+      blurPx: motionBlurPx,
+      panZoom: motion.panZoom,
+      panZoomAmount: round(motion.panZoomAmount),
+      ease: motion.ease,
+      stabilizeScale: motion.stabilize ? 1.06 : 1,
+    },
+    audio: {
+      fadeInMs: Math.round(audio.fadeInMs),
+      fadeOutMs: Math.round(audio.fadeOutMs),
+      musicDuck: round(audio.musicDuck),
+      voiceEnhance: audio.voiceEnhance,
+      noiseReduction: round(audio.noiseReduction),
+      normalize: audio.normalize,
+      detached: audio.detached,
+    },
     identity: false,
+
   };
 
   spec.identity =
