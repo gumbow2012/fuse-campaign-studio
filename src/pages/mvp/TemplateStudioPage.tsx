@@ -3669,9 +3669,20 @@ export default function TemplateStudioPage() {
               ) : null}
             </div>
 
+              {/* Live "Fusing" experience — server-truthful for the whole active run. */}
+              {result && ACTIVE_RUN_STATUSES.has(result.status) ? (
+                <CampaignFusingStage
+                  jobId={activeRunId ?? null}
+                  resolveLatest={!activeRunId}
+                  templateName={workspaceTemplateName}
+                  className="mt-6"
+                />
+              ) : null}
+
               {/* P0: the workflow graph stays attached for the ENTIRE run lifecycle —
                   queued → running → video_pending → complete / failed. */}
-              {result && result.publicGraph && result.publicGraph.nodes.length > 0 ? (
+              {result && result.publicGraph && result.publicGraph.nodes.length > 0 &&
+              !ACTIVE_RUN_STATUSES.has(result.status) ? (
                 <div className="mt-6 space-y-4">
                   <CampaignBuildGraph
                     graph={result.publicGraph}
@@ -3682,18 +3693,9 @@ export default function TemplateStudioPage() {
                     onCustomizeWorkflow={() => void handleCustomizeWorkflow()}
                     onLockedCustomize={() => setWorkflowUpgradeDialogOpen(true)}
                   />
-                  {ACTIVE_RUN_STATUSES.has(result.status) ? (
-                    <CampaignOutputsPanel graph={result.publicGraph} outputs={result.outputs} />
-                  ) : null}
                 </div>
               ) : null}
 
-              {result && !result.publicGraph?.nodes.length && ACTIVE_RUN_STATUSES.has(result.status) ? (
-                <div className="mt-6 space-y-4">
-                  <RunProgressBeacon progress={result.progress} status={result.status} />
-                  <CampaignOutputsPanel graph={result.publicGraph} outputs={result.outputs} />
-                </div>
-              ) : null}
 
               {/* Recovery: successful deliverables of a failed/partial run stay reachable. */}
               {showRecoveryView && recovered ? (
