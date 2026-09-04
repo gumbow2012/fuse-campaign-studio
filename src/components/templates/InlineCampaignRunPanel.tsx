@@ -154,6 +154,8 @@ export default function InlineCampaignRunPanel({
   const [result, setResult] = useState<RunState | null>(null);
   const [paywallOpen, setPaywallOpen] = useState(false);
   const [freeStatus, setFreeStatus] = useState<string | null>(null);
+  /** Surfaced in the panel so a failed start is never an invisible no-op. */
+  const [error, setError] = useState<string | null>(null);
 
   const assetFields = inputFields.filter((field) => field.type === "image" || field.type === "video");
   const textFields = inputFields.filter((field) => field.type !== "image" && field.type !== "video");
