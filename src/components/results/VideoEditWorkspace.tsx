@@ -26,6 +26,8 @@ import ClipTimeline, { type TimelineClip } from "@/components/results/ClipTimeli
 import StudioButton from "@/components/results/StudioButton";
 import TrueRatioMedia from "@/components/results/TrueRatioMedia";
 import useClipPosters from "@/hooks/useClipPosters";
+import { cachedDuration } from "@/lib/videoPoster";
+import { persistSourceDuration } from "@/services/campaignEditor";
 import type { useCampaignEditor } from "@/hooks/useCampaignEditor";
 import type { CampaignResultSlot } from "@/components/results/resultSlots";
 import { cn } from "@/lib/utils";
@@ -44,6 +46,8 @@ const timecode = (ms: number) => {
   return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, "0")}`;
 };
 
+const MIN_CLIP_MS = 300;
+
 const IMAGE_EXTENSIONS = /\.(png|jpe?g|webp|gif|avif|heic|bmp)$/i;
 
 /** Images are shown directly; everything else is treated as video media. */
@@ -59,6 +63,14 @@ export function VideoEditWorkspace({ editor, fallbackSlots, className }: VideoEd
     { id: string; trimStartMs: number; trimEndMs: number; edge: "start" | "end" } | null
   >(null);
   const scrubFrame = useRef<number | null>(null);
+  /** Clips near the viewport — only these extract a poster. */
+  const [visibleIds, setVisibleIds] = useState<string[]>([]);
+  /** Real media lengths measured from video metadata, keyed by segment id. */
+  const [measured, setMeasured] = useState<Record<string, number>>({});
+  const correctedRef = useRef<Set<string>>(new Set());
+  const [activeLoading, setActiveLoading] = useState(false);
+
+  const onVisibleClipsChange = useCallback((ids: string[]) => setVisibleIds(ids), []);
 
   const segments = editor?.active ?? [];
   const selectedId = editor?.selectedId ?? null;
@@ -88,7 +100,55 @@ export function VideoEditWorkspace({ editor, fallbackSlots, className }: VideoEd
     [editor, segments, fallbackSlots],
   );
 
-  const posters = useClipPosters(posterSources);
+  /* The active clip always extracts first; the rest only when scrolled near. */
+  const allowedIds = useMemo(
+    () => [...visibleIds, ...(selectedId ? [selectedId] : []), ...(segments[0] ? [segments[0].id] : [])],
+    [visibleIds, selectedId, segments],
+  );
+  const posters = useClipPosters(posterSources, { allowedIds, concurrency: 2 });
+
+  /**
+   * Metadata durations land with the posters (same metadata load). They are the
+   * source of truth for labels, totals and trim ranges; stored values are only a
+   * fallback until metadata arrives.
+   */
+  useEffect(() => {
+    setMeasured((current) => {
+      let next = current;
+      for (const segment of segments) {
+        const real = cachedDuration(segment.url, `edit-segment:${segment.id}`);
+        if (real && current[segment.id] !== real) {
+          if (next === current) next = { ...current };
+          next[segment.id] = real;
+        }
+      }
+      return next;
+    });
+  }, [posters, segments]);
+
+  const durationOf = useCallback(
+    (segment: EditSegment) => {
+      const real = measured[segment.id];
+      if (real && Number.isFinite(real) && real > 0) return Math.round(real);
+      const stored = Number(segment.source_duration_ms);
+      return Number.isFinite(stored) && stored > 0 ? Math.round(stored) : 0;
+    },
+    [measured],
+  );
+
+  /** Write a measured correction back once per clip — best effort, silent. */
+  const projectId = editor?.project?.id ?? null;
+  const revision = editor?.project?.revision ?? 0;
+  useEffect(() => {
+    if (!projectId) return;
+    for (const segment of segments) {
+      const real = measured[segment.id];
+      if (!real || correctedRef.current.has(segment.id)) continue;
+      if (Math.abs(real - (Number(segment.source_duration_ms) || 0)) < 250) continue;
+      correctedRef.current.add(segment.id);
+      void persistSourceDuration(projectId, revision, segment.id, real);
+    }
+  }, [measured, segments, projectId, revision]);
 
   /* ------------------------------ playback ------------------------------ */
 
@@ -166,6 +226,7 @@ export function VideoEditWorkspace({ editor, fallbackSlots, className }: VideoEd
             trimEndMs: 1,
             muted: false,
             incomplete: !slot.item,
+            durationUnknown: true,
           }))}
 
           selectedId={null}
@@ -210,11 +271,12 @@ export function VideoEditWorkspace({ editor, fallbackSlots, className }: VideoEd
     posterUrl: posters[segment.id] ?? null,
     mediaUrl: segment.url,
     kind: isImageSegment(segment.source_path) ? "image" : "video",
-    sourceDurationMs: Math.max(1, segment.source_duration_ms),
+    sourceDurationMs: Math.max(1, durationOf(segment) || 1),
     trimStartMs: liveSpan(segment).trimStartMs,
     trimEndMs: liveSpan(segment).trimEndMs,
     muted: segment.muted,
     incomplete: segment.removed || !segment.source_path,
+    durationUnknown: durationOf(segment) <= 0,
   }));
 
   /**
@@ -261,9 +323,11 @@ export function VideoEditWorkspace({ editor, fallbackSlots, className }: VideoEd
   const trim = (id: string, startMs: number, endMs: number, commit: boolean) => {
     const before = segments.find((segment) => segment.id === id);
     if (!before) return;
-    const duration = Math.max(1, before.source_duration_ms);
-    const start = Math.min(Math.max(0, Math.round(startMs)), duration - 1);
-    const end = Math.min(duration, Math.max(start + 1, Math.round(endMs)));
+    const duration = durationOf(before);
+    /* Unknown length — never persist a NaN or zero-length trim. */
+    if (!duration || !Number.isFinite(startMs) || !Number.isFinite(endMs)) return;
+    const start = Math.min(Math.max(0, Math.round(startMs)), Math.max(0, duration - MIN_CLIP_MS));
+    const end = Math.min(duration, Math.max(start + MIN_CLIP_MS, Math.round(endMs)));
     runOp(
       { op: "trim", payload: { segment_id: id, trim_start_ms: start, trim_end_ms: end } },
       { record: commit, immediate: commit, label: "trim" },
@@ -301,13 +365,25 @@ export function VideoEditWorkspace({ editor, fallbackSlots, className }: VideoEd
               src={selected.url}
               muted={selected.muted}
               playsInline
-              preload="metadata"
+              preload="auto"
               poster={posters[selected.id] ?? undefined}
+              onLoadedMetadata={(event) => {
+                const real = Math.round((event.currentTarget.duration || 0) * 1000);
+                if (real > 0) setMeasured((current) => ({ ...current, [selected.id]: real }));
+                setActiveLoading(false);
+              }}
+              onWaiting={() => setActiveLoading(true)}
+              onCanPlay={() => setActiveLoading(false)}
               onTimeUpdate={onTimeUpdate}
               onPause={() => setPlaying(false)}
               onPlay={() => setPlaying(true)}
               className="mx-auto max-h-[min(58vh,640px)] w-auto rounded-2xl border border-white/10 bg-black object-contain"
             />
+            {activeLoading ? (
+              <span className="pointer-events-none absolute right-3 top-3 rounded-full bg-slate-950/80 p-2">
+                <Loader2 className="h-4 w-4 animate-spin text-cyan-200 motion-reduce:animate-none" aria-hidden />
+              </span>
+            ) : null}
           </div>
 
           <div className="flex flex-wrap items-center justify-between gap-3">
@@ -379,6 +455,7 @@ export function VideoEditWorkspace({ editor, fallbackSlots, className }: VideoEd
         onReorder={(order) => runOp({ op: "reorder", payload: { order } }, { label: "reorder" })}
         onTrim={trim}
         onTrimPreview={previewTrim}
+        onVisibleClipsChange={onVisibleClipsChange}
         playheadRatio={playheadRatio}
       />
 
