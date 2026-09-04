@@ -328,12 +328,11 @@ export default function InlineCampaignRunPanel({
       setResult({ status: "queued", progress: 0, outputs: [] });
       void refreshProfile();
       toast({ title: `${templateName} is running`, description: "Progress shows right here." });
-    } catch (error) {
-      toast({
-        title: "Generation failed",
-        description: error instanceof Error ? error.message : "Could not start the campaign.",
-        variant: "destructive",
-      });
+    } catch (runError) {
+      const message =
+        runError instanceof Error ? runError.message : "Could not start the campaign.";
+      setError(message);
+      toast({ title: "Generation failed", description: message, variant: "destructive" });
     } finally {
       setSubmitting(false);
     }
