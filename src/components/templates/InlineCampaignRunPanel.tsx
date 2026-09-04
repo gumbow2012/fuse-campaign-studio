@@ -420,28 +420,13 @@ export default function InlineCampaignRunPanel({
     return (
       <div className={cn("space-y-4", className)}>
         {running ? (
-          <div className="rounded-2xl border border-white/10 bg-black/30 p-5">
-            <div className="flex items-center gap-2">
-              <Loader2 className="h-4 w-4 animate-spin text-[hsl(var(--electric-cyan))]" aria-hidden />
-              <p className="font-display text-sm font-semibold uppercase tracking-[0.06em] text-white">
-                {result.status === "video_pending" ? "Rendering video" : "Building your campaign"}
-              </p>
-            </div>
-            <Progress value={Math.max(4, Math.min(100, result.progress))} className="mt-4 h-1.5" />
-            <p className="mt-2 font-mono text-[10px] uppercase tracking-[0.2em] text-slate-400">
-              {result.statusMessage ?? "This usually takes a few minutes. Stay on this page."}
-            </p>
-            {result.publicGraph ? (
-              <CampaignBuildGraph
-                graph={result.publicGraph}
-                statusMessage={result.statusMessage}
-                progress={result.progress}
-                runStatus={result.status}
-                className="mt-5"
-              />
-            ) : null}
-          </div>
+          <CampaignFusingStage
+            jobId={jobId}
+            templateName={templateName}
+            onTerminal={() => void refreshProfile()}
+          />
         ) : result.status === "failed" ? (
+
           <div className="rounded-2xl border border-rose-400/25 bg-rose-500/[0.06] p-5">
             <p className="font-display text-sm font-semibold uppercase tracking-[0.06em] text-rose-100">
               {failureCopy?.title ?? "This run didn't finish"}
