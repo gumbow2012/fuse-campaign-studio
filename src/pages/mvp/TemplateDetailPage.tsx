@@ -143,8 +143,12 @@ export default function TemplateDetailPage() {
     : "No product uploads required";
 
   const deliverables = template
-    ? `${countLabel(template.image_count, "image")} · ${countLabel(template.video_count, "video clip")}`
+    ? deliverablesLabel(template.image_count, template.video_count, "image").join(" · ")
     : "";
+  const youllGet = template
+    ? deliverablesLabel(template.image_count, template.video_count, "campaign image").join(" + ")
+    : "";
+
 
   /**
    * Run fields. The catalog `input_schema` carries the pipeline input keys, so
