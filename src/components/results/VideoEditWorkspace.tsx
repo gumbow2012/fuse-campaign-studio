@@ -54,6 +54,11 @@ export function VideoEditWorkspace({ editor, fallbackSlots, className }: VideoEd
   const videoRef = useRef<HTMLVideoElement>(null);
   const [playing, setPlaying] = useState(false);
   const [playheadRatio, setPlayheadRatio] = useState<number | null>(null);
+  /** Live trim while a handle is held — local only, never a request per pixel. */
+  const [liveTrim, setLiveTrim] = useState<
+    { id: string; trimStartMs: number; trimEndMs: number; edge: "start" | "end" } | null
+  >(null);
+  const scrubFrame = useRef<number | null>(null);
 
   const segments = editor?.active ?? [];
   const selectedId = editor?.selectedId ?? null;
@@ -181,6 +186,24 @@ export function VideoEditWorkspace({ editor, fallbackSlots, className }: VideoEd
    * removed:false and a source is READY. The "needs another pass" warning is
    * reserved for a genuinely missing output (no source at all).
    */
+  const liveSpan = (segment: (typeof segments)[number]) => {
+    const live = liveTrim && liveTrim.id === segment.id ? liveTrim : null;
+    return {
+      trimStartMs: live ? live.trimStartMs : segment.trim_start_ms,
+      trimEndMs: live ? live.trimEndMs : segment.trim_end_ms,
+    };
+  };
+
+  /** Total ticks in realtime: swap the dragged clip's span into the saved total. */
+  const liveDurationMs = (() => {
+    if (!liveTrim) return editor.durationMs;
+    const segment = segments.find((item) => item.id === liveTrim.id);
+    if (!segment) return editor.durationMs;
+    const savedSpan = Math.max(0, segment.trim_end_ms - segment.trim_start_ms);
+    const nextSpan = Math.max(0, liveTrim.trimEndMs - liveTrim.trimStartMs);
+    return Math.max(0, editor.durationMs - savedSpan + nextSpan);
+  })();
+
   const clips: TimelineClip[] = segments.map((segment, index) => ({
     id: segment.id,
     number: index + 1,
@@ -188,11 +211,51 @@ export function VideoEditWorkspace({ editor, fallbackSlots, className }: VideoEd
     mediaUrl: segment.url,
     kind: isImageSegment(segment.source_path) ? "image" : "video",
     sourceDurationMs: Math.max(1, segment.source_duration_ms),
-    trimStartMs: segment.trim_start_ms,
-    trimEndMs: segment.trim_end_ms,
+    trimStartMs: liveSpan(segment).trimStartMs,
+    trimEndMs: liveSpan(segment).trimEndMs,
     muted: segment.muted,
     incomplete: segment.removed || !segment.source_path,
   }));
+
+  /**
+   * Live handle drag: seek the already-loaded player to the exact boundary frame
+   * (in-point for the left handle, out-point for the right) once per animation
+   * frame, and keep the live trim in local state so durations tick in realtime.
+   * Nothing is persisted here.
+   */
+  const previewTrim = (
+    preview: { id: string; trimStartMs: number; trimEndMs: number; edge: "start" | "end" } | null,
+  ) => {
+    setLiveTrim(preview);
+    const element = videoRef.current;
+    if (!preview) {
+      if (scrubFrame.current != null) {
+        cancelAnimationFrame(scrubFrame.current);
+        scrubFrame.current = null;
+      }
+      /* Back to normal playback of the selected clip. */
+      if (element && selected) {
+        try {
+          element.currentTime = selected.trim_start_ms / 1000;
+        } catch {
+          /* ignore seek races */
+        }
+      }
+      return;
+    }
+    if (!element || preview.id !== selected?.id || element.readyState < 1) return;
+    const at = (preview.edge === "start" ? preview.trimStartMs : preview.trimEndMs) / 1000;
+    if (scrubFrame.current != null) return;
+    scrubFrame.current = requestAnimationFrame(() => {
+      scrubFrame.current = null;
+      if (!element.paused) element.pause();
+      try {
+        element.currentTime = at;
+      } catch {
+        /* ignore seek races */
+      }
+    });
+  };
 
   /** Persisted once, on drag release — the timeline shows the drag visually. */
   const trim = (id: string, startMs: number, endMs: number, commit: boolean) => {
@@ -253,7 +316,7 @@ export function VideoEditWorkspace({ editor, fallbackSlots, className }: VideoEd
                 {playing ? <Pause className="h-4 w-4" aria-hidden /> : <Play className="h-4 w-4" aria-hidden />}
               </StudioButton>
               <p className="font-display text-[12px] font-semibold uppercase tracking-[0.16em] text-slate-300 tabular-nums">
-                {timecode(editor.durationMs)} total · {clips.length} clip{clips.length === 1 ? "" : "s"}
+                {timecode(liveDurationMs)} total · {clips.length} clip{clips.length === 1 ? "" : "s"}
               </p>
             </div>
 
@@ -315,6 +378,7 @@ export function VideoEditWorkspace({ editor, fallbackSlots, className }: VideoEd
         onSelect={(id) => editor.setSelectedId(id)}
         onReorder={(order) => runOp({ op: "reorder", payload: { order } }, { label: "reorder" })}
         onTrim={trim}
+        onTrimPreview={previewTrim}
         playheadRatio={playheadRatio}
       />
 
