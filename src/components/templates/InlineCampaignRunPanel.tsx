@@ -281,6 +281,7 @@ export default function InlineCampaignRunPanel({
     }
 
     setSubmitting(true);
+    setError(null);
     setResult(null);
     setJobId(null);
 
