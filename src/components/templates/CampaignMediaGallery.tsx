@@ -38,6 +38,17 @@ export default function CampaignMediaGallery({
 
   const usable = useMemo(() => items.filter((item) => !broken[item.id]), [items, broken]);
 
+  /* Video items rarely ship a poster_url — extract a first frame client-side. */
+  const posterSources = useMemo(
+    () =>
+      usable
+        .filter((item) => item.media_type === "video")
+        .map((item) => ({ id: item.id, url: item.url, poster: item.poster_url })),
+    [usable],
+  );
+  const posters = useClipPosters(posterSources);
+
+
   const activeIndex = Math.max(
     0,
     usable.findIndex((item) => item.id === activeId),
