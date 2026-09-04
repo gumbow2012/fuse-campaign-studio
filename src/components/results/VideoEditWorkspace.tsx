@@ -153,19 +153,42 @@ export function VideoEditWorkspace({ editor, fallbackSlots, className }: VideoEd
     [measured],
   );
 
-  /** Write a measured correction back once per clip — best effort, silent. */
+  /**
+   * SELF-HEALING DURATIONS — write each measured length back once per clip,
+   * debounced and serialized, silently. Runs whose `source_duration_ms` was
+   * never stored get real lengths persisted so trims stay valid next session.
+   */
   const projectId = editor?.project?.id ?? null;
   const revision = editor?.project?.revision ?? 0;
+  const patchSourceDuration = editor?.patchSourceDuration;
+  const healTimerRef = useRef<number | null>(null);
+  const healingRef = useRef(false);
   useEffect(() => {
     if (!projectId) return;
-    for (const segment of segments) {
-      const real = measured[segment.id];
-      if (!real || correctedRef.current.has(segment.id)) continue;
-      if (Math.abs(real - (Number(segment.source_duration_ms) || 0)) < 250) continue;
-      correctedRef.current.add(segment.id);
-      void persistSourceDuration(projectId, revision, segment.id, real);
-    }
-  }, [measured, segments, projectId, revision]);
+    if (healTimerRef.current) window.clearTimeout(healTimerRef.current);
+    healTimerRef.current = window.setTimeout(() => {
+      void (async () => {
+        if (healingRef.current) return;
+        healingRef.current = true;
+        try {
+          for (const segment of segments) {
+            const real = measured[segment.id];
+            if (!real || correctedRef.current.has(segment.id)) continue;
+            if (Math.abs(real - (Number(segment.source_duration_ms) || 0)) < 250) continue;
+            correctedRef.current.add(segment.id);
+            /* Local state first, so labels/total/trim ranges are valid instantly. */
+            patchSourceDuration?.(segment.id, real);
+            await persistSourceDuration(projectId, revision, segment.id, real);
+          }
+        } finally {
+          healingRef.current = false;
+        }
+      })();
+    }, 400);
+    return () => {
+      if (healTimerRef.current) window.clearTimeout(healTimerRef.current);
+    };
+  }, [measured, segments, projectId, revision, patchSourceDuration]);
 
   /* ------------------------------ playback ------------------------------ */
 
