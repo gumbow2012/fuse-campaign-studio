@@ -34,7 +34,7 @@ import { findEditProjectForRun } from "@/services/campaignEditor";
 import { downloadAllOutputs, downloadSignedOutput } from "@/services/resultDownloads";
 import { normalizeExportSettings } from "@/services/exportSettings";
 import type { CampaignLiveStatus } from "@/services/campaignLiveStatus";
-import type { CustomizeState } from "@/lib/customizeGating";
+import { canInitiateFork, type CustomizeState } from "@/lib/customizeGating";
 import { cn } from "@/lib/utils";
 
 export interface CampaignResultsStageProps {
@@ -183,7 +183,7 @@ export function CampaignResultsStage({
   const missing = Math.max(0, total - ready);
   const zeroOutputTerminal = executionComplete && ready === 0;
   const canCustomize = !!onCustomizeWorkflow || !!onLockedCustomize;
-  const locked = customizeState ? !customizeState.allowed : false;
+  const locked = customizeState ? !canInitiateFork(customizeState) : false;
 
   return (
     <div className={cn("mx-auto w-full max-w-[1520px] space-y-6", className)}>
