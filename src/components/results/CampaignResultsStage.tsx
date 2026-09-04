@@ -25,7 +25,7 @@ import StudioButton from "@/components/results/StudioButton";
 import StudioStatusBar from "@/components/results/StudioStatusBar";
 import VideoEditSection from "@/components/results/VideoEditSection";
 import { buildSlots, readyItems, type CampaignResultSlot } from "@/components/results/resultSlots";
-import useCampaignEditor from "@/hooks/useCampaignEditor";
+import { useCampaignEditor } from "@/hooks/useCampaignEditor";
 import useCampaignLiveStatus from "@/hooks/useCampaignLiveStatus";
 import useServerExport from "@/hooks/useServerExport";
 import { toast } from "@/hooks/use-toast";

@@ -26,7 +26,7 @@ import ClipTimeline, { type TimelineClip } from "@/components/results/ClipTimeli
 import StudioButton from "@/components/results/StudioButton";
 import TrueRatioMedia from "@/components/results/TrueRatioMedia";
 import useClipPosters from "@/hooks/useClipPosters";
-import type useCampaignEditor from "@/hooks/useCampaignEditor";
+import type { useCampaignEditor } from "@/hooks/useCampaignEditor";
 import type { CampaignResultSlot } from "@/components/results/resultSlots";
 import { cn } from "@/lib/utils";
 
