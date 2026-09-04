@@ -157,21 +157,37 @@ export default function CampaignMediaGallery({
                   : "border-white/10 hover:border-[hsl(var(--electric-blue)/0.5)]",
               )}
             >
-              <img
-                src={item.media_type === "video" ? item.poster_url ?? item.url : item.url}
-                alt=""
-                loading="lazy"
-                decoding="async"
-                onError={() => markBroken(item.id)}
-                className="h-full w-full object-cover"
-              />
               {item.media_type === "video" ? (
-                <span className="pointer-events-none absolute inset-0 flex items-center justify-center">
-                  <span className="flex h-6 w-6 items-center justify-center rounded-full bg-black/60 ring-1 ring-white/20">
-                    <Play className="h-3 w-3 translate-x-[1px] fill-white text-white" />
+                <>
+                  {item.poster_url ?? posters[item.id] ? (
+                    <img
+                      src={(item.poster_url ?? posters[item.id]) as string}
+                      alt=""
+                      loading="lazy"
+                      decoding="async"
+                      className="h-full w-full object-cover"
+                    />
+                  ) : (
+                    /* Poster still extracting — a quiet gradient, never a film icon. */
+                    <span className="absolute inset-0 bg-[linear-gradient(180deg,hsl(var(--navy-mid)/0.9),hsl(var(--navy-deep)))]" />
+                  )}
+                  <span className="pointer-events-none absolute inset-0 flex items-center justify-center">
+                    <span className="flex h-6 w-6 items-center justify-center rounded-full bg-black/60 ring-1 ring-white/20">
+                      <Play className="h-3 w-3 translate-x-[1px] fill-white text-white" />
+                    </span>
                   </span>
-                </span>
-              ) : null}
+                </>
+              ) : (
+                <img
+                  src={item.url}
+                  alt=""
+                  loading="lazy"
+                  decoding="async"
+                  onError={() => markBroken(item.id)}
+                  className="h-full w-full object-cover"
+                />
+              )}
+
             </button>
           ))}
         </div>
