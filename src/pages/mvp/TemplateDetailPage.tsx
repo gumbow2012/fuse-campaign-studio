@@ -43,6 +43,15 @@ function countLabel(count: number, singular: string) {
   return `${count} ${count === 1 ? singular : `${singular}s`}`;
 }
 
+/** Joins image/video counts while skipping any zero segment. */
+function deliverablesLabel(imageCount: number, videoCount: number, imageSingular: string) {
+  const parts: string[] = [];
+  if (imageCount > 0) parts.push(countLabel(imageCount, imageSingular));
+  if (videoCount > 0) parts.push(countLabel(videoCount, "video clip"));
+  return parts;
+}
+
+
 function PanelBlock({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="border-t border-white/[0.08] pt-4">
