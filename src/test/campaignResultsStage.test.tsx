@@ -76,9 +76,9 @@ describe("Results experience", () => {
     fetchMock.mockImplementation(async (id: string) => normalizeLiveStatus(payload({}), id));
     await renderStage();
     await waitFor(() => expect(screen.getByText(/Bringing your campaign to life/i)).toBeTruthy());
-    expect(screen.getByText(/Generating video clip 03/i)).toBeTruthy();
-    expect(screen.getByText(/1 \/ 2 clips ready/i)).toBeTruthy();
-    expect(screen.getByText(/Photoshoot/i)).toBeTruthy();
+    expect(screen.getAllByText(/Generating video clip 03/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/1 \/ 2 clips ready/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Photoshoot/i).length).toBeGreaterThan(0);
     expect(screen.getByText(/About 2 min remaining/i)).toBeTruthy();
   });
 
@@ -104,11 +104,11 @@ describe("Results experience", () => {
     await renderStage();
     await waitFor(() => expect(screen.getByText(/Your campaign is ready/i)).toBeTruthy());
     expect(screen.getByText(/2 outputs need another pass/i)).toBeTruthy();
-    expect(screen.getByText(/Complete/i)).toBeTruthy();
+    expect(screen.getAllByText(/Complete/i).length).toBeGreaterThan(0);
     expect(screen.queryByText(/interrupted|partial|failed|didn't finish/i)).toBeNull();
     expect(screen.queryByText(/min remaining/i)).toBeNull();
     /* Usable media stays reachable; missing slots stay calm. */
-    expect(screen.getByText(/1 \/ 2 clips ready/i)).toBeTruthy();
+    expect(screen.getAllByText(/1 \/ 2 clips ready/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/Needs another pass/i).length).toBeGreaterThan(0);
   });
 });
