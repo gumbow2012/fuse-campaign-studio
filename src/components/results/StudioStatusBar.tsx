@@ -66,7 +66,7 @@ export function StudioStatusBar({
               ) : (
                 <RefreshCw className="h-4 w-4" aria-hidden />
               )}
-              Retry failed output
+              Retry missing output{missing === 1 ? "" : "s"}
             </StudioButton>
           ) : null}
         </div>
