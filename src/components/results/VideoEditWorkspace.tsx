@@ -152,12 +152,15 @@ export function VideoEditWorkspace({ editor, fallbackSlots, className }: VideoEd
             id: slot.item?.id ?? `slot-${slot.number}`,
             number: slot.number,
             posterUrl: slot.item ? posters[slot.item.id] ?? slot.item.poster_url ?? null : null,
+            mediaUrl: slot.item?.url ?? null,
+            kind: "video" as const,
             sourceDurationMs: 1,
             trimStartMs: 0,
             trimEndMs: 1,
             muted: false,
             incomplete: !slot.item,
           }))}
+
           selectedId={null}
           onSelect={() => undefined}
         />
