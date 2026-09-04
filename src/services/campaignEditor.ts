@@ -66,11 +66,14 @@ export type EditOp =
   | {
       op: "set_meta";
       payload: {
+        /** Campaign name — drives the export filename and folder. */
+        name?: string;
         export_settings?: ExportSettings;
         text_layers?: TextLayer[];
         music?: MusicTrack | null;
       };
     };
+
 
 export type UpdateResult = {
   status: "ok" | "conflict" | "forbidden" | "not_found" | "error";

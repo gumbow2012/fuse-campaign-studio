@@ -150,11 +150,13 @@ function inverseOf(segments: EditSegment[], project: EditProject | null, op: Edi
     case "set_meta": {
       if (!project) return [];
       const payload: Record<string, unknown> = {};
+      if (op.payload.name !== undefined) payload.name = project.name ?? "";
       if (op.payload.export_settings) payload.export_settings = project.export_settings;
       if (op.payload.text_layers) payload.text_layers = project.text_layers;
       if (op.payload.music !== undefined) payload.music = project.music;
       return [{ op: "set_meta", payload } as EditOp];
     }
+
     default:
       return [];
   }
@@ -370,10 +372,12 @@ export function useCampaignEditor(projectId: string | undefined) {
         if (beforeProject) {
           const next: EditProject = {
             ...beforeProject,
+            name: op.payload.name !== undefined ? op.payload.name : beforeProject.name,
             export_settings: op.payload.export_settings ?? beforeProject.export_settings,
             text_layers: op.payload.text_layers ?? beforeProject.text_layers,
             music: op.payload.music !== undefined ? op.payload.music : beforeProject.music,
           };
+
           setProject(next);
           projectRef.current = next;
         }
@@ -480,6 +484,16 @@ export function useCampaignEditor(projectId: string | undefined) {
     [runOp],
   );
 
+  /** Rename the campaign — persisted through set_meta, undoable like any op. */
+  const setProjectName = useCallback(
+    (name: string) => {
+      runOp({ op: "set_meta", payload: { name } }, { label: "campaign name", immediate: true });
+    },
+    [runOp],
+  );
+
+
+
   const setMusic = useCallback(
     (music: MusicTrack | null, label = "music") => {
       runOp({ op: "set_meta", payload: { music } }, { label });
@@ -518,6 +532,8 @@ export function useCampaignEditor(projectId: string | undefined) {
     resetAdjust,
     setExportSettings,
     setTextLayers,
+    setProjectName,
+
     setMusic,
     reload,
     undo,

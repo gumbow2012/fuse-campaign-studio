@@ -1,31 +1,35 @@
 /**
- * CUSTOMER RESULTS EXPERIENCE — the single canonical presentation of a campaign.
+ * FUSE CREATIVE STUDIO — the single canonical presentation of a campaign.
  *
  * `campaign-live-status` is the only source of truth: polling stops the moment
  * the server reports `execution_complete`, and nothing here invents progress,
  * status or failure copy.
  *
- * Hierarchy (R3):
- *   CAMPAIGN WORKFLOW   [ EDIT WORKFLOW · PRO ]
- *   VIDEO EDIT          (from the first ready video clip)
- *   PHOTOSHOOT          (from the first ready photo)
+ * Hierarchy:
+ *   HEADER          headline · editable campaign name · template · counts
+ *   STATUS BAR      ready/total · progress · retry when outputs are missing
+ *   VIDEO EDIT      big player + REAL non-destructive timeline + export
+ *   PHOTOSHOOT      large true-ratio gallery + download all
  *
- * R1: a campaign with at least one usable output NEVER shows a global
- * partial/failed/interrupted state. Missing outputs stay slot-level.
- *
- * Seams left open on purpose: per-slot Regenerate (outlined slot treatment is
- * already in place), a server ZIP bundle (swap `downloadAllOutputs`), and live
- * edit-project attachment (`findEditProjectForRun`).
+ * A campaign with at least one usable output NEVER shows a global partial or
+ * failed state — missing outputs stay slot-level. Every edit and the export go
+ * through the existing edge functions; original generated files are untouched.
  */
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { Button } from "@/components/ui/button";
+import { Sliders } from "lucide-react";
 import CampaignWorkflowPanel from "@/components/results/CampaignWorkflowPanel";
+import EditableCampaignName from "@/components/results/EditableCampaignName";
 import PhotoshootSection from "@/components/results/PhotoshootSection";
+import StudioButton from "@/components/results/StudioButton";
+import StudioStatusBar from "@/components/results/StudioStatusBar";
 import VideoEditSection from "@/components/results/VideoEditSection";
 import { buildSlots, readyItems, type CampaignResultSlot } from "@/components/results/resultSlots";
+import useCampaignEditor from "@/hooks/useCampaignEditor";
 import useCampaignLiveStatus from "@/hooks/useCampaignLiveStatus";
+import useServerExport from "@/hooks/useServerExport";
 import { toast } from "@/hooks/use-toast";
+import { supabase } from "@/integrations/supabase/client";
 import { findEditProjectForRun } from "@/services/campaignEditor";
 import { downloadAllOutputs, downloadSignedOutput } from "@/services/resultDownloads";
 import type { CampaignLiveStatus } from "@/services/campaignLiveStatus";
@@ -37,7 +41,7 @@ export interface CampaignResultsStageProps {
   resolveLatest?: boolean;
   templateName?: string | null;
   onTerminal?: (status: CampaignLiveStatus) => void;
-  /** R7 — existing private-fork entry point, owned by the parent. */
+  /** Existing private-fork entry point, owned by the parent. */
   customizeState?: CustomizeState;
   onCustomizeWorkflow?: () => void;
   onLockedCustomize?: () => void;
@@ -66,6 +70,8 @@ export function CampaignResultsStage({
     { id: string; segmentCount: number; customized: boolean } | null
   >(null);
   const [downloading, setDownloading] = useState<"video" | "image" | null>(null);
+  const [retrying, setRetrying] = useState(false);
+  const [nameSavedAt, setNameSavedAt] = useState<number | null>(null);
 
   const executionComplete = status?.job.execution_complete ?? false;
 
@@ -79,7 +85,6 @@ export function CampaignResultsStage({
       setEditProject({
         id: found.id,
         segmentCount: found.segmentCount,
-        /* A revision beyond the initial build means the user has edited it. */
         customized: found.revision > 1,
       });
     });
@@ -88,8 +93,23 @@ export function CampaignResultsStage({
     };
   }, [liveJobId, executionComplete]);
 
+  /* The live, real editor for this run's auto-created edit project. */
+  const editor = useCampaignEditor(editProject?.id ?? null);
+  const hasEditor = !!editProject && !!editor.project;
+  const campaignName = editor.project?.name?.trim() || null;
+
+  const exporter = useServerExport(editProject?.id ?? null, campaignName ?? templateName ?? null);
+
   const videoSlots = useMemo(() => (status ? buildSlots(status, "video") : []), [status]);
   const photoSlots = useMemo(() => (status ? buildSlots(status, "image") : []), [status]);
+
+  const renameCampaign = useCallback(
+    (next: string) => {
+      editor.setProjectName(next);
+      setNameSavedAt(Date.now());
+    },
+    [editor],
+  );
 
   const downloadOne = useCallback(
     async (slot: CampaignResultSlot) => {
@@ -125,13 +145,31 @@ export function CampaignResultsStage({
     [refresh],
   );
 
+  /* Free retry of the outputs the server reports as missing. */
+  const retryFailed = useCallback(async () => {
+    if (!liveJobId) return;
+    setRetrying(true);
+    try {
+      const { error } = await supabase.functions.invoke("retry-failed-run", {
+        body: { run_id: liveJobId },
+      });
+      if (error) throw error;
+      toast({ title: "Another pass started", description: "We'll add the outputs here as they land." });
+      await refresh();
+    } catch {
+      toast({ title: "Couldn't start another pass", description: "Please try again in a moment." });
+    } finally {
+      setRetrying(false);
+    }
+  }, [liveJobId, refresh]);
+
   if (!status) {
     return (
       <section
-        className={cn("rounded-[1.5rem] border border-white/10 bg-black/30 p-6", className)}
+        className={cn("rounded-3xl border border-white/10 bg-slate-950/50 p-7", className)}
         aria-label="Your campaign"
       >
-        <p className="font-display text-[11px] font-semibold uppercase tracking-[0.24em] text-slate-400">
+        <p className="font-display text-[12px] font-semibold uppercase tracking-[0.2em] text-slate-400">
           Campaign workflow
         </p>
         <p className="mt-2 text-sm text-slate-400">Reconnecting to your campaign…</p>
@@ -141,56 +179,101 @@ export function CampaignResultsStage({
 
   const ready = status.outputs.ready;
   const total = status.outputs.total;
+  const missing = Math.max(0, total - ready);
   const zeroOutputTerminal = executionComplete && ready === 0;
+  const canCustomize = !!onCustomizeWorkflow || !!onLockedCustomize;
+  const locked = customizeState ? !customizeState.allowed : false;
 
   return (
-    <div className={cn("space-y-7", className)}>
-      <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <p className="font-display text-sm font-semibold uppercase tracking-[0.18em] text-white">
-          Your campaign
-        </p>
-        {total > 0 ? (
-          <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-slate-400 tabular-nums">
-            {ready} / {total} ready
-          </p>
-        ) : null}
-      </div>
+    <div className={cn("mx-auto w-full max-w-[1520px] space-y-6", className)}>
+      {/* ------------------------------- header ------------------------------- */}
+      <header className="rounded-3xl border border-white/10 bg-slate-950/50 p-6 sm:p-8">
+        <div className="flex flex-wrap items-start justify-between gap-x-8 gap-y-5">
+          <div className="min-w-0 flex-1">
+            <p className="font-display text-[12px] font-semibold uppercase tracking-[0.22em] text-cyan-100">
+              {executionComplete ? "Your campaign is ready" : status.job.headline}
+            </p>
+            <div className="mt-3">
+              <EditableCampaignName
+                name={campaignName}
+                placeholder={templateName ? `${templateName} campaign` : "Untitled campaign"}
+                saving={hasEditor && editor.saveState === "saving"}
+                savedAt={hasEditor && editor.saveState === "saved" ? nameSavedAt : null}
+                onSave={hasEditor ? renameCampaign : undefined}
+              />
+            </div>
+            <p className="mt-2 text-[14px] text-slate-400">
+              {templateName ? `${templateName} · ` : ""}
+              <span className="tabular-nums">
+                {ready}/{total || ready} outputs ready
+              </span>
+            </p>
+          </div>
 
-      <CampaignWorkflowPanel
-        status={status}
-        maxProgress={maxProgress}
-        templateName={templateName}
-        customizeState={customizeState}
-        onCustomizeWorkflow={onCustomizeWorkflow}
-        onLockedCustomize={onLockedCustomize}
+          {canCustomize ? (
+            <StudioButton
+              tone="secondary"
+              size="xl"
+              onClick={locked ? onLockedCustomize : onCustomizeWorkflow}
+            >
+              <Sliders className="h-4 w-4" aria-hidden /> Edit workflow
+            </StudioButton>
+          ) : null}
+        </div>
+
+        {/* Technical details stay out of the primary experience. */}
+        {liveJobId ? (
+          <details className="mt-6 border-t border-white/10 pt-4">
+            <summary className="cursor-pointer font-display text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500 transition-colors duration-200 hover:text-slate-300">
+              Details
+            </summary>
+            <p className="mt-2 break-all text-[13px] text-slate-500">Current run {liveJobId}</p>
+          </details>
+        ) : null}
+      </header>
+
+      <StudioStatusBar
+        ready={ready}
+        total={total}
+        percent={maxProgress}
+        complete={executionComplete}
+        missing={missing}
+        retrying={retrying}
+        onRetry={executionComplete ? () => void retryFailed() : undefined}
       />
 
+      {!executionComplete ? (
+        <CampaignWorkflowPanel
+          status={status}
+          maxProgress={maxProgress}
+          templateName={templateName}
+          customizeState={customizeState}
+          onCustomizeWorkflow={onCustomizeWorkflow}
+          onLockedCustomize={onLockedCustomize}
+        />
+      ) : null}
+
       {zeroOutputTerminal ? (
-        <section className="rounded-[1.5rem] border border-white/10 bg-white/[0.02] p-6" aria-label="Recovery">
-          <p className="font-display text-sm font-semibold uppercase tracking-[0.12em] text-slate-100">
+        <section
+          className="rounded-3xl border border-white/10 bg-white/[0.02] p-7"
+          aria-label="Recovery"
+        >
+          <p className="font-display text-lg font-bold uppercase tracking-[0.14em] text-slate-100">
             We couldn't start this campaign
           </p>
-          <p className="mt-2 text-sm leading-6 text-slate-400">
+          <p className="mt-2 max-w-xl text-[14px] leading-6 text-slate-400">
             Try again or update your uploads. You're only charged for outputs you receive.
           </p>
-          <div className="mt-4 flex flex-wrap gap-2">
+          <div className="mt-5 flex flex-wrap gap-3">
             {onRunAgain ? (
-              <Button
-                type="button"
-                onClick={onRunAgain}
-                className="rounded-full bg-[hsl(var(--electric-cyan))] text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-950 hover:bg-[hsl(var(--electric-blue))]"
-              >
+              <StudioButton tone="primary" size="lg" onClick={onRunAgain}>
                 Try again
-              </Button>
+              </StudioButton>
             ) : null}
             {liveJobId ? (
-              <Button
-                asChild
-                variant="outline"
-                className="rounded-full border-white/20 text-[11px] uppercase tracking-[0.16em]"
-              >
-                <Link to={`/app/runs/${encodeURIComponent(liveJobId)}`}>View all files</Link>
-              </Button>
+              <StudioButton tone="tertiary" size="lg" asChild>
+                <Link to={`/app/runs/${encodeURIComponent(liveJobId)}`}>View all outputs</Link>
+              </StudioButton>
             ) : null}
           </div>
         </section>
@@ -199,11 +282,20 @@ export function CampaignResultsStage({
           <VideoEditSection
             slots={videoSlots}
             jobId={liveJobId}
+            editor={hasEditor ? editor : null}
             editProject={editProject}
             downloading={downloading === "video"}
             executionComplete={executionComplete}
-            onDownloadItem={(slot) => void downloadOne(slot)}
             onDownloadAll={() => void downloadMany("video", videoSlots)}
+            exportPhase={exporter.phase}
+            exportError={exporter.error}
+            exportReady={exporter.phase === "ready"}
+            onExport={() =>
+              void exporter.start(
+                editor.project?.export_settings ?? { aspect_ratio: "9:16" as never },
+              )
+            }
+            onDownloadExport={exporter.download}
           />
 
           <PhotoshootSection
@@ -215,11 +307,11 @@ export function CampaignResultsStage({
           />
 
           {liveJobId && ready > 0 ? (
-            <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-slate-500">
-              <Link to={`/app/runs/${encodeURIComponent(liveJobId)}`} className="hover:text-slate-300">
-                View all files →
-              </Link>
-            </p>
+            <div className="pb-2">
+              <StudioButton tone="tertiary" size="md" asChild>
+                <Link to={`/app/runs/${encodeURIComponent(liveJobId)}`}>View all outputs</Link>
+              </StudioButton>
+            </div>
           ) : null}
         </>
       )}
