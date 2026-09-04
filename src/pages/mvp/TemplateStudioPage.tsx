@@ -39,7 +39,6 @@ import InlineCampaignBuilder from "@/components/templates/InlineCampaignBuilder"
 import CastSelector, { PRIMARY_CAST_SLOT, type CastSelection } from "@/components/templates/CastSelector";
 import CampaignFusingStage from "@/components/generation/CampaignFusingStage";
 import { CampaignBuildGraph, type PublicGraph } from "@/components/templates/CampaignBuildGraph";
-import CampaignOutputsPanel from "@/components/templates/CampaignOutputsPanel";
 import CampaignResults from "@/components/templates/CampaignResults";
 import CampaignReadyBanner from "@/components/editor/CampaignReadyBanner";
 import RecoveredCampaignResults from "@/components/templates/RecoveredCampaignResults";
