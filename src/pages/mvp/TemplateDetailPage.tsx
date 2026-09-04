@@ -399,11 +399,18 @@ export default function TemplateDetailPage() {
             </div>
             <Button
               type="button"
-              onClick={() => navigate(buildPath)}
+              onClick={() =>
+                runPanelRef.current?.scrollIntoView({ behavior: "smooth", block: "center" })
+              }
               className="shrink-0 rounded-full bg-[hsl(var(--electric-cyan))] px-5 py-5 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-950 hover:bg-[hsl(var(--electric-blue))]"
             >
-              {cta.label}
+              {runPhase === "complete"
+                ? "See results"
+                : runPhase === "running"
+                  ? "Generating…"
+                  : "Run campaign"}
             </Button>
+
           </div>
         </div>
       ) : null}
