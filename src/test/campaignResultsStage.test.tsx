@@ -16,7 +16,11 @@ vi.mock("@/services/campaignLiveStatus", async () => {
   );
   return { ...actual, fetchCampaignLiveStatus: (id: string) => fetchMock(id) };
 });
-vi.mock("@/services/campaignEditor", () => ({ findEditProjectForRun: async () => null }));
+vi.mock("@/services/campaignEditor", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/services/campaignEditor")>();
+  /* No edit project for this run: the timeline falls back to read-only clips. */
+  return { ...actual, findEditProjectForRun: async () => null };
+});
 
 const payload = (overrides: Record<string, unknown>) => ({
   job: {
