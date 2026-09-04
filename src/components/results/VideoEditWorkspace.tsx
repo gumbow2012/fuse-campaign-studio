@@ -391,7 +391,7 @@ export function VideoEditWorkspace({ editor, fallbackSlots, className }: VideoEd
           payload: {
             segment_id: selected.id,
             trim_start_ms: 0,
-            trim_end_ms: Math.max(1, selected.source_duration_ms),
+            trim_end_ms: Math.max(1, durationOf(selected) || selected.source_duration_ms),
           },
         },
         { op: "mute", payload: { segment_id: selected.id, muted: false } },
