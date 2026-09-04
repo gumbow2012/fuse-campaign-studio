@@ -9,7 +9,14 @@
 import { SUPABASE_PUBLISHABLE_KEY, SUPABASE_URL, supabase } from "@/integrations/supabase/client";
 import { fetchCampaignHistoryPage } from "@/services/campaignHistory";
 
-export type LivePhase = "preparing" | "images" | "video" | "mixed" | "complete";
+export type LivePhase =
+  | "preparing"
+  | "images"
+  | "video"
+  | "mixed"
+  | "ready"
+  | "complete"
+  | "needs_action";
 export type LiveJobStatus = "queued" | "running" | "video_pending" | "complete" | "failed";
 export type LiveNodeStatus = "waiting" | "generating" | "ready" | "failed";
 
@@ -20,6 +27,8 @@ export interface LiveJob {
   phase: LivePhase;
   headline: string | null;
   support: string | null;
+  /** Server truth: the run is finished, whatever the slot-level outcome. */
+  execution_complete: boolean;
 }
 
 export interface LiveActiveStep {
@@ -55,7 +64,12 @@ export interface CampaignLiveStatus {
   active: LiveActiveStep[];
   recent: LiveRecentStep[];
   graph: LiveGraphNode[];
-  outputs: { ready: number; total: number; items: LiveOutputItem[] };
+  outputs: {
+    ready: number;
+    total: number;
+    needs_regeneration: number;
+    items: LiveOutputItem[];
+  };
   eta_seconds: number | null;
   updated_at: string | null;
 }
@@ -96,11 +110,16 @@ export function normalizeLiveStatus(raw: unknown, jobId: string): CampaignLiveSt
         ? job.status
         : "running",
       progress_pct: Math.max(0, Math.min(100, asNumber(job.progress_pct, 0))),
-      phase: (["preparing", "images", "video", "mixed", "complete"] as const).includes(job.phase)
+      phase: (
+        ["preparing", "images", "video", "mixed", "ready", "complete", "needs_action"] as const
+      ).includes(job.phase)
         ? job.phase
         : "preparing",
       headline: asText(job.headline),
       support: asText(job.support),
+      /* Defensive: older payloads omit the flag — a terminal status still ends the run. */
+      execution_complete:
+        job.execution_complete === true || job.status === "complete" || job.status === "failed",
     },
     active: (Array.isArray(data.active) ? data.active : [])
       .map((step: Record<string, any>) => ({
@@ -128,6 +147,7 @@ export function normalizeLiveStatus(raw: unknown, jobId: string): CampaignLiveSt
     outputs: {
       ready: Math.max(0, asNumber(outputs.ready, 0)),
       total: Math.max(0, asNumber(outputs.total, 0)),
+      needs_regeneration: Math.max(0, asNumber(outputs.needs_regeneration, 0)),
       items: items
         .map((item: Record<string, any>, index: number) => ({
           id: asText(item?.id) ?? `output-${index}`,
