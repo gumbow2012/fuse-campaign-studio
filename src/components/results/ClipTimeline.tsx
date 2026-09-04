@@ -7,7 +7,7 @@
  * Nothing here mutates media — every gesture is reported upward and persisted
  * as an edit op, so original files are untouched.
  */
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useState } from "react";
 import { AlertTriangle, Film, VolumeX } from "lucide-react";
 import { cn } from "@/lib/utils";
 
