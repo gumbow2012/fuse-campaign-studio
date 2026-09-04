@@ -220,14 +220,12 @@ export function ClipTimeline({
                   <span
                     role="slider"
                     aria-label={`Trim start of clip ${pad(clip.number)}`}
-                    aria-valuenow={Math.round(clip.trimStartMs)}
+                    aria-valuenow={Math.round(trimStartMs)}
                     aria-valuemin={0}
                     aria-valuemax={clip.sourceDurationMs}
                     tabIndex={-1}
                     onPointerDown={(event) => beginTrim(event, clip, "start")}
-                    onPointerMove={(event) => moveTrim(event, clip, false)}
-                    onPointerUp={(event) => moveTrim(event, clip, true)}
-                    className="absolute inset-y-0 z-10 flex w-3 cursor-ew-resize items-center justify-center bg-cyan-300/80"
+                    className="absolute inset-y-0 z-10 flex w-3 touch-none cursor-ew-resize items-center justify-center bg-cyan-300/80"
                     style={{ left: `calc(${startPct}% - 1px)` }}
                   >
                     <span className="h-6 w-[2px] rounded bg-slate-950/70" />
@@ -235,18 +233,17 @@ export function ClipTimeline({
                   <span
                     role="slider"
                     aria-label={`Trim end of clip ${pad(clip.number)}`}
-                    aria-valuenow={Math.round(clip.trimEndMs)}
+                    aria-valuenow={Math.round(trimEndMs)}
                     aria-valuemin={0}
                     aria-valuemax={clip.sourceDurationMs}
                     tabIndex={-1}
                     onPointerDown={(event) => beginTrim(event, clip, "end")}
-                    onPointerMove={(event) => moveTrim(event, clip, false)}
-                    onPointerUp={(event) => moveTrim(event, clip, true)}
-                    className="absolute inset-y-0 z-10 flex w-3 cursor-ew-resize items-center justify-center bg-cyan-300/80"
+                    className="absolute inset-y-0 z-10 flex w-3 touch-none cursor-ew-resize items-center justify-center bg-cyan-300/80"
                     style={{ left: `calc(${endPct}% - 11px)` }}
                   >
                     <span className="h-6 w-[2px] rounded bg-slate-950/70" />
                   </span>
+
                 </>
               ) : null}
 
