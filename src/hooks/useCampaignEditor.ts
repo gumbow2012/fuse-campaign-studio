@@ -48,15 +48,18 @@ function applyLocally(segments: EditSegment[], op: EditOp): EditSegment[] {
       });
     }
     case "trim":
-      return segments.map((segment) =>
-        segment.id === op.payload.segment_id
-          ? {
-              ...segment,
-              trim_start_ms: Math.max(0, Math.round(op.payload.trim_start_ms)),
-              trim_end_ms: Math.min(segment.source_duration_ms, Math.round(op.payload.trim_end_ms)),
-            }
-          : segment,
-      );
+      return segments.map((segment) => {
+        if (segment.id !== op.payload.segment_id) return segment;
+        const end = Math.round(op.payload.trim_end_ms);
+        /* A stored length of 0 means "unknown" — it must never clamp a trim to 0. */
+        const known = Number(segment.source_duration_ms) > 0 ? segment.source_duration_ms : 0;
+        return {
+          ...segment,
+          source_duration_ms: known > 0 ? known : Math.max(0, end),
+          trim_start_ms: Math.max(0, Math.round(op.payload.trim_start_ms)),
+          trim_end_ms: known > 0 ? Math.min(known, end) : Math.max(0, end),
+        };
+      });
     case "mute":
       return segments.map((segment) =>
         segment.id === op.payload.segment_id ? { ...segment, muted: op.payload.muted } : segment,
