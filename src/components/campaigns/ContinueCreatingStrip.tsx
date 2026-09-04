@@ -1,7 +1,7 @@
 import { Loader2, RotateCcw } from "lucide-react";
 import CampaignThumbnail from "@/components/campaigns/CampaignThumbnail";
 import { Button } from "@/components/ui/button";
-import { formatRelativeCampaignTime, type CampaignRun } from "@/lib/campaignHistory";
+import { formatRelativeCampaignTime, hasUsableOutputs, usableOutputCount, type CampaignRun } from "@/lib/campaignHistory";
 import { track } from "@/lib/analytics/track";
 import { cn } from "@/lib/utils";
 
@@ -47,7 +47,9 @@ export default function ContinueCreatingStrip({
       <div className="mt-3 flex gap-3 overflow-x-auto pb-1 [scrollbar-width:thin]">
         {runs.map((run) => {
           const building = run.status === "queued" || run.status === "running" || run.status === "video_pending";
-          const failed = run.status === "failed";
+          // Terminal + usable outputs = a results campaign, never a failure.
+          const readyCount = usableOutputCount(run);
+          const failed = run.status === "failed" && !hasUsableOutputs(run);
 
           return (
             <article
@@ -75,7 +77,9 @@ export default function ContinueCreatingStrip({
                       <Loader2 className="h-3 w-3 animate-spin" /> Generating…
                     </>
                   ) : failed ? (
-                    "Didn't finish"
+                    "Needs another try"
+                  ) : run.status === "failed" ? (
+                    `${readyCount} ready`
                   ) : (
                     formatRelativeCampaignTime(run)
                   )}
@@ -95,7 +99,7 @@ export default function ContinueCreatingStrip({
                   >
                     {building ? "View progress" : failed ? "Try again" : "View results"}
                   </Button>
-                  {run.status === "complete" ? (
+                  {run.status === "complete" || (run.status === "failed" && !failed) ? (
                     <Button
                       type="button"
                       size="sm"
