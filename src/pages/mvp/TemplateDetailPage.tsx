@@ -140,11 +140,20 @@ export default function TemplateDetailPage() {
       ? { label: "Unlock access", sub: null }
       : { label: "Run campaign", sub: null };
 
+  /** Other campaigns with a real preview, deduped by name. */
   const related = useMemo(() => {
-    const list = catalogQuery.data ?? [];
-    return list
-      .filter((entry) => String(entry.id) !== String(catalogEntry?.id ?? ""))
-      .slice(0, 4);
+    const seen = new Set<string>();
+    const out: ApiTemplate[] = [];
+    for (const entry of catalogQuery.data ?? []) {
+      if (String(entry.id) === String(catalogEntry?.id ?? "")) continue;
+      if (!entry.preview_url) continue;
+      const key = entry.name.trim().toLowerCase();
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
+      out.push(entry);
+      if (out.length === 4) break;
+    }
+    return out;
   }, [catalogQuery.data, catalogEntry]);
 
   const ctaButton = (
