@@ -171,25 +171,37 @@ export function VideoEditWorkspace({ editor, fallbackSlots, className }: VideoEd
 
   const { project, runOp, runOps, undo, redo, canUndo, canRedo, saveState, saveError, retrySave } = editor;
 
+  /**
+   * Clip status comes from the REAL segment state: a segment that exists with
+   * removed:false and a source is READY. The "needs another pass" warning is
+   * reserved for a genuinely missing output (no source at all).
+   */
   const clips: TimelineClip[] = segments.map((segment, index) => ({
     id: segment.id,
     number: index + 1,
     posterUrl: posters[segment.id] ?? null,
+    mediaUrl: segment.url,
+    kind: isImageSegment(segment.source_path) ? "image" : "video",
     sourceDurationMs: Math.max(1, segment.source_duration_ms),
     trimStartMs: segment.trim_start_ms,
     trimEndMs: segment.trim_end_ms,
     muted: segment.muted,
-    incomplete: !segment.url,
+    incomplete: !segment.source_path,
   }));
 
+  /** Persisted once, on drag release — the timeline shows the drag visually. */
   const trim = (id: string, startMs: number, endMs: number, commit: boolean) => {
     const before = segments.find((segment) => segment.id === id);
     if (!before) return;
+    const duration = Math.max(1, before.source_duration_ms);
+    const start = Math.min(Math.max(0, Math.round(startMs)), duration - 1);
+    const end = Math.min(duration, Math.max(start + 1, Math.round(endMs)));
     runOp(
-      { op: "trim", payload: { segment_id: id, trim_start_ms: startMs, trim_end_ms: endMs } },
+      { op: "trim", payload: { segment_id: id, trim_start_ms: start, trim_end_ms: end } },
       { record: commit, immediate: commit, label: "trim" },
     );
   };
+
 
   const resetClip = () => {
     if (!selected) return;
