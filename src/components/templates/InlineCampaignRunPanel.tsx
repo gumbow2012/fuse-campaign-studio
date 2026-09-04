@@ -15,7 +15,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import TemplateInputCard from "@/components/templates/TemplateInputCard";
 import { type PublicGraph } from "@/components/templates/CampaignBuildGraph";
-import CampaignFusingStage from "@/components/generation/CampaignFusingStage";
+import CampaignResultsStage from "@/components/results/CampaignResultsStage";
 import CampaignResults, { type CampaignResultOutput } from "@/components/templates/CampaignResults";
 import GeneratePaywallModal from "@/components/mvp/GeneratePaywallModal";
 import { useAuth } from "@/contexts/AuthContext";

@@ -37,7 +37,7 @@ import {
 import { campaignInputGroups } from "@/lib/campaignInputGroups";
 import InlineCampaignBuilder from "@/components/templates/InlineCampaignBuilder";
 import CastSelector, { PRIMARY_CAST_SLOT, type CastSelection } from "@/components/templates/CastSelector";
-import CampaignFusingStage from "@/components/generation/CampaignFusingStage";
+import CampaignResultsStage from "@/components/results/CampaignResultsStage";
 import { CampaignBuildGraph, type PublicGraph } from "@/components/templates/CampaignBuildGraph";
 import CampaignResults from "@/components/templates/CampaignResults";
 import CampaignReadyBanner from "@/components/editor/CampaignReadyBanner";
@@ -3669,12 +3669,16 @@ export default function TemplateStudioPage() {
               ) : null}
             </div>
 
-              {/* Live "Fusing" experience — server-truthful for the whole active run. */}
-              {result && ACTIVE_RUN_STATUSES.has(result.status) ? (
-                <CampaignFusingStage
+              {/* Canonical customer Results experience — workflow, video edit,
+                  photoshoot — server-truthful for the whole run lifecycle. */}
+              {result ? (
+                <CampaignResultsStage
                   jobId={activeRunId ?? null}
                   resolveLatest={!activeRunId}
                   templateName={workspaceTemplateName}
+                  customizeState={customizeState}
+                  onCustomizeWorkflow={() => void handleCustomizeWorkflow()}
+                  onLockedCustomize={() => setWorkflowUpgradeDialogOpen(true)}
                   className="mt-6"
                 />
               ) : null}
