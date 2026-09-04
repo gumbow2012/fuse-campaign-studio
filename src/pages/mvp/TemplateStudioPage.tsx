@@ -421,32 +421,36 @@ function CreditRemainingMeter({
   showTopUp?: boolean;
 }) {
   return (
-    <div className="min-w-[230px] rounded-[1.5rem] border border-white/10 bg-slate-950/75 p-4 shadow-[0_18px_60px_rgba(0,0,0,0.32)] backdrop-blur-xl">
-      <div className="flex items-end justify-between gap-3">
-        <div>
-          <p className="font-display text-5xl font-semibold tracking-[-0.06em] text-white">{percent}%</p>
-          <p className="mt-1 text-[11px] uppercase tracking-[0.24em] text-slate-400">{label}</p>
-        </div>
-        <p className="pb-1 text-sm font-medium text-cyan-100">{value}</p>
+    /* Compact chip — credits inform, they don't dominate the studio. */
+    <div className="min-w-[220px] max-w-[300px] rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3 backdrop-blur-xl">
+      <div className="flex items-baseline justify-between gap-3">
+        <p className="font-display text-[12px] font-semibold uppercase tracking-[0.16em] text-white tabular-nums">
+          {value}
+        </p>
+        <p className="font-display text-[11px] font-semibold uppercase tracking-[0.16em] text-cyan-100 tabular-nums">
+          {percent}% left
+        </p>
+      </div>
+      <p className="mt-1 text-[11px] text-slate-400">{label}</p>
+      <div className="mt-2.5 h-1 overflow-hidden rounded-full bg-white/10">
+        <div
+          className="h-full rounded-full bg-cyan-300 shadow-[0_0_14px_rgba(103,232,249,0.6)] transition-[width] duration-500 motion-reduce:transition-none"
+          style={{ width: `${percent}%` }}
+        />
       </div>
       {showTopUp ? (
         <CreditPackDialog
           trigger={
-            <Button className="mt-4 w-full rounded-full bg-cyan-300 text-slate-950 hover:bg-cyan-200">
+            <Button className="mt-3 h-9 w-full rounded-xl bg-cyan-300 font-display text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-950 hover:bg-cyan-200">
               Get credits
             </Button>
           }
         />
       ) : null}
-      <div className="mt-4 h-1.5 overflow-hidden rounded-full bg-white/10">
-        <div
-          className="h-full rounded-full bg-cyan-300 shadow-[0_0_18px_rgba(103,232,249,0.65)]"
-          style={{ width: `${percent}%` }}
-        />
-      </div>
     </div>
   );
 }
+
 
 function RunProgressBeacon({
   progress,
