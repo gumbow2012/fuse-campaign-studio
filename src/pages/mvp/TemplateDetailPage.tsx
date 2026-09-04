@@ -2,13 +2,14 @@
  * CAMPAIGN PRODUCT PAGE — /templates/:slug
  *
  * Ecommerce-style PDP for a campaign template: one unified media gallery on the
- * left, a sticky product panel on the right (deliverables, uploads, cost and a
- * contextual CTA), then a short "how it works" strip, related campaigns and an
- * optional collapsed detail accordion.
+ * left, a sticky product panel on the right (deliverables, uploads, cost) and a
+ * short "how it works" strip, related campaigns and a collapsed detail accordion.
  *
- * Presentation only. Credit cost comes from the same catalog the marketplace
- * cards read, entitlement state comes from the existing auth/profile context,
- * and `/templates/:slug/build` remains the single path into the builder.
+ * The ENTIRE run flow is inline: the sticky panel hosts
+ * InlineCampaignRunPanel (CTA → uploads → generate → progress → results), which
+ * reuses the builder's components and run pipeline unchanged. This page never
+ * routes into the builder.
+
  */
 
 import { useMemo, useRef, useState } from "react";
