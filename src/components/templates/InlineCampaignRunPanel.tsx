@@ -364,11 +364,10 @@ export default function InlineCampaignRunPanel({
       setPaywallOpen(true);
       return;
     }
-    if (hasInputs) {
-      setStage("inputs");
-      return;
-    }
-    void runNow();
+    /* Always advance the panel: upload slots when the campaign needs assets,
+       otherwise the confirm/generate step. Never a silent no-op. */
+    setError(null);
+    setStage("inputs");
   };
 
   const ctaLabel = !user && freePreviewEnabled
