@@ -94,7 +94,7 @@ export function CampaignResultsStage({
   }, [liveJobId, executionComplete]);
 
   /* The live, real editor for this run's auto-created edit project. */
-  const editor = useCampaignEditor(editProject?.id ?? null);
+  const editor = useCampaignEditor(editProject?.id);
   const hasEditor = !!editProject && !!editor.project;
   const campaignName = editor.project?.name?.trim() || null;
 
