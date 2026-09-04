@@ -372,12 +372,49 @@ export function useCampaignEditor(projectId: string | undefined) {
     [drain],
   );
 
-  /** Manual retry after a failed save — the queued ops are still intact. */
+  /**
+   * Manual retry after a failed save — the queued ops are still intact. The
+   * newest server revision is re-fetched first (without touching the user's local
+   * edits) so a stale revision can't reject the retry again.
+   */
   const retrySave = useCallback(() => {
     setSaveError(null);
-    setSaveState(queueRef.current.length ? "dirty" : "saved");
-    void drain();
-  }, [drain]);
+    setSaveState(queueRef.current.length ? "saving" : "saved");
+    void (async () => {
+      if (projectId) {
+        try {
+          const state = await loadEditorState(projectId);
+          adoptRevision(state.project);
+        } catch {
+          /* fall through — the conflict path inside drain() still reconciles */
+        }
+      }
+      await drain();
+    })();
+  }, [drain, projectId, adoptRevision]);
+
+  /**
+   * Locally record a clip length measured from media metadata (self-healing for
+   * runs whose `source_duration_ms` was never stored). No history entry: it is a
+   * correction of missing data, not a user edit.
+   */
+  const patchSourceDuration = useCallback((segmentId: string, sourceDurationMs: number) => {
+    const ms = Math.round(sourceDurationMs);
+    if (!Number.isFinite(ms) || ms <= 0) return;
+    setSegments((current) => {
+      const next = current.map((segment) =>
+        segment.id === segmentId
+          ? {
+              ...segment,
+              source_duration_ms: ms,
+              trim_end_ms: segment.trim_end_ms > segment.trim_start_ms ? Math.min(segment.trim_end_ms, ms) : ms,
+            }
+          : segment,
+      );
+      segmentsRef.current = next;
+      return next;
+    });
+  }, []);
 
 
   /** Public mutation entry point — optimistic UI first, then autosave. */
