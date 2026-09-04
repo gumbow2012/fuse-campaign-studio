@@ -261,17 +261,26 @@ export function ClipTimeline({
               )}
 
 
-              {/* Trimmed-out head and tail, shown only while the clip is selected. */}
+              {/* Trimmed-out head and tail, shown only while the clip is selected.
+                  While dragging the card spans the full source, so the cut region
+                  dims live under the cursor; at rest the card IS the kept span and
+                  the handles sit on its edges. */}
               {selected && onTrim ? (
                 <>
                   <span
-                    className="pointer-events-none absolute inset-y-0 left-0 bg-slate-950/70"
-                    style={{ width: `${startPct}%` }}
+                    className="pointer-events-none absolute inset-y-0 left-0 bg-slate-950/75"
+                    style={{ width: `${live ? startPct : 0}%` }}
                   />
                   <span
-                    className="pointer-events-none absolute inset-y-0 right-0 bg-slate-950/70"
-                    style={{ width: `${100 - endPct}%` }}
+                    className="pointer-events-none absolute inset-y-0 right-0 bg-slate-950/75"
+                    style={{ width: `${live ? 100 - endPct : 0}%` }}
                   />
+                  {live ? (
+                    <span
+                      className="pointer-events-none absolute inset-y-0 z-[5] border-x-2 border-cyan-300/90 bg-cyan-300/[0.06]"
+                      style={{ left: `${startPct}%`, width: `${Math.max(0, endPct - startPct)}%` }}
+                    />
+                  ) : null}
                   <span
                     role="slider"
                     aria-label={`Trim start of clip ${pad(clip.number)}`}
