@@ -409,102 +409,34 @@ export default function InlineCampaignRunPanel({
       ? `${creditCost} credits`
       : null;
 
-  const failureCopy = result?.publicFailure
-    ? readPublicFailure(result.publicFailure)
-    : null;
-
   /* ---------- rendering ---------- */
 
   if (result) {
-    const running = ACTIVE_STATUSES.has(result.status);
+    const restart = () => {
+      setResult(null);
+      setJobId(null);
+      setStage(hasInputs ? "inputs" : "cta");
+    };
     return (
-      <div className={cn("space-y-4", className)}>
-        {running ? (
-          <CampaignFusingStage
-            jobId={jobId}
-            templateName={templateName}
-            onTerminal={() => void refreshProfile()}
-          />
-        ) : result.status === "failed" ? (
-
-          <div className="rounded-2xl border border-rose-400/25 bg-rose-500/[0.06] p-5">
-            <p className="font-display text-sm font-semibold uppercase tracking-[0.06em] text-rose-100">
-              {failureCopy?.title ?? "This run didn't finish"}
-            </p>
-            <p className="mt-2 text-sm leading-6 text-rose-100/80">
-              {failureCopy?.message ??
-                "Some clips didn't complete. You're not charged for anything that didn't finish."}
-            </p>
-            <div className="mt-4 flex flex-wrap gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                className="rounded-full border-white/20 text-[11px] uppercase tracking-[0.16em]"
-                onClick={() => {
-                  setResult(null);
-                  setJobId(null);
-                  setStage(hasInputs ? "inputs" : "cta");
-                }}
-              >
-                Try again
-              </Button>
-              {jobId ? (
-                <Button
-                  asChild
-                  variant="ghost"
-                  className="rounded-full text-[11px] uppercase tracking-[0.16em] text-slate-300"
-                >
-                  <Link to={`/app/runs/${encodeURIComponent(jobId)}`}>See details</Link>
-                </Button>
-              ) : null}
-            </div>
-          </div>
-        ) : (
-          <div className="space-y-4">
-            <div className="rounded-2xl border border-emerald-300/25 bg-emerald-400/[0.06] p-5">
-              <p className="font-display text-sm font-semibold uppercase tracking-[0.06em] text-emerald-100">
-                Your campaign is ready
-              </p>
-              <p className="mt-1 font-mono text-[10px] uppercase tracking-[0.2em] text-emerald-200/70">
-                {result.outputs.length} {result.outputs.length === 1 ? "asset" : "assets"}
-              </p>
-            </div>
-            <CampaignResults
-              outputs={result.outputs}
-              onDownload={(output, index) =>
-                void downloadOutput(
-                  output.url,
-                  `${templateName.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-${index + 1}.${output.type === "video" ? "mp4" : "jpg"}`,
-                )
-              }
-            />
-            <div className="flex flex-wrap gap-2">
-              {jobId ? (
-                <Button
-                  asChild
-                  className="rounded-full bg-[hsl(var(--electric-cyan))] text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-950 hover:bg-[hsl(var(--electric-blue))]"
-                >
-                  <Link to={`/app/campaigns/${encodeURIComponent(jobId)}/edit`}>Edit campaign video</Link>
-                </Button>
-              ) : null}
-              <Button
-                type="button"
-                variant="outline"
-                className="rounded-full border-white/20 text-[11px] uppercase tracking-[0.16em]"
-                onClick={() => {
-                  setResult(null);
-                  setJobId(null);
-                  setStage(hasInputs ? "inputs" : "cta");
-                }}
-              >
-                Run again
-              </Button>
-            </div>
-          </div>
-        )}
+      <div className={cn("space-y-5", className)}>
+        <CampaignResultsStage
+          jobId={jobId}
+          templateName={templateName}
+          onTerminal={() => void refreshProfile()}
+          onRunAgain={restart}
+        />
+        <Button
+          type="button"
+          variant="outline"
+          className="rounded-full border-white/20 text-[11px] uppercase tracking-[0.16em]"
+          onClick={restart}
+        >
+          Run again
+        </Button>
       </div>
     );
   }
+
 
   return (
     <div className={cn("space-y-4", className)}>
