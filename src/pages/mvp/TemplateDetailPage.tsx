@@ -53,10 +53,15 @@ function PanelBlock({ label, children }: { label: string; children: React.ReactN
 
 export default function TemplateDetailPage() {
   const { slug = "" } = useParams();
-  const navigate = useNavigate();
-  const { user, profile, isAdmin, isCreator } = useAuth();
+  const { isAdmin } = useAuth();
   const { canFavorite, isFavorite, toggleFavorite } = useTemplateFavorites();
   const [aboutOpen, setAboutOpen] = useState(false);
+  /** Lifecycle of the in-page run — drives the mobile bar's label only. */
+  const [runPhase, setRunPhase] = useState<"idle" | "inputs" | "running" | "complete" | "failed">(
+    "idle",
+  );
+  const runPanelRef = useRef<HTMLDivElement>(null);
+
 
   const detailQuery = useQuery({
     queryKey: ["template-detail-page", slug],
