@@ -44,6 +44,12 @@ const timecode = (ms: number) => {
   return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, "0")}`;
 };
 
+const IMAGE_EXTENSIONS = /\.(png|jpe?g|webp|gif|avif|heic|bmp)$/i;
+
+/** Images are shown directly; everything else is treated as video media. */
+const isImageSegment = (path: string | null | undefined) => !!path && IMAGE_EXTENSIONS.test(path.split("?")[0]);
+
+
 export function VideoEditWorkspace({ editor, fallbackSlots, className }: VideoEditWorkspaceProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [playing, setPlaying] = useState(false);
