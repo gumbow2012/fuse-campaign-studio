@@ -504,21 +504,30 @@ export default function InlineCampaignRunPanel({
 
   return (
     <div className={cn("space-y-4", className)}>
-      {stage === "inputs" && hasInputs ? (
+      {stage === "inputs" ? (
         <div className="space-y-3">
           <div className="flex items-center justify-between gap-3">
             <p className="font-mono text-[9px] uppercase tracking-[0.24em] text-slate-500">
-              Add your product
+              {hasInputs ? "Add your product" : "Ready to generate"}
             </p>
-            <p
-              className={cn(
-                "font-mono text-[9px] uppercase tracking-[0.2em]",
-                requiredReady ? "text-emerald-200" : "text-slate-500",
-              )}
-            >
-              {readyCount}/{inputFields.length} ready
-            </p>
+            {hasInputs ? (
+              <p
+                className={cn(
+                  "font-mono text-[9px] uppercase tracking-[0.2em]",
+                  requiredReady ? "text-emerald-200" : "text-slate-500",
+                )}
+              >
+                {readyCount}/{inputFields.length} ready
+              </p>
+            ) : null}
           </div>
+
+          {hasInputs ? null : (
+            <p className="rounded-2xl border border-white/10 bg-black/25 p-4 text-sm leading-6 text-slate-300">
+              This campaign needs no uploads — generate it now.
+            </p>
+          )}
+
 
           {assetFields.map((field) => (
             <TemplateInputCard
