@@ -137,24 +137,39 @@ export default function TemplateDetailPage() {
     ? `${countLabel(template.image_count, "image")} · ${countLabel(template.video_count, "video clip")}`
     : "";
 
-  /** Run fields: the catalog schema when present, else the detail page inputs. */
+  /**
+   * Run fields. The catalog `input_schema` carries the pipeline input keys, so
+   * it wins when usable; when it is missing/empty (production catalogs can omit
+   * it) the detail page's own `required_inputs` becomes the source of truth so
+   * an upload-driven campaign never falls through to a bare confirm step.
+   * Friendly labels from `required_inputs` are merged in by position.
+   */
   const inputFields = useMemo<RunInputField[]>(() => {
-    const schema = catalogEntry?.input_schema;
-    if (Array.isArray(schema) && schema.length) {
-      return schema.map((entry) => ({
-        key: String(entry.key),
-        label: String(entry.label || entry.key),
-        type: String(entry.type || "image"),
-        required: entry.required !== false,
-      }));
+    const required = template?.required_inputs ?? [];
+    const schema = Array.isArray(catalogEntry?.input_schema)
+      ? catalogEntry!.input_schema!.filter((entry) => entry && !!String(entry.key ?? "").trim())
+      : [];
+
+    if (schema.length) {
+      return schema.map((entry, index) => {
+        const fallback = required[index];
+        return {
+          key: String(entry.key),
+          label: String(entry.label || fallback?.label || entry.key),
+          type: String(entry.type || fallback?.expected || "image"),
+          required: entry.required !== false,
+        };
+      });
     }
-    return (template?.required_inputs ?? []).map((input) => ({
+
+    return required.map((input) => ({
       key: input.name,
       label: input.label || input.name,
       type: String(input.expected || "image"),
       required: true,
     }));
   }, [catalogEntry, template]);
+
 
   const runVersionId = catalogEntry
     ? String(catalogEntry.versionId ?? catalogEntry.id)
