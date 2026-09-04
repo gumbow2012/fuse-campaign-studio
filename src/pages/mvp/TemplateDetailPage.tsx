@@ -101,7 +101,7 @@ export default function TemplateDetailPage() {
   const creditCost = catalogEntry ? Number(catalogEntry.estimated_credits_per_run) : null;
   const costLabel =
     creditCost != null ? `${creditCost} credits` : catalogQuery.isLoading ? "…" : "See builder";
-  const buildPath = slug ? `/templates/${encodeURIComponent(slug)}/build` : "/app/templates";
+  const favoriteId = String(catalogEntry?.id ?? template?.id ?? "");
 
   /** Merchandised media: hero first (video-first), then the returned order. */
   const galleryItems = useMemo<TemplateGalleryItem[]>(() => {
