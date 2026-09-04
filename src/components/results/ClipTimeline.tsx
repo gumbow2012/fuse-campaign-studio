@@ -127,9 +127,13 @@ export function ClipTimeline({
       {clips.map((clip) => {
         const selected = clip.id === selectedId;
         const source = Math.max(1, clip.sourceDurationMs);
-        const startPct = (clip.trimStartMs / source) * 100;
-        const endPct = (clip.trimEndMs / source) * 100;
-        const duration = Math.max(0, clip.trimEndMs - clip.trimStartMs);
+        const live = draft && draft.id === clip.id ? draft : null;
+        const trimStartMs = Math.min(Math.max(0, live ? live.startMs : clip.trimStartMs), source);
+        const trimEndMs = Math.min(Math.max(trimStartMs, live ? live.endMs : clip.trimEndMs), source);
+        const startPct = (trimStartMs / source) * 100;
+        const endPct = (trimEndMs / source) * 100;
+        const duration = Math.max(0, trimEndMs - trimStartMs);
+
 
         return (
           <li key={clip.id} className="shrink-0">
