@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Link } from "react-router-dom";
 import { Zap, FolderOpen, Plus, CreditCard, Loader2 } from "lucide-react";
+import { describeCampaignStatus, hasUsableOutputs, type CampaignRun } from "@/lib/campaignHistory";
 
 type RecentRun = {
   id: string;
