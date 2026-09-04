@@ -14,6 +14,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Expand, Play } from "lucide-react";
 import { cn } from "@/lib/utils";
 import TemplateMediaLightbox from "./TemplateMediaLightbox";
+import useClipPosters from "@/hooks/useClipPosters";
 import type { TemplateGalleryItem } from "@/services/templateDetailPage";
 
 function Skeleton({ className }: { className?: string }) {
@@ -37,6 +38,17 @@ export default function CampaignMediaGallery({
   const touchStart = useRef<{ x: number; y: number } | null>(null);
 
   const usable = useMemo(() => items.filter((item) => !broken[item.id]), [items, broken]);
+
+  /* Video items rarely ship a poster_url — extract a first frame client-side. */
+  const posterSources = useMemo(
+    () =>
+      usable
+        .filter((item) => item.media_type === "video")
+        .map((item) => ({ id: item.id, url: item.url, poster: item.poster_url })),
+    [usable],
+  );
+  const posters = useClipPosters(posterSources);
+
 
   const activeIndex = Math.max(
     0,
@@ -107,17 +119,19 @@ export default function CampaignMediaGallery({
           <video
             key={active.id}
             src={active.url}
-            poster={active.poster_url ?? undefined}
+            poster={active.poster_url ?? posters[active.id] ?? undefined}
             autoPlay
             muted
             loop
             controls
             playsInline
+            crossOrigin="anonymous"
             preload="metadata"
             aria-label={`${name} campaign preview`}
             onError={() => markBroken(active.id)}
-            className="h-full w-full object-cover"
+            className="h-full w-full bg-black object-contain"
           />
+
         ) : (
           <button
             type="button"
@@ -155,21 +169,37 @@ export default function CampaignMediaGallery({
                   : "border-white/10 hover:border-[hsl(var(--electric-blue)/0.5)]",
               )}
             >
-              <img
-                src={item.media_type === "video" ? item.poster_url ?? item.url : item.url}
-                alt=""
-                loading="lazy"
-                decoding="async"
-                onError={() => markBroken(item.id)}
-                className="h-full w-full object-cover"
-              />
               {item.media_type === "video" ? (
-                <span className="pointer-events-none absolute inset-0 flex items-center justify-center">
-                  <span className="flex h-6 w-6 items-center justify-center rounded-full bg-black/60 ring-1 ring-white/20">
-                    <Play className="h-3 w-3 translate-x-[1px] fill-white text-white" />
+                <>
+                  {item.poster_url ?? posters[item.id] ? (
+                    <img
+                      src={(item.poster_url ?? posters[item.id]) as string}
+                      alt=""
+                      loading="lazy"
+                      decoding="async"
+                      className="h-full w-full object-cover"
+                    />
+                  ) : (
+                    /* Poster still extracting — a quiet gradient, never a film icon. */
+                    <span className="absolute inset-0 bg-[linear-gradient(180deg,hsl(var(--navy-mid)/0.9),hsl(var(--navy-deep)))]" />
+                  )}
+                  <span className="pointer-events-none absolute inset-0 flex items-center justify-center">
+                    <span className="flex h-6 w-6 items-center justify-center rounded-full bg-black/60 ring-1 ring-white/20">
+                      <Play className="h-3 w-3 translate-x-[1px] fill-white text-white" />
+                    </span>
                   </span>
-                </span>
-              ) : null}
+                </>
+              ) : (
+                <img
+                  src={item.url}
+                  alt=""
+                  loading="lazy"
+                  decoding="async"
+                  onError={() => markBroken(item.id)}
+                  className="h-full w-full object-cover"
+                />
+              )}
+
             </button>
           ))}
         </div>
