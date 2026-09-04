@@ -115,28 +115,54 @@ export function ClipTimeline({
     const startAt = Math.min(Math.max(0, clip.trimStartMs), duration - MIN_CLIP_MS);
     const endAt = Math.min(duration, Math.max(startAt + MIN_CLIP_MS, clip.trimEndMs));
 
+    /* px → ms from the card geometry captured at drag start, so the mapping
+       stays stable even though the card itself resizes while dragging. */
     const compute = (clientX: number): TrimDraft => {
       const ratio = Math.min(1, Math.max(0, (clientX - card.left) / card.width));
       const at = Math.round(ratio * duration);
       if (edge === "start") {
-        return { id: clip.id, startMs: Math.min(Math.max(0, at), endAt - MIN_CLIP_MS), endMs: endAt };
+        return { id: clip.id, edge, startMs: Math.min(Math.max(0, at), endAt - MIN_CLIP_MS), endMs: endAt };
       }
-      return { id: clip.id, startMs: startAt, endMs: Math.max(startAt + MIN_CLIP_MS, Math.min(duration, at)) };
+      return {
+        id: clip.id,
+        edge,
+        startMs: startAt,
+        endMs: Math.max(startAt + MIN_CLIP_MS, Math.min(duration, at)),
+      };
     };
 
-    const onMove = (moveEvent: PointerEvent) => setDraft(compute(moveEvent.clientX));
+    const publish = (next: TrimDraft) => {
+      setDraft(next);
+      onTrimPreview?.({ id: next.id, trimStartMs: next.startMs, trimEndMs: next.endMs, edge });
+    };
+
+    let pendingX: number | null = null;
+    const onMove = (moveEvent: PointerEvent) => {
+      pendingX = moveEvent.clientX;
+      if (frame.current != null) return;
+      frame.current = requestAnimationFrame(() => {
+        frame.current = null;
+        if (pendingX == null) return;
+        publish(compute(pendingX));
+      });
+    };
     const onEnd = (endEvent: PointerEvent) => {
       window.removeEventListener("pointermove", onMove);
       window.removeEventListener("pointerup", onEnd);
       window.removeEventListener("pointercancel", onEnd);
-      const next = compute(endEvent.clientX);
+      if (frame.current != null) {
+        cancelAnimationFrame(frame.current);
+        frame.current = null;
+      }
+      const next = compute(endEvent.clientX ?? pendingX ?? card.left);
       setDraft(null);
+      onTrimPreview?.(null);
       if (next.startMs !== startAt || next.endMs !== endAt) {
         onTrim(clip.id, next.startMs, next.endMs, true);
       }
     };
 
-    setDraft({ id: clip.id, startMs: startAt, endMs: endAt });
+    publish({ id: clip.id, edge, startMs: startAt, endMs: endAt });
     window.addEventListener("pointermove", onMove);
     window.addEventListener("pointerup", onEnd);
     window.addEventListener("pointercancel", onEnd);
