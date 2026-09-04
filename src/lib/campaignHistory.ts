@@ -49,8 +49,22 @@ export interface CampaignStatusDescriptor {
   detail: string | null;
 }
 
+/** Outputs the customer can actually use (a real media URL). */
+export function usableOutputCount(run: Pick<CampaignRun, "outputs">) {
+  const outputs = Array.isArray(run.outputs) ? run.outputs : [];
+  return outputs.filter((output) => !!output?.url).length;
+}
+
+/**
+ * A terminal run with at least one usable output is a RESULTS campaign, not a
+ * failure — the customer never sees "failed/interrupted/didn't finish".
+ */
+export function hasUsableOutputs(run: Pick<CampaignRun, "outputs">) {
+  return usableOutputCount(run) > 0;
+}
+
 export function describeCampaignStatus(run: Pick<CampaignRun, "status" | "progress" | "outputs">): CampaignStatusDescriptor {
-  const outputCount = Array.isArray(run.outputs) ? run.outputs.length : 0;
+  const outputCount = usableOutputCount(run);
 
   if (run.status === "complete") {
     // Never show "100%" on a finished campaign.
@@ -58,7 +72,11 @@ export function describeCampaignStatus(run: Pick<CampaignRun, "status" | "progre
   }
 
   if (run.status === "failed") {
-    return { tone: "attention", label: "! NEEDS ATTENTION", detail: "View issue →" };
+    // Usable outputs → calm results language. Nothing usable → neutral retry.
+    if (outputCount > 0) {
+      return { tone: "ready", label: "✓ READY", detail: `${outputCount} ready` };
+    }
+    return { tone: "attention", label: "NEEDS ANOTHER TRY", detail: null };
   }
 
   const progress = Number.isFinite(run.progress) ? Math.max(0, Math.min(99, Math.round(run.progress))) : 0;
