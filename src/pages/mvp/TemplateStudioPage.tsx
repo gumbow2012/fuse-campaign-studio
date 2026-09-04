@@ -2840,7 +2840,7 @@ export default function TemplateStudioPage() {
                 Post-Purchase Studio
               </p>
               <h1 className="mt-2 font-display text-xl font-bold leading-tight text-white sm:mt-3 sm:text-4xl">
-                Your campaign is ready. Upload your assets.
+                Build your campaign.
               </h1>
               <p className="mt-1.5 max-w-2xl text-[13px] leading-5 text-slate-300 sm:mt-3 sm:text-sm sm:leading-6 md:text-base">
                 The selected workflow is loaded. Add the required assets, confirm the run cost, and generate campaign videos.
@@ -3653,17 +3653,11 @@ export default function TemplateStudioPage() {
               Back to templates
             </button>
 
-            <div className="mt-5 flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <p className="text-[11px] uppercase tracking-[0.24em] text-muted-foreground">
-                  Result{workspaceTemplateName ? ` · ${workspaceTemplateName}` : ""}
-                </p>
-                <p className="mt-2 text-sm text-slate-300">
-                  Current run {activeRunId ? <span className="font-mono text-slate-100">{activeRunId}</span> : "has not started yet"}.
-                </p>
-              </div>
-
-            </div>
+            {!activeRunId ? (
+              <p className="mt-5 text-sm text-slate-300">
+                This campaign hasn't started yet.
+              </p>
+            ) : null}
 
               {/* Canonical customer Results experience — workflow, video edit,
                   photoshoot — server-truthful for the whole run lifecycle. */}
