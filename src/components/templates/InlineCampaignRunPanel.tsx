@@ -272,6 +272,7 @@ export default function InlineCampaignRunPanel({
 
   const runNow = useCallback(async () => {
     if (hasInputs && !requiredReady) {
+      setError("Fill every required slot before generating.");
       toast({
         title: "Add your assets",
         description: "Fill every required slot before generating.",
