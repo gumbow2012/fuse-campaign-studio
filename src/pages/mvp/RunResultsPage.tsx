@@ -41,9 +41,8 @@ export default function RunResultsPage() {
   const headline = useMemo(() => {
     if (!counts) return "";
     const total = counts.total || counts.completed + counts.failed;
-    return counts.failed > 0
-      ? `${counts.completed} of ${total} outputs ready · ${counts.failed} failed`
-      : `${counts.completed} outputs ready`;
+    /* R1 — never a customer-facing partial/failed count. */
+    return total > 0 ? `${counts.completed} / ${total} ready` : `${counts.completed} outputs ready`;
   }, [counts]);
 
   const editHref = results?.edit_project_id ? `/editor/${results.edit_project_id}` : null;
@@ -173,7 +172,7 @@ export default function RunResultsPage() {
               </p>
             ) : null}
 
-            {results.failed_steps.length || results.error_summary ? (
+            {!results.outputs.length && (results.failed_steps.length || results.error_summary) ? (
               <div className="mt-4 rounded-2xl border border-white/10 bg-white/[0.03] p-4">
                 <p className="text-sm text-slate-200">
                   {results.is_transient
@@ -199,7 +198,7 @@ export default function RunResultsPage() {
                         src={output.url}
                         alt={output.label || `Campaign output ${index + 1}`}
                         loading="lazy"
-                        className="h-full w-full object-cover"
+                        className="h-full w-full object-contain"
                       />
                     ) : (
                       <video
@@ -207,7 +206,7 @@ export default function RunResultsPage() {
                         controls
                         playsInline
                         preload="metadata"
-                        className="h-full w-full object-cover"
+                        className="h-full w-full object-contain"
                       />
                     )}
                   </div>
