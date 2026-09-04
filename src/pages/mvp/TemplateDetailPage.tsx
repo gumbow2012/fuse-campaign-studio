@@ -43,6 +43,15 @@ function countLabel(count: number, singular: string) {
   return `${count} ${count === 1 ? singular : `${singular}s`}`;
 }
 
+/** Joins image/video counts while skipping any zero segment. */
+function deliverablesLabel(imageCount: number, videoCount: number, imageSingular: string) {
+  const parts: string[] = [];
+  if (imageCount > 0) parts.push(countLabel(imageCount, imageSingular));
+  if (videoCount > 0) parts.push(countLabel(videoCount, "video clip"));
+  return parts;
+}
+
+
 function PanelBlock({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="border-t border-white/[0.08] pt-4">
@@ -134,8 +143,12 @@ export default function TemplateDetailPage() {
     : "No product uploads required";
 
   const deliverables = template
-    ? `${countLabel(template.image_count, "image")} · ${countLabel(template.video_count, "video clip")}`
+    ? deliverablesLabel(template.image_count, template.video_count, "image").join(" · ")
     : "";
+  const youllGet = template
+    ? deliverablesLabel(template.image_count, template.video_count, "campaign image").join(" + ")
+    : "";
+
 
   /**
    * Run fields. The catalog `input_schema` carries the pipeline input keys, so
@@ -276,18 +289,18 @@ export default function TemplateDetailPage() {
                     <p className="mt-3 text-sm leading-6 text-slate-400">{template.description}</p>
                   ) : null}
 
-                  <p className="mt-4 text-sm font-semibold text-white">{deliverables}</p>
+                  {deliverables ? (
+                    <p className="mt-4 text-sm font-semibold text-white">{deliverables}</p>
+                  ) : null}
                   <p className="mt-1 font-mono text-[10px] uppercase tracking-[0.2em] text-slate-400">
                     {[template.aspect_ratio, costLabel].filter(Boolean).join(" · ")}
                   </p>
 
                   <div className="mt-5 space-y-4">
                     <PanelBlock label="You'll add">{uploadsLabel}</PanelBlock>
-                    <PanelBlock label="You'll get">
-                      {countLabel(template.image_count, "campaign image")} +{" "}
-                      {countLabel(template.video_count, "video clip")}
-                    </PanelBlock>
+                    {youllGet ? <PanelBlock label="You'll get">{youllGet}</PanelBlock> : null}
                   </div>
+
 
                   <div ref={runPanelRef} className="mt-6 space-y-3 scroll-mt-24">
                     {runPanel}
