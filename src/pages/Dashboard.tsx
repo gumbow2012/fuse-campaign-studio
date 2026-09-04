@@ -115,15 +115,20 @@ const Dashboard = () => {
           ) : (
             <div className="space-y-3">
               {recentRuns.map((run) => {
-                const status = describeCampaignStatus(run as unknown as CampaignRun);
-                // Terminal run with usable outputs → its Results view, never the builder.
-                const href = hasUsableOutputs(run as unknown as CampaignRun) || run.status !== "failed"
-                  ? `/app/templates?run=${encodeURIComponent(run.id)}`
-                  : `/app/templates?template=${encodeURIComponent(run.templateName ?? "")}`;
+                const campaign = run as unknown as CampaignRun;
+                const status = describeCampaignStatus(campaign);
+                const usable = hasUsableOutputs(campaign);
+                const partialReady = run.status === "failed" && usable;
+                // Terminal run with usable outputs → its Results page, never the builder.
+                const href = partialReady
+                  ? `/app/runs/${encodeURIComponent(run.id)}`
+                  : usable || run.status !== "failed"
+                    ? `/app/templates?run=${encodeURIComponent(run.id)}`
+                    : `/app/templates?template=${encodeURIComponent(run.templateName ?? "")}`;
 
                 return (
-                  <Link key={run.id} to={href} className="block">
-                    <div className="rounded-xl border border-border/30 bg-card p-4 hover:border-primary/30 transition-colors flex items-center justify-between">
+                  <div key={run.id} className="rounded-xl border border-border/30 bg-card hover:border-primary/30 transition-colors">
+                    <Link to={href} className="block p-4 flex items-center justify-between">
                       <div>
                         <p className="text-sm font-semibold text-foreground">{run.templateName ?? "Template"}</p>
                         <p className="text-xs text-muted-foreground">
@@ -137,10 +142,21 @@ const Dashboard = () => {
                       }`}>
                         {status.detail ?? status.label}
                       </span>
-                    </div>
-                  </Link>
+                    </Link>
+                    {partialReady ? (
+                      <div className="px-4 pb-3">
+                        <Link
+                          to={`/app/templates?template=${encodeURIComponent(run.templateName ?? "")}`}
+                          className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground hover:text-foreground transition-colors"
+                        >
+                          Run again
+                        </Link>
+                      </div>
+                    ) : null}
+                  </div>
                 );
               })}
+
             </div>
           )}
         </div>
