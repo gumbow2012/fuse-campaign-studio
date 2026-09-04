@@ -128,17 +128,29 @@ export default function TemplateDetailPage() {
     ? `${countLabel(template.image_count, "image")} · ${countLabel(template.video_count, "video clip")}`
     : "";
 
-  const balance = Number(profile?.credits_balance ?? 0);
-  const privileged = isAdmin || isCreator;
-  const freeEligible = !user && catalogEntry?.free_preview_enabled === true;
-  const shortOnCredits =
-    !!user && !privileged && creditCost != null && balance < creditCost;
+  /** Run fields: the catalog schema when present, else the detail page inputs. */
+  const inputFields = useMemo<RunInputField[]>(() => {
+    const schema = catalogEntry?.input_schema;
+    if (Array.isArray(schema) && schema.length) {
+      return schema.map((entry) => ({
+        key: String(entry.key),
+        label: String(entry.label || entry.key),
+        type: String(entry.type || "image"),
+        required: entry.required !== false,
+      }));
+    }
+    return (template?.required_inputs ?? []).map((input) => ({
+      key: input.name,
+      label: input.label || input.name,
+      type: String(input.expected || "image"),
+      required: true,
+    }));
+  }, [catalogEntry, template]);
 
-  const cta = freeEligible
-    ? { label: "Try your first video free", sub: "Create an account and generate one video with your product." }
-    : shortOnCredits
-      ? { label: "Unlock access", sub: null }
-      : { label: "Run campaign", sub: null };
+  const runVersionId = catalogEntry
+    ? String(catalogEntry.versionId ?? catalogEntry.id)
+    : null;
+  const runTemplateId = String(catalogEntry?.templateId ?? template?.id ?? "");
 
   /** Other campaigns with a real preview, deduped by name. */
   const related = useMemo(() => {
@@ -156,16 +168,20 @@ export default function TemplateDetailPage() {
     return out;
   }, [catalogQuery.data, catalogEntry]);
 
-  const ctaButton = (
-    <Button
-      type="button"
-      onClick={() => navigate(buildPath)}
-      className="w-full rounded-full bg-[hsl(var(--electric-cyan))] py-6 text-[12px] font-semibold uppercase tracking-[0.18em] text-slate-950 shadow-[0_0_40px_-12px_hsl(var(--electric-cyan)/0.85)] hover:bg-[hsl(var(--electric-blue))]"
-    >
-      {cta.label}
-      <ArrowRight className="h-4 w-4" />
-    </Button>
-  );
+  /* The whole run flow lives in this panel — the page never routes away. */
+  const runPanel = runTemplateId ? (
+    <InlineCampaignRunPanel
+      templateId={runTemplateId}
+      versionId={runVersionId}
+      templateName={template?.name ?? "Campaign"}
+      slug={slug}
+      creditCost={creditCost}
+      freePreviewEnabled={catalogEntry?.free_preview_enabled === true}
+      inputFields={inputFields}
+      onPhaseChange={setRunPhase}
+    />
+  ) : null;
+
 
   return (
     <SiteShell>
