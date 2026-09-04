@@ -290,7 +290,7 @@ export function ClipTimeline({
                     tabIndex={-1}
                     onPointerDown={(event) => beginTrim(event, clip, "start")}
                     className="absolute inset-y-0 z-10 flex w-3 touch-none cursor-ew-resize items-center justify-center bg-cyan-300/80"
-                    style={{ left: `calc(${startPct}% - 1px)` }}
+                    style={{ left: `calc(${live ? startPct : 0}% - 1px)` }}
                   >
                     <span className="h-6 w-[2px] rounded bg-slate-950/70" />
                   </span>
@@ -303,7 +303,7 @@ export function ClipTimeline({
                     tabIndex={-1}
                     onPointerDown={(event) => beginTrim(event, clip, "end")}
                     className="absolute inset-y-0 z-10 flex w-3 touch-none cursor-ew-resize items-center justify-center bg-cyan-300/80"
-                    style={{ left: `calc(${endPct}% - 11px)` }}
+                    style={{ left: `calc(${live ? endPct : 100}% - 11px)` }}
                   >
                     <span className="h-6 w-[2px] rounded bg-slate-950/70" />
                   </span>
@@ -316,7 +316,10 @@ export function ClipTimeline({
                 <span
                   className="pointer-events-none absolute inset-y-0 z-20 w-[2px] bg-white/90"
                   style={{
-                    left: `${startPct + Math.min(1, Math.max(0, playheadRatio)) * (endPct - startPct)}%`,
+                    left: `${
+                      (live ? startPct : 0) +
+                      Math.min(1, Math.max(0, playheadRatio)) * ((live ? endPct : 100) - (live ? startPct : 0))
+                    }%`,
                   }}
                 />
               ) : null}
