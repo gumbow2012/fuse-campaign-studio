@@ -68,6 +68,7 @@ export function VideoEditWorkspace({ editor, fallbackSlots, className }: VideoEd
         ? segments.map((segment) => ({
             id: segment.id,
             url: segment.url,
+              cacheKey: `edit-segment:${segment.id}`,
             /* An image segment IS its own thumbnail — nothing to decode. */
             poster: isImageSegment(segment.source_path) ? segment.url : null,
           }))
@@ -76,6 +77,7 @@ export function VideoEditWorkspace({ editor, fallbackSlots, className }: VideoEd
             .map((slot) => ({
               id: slot.item!.id,
               url: slot.item!.url,
+              cacheKey: `result-output:${slot.item!.id}`,
               poster: slot.item!.poster_url ?? null,
             })),
     [editor, segments, fallbackSlots],
@@ -189,7 +191,7 @@ export function VideoEditWorkspace({ editor, fallbackSlots, className }: VideoEd
     trimStartMs: segment.trim_start_ms,
     trimEndMs: segment.trim_end_ms,
     muted: segment.muted,
-    incomplete: !segment.source_path,
+    incomplete: segment.removed || !segment.source_path,
   }));
 
   /** Persisted once, on drag release — the timeline shows the drag visually. */

@@ -201,6 +201,27 @@ export function useCampaignEditor(projectId: string | undefined) {
     segmentsRef.current = next.segments;
   }, []);
 
+  /**
+   * Save responses can contain fresh signed urls or partial segment records.
+   * Merge them by stable segment id so a revision update never erases a valid
+   * source/url while the refreshed signature is being resolved.
+   */
+  const adoptSavedState = useCallback((next: { project: EditProject; segments: EditSegment[] }) => {
+    const currentById = new Map(segmentsRef.current.map((segment) => [segment.id, segment]));
+    const merged = next.segments.map((segment) => {
+      const current = currentById.get(segment.id);
+      if (!current) return segment;
+      return {
+        ...segment,
+        source_path: segment.source_path || current.source_path,
+        source_label: segment.source_label ?? current.source_label,
+        source_duration_ms: segment.source_duration_ms || current.source_duration_ms,
+        url: segment.url || current.url,
+      };
+    });
+    adopt({ project: next.project, segments: merged });
+  }, [adopt]);
+
   /** Take only the server's revision — never its media/adjustment values. */
   const adoptRevision = useCallback((serverProject: EditProject) => {
     revisionRef.current = serverProject.revision;
@@ -298,7 +319,7 @@ export function useCampaignEditor(projectId: string | undefined) {
             // Newer local edits exist (or no segments echoed) — never overwrite them.
             adoptRevision(result.project);
           } else {
-            adopt({ project: result.project, segments: result.segments });
+            adoptSavedState({ project: result.project, segments: result.segments });
           }
           setSaveError(null);
         } else {
@@ -319,7 +340,7 @@ export function useCampaignEditor(projectId: string | undefined) {
       inFlightRef.current = false;
       if (queueRef.current.length && !failed) void drain();
     }
-  }, [projectId, adopt, adoptRevision]);
+  }, [projectId, adoptRevision, adoptSavedState]);
 
   const enqueue = useCallback(
     (op: EditOp, immediate: boolean) => {
