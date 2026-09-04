@@ -27,7 +27,7 @@ import StudioButton from "@/components/results/StudioButton";
 import TrueRatioMedia from "@/components/results/TrueRatioMedia";
 import useClipPosters from "@/hooks/useClipPosters";
 import { cachedDuration } from "@/lib/videoPoster";
-import { persistSourceDuration } from "@/services/campaignEditor";
+import { persistSourceDuration, type EditSegment } from "@/services/campaignEditor";
 import type { useCampaignEditor } from "@/hooks/useCampaignEditor";
 import type { CampaignResultSlot } from "@/components/results/resultSlots";
 import { cn } from "@/lib/utils";
