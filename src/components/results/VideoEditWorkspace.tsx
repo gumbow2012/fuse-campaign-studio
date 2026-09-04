@@ -26,6 +26,7 @@ import ClipTimeline, { type TimelineClip } from "@/components/results/ClipTimeli
 import StudioButton from "@/components/results/StudioButton";
 import TrueRatioMedia from "@/components/results/TrueRatioMedia";
 import useClipPosters from "@/hooks/useClipPosters";
+import useClipDurations from "@/hooks/useClipDurations";
 import { cachedDuration } from "@/lib/videoPoster";
 import { persistSourceDuration, type EditSegment } from "@/services/campaignEditor";
 import type { useCampaignEditor } from "@/hooks/useCampaignEditor";
@@ -295,15 +296,17 @@ export function VideoEditWorkspace({ editor, fallbackSlots, className }: VideoEd
     };
   };
 
-  /** Total ticks in realtime: swap the dragged clip's span into the saved total. */
-  const liveDurationMs = (() => {
-    if (!liveTrim) return editor.durationMs;
-    const segment = segments.find((item) => item.id === liveTrim.id);
-    if (!segment) return editor.durationMs;
-    const savedSpan = Math.max(0, segment.trim_end_ms - segment.trim_start_ms);
-    const nextSpan = Math.max(0, liveTrim.trimEndMs - liveTrim.trimStartMs);
-    return Math.max(0, editor.durationMs - savedSpan + nextSpan);
-  })();
+  /**
+   * Total is computed from the REAL (measured) lengths, so a run with no stored
+   * durations never reads 0:00, and it ticks live while a handle is held.
+   */
+  const spanOf = (segment: (typeof segments)[number]) => {
+    const duration = durationOf(segment);
+    const { trimStartMs, trimEndMs } = liveSpan(segment);
+    if (trimEndMs > trimStartMs) return trimEndMs - trimStartMs;
+    return duration > 0 ? duration - Math.min(trimStartMs, duration) : 0;
+  };
+  const liveDurationMs = segments.reduce((sum, segment) => sum + spanOf(segment), 0);
 
   const clips: TimelineClip[] = segments.map((segment, index) => ({
     id: segment.id,
@@ -313,7 +316,11 @@ export function VideoEditWorkspace({ editor, fallbackSlots, className }: VideoEd
     kind: isImageSegment(segment.source_path) ? "image" : "video",
     sourceDurationMs: Math.max(1, durationOf(segment) || 1),
     trimStartMs: liveSpan(segment).trimStartMs,
-    trimEndMs: liveSpan(segment).trimEndMs,
+    /* An unset/zero trim end means "whole clip" once the real length is known. */
+    trimEndMs:
+      liveSpan(segment).trimEndMs > liveSpan(segment).trimStartMs
+        ? liveSpan(segment).trimEndMs
+        : Math.max(1, durationOf(segment) || 1),
     muted: segment.muted,
     incomplete: segment.removed || !segment.source_path,
     durationUnknown: durationOf(segment) <= 0,
