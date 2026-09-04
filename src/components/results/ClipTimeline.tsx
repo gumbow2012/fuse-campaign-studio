@@ -186,11 +186,25 @@ export function ClipTimeline({
                     clip.incomplete ? "opacity-40" : "",
                   )}
                 />
+              ) : clip.mediaUrl && clip.kind !== "image" ? (
+                /* Poster extraction hasn't landed (or CORS blocked it): show the
+                   real first frame with a muted, non-interactive video. */
+                <video
+                  src={`${clip.mediaUrl}#t=0.1`}
+                  muted
+                  playsInline
+                  preload="metadata"
+                  tabIndex={-1}
+                  className="pointer-events-none h-full w-full object-cover"
+                />
+              ) : clip.mediaUrl ? (
+                <img src={clip.mediaUrl} alt="" className="h-full w-full object-cover" />
               ) : (
                 <span className="flex h-full w-full items-center justify-center text-slate-600">
                   <Film className="h-5 w-5" aria-hidden />
                 </span>
               )}
+
 
               {/* Trimmed-out head and tail, shown only while the clip is selected. */}
               {selected && onTrim ? (
