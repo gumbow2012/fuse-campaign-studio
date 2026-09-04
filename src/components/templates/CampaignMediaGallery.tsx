@@ -107,17 +107,19 @@ export default function CampaignMediaGallery({
           <video
             key={active.id}
             src={active.url}
-            poster={active.poster_url ?? undefined}
+            poster={active.poster_url ?? posters[active.id] ?? undefined}
             autoPlay
             muted
             loop
             controls
             playsInline
+            crossOrigin="anonymous"
             preload="metadata"
             aria-label={`${name} campaign preview`}
             onError={() => markBroken(active.id)}
-            className="h-full w-full object-cover"
+            className="h-full w-full bg-black object-contain"
           />
+
         ) : (
           <button
             type="button"
