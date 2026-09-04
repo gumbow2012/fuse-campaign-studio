@@ -167,7 +167,7 @@ export default function TemplateDetailPage() {
           "See what this FUSE campaign creates, what you upload, and what it costs to run."
         }
         path={`/templates/${slug}`}
-        image={null}
+        image={catalogEntry?.preview_url ?? null}
       />
 
       <div className="relative mx-auto w-full max-w-[1400px] px-4 py-6 pb-28 sm:px-6 lg:py-10 lg:pb-16">
