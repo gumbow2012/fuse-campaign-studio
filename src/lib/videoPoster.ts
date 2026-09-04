@@ -7,20 +7,22 @@
  * a re-render (or a refreshed signature on the same file) never re-decodes.
  */
 
-/** Signature-independent cache key — the same file keeps its poster. */
-const cacheKey = (url: string) => url.split("?")[0];
+/** Signature-independent fallback key — the same object keeps its poster. */
+const urlCacheKey = (url: string) => url.split("?")[0];
+
+const resolveCacheKey = (url: string, stableKey?: string) => stableKey?.trim() || urlCacheKey(url);
 
 const posters = new Map<string, string>();
 const failed = new Set<string>();
 const inflight = new Map<string, Promise<string | null>>();
 
-export function cachedPoster(url: string | null | undefined): string | null {
+export function cachedPoster(url: string | null | undefined, stableKey?: string): string | null {
   if (!url) return null;
-  return posters.get(cacheKey(url)) ?? null;
+  return posters.get(resolveCacheKey(url, stableKey)) ?? null;
 }
 
-export function posterFailed(url: string | null | undefined) {
-  return !!url && failed.has(cacheKey(url));
+export function posterFailed(url: string | null | undefined, stableKey?: string) {
+  return !!url && failed.has(resolveCacheKey(url, stableKey));
 }
 
 function drawFrame(video: HTMLVideoElement): string | null {
@@ -89,9 +91,9 @@ async function grab(url: string, timeoutMs: number): Promise<string | null> {
  */
 export async function extractPoster(
   url: string,
-  options?: { timeoutMs?: number },
+  options?: { timeoutMs?: number; cacheKey?: string },
 ): Promise<string | null> {
-  const key = cacheKey(url);
+  const key = resolveCacheKey(url, options?.cacheKey);
   const known = posters.get(key);
   if (known) return known;
   if (failed.has(key)) return null;
