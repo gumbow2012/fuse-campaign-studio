@@ -127,3 +127,62 @@ export async function extractPoster(
   inflight.set(key, task);
   return await task;
 }
+
+/**
+ * DURATION ONLY — metadata probe for a clip whose length is not stored.
+ *
+ * `preload="metadata"` fetches headers, not the file, so this is cheap enough to
+ * run for EVERY clip on a timeline (durations must never depend on scrolling).
+ * The element is released as soon as the length is known. Result is cached under
+ * the same stable key the poster cache uses.
+ */
+export async function measureDuration(
+  url: string,
+  options?: { timeoutMs?: number; cacheKey?: string },
+): Promise<number | null> {
+  const key = resolveCacheKey(url, options?.cacheKey);
+  const known = durations.get(key);
+  if (known && known > 0) return known;
+
+  const pending = durationInflight.get(key);
+  if (pending) return await pending;
+
+  const task = new Promise<number | null>((resolve) => {
+    const video = document.createElement("video");
+    let settled = false;
+    const finish = (value: number | null) => {
+      if (settled) return;
+      settled = true;
+      window.clearTimeout(timer);
+      video.onloadedmetadata = null;
+      video.onerror = null;
+      video.removeAttribute("src");
+      video.load();
+      resolve(value);
+    };
+    const timer = window.setTimeout(() => finish(null), options?.timeoutMs ?? 12000);
+
+    video.crossOrigin = "anonymous";
+    video.preload = "metadata";
+    video.muted = true;
+    video.playsInline = true;
+    video.setAttribute("aria-hidden", "true");
+    video.onerror = () => finish(null);
+    video.onloadedmetadata = () => {
+      const seconds = Number.isFinite(video.duration) ? video.duration : 0;
+      if (seconds > 0) {
+        const ms = Math.round(seconds * 1000);
+        durations.set(key, ms);
+        finish(ms);
+        return;
+      }
+      finish(null);
+    };
+    video.src = url;
+  }).finally(() => {
+    durationInflight.delete(key);
+  });
+
+  durationInflight.set(key, task);
+  return await task;
+}
