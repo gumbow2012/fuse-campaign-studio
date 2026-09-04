@@ -65,7 +65,12 @@ export function VideoEditWorkspace({ editor, fallbackSlots, className }: VideoEd
   const posterSources = useMemo(
     () =>
       editor
-        ? segments.map((segment) => ({ id: segment.id, url: segment.url }))
+        ? segments.map((segment) => ({
+            id: segment.id,
+            url: segment.url,
+            /* An image segment IS its own thumbnail — nothing to decode. */
+            poster: isImageSegment(segment.source_path) ? segment.url : null,
+          }))
         : fallbackSlots
             .filter((slot) => slot.item)
             .map((slot) => ({
@@ -75,6 +80,7 @@ export function VideoEditWorkspace({ editor, fallbackSlots, className }: VideoEd
             })),
     [editor, segments, fallbackSlots],
   );
+
   const posters = useClipPosters(posterSources);
 
   /* ------------------------------ playback ------------------------------ */
