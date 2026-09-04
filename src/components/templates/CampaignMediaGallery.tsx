@@ -14,6 +14,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Expand, Play } from "lucide-react";
 import { cn } from "@/lib/utils";
 import TemplateMediaLightbox from "./TemplateMediaLightbox";
+import useClipPosters from "@/hooks/useClipPosters";
 import type { TemplateGalleryItem } from "@/services/templateDetailPage";
 
 function Skeleton({ className }: { className?: string }) {
