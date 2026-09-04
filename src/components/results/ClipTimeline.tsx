@@ -7,7 +7,7 @@
  * Nothing here mutates media — every gesture is reported upward and persisted
  * as an edit op, so original files are untouched.
  */
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useState } from "react";
 import { AlertTriangle, Film, VolumeX } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -15,6 +15,9 @@ export interface TimelineClip {
   id: string;
   number: number;
   posterUrl: string | null;
+  /** Signed media url — used as a live fallback thumbnail when no poster exists. */
+  mediaUrl?: string | null;
+  kind?: "video" | "image";
   sourceDurationMs: number;
   trimStartMs: number;
   trimEndMs: number;
@@ -41,6 +44,8 @@ const MIN_CLIP_MS = 300;
 const seconds = (ms: number) => `${(Math.max(0, ms) / 1000).toFixed(1)}s`;
 const pad = (value: number) => String(value).padStart(2, "0");
 
+type TrimDraft = { id: string; startMs: number; endMs: number };
+
 export function ClipTimeline({
   clips,
   selectedId,
@@ -53,7 +58,8 @@ export function ClipTimeline({
 }: ClipTimelineProps) {
   const [dragId, setDragId] = useState<string | null>(null);
   const [overId, setOverId] = useState<string | null>(null);
-  const trimRef = useRef<{ id: string; edge: "start" | "end"; width: number; left: number } | null>(null);
+  /** Visual-only trim while dragging — persisted once, on release. */
+  const [draft, setDraft] = useState<TrimDraft | null>(null);
 
   const reorder = useCallback(
     (fromId: string, toId: string) => {
@@ -68,6 +74,11 @@ export function ClipTimeline({
     [clips, onReorder],
   );
 
+  /**
+   * Trim drag: window-level listeners (never lost if the handle re-renders),
+   * clamped to [0, sourceDuration] with start < end, and persisted only once
+   * the pointer is released — no request per pixel.
+   */
   const beginTrim = (
     event: React.PointerEvent<HTMLSpanElement>,
     clip: TimelineClip,
@@ -77,32 +88,52 @@ export function ClipTimeline({
     event.preventDefault();
     event.stopPropagation();
     const card = (event.currentTarget.closest("[data-clip-card]") as HTMLElement | null)?.getBoundingClientRect();
-    if (!card) return;
-    trimRef.current = { id: clip.id, edge, width: card.width, left: card.left };
-    event.currentTarget.setPointerCapture(event.pointerId);
+    if (!card || card.width <= 0) return;
+
+    const duration = Math.max(MIN_CLIP_MS, Math.round(clip.sourceDurationMs) || MIN_CLIP_MS);
+    const startAt = Math.min(Math.max(0, clip.trimStartMs), duration - MIN_CLIP_MS);
+    const endAt = Math.min(duration, Math.max(startAt + MIN_CLIP_MS, clip.trimEndMs));
+
+    const compute = (clientX: number): TrimDraft => {
+      const ratio = Math.min(1, Math.max(0, (clientX - card.left) / card.width));
+      const at = Math.round(ratio * duration);
+      if (edge === "start") {
+        return { id: clip.id, startMs: Math.min(Math.max(0, at), endAt - MIN_CLIP_MS), endMs: endAt };
+      }
+      return { id: clip.id, startMs: startAt, endMs: Math.max(startAt + MIN_CLIP_MS, Math.min(duration, at)) };
+    };
+
+    const onMove = (moveEvent: PointerEvent) => setDraft(compute(moveEvent.clientX));
+    const onEnd = (endEvent: PointerEvent) => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onEnd);
+      window.removeEventListener("pointercancel", onEnd);
+      const next = compute(endEvent.clientX);
+      setDraft(null);
+      if (next.startMs !== startAt || next.endMs !== endAt) {
+        onTrim(clip.id, next.startMs, next.endMs, true);
+      }
+    };
+
+    setDraft({ id: clip.id, startMs: startAt, endMs: endAt });
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onEnd);
+    window.addEventListener("pointercancel", onEnd);
   };
 
-  const moveTrim = (event: React.PointerEvent<HTMLSpanElement>, clip: TimelineClip, commit: boolean) => {
-    const state = trimRef.current;
-    if (!state || state.id !== clip.id || !onTrim) return;
-    const ratio = Math.min(1, Math.max(0, (event.clientX - state.left) / Math.max(1, state.width)));
-    const at = Math.round(ratio * clip.sourceDurationMs);
-    if (state.edge === "start") {
-      onTrim(clip.id, Math.min(at, clip.trimEndMs - MIN_CLIP_MS), clip.trimEndMs, commit);
-    } else {
-      onTrim(clip.id, clip.trimStartMs, Math.max(at, clip.trimStartMs + MIN_CLIP_MS), commit);
-    }
-    if (commit) trimRef.current = null;
-  };
 
   return (
     <ol className={cn("flex gap-3 overflow-x-auto pb-3", className)} aria-label="Clip timeline">
       {clips.map((clip) => {
         const selected = clip.id === selectedId;
         const source = Math.max(1, clip.sourceDurationMs);
-        const startPct = (clip.trimStartMs / source) * 100;
-        const endPct = (clip.trimEndMs / source) * 100;
-        const duration = Math.max(0, clip.trimEndMs - clip.trimStartMs);
+        const live = draft && draft.id === clip.id ? draft : null;
+        const trimStartMs = Math.min(Math.max(0, live ? live.startMs : clip.trimStartMs), source);
+        const trimEndMs = Math.min(Math.max(trimStartMs, live ? live.endMs : clip.trimEndMs), source);
+        const startPct = (trimStartMs / source) * 100;
+        const endPct = (trimEndMs / source) * 100;
+        const duration = Math.max(0, trimEndMs - trimStartMs);
+
 
         return (
           <li key={clip.id} className="shrink-0">
@@ -155,11 +186,25 @@ export function ClipTimeline({
                     clip.incomplete ? "opacity-40" : "",
                   )}
                 />
+              ) : clip.mediaUrl && clip.kind !== "image" ? (
+                /* Poster extraction hasn't landed (or CORS blocked it): show the
+                   real first frame with a muted, non-interactive video. */
+                <video
+                  src={`${clip.mediaUrl}#t=0.1`}
+                  muted
+                  playsInline
+                  preload="metadata"
+                  tabIndex={-1}
+                  className="pointer-events-none h-full w-full object-cover"
+                />
+              ) : clip.mediaUrl ? (
+                <img src={clip.mediaUrl} alt="" className="h-full w-full object-cover" />
               ) : (
                 <span className="flex h-full w-full items-center justify-center text-slate-600">
                   <Film className="h-5 w-5" aria-hidden />
                 </span>
               )}
+
 
               {/* Trimmed-out head and tail, shown only while the clip is selected. */}
               {selected && onTrim ? (
@@ -175,14 +220,12 @@ export function ClipTimeline({
                   <span
                     role="slider"
                     aria-label={`Trim start of clip ${pad(clip.number)}`}
-                    aria-valuenow={Math.round(clip.trimStartMs)}
+                    aria-valuenow={Math.round(trimStartMs)}
                     aria-valuemin={0}
                     aria-valuemax={clip.sourceDurationMs}
                     tabIndex={-1}
                     onPointerDown={(event) => beginTrim(event, clip, "start")}
-                    onPointerMove={(event) => moveTrim(event, clip, false)}
-                    onPointerUp={(event) => moveTrim(event, clip, true)}
-                    className="absolute inset-y-0 z-10 flex w-3 cursor-ew-resize items-center justify-center bg-cyan-300/80"
+                    className="absolute inset-y-0 z-10 flex w-3 touch-none cursor-ew-resize items-center justify-center bg-cyan-300/80"
                     style={{ left: `calc(${startPct}% - 1px)` }}
                   >
                     <span className="h-6 w-[2px] rounded bg-slate-950/70" />
@@ -190,18 +233,17 @@ export function ClipTimeline({
                   <span
                     role="slider"
                     aria-label={`Trim end of clip ${pad(clip.number)}`}
-                    aria-valuenow={Math.round(clip.trimEndMs)}
+                    aria-valuenow={Math.round(trimEndMs)}
                     aria-valuemin={0}
                     aria-valuemax={clip.sourceDurationMs}
                     tabIndex={-1}
                     onPointerDown={(event) => beginTrim(event, clip, "end")}
-                    onPointerMove={(event) => moveTrim(event, clip, false)}
-                    onPointerUp={(event) => moveTrim(event, clip, true)}
-                    className="absolute inset-y-0 z-10 flex w-3 cursor-ew-resize items-center justify-center bg-cyan-300/80"
+                    className="absolute inset-y-0 z-10 flex w-3 touch-none cursor-ew-resize items-center justify-center bg-cyan-300/80"
                     style={{ left: `calc(${endPct}% - 11px)` }}
                   >
                     <span className="h-6 w-[2px] rounded bg-slate-950/70" />
                   </span>
+
                 </>
               ) : null}
 

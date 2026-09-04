@@ -44,6 +44,12 @@ const timecode = (ms: number) => {
   return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, "0")}`;
 };
 
+const IMAGE_EXTENSIONS = /\.(png|jpe?g|webp|gif|avif|heic|bmp)$/i;
+
+/** Images are shown directly; everything else is treated as video media. */
+const isImageSegment = (path: string | null | undefined) => !!path && IMAGE_EXTENSIONS.test(path.split("?")[0]);
+
+
 export function VideoEditWorkspace({ editor, fallbackSlots, className }: VideoEditWorkspaceProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [playing, setPlaying] = useState(false);
@@ -59,7 +65,12 @@ export function VideoEditWorkspace({ editor, fallbackSlots, className }: VideoEd
   const posterSources = useMemo(
     () =>
       editor
-        ? segments.map((segment) => ({ id: segment.id, url: segment.url }))
+        ? segments.map((segment) => ({
+            id: segment.id,
+            url: segment.url,
+            /* An image segment IS its own thumbnail — nothing to decode. */
+            poster: isImageSegment(segment.source_path) ? segment.url : null,
+          }))
         : fallbackSlots
             .filter((slot) => slot.item)
             .map((slot) => ({
@@ -69,6 +80,7 @@ export function VideoEditWorkspace({ editor, fallbackSlots, className }: VideoEd
             })),
     [editor, segments, fallbackSlots],
   );
+
   const posters = useClipPosters(posterSources);
 
   /* ------------------------------ playback ------------------------------ */
@@ -140,12 +152,15 @@ export function VideoEditWorkspace({ editor, fallbackSlots, className }: VideoEd
             id: slot.item?.id ?? `slot-${slot.number}`,
             number: slot.number,
             posterUrl: slot.item ? posters[slot.item.id] ?? slot.item.poster_url ?? null : null,
+            mediaUrl: slot.item?.url ?? null,
+            kind: "video" as const,
             sourceDurationMs: 1,
             trimStartMs: 0,
             trimEndMs: 1,
             muted: false,
             incomplete: !slot.item,
           }))}
+
           selectedId={null}
           onSelect={() => undefined}
         />
@@ -159,25 +174,37 @@ export function VideoEditWorkspace({ editor, fallbackSlots, className }: VideoEd
 
   const { project, runOp, runOps, undo, redo, canUndo, canRedo, saveState, saveError, retrySave } = editor;
 
+  /**
+   * Clip status comes from the REAL segment state: a segment that exists with
+   * removed:false and a source is READY. The "needs another pass" warning is
+   * reserved for a genuinely missing output (no source at all).
+   */
   const clips: TimelineClip[] = segments.map((segment, index) => ({
     id: segment.id,
     number: index + 1,
     posterUrl: posters[segment.id] ?? null,
+    mediaUrl: segment.url,
+    kind: isImageSegment(segment.source_path) ? "image" : "video",
     sourceDurationMs: Math.max(1, segment.source_duration_ms),
     trimStartMs: segment.trim_start_ms,
     trimEndMs: segment.trim_end_ms,
     muted: segment.muted,
-    incomplete: !segment.url,
+    incomplete: !segment.source_path,
   }));
 
+  /** Persisted once, on drag release — the timeline shows the drag visually. */
   const trim = (id: string, startMs: number, endMs: number, commit: boolean) => {
     const before = segments.find((segment) => segment.id === id);
     if (!before) return;
+    const duration = Math.max(1, before.source_duration_ms);
+    const start = Math.min(Math.max(0, Math.round(startMs)), duration - 1);
+    const end = Math.min(duration, Math.max(start + 1, Math.round(endMs)));
     runOp(
-      { op: "trim", payload: { segment_id: id, trim_start_ms: startMs, trim_end_ms: endMs } },
+      { op: "trim", payload: { segment_id: id, trim_start_ms: start, trim_end_ms: end } },
       { record: commit, immediate: commit, label: "trim" },
     );
   };
+
 
   const resetClip = () => {
     if (!selected) return;
