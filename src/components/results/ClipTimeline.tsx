@@ -148,7 +148,7 @@ export function ClipTimeline({
     clip: TimelineClip,
     edge: "start" | "end",
   ) => {
-    if (!onTrim) return;
+    if (!onTrim || clip.durationUnknown) return;
     event.preventDefault();
     event.stopPropagation();
     const card = (event.currentTarget.closest("[data-clip-card]") as HTMLElement | null)?.getBoundingClientRect();
@@ -216,10 +216,16 @@ export function ClipTimeline({
     <ol ref={listRef} className={cn("flex gap-3 overflow-x-auto pb-3", className)} aria-label="Clip timeline">
       {clips.map((clip) => {
         const selected = clip.id === selectedId;
-        const source = Math.max(1, clip.sourceDurationMs);
+        /* Every value below is forced finite: a missing/NaN duration can never
+           produce a NaN width or a broken handle position. */
+        const finite = (value: number, fallback = 0) => (Number.isFinite(value) ? value : fallback);
+        const source = Math.max(1, finite(clip.sourceDurationMs, 1));
         const live = draft && draft.id === clip.id ? draft : null;
-        const trimStartMs = Math.min(Math.max(0, live ? live.startMs : clip.trimStartMs), source);
-        const trimEndMs = Math.min(Math.max(trimStartMs, live ? live.endMs : clip.trimEndMs), source);
+        const trimStartMs = Math.min(Math.max(0, finite(live ? live.startMs : clip.trimStartMs)), source);
+        const trimEndMs = Math.min(
+          Math.max(trimStartMs, finite(live ? live.endMs : clip.trimEndMs, source)),
+          source,
+        );
         const startPct = (trimStartMs / source) * 100;
         const endPct = (trimEndMs / source) * 100;
         const duration = Math.max(0, trimEndMs - trimStartMs);
@@ -227,7 +233,7 @@ export function ClipTimeline({
            is being dragged (so the cut region can dim under the cursor), and
            proportional to the kept span the rest of the time — it visibly grows
            and shrinks as the trim changes. */
-        const cardWidth = live
+        const cardWidth = live || clip.durationUnknown
           ? CARD_WIDTH
           : Math.max(MIN_CARD_WIDTH, Math.round(CARD_WIDTH * (duration / source)) || MIN_CARD_WIDTH);
 
