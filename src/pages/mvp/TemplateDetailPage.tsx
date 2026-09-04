@@ -221,7 +221,7 @@ export default function TemplateDetailPage() {
               <CampaignMediaGallery
                 items={galleryItems}
                 name={template.name}
-                className="mx-auto w-full max-w-sm lg:mx-0 lg:max-w-md"
+                className="mx-auto w-full max-w-[320px] lg:mx-0 lg:max-w-[360px]"
               />
 
               <div className="lg:sticky lg:top-24">
@@ -306,15 +306,13 @@ export default function TemplateDetailPage() {
                       className="group overflow-hidden rounded-[14px] border border-white/10 bg-black transition hover:border-[hsl(var(--electric-blue)/0.5)]"
                     >
                       <div className="aspect-[9/16] w-full overflow-hidden bg-[linear-gradient(180deg,hsl(var(--navy-mid)/0.85),hsl(var(--navy-deep)))]">
-                        {entry.preview_url ? (
-                          <img
-                            src={entry.preview_url}
-                            alt=""
-                            loading="lazy"
-                            decoding="async"
-                            className="h-full w-full object-cover transition duration-500 group-hover:scale-[1.03]"
-                          />
-                        ) : null}
+                        <img
+                          src={entry.preview_url ?? undefined}
+                          alt=""
+                          loading="lazy"
+                          decoding="async"
+                          className="h-full w-full object-cover transition duration-500 group-hover:scale-[1.03]"
+                        />
                       </div>
                       <p className="truncate px-3 py-2.5 font-display text-[12px] font-semibold uppercase tracking-[0.02em] text-white">
                         {entry.name}
