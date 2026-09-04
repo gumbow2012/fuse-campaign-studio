@@ -154,6 +154,8 @@ export default function InlineCampaignRunPanel({
   const [result, setResult] = useState<RunState | null>(null);
   const [paywallOpen, setPaywallOpen] = useState(false);
   const [freeStatus, setFreeStatus] = useState<string | null>(null);
+  /** Surfaced in the panel so a failed start is never an invisible no-op. */
+  const [error, setError] = useState<string | null>(null);
 
   const assetFields = inputFields.filter((field) => field.type === "image" || field.type === "video");
   const textFields = inputFields.filter((field) => field.type !== "image" && field.type !== "video");
@@ -270,6 +272,7 @@ export default function InlineCampaignRunPanel({
 
   const runNow = useCallback(async () => {
     if (hasInputs && !requiredReady) {
+      setError("Fill every required slot before generating.");
       toast({
         title: "Add your assets",
         description: "Fill every required slot before generating.",
@@ -279,6 +282,7 @@ export default function InlineCampaignRunPanel({
     }
 
     setSubmitting(true);
+    setError(null);
     setResult(null);
     setJobId(null);
 
@@ -325,12 +329,11 @@ export default function InlineCampaignRunPanel({
       setResult({ status: "queued", progress: 0, outputs: [] });
       void refreshProfile();
       toast({ title: `${templateName} is running`, description: "Progress shows right here." });
-    } catch (error) {
-      toast({
-        title: "Generation failed",
-        description: error instanceof Error ? error.message : "Could not start the campaign.",
-        variant: "destructive",
-      });
+    } catch (runError) {
+      const message =
+        runError instanceof Error ? runError.message : "Could not start the campaign.";
+      setError(message);
+      toast({ title: "Generation failed", description: message, variant: "destructive" });
     } finally {
       setSubmitting(false);
     }
@@ -362,11 +365,10 @@ export default function InlineCampaignRunPanel({
       setPaywallOpen(true);
       return;
     }
-    if (hasInputs) {
-      setStage("inputs");
-      return;
-    }
-    void runNow();
+    /* Always advance the panel: upload slots when the campaign needs assets,
+       otherwise the confirm/generate step. Never a silent no-op. */
+    setError(null);
+    setStage("inputs");
   };
 
   const ctaLabel = !user && freePreviewEnabled
@@ -503,21 +505,30 @@ export default function InlineCampaignRunPanel({
 
   return (
     <div className={cn("space-y-4", className)}>
-      {stage === "inputs" && hasInputs ? (
+      {stage === "inputs" ? (
         <div className="space-y-3">
           <div className="flex items-center justify-between gap-3">
             <p className="font-mono text-[9px] uppercase tracking-[0.24em] text-slate-500">
-              Add your product
+              {hasInputs ? "Add your product" : "Ready to generate"}
             </p>
-            <p
-              className={cn(
-                "font-mono text-[9px] uppercase tracking-[0.2em]",
-                requiredReady ? "text-emerald-200" : "text-slate-500",
-              )}
-            >
-              {readyCount}/{inputFields.length} ready
-            </p>
+            {hasInputs ? (
+              <p
+                className={cn(
+                  "font-mono text-[9px] uppercase tracking-[0.2em]",
+                  requiredReady ? "text-emerald-200" : "text-slate-500",
+                )}
+              >
+                {readyCount}/{inputFields.length} ready
+              </p>
+            ) : null}
           </div>
+
+          {hasInputs ? null : (
+            <p className="rounded-2xl border border-white/10 bg-black/25 p-4 text-sm leading-6 text-slate-300">
+              This campaign needs no uploads — generate it now.
+            </p>
+          )}
+
 
           {assetFields.map((field) => (
             <TemplateInputCard
@@ -560,6 +571,12 @@ export default function InlineCampaignRunPanel({
               />
             </div>
           ))}
+
+          {error ? (
+            <p className="rounded-xl border border-rose-400/25 bg-rose-500/[0.07] px-4 py-3 text-sm leading-6 text-rose-100">
+              {error}
+            </p>
+          ) : null}
 
           <Button
             type="button"
