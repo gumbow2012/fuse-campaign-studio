@@ -64,6 +64,14 @@ export type EditOp =
     }
   | { op: "reset_adjust"; payload: { segment_id?: string; scope: "clip" | "all" } }
   | {
+      /**
+       * Self-healing duration correction: the client measured the real media
+       * length from video metadata. Ignored silently if unsupported server-side.
+       */
+      op: "set_source_duration";
+      payload: { segment_id: string; source_duration_ms: number };
+    }
+  | {
       op: "set_meta";
       payload: {
         /** Campaign name — drives the export filename and folder. */
@@ -163,6 +171,27 @@ export async function applyEditOp(
     segments: body.segments ? state.segments : undefined,
     error: typeof body.error === "string" ? body.error : undefined,
   };
+}
+
+/**
+ * Persist a measured clip length outside the edit queue: best-effort, never
+ * surfaces an error to the user and never blocks an edit.
+ */
+export async function persistSourceDuration(
+  projectId: string,
+  expectedRevision: number,
+  segmentId: string,
+  sourceDurationMs: number,
+): Promise<number | null> {
+  try {
+    const result = await applyEditOp(projectId, expectedRevision, {
+      op: "set_source_duration",
+      payload: { segment_id: segmentId, source_duration_ms: Math.round(sourceDurationMs) },
+    });
+    return result.status === "ok" && result.project ? result.project.revision : null;
+  } catch {
+    return null;
+  }
 }
 
 export type ExportResult = {

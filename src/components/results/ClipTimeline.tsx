@@ -24,6 +24,11 @@ export interface TimelineClip {
   muted: boolean;
   /** Media that is missing or could not be decoded. */
   incomplete?: boolean;
+  /**
+   * True until this clip's real length is known. Trim handles stay disabled and
+   * the label shows a quiet loading state — never a 0.0s or NaN width.
+   */
+  durationUnknown?: boolean;
 }
 
 export interface ClipTimelineProps {
@@ -42,6 +47,11 @@ export interface ClipTimelineProps {
     preview: { id: string; trimStartMs: number; trimEndMs: number; edge: "start" | "end" } | null,
   ) => void;
   onRetry?: (id: string) => void;
+  /**
+   * Ids currently near/in the viewport (IntersectionObserver). The parent uses
+   * this to extract posters lazily instead of opening every clip at once.
+   */
+  onVisibleClipsChange?: (ids: string[]) => void;
   /** Playhead position inside the selected clip, in ms of its trimmed span. */
   playheadRatio?: number | null;
   className?: string;
@@ -65,9 +75,12 @@ export function ClipTimeline({
   onTrim,
   onTrimPreview,
   onRetry,
+  onVisibleClipsChange,
   playheadRatio = null,
   className,
 }: ClipTimelineProps) {
+  const listRef = useRef<HTMLOListElement>(null);
+  const visibleRef = useRef<Set<string>>(new Set());
   const [dragId, setDragId] = useState<string | null>(null);
   const [overId, setOverId] = useState<string | null>(null);
   /** Visual-only trim while dragging — persisted once, on release. */
@@ -81,6 +94,36 @@ export function ClipTimeline({
     },
     [],
   );
+
+  /**
+   * Only clips near the viewport are reported as visible, so the parent extracts
+   * at most a couple of posters at a time instead of hitting every signed url.
+   */
+  useEffect(() => {
+    const list = listRef.current;
+    if (!list || !onVisibleClipsChange || typeof IntersectionObserver === "undefined") return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        let changed = false;
+        for (const entry of entries) {
+          const id = (entry.target as HTMLElement).dataset.clipId;
+          if (!id) continue;
+          if (entry.isIntersecting) {
+            if (!visibleRef.current.has(id)) {
+              visibleRef.current.add(id);
+              changed = true;
+            }
+          } else if (visibleRef.current.delete(id)) {
+            changed = true;
+          }
+        }
+        if (changed) onVisibleClipsChange(Array.from(visibleRef.current));
+      },
+      { root: list, rootMargin: "200px" },
+    );
+    list.querySelectorAll<HTMLElement>("[data-clip-id]").forEach((node) => observer.observe(node));
+    return () => observer.disconnect();
+  }, [onVisibleClipsChange, clips.length]);
 
   const reorder = useCallback(
     (fromId: string, toId: string) => {
@@ -105,7 +148,7 @@ export function ClipTimeline({
     clip: TimelineClip,
     edge: "start" | "end",
   ) => {
-    if (!onTrim) return;
+    if (!onTrim || clip.durationUnknown) return;
     event.preventDefault();
     event.stopPropagation();
     const card = (event.currentTarget.closest("[data-clip-card]") as HTMLElement | null)?.getBoundingClientRect();
@@ -170,13 +213,19 @@ export function ClipTimeline({
 
 
   return (
-    <ol className={cn("flex gap-3 overflow-x-auto pb-3", className)} aria-label="Clip timeline">
+    <ol ref={listRef} className={cn("flex gap-3 overflow-x-auto pb-3", className)} aria-label="Clip timeline">
       {clips.map((clip) => {
         const selected = clip.id === selectedId;
-        const source = Math.max(1, clip.sourceDurationMs);
+        /* Every value below is forced finite: a missing/NaN duration can never
+           produce a NaN width or a broken handle position. */
+        const finite = (value: number, fallback = 0) => (Number.isFinite(value) ? value : fallback);
+        const source = Math.max(1, finite(clip.sourceDurationMs, 1));
         const live = draft && draft.id === clip.id ? draft : null;
-        const trimStartMs = Math.min(Math.max(0, live ? live.startMs : clip.trimStartMs), source);
-        const trimEndMs = Math.min(Math.max(trimStartMs, live ? live.endMs : clip.trimEndMs), source);
+        const trimStartMs = Math.min(Math.max(0, finite(live ? live.startMs : clip.trimStartMs)), source);
+        const trimEndMs = Math.min(
+          Math.max(trimStartMs, finite(live ? live.endMs : clip.trimEndMs, source)),
+          source,
+        );
         const startPct = (trimStartMs / source) * 100;
         const endPct = (trimEndMs / source) * 100;
         const duration = Math.max(0, trimEndMs - trimStartMs);
@@ -184,12 +233,12 @@ export function ClipTimeline({
            is being dragged (so the cut region can dim under the cursor), and
            proportional to the kept span the rest of the time — it visibly grows
            and shrinks as the trim changes. */
-        const cardWidth = live
+        const cardWidth = live || clip.durationUnknown
           ? CARD_WIDTH
           : Math.max(MIN_CARD_WIDTH, Math.round(CARD_WIDTH * (duration / source)) || MIN_CARD_WIDTH);
 
         return (
-          <li key={clip.id} className="shrink-0">
+          <li key={clip.id} data-clip-id={clip.id} className="shrink-0">
             <div
               data-clip-card
               role="button"
@@ -241,9 +290,9 @@ export function ClipTimeline({
                     clip.incomplete ? "opacity-40" : "",
                   )}
                 />
-              ) : clip.mediaUrl && clip.kind !== "image" ? (
-                /* Poster extraction hasn't landed (or CORS blocked it): show the
-                   real first frame with a muted, non-interactive video. */
+              ) : clip.mediaUrl && clip.kind !== "image" && selected ? (
+                /* Only the ACTIVE clip may mount a real video element — inactive
+                   clips never open a stream, so a 10-clip run has no burst. */
                 <video
                   src={`${clip.mediaUrl}#t=0.1`}
                   muted
@@ -252,7 +301,7 @@ export function ClipTimeline({
                   tabIndex={-1}
                   className="pointer-events-none h-full w-full object-cover"
                 />
-              ) : clip.mediaUrl ? (
+              ) : clip.mediaUrl && clip.kind === "image" ? (
                 <img src={clip.mediaUrl} alt="" className="h-full w-full object-cover" />
               ) : (
                 <span className="flex h-full w-full items-center justify-center text-slate-600">
@@ -265,7 +314,7 @@ export function ClipTimeline({
                   While dragging the card spans the full source, so the cut region
                   dims live under the cursor; at rest the card IS the kept span and
                   the handles sit on its edges. */}
-              {selected && onTrim ? (
+              {selected && onTrim && !clip.durationUnknown ? (
                 <>
                   <span
                     className="pointer-events-none absolute inset-y-0 left-0 bg-slate-950/75"
@@ -326,7 +375,7 @@ export function ClipTimeline({
 
               <span className="pointer-events-none absolute inset-x-0 bottom-0 flex items-center justify-between gap-2 bg-gradient-to-t from-slate-950 via-slate-950/85 to-transparent px-2.5 py-1.5">
                 <span className="font-display text-[11px] font-semibold uppercase tracking-[0.14em] text-white tabular-nums">
-                  {pad(clip.number)} · {seconds(duration)}
+                  {pad(clip.number)} · {clip.durationUnknown ? "loading…" : seconds(duration)}
                 </span>
                 {clip.muted ? <VolumeX className="h-3.5 w-3.5 text-slate-400" aria-hidden /> : null}
               </span>
