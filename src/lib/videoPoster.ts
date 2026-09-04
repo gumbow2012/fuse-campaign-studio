@@ -17,6 +17,8 @@ const posters = new Map<string, string>();
 const durations = new Map<string, number>();
 const failed = new Set<string>();
 const inflight = new Map<string, Promise<string | null>>();
+/** Metadata-only duration probes, de-duplicated per stable key. */
+const durationInflight = new Map<string, Promise<number | null>>();
 
 export function cachedPoster(url: string | null | undefined, stableKey?: string): string | null {
   if (!url) return null;
