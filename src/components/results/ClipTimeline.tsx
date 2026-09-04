@@ -180,7 +180,13 @@ export function ClipTimeline({
         const startPct = (trimStartMs / source) * 100;
         const endPct = (trimEndMs / source) * 100;
         const duration = Math.max(0, trimEndMs - trimStartMs);
-
+        /* The card is a real ruler of the clip: full source width while a handle
+           is being dragged (so the cut region can dim under the cursor), and
+           proportional to the kept span the rest of the time — it visibly grows
+           and shrinks as the trim changes. */
+        const cardWidth = live
+          ? CARD_WIDTH
+          : Math.max(MIN_CARD_WIDTH, Math.round(CARD_WIDTH * (duration / source)) || MIN_CARD_WIDTH);
 
         return (
           <li key={clip.id} className="shrink-0">
@@ -188,7 +194,8 @@ export function ClipTimeline({
               data-clip-card
               role="button"
               tabIndex={0}
-              draggable={!!onReorder}
+              draggable={!!onReorder && !live}
+              style={{ width: cardWidth }}
               aria-current={selected}
               aria-label={`Clip ${pad(clip.number)} — ${seconds(duration)}`}
               onClick={() => onSelect(clip.id)}
