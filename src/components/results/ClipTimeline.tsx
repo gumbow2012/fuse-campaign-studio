@@ -222,7 +222,8 @@ export function ClipTimeline({
                 setOverId(null);
               }}
               className={cn(
-                "group relative h-[112px] w-[160px] overflow-hidden rounded-xl border bg-slate-950 transition-[border-color,box-shadow,transform] duration-200 motion-reduce:transition-none",
+                "group relative h-[112px] overflow-hidden rounded-xl border bg-slate-950 transition-[border-color,box-shadow,transform,width] duration-200 motion-reduce:transition-none",
+                live ? "transition-none select-none" : "",
                 selected
                   ? "border-cyan-300 shadow-[0_0_0_2px_rgba(103,232,249,0.28),0_10px_30px_-12px_rgba(103,232,249,0.5)]"
                   : "border-white/12 hover:border-white/30",
