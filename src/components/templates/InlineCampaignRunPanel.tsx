@@ -161,6 +161,24 @@ export default function InlineCampaignRunPanel({
   const textFields = inputFields.filter((field) => field.type !== "image" && field.type !== "video");
   const hasInputs = inputFields.length > 0;
 
+  /**
+   * Fresh visit = fresh CTA. Progress/error state only ever comes from a run
+   * started in this session, so mounting (or switching templates) clears any
+   * leftover run state instead of surfacing a prior interrupted job.
+   */
+  useEffect(() => {
+    setStage("cta");
+    setFiles({});
+    setLibraryAssets({});
+    setTextInputs({});
+    setSubmitting(false);
+    setJobId(null);
+    setResult(null);
+    setError(null);
+    setPaywallOpen(false);
+  }, [slug, templateId, versionId]);
+
+
   /* Signed-in free-video eligibility — read-only, server stays authoritative. */
   useEffect(() => {
     if (!user) {
