@@ -33,6 +33,14 @@ export interface ClipTimelineProps {
   onReorder?: (order: string[]) => void;
   /** `commit` is true on release — that's when a history entry is recorded. */
   onTrim?: (id: string, trimStartMs: number, trimEndMs: number, commit: boolean) => void;
+  /**
+   * Live drag feedback (rAF-throttled, no network): lets the parent scrub the
+   * main player to the boundary frame and tick the total duration in realtime.
+   * `edge` is null on release.
+   */
+  onTrimPreview?: (
+    preview: { id: string; trimStartMs: number; trimEndMs: number; edge: "start" | "end" } | null,
+  ) => void;
   onRetry?: (id: string) => void;
   /** Playhead position inside the selected clip, in ms of its trimmed span. */
   playheadRatio?: number | null;
